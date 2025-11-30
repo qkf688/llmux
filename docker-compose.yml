@@ -1,5 +1,5 @@
 services:
-  llmio:
+  llmux:
     image: qkf688/llmux:latest
     ports:
       - 7070:7070

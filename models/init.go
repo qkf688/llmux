@@ -41,15 +41,21 @@ func Init(ctx context.Context, path string) {
 	}
 	// 初始化默认设置
 	initDefaultSettings(ctx)
+	// 初始化优先级字段
+	initPriorityField(ctx)
 }
 
 // initDefaultSettings 初始化默认设置
 func initDefaultSettings(ctx context.Context) {
 	defaultSettings := []Setting{
-		{Key: SettingKeyStrictCapabilityMatch, Value: "false"}, // 默认关闭严格能力匹配
-		{Key: SettingKeyAutoWeightDecay, Value: "false"},       // 默认关闭自动权重衰减
-		{Key: SettingKeyAutoWeightDecayDefault, Value: "100"},  // 默认权重值100
-		{Key: SettingKeyAutoWeightDecayStep, Value: "1"},       // 默认每次失败减少1
+		{Key: SettingKeyStrictCapabilityMatch, Value: "false"},   // 默认关闭严格能力匹配
+		{Key: SettingKeyAutoWeightDecay, Value: "false"},         // 默认关闭自动权重衰减
+		{Key: SettingKeyAutoWeightDecayDefault, Value: "100"},    // 默认权重值100
+		{Key: SettingKeyAutoWeightDecayStep, Value: "1"},         // 默认每次失败减少1
+		{Key: SettingKeyAutoPriorityDecay, Value: "false"},       // 默认关闭自动优先级衰减
+		{Key: SettingKeyAutoPriorityDecayDefault, Value: "100"},  // 默认优先级值100
+		{Key: SettingKeyAutoPriorityDecayStep, Value: "1"},       // 默认每次失败减少1
+		{Key: SettingKeyAutoPriorityDecayThreshold, Value: "90"}, // 默认优先级阈值90，达到此值自动禁用
 	}
 
 	for _, setting := range defaultSettings {
@@ -63,6 +69,14 @@ func initDefaultSettings(ctx context.Context) {
 				panic(err)
 			}
 		}
+	}
+}
+
+// initPriorityField 初始化优先级字段，为现有记录设置默认优先级
+func initPriorityField(ctx context.Context) {
+	// 为 priority 为 0 的记录设置默认优先级 100
+	if _, err := gorm.G[ModelWithProvider](DB).Where("priority = 0 OR priority IS NULL").Update(ctx, "priority", 100); err != nil {
+		panic(err)
 	}
 }
 

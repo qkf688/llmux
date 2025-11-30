@@ -42,6 +42,7 @@ type ModelWithProvider struct {
 	Status           *bool             // 是否启用
 	CustomerHeaders  map[string]string `gorm:"serializer:json"` // 自定义headers
 	Weight           int
+	Priority         int // 优先级，值越高越优先选择
 }
 
 type ChatLog struct {
@@ -113,5 +114,10 @@ const (
 	SettingKeyAutoWeightDecay        = "auto_weight_decay"         // 自动权重衰减开关
 	SettingKeyAutoWeightDecayDefault = "auto_weight_decay_default" // 自动权重衰减默认权重
 	SettingKeyAutoWeightDecayStep    = "auto_weight_decay_step"    // 自动权重衰减步长（每次失败减少的权重）
+
+	SettingKeyAutoPriorityDecay          = "auto_priority_decay"           // 自动优先级衰减开关
+	SettingKeyAutoPriorityDecayDefault   = "auto_priority_decay_default"   // 自动优先级衰减默认优先级
+	SettingKeyAutoPriorityDecayStep      = "auto_priority_decay_step"      // 自动优先级衰减步长（每次失败减少的优先级）
+	SettingKeyAutoPriorityDecayThreshold = "auto_priority_decay_threshold" // 自动优先级衰减阈值（达到此值自动禁用）
 )
  

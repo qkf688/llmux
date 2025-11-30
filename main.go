@@ -83,6 +83,7 @@ func main() {
 	api.GET("/settings", handler.GetSettings)
 	api.PUT("/settings", handler.UpdateSettings)
 	api.POST("/settings/reset-weights", handler.ResetModelWeights)
+	api.POST("/settings/reset-priorities", handler.ResetModelPriorities)
 
 	// Provider connectivity test
 	api.GET("/test/:id", handler.ProviderTestHandler)
@@ -114,4 +115,3 @@ func setwebui(r *gin.Engine) {
 		c.Data(http.StatusNotFound, "text/html; charset=utf-8", []byte("404 Not Found"))
 	})
 }
- 

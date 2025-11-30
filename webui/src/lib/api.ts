@@ -31,6 +31,7 @@ export interface ModelWithProvider {
   CustomerHeaders: Record<string, string> | null;
   Status: boolean | null;
   Weight: number;
+  Priority: number;
 }
 
 export interface SystemConfig {
@@ -207,6 +208,7 @@ export async function createModelProvider(association: {
   with_header: boolean;
   customer_headers: Record<string, string>;
   weight: number;
+  priority?: number;
 }): Promise<ModelWithProvider> {
   return apiRequest<ModelWithProvider>('/model-providers', {
     method: 'POST',
@@ -224,6 +226,7 @@ export async function updateModelProvider(id: number, association: {
   with_header?: boolean;
   customer_headers?: Record<string, string>;
   weight?: number;
+  priority?: number;
 }): Promise<ModelWithProvider> {
   return apiRequest<ModelWithProvider>(`/model-providers/${id}`, {
     method: 'PUT',
@@ -404,6 +407,10 @@ export interface Settings {
   auto_weight_decay: boolean;
   auto_weight_decay_default: number;
   auto_weight_decay_step: number;
+  auto_priority_decay: boolean;
+  auto_priority_decay_default: number;
+  auto_priority_decay_step: number;
+  auto_priority_decay_threshold: number;
 }
 
 export async function getSettings(): Promise<Settings> {
@@ -424,6 +431,18 @@ export interface ResetWeightsResponse {
 
 export async function resetModelWeights(modelId?: number): Promise<ResetWeightsResponse> {
   return apiRequest<ResetWeightsResponse>('/settings/reset-weights', {
+    method: 'POST',
+    body: JSON.stringify({ model_id: modelId }),
+  });
+}
+
+export interface ResetPrioritiesResponse {
+  updated: number;
+  default_priority: number;
+}
+
+export async function resetModelPriorities(modelId?: number): Promise<ResetPrioritiesResponse> {
+  return apiRequest<ResetPrioritiesResponse>('/settings/reset-priorities', {
     method: 'POST',
     body: JSON.stringify({ model_id: modelId }),
   });

@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { getSettings, updateSettings, resetModelWeights } from "@/lib/api";
+import { getSettings, updateSettings, resetModelWeights, resetModelPriorities } from "@/lib/api";
 import type { Settings } from "@/lib/api";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -13,7 +13,8 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [resetting, setResetting] = useState(false);
+  const [resettingWeights, setResettingWeights] = useState(false);
+  const [resettingPriorities, setResettingPriorities] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [originalSettings, setOriginalSettings] = useState<Settings | null>(null);
 
@@ -91,25 +92,73 @@ export default function SettingsPage() {
     }
   };
 
+  const handleAutoPriorityDecayChange = (checked: boolean) => {
+    if (settings) {
+      const newSettings = { ...settings, auto_priority_decay: checked };
+      setSettings(newSettings);
+      checkHasChanges(newSettings);
+    }
+  };
+
+  const handleAutoPriorityDecayDefaultChange = (value: number) => {
+    if (settings) {
+      const newSettings = { ...settings, auto_priority_decay_default: value };
+      setSettings(newSettings);
+      checkHasChanges(newSettings);
+    }
+  };
+
+  const handleAutoPriorityDecayStepChange = (value: number) => {
+    if (settings) {
+      const newSettings = { ...settings, auto_priority_decay_step: value };
+      setSettings(newSettings);
+      checkHasChanges(newSettings);
+    }
+  };
+
+  const handleAutoPriorityDecayThresholdChange = (value: number) => {
+    if (settings) {
+      const newSettings = { ...settings, auto_priority_decay_threshold: value };
+      setSettings(newSettings);
+      checkHasChanges(newSettings);
+    }
+  };
+
   const checkHasChanges = (newSettings: Settings) => {
     if (!originalSettings) return;
     const changed =
       originalSettings.strict_capability_match !== newSettings.strict_capability_match ||
       originalSettings.auto_weight_decay !== newSettings.auto_weight_decay ||
       originalSettings.auto_weight_decay_default !== newSettings.auto_weight_decay_default ||
-      originalSettings.auto_weight_decay_step !== newSettings.auto_weight_decay_step;
+      originalSettings.auto_weight_decay_step !== newSettings.auto_weight_decay_step ||
+      originalSettings.auto_priority_decay !== newSettings.auto_priority_decay ||
+      originalSettings.auto_priority_decay_default !== newSettings.auto_priority_decay_default ||
+      originalSettings.auto_priority_decay_step !== newSettings.auto_priority_decay_step ||
+      originalSettings.auto_priority_decay_threshold !== newSettings.auto_priority_decay_threshold;
     setHasChanges(changed);
   };
 
   const handleResetAllWeights = async () => {
     try {
-      setResetting(true);
+      setResettingWeights(true);
       const result = await resetModelWeights();
       toast.success(`已重置 ${result.updated} 个模型关联的权重到 ${result.default_weight}`);
     } catch (error) {
       toast.error("重置权重失败: " + (error as Error).message);
     } finally {
-      setResetting(false);
+      setResettingWeights(false);
+    }
+  };
+
+  const handleResetAllPriorities = async () => {
+    try {
+      setResettingPriorities(true);
+      const result = await resetModelPriorities();
+      toast.success(`已重置 ${result.updated} 个模型关联的优先级到 ${result.default_priority}，并重新启用`);
+    } catch (error) {
+      toast.error("重置优先级失败: " + (error as Error).message);
+    } finally {
+      setResettingPriorities(false);
     }
   };
 
@@ -250,10 +299,115 @@ export default function SettingsPage() {
                     <Button
                       variant="outline"
                       onClick={handleResetAllWeights}
-                      disabled={resetting}
+                      disabled={resettingWeights}
                     >
-                      {resetting ? <Spinner className="w-4 h-4 mr-2" /> : null}
+                      {resettingWeights ? <Spinner className="w-4 h-4 mr-2" /> : null}
                       重置权重
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>自动优先级衰减</CardTitle>
+            <CardDescription>
+              配置调用失败时自动降低供应商优先级的行为。优先级决定选择顺序，优先级高的供应商优先被选择；优先级相同时按权重随机选择。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="auto-priority-decay" className="text-base font-medium">
+                  启用自动优先级衰减
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  开启后，每次调用失败时，系统会自动减少对应供应商关联的优先级。
+                  <br />
+                  当优先级降到阈值时，该供应商关联将被自动禁用。
+                </p>
+              </div>
+              <Switch
+                id="auto-priority-decay"
+                checked={settings?.auto_priority_decay ?? false}
+                onCheckedChange={handleAutoPriorityDecayChange}
+              />
+            </div>
+
+            {settings?.auto_priority_decay && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="auto-priority-decay-default" className="text-base font-medium">
+                    默认优先级值
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    新创建关联的默认优先级值，也是重置优先级时使用的值。
+                  </p>
+                  <Input
+                    id="auto-priority-decay-default"
+                    type="number"
+                    min={1}
+                    max={1000}
+                    value={settings?.auto_priority_decay_default ?? 100}
+                    onChange={(e) => handleAutoPriorityDecayDefaultChange(parseInt(e.target.value) || 100)}
+                    className="w-32"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="auto-priority-decay-step" className="text-base font-medium">
+                    衰减步长
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    每次调用失败时减少的优先级值。
+                  </p>
+                  <Input
+                    id="auto-priority-decay-step"
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={settings?.auto_priority_decay_step ?? 1}
+                    onChange={(e) => handleAutoPriorityDecayStepChange(parseInt(e.target.value) || 1)}
+                    className="w-32"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="auto-priority-decay-threshold" className="text-base font-medium">
+                    禁用阈值
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    当优先级降到此值或以下时，自动禁用该供应商关联。
+                  </p>
+                  <Input
+                    id="auto-priority-decay-threshold"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={settings?.auto_priority_decay_threshold ?? 90}
+                    onChange={(e) => handleAutoPriorityDecayThresholdChange(parseInt(e.target.value) || 90)}
+                    className="w-32"
+                  />
+                </div>
+
+                <div className="pt-4 border-t">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label className="text-base font-medium">重置所有优先级</Label>
+                      <p className="text-sm text-muted-foreground">
+                        将所有模型关联的优先级重置为默认值 ({settings?.auto_priority_decay_default ?? 100})，并重新启用所有关联。
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={handleResetAllPriorities}
+                      disabled={resettingPriorities}
+                    >
+                      {resettingPriorities ? <Spinner className="w-4 h-4 mr-2" /> : null}
+                      重置优先级
                     </Button>
                   </div>
                 </div>
@@ -279,4 +433,4 @@ export default function SettingsPage() {
       </div>
     </div>
   );
-} 
+}

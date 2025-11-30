@@ -42,6 +42,7 @@ type ModelWithProviderRequest struct {
 	WithHeader       bool              `json:"with_header"`
 	CustomerHeaders  map[string]string `json:"customer_headers"`
 	Weight           int               `json:"weight"`
+	Priority         int               `json:"priority"`
 }
 
 // ModelProviderStatusRequest represents the request body for updating provider status
@@ -479,6 +480,12 @@ func CreateModelProvider(c *gin.Context) {
 		customerHeaders = map[string]string{}
 	}
 
+	// 如果没有指定优先级，使用默认优先级
+	priority := req.Priority
+	if priority == 0 {
+		priority = getAutoPriorityDecayDefault(c.Request.Context())
+	}
+
 	modelProvider := models.ModelWithProvider{
 		ModelID:          req.ModelID,
 		ProviderModel:    req.ProviderModel,
@@ -489,6 +496,7 @@ func CreateModelProvider(c *gin.Context) {
 		WithHeader:       &req.WithHeader,
 		CustomerHeaders:  customerHeaders,
 		Weight:           req.Weight,
+		Priority:         priority,
 	}
 
 	defaultStatus := true
@@ -546,6 +554,7 @@ func UpdateModelProvider(c *gin.Context) {
 		WithHeader:       &req.WithHeader,
 		CustomerHeaders:  customerHeaders,
 		Weight:           req.Weight,
+		Priority:         req.Priority,
 	}
 
 	if _, err := gorm.G[models.ModelWithProvider](models.DB).Where("id = ?", id).Updates(c.Request.Context(), updates); err != nil {
@@ -799,18 +808,26 @@ func GetUserAgents(c *gin.Context) {
 
 // SettingsResponse 设置响应结构
 type SettingsResponse struct {
-	StrictCapabilityMatch  bool `json:"strict_capability_match"`
-	AutoWeightDecay        bool `json:"auto_weight_decay"`
-	AutoWeightDecayDefault int  `json:"auto_weight_decay_default"`
-	AutoWeightDecayStep    int  `json:"auto_weight_decay_step"`
+	StrictCapabilityMatch      bool `json:"strict_capability_match"`
+	AutoWeightDecay            bool `json:"auto_weight_decay"`
+	AutoWeightDecayDefault     int  `json:"auto_weight_decay_default"`
+	AutoWeightDecayStep        int  `json:"auto_weight_decay_step"`
+	AutoPriorityDecay          bool `json:"auto_priority_decay"`
+	AutoPriorityDecayDefault   int  `json:"auto_priority_decay_default"`
+	AutoPriorityDecayStep      int  `json:"auto_priority_decay_step"`
+	AutoPriorityDecayThreshold int  `json:"auto_priority_decay_threshold"`
 }
 
 // UpdateSettingsRequest 更新设置请求结构
 type UpdateSettingsRequest struct {
-	StrictCapabilityMatch  bool `json:"strict_capability_match"`
-	AutoWeightDecay        bool `json:"auto_weight_decay"`
-	AutoWeightDecayDefault int  `json:"auto_weight_decay_default"`
-	AutoWeightDecayStep    int  `json:"auto_weight_decay_step"`
+	StrictCapabilityMatch      bool `json:"strict_capability_match"`
+	AutoWeightDecay            bool `json:"auto_weight_decay"`
+	AutoWeightDecayDefault     int  `json:"auto_weight_decay_default"`
+	AutoWeightDecayStep        int  `json:"auto_weight_decay_step"`
+	AutoPriorityDecay          bool `json:"auto_priority_decay"`
+	AutoPriorityDecayDefault   int  `json:"auto_priority_decay_default"`
+	AutoPriorityDecayStep      int  `json:"auto_priority_decay_step"`
+	AutoPriorityDecayThreshold int  `json:"auto_priority_decay_threshold"`
 }
 
 // GetSettings 获取所有设置
@@ -823,10 +840,14 @@ func GetSettings(c *gin.Context) {
 
 	// 构建响应
 	response := SettingsResponse{
-		StrictCapabilityMatch:  true, // 默认值
-		AutoWeightDecay:        false,
-		AutoWeightDecayDefault: 100,
-		AutoWeightDecayStep:    1,
+		StrictCapabilityMatch:      true, // 默认值
+		AutoWeightDecay:            false,
+		AutoWeightDecayDefault:     100,
+		AutoWeightDecayStep:        1,
+		AutoPriorityDecay:          false,
+		AutoPriorityDecayDefault:   100,
+		AutoPriorityDecayStep:      1,
+		AutoPriorityDecayThreshold: 90,
 	}
 
 	for _, setting := range settings {
@@ -842,6 +863,20 @@ func GetSettings(c *gin.Context) {
 		case models.SettingKeyAutoWeightDecayStep:
 			if val, err := strconv.Atoi(setting.Value); err == nil {
 				response.AutoWeightDecayStep = val
+			}
+		case models.SettingKeyAutoPriorityDecay:
+			response.AutoPriorityDecay = setting.Value == "true"
+		case models.SettingKeyAutoPriorityDecayDefault:
+			if val, err := strconv.Atoi(setting.Value); err == nil {
+				response.AutoPriorityDecayDefault = val
+			}
+		case models.SettingKeyAutoPriorityDecayStep:
+			if val, err := strconv.Atoi(setting.Value); err == nil {
+				response.AutoPriorityDecayStep = val
+			}
+		case models.SettingKeyAutoPriorityDecayThreshold:
+			if val, err := strconv.Atoi(setting.Value); err == nil {
+				response.AutoPriorityDecayThreshold = val
 			}
 		}
 	}
@@ -921,6 +956,72 @@ func UpdateSettings(c *gin.Context) {
 		}
 	}
 
+	// 获取当前自动优先级衰减开关状态
+	currentAutoPriorityDecay := false
+	currentPrioritySetting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyAutoPriorityDecay).
+		First(ctx)
+	if err == nil {
+		currentAutoPriorityDecay = currentPrioritySetting.Value == "true"
+	}
+
+	// 更新自动优先级衰减开关
+	autoPriorityDecayValue := "false"
+	if req.AutoPriorityDecay {
+		autoPriorityDecayValue = "true"
+	}
+
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyAutoPriorityDecay).
+		Update(ctx, "value", autoPriorityDecayValue); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新自动优先级衰减默认值
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyAutoPriorityDecayDefault).
+		Update(ctx, "value", strconv.Itoa(req.AutoPriorityDecayDefault)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新自动优先级衰减步长
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyAutoPriorityDecayStep).
+		Update(ctx, "value", strconv.Itoa(req.AutoPriorityDecayStep)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新自动优先级衰减阈值
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyAutoPriorityDecayThreshold).
+		Update(ctx, "value", strconv.Itoa(req.AutoPriorityDecayThreshold)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 如果刚刚开启自动优先级衰减（之前是关闭的，现在是开启的），自动重置所有优先级
+	if req.AutoPriorityDecay && !currentAutoPriorityDecay {
+		if _, err := gorm.G[models.ModelWithProvider](models.DB).
+			Where("1 = 1").
+			Update(ctx, "priority", req.AutoPriorityDecayDefault); err != nil {
+			slog.Error("auto reset priorities failed", "error", err)
+		} else {
+			slog.Info("auto reset all priorities on enabling auto priority decay", "default_priority", req.AutoPriorityDecayDefault)
+		}
+		// 同时重新启用所有关联模型
+		trueVal := true
+		if _, err := gorm.G[models.ModelWithProvider](models.DB).
+			Where("1 = 1").
+			Updates(ctx, models.ModelWithProvider{Status: &trueVal}); err != nil {
+			slog.Error("auto re-enable all model providers failed", "error", err)
+		} else {
+			slog.Info("auto re-enable all model providers on enabling auto priority decay")
+		}
+	}
+
 	// 返回更新后的设置
 	GetSettings(c)
 }
@@ -975,6 +1076,61 @@ func ResetModelWeights(c *gin.Context) {
 	})
 }
 
+// ResetModelPrioritiesRequest 重置模型优先级请求结构
+type ResetModelPrioritiesRequest struct {
+	ModelID *uint `json:"model_id"` // 可选，为空时重置所有模型的优先级
+}
+
+// ResetModelPriorities 重置模型关联的优先级到默认值
+func ResetModelPriorities(c *gin.Context) {
+	var req ResetModelPrioritiesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// 获取默认优先级值
+	defaultPriority := getAutoPriorityDecayDefault(ctx)
+
+	// 更新优先级
+	var result int
+	var err error
+	if req.ModelID != nil {
+		result, err = gorm.G[models.ModelWithProvider](models.DB).
+			Where("model_id = ?", *req.ModelID).
+			Update(ctx, "priority", defaultPriority)
+	} else {
+		// 使用 Where("1 = 1") 来允许全表更新
+		result, err = gorm.G[models.ModelWithProvider](models.DB).
+			Where("1 = 1").
+			Update(ctx, "priority", defaultPriority)
+	}
+
+	if err != nil {
+		common.InternalServerError(c, "Failed to reset priorities: "+err.Error())
+		return
+	}
+
+	// 同时重新启用所有关联模型
+	trueVal := true
+	if req.ModelID != nil {
+		gorm.G[models.ModelWithProvider](models.DB).
+			Where("model_id = ?", *req.ModelID).
+			Updates(ctx, models.ModelWithProvider{Status: &trueVal})
+	} else {
+		gorm.G[models.ModelWithProvider](models.DB).
+			Where("1 = 1").
+			Updates(ctx, models.ModelWithProvider{Status: &trueVal})
+	}
+
+	common.Success(c, map[string]interface{}{
+		"updated":          result,
+		"default_priority": defaultPriority,
+	})
+}
+
 // GetStrictCapabilityMatch 获取严格能力匹配设置
 func GetStrictCapabilityMatch(ctx context.Context) bool {
 	setting, err := gorm.G[models.Setting](models.DB).
@@ -984,5 +1140,20 @@ func GetStrictCapabilityMatch(ctx context.Context) bool {
 		return true // 默认开启
 	}
 	return setting.Value == "true"
+}
+
+// getAutoPriorityDecayDefault 获取自动优先级衰减默认值
+func getAutoPriorityDecayDefault(ctx context.Context) int {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyAutoPriorityDecayDefault).
+		First(ctx)
+	if err != nil {
+		return 100 // 默认优先级100
+	}
+	val, err := strconv.Atoi(setting.Value)
+	if err != nil {
+		return 100
+	}
+	return val
 }
  

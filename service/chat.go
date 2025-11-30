@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptrace"
+	"sort"
 	"strconv"
 	"time"
 
@@ -24,6 +25,7 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 
 	providerMap := providersWithMeta.ProviderMap
 	weightItems := providersWithMeta.WeightItems
+	priorityItems := providersWithMeta.PriorityItems
 
 	// 收集重试过程中的err日志
 	retryLog := make(chan models.ChatLog, providersWithMeta.MaxRetry)
@@ -42,8 +44,8 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 		case <-timer.C:
 			return nil, 0, errors.New("retry time out")
 		default:
-			// 加权负载均衡
-			id, err := balancer.WeightedRandom(weightItems)
+			// 根据优先级和权重选择供应商
+			id, err := selectByPriorityAndWeight(weightItems, priorityItems)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -103,6 +105,7 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				retryLog <- log.WithError(err)
 				// 请求失败 移除待选
 				delete(weightItems, *id)
+				delete(priorityItems, *id)
 				continue
 			}
 
@@ -119,6 +122,7 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				} else {
 					// 非RPM限制 移除待选
 					delete(weightItems, *id)
+					delete(priorityItems, *id)
 				}
 				res.Body.Close()
 				continue
@@ -137,14 +141,47 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 	return nil, 0, errors.New("maximum retry attempts reached")
 }
 
+// selectByPriorityAndWeight 根据优先级和权重选择供应商
+// 优先选择优先级高的，优先级相同时按权重随机选择
+func selectByPriorityAndWeight(weightItems map[uint]int, priorityItems map[uint]int) (*uint, error) {
+	if len(weightItems) == 0 {
+		return nil, fmt.Errorf("no provide items")
+	}
+
+	// 找到最高优先级
+	maxPriority := -1
+	for id := range weightItems {
+		if priority, ok := priorityItems[id]; ok && priority > maxPriority {
+			maxPriority = priority
+		}
+	}
+
+	// 筛选出最高优先级的供应商
+	highPriorityItems := make(map[uint]int)
+	for id, weight := range weightItems {
+		if priority, ok := priorityItems[id]; ok && priority == maxPriority {
+			highPriorityItems[id] = weight
+		}
+	}
+
+	// 在最高优先级的供应商中按权重随机选择
+	if len(highPriorityItems) > 0 {
+		return balancer.WeightedRandom(highPriorityItems)
+	}
+
+	// 如果没有优先级信息，回退到原来的权重选择
+	return balancer.WeightedRandom(weightItems)
+}
+
 func RecordRetryLog(ctx context.Context, retryLog chan models.ChatLog, modelWithProviderMap map[uint]models.ModelWithProvider) {
 	for log := range retryLog {
 		if _, err := SaveChatLog(ctx, log); err != nil {
 			slog.Error("save chat log error", "error", err)
 		}
-		// 当调用失败时，检查并应用权重衰减
+		// 当调用失败时，检查并应用权重衰减和优先级衰减
 		if log.Status == "error" {
 			applyWeightDecay(ctx, log, modelWithProviderMap)
+			applyPriorityDecay(ctx, log, modelWithProviderMap)
 		}
 	}
 }
@@ -212,6 +249,97 @@ func getAutoWeightDecayStep(ctx context.Context) int {
 	return step
 }
 
+// applyPriorityDecay 应用优先级衰减
+func applyPriorityDecay(ctx context.Context, log models.ChatLog, modelWithProviderMap map[uint]models.ModelWithProvider) {
+	// 检查是否开启自动优先级衰减
+	if !getAutoPriorityDecay(ctx) {
+		return
+	}
+
+	// 获取衰减步长和阈值
+	decayStep := getAutoPriorityDecayStep(ctx)
+	threshold := getAutoPriorityDecayThreshold(ctx)
+
+	// 查找对应的 ModelWithProvider
+	for id, mwp := range modelWithProviderMap {
+		// 获取供应商信息以匹配日志
+		provider, err := gorm.G[models.Provider](models.DB).Where("id = ?", mwp.ProviderID).First(ctx)
+		if err != nil {
+			continue
+		}
+		if provider.Name == log.ProviderName && mwp.ProviderModel == log.ProviderModel {
+			// 计算新优先级
+			newPriority := mwp.Priority - decayStep
+			if newPriority < 0 {
+				newPriority = 0
+			}
+
+			// 更新数据库中的优先级
+			if _, err := gorm.G[models.ModelWithProvider](models.DB).
+				Where("id = ?", id).
+				Update(ctx, "priority", newPriority); err != nil {
+				slog.Error("update priority error", "error", err, "id", id)
+			} else {
+				slog.Info("priority decay applied", "provider", log.ProviderName, "model", log.ProviderModel, "old_priority", mwp.Priority, "new_priority", newPriority)
+			}
+
+			// 如果优先级达到阈值，自动禁用该关联模型
+			if newPriority <= threshold {
+				falseVal := false
+				if _, err := gorm.G[models.ModelWithProvider](models.DB).
+					Where("id = ?", id).
+					Updates(ctx, models.ModelWithProvider{Status: &falseVal}); err != nil {
+					slog.Error("auto disable model provider error", "error", err, "id", id)
+				} else {
+					slog.Warn("model provider auto disabled due to low priority", "provider", log.ProviderName, "model", log.ProviderModel, "priority", newPriority, "threshold", threshold)
+				}
+			}
+			break
+		}
+	}
+}
+
+// getAutoPriorityDecay 获取自动优先级衰减开关
+func getAutoPriorityDecay(ctx context.Context) bool {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyAutoPriorityDecay).
+		First(ctx)
+	if err != nil {
+		return false // 默认关闭
+	}
+	return setting.Value == "true"
+}
+
+// getAutoPriorityDecayStep 获取自动优先级衰减步长
+func getAutoPriorityDecayStep(ctx context.Context) int {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyAutoPriorityDecayStep).
+		First(ctx)
+	if err != nil {
+		return 1 // 默认步长1
+	}
+	step, err := strconv.Atoi(setting.Value)
+	if err != nil {
+		return 1
+	}
+	return step
+}
+
+// getAutoPriorityDecayThreshold 获取自动优先级衰减阈值
+func getAutoPriorityDecayThreshold(ctx context.Context) int {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyAutoPriorityDecayThreshold).
+		First(ctx)
+	if err != nil {
+		return 90 // 默认阈值90
+	}
+	threshold, err := strconv.Atoi(setting.Value)
+	if err != nil {
+		return 90
+	}
+	return threshold
+}
+
 func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, processer Processer, logId uint, before Before, ioLog bool) {
 	recordFunc := func() error {
 		defer reader.Close()
@@ -272,6 +400,7 @@ func buildHeaders(source http.Header, withHeader bool, customHeaders map[string]
 type ProvidersWithMeta struct {
 	ModelWithProviderMap map[uint]models.ModelWithProvider
 	WeightItems          map[uint]int
+	PriorityItems        map[uint]int
 	ProviderMap          map[uint]models.Provider
 	MaxRetry             int
 	TimeOut              int
@@ -336,12 +465,28 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 	providerMap := lo.KeyBy(providers, func(p models.Provider) uint { return p.ID })
 
 	weightItems := make(map[uint]int)
+	priorityItems := make(map[uint]int)
 	for _, mp := range modelWithProviders {
 		if _, ok := providerMap[mp.ProviderID]; !ok {
 			continue
 		}
 		weightItems[mp.ID] = mp.Weight
+		priorityItems[mp.ID] = mp.Priority
 	}
+
+	// 按优先级排序供应商（用于日志输出）
+	type providerPriority struct {
+		ID       uint
+		Priority int
+	}
+	var sortedProviders []providerPriority
+	for id, priority := range priorityItems {
+		sortedProviders = append(sortedProviders, providerPriority{ID: id, Priority: priority})
+	}
+	sort.Slice(sortedProviders, func(i, j int) bool {
+		return sortedProviders[i].Priority > sortedProviders[j].Priority
+	})
+	slog.Debug("providers sorted by priority", "order", sortedProviders)
 
 	if model.IOLog == nil {
 		model.IOLog = new(bool)
@@ -350,6 +495,7 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 	return &ProvidersWithMeta{
 		ModelWithProviderMap: modelWithProviderMap,
 		WeightItems:          weightItems,
+		PriorityItems:        priorityItems,
 		ProviderMap:          providerMap,
 		MaxRetry:             model.MaxRetry,
 		TimeOut:              model.TimeOut,

@@ -93,6 +93,7 @@ const formSchema = z.object({
   image: z.boolean(),
   with_header: z.boolean(),
   weight: z.number().positive({ message: "权重必须大于0" }),
+  priority: z.number().min(0, { message: "优先级必须大于等于0" }),
   customer_headers: z.array(headerPairSchema).default([]),
 });
 
@@ -153,6 +154,7 @@ export default function ModelProvidersPage() {
       image: false,
       with_header: false,
       weight: 1,
+      priority: 100,
       customer_headers: [],
     },
   });
@@ -223,7 +225,8 @@ export default function ModelProvidersPage() {
       image: values.image,
       with_header: values.with_header,
       customer_headers: headers,
-      weight: values.weight
+      weight: values.weight,
+      priority: values.priority
     };
   };
 
@@ -348,6 +351,7 @@ export default function ModelProvidersPage() {
         image: false,
         with_header: false,
         weight: 1,
+        priority: 100,
         customer_headers: []
       });
       setSelectedProviderModels([]);
@@ -380,6 +384,7 @@ export default function ModelProvidersPage() {
         image: false,
         with_header: false,
         weight: 1,
+        priority: 100,
         customer_headers: []
       });
       if (selectedModelId) {
@@ -594,6 +599,7 @@ export default function ModelProvidersPage() {
       image: association.Image,
       with_header: association.WithHeader,
       weight: association.Weight,
+      priority: association.Priority ?? 100,
       customer_headers: headerPairs.length ? headerPairs : [],
     });
     setOpen(true);
@@ -610,6 +616,7 @@ export default function ModelProvidersPage() {
       image: false,
       with_header: false,
       weight: 1,
+      priority: 100,
       customer_headers: []
     });
     setOpen(true);
@@ -805,6 +812,7 @@ export default function ModelProvidersPage() {
                     <TableHead>视觉</TableHead>
                     <TableHead>请求头透传</TableHead>
                     <TableHead>权重</TableHead>
+                    <TableHead>优先级</TableHead>
                     <TableHead>启用</TableHead>
                     <TableHead>
                       <div className="flex items-center gap-1">状态
@@ -864,6 +872,7 @@ export default function ModelProvidersPage() {
                           </span>
                         </TableCell>
                         <TableCell>{association.Weight}</TableCell>
+                        <TableCell>{association.Priority ?? 100}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Switch
@@ -976,12 +985,13 @@ export default function ModelProvidersPage() {
                       <MobileInfoItem label="提供商类型" value={provider?.Type ?? '未知'} />
                       <MobileInfoItem label="提供商 ID" value={<span className="font-mono text-xs">{provider?.ID ?? '-'}</span>} />
                       <MobileInfoItem label="权重" value={association.Weight} />
+                      <MobileInfoItem label="优先级" value={association.Priority ?? 100} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
                       <MobileInfoItem
                         label="请求头透传"
                         value={<span className={association.WithHeader ? "text-green-600" : "text-red-600"}>{association.WithHeader ? '✓' : '✗'}</span>}
                       />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 text-xs">
                       <MobileInfoItem
                         label="工具调用"
                         value={<span className={association.ToolCall ? "text-green-600" : "text-red-600"}>{association.ToolCall ? '✓' : '✗'}</span>}
@@ -1380,6 +1390,25 @@ export default function ModelProvidersPage() {
                           {...field}
                           type="number"
                           min="1"
+                          onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="priority"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>优先级 (优先级高的优先选择，相同优先级按权重随机)</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="number"
+                          min="0"
                           onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
                         />
                       </FormControl>

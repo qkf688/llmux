@@ -101,6 +101,10 @@ func GetProviderModels(c *gin.Context) {
 		common.NotFound(c, "Failed to get models: "+err.Error())
 		return
 	}
+	// 确保返回的是数组而不是 nil，避免前端白屏
+	if models == nil {
+		models = []providers.Model{}
+	}
 	common.Success(c, models)
 }
 

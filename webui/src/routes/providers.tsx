@@ -140,8 +140,10 @@ export default function ProvidersPage() {
     try {
       setModelsLoading(true);
       const data = await getProviderModels(providerId);
-      setProviderModels(data);
-      setFilteredProviderModels(data);
+      // 确保 data 是数组，防止后端返回 null 导致白屏
+      const models = Array.isArray(data) ? data : [];
+      setProviderModels(models);
+      setFilteredProviderModels(models);
     } catch (err) {
       console.error("获取提供商模型失败", err);
       setProviderModels([]);

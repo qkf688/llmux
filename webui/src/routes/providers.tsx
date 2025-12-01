@@ -25,7 +25,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Form,
   FormControl,
@@ -63,9 +62,54 @@ import { toast } from "sonner";
 const formSchema = z.object({
   name: z.string().min(1, { message: "提供商名称不能为空" }),
   type: z.string().min(1, { message: "提供商类型不能为空" }),
-  config: z.string().min(1, { message: "配置不能为空" }),
+  base_url: z.string().min(1, { message: "Base URL 不能为空" }),
+  api_key: z.string().min(1, { message: "API Key 不能为空" }),
+  // Anthropic 特有字段
+  beta: z.string().optional(),
+  version: z.string().optional(),
   console: z.string().optional(),
 });
+
+// 将表单字段转换为 JSON 配置字符串
+function buildConfigFromForm(values: z.infer<typeof formSchema>): string {
+  if (values.type === "anthropic") {
+    return JSON.stringify({
+      base_url: values.base_url,
+      api_key: values.api_key,
+      beta: values.beta || "",
+      version: values.version || "2023-06-01",
+    });
+  }
+  return JSON.stringify({
+    base_url: values.base_url,
+    api_key: values.api_key,
+  });
+}
+
+// 从 JSON 配置字符串解析为表单字段
+function parseConfigToForm(config: string, _type?: string): {
+  base_url: string;
+  api_key: string;
+  beta?: string;
+  version?: string;
+} {
+  try {
+    const parsed = JSON.parse(config);
+    return {
+      base_url: parsed.base_url || "",
+      api_key: parsed.api_key || "",
+      beta: parsed.beta || "",
+      version: parsed.version || "",
+    };
+  } catch {
+    return {
+      base_url: "",
+      api_key: "",
+      beta: "",
+      version: "",
+    };
+  }
+}
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -91,10 +135,16 @@ export default function ProvidersPage() {
     defaultValues: {
       name: "",
       type: "",
-      config: "",
+      base_url: "",
+      api_key: "",
+      beta: "",
+      version: "",
       console: "",
     },
   });
+
+  // 监听类型变化，用于显示/隐藏 Anthropic 特有字段
+  const watchedType = form.watch("type");
 
   useEffect(() => {
     fetchProviders();
@@ -166,15 +216,16 @@ export default function ProvidersPage() {
 
   const handleCreate = async (values: z.infer<typeof formSchema>) => {
     try {
+      const config = buildConfigFromForm(values);
       await createProvider({
         name: values.name,
         type: values.type,
-        config: values.config,
+        config: config,
         console: values.console || ""
       });
       setOpen(false);
       toast.success(`提供商 ${values.name} 创建成功`);
-      form.reset({ name: "", type: "", config: "", console: "" });
+      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "" });
       fetchProviders();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -186,16 +237,17 @@ export default function ProvidersPage() {
   const handleUpdate = async (values: z.infer<typeof formSchema>) => {
     if (!editingProvider) return;
     try {
+      const config = buildConfigFromForm(values);
       await updateProvider(editingProvider.ID, {
         name: values.name,
         type: values.type,
-        config: values.config,
+        config: config,
         console: values.console || ""
       });
       setOpen(false);
       toast.success(`提供商 ${values.name} 更新成功`);
       setEditingProvider(null);
-      form.reset({ name: "", type: "", config: "", console: "" });
+      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "" });
       fetchProviders();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -221,10 +273,14 @@ export default function ProvidersPage() {
 
   const openEditDialog = (provider: Provider) => {
     setEditingProvider(provider);
+    const configFields = parseConfigToForm(provider.Config, provider.Type);
     form.reset({
       name: provider.Name,
       type: provider.Type,
-      config: provider.Config,
+      base_url: configFields.base_url,
+      api_key: configFields.api_key,
+      beta: configFields.beta || "",
+      version: configFields.version || "",
       console: provider.Console || "",
     });
     setOpen(true);
@@ -232,7 +288,7 @@ export default function ProvidersPage() {
 
   const openCreateDialog = () => {
     setEditingProvider(null);
-    form.reset({ name: "", type: "", config: "", console: "" });
+    form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "" });
     setOpen(true);
   };
 
@@ -463,10 +519,16 @@ export default function ProvidersPage() {
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                         onChange={(e) => {
                           field.onChange(e);
-                          // When type changes, populate config with template if available
+                          // When type changes, populate config fields with template defaults if available
                           const selectedTemplate = providerTemplates.find(t => t.type === e.target.value);
                           if (selectedTemplate) {
-                            form.setValue("config", selectedTemplate.template);
+                            const parsed = parseConfigToForm(selectedTemplate.template, e.target.value);
+                            form.setValue("base_url", parsed.base_url);
+                            // Don't set api_key as it should be entered by user
+                            if (e.target.value === "anthropic") {
+                              form.setValue("version", parsed.version || "2023-06-01");
+                              form.setValue("beta", parsed.beta || "");
+                            }
                           }
                         }}
                       >
@@ -485,15 +547,12 @@ export default function ProvidersPage() {
 
               <FormField
                 control={form.control}
-                name="config"
+                name="base_url"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>配置</FormLabel>
+                    <FormLabel>Base URL</FormLabel>
                     <FormControl>
-                      <Textarea
-                        {...field}
-                        className="resize-none whitespace-pre overflow-x-auto"
-                      />
+                      <Input {...field} placeholder="https://api.openai.com/v1" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -502,10 +561,57 @@ export default function ProvidersPage() {
 
               <FormField
                 control={form.control}
+                name="api_key"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>API Key</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="password" placeholder="sk-..." />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Anthropic 特有字段 */}
+              {watchedType === "anthropic" && (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="version"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Version</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="2023-06-01" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="beta"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Beta（可选）</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="可选的 beta 标识" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </>
+              )}
+
+              <FormField
+                control={form.control}
                 name="console"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>控制台地址</FormLabel>
+                    <FormLabel>控制台地址（可选）</FormLabel>
                     <FormControl>
                       <Input {...field} placeholder="https://example.com/console" />
                     </FormControl>

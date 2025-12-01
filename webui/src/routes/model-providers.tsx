@@ -57,9 +57,10 @@ import {
   getModels,
   getProviders,
   testModelProvider,
-  getProviderModels
+  getProviderModels,
+  getSettings
 } from "@/lib/api";
-import type { ModelWithProvider, Model, Provider, ProviderModel } from "@/lib/api";
+import type { ModelWithProvider, Model, Provider, ProviderModel, Settings } from "@/lib/api";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -137,6 +138,7 @@ export default function ModelProvidersPage() {
   const [selectedAssociationIds, setSelectedAssociationIds] = useState<number[]>([]);
   const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
+  const [settings, setSettings] = useState<Settings | null>(null);
 
   const dialogClose = () => {
     setTestDialogOpen(false)
@@ -164,7 +166,7 @@ export default function ModelProvidersPage() {
   });
 
   useEffect(() => {
-    Promise.all([fetchModels(), fetchProviders()]).finally(() => {
+    Promise.all([fetchModels(), fetchProviders(), fetchSettings()]).finally(() => {
       setLoading(false);
     });
   }, []);
@@ -249,6 +251,15 @@ export default function ModelProvidersPage() {
       const message = err instanceof Error ? err.message : String(err);
       toast.error(`获取提供商列表失败: ${message}`);
       console.error(err);
+    }
+  };
+
+  const fetchSettings = async () => {
+    try {
+      const data = await getSettings();
+      setSettings(data);
+    } catch (err) {
+      console.error("获取系统设置失败", err);
     }
   };
 
@@ -607,6 +618,8 @@ export default function ModelProvidersPage() {
 
   const openCreateDialog = () => {
     setEditingAssociation(null);
+    // 如果开启了自动权重衰减，使用设置中的默认权重值
+    const defaultWeight = settings?.auto_weight_decay ? (settings.auto_weight_decay_default || 100) : 1;
     form.reset({
       model_id: selectedModelId || 0,
       provider_name: "",
@@ -615,7 +628,7 @@ export default function ModelProvidersPage() {
       structured_output: false,
       image: false,
       with_header: false,
-      weight: 1,
+      weight: defaultWeight,
       priority: 100,
       customer_headers: []
     });

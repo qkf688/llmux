@@ -56,6 +56,7 @@ func initDefaultSettings(ctx context.Context) {
 		{Key: SettingKeyAutoPriorityDecayDefault, Value: "100"},  // 默认优先级值100
 		{Key: SettingKeyAutoPriorityDecayStep, Value: "1"},       // 默认每次失败减少1
 		{Key: SettingKeyAutoPriorityDecayThreshold, Value: "90"}, // 默认优先级阈值90，达到此值自动禁用
+		{Key: SettingKeyLogRetentionCount, Value: "100"},         // 默认保留100条日志，0表示不限制
 	}
 
 	for _, setting := range defaultSettings {

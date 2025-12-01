@@ -411,6 +411,7 @@ export interface Settings {
   auto_priority_decay_default: number;
   auto_priority_decay_step: number;
   auto_priority_decay_threshold: number;
+  log_retention_count: number;
 }
 
 export async function getSettings(): Promise<Settings> {
@@ -445,6 +446,26 @@ export async function resetModelPriorities(modelId?: number): Promise<ResetPrior
   return apiRequest<ResetPrioritiesResponse>('/settings/reset-priorities', {
     method: 'POST',
     body: JSON.stringify({ model_id: modelId }),
+  });
+}
+
+// Log management API functions
+export async function deleteLog(id: number): Promise<void> {
+  await apiRequest<void>(`/logs/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function batchDeleteLogs(ids: number[]): Promise<{ deleted: number }> {
+  return apiRequest<{ deleted: number }>('/logs/batch', {
+    method: 'DELETE',
+    body: JSON.stringify({ ids }),
+  });
+}
+
+export async function clearAllLogs(): Promise<{ deleted: number }> {
+  return apiRequest<{ deleted: number }>('/logs/clear', {
+    method: 'DELETE',
   });
 }
  

@@ -820,6 +820,7 @@ type SettingsResponse struct {
 	AutoPriorityDecayDefault   int  `json:"auto_priority_decay_default"`
 	AutoPriorityDecayStep      int  `json:"auto_priority_decay_step"`
 	AutoPriorityDecayThreshold int  `json:"auto_priority_decay_threshold"`
+	LogRetentionCount          int  `json:"log_retention_count"`
 }
 
 // UpdateSettingsRequest 更新设置请求结构
@@ -832,6 +833,7 @@ type UpdateSettingsRequest struct {
 	AutoPriorityDecayDefault   int  `json:"auto_priority_decay_default"`
 	AutoPriorityDecayStep      int  `json:"auto_priority_decay_step"`
 	AutoPriorityDecayThreshold int  `json:"auto_priority_decay_threshold"`
+	LogRetentionCount          int  `json:"log_retention_count"`
 }
 
 // GetSettings 获取所有设置
@@ -852,6 +854,7 @@ func GetSettings(c *gin.Context) {
 		AutoPriorityDecayDefault:   100,
 		AutoPriorityDecayStep:      1,
 		AutoPriorityDecayThreshold: 90,
+		LogRetentionCount:          100, // 默认保留100条
 	}
 
 	for _, setting := range settings {
@@ -881,6 +884,10 @@ func GetSettings(c *gin.Context) {
 		case models.SettingKeyAutoPriorityDecayThreshold:
 			if val, err := strconv.Atoi(setting.Value); err == nil {
 				response.AutoPriorityDecayThreshold = val
+			}
+		case models.SettingKeyLogRetentionCount:
+			if val, err := strconv.Atoi(setting.Value); err == nil {
+				response.LogRetentionCount = val
 			}
 		}
 	}
@@ -1026,8 +1033,71 @@ func UpdateSettings(c *gin.Context) {
 		}
 	}
 
+	// 更新日志保留条数设置
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyLogRetentionCount).
+		Update(ctx, "value", strconv.Itoa(req.LogRetentionCount)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 如果设置了保留条数限制，立即执行清理
+	if req.LogRetentionCount > 0 {
+		go cleanupExcessLogs(req.LogRetentionCount)
+	}
+
 	// 返回更新后的设置
 	GetSettings(c)
+}
+
+// cleanupExcessLogs 清理超出保留条数的日志
+func cleanupExcessLogs(retentionCount int) {
+	ctx := context.Background()
+
+	// 获取总日志数
+	var total int64
+	if err := models.DB.Model(&models.ChatLog{}).Count(&total).Error; err != nil {
+		slog.Error("failed to count logs for cleanup", "error", err)
+		return
+	}
+
+	// 如果日志数超过保留条数，删除多余的
+	if int(total) > retentionCount {
+		deleteCount := int(total) - retentionCount
+
+		// 获取需要删除的日志ID（最旧的）
+		var logsToDelete []models.ChatLog
+		if err := models.DB.Model(&models.ChatLog{}).
+			Order("id ASC").
+			Limit(deleteCount).
+			Find(&logsToDelete).Error; err != nil {
+			slog.Error("failed to find logs to delete", "error", err)
+			return
+		}
+
+		// 提取ID列表
+		ids := make([]uint, len(logsToDelete))
+		for i, log := range logsToDelete {
+			ids[i] = log.ID
+		}
+
+		// 删除对应的ChatIO记录
+		if _, err := gorm.G[models.ChatIO](models.DB).
+			Where("log_id IN ?", ids).
+			Delete(ctx); err != nil {
+			slog.Error("failed to delete chat io records", "error", err)
+		}
+
+		// 删除日志记录
+		if _, err := gorm.G[models.ChatLog](models.DB).
+			Where("id IN ?", ids).
+			Delete(ctx); err != nil {
+			slog.Error("failed to delete logs", "error", err)
+			return
+		}
+
+		slog.Info("cleaned up excess logs", "deleted", deleteCount, "retention", retentionCount)
+	}
 }
 
 // ResetModelWeightsRequest 重置模型权重请求结构
@@ -1159,5 +1229,106 @@ func getAutoPriorityDecayDefault(ctx context.Context) int {
 		return 100
 	}
 	return val
+}
+
+// DeleteLog 删除单条日志
+func DeleteLog(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		common.BadRequest(c, "Invalid ID format")
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// 删除对应的ChatIO记录
+	if _, err := gorm.G[models.ChatIO](models.DB).
+		Where("log_id = ?", id).
+		Delete(ctx); err != nil {
+		slog.Warn("failed to delete chat io record", "log_id", id, "error", err)
+	}
+
+	// 删除日志记录
+	result, err := gorm.G[models.ChatLog](models.DB).
+		Where("id = ?", id).
+		Delete(ctx)
+	if err != nil {
+		common.InternalServerError(c, "Failed to delete log: "+err.Error())
+		return
+	}
+
+	if result == 0 {
+		common.NotFound(c, "Log not found")
+		return
+	}
+
+	common.Success(c, nil)
+}
+
+// BatchDeleteLogsRequest 批量删除日志请求结构
+type BatchDeleteLogsRequest struct {
+	IDs []uint `json:"ids"`
+}
+
+// BatchDeleteLogs 批量删除日志
+func BatchDeleteLogs(c *gin.Context) {
+	var req BatchDeleteLogsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		common.BadRequest(c, "No IDs provided")
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// 删除对应的ChatIO记录
+	if _, err := gorm.G[models.ChatIO](models.DB).
+		Where("log_id IN ?", req.IDs).
+		Delete(ctx); err != nil {
+		slog.Warn("failed to delete chat io records", "error", err)
+	}
+
+	// 删除日志记录
+	result, err := gorm.G[models.ChatLog](models.DB).
+		Where("id IN ?", req.IDs).
+		Delete(ctx)
+	if err != nil {
+		common.InternalServerError(c, "Failed to delete logs: "+err.Error())
+		return
+	}
+
+	common.Success(c, map[string]interface{}{
+		"deleted": result,
+	})
+}
+
+// ClearAllLogs 清空所有日志
+func ClearAllLogs(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// 删除所有ChatIO记录
+	if _, err := gorm.G[models.ChatIO](models.DB).
+		Where("1 = 1").
+		Delete(ctx); err != nil {
+		slog.Warn("failed to delete all chat io records", "error", err)
+	}
+
+	// 删除所有日志记录
+	result, err := gorm.G[models.ChatLog](models.DB).
+		Where("1 = 1").
+		Delete(ctx)
+	if err != nil {
+		common.InternalServerError(c, "Failed to clear logs: "+err.Error())
+		return
+	}
+
+	common.Success(c, map[string]interface{}{
+		"deleted": result,
+	})
 }
  

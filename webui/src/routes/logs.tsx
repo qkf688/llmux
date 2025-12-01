@@ -12,9 +12,21 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import Loading from "@/components/loading";
-import { getLogs, getProviders, getModels, getUserAgents, type ChatLog, type Provider, type Model, getProviderTemplates } from "@/lib/api";
-import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { getLogs, getProviders, getModels, getUserAgents, deleteLog, batchDeleteLogs, type ChatLog, type Provider, type Model, getProviderTemplates } from "@/lib/api";
+import { ChevronLeft, ChevronRight, RefreshCw, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 // 格式化时间显示
 const formatTime = (nanoseconds: number): string => {
@@ -64,6 +76,13 @@ export default function LogsPage() {
   // 详情弹窗
   const [selectedLog, setSelectedLog] = useState<ChatLog | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  // 选择状态
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
+  // 删除确认对话框状态
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false);
+  const [logToDelete, setLogToDelete] = useState<number | null>(null);
   // 获取数据
   const fetchProviders = async () => {
     try {
@@ -143,6 +162,83 @@ export default function LogsPage() {
     if (!canViewChatIO(log)) return;
     navigate(`/logs/${log.ID}/chat-io`);
   };
+
+  // 选择相关函数
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(logs.map(log => log.ID)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleSelectOne = (id: number, checked: boolean) => {
+    const newSelected = new Set(selectedIds);
+    if (checked) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const isAllSelected = logs.length > 0 && selectedIds.size === logs.length;
+  const isSomeSelected = selectedIds.size > 0 && selectedIds.size < logs.length;
+
+  // 打开单条删除确认对话框
+  const openDeleteDialog = (id: number) => {
+    setLogToDelete(id);
+    setDeleteDialogOpen(true);
+  };
+
+  // 确认删除单条日志
+  const confirmDeleteLog = async () => {
+    if (logToDelete === null) return;
+    try {
+      setIsDeleting(true);
+      await deleteLog(logToDelete);
+      toast.success("日志已删除");
+      fetchLogs();
+      setSelectedIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(logToDelete);
+        return newSet;
+      });
+    } catch (error) {
+      toast.error("删除失败: " + (error as Error).message);
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
+      setLogToDelete(null);
+    }
+  };
+
+  // 打开批量删除确认对话框
+  const openBatchDeleteDialog = () => {
+    if (selectedIds.size === 0) return;
+    setBatchDeleteDialogOpen(true);
+  };
+
+  // 确认批量删除日志
+  const confirmBatchDelete = async () => {
+    try {
+      setIsDeleting(true);
+      const result = await batchDeleteLogs(Array.from(selectedIds));
+      toast.success(`已删除 ${result.deleted} 条日志`);
+      setSelectedIds(new Set());
+      fetchLogs();
+    } catch (error) {
+      toast.error("批量删除失败: " + (error as Error).message);
+    } finally {
+      setIsDeleting(false);
+      setBatchDeleteDialogOpen(false);
+    }
+  };
+
+  // 页面切换时清空选择
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [page, pageSize, providerNameFilter, modelFilter, statusFilter, styleFilter, userAgentFilter]);
   // 布局开始
   return (
     <div className="h-full min-h-0 flex flex-col gap-4 p-1">
@@ -152,16 +248,30 @@ export default function LogsPage() {
           <div className="min-w-0">
             <h2 className="text-2xl font-bold tracking-tight">请求日志</h2>
           </div>
-          <Button
-            onClick={handleRefresh}
-            variant="outline"
-            size="icon"
-            className="ml-auto shrink-0"
-            aria-label="刷新列表"
-            title="刷新列表"
-          >
-            <RefreshCw className="size-4" />
-          </Button>
+          <div className="flex gap-2 ml-auto">
+            {selectedIds.size > 0 && (
+              <Button
+                onClick={openBatchDeleteDialog}
+                variant="destructive"
+                size="sm"
+                disabled={isDeleting}
+                className="shrink-0"
+              >
+                <Trash2 className="size-4 mr-1" />
+                删除 ({selectedIds.size})
+              </Button>
+            )}
+            <Button
+              onClick={handleRefresh}
+              variant="outline"
+              size="icon"
+              className="shrink-0"
+              aria-label="刷新列表"
+              title="刷新列表"
+            >
+              <RefreshCw className="size-4" />
+            </Button>
+          </div>
         </div>
       </div>
       {/* 筛选区域 */}
@@ -252,9 +362,21 @@ export default function LogsPage() {
           <div className="h-full flex flex-col">
             <div className="flex-1 overflow-y-auto">
               <div className="hidden sm:block w-full">
-                <Table className="min-w-[1100px]">
+                <Table className="min-w-[1150px]">
                   <TableHeader className="z-10 sticky top-0 bg-secondary/90 backdrop-blur text-secondary-foreground">
                     <TableRow className="hover:bg-secondary/90">
+                      <TableHead className="w-[40px]">
+                        <Checkbox
+                          checked={isAllSelected}
+                          ref={(el) => {
+                            if (el) {
+                              (el as unknown as HTMLInputElement).indeterminate = isSomeSelected;
+                            }
+                          }}
+                          onCheckedChange={handleSelectAll}
+                          aria-label="全选"
+                        />
+                      </TableHead>
                       <TableHead>时间</TableHead>
                       <TableHead>模型名称</TableHead>
                       <TableHead>状态</TableHead>
@@ -264,12 +386,19 @@ export default function LogsPage() {
                       <TableHead>类型</TableHead>
                       <TableHead>提供商</TableHead>
                       <TableHead>UA</TableHead>
-                      <TableHead className="w-[140px]">操作</TableHead>
+                      <TableHead className="w-[180px]">操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {logs.map((log) => (
-                      <TableRow key={log.ID}>
+                      <TableRow key={log.ID} className={selectedIds.has(log.ID) ? "bg-muted/50" : ""}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.has(log.ID)}
+                            onCheckedChange={(checked) => handleSelectOne(log.ID, !!checked)}
+                            aria-label={`选择日志 ${log.ID}`}
+                          />
+                        </TableCell>
                         <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                           {new Date(log.CreatedAt).toLocaleString()}
                         </TableCell>
@@ -289,7 +418,7 @@ export default function LogsPage() {
                           {log.UserAgent || '-'}
                         </TableCell>
                         <TableCell>
-                          <div className="flex gap-2">
+                          <div className="flex gap-1">
                             <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => openDetailDialog(log)}>
                               详情
                             </Button>
@@ -302,6 +431,15 @@ export default function LogsPage() {
                             >
                               会话
                             </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-destructive hover:text-destructive"
+                              onClick={() => openDeleteDialog(log.ID)}
+                              disabled={isDeleting}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -311,11 +449,18 @@ export default function LogsPage() {
               </div>
               <div className="sm:hidden px-2 py-3 divide-y divide-border">
                 {logs.map((log) => (
-                  <div key={log.ID} className="py-3 space-y-2 my-1 px-1">
+                  <div key={log.ID} className={`py-3 space-y-2 my-1 px-1 ${selectedIds.has(log.ID) ? 'bg-muted/50 rounded' : ''}`}>
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-sm truncate">{log.Name}</h3>
-                        <p className="text-[11px] text-muted-foreground">{new Date(log.CreatedAt).toLocaleString()}</p>
+                      <div className="flex items-start gap-2 min-w-0 flex-1">
+                        <Checkbox
+                          checked={selectedIds.has(log.ID)}
+                          onCheckedChange={(checked) => handleSelectOne(log.ID, !!checked)}
+                          className="mt-1"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-semibold text-sm truncate">{log.Name}</h3>
+                          <p className="text-[11px] text-muted-foreground">{new Date(log.CreatedAt).toLocaleString()}</p>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <span
@@ -324,7 +469,7 @@ export default function LogsPage() {
                         >
                           {log.Status}
                         </span>
-                        <div className="flex gap-1.5">
+                        <div className="flex gap-1">
                           <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => openDetailDialog(log)}>
                             详情
                           </Button>
@@ -336,10 +481,19 @@ export default function LogsPage() {
                           >
                             会话
                           </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-destructive"
+                            onClick={() => openDeleteDialog(log.ID)}
+                            disabled={isDeleting}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
                         </div>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="grid grid-cols-2 gap-3 text-xs ml-6">
                       <div className="space-y-1">
                         <p className="text-muted-foreground text-[10px] uppercase tracking-wide">Tokens</p>
                         <p className="font-medium">{log.total_tokens}</p>
@@ -476,6 +630,48 @@ export default function LogsPage() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* 单条删除确认对话框 */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除这条日志吗？此操作不可恢复。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteLog}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* 批量删除确认对话框 */}
+      <AlertDialog open={batchDeleteDialogOpen} onOpenChange={setBatchDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认批量删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除选中的 {selectedIds.size} 条日志吗？此操作不可恢复。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmBatchDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

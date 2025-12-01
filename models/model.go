@@ -119,5 +119,6 @@ const (
 	SettingKeyAutoPriorityDecayDefault   = "auto_priority_decay_default"   // 自动优先级衰减默认优先级
 	SettingKeyAutoPriorityDecayStep      = "auto_priority_decay_step"      // 自动优先级衰减步长（每次失败减少的优先级）
 	SettingKeyAutoPriorityDecayThreshold = "auto_priority_decay_threshold" // 自动优先级衰减阈值（达到此值自动禁用）
+
+	SettingKeyLogRetentionCount = "log_retention_count" // 日志保留条数，0表示不限制
 )
- 

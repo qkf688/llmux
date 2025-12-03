@@ -468,4 +468,83 @@ export async function clearAllLogs(): Promise<{ deleted: number }> {
     method: 'DELETE',
   });
 }
- 
+
+// Health Check API functions
+export interface HealthCheckSettings {
+  enabled: boolean;
+  interval: number;
+  failure_threshold: number;
+  auto_enable: boolean;
+}
+
+export interface HealthCheckLog {
+  ID: number;
+  CreatedAt: string;
+  model_provider_id: number;
+  model_name: string;
+  provider_name: string;
+  provider_model: string;
+  status: string;
+  error: string;
+  response_time: number;
+  checked_at: string;
+}
+
+export interface HealthCheckLogsResponse {
+  data: HealthCheckLog[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
+export async function getHealthCheckSettings(): Promise<HealthCheckSettings> {
+  return apiRequest<HealthCheckSettings>('/health-check/settings');
+}
+
+export async function updateHealthCheckSettings(settings: HealthCheckSettings): Promise<HealthCheckSettings> {
+  return apiRequest<HealthCheckSettings>('/health-check/settings', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  });
+}
+
+export async function getHealthCheckLogs(
+  page: number = 1,
+  pageSize: number = 20,
+  filters: {
+    modelProviderId?: number;
+    modelName?: string;
+    providerName?: string;
+    status?: string;
+  } = {}
+): Promise<HealthCheckLogsResponse> {
+  const params = new URLSearchParams();
+  params.append("page", page.toString());
+  params.append("page_size", pageSize.toString());
+
+  if (filters.modelProviderId) params.append("model_provider_id", filters.modelProviderId.toString());
+  if (filters.modelName) params.append("model_name", filters.modelName);
+  if (filters.providerName) params.append("provider_name", filters.providerName);
+  if (filters.status) params.append("status", filters.status);
+
+  return apiRequest<HealthCheckLogsResponse>(`/health-check/logs?${params.toString()}`);
+}
+
+export async function clearHealthCheckLogs(): Promise<{ deleted: number }> {
+  return apiRequest<{ deleted: number }>('/health-check/logs', {
+    method: 'DELETE',
+  });
+}
+
+export async function runHealthCheck(id: number): Promise<HealthCheckLog> {
+  return apiRequest<HealthCheckLog>(`/health-check/run/${id}`, {
+    method: 'POST',
+  });
+}
+
+export async function runHealthCheckAll(): Promise<{ message: string }> {
+  return apiRequest<{ message: string }>('/health-check/run-all', {
+    method: 'POST',
+  });
+}

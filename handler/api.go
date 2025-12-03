@@ -10,6 +10,7 @@ import (
 	"github.com/atopos31/llmio/common"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/providers"
+	"github.com/atopos31/llmio/service"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -1307,6 +1308,236 @@ func BatchDeleteLogs(c *gin.Context) {
 	})
 }
 
+// HealthCheckSettingsResponse 健康检测设置响应结构
+type HealthCheckSettingsResponse struct {
+	Enabled          bool `json:"enabled"`
+	Interval         int  `json:"interval"`
+	FailureThreshold int  `json:"failure_threshold"`
+	AutoEnable       bool `json:"auto_enable"`
+}
+
+// UpdateHealthCheckSettingsRequest 更新健康检测设置请求结构
+type UpdateHealthCheckSettingsRequest struct {
+	Enabled          bool `json:"enabled"`
+	Interval         int  `json:"interval"`
+	FailureThreshold int  `json:"failure_threshold"`
+	AutoEnable       bool `json:"auto_enable"`
+}
+
+// GetHealthCheckSettings 获取健康检测设置
+func GetHealthCheckSettings(c *gin.Context) {
+	ctx := c.Request.Context()
+	enabled, interval, failureThreshold, autoEnable := service.GetHealthCheckSettings(ctx)
+
+	response := HealthCheckSettingsResponse{
+		Enabled:          enabled,
+		Interval:         interval,
+		FailureThreshold: failureThreshold,
+		AutoEnable:       autoEnable,
+	}
+
+	common.Success(c, response)
+}
+
+// UpdateHealthCheckSettings 更新健康检测设置
+func UpdateHealthCheckSettings(c *gin.Context) {
+	var req UpdateHealthCheckSettingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// 更新启用状态
+	enabledValue := "false"
+	if req.Enabled {
+		enabledValue = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyHealthCheckEnabled).
+		Update(ctx, "value", enabledValue); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新检测间隔
+	if req.Interval < 1 {
+		req.Interval = 60
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyHealthCheckInterval).
+		Update(ctx, "value", strconv.Itoa(req.Interval)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新失败次数阈值
+	if req.FailureThreshold < 1 {
+		req.FailureThreshold = 3
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyHealthCheckFailureThreshold).
+		Update(ctx, "value", strconv.Itoa(req.FailureThreshold)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新自动启用
+	autoEnableValue := "false"
+	if req.AutoEnable {
+		autoEnableValue = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyHealthCheckAutoEnable).
+		Update(ctx, "value", autoEnableValue); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 重启健康检测服务
+	go service.GetHealthChecker().Restart(context.Background())
+
+	// 返回更新后的设置
+	GetHealthCheckSettings(c)
+}
+
+// GetHealthCheckLogs 获取健康检测日志（支持分页和筛选）
+func GetHealthCheckLogs(c *gin.Context) {
+	// 分页参数
+	pageStr := c.Query("page")
+	page := 1
+	if pageStr != "" {
+		parsedPage, err := strconv.Atoi(pageStr)
+		if err != nil || parsedPage < 1 {
+			common.BadRequest(c, "Invalid page parameter")
+			return
+		}
+		page = parsedPage
+	}
+
+	pageSizeStr := c.Query("page_size")
+	pageSize := 20 // Default page size
+	if pageSizeStr != "" {
+		parsedPageSize, err := strconv.Atoi(pageSizeStr)
+		if err != nil || parsedPageSize < 1 || parsedPageSize > 100 {
+			common.BadRequest(c, "Invalid page_size parameter (must be between 1 and 100)")
+			return
+		}
+		pageSize = parsedPageSize
+	}
+
+	// 筛选参数
+	modelProviderID := c.Query("model_provider_id")
+	modelName := c.Query("model_name")
+	providerName := c.Query("provider_name")
+	status := c.Query("status")
+
+	// 构建查询条件
+	query := models.DB.Model(&models.HealthCheckLog{})
+
+	if modelProviderID != "" {
+		query = query.Where("model_provider_id = ?", modelProviderID)
+	}
+
+	if modelName != "" {
+		query = query.Where("model_name = ?", modelName)
+	}
+
+	if providerName != "" {
+		query = query.Where("provider_name = ?", providerName)
+	}
+
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+
+	// 获取总数
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		common.InternalServerError(c, "Failed to count health check logs: "+err.Error())
+		return
+	}
+
+	// 获取分页数据
+	var logs []models.HealthCheckLog
+	offset := (page - 1) * pageSize
+	if err := query.Order("id DESC").Offset(offset).Limit(pageSize).Find(&logs).Error; err != nil {
+		common.InternalServerError(c, "Failed to query health check logs: "+err.Error())
+		return
+	}
+
+	result := map[string]any{
+		"data":      logs,
+		"total":     total,
+		"page":      page,
+		"page_size": pageSize,
+		"pages":     (total + int64(pageSize) - 1) / int64(pageSize),
+	}
+
+	common.Success(c, result)
+}
+
+// ClearHealthCheckLogs 清空健康检测日志
+func ClearHealthCheckLogs(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	result, err := gorm.G[models.HealthCheckLog](models.DB).
+		Where("1 = 1").
+		Delete(ctx)
+	if err != nil {
+		common.InternalServerError(c, "Failed to clear health check logs: "+err.Error())
+		return
+	}
+
+	common.Success(c, map[string]interface{}{
+		"deleted": result,
+	})
+}
+
+// RunHealthCheck 手动运行单个模型提供商的健康检测
+func RunHealthCheck(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		common.BadRequest(c, "Invalid ID format")
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	log, err := service.GetHealthChecker().CheckSingle(ctx, uint(id))
+	if err != nil {
+		common.InternalServerError(c, "Failed to run health check: "+err.Error())
+		return
+	}
+
+	common.Success(c, log)
+}
+
+// RunHealthCheckAll 手动运行所有模型提供商的健康检测
+func RunHealthCheckAll(c *gin.Context) {
+	go func() {
+		checker := service.GetHealthChecker()
+		ctx := context.Background()
+
+		// 获取所有模型提供商关联
+		modelProviders, err := gorm.G[models.ModelWithProvider](models.DB).Find(ctx)
+		if err != nil {
+			slog.Error("failed to get model providers for health check", "error", err)
+			return
+		}
+
+		for _, mp := range modelProviders {
+			checker.CheckSingle(ctx, mp.ID)
+		}
+	}()
+
+	common.Success(c, map[string]string{
+		"message": "Health check started for all model providers",
+	})
+}
+
 // ClearAllLogs 清空所有日志
 func ClearAllLogs(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -1331,4 +1562,3 @@ func ClearAllLogs(c *gin.Context) {
 		"deleted": result,
 	})
 }
- 

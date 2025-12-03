@@ -121,4 +121,23 @@ const (
 	SettingKeyAutoPriorityDecayThreshold = "auto_priority_decay_threshold" // 自动优先级衰减阈值（达到此值自动禁用）
 
 	SettingKeyLogRetentionCount = "log_retention_count" // 日志保留条数，0表示不限制
+
+	// 模型健康检测相关设置
+	SettingKeyHealthCheckEnabled          = "health_check_enabled"            // 健康检测总开关
+	SettingKeyHealthCheckInterval         = "health_check_interval"           // 健康检测间隔（分钟）
+	SettingKeyHealthCheckFailureThreshold = "health_check_failure_threshold"  // 失败次数阈值（超过此值自动禁用）
+	SettingKeyHealthCheckAutoEnable       = "health_check_auto_enable"        // 检测成功后是否自动启用
 )
+
+// HealthCheckLog 模型健康检测日志
+type HealthCheckLog struct {
+	gorm.Model
+	ModelProviderID uint      `gorm:"index" json:"model_provider_id"`   // 关联的 ModelWithProvider ID
+	ModelName       string    `gorm:"index" json:"model_name"`          // 模型名称
+	ProviderName    string    `gorm:"index" json:"provider_name"`       // 提供商名称
+	ProviderModel   string    `json:"provider_model"`                   // 提供商模型名称
+	Status          string    `gorm:"index" json:"status"`              // 检测状态: success, error
+	Error           string    `json:"error,omitempty"`                  // 错误信息
+	ResponseTime    int64     `json:"response_time"`                    // 响应时间（毫秒）
+	CheckedAt       time.Time `gorm:"index" json:"checked_at"`          // 检测时间
+}

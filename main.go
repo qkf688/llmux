@@ -14,6 +14,7 @@ import (
 	"github.com/atopos31/llmio/handler"
 	"github.com/atopos31/llmio/middleware"
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/service"
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	_ "golang.org/x/crypto/x509roots/fallback"
@@ -23,6 +24,9 @@ func init() {
 	ctx := context.Background()
 	models.Init(ctx, "./db/llmio.db")
 	slog.Info("TZ", "time.Local", time.Local.String())
+
+	// 启动健康检测服务
+	go service.GetHealthChecker().Start(ctx)
 }
 
 func main() {
@@ -87,6 +91,14 @@ func main() {
 	api.PUT("/settings", handler.UpdateSettings)
 	api.POST("/settings/reset-weights", handler.ResetModelWeights)
 	api.POST("/settings/reset-priorities", handler.ResetModelPriorities)
+
+	// Health check management
+	api.GET("/health-check/settings", handler.GetHealthCheckSettings)
+	api.PUT("/health-check/settings", handler.UpdateHealthCheckSettings)
+	api.GET("/health-check/logs", handler.GetHealthCheckLogs)
+	api.DELETE("/health-check/logs", handler.ClearHealthCheckLogs)
+	api.POST("/health-check/run/:id", handler.RunHealthCheck)
+	api.POST("/health-check/run-all", handler.RunHealthCheckAll)
 
 	// Provider connectivity test
 	api.GET("/test/:id", handler.ProviderTestHandler)

@@ -16,22 +16,29 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { getSettings, updateSettings, resetModelWeights, resetModelPriorities, clearAllLogs } from "@/lib/api";
-import type { Settings } from "@/lib/api";
+import { getSettings, updateSettings, resetModelWeights, resetModelPriorities, clearAllLogs, getHealthCheckSettings, updateHealthCheckSettings, clearHealthCheckLogs, runHealthCheckAll } from "@/lib/api";
+import type { Settings, HealthCheckSettings } from "@/lib/api";
 import { Spinner } from "@/components/ui/spinner";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [healthCheckSettings, setHealthCheckSettings] = useState<HealthCheckSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingHealthCheck, setSavingHealthCheck] = useState(false);
   const [resettingWeights, setResettingWeights] = useState(false);
   const [resettingPriorities, setResettingPriorities] = useState(false);
   const [clearingLogs, setClearingLogs] = useState(false);
+  const [clearingHealthCheckLogs, setClearingHealthCheckLogs] = useState(false);
+  const [runningHealthCheck, setRunningHealthCheck] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [hasHealthCheckChanges, setHasHealthCheckChanges] = useState(false);
   const [originalSettings, setOriginalSettings] = useState<Settings | null>(null);
+  const [originalHealthCheckSettings, setOriginalHealthCheckSettings] = useState<HealthCheckSettings | null>(null);
 
   useEffect(() => {
     loadSettings();
+    loadHealthCheckSettings();
   }, []);
 
   const loadSettings = async () => {
@@ -45,6 +52,17 @@ export default function SettingsPage() {
       toast.error("加载设置失败: " + (error as Error).message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadHealthCheckSettings = async () => {
+    try {
+      const data = await getHealthCheckSettings();
+      setHealthCheckSettings(data);
+      setOriginalHealthCheckSettings(data);
+      setHasHealthCheckChanges(false);
+    } catch (error) {
+      toast.error("加载健康检测设置失败: " + (error as Error).message);
     }
   };
 
@@ -192,6 +210,97 @@ export default function SettingsPage() {
       toast.error("清空日志失败: " + (error as Error).message);
     } finally {
       setClearingLogs(false);
+    }
+  };
+
+  // Health Check Settings handlers
+  const handleHealthCheckEnabledChange = (checked: boolean) => {
+    if (healthCheckSettings) {
+      const newSettings = { ...healthCheckSettings, enabled: checked };
+      setHealthCheckSettings(newSettings);
+      checkHealthCheckHasChanges(newSettings);
+    }
+  };
+
+  const handleHealthCheckIntervalChange = (value: number) => {
+    if (healthCheckSettings) {
+      const newSettings = { ...healthCheckSettings, interval: value };
+      setHealthCheckSettings(newSettings);
+      checkHealthCheckHasChanges(newSettings);
+    }
+  };
+
+  const handleHealthCheckFailureThresholdChange = (value: number) => {
+    if (healthCheckSettings) {
+      const newSettings = { ...healthCheckSettings, failure_threshold: value };
+      setHealthCheckSettings(newSettings);
+      checkHealthCheckHasChanges(newSettings);
+    }
+  };
+
+  const handleHealthCheckAutoEnableChange = (checked: boolean) => {
+    if (healthCheckSettings) {
+      const newSettings = { ...healthCheckSettings, auto_enable: checked };
+      setHealthCheckSettings(newSettings);
+      checkHealthCheckHasChanges(newSettings);
+    }
+  };
+
+  const checkHealthCheckHasChanges = (newSettings: HealthCheckSettings) => {
+    if (!originalHealthCheckSettings) return;
+    const changed =
+      originalHealthCheckSettings.enabled !== newSettings.enabled ||
+      originalHealthCheckSettings.interval !== newSettings.interval ||
+      originalHealthCheckSettings.failure_threshold !== newSettings.failure_threshold ||
+      originalHealthCheckSettings.auto_enable !== newSettings.auto_enable;
+    setHasHealthCheckChanges(changed);
+  };
+
+  const handleSaveHealthCheckSettings = async () => {
+    if (!healthCheckSettings) return;
+
+    try {
+      setSavingHealthCheck(true);
+      const updated = await updateHealthCheckSettings(healthCheckSettings);
+      setHealthCheckSettings(updated);
+      setOriginalHealthCheckSettings(updated);
+      setHasHealthCheckChanges(false);
+      toast.success("健康检测设置保存成功");
+    } catch (error) {
+      toast.error("保存健康检测设置失败: " + (error as Error).message);
+    } finally {
+      setSavingHealthCheck(false);
+    }
+  };
+
+  const handleResetHealthCheckSettings = () => {
+    if (originalHealthCheckSettings) {
+      setHealthCheckSettings(originalHealthCheckSettings);
+      setHasHealthCheckChanges(false);
+    }
+  };
+
+  const handleClearHealthCheckLogs = async () => {
+    try {
+      setClearingHealthCheckLogs(true);
+      const result = await clearHealthCheckLogs();
+      toast.success(`已清空 ${result.deleted} 条健康检测日志`);
+    } catch (error) {
+      toast.error("清空健康检测日志失败: " + (error as Error).message);
+    } finally {
+      setClearingHealthCheckLogs(false);
+    }
+  };
+
+  const handleRunHealthCheckAll = async () => {
+    try {
+      setRunningHealthCheck(true);
+      await runHealthCheckAll();
+      toast.success("已启动所有模型提供商的健康检测");
+    } catch (error) {
+      toast.error("启动健康检测失败: " + (error as Error).message);
+    } finally {
+      setRunningHealthCheck(false);
     }
   };
 
@@ -506,6 +615,159 @@ export default function SettingsPage() {
                       <AlertDialogCancel>取消</AlertDialogCancel>
                       <AlertDialogAction
                         onClick={handleClearAllLogs}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        确认清空
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>健康检测</CardTitle>
+            <CardDescription>
+              配置模型提供商的定时健康检测功能
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="health-check-enabled" className="text-base font-medium">
+                  启用健康检测
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  开启后，系统会定时检测所有模型提供商的可用性。
+                  <br />
+                  检测失败超过阈值后，会自动禁用该模型提供商。
+                </p>
+              </div>
+              <Switch
+                id="health-check-enabled"
+                checked={healthCheckSettings?.enabled ?? false}
+                onCheckedChange={handleHealthCheckEnabledChange}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="health-check-interval" className="text-base font-medium">
+                检测间隔（分钟）
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                每隔多少分钟执行一次健康检测。
+              </p>
+              <Input
+                id="health-check-interval"
+                type="number"
+                min={1}
+                max={1440}
+                value={healthCheckSettings?.interval ?? 60}
+                onChange={(e) => handleHealthCheckIntervalChange(parseInt(e.target.value) || 60)}
+                className="w-32"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="health-check-failure-threshold" className="text-base font-medium">
+                失败次数阈值
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                连续检测失败达到此次数后，自动禁用该模型提供商。
+              </p>
+              <Input
+                id="health-check-failure-threshold"
+                type="number"
+                min={1}
+                max={10}
+                value={healthCheckSettings?.failure_threshold ?? 3}
+                onChange={(e) => handleHealthCheckFailureThresholdChange(parseInt(e.target.value) || 3)}
+                className="w-32"
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="health-check-auto-enable" className="text-base font-medium">
+                  检测成功自动启用
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  开启后，当已禁用的模型提供商检测成功时，会自动重新启用。
+                </p>
+              </div>
+              <Switch
+                id="health-check-auto-enable"
+                checked={healthCheckSettings?.auto_enable ?? false}
+                onCheckedChange={handleHealthCheckAutoEnableChange}
+              />
+            </div>
+
+            <div className="pt-4 border-t flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                onClick={handleResetHealthCheckSettings}
+                disabled={!hasHealthCheckChanges || savingHealthCheck}
+              >
+                重置
+              </Button>
+              <Button
+                onClick={handleSaveHealthCheckSettings}
+                disabled={!hasHealthCheckChanges || savingHealthCheck}
+              >
+                {savingHealthCheck ? <Spinner className="w-4 h-4 mr-2" /> : null}
+                保存健康检测设置
+              </Button>
+            </div>
+
+            <div className="pt-4 border-t space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base font-medium">手动执行检测</Label>
+                  <p className="text-sm text-muted-foreground">
+                    立即对所有模型提供商执行一次健康检测。
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={handleRunHealthCheckAll}
+                  disabled={runningHealthCheck}
+                >
+                  {runningHealthCheck ? <Spinner className="w-4 h-4 mr-2" /> : null}
+                  执行检测
+                </Button>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base font-medium">清空检测日志</Label>
+                  <p className="text-sm text-muted-foreground">
+                    删除所有健康检测日志。此操作不可恢复。
+                  </p>
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="destructive"
+                      disabled={clearingHealthCheckLogs}
+                    >
+                      {clearingHealthCheckLogs ? <Spinner className="w-4 h-4 mr-2" /> : null}
+                      清空检测日志
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>确认清空检测日志</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        确定要清空所有健康检测日志吗？此操作不可恢复。
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>取消</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleClearHealthCheckLogs}
                         className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                       >
                         确认清空

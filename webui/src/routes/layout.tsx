@@ -10,7 +10,8 @@ import {
   FaSignOutAlt,
   FaChevronLeft,
   FaChevronRight,
-  FaCog
+  FaCog,
+  FaHeartbeat
 } from "react-icons/fa";
 import { useTheme } from "@/components/theme-provider";
 
@@ -35,6 +36,7 @@ export default function Layout() {
     { to: "/models", label: "模型管理", icon: <FaRobot /> },
     { to: "/model-providers", label: "模型提供商关联", icon: <FaLink /> },
     { to: "/logs", label: "请求日志", icon: <FaFileAlt /> },
+    { to: "/health-check-logs", label: "健康检测日志", icon: <FaHeartbeat /> },
     { to: "/settings", label: "系统设置", icon: <FaCog /> },
   ];
 

@@ -49,6 +49,7 @@ import Loading from "@/components/loading";
 import {
   getModelProviders,
   getModelProviderStatus,
+  getModelProviderHealthStatus,
   createModelProvider,
   updateModelProvider,
   updateModelProviderStatus,
@@ -106,6 +107,7 @@ export default function ModelProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [searchParams, setSearchParams] = useSearchParams();
   const [providerStatus, setProviderStatus] = useState<Record<number, boolean[]>>({});
+  const [healthStatus, setHealthStatus] = useState<Record<number, boolean[]>>({});
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editingAssociation, setEditingAssociation] = useState<ModelWithProvider | null>(null);
@@ -304,28 +306,36 @@ export default function ModelProvidersPage() {
   const loadProviderStatus = async (providers: ModelWithProvider[], modelId: number) => {
     const selectedModel = models.find(m => m.ID === modelId);
     if (!selectedModel) return;
-    setProviderStatus([])
+    setProviderStatus({});
+    setHealthStatus({});
 
     const newStatus: Record<number, boolean[]> = {};
+    const newHealthStatus: Record<number, boolean[]> = {};
 
     // 并行加载所有状态数据
     await Promise.all(
       providers.map(async (provider) => {
         try {
-          const status = await getModelProviderStatus(
-            provider.ProviderID,
-            selectedModel.Name,
-            provider.ProviderModel
-          );
+          const [status, healthStatusList] = await Promise.all([
+            getModelProviderStatus(
+              provider.ProviderID,
+              selectedModel.Name,
+              provider.ProviderModel
+            ),
+            getModelProviderHealthStatus(provider.ID)
+          ]);
           newStatus[provider.ID] = status;
+          newHealthStatus[provider.ID] = healthStatusList;
         } catch (error) {
           console.error(`Failed to load status for provider ${provider.ID}:`, error);
           newStatus[provider.ID] = [];
+          newHealthStatus[provider.ID] = [];
         }
       })
     );
 
     setProviderStatus(newStatus);
+    setHealthStatus(newHealthStatus);
   };
 
   const handleCreate = async (values: FormValues) => {
@@ -841,6 +851,7 @@ export default function ModelProvidersPage() {
                         </Button>
                       </div>
                     </TableHead>
+                    <TableHead>健康检测</TableHead>
                     <TableHead>操作</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -849,6 +860,7 @@ export default function ModelProvidersPage() {
                     const provider = providers.find(p => p.ID === association.ProviderID);
                     const isAssociationEnabled = association.Status ?? false;
                     const statusBars = providerStatus[association.ID];
+                    const healthBars = healthStatus[association.ID];
                     return (
                       <TableRow key={association.ID}>
                         <TableCell>
@@ -921,6 +933,27 @@ export default function ModelProvidersPage() {
                           </div>
                         </TableCell>
                         <TableCell>
+                          <div className="flex items-center space-x-4 w-20">
+                            {healthBars ? (
+                              healthBars.length > 0 ? (
+                                <div className="flex space-x-1 items-end h-6">
+                                  {healthBars.map((isSuccess, index) => (
+                                    <div
+                                      key={index}
+                                      className={`w-1 h-6 ${isSuccess ? 'bg-emerald-500' : 'bg-orange-500'}`}
+                                      title={isSuccess ? '健康检测成功' : '健康检测失败'}
+                                    />
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-xs text-gray-400">无数据</div>
+                              )
+                            ) : (
+                              <Spinner />
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
                           <div className="flex flex-wrap gap-2">
                             <Button variant="outline" size="sm" onClick={() => openEditDialog(association)}>
                               编辑
@@ -974,6 +1007,7 @@ export default function ModelProvidersPage() {
                 const provider = providers.find(p => p.ID === association.ProviderID);
                 const isAssociationEnabled = association.Status ?? true;
                 const statusBars = providerStatus[association.ID];
+                const healthBars = healthStatus[association.ID];
                 return (
                   <div key={association.ID} className="py-3 space-y-3">
                     <div className="flex items-start justify-between gap-2">
@@ -1027,6 +1061,27 @@ export default function ModelProvidersPage() {
                                   <div
                                     key={index}
                                     className={`w-1 h-4 rounded ${isSuccess ? 'bg-green-500' : 'bg-red-500'}`}
+                                  />
+                                ))
+                              ) : (
+                                <span className="text-muted-foreground text-[11px]">无数据</span>
+                              )
+                            ) : (
+                              <Spinner />
+                            )}
+                          </div>
+                        }
+                      />
+                      <MobileInfoItem
+                        label="健康检测"
+                        value={
+                          <div className="flex items-center gap-1">
+                            {healthBars ? (
+                              healthBars.length > 0 ? (
+                                healthBars.map((isSuccess, index) => (
+                                  <div
+                                    key={index}
+                                    className={`w-1 h-4 rounded ${isSuccess ? 'bg-emerald-500' : 'bg-orange-500'}`}
                                   />
                                 ))
                               ) : (

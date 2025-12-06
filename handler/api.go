@@ -472,6 +472,50 @@ func GetModelProviderStatus(c *gin.Context) {
 	common.Success(c, status)
 }
 
+// GetModelProviderHealthStatus 获取模型提供商的健康检测结果（最近若干次）
+func GetModelProviderHealthStatus(c *gin.Context) {
+	modelProviderIDStr := c.Query("model_provider_id")
+	limitStr := c.Query("limit")
+
+	if modelProviderIDStr == "" {
+		common.BadRequest(c, "model_provider_id query parameter is required")
+		return
+	}
+
+	modelProviderID, err := strconv.ParseUint(modelProviderIDStr, 10, 64)
+	if err != nil {
+		common.BadRequest(c, "Invalid model_provider_id format")
+		return
+	}
+
+	limit := 10
+	if limitStr != "" {
+		parsed, parseErr := strconv.Atoi(limitStr)
+		if parseErr != nil || parsed < 1 || parsed > 50 {
+			common.BadRequest(c, "Invalid limit parameter (must be between 1 and 50)")
+			return
+		}
+		limit = parsed
+	}
+
+	logs, err := gorm.G[models.HealthCheckLog](models.DB).
+		Where("model_provider_id = ?", modelProviderID).
+		Order("checked_at DESC").
+		Limit(limit).
+		Find(c.Request.Context())
+	if err != nil {
+		common.InternalServerError(c, "Failed to retrieve health check logs: "+err.Error())
+		return
+	}
+
+	status := make([]bool, 0, len(logs))
+	for _, log := range logs {
+		status = append(status, log.Status == "success")
+	}
+	slices.Reverse(status)
+	common.Success(c, status)
+}
+
 // CreateModelProvider 创建模型提供商关联
 func CreateModelProvider(c *gin.Context) {
 	var req ModelWithProviderRequest

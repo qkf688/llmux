@@ -189,6 +189,14 @@ export async function getModelProviders(modelId: number): Promise<ModelWithProvi
   return apiRequest<ModelWithProvider[]>(`/model-providers?model_id=${modelId}`);
 }
 
+export async function getModelProviderHealthStatus(modelProviderId: number, limit: number = 10): Promise<boolean[]> {
+  const params = new URLSearchParams({
+    model_provider_id: modelProviderId.toString(),
+    limit: limit.toString()
+  });
+  return apiRequest<boolean[]>(`/model-providers/health-status?${params.toString()}`);
+}
+
 export async function getModelProviderStatus(providerId: number, modelName: string, providerModel: string): Promise<boolean[]> {
   const params = new URLSearchParams({
     provider_id: providerId.toString(),

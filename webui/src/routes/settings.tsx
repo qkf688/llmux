@@ -4,19 +4,8 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { getSettings, updateSettings, resetModelWeights, resetModelPriorities, getHealthCheckSettings, updateHealthCheckSettings, clearHealthCheckLogs, runHealthCheckAll } from "@/lib/api";
+import { getSettings, updateSettings, resetModelWeights, resetModelPriorities, getHealthCheckSettings, updateHealthCheckSettings, runHealthCheckAll } from "@/lib/api";
 import type { Settings, HealthCheckSettings } from "@/lib/api";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -28,7 +17,6 @@ export default function SettingsPage() {
   const [savingHealthCheck, setSavingHealthCheck] = useState(false);
   const [resettingWeights, setResettingWeights] = useState(false);
   const [resettingPriorities, setResettingPriorities] = useState(false);
-  const [clearingHealthCheckLogs, setClearingHealthCheckLogs] = useState(false);
   const [runningHealthCheck, setRunningHealthCheck] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [hasHealthCheckChanges, setHasHealthCheckChanges] = useState(false);
@@ -264,18 +252,6 @@ export default function SettingsPage() {
     if (originalHealthCheckSettings) {
       setHealthCheckSettings(originalHealthCheckSettings);
       setHasHealthCheckChanges(false);
-    }
-  };
-
-  const handleClearHealthCheckLogs = async () => {
-    try {
-      setClearingHealthCheckLogs(true);
-      const result = await clearHealthCheckLogs();
-      toast.success(`已清空 ${result.deleted} 条健康检测日志`);
-    } catch (error) {
-      toast.error("清空健康检测日志失败: " + (error as Error).message);
-    } finally {
-      setClearingHealthCheckLogs(false);
     }
   };
 
@@ -686,43 +662,6 @@ export default function SettingsPage() {
                   {runningHealthCheck ? <Spinner className="w-4 h-4 mr-2" /> : null}
                   执行检测
                 </Button>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label className="text-base font-medium">清空检测日志</Label>
-                  <p className="text-sm text-muted-foreground">
-                    删除所有健康检测日志。此操作不可恢复。
-                  </p>
-                </div>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="destructive"
-                      disabled={clearingHealthCheckLogs}
-                    >
-                      {clearingHealthCheckLogs ? <Spinner className="w-4 h-4 mr-2" /> : null}
-                      清空检测日志
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>确认清空检测日志</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        确定要清空所有健康检测日志吗？此操作不可恢复。
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>取消</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={handleClearHealthCheckLogs}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      >
-                        确认清空
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
               </div>
             </div>
           </CardContent>

@@ -12,8 +12,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Loading from "@/components/loading";
-import { getHealthCheckLogs, getProviders, getModels, type HealthCheckLog, type Provider, type Model } from "@/lib/api";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { getHealthCheckLogs, getProviders, getModels, clearHealthCheckLogs, type HealthCheckLog, type Provider, type Model } from "@/lib/api";
 import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 
 // 格式化时间显示
 const formatTime = (milliseconds: number): string => {
@@ -53,6 +55,8 @@ export default function HealthCheckLogsPage() {
   // 详情弹窗
   const [selectedLog, setSelectedLog] = useState<HealthCheckLog | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
+  const [clearingLogs, setClearingLogs] = useState(false);
 
   // 获取数据
   const fetchProviders = async () => {
@@ -73,10 +77,10 @@ export default function HealthCheckLogsPage() {
     }
   };
 
-  const fetchLogs = async () => {
+  const fetchLogs = async (pageToFetch = page, pageSizeToUse = pageSize) => {
     setLoading(true);
     try {
-      const result = await getHealthCheckLogs(page, pageSize, {
+      const result = await getHealthCheckLogs(pageToFetch, pageSizeToUse, {
         providerName: providerNameFilter === "all" ? undefined : providerNameFilter,
         modelName: modelFilter === "all" ? undefined : modelFilter,
         status: statusFilter === "all" ? undefined : statusFilter,
@@ -127,6 +131,21 @@ export default function HealthCheckLogsPage() {
     setIsDialogOpen(true);
   };
 
+  const handleClearLogs = async () => {
+    try {
+      setClearingLogs(true);
+      const result = await clearHealthCheckLogs();
+      toast.success(`已清空 ${result.deleted} 条健康检测日志`);
+      setIsClearDialogOpen(false);
+      setPage(1);
+      await fetchLogs(1, pageSize);
+    } catch (error) {
+      toast.error("清空健康检测日志失败: " + (error as Error).message);
+    } finally {
+      setClearingLogs(false);
+    }
+  };
+
   // 布局开始
   return (
     <div className="h-full min-h-0 flex flex-col gap-4 p-1">
@@ -138,6 +157,35 @@ export default function HealthCheckLogsPage() {
             <p className="text-sm text-muted-foreground">查看模型提供商的健康检测历史记录</p>
           </div>
           <div className="flex gap-2 ml-auto">
+            <AlertDialog open={isClearDialogOpen} onOpenChange={setIsClearDialogOpen}>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="destructive"
+                  className="shrink-0"
+                  disabled={clearingLogs}
+                >
+                  {clearingLogs ? "清空中..." : "清空检测日志"}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>确认清空检测日志</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    删除所有健康检测日志，操作不可恢复。确认继续？
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>取消</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleClearLogs}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    disabled={clearingLogs}
+                  >
+                    {clearingLogs ? "清空中..." : "确认清空"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
             <Button
               onClick={handleRefresh}
               variant="outline"

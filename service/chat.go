@@ -206,8 +206,8 @@ func applyWeightDecay(ctx context.Context, log models.ChatLog, modelWithProvider
 		if provider.Name == log.ProviderName && mwp.ProviderModel == log.ProviderModel {
 			// 计算新权重
 			newWeight := mwp.Weight - decayStep
-			if newWeight < 0 {
-				newWeight = 0
+			if newWeight < 1 {
+				newWeight = 1
 			}
 
 			// 更新数据库中的权重

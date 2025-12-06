@@ -21,10 +21,11 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import Loading from "@/components/loading";
-import { getLogs, getProviders, getModels, getUserAgents, deleteLog, batchDeleteLogs, type ChatLog, type Provider, type Model, getProviderTemplates } from "@/lib/api";
+import { getLogs, getProviders, getModels, getUserAgents, deleteLog, batchDeleteLogs, type ChatLog, type Provider, type Model, getProviderTemplates, clearAllLogs } from "@/lib/api";
 import { ChevronLeft, ChevronRight, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -83,6 +84,8 @@ export default function LogsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false);
   const [logToDelete, setLogToDelete] = useState<number | null>(null);
+  const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false);
+  const [isClearingAll, setIsClearingAll] = useState(false);
   // 获取数据
   const fetchProviders = async () => {
     try {
@@ -235,6 +238,21 @@ export default function LogsPage() {
     }
   };
 
+  const handleClearAllLogs = async () => {
+    try {
+      setIsClearingAll(true);
+      const result = await clearAllLogs();
+      toast.success(`已清空 ${result.deleted} 条日志`);
+      setSelectedIds(new Set());
+      fetchLogs();
+    } catch (error) {
+      toast.error("清空日志失败: " + (error as Error).message);
+    } finally {
+      setIsClearingAll(false);
+      setClearAllDialogOpen(false);
+    }
+  };
+
   // 页面切换时清空选择
   useEffect(() => {
     setSelectedIds(new Set());
@@ -249,6 +267,36 @@ export default function LogsPage() {
             <h2 className="text-2xl font-bold tracking-tight">请求日志</h2>
           </div>
           <div className="flex gap-2 ml-auto">
+            <AlertDialog open={clearAllDialogOpen} onOpenChange={setClearAllDialogOpen}>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={isClearingAll}
+                >
+                  <Trash2 className="size-4 mr-1" />
+                  {isClearingAll ? "清空中..." : "清空所有日志"}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>确认清空日志</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    确定要清空所有请求日志和对话记录吗？此操作不可恢复。
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>取消</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleClearAllLogs}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    确认清空
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
             {selectedIds.size > 0 && (
               <Button
                 onClick={openBatchDeleteDialog}

@@ -16,7 +16,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { getSettings, updateSettings, resetModelWeights, resetModelPriorities, clearAllLogs, getHealthCheckSettings, updateHealthCheckSettings, clearHealthCheckLogs, runHealthCheckAll } from "@/lib/api";
+import { getSettings, updateSettings, resetModelWeights, resetModelPriorities, getHealthCheckSettings, updateHealthCheckSettings, clearHealthCheckLogs, runHealthCheckAll } from "@/lib/api";
 import type { Settings, HealthCheckSettings } from "@/lib/api";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -28,7 +28,6 @@ export default function SettingsPage() {
   const [savingHealthCheck, setSavingHealthCheck] = useState(false);
   const [resettingWeights, setResettingWeights] = useState(false);
   const [resettingPriorities, setResettingPriorities] = useState(false);
-  const [clearingLogs, setClearingLogs] = useState(false);
   const [clearingHealthCheckLogs, setClearingHealthCheckLogs] = useState(false);
   const [runningHealthCheck, setRunningHealthCheck] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -198,18 +197,6 @@ export default function SettingsPage() {
       toast.error("重置优先级失败: " + (error as Error).message);
     } finally {
       setResettingPriorities(false);
-    }
-  };
-
-  const handleClearAllLogs = async () => {
-    try {
-      setClearingLogs(true);
-      const result = await clearAllLogs();
-      toast.success(`已清空 ${result.deleted} 条日志`);
-    } catch (error) {
-      toast.error("清空日志失败: " + (error as Error).message);
-    } finally {
-      setClearingLogs(false);
     }
   };
 
@@ -584,45 +571,6 @@ export default function SettingsPage() {
                 onChange={(e) => handleLogRetentionCountChange(parseInt(e.target.value) || 0)}
                 className="w-32"
               />
-            </div>
-
-            <div className="pt-4 border-t">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label className="text-base font-medium">清空所有日志</Label>
-                  <p className="text-sm text-muted-foreground">
-                    删除所有请求日志和对话记录。此操作不可恢复。
-                  </p>
-                </div>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="destructive"
-                      disabled={clearingLogs}
-                    >
-                      {clearingLogs ? <Spinner className="w-4 h-4 mr-2" /> : null}
-                      清空日志
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>确认清空日志</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        确定要清空所有日志吗？此操作将删除所有请求日志和对话记录，且不可恢复。
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>取消</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={handleClearAllLogs}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      >
-                        确认清空
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
             </div>
           </CardContent>
         </Card>

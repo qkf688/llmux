@@ -159,6 +159,9 @@ export default function ProvidersPage() {
   const [providerModels, setProviderModels] = useState<ProviderModel[]>([]);
   const [filteredProviderModels, setFilteredProviderModels] = useState<ProviderModel[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [customModelsOpen, setCustomModelsOpen] = useState(false);
+  const [customModelsList, setCustomModelsList] = useState<string[]>([]);
+  const [customModelsProviderName, setCustomModelsProviderName] = useState<string>("");
 
   // 筛选条件
   const [nameFilter, setNameFilter] = useState<string>("");
@@ -249,6 +252,13 @@ export default function ProvidersPage() {
   const copyModelName = async (modelName: string) => {
     await navigator.clipboard.writeText(modelName);
     toast.success(`已复制模型名称: ${modelName}`);
+  };
+
+  const openCustomModelsDialog = (provider: Provider) => {
+    const customModels = extractCustomModels(provider.Config);
+    setCustomModelsList(customModels);
+    setCustomModelsProviderName(provider.Name);
+    setCustomModelsOpen(true);
   };
 
   const handleCreate = async (values: z.infer<typeof formSchema>) => {
@@ -413,17 +423,14 @@ export default function ProvidersPage() {
                         <TableCell className="font-medium">{provider.Name}</TableCell>
                         <TableCell className="text-sm">{provider.Type}</TableCell>
                         <TableCell>
-                          {customModels.length > 0 ? (
-                            <div className="flex flex-wrap gap-1 max-w-md">
-                              {customModels.map((model) => (
-                                <span key={model} className="px-2 py-0.5 rounded-md bg-muted text-xs">
-                                  {model}
-                                </span>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">未配置</span>
-                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openCustomModelsDialog(provider)}
+                            disabled={customModels.length === 0}
+                          >
+                            查看{customModels.length > 0 ? `（${customModels.length}）` : ""}
+                          </Button>
                         </TableCell>
                         <TableCell>
                           {provider.Console ? (
@@ -484,11 +491,15 @@ export default function ProvidersPage() {
                         <h3 className="font-semibold text-sm truncate">{provider.Name}</h3>
                         <p className="text-[11px] text-muted-foreground">ID: {provider.ID}</p>
                         <p className="text-[11px] text-muted-foreground">类型: {provider.Type || "未知"}</p>
-                        {customModels.length > 0 && (
-                          <p className="text-[11px] text-muted-foreground">
-                            自定义模型: {customModels.join(", ")}
-                          </p>
-                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs mt-1"
+                          onClick={() => openCustomModelsDialog(provider)}
+                          disabled={customModels.length === 0}
+                        >
+                          自定义模型{customModels.length > 0 ? `（${customModels.length}）` : ""}
+                        </Button>
                         {provider.Console && (
                           <Button
                             variant="link"
@@ -701,6 +712,40 @@ export default function ProvidersPage() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* 自定义模型对话框 */}
+      <Dialog open={customModelsOpen} onOpenChange={setCustomModelsOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{customModelsProviderName || "当前提供商"}的自定义模型</DialogTitle>
+            <DialogDescription>展示该提供商配置的自定义模型列表</DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-80 overflow-y-auto">
+            {customModelsList.length === 0 ? (
+              <div className="text-center text-muted-foreground py-6">未配置自定义模型</div>
+            ) : (
+              <div className="space-y-2">
+                {customModelsList.map((model, index) => (
+                  <div
+                    key={`${model}-${index}`}
+                    className="flex items-center justify-between rounded-md border px-3 py-2"
+                  >
+                    <span className="font-mono text-sm text-primary">{model}</span>
+                    <Button variant="ghost" size="sm" onClick={() => copyModelName(model)}>
+                      复制
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button onClick={() => setCustomModelsOpen(false)}>关闭</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

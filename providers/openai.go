@@ -11,8 +11,9 @@ import (
 )
 
 type OpenAI struct {
-	BaseURL string `json:"base_url"`
-	APIKey  string `json:"api_key"`
+	BaseURL      string   `json:"base_url"`
+	APIKey       string   `json:"api_key"`
+	CustomModels []string `json:"custom_models"`
 }
 
 func (o *OpenAI) BuildReq(ctx context.Context, header http.Header, model string, rawBody []byte) (*http.Request, error) {
@@ -34,6 +35,10 @@ func (o *OpenAI) BuildReq(ctx context.Context, header http.Header, model string,
 }
 
 func (o *OpenAI) Models(ctx context.Context) ([]Model, error) {
+	if len(o.CustomModels) > 0 {
+		return buildCustomModels(o.CustomModels), nil
+	}
+
 	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/models", o.BaseURL), nil)
 	if err != nil {
 		return nil, err
@@ -55,4 +60,3 @@ func (o *OpenAI) Models(ctx context.Context) ([]Model, error) {
 	}
 	return modelList.Data, nil
 }
- 

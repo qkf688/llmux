@@ -12,8 +12,9 @@ import (
 
 // openai responses api
 type OpenAIRes struct {
-	BaseURL string `json:"base_url"`
-	APIKey  string `json:"api_key"`
+	BaseURL      string   `json:"base_url"`
+	APIKey       string   `json:"api_key"`
+	CustomModels []string `json:"custom_models"`
 }
 
 func (o *OpenAIRes) BuildReq(ctx context.Context, header http.Header, model string, rawBody []byte) (*http.Request, error) {
@@ -35,6 +36,10 @@ func (o *OpenAIRes) BuildReq(ctx context.Context, header http.Header, model stri
 }
 
 func (o *OpenAIRes) Models(ctx context.Context) ([]Model, error) {
+	if len(o.CustomModels) > 0 {
+		return buildCustomModels(o.CustomModels), nil
+	}
+
 	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/models", o.BaseURL), nil)
 	if err != nil {
 		return nil, err
@@ -56,4 +61,3 @@ func (o *OpenAIRes) Models(ctx context.Context) ([]Model, error) {
 	}
 	return modelList.Data, nil
 }
- 

@@ -25,6 +25,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Form,
   FormControl,
@@ -68,22 +69,27 @@ const formSchema = z.object({
   beta: z.string().optional(),
   version: z.string().optional(),
   console: z.string().optional(),
+  custom_models: z.string().optional(),
 });
 
 // 将表单字段转换为 JSON 配置字符串
 function buildConfigFromForm(values: z.infer<typeof formSchema>): string {
-  if (values.type === "anthropic") {
-    return JSON.stringify({
-      base_url: values.base_url,
-      api_key: values.api_key,
-      beta: values.beta || "",
-      version: values.version || "2023-06-01",
-    });
-  }
-  return JSON.stringify({
+  const customModels = parseCustomModelsInput(values.custom_models);
+  const baseConfig: Record<string, unknown> = {
     base_url: values.base_url,
     api_key: values.api_key,
-  });
+  };
+
+  if (values.type === "anthropic") {
+    baseConfig.beta = values.beta || "";
+    baseConfig.version = values.version || "2023-06-01";
+  }
+
+  if (customModels.length > 0) {
+    baseConfig.custom_models = customModels;
+  }
+
+  return JSON.stringify(baseConfig);
 }
 
 // 从 JSON 配置字符串解析为表单字段
@@ -92,6 +98,7 @@ function parseConfigToForm(config: string, _type?: string): {
   api_key: string;
   beta?: string;
   version?: string;
+  custom_models: string[];
 } {
   try {
     const parsed = JSON.parse(config);
@@ -100,6 +107,9 @@ function parseConfigToForm(config: string, _type?: string): {
       api_key: parsed.api_key || "",
       beta: parsed.beta || "",
       version: parsed.version || "",
+      custom_models: Array.isArray(parsed.custom_models)
+        ? parsed.custom_models.filter((item: unknown) => typeof item === "string" && item.trim() !== "")
+        : [],
     };
   } catch {
     return {
@@ -107,7 +117,33 @@ function parseConfigToForm(config: string, _type?: string): {
       api_key: "",
       beta: "",
       version: "",
+      custom_models: [],
     };
+  }
+}
+
+function parseCustomModelsInput(input?: string): string[] {
+  if (!input) {
+    return [];
+  }
+  return input
+    .split(/[\n,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function extractCustomModels(config: string): string[] {
+  try {
+    const parsed = JSON.parse(config);
+    if (!Array.isArray(parsed.custom_models)) {
+      return [];
+    }
+    return parsed.custom_models
+      .filter((item: unknown) => typeof item === "string")
+      .map((item: string) => item.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
   }
 }
 
@@ -140,6 +176,7 @@ export default function ProvidersPage() {
       beta: "",
       version: "",
       console: "",
+      custom_models: "",
     },
   });
 
@@ -225,7 +262,7 @@ export default function ProvidersPage() {
       });
       setOpen(false);
       toast.success(`提供商 ${values.name} 创建成功`);
-      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "" });
+      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "" });
       fetchProviders();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -247,7 +284,7 @@ export default function ProvidersPage() {
       setOpen(false);
       toast.success(`提供商 ${values.name} 更新成功`);
       setEditingProvider(null);
-      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "" });
+      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "" });
       fetchProviders();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -282,13 +319,14 @@ export default function ProvidersPage() {
       beta: configFields.beta || "",
       version: configFields.version || "",
       console: provider.Console || "",
+      custom_models: configFields.custom_models.join("\n"),
     });
     setOpen(true);
   };
 
   const openCreateDialog = () => {
     setEditingProvider(null);
-    form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "" });
+    form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "" });
     setOpen(true);
   };
 
@@ -361,118 +399,137 @@ export default function ProvidersPage() {
                     <TableHead>ID</TableHead>
                     <TableHead>名称</TableHead>
                     <TableHead>类型</TableHead>
-                    <TableHead>配置</TableHead>
+                    <TableHead>自定义模型</TableHead>
                     <TableHead>控制台</TableHead>
                     <TableHead className="w-[260px]">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {providers.map((provider) => (
-                    <TableRow key={provider.ID}>
-                      <TableCell className="font-mono text-xs text-muted-foreground">{provider.ID}</TableCell>
-                      <TableCell className="font-medium">{provider.Name}</TableCell>
-                      <TableCell className="text-sm">{provider.Type}</TableCell>
-                      <TableCell>
-                        <pre className="text-xs overflow-hidden max-w-md truncate">
-                          {provider.Config}
-                        </pre>
-                      </TableCell>
-                      <TableCell>
-                        {provider.Console ? (
-                          <Button
-                            title={provider.Console}
-                            variant="outline"
-                            size="sm"
-                            onClick={() => window.open(provider.Console, '_blank')}
-                          >
-                            前往
-                          </Button>
-                        ) : (
-                          <span className="text-muted-foreground">暂未设置</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-2">
-                          <Button variant="outline" size="sm" onClick={() => openEditDialog(provider)}>
-                            编辑
-                          </Button>
-                          <Button variant="secondary" size="sm" onClick={() => openModelsDialog(provider.ID)}>
-                            模型列表
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="destructive" size="sm" onClick={() => openDeleteDialog(provider.ID)}>
-                                删除
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>确定要删除这个提供商吗？</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  此操作无法撤销。这将永久删除该提供商。
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel onClick={() => setDeleteId(null)}>取消</AlertDialogCancel>
-                                <AlertDialogAction onClick={handleDelete}>确认删除</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {providers.map((provider) => {
+                    const customModels = extractCustomModels(provider.Config);
+                    return (
+                      <TableRow key={provider.ID}>
+                        <TableCell className="font-mono text-xs text-muted-foreground">{provider.ID}</TableCell>
+                        <TableCell className="font-medium">{provider.Name}</TableCell>
+                        <TableCell className="text-sm">{provider.Type}</TableCell>
+                        <TableCell>
+                          {customModels.length > 0 ? (
+                            <div className="flex flex-wrap gap-1 max-w-md">
+                              {customModels.map((model) => (
+                                <span key={model} className="px-2 py-0.5 rounded-md bg-muted text-xs">
+                                  {model}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">未配置</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {provider.Console ? (
+                            <Button
+                              title={provider.Console}
+                              variant="outline"
+                              size="sm"
+                              onClick={() => window.open(provider.Console, '_blank')}
+                            >
+                              前往
+                            </Button>
+                          ) : (
+                            <span className="text-muted-foreground">暂未设置</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-2">
+                            <Button variant="outline" size="sm" onClick={() => openEditDialog(provider)}>
+                              编辑
+                            </Button>
+                            <Button variant="secondary" size="sm" onClick={() => openModelsDialog(provider.ID)}>
+                              模型列表
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="destructive" size="sm" onClick={() => openDeleteDialog(provider.ID)}>
+                                  删除
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>确定要删除这个提供商吗？</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    此操作无法撤销。这将永久删除该提供商。
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel onClick={() => setDeleteId(null)}>取消</AlertDialogCancel>
+                                  <AlertDialogAction onClick={handleDelete}>确认删除</AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
             <div className="sm:hidden flex-1 min-h-0 overflow-y-auto px-2 py-3 divide-y divide-border">
-              {providers.map((provider) => (
-                <div key={provider.ID} className="py-3 space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold text-sm truncate">{provider.Name}</h3>
-                      <p className="text-[11px] text-muted-foreground">ID: {provider.ID}</p>
-                      <p className="text-[11px] text-muted-foreground">类型: {provider.Type || "未知"}</p>
-                      {provider.Console && (
-                        <Button
-                          variant="link"
-                          className="px-0 h-auto text-[11px]"
-                          onClick={() => window.open(provider.Console, '_blank')}
-                        >
-                          控制台
-                        </Button>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap justify-end gap-1.5">
-                      <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => openEditDialog(provider)}>
-                        编辑
-                      </Button>
-                      <Button variant="secondary" size="sm" className="h-7 px-2 text-xs" onClick={() => openModelsDialog(provider.ID)}>
-                        模型
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="destructive" size="sm" className="h-7 px-2 text-xs" onClick={() => openDeleteDialog(provider.ID)}>
-                            删除
+              {providers.map((provider) => {
+                const customModels = extractCustomModels(provider.Config);
+                return (
+                  <div key={provider.ID} className="py-3 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold text-sm truncate">{provider.Name}</h3>
+                        <p className="text-[11px] text-muted-foreground">ID: {provider.ID}</p>
+                        <p className="text-[11px] text-muted-foreground">类型: {provider.Type || "未知"}</p>
+                        {customModels.length > 0 && (
+                          <p className="text-[11px] text-muted-foreground">
+                            自定义模型: {customModels.join(", ")}
+                          </p>
+                        )}
+                        {provider.Console && (
+                          <Button
+                            variant="link"
+                            className="px-0 h-auto text-[11px]"
+                            onClick={() => window.open(provider.Console, '_blank')}
+                          >
+                            控制台
                           </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>确定要删除这个提供商吗？</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              此操作无法撤销。这将永久删除该提供商。
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel onClick={() => setDeleteId(null)}>取消</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleDelete}>确认删除</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap justify-end gap-1.5">
+                        <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => openEditDialog(provider)}>
+                          编辑
+                        </Button>
+                        <Button variant="secondary" size="sm" className="h-7 px-2 text-xs" onClick={() => openModelsDialog(provider.ID)}>
+                          模型
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="destructive" size="sm" className="h-7 px-2 text-xs" onClick={() => openDeleteDialog(provider.ID)}>
+                              删除
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>确定要删除这个提供商吗？</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                此操作无法撤销。这将永久删除该提供商。
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel onClick={() => setDeleteId(null)}>取消</AlertDialogCancel>
+                              <AlertDialogAction onClick={handleDelete}>确认删除</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -567,6 +624,20 @@ export default function ProvidersPage() {
                     <FormLabel>API Key</FormLabel>
                     <FormControl>
                       <Input {...field} type="password" placeholder="sk-..." />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="custom_models"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>自定义模型（可选）</FormLabel>
+                    <FormControl>
+                      <Textarea {...field} placeholder="每行一个模型 ID，优先使用此列表，无需从提供商获取" className="h-28" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

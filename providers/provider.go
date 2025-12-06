@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/atopos31/llmio/consts"
 )
@@ -24,6 +26,24 @@ type Model struct {
 type Provider interface {
 	BuildReq(ctx context.Context, header http.Header, model string, rawData []byte) (*http.Request, error)
 	Models(ctx context.Context) ([]Model, error)
+}
+
+func buildCustomModels(custom []string) []Model {
+	now := time.Now().Unix()
+	models := make([]Model, 0, len(custom))
+	for _, model := range custom {
+		trimmed := strings.TrimSpace(model)
+		if trimmed == "" {
+			continue
+		}
+		models = append(models, Model{
+			ID:      trimmed,
+			Object:  "custom",
+			Created: now,
+			OwnedBy: "custom",
+		})
+	}
+	return models
 }
 
 func New(Type, providerConfig string) (Provider, error) {
@@ -52,4 +72,3 @@ func New(Type, providerConfig string) (Provider, error) {
 		return nil, errors.New("unknown provider")
 	}
 }
- 

@@ -12,10 +12,11 @@ import (
 )
 
 type Anthropic struct {
-	BaseURL string `json:"base_url"`
-	APIKey  string `json:"api_key"`
-	Version string `json:"version"`
-	Beta    string `json:"beta"`
+	BaseURL      string   `json:"base_url"`
+	APIKey       string   `json:"api_key"`
+	Version      string   `json:"version"`
+	Beta         string   `json:"beta"`
+	CustomModels []string `json:"custom_models"`
 }
 
 func (a *Anthropic) BuildReq(ctx context.Context, header http.Header, model string, rawBody []byte) (*http.Request, error) {
@@ -52,6 +53,10 @@ type AnthropicModel struct {
 }
 
 func (a *Anthropic) Models(ctx context.Context) ([]Model, error) {
+	if len(a.CustomModels) > 0 {
+		return buildCustomModels(a.CustomModels), nil
+	}
+
 	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/models", a.BaseURL), nil)
 	if err != nil {
 		return nil, err
@@ -83,4 +88,3 @@ func (a *Anthropic) Models(ctx context.Context) ([]Model, error) {
 	}
 	return modelList.Data, nil
 }
- 

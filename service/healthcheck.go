@@ -227,6 +227,8 @@ func (h *HealthChecker) checkOne(ctx context.Context, mp *models.ModelWithProvid
 		slog.Error("failed to save health check log", "error", err)
 	}
 
+	go EnforceHealthCheckLogRetention(context.Background())
+
 	// 处理检测结果
 	h.handleCheckResult(ctx, mp, checkErr == nil)
 }
@@ -407,6 +409,21 @@ func (h *HealthChecker) getAutoEnable(ctx context.Context) bool {
 	return setting.Value == "true"
 }
 
+// getLogRetentionCount 获取健康检测日志保留条数
+func (h *HealthChecker) getLogRetentionCount(ctx context.Context) int {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyHealthCheckLogRetentionCount).
+		First(ctx)
+	if err != nil {
+		return 0
+	}
+	retention, err := strconv.Atoi(setting.Value)
+	if err != nil || retention < 0 {
+		return 0
+	}
+	return retention
+}
+
 // CheckSingle 手动检测单个模型提供商
 func (h *HealthChecker) CheckSingle(ctx context.Context, mpID uint) (*models.HealthCheckLog, error) {
 	mp, err := gorm.G[models.ModelWithProvider](models.DB).Where("id = ?", mpID).First(ctx)
@@ -449,6 +466,8 @@ func (h *HealthChecker) CheckSingle(ctx context.Context, mpID uint) (*models.Hea
 		return nil, err
 	}
 
+	go EnforceHealthCheckLogRetention(context.Background())
+
 	// 处理检测结果
 	h.handleCheckResult(ctx, &mp, checkErr == nil)
 
@@ -456,7 +475,7 @@ func (h *HealthChecker) CheckSingle(ctx context.Context, mpID uint) (*models.Hea
 }
 
 // GetHealthCheckSettings 获取健康检测设置
-func GetHealthCheckSettings(ctx context.Context) (enabled bool, interval int, failureThreshold int, autoEnable bool) {
+func GetHealthCheckSettings(ctx context.Context) (enabled bool, interval int, failureThreshold int, autoEnable bool, logRetentionCount int) {
 	checker := GetHealthChecker()
 
 	enabled = checker.isEnabled(ctx)
@@ -473,29 +492,78 @@ func GetHealthCheckSettings(ctx context.Context) (enabled bool, interval int, fa
 
 	failureThreshold = checker.getFailureThreshold(ctx)
 	autoEnable = checker.getAutoEnable(ctx)
+	logRetentionCount = checker.getLogRetentionCount(ctx)
 
 	return
 }
 
 // HealthCheckSettingsJSON 健康检测设置 JSON 结构
 type HealthCheckSettingsJSON struct {
-	Enabled          bool `json:"enabled"`
-	Interval         int  `json:"interval"`
-	FailureThreshold int  `json:"failure_threshold"`
-	AutoEnable       bool `json:"auto_enable"`
+	Enabled           bool `json:"enabled"`
+	Interval          int  `json:"interval"`
+	FailureThreshold  int  `json:"failure_threshold"`
+	AutoEnable        bool `json:"auto_enable"`
+	LogRetentionCount int  `json:"log_retention_count"`
 }
 
 // MarshalJSON 序列化健康检测设置
 func (s HealthCheckSettingsJSON) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		Enabled          bool `json:"enabled"`
-		Interval         int  `json:"interval"`
-		FailureThreshold int  `json:"failure_threshold"`
-		AutoEnable       bool `json:"auto_enable"`
+		Enabled           bool `json:"enabled"`
+		Interval          int  `json:"interval"`
+		FailureThreshold  int  `json:"failure_threshold"`
+		AutoEnable        bool `json:"auto_enable"`
+		LogRetentionCount int  `json:"log_retention_count"`
 	}{
-		Enabled:          s.Enabled,
-		Interval:         s.Interval,
-		FailureThreshold: s.FailureThreshold,
-		AutoEnable:       s.AutoEnable,
+		Enabled:           s.Enabled,
+		Interval:          s.Interval,
+		FailureThreshold:  s.FailureThreshold,
+		AutoEnable:        s.AutoEnable,
+		LogRetentionCount: s.LogRetentionCount,
 	})
+}
+
+// EnforceHealthCheckLogRetention 清理超出保留条数的健康检测日志
+func EnforceHealthCheckLogRetention(ctx context.Context) {
+	retention := GetHealthChecker().getLogRetentionCount(ctx)
+	if retention <= 0 {
+		return
+	}
+	cleanupHealthCheckLogs(ctx, retention)
+}
+
+func cleanupHealthCheckLogs(ctx context.Context, retentionCount int) {
+	var total int64
+	if err := models.DB.WithContext(ctx).Model(&models.HealthCheckLog{}).Count(&total).Error; err != nil {
+		slog.Error("failed to count health check logs for cleanup", "error", err)
+		return
+	}
+
+	if int(total) <= retentionCount {
+		return
+	}
+
+	deleteCount := int(total) - retentionCount
+	var ids []uint
+	if err := models.DB.WithContext(ctx).
+		Model(&models.HealthCheckLog{}).
+		Order("id ASC").
+		Limit(deleteCount).
+		Pluck("id", &ids).Error; err != nil {
+		slog.Error("failed to find health check logs to delete", "error", err)
+		return
+	}
+
+	if len(ids) == 0 {
+		return
+	}
+
+	if _, err := gorm.G[models.HealthCheckLog](models.DB).
+		Where("id IN ?", ids).
+		Delete(ctx); err != nil {
+		slog.Error("failed to delete health check logs", "error", err)
+		return
+	}
+
+	slog.Info("cleaned up excess health check logs", "deleted", len(ids), "retention", retentionCount)
 }

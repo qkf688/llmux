@@ -221,13 +221,22 @@ export default function SettingsPage() {
     }
   };
 
+  const handleHealthCheckLogRetentionCountChange = (value: number) => {
+    if (healthCheckSettings) {
+      const newSettings = { ...healthCheckSettings, log_retention_count: value };
+      setHealthCheckSettings(newSettings);
+      checkHealthCheckHasChanges(newSettings);
+    }
+  };
+
   const checkHealthCheckHasChanges = (newSettings: HealthCheckSettings) => {
     if (!originalHealthCheckSettings) return;
     const changed =
       originalHealthCheckSettings.enabled !== newSettings.enabled ||
       originalHealthCheckSettings.interval !== newSettings.interval ||
       originalHealthCheckSettings.failure_threshold !== newSettings.failure_threshold ||
-      originalHealthCheckSettings.auto_enable !== newSettings.auto_enable;
+      originalHealthCheckSettings.auto_enable !== newSettings.auto_enable ||
+      originalHealthCheckSettings.log_retention_count !== newSettings.log_retention_count;
     setHasHealthCheckChanges(changed);
   };
 
@@ -609,6 +618,24 @@ export default function SettingsPage() {
                 max={10}
                 value={healthCheckSettings?.failure_threshold ?? 3}
                 onChange={(e) => handleHealthCheckFailureThresholdChange(parseInt(e.target.value) || 3)}
+                className="w-32"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="health-check-log-retention-count" className="text-base font-medium">
+                健康检测日志保留条数
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                系统自动保留的最新健康检测日志条数，设置为 0 表示不限制。
+              </p>
+              <Input
+                id="health-check-log-retention-count"
+                type="number"
+                min={0}
+                max={100000}
+                value={healthCheckSettings?.log_retention_count ?? 0}
+                onChange={(e) => handleHealthCheckLogRetentionCountChange(parseInt(e.target.value) || 0)}
                 className="w-32"
               />
             </div>

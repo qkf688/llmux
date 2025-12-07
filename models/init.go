@@ -59,10 +59,11 @@ func initDefaultSettings(ctx context.Context) {
 		{Key: SettingKeyAutoPriorityDecayThreshold, Value: "90"}, // 默认优先级阈值90，达到此值自动禁用
 		{Key: SettingKeyLogRetentionCount, Value: "100"},         // 默认保留100条日志，0表示不限制
 		// 健康检测相关默认设置
-		{Key: SettingKeyHealthCheckEnabled, Value: "false"},          // 默认关闭健康检测
-		{Key: SettingKeyHealthCheckInterval, Value: "60"},            // 默认检测间隔60分钟
-		{Key: SettingKeyHealthCheckFailureThreshold, Value: "3"},     // 默认失败3次后禁用
-		{Key: SettingKeyHealthCheckAutoEnable, Value: "false"},       // 默认检测成功不自动启用
+		{Key: SettingKeyHealthCheckEnabled, Value: "false"},         // 默认关闭健康检测
+		{Key: SettingKeyHealthCheckInterval, Value: "60"},           // 默认检测间隔60分钟
+		{Key: SettingKeyHealthCheckFailureThreshold, Value: "3"},    // 默认失败3次后禁用
+		{Key: SettingKeyHealthCheckAutoEnable, Value: "false"},      // 默认检测成功不自动启用
+		{Key: SettingKeyHealthCheckLogRetentionCount, Value: "100"}, // 默认保留100条健康检测日志，0 表示不限制
 	}
 
 	for _, setting := range defaultSettings {

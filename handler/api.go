@@ -1354,30 +1354,33 @@ func BatchDeleteLogs(c *gin.Context) {
 
 // HealthCheckSettingsResponse 健康检测设置响应结构
 type HealthCheckSettingsResponse struct {
-	Enabled          bool `json:"enabled"`
-	Interval         int  `json:"interval"`
-	FailureThreshold int  `json:"failure_threshold"`
-	AutoEnable       bool `json:"auto_enable"`
+	Enabled           bool `json:"enabled"`
+	Interval          int  `json:"interval"`
+	FailureThreshold  int  `json:"failure_threshold"`
+	AutoEnable        bool `json:"auto_enable"`
+	LogRetentionCount int  `json:"log_retention_count"`
 }
 
 // UpdateHealthCheckSettingsRequest 更新健康检测设置请求结构
 type UpdateHealthCheckSettingsRequest struct {
-	Enabled          bool `json:"enabled"`
-	Interval         int  `json:"interval"`
-	FailureThreshold int  `json:"failure_threshold"`
-	AutoEnable       bool `json:"auto_enable"`
+	Enabled           bool `json:"enabled"`
+	Interval          int  `json:"interval"`
+	FailureThreshold  int  `json:"failure_threshold"`
+	AutoEnable        bool `json:"auto_enable"`
+	LogRetentionCount int  `json:"log_retention_count"`
 }
 
 // GetHealthCheckSettings 获取健康检测设置
 func GetHealthCheckSettings(c *gin.Context) {
 	ctx := c.Request.Context()
-	enabled, interval, failureThreshold, autoEnable := service.GetHealthCheckSettings(ctx)
+	enabled, interval, failureThreshold, autoEnable, logRetentionCount := service.GetHealthCheckSettings(ctx)
 
 	response := HealthCheckSettingsResponse{
-		Enabled:          enabled,
-		Interval:         interval,
-		FailureThreshold: failureThreshold,
-		AutoEnable:       autoEnable,
+		Enabled:           enabled,
+		Interval:          interval,
+		FailureThreshold:  failureThreshold,
+		AutoEnable:        autoEnable,
+		LogRetentionCount: logRetentionCount,
 	}
 
 	common.Success(c, response)
@@ -1439,8 +1442,22 @@ func UpdateHealthCheckSettings(c *gin.Context) {
 		return
 	}
 
+	// 更新健康检测日志保留条数
+	if req.LogRetentionCount < 0 {
+		req.LogRetentionCount = 0
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyHealthCheckLogRetentionCount).
+		Update(ctx, "value", strconv.Itoa(req.LogRetentionCount)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
 	// 重启健康检测服务
 	go service.GetHealthChecker().Restart(context.Background())
+
+	// 执行日志清理以满足新的保留策略
+	go service.EnforceHealthCheckLogRetention(context.Background())
 
 	// 返回更新后的设置
 	GetHealthCheckSettings(c)

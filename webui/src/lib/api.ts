@@ -483,6 +483,7 @@ export interface HealthCheckSettings {
   interval: number;
   failure_threshold: number;
   auto_enable: boolean;
+  log_retention_count: number;
 }
 
 export interface HealthCheckLog {

@@ -43,17 +43,27 @@ func AuthAnthropic(koken string) gin.HandlerFunc {
 		if koken == "" {
 			return
 		}
-		authHeader := c.GetHeader("x-api-key")
-		if authHeader == "" {
-			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "x-api-key header is missing")
+
+		// 优先检查 Authorization: Bearer 头
+		authHeader := c.GetHeader("Authorization")
+		if authHeader != "" {
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 && parts[0] == "Bearer" && parts[1] == koken {
+				return
+			}
+		}
+
+		// 回退检查 x-api-key 头（保持向后兼容）
+		xApiKey := c.GetHeader("x-api-key")
+		if xApiKey == "" {
+			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Authorization header or x-api-key header is missing")
 			c.Abort()
 			return
 		}
-		if authHeader != koken {
+		if xApiKey != koken {
 			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Invalid token")
 			c.Abort()
 			return
 		}
 	}
 }
- 

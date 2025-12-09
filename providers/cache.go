@@ -3,6 +3,7 @@ package providers
 import (
 	"net"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 )
@@ -59,4 +60,34 @@ func GetClient(responseHeaderTimeout time.Duration) *http.Client {
 	cache.clients[responseHeaderTimeout] = client
 	return client
 }
- 
+
+// GetClientWithProxy returns an http.Client with the specified responseHeaderTimeout and proxy.
+// This creates a new client each time and does not use caching.
+func GetClientWithProxy(responseHeaderTimeout time.Duration, proxyURL string) *http.Client {
+	transport := &http.Transport{
+		DialContext:           dialer.DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		ResponseHeaderTimeout: responseHeaderTimeout,
+	}
+
+	// 如果提供了代理URL，使用它；否则使用环境变量
+	if proxyURL != "" {
+		if parsedURL, err := url.Parse(proxyURL); err == nil {
+			transport.Proxy = http.ProxyURL(parsedURL)
+		} else {
+			// 解析失败，回退到环境变量
+			transport.Proxy = http.ProxyFromEnvironment
+		}
+	} else {
+		transport.Proxy = http.ProxyFromEnvironment
+	}
+
+	return &http.Client{
+		Transport: transport,
+		Timeout:   0,
+	}
+}

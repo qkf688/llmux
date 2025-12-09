@@ -26,6 +26,7 @@ type Model struct {
 type Provider interface {
 	BuildReq(ctx context.Context, header http.Header, model string, rawData []byte) (*http.Request, error)
 	Models(ctx context.Context) ([]Model, error)
+	GetProxy() string
 }
 
 func buildCustomModels(custom []string) []Model {
@@ -46,12 +47,17 @@ func buildCustomModels(custom []string) []Model {
 	return models
 }
 
-func New(Type, providerConfig string) (Provider, error) {
+// New 根据类型创建对应的 Provider 实例，并注入外层存储的代理。
+// proxy 参数优先级高于 config 内的代理字段，避免双处配置导致遗漏。
+func New(Type, providerConfig, proxy string) (Provider, error) {
 	switch Type {
 	case consts.StyleOpenAI:
 		var openai OpenAI
 		if err := json.Unmarshal([]byte(providerConfig), &openai); err != nil {
 			return nil, errors.New("invalid openai config")
+		}
+		if proxy != "" {
+			openai.Proxy = proxy
 		}
 
 		return &openai, nil
@@ -60,12 +66,18 @@ func New(Type, providerConfig string) (Provider, error) {
 		if err := json.Unmarshal([]byte(providerConfig), &openaiRes); err != nil {
 			return nil, errors.New("invalid openai-res config")
 		}
+		if proxy != "" {
+			openaiRes.Proxy = proxy
+		}
 
 		return &openaiRes, nil
 	case consts.StyleAnthropic:
 		var anthropic Anthropic
 		if err := json.Unmarshal([]byte(providerConfig), &anthropic); err != nil {
 			return nil, errors.New("invalid anthropic config")
+		}
+		if proxy != "" {
+			anthropic.Proxy = proxy
 		}
 		return &anthropic, nil
 	default:

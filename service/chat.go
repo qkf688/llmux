@@ -33,7 +33,8 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 
 	go RecordRetryLog(context.Background(), retryLog, providersWithMeta.ModelWithProviderMap)
 
-	client := providers.GetClient(time.Second * time.Duration(providersWithMeta.TimeOut) / 3)
+	// 注意：这里我们需要在循环中为每个provider创建带代理的client
+	// 所以先移除这行，在循环内部创建
 
 	timer := time.NewTimer(time.Second * time.Duration(providersWithMeta.TimeOut))
 	defer timer.Stop()
@@ -59,12 +60,15 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 
 			provider := providerMap[modelWithProvider.ProviderID]
 
-			chatModel, err := providers.New(style, provider.Config)
+			chatModel, err := providers.New(style, provider.Config, provider.Proxy)
 			if err != nil {
 				return nil, 0, err
 			}
 
-			slog.Info("using provider", "provider", provider.Name, "model", modelWithProvider.ProviderModel)
+			// 为当前provider创建带代理的client
+			client := providers.GetClientWithProxy(time.Second*time.Duration(providersWithMeta.TimeOut)/3, chatModel.GetProxy())
+
+			slog.Info("using provider", "provider", provider.Name, "model", modelWithProvider.ProviderModel, "proxy", chatModel.GetProxy())
 
 			log := models.ChatLog{
 				Name:          before.Model,

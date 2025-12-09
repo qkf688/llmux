@@ -70,6 +70,7 @@ const formSchema = z.object({
   version: z.string().optional(),
   console: z.string().optional(),
   custom_models: z.string().optional(),
+  proxy: z.string().optional(),
 });
 
 // 将表单字段转换为 JSON 配置字符串
@@ -181,6 +182,7 @@ export default function ProvidersPage() {
       version: "",
       console: "",
       custom_models: "",
+      proxy: "",
     },
   });
 
@@ -269,11 +271,12 @@ export default function ProvidersPage() {
         name: values.name,
         type: values.type,
         config: config,
-        console: values.console || ""
+        console: values.console || "",
+        proxy: values.proxy || ""
       });
       setOpen(false);
       toast.success(`提供商 ${values.name} 创建成功`);
-      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "" });
+      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "", proxy: "" });
       fetchProviders();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -290,12 +293,13 @@ export default function ProvidersPage() {
         name: values.name,
         type: values.type,
         config: config,
-        console: values.console || ""
+        console: values.console || "",
+        proxy: values.proxy || ""
       });
       setOpen(false);
       toast.success(`提供商 ${values.name} 更新成功`);
       setEditingProvider(null);
-      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "" });
+      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "", proxy: "" });
       fetchProviders();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -332,6 +336,7 @@ export default function ProvidersPage() {
       version: configFields.version || "",
       console: provider.Console || "",
       custom_models: configFields.custom_models.join("\n"),
+      proxy: provider.Proxy || "",
     });
     setOpen(true);
   };
@@ -339,7 +344,7 @@ export default function ProvidersPage() {
   const openCreateDialog = () => {
     setEditingProvider(null);
     setShowApiKey(false);
-    form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "" });
+    form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "", proxy: "" });
     setOpen(true);
   };
 
@@ -725,6 +730,20 @@ export default function ProvidersPage() {
                     <FormLabel>控制台地址（可选）</FormLabel>
                     <FormControl>
                       <Input {...field} placeholder="https://example.com/console" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="proxy"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>代理地址（可选）</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="http://user:pass@host:port" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

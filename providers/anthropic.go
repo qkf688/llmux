@@ -17,6 +17,7 @@ type Anthropic struct {
 	Version      string   `json:"version"`
 	Beta         string   `json:"beta"`
 	CustomModels []string `json:"custom_models"`
+	Proxy        string   `json:"proxy"`
 }
 
 func (a *Anthropic) BuildReq(ctx context.Context, header http.Header, model string, rawBody []byte) (*http.Request, error) {
@@ -65,7 +66,10 @@ func (a *Anthropic) Models(ctx context.Context) ([]Model, error) {
 	req.Header.Set("x-api-key", a.APIKey)
 	req.Header.Set("anthropic-version", a.Version)
 	req.Header.Set("anthropic-beta", a.Beta)
-	res, err := http.DefaultClient.Do(req)
+	
+	// 使用带代理的客户端
+	client := GetClientWithProxy(30*time.Second, a.Proxy)
+	res, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -87,4 +91,8 @@ func (a *Anthropic) Models(ctx context.Context) ([]Model, error) {
 		})
 	}
 	return modelList.Data, nil
+}
+
+func (a *Anthropic) GetProxy() string {
+	return a.Proxy
 }

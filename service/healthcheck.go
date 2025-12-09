@@ -236,7 +236,7 @@ func (h *HealthChecker) checkOne(ctx context.Context, mp *models.ModelWithProvid
 // doCheck 执行实际的检测请求
 func (h *HealthChecker) doCheck(ctx context.Context, provider *models.Provider, mp *models.ModelWithProvider) error {
 	// 创建提供商实例
-	providerInstance, err := providers.New(provider.Type, provider.Config)
+	providerInstance, err := providers.New(provider.Type, provider.Config, provider.Proxy)
 	if err != nil {
 		return err
 	}
@@ -267,8 +267,9 @@ func (h *HealthChecker) doCheck(ctx context.Context, provider *models.Provider, 
 		return err
 	}
 
-	// 发送请求
-	res, err := h.httpClient.Do(req)
+	// 发送请求，优先使用提供商级别代理
+	client := providers.GetClientWithProxy(30*time.Second, providerInstance.GetProxy())
+	res, err := client.Do(req)
 	if err != nil {
 		return err
 	}

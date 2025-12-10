@@ -1018,15 +1018,6 @@ func UpdateSettings(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// 获取当前自动权重衰减开关状态
-	currentAutoWeightDecay := false
-	currentSetting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyAutoWeightDecay).
-		First(ctx)
-	if err == nil {
-		currentAutoWeightDecay = currentSetting.Value == "true"
-	}
-
 	// 更新严格能力匹配设置
 	strictValue := "false"
 	if req.StrictCapabilityMatch {
@@ -1090,26 +1081,6 @@ func UpdateSettings(c *gin.Context) {
 		return
 	}
 
-	// 如果刚刚开启自动权重衰减（之前是关闭的，现在是开启的），自动重置所有权重
-	if req.AutoWeightDecay && !currentAutoWeightDecay {
-		if _, err := gorm.G[models.ModelWithProvider](models.DB).
-			Where("1 = 1").
-			Update(ctx, "weight", req.AutoWeightDecayDefault); err != nil {
-			slog.Error("auto reset weights failed", "error", err)
-		} else {
-			slog.Info("auto reset all weights on enabling auto weight decay", "default_weight", req.AutoWeightDecayDefault)
-		}
-	}
-
-	// 获取当前自动优先级衰减开关状态
-	currentAutoPriorityDecay := false
-	currentPrioritySetting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyAutoPriorityDecay).
-		First(ctx)
-	if err == nil {
-		currentAutoPriorityDecay = currentPrioritySetting.Value == "true"
-	}
-
 	// 更新自动优先级衰减开关
 	autoPriorityDecayValue := "false"
 	if req.AutoPriorityDecay {
@@ -1166,26 +1137,6 @@ func UpdateSettings(c *gin.Context) {
 		Update(ctx, "value", strconv.Itoa(req.AutoPriorityIncreaseMax)); err != nil {
 		common.InternalServerError(c, "Failed to update settings: "+err.Error())
 		return
-	}
-
-	// 如果刚刚开启自动优先级衰减（之前是关闭的，现在是开启的），自动重置所有优先级
-	if req.AutoPriorityDecay && !currentAutoPriorityDecay {
-		if _, err := gorm.G[models.ModelWithProvider](models.DB).
-			Where("1 = 1").
-			Update(ctx, "priority", req.AutoPriorityDecayDefault); err != nil {
-			slog.Error("auto reset priorities failed", "error", err)
-		} else {
-			slog.Info("auto reset all priorities on enabling auto priority decay", "default_priority", req.AutoPriorityDecayDefault)
-		}
-		// 同时重新启用所有关联模型
-		trueVal := true
-		if _, err := gorm.G[models.ModelWithProvider](models.DB).
-			Where("1 = 1").
-			Updates(ctx, models.ModelWithProvider{Status: &trueVal}); err != nil {
-			slog.Error("auto re-enable all model providers failed", "error", err)
-		} else {
-			slog.Info("auto re-enable all model providers on enabling auto priority decay")
-		}
 	}
 
 	countHealthCheckValue := "false"

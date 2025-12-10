@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/select";
 import Loading from "@/components/loading";
 import { Spinner } from "@/components/ui/spinner";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import {
   getModels,
   createModel,
@@ -66,6 +67,16 @@ import { parseAllModelsFromConfig, toProviderModelList } from "@/lib/provider-mo
 type MobileInfoItemProps = {
   label: string;
   value: ReactNode;
+};
+
+type ProviderModelWithOwner = ProviderModel & {
+  providerId: number;
+  providerName: string;
+};
+
+type ProviderModelGroup = {
+  provider: Provider;
+  models: ProviderModelWithOwner[];
 };
 
 const MobileInfoItem = ({ label, value }: MobileInfoItemProps) => (
@@ -97,9 +108,11 @@ export default function ModelsPage() {
   
   // 供应商相关状态
   const [providers, setProviders] = useState<Provider[]>([]);
-  const [selectedProviderId, setSelectedProviderId] = useState<string>("");
-  const [providerModels, setProviderModels] = useState<ProviderModel[]>([]);
+  const [selectedProviderId, setSelectedProviderId] = useState<string>("all");
+  const [providerModels, setProviderModels] = useState<ProviderModelWithOwner[]>([]);
+  const [providerModelGroups, setProviderModelGroups] = useState<ProviderModelGroup[]>([]);
   const [loadingProviderModels, setLoadingProviderModels] = useState(false);
+  const [collapsedProviders, setCollapsedProviders] = useState<Record<number, boolean>>({});
   
   // 模型选择弹窗状态
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
@@ -121,15 +134,6 @@ export default function ModelsPage() {
     fetchModels();
     fetchProviders();
   }, []);
-  
-  // 当选择供应商变化时，获取该供应商的模型列表
-  useEffect(() => {
-    if (selectedProviderId) {
-      loadProviderModelsFromCache(parseInt(selectedProviderId));
-    } else {
-      setProviderModels([]);
-    }
-  }, [selectedProviderId, providers]);
 
   const fetchModels = async () => {
     try {
@@ -147,19 +151,31 @@ export default function ModelsPage() {
 
   const fetchProviders = async () => {
     try {
+      setLoadingProviderModels(true);
       const data = await getProviders();
       setProviders(data);
+      const groups = data.map((provider) => {
+        const models = toProviderModelList(parseAllModelsFromConfig(provider.Config)).map((model) => ({
+          ...model,
+          providerId: provider.ID,
+          providerName: provider.Name,
+        }));
+        return { provider, models };
+      });
+      setProviderModelGroups(groups);
+      setProviderModels(groups.flatMap((group) => group.models));
+      setCollapsedProviders((prev) => {
+        const next: Record<number, boolean> = {};
+        groups.forEach(({ provider }) => {
+          next[provider.ID] = prev[provider.ID] ?? false;
+        });
+        return next;
+      });
     } catch (err) {
       console.error("获取供应商列表失败:", err);
+    } finally {
+      setLoadingProviderModels(false);
     }
-  };
-
-  const loadProviderModelsFromCache = (providerId: number) => {
-    setLoadingProviderModels(true);
-    const provider = providers.find((item) => item.ID === providerId);
-    const cached = provider ? toProviderModelList(parseAllModelsFromConfig(provider.Config)) : [];
-    setProviderModels(cached);
-    setLoadingProviderModels(false);
   };
 
   const handleSelectProviderModel = (modelId: string) => {
@@ -169,18 +185,28 @@ export default function ModelsPage() {
   };
 
   // 过滤模型列表
-  const filteredProviderModels = providerModels.filter(model =>
-    model.id.toLowerCase().includes(modelSearchQuery.toLowerCase())
-  );
+  const toggleProviderCollapse = (providerId: number) => {
+    setCollapsedProviders((prev) => ({
+      ...prev,
+      [providerId]: !prev[providerId],
+    }));
+  };
+
+  const filteredProviderGroups = providerModelGroups
+    .filter((group) => selectedProviderId === "all" || group.provider.ID.toString() === selectedProviderId)
+    .map((group) => ({
+      ...group,
+      models: group.models.filter((model) =>
+        model.id.toLowerCase().includes(modelSearchQuery.toLowerCase())
+      )
+    }))
+    .filter((group) => group.models.length > 0);
+  const filteredProviderModels = filteredProviderGroups.flatMap((group) => group.models);
 
   // 打开模型选择弹窗
   const openModelPicker = () => {
-    if (!selectedProviderId) {
-      toast.error("请先选择供应商");
-      return;
-    }
     if (providerModels.length === 0) {
-      toast.error("该供应商暂无“全部模型”，请先在提供商管理页同步或添加模型");
+      toast.error("暂无任何“全部模型”，请先在提供商管理页同步或添加模型");
       return;
     }
     setModelPickerOpen(true);
@@ -245,8 +271,7 @@ export default function ModelsPage() {
   const openCreateDialog = () => {
     setEditingModel(null);
     form.reset({ name: "", remark: "", max_retry: 10, time_out: 60, io_log: false });
-    setSelectedProviderId("");
-    setProviderModels([]);
+    setSelectedProviderId("all");
     setOpen(true);
   };
 
@@ -514,7 +539,7 @@ export default function ModelsPage() {
               {/* 供应商选择（仅在创建模式下显示） */}
               {!editingModel && (
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">从全部模型选择（可选）</label>
+                  <label className="text-sm font-medium">从提供商选择（默认全部）</label>
                   <div className="flex gap-2">
                     <Select
                       value={selectedProviderId}
@@ -524,6 +549,7 @@ export default function ModelsPage() {
                         <SelectValue placeholder="选择供应商" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="all">全部</SelectItem>
                         {providers.map((provider) => (
                           <SelectItem key={provider.ID} value={provider.ID.toString()}>
                             {provider.Name} ({provider.Type})
@@ -535,7 +561,7 @@ export default function ModelsPage() {
                       type="button"
                       variant="outline"
                       onClick={openModelPicker}
-                      disabled={!selectedProviderId || loadingProviderModels}
+                      disabled={loadingProviderModels || providerModels.length === 0}
                     >
                       {loadingProviderModels ? (
                         <>
@@ -656,7 +682,9 @@ export default function ModelsPage() {
           <DialogHeader>
             <DialogTitle>选择模型</DialogTitle>
             <DialogDescription>
-              从供应商 {providers.find(p => p.ID.toString() === selectedProviderId)?.Name} 的全部模型缓存中选择
+              {selectedProviderId === "all"
+                ? "从全部提供商的模型缓存中选择"
+                : `从供应商 ${providers.find(p => p.ID.toString() === selectedProviderId)?.Name ?? "未找到"} 的模型缓存中选择`}
             </DialogDescription>
           </DialogHeader>
           
@@ -671,33 +699,62 @@ export default function ModelsPage() {
           </div>
           
           {/* 模型列表 */}
-          <div className="flex-1 min-h-0 overflow-y-auto border rounded-md">
+          <div className="flex-1 min-h-0 overflow-y-auto border rounded-md space-y-2 p-2">
             {loadingProviderModels ? (
               <div className="flex items-center justify-center h-32">
                 <Spinner className="h-6 w-6 mr-2" />
                 <span>加载模型列表...</span>
               </div>
-            ) : filteredProviderModels.length === 0 ? (
+            ) : providerModels.length === 0 ? (
               <div className="flex items-center justify-center h-32 text-muted-foreground">
-                {modelSearchQuery ? "没有找到匹配的模型" : "该供应商暂无全部模型缓存，请先在提供商管理页同步"}
+                暂无全部模型缓存，请先在提供商管理页同步
+              </div>
+            ) : filteredProviderGroups.length === 0 ? (
+              <div className="flex items-center justify-center h-32 text-muted-foreground">
+                没有找到匹配的模型
               </div>
             ) : (
-              <div className="divide-y">
-                {filteredProviderModels.map((model) => (
-                  <div
-                    key={model.id}
-                    className="p-3 hover:bg-muted cursor-pointer transition-colors"
-                    onClick={() => handleSelectProviderModel(model.id)}
-                  >
-                    <div className="font-medium text-sm">{model.id}</div>
-                    {model.owned_by && (
-                      <div className="text-xs text-muted-foreground mt-1">
-                        提供者: {model.owned_by}
+              filteredProviderGroups.map((group) => {
+                const isCollapsed = collapsedProviders[group.provider.ID] ?? false;
+                return (
+                  <div key={group.provider.ID} className="border rounded-md">
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted/70 transition"
+                      onClick={() => toggleProviderCollapse(group.provider.ID)}
+                    >
+                      <div className="flex items-center gap-2">
+                        {isCollapsed ? (
+                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        )}
+                        <span className="font-medium">{group.provider.Name}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {group.models.length} 个模型
+                      </span>
+                    </button>
+                    {!isCollapsed && (
+                      <div className="divide-y">
+                        {group.models.map((model) => (
+                          <div
+                            key={`${group.provider.ID}-${model.id}`}
+                            className="p-3 hover:bg-muted cursor-pointer transition-colors"
+                            onClick={() => handleSelectProviderModel(model.id)}
+                          >
+                            <div className="font-medium text-sm">{model.id}</div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              提供商: {group.provider.Name}
+                              {model.owned_by ? ` · 归属: ${model.owned_by}` : ""}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
-                ))}
-              </div>
+                );
+              })
             )}
           </div>
           
@@ -706,8 +763,7 @@ export default function ModelsPage() {
               <span className="text-sm text-muted-foreground">
                 共 {filteredProviderModels.length} 个模型
                 {modelSearchQuery && providerModels.length !== filteredProviderModels.length &&
-                  ` (已筛选，总计 ${providerModels.length} 个)`
-                }
+                  ` (已筛选，总计 ${providerModels.length} 个)`}
               </span>
               <Button type="button" variant="outline" onClick={() => setModelPickerOpen(false)}>
                 取消

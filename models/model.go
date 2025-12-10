@@ -124,6 +124,7 @@ const (
 	SettingKeyAutoPriorityDecayThreshold = "auto_priority_decay_threshold" // 自动优先级衰减阈值（达到此值自动禁用）
 	SettingKeyAutoPriorityIncreaseStep   = "auto_priority_increase_step"   // 自动优先级增加步长（每次成功增加的优先级）
 	SettingKeyAutoPriorityIncreaseMax    = "auto_priority_increase_max"    // 自动优先级增加的上限
+	SettingKeyAutoSuccessIncrease        = "auto_success_increase"         // 成功调用后是否执行自增
 
 	SettingKeyLogRetentionCount = "log_retention_count" // 日志保留条数，0表示不限制
 

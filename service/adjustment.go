@@ -11,6 +11,10 @@ import (
 
 // applySuccessAdjustments 在成功调用后尝试提升权重与优先级
 func applySuccessAdjustments(ctx context.Context, modelProviderID uint) {
+	if !getAutoSuccessIncrease(ctx) {
+		return
+	}
+
 	applyWeightIncreaseByID(ctx, modelProviderID)
 	applyPriorityIncreaseByID(ctx, modelProviderID)
 }
@@ -145,6 +149,17 @@ func getAutoPriorityIncreaseMax(ctx context.Context) int {
 		return 100
 	}
 	return max
+}
+
+// getAutoSuccessIncrease 获取成功自增开关
+func getAutoSuccessIncrease(ctx context.Context) bool {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyAutoSuccessIncrease).
+		First(ctx)
+	if err != nil {
+		return true
+	}
+	return setting.Value == "true"
 }
 
 // applyWeightDecayByModelProviderID 根据配置对指定关联应用权重衰减

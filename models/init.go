@@ -53,6 +53,7 @@ func initDefaultSettings(ctx context.Context) {
 		{Key: SettingKeyAutoWeightDecay, Value: "false"},         // 默认关闭自动权重衰减
 		{Key: SettingKeyAutoWeightDecayDefault, Value: "100"},    // 默认权重值100
 		{Key: SettingKeyAutoWeightDecayStep, Value: "1"},         // 默认每次失败减少1
+		{Key: SettingKeyAutoSuccessIncrease, Value: "true"},      // 默认开启成功调用自增
 		{Key: SettingKeyAutoWeightIncreaseStep, Value: "1"},      // 默认每次成功增加1
 		{Key: SettingKeyAutoWeightIncreaseMax, Value: "100"},     // 默认权重上限100
 		{Key: SettingKeyAutoPriorityDecay, Value: "false"},       // 默认关闭自动优先级衰减

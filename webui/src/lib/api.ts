@@ -424,6 +424,7 @@ export interface Settings {
   auto_weight_decay: boolean;
   auto_weight_decay_default: number;
   auto_weight_decay_step: number;
+  auto_success_increase: boolean;
   auto_weight_increase_step: number;
   auto_weight_increase_max: number;
   auto_priority_decay: boolean;

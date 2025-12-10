@@ -891,6 +891,7 @@ type SettingsResponse struct {
 	AutoWeightDecay            bool `json:"auto_weight_decay"`
 	AutoWeightDecayDefault     int  `json:"auto_weight_decay_default"`
 	AutoWeightDecayStep        int  `json:"auto_weight_decay_step"`
+	AutoSuccessIncrease        bool `json:"auto_success_increase"`
 	AutoWeightIncreaseStep     int  `json:"auto_weight_increase_step"`
 	AutoWeightIncreaseMax      int  `json:"auto_weight_increase_max"`
 	AutoPriorityDecay          bool `json:"auto_priority_decay"`
@@ -910,6 +911,7 @@ type UpdateSettingsRequest struct {
 	AutoWeightDecay            bool `json:"auto_weight_decay"`
 	AutoWeightDecayDefault     int  `json:"auto_weight_decay_default"`
 	AutoWeightDecayStep        int  `json:"auto_weight_decay_step"`
+	AutoSuccessIncrease        bool `json:"auto_success_increase"`
 	AutoWeightIncreaseStep     int  `json:"auto_weight_increase_step"`
 	AutoWeightIncreaseMax      int  `json:"auto_weight_increase_max"`
 	AutoPriorityDecay          bool `json:"auto_priority_decay"`
@@ -937,6 +939,7 @@ func GetSettings(c *gin.Context) {
 		AutoWeightDecay:            false,
 		AutoWeightDecayDefault:     100,
 		AutoWeightDecayStep:        1,
+		AutoSuccessIncrease:        true,
 		AutoWeightIncreaseStep:     1,
 		AutoWeightIncreaseMax:      100,
 		AutoPriorityDecay:          false,
@@ -964,6 +967,8 @@ func GetSettings(c *gin.Context) {
 			if val, err := strconv.Atoi(setting.Value); err == nil {
 				response.AutoWeightDecayStep = val
 			}
+		case models.SettingKeyAutoSuccessIncrease:
+			response.AutoSuccessIncrease = setting.Value == "true"
 		case models.SettingKeyAutoWeightIncreaseStep:
 			if val, err := strconv.Atoi(setting.Value); err == nil {
 				response.AutoWeightIncreaseStep = val
@@ -1060,11 +1065,20 @@ func UpdateSettings(c *gin.Context) {
 		return
 	}
 
-	if req.AutoWeightIncreaseStep < 1 {
-		req.AutoWeightIncreaseStep = 1
+	if req.AutoSuccessIncrease {
+		if req.AutoWeightIncreaseStep < 1 {
+			req.AutoWeightIncreaseStep = 1
+		}
+		if req.AutoWeightIncreaseMax < 1 {
+			req.AutoWeightIncreaseMax = 100
+		}
 	}
-	if req.AutoWeightIncreaseMax < 1 {
-		req.AutoWeightIncreaseMax = 100
+
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyAutoSuccessIncrease).
+		Update(ctx, "value", strconv.FormatBool(req.AutoSuccessIncrease)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
 	}
 
 	if _, err := gorm.G[models.Setting](models.DB).

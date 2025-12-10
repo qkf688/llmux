@@ -110,6 +110,14 @@ export default function SettingsPage() {
     }
   };
 
+  const handleAutoSuccessIncreaseChange = (checked: boolean) => {
+    if (settings) {
+      const newSettings = { ...settings, auto_success_increase: checked };
+      setSettings(newSettings);
+      checkHasChanges(newSettings);
+    }
+  };
+
   const handleAutoWeightIncreaseStepChange = (value: number) => {
     if (settings) {
       const newSettings = { ...settings, auto_weight_increase_step: value };
@@ -201,6 +209,7 @@ export default function SettingsPage() {
       baseline.auto_weight_decay !== newSettings.auto_weight_decay ||
       baseline.auto_weight_decay_default !== newSettings.auto_weight_decay_default ||
       baseline.auto_weight_decay_step !== newSettings.auto_weight_decay_step ||
+      baseline.auto_success_increase !== newSettings.auto_success_increase ||
       baseline.auto_weight_increase_step !== newSettings.auto_weight_increase_step ||
       baseline.auto_weight_increase_max !== newSettings.auto_weight_increase_max ||
       baseline.auto_priority_decay !== newSettings.auto_priority_decay ||
@@ -626,6 +635,22 @@ export default function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="auto-success-increase" className="text-base font-medium">
+                  启用成功自增
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  关闭后，成功调用不会自动提升权重或优先级。
+                </p>
+              </div>
+              <Switch
+                id="auto-success-increase"
+                checked={settings?.auto_success_increase ?? true}
+                onCheckedChange={handleAutoSuccessIncreaseChange}
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="auto-weight-increase-step" className="text-base font-medium">
                 权重增加步长
@@ -641,6 +666,7 @@ export default function SettingsPage() {
                 value={settings?.auto_weight_increase_step ?? 1}
                 onChange={(e) => handleAutoWeightIncreaseStepChange(parseInt(e.target.value) || 1)}
                 className="w-32"
+                disabled={!settings?.auto_success_increase}
               />
             </div>
 
@@ -659,6 +685,7 @@ export default function SettingsPage() {
                 value={settings?.auto_weight_increase_max ?? 100}
                 onChange={(e) => handleAutoWeightIncreaseMaxChange(parseInt(e.target.value) || 100)}
                 className="w-32"
+                disabled={!settings?.auto_success_increase}
               />
             </div>
 
@@ -677,6 +704,7 @@ export default function SettingsPage() {
                 value={settings?.auto_priority_increase_step ?? 1}
                 onChange={(e) => handleAutoPriorityIncreaseStepChange(parseInt(e.target.value) || 1)}
                 className="w-32"
+                disabled={!settings?.auto_success_increase}
               />
             </div>
 
@@ -695,6 +723,7 @@ export default function SettingsPage() {
                 value={settings?.auto_priority_increase_max ?? 100}
                 onChange={(e) => handleAutoPriorityIncreaseMaxChange(parseInt(e.target.value) || 100)}
                 className="w-32"
+                disabled={!settings?.auto_success_increase}
               />
             </div>
           </CardContent>

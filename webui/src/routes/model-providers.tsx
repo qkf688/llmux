@@ -64,7 +64,7 @@ import type { ModelWithProvider, Model, Provider, ProviderModel, Settings } from
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { parseAllModelsFromConfig, toProviderModelList } from "@/lib/provider-models";
 
@@ -72,6 +72,25 @@ type MobileInfoItemProps = {
   label: string;
   value: ReactNode;
 };
+
+type ProviderModelWithOwner = ProviderModel & {
+  providerId: number;
+  providerName: string;
+};
+
+type ProviderModelSelection = {
+  providerId: number;
+  providerName: string;
+  modelId: string;
+};
+
+type ProviderModelGroup = {
+  provider: Provider;
+  models: ProviderModelWithOwner[];
+};
+
+const buildSelectionKey = (providerId: number, modelId: string) =>
+  `${providerId}::${modelId.toLowerCase()}`;
 
 const MobileInfoItem = ({ label, value }: MobileInfoItemProps) => (
   <div className="space-y-1">
@@ -89,7 +108,7 @@ const headerPairSchema = z.object({
 const formSchema = z.object({
   model_id: z.number().positive({ message: "模型ID必须大于0" }),
   provider_name: z.string().default(""),
-  provider_id: z.number().positive({ message: "提供商ID必须大于0" }),
+  provider_id: z.number().min(0, { message: "提供商ID必须大于等于0" }),
   tool_call: z.boolean(),
   structured_output: z.boolean(),
   image: z.boolean(),
@@ -132,15 +151,17 @@ export default function ModelProvidersPage() {
   const [statusUpdating, setStatusUpdating] = useState<Record<number, boolean>>({});
   const [statusError, setStatusError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [providerModels, setProviderModels] = useState<ProviderModel[]>([]);
+  const [providerModelGroups, setProviderModelGroups] = useState<ProviderModelGroup[]>([]);
+  const [providerModels, setProviderModels] = useState<ProviderModelWithOwner[]>([]);
   const [loadingProviderModels, setLoadingProviderModels] = useState(false);
-  const [selectedProviderModels, setSelectedProviderModels] = useState<string[]>([]);
+  const [selectedProviderModels, setSelectedProviderModels] = useState<ProviderModelSelection[]>([]);
   const [modelListDialogOpen, setModelListDialogOpen] = useState(false);
   const [modelSearchKeyword, setModelSearchKeyword] = useState("");
   const [selectedAssociationIds, setSelectedAssociationIds] = useState<number[]>([]);
   const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [collapsedProviders, setCollapsedProviders] = useState<Record<number, boolean>>({});
 
   const dialogClose = () => {
     setTestDialogOpen(false)
@@ -211,7 +232,13 @@ export default function ModelProvidersPage() {
     }
   }, [selectedModelId]);
 
-  const buildPayload = (values: FormValues) => {
+  const buildPayload = (
+    values: FormValues,
+    overrides?: {
+      providerId?: number;
+      providerModel?: string;
+    }
+  ) => {
     const headers: Record<string, string> = {};
     (values.customer_headers || []).forEach(({ key, value }) => {
       const trimmedKey = key.trim();
@@ -222,8 +249,8 @@ export default function ModelProvidersPage() {
 
     return {
       model_id: values.model_id,
-      provider_name: values.provider_name || "",
-      provider_id: values.provider_id,
+      provider_name: (overrides?.providerModel ?? values.provider_name) || "",
+      provider_id: overrides?.providerId ?? values.provider_id,
       tool_call: values.tool_call,
       structured_output: values.structured_output,
       image: values.image,
@@ -245,10 +272,33 @@ export default function ModelProvidersPage() {
     }
   };
 
+  const rebuildProviderModels = (providerList: Provider[]) => {
+    setLoadingProviderModels(true);
+    const groups = providerList.map((provider) => {
+      const models = toProviderModelList(parseAllModelsFromConfig(provider.Config)).map((model) => ({
+        ...model,
+        providerId: provider.ID,
+        providerName: provider.Name,
+      }));
+      return { provider, models };
+    });
+    setProviderModelGroups(groups);
+    setProviderModels(groups.flatMap((group) => group.models));
+    setCollapsedProviders((prev) => {
+      const next: Record<number, boolean> = {};
+      groups.forEach(({ provider }) => {
+        next[provider.ID] = prev[provider.ID] ?? false;
+      });
+      return next;
+    });
+    setLoadingProviderModels(false);
+  };
+
   const fetchProviders = async () => {
     try {
       const data = await getProviders();
       setProviders(data);
+      rebuildProviderModels(data);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast.error(`获取提供商列表失败: ${message}`);
@@ -263,18 +313,6 @@ export default function ModelProvidersPage() {
     } catch (err) {
       console.error("获取系统设置失败", err);
     }
-  };
-
-  const fetchProviderModels = (providerId: number) => {
-    if (!providerId) {
-      setProviderModels([]);
-      return;
-    }
-    setLoadingProviderModels(true);
-    const provider = providers.find((item) => item.ID === providerId);
-    const cached = provider ? toProviderModelList(parseAllModelsFromConfig(provider.Config)) : [];
-    setProviderModels(cached);
-    setLoadingProviderModels(false);
   };
 
   const fetchModelProviders = async (modelId: number) => {
@@ -337,22 +375,33 @@ export default function ModelProvidersPage() {
     try {
       // 如果选择了多个模型，批量创建关联
       if (selectedProviderModels.length > 0) {
-        const promises = selectedProviderModels.map(modelName => {
-          const payload = {
-            ...buildPayload(values),
-            provider_name: modelName
-          };
-          return createModelProvider(payload);
-        });
+        const promises = selectedProviderModels.map(({ providerId, modelId }) =>
+          createModelProvider(
+            buildPayload(values, {
+              providerId,
+              providerModel: modelId
+            })
+          )
+        );
         await Promise.all(promises);
         toast.success(`成功创建 ${selectedProviderModels.length} 个模型提供商关联`);
-      } else if (values.provider_name && values.provider_name.trim()) {
-        // 单个模型创建（手动输入）
-        await createModelProvider(buildPayload(values));
-        toast.success("模型提供商关联创建成功");
       } else {
-        toast.error("请选择模型或手动输入模型名称");
-        return;
+        const modelName = values.provider_name?.trim();
+        if (!modelName) {
+          toast.error("请选择模型或手动输入模型名称");
+          return;
+        }
+        if (!values.provider_id || values.provider_id <= 0) {
+          toast.error("请选择具体的提供商");
+          return;
+        }
+        await createModelProvider(
+          buildPayload(values, {
+            providerId: values.provider_id,
+            providerModel: modelName
+          })
+        );
+        toast.success("模型提供商关联创建成功");
       }
       
       setOpen(false);
@@ -600,6 +649,7 @@ export default function ModelProvidersPage() {
 
   const openEditDialog = (association: ModelWithProvider) => {
     setEditingAssociation(association);
+    setSelectedProviderModels([]);
     const headerPairs = Object.entries(association.CustomerHeaders || {}).map(([key, value]) => ({
       key,
       value,
@@ -621,6 +671,7 @@ export default function ModelProvidersPage() {
 
   const openCreateDialog = () => {
     setEditingAssociation(null);
+    setSelectedProviderModels([]);
     // 如果开启了自动权重衰减，使用设置中的默认权重值
     const defaultWeight = settings?.auto_weight_decay ? (settings.auto_weight_decay_default || 100) : 1;
     form.reset({
@@ -681,10 +732,18 @@ export default function ModelProvidersPage() {
     const id = parseInt(modelId);
     setSelectedModelId(id);
     setSelectedAssociationIds([]); // 切换模型时清空选择
+    setSelectedProviderModels([]);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("modelId", id.toString());
     setSearchParams(nextParams);
     form.setValue("model_id", id);
+  };
+
+  const toggleProviderCollapse = (providerId: number) => {
+    setCollapsedProviders((prev) => ({
+      ...prev,
+      [providerId]: !prev[providerId],
+    }));
   };
 
   // 获取唯一的提供商类型列表
@@ -702,6 +761,27 @@ export default function ModelProvidersPage() {
 
   const isAllAssociationsSelected = filteredModelProviders.length > 0 && selectedAssociationIds.length === filteredModelProviders.length;
   const isPartialAssociationsSelected = selectedAssociationIds.length > 0 && selectedAssociationIds.length < filteredModelProviders.length;
+
+  const existingAssociationKeys = new Set(
+    modelProviders.map((mp) => buildSelectionKey(mp.ProviderID, mp.ProviderModel))
+  );
+  const searchKeywordLower = modelSearchKeyword.toLowerCase();
+  const visibleProviderGroups = providerModelGroups
+    .map((group) => ({
+      ...group,
+      models: group.models.filter((model) =>
+        model.id.toLowerCase().includes(searchKeywordLower)
+      )
+    }))
+    .filter((group) => group.models.length > 0);
+  const visibleProviderModels = visibleProviderGroups.flatMap((group) => group.models);
+  const visibleAvailableModels = visibleProviderModels.filter(
+    (model) => !existingAssociationKeys.has(buildSelectionKey(model.providerId, model.id))
+  );
+  const visibleExistingCount = visibleProviderModels.length - visibleAvailableModels.length;
+  const selectedKeys = new Set(
+    selectedProviderModels.map((item) => buildSelectionKey(item.providerId, item.modelId))
+  );
 
   if (loading && models.length === 0 && providers.length === 0) return <Loading message="加载模型和提供商" />;
 
@@ -1197,14 +1277,18 @@ export default function ModelProvidersPage() {
                   name="provider_id"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>提供商</FormLabel>
+                      <FormLabel>提供商（默认全部）</FormLabel>
                       <Select
-                        value={field.value.toString()}
+                        value={field.value && field.value > 0 ? field.value.toString() : "0"}
                         onValueChange={(value) => {
-                          const providerId = parseInt(value);
+                          if (value === "0") {
+                            field.onChange(0);
+                            setSelectedProviderModels([]);
+                            return;
+                          }
+                          const providerId = parseInt(value, 10);
                           field.onChange(providerId);
                           setSelectedProviderModels([]);
-                          fetchProviderModels(providerId);
                         }}
                       >
                         <FormControl>
@@ -1213,6 +1297,7 @@ export default function ModelProvidersPage() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
+                          <SelectItem value="0">全部</SelectItem>
                           {providers.map((provider) => (
                             <SelectItem key={provider.ID} value={provider.ID.toString()}>
                               {provider.Name}
@@ -1241,7 +1326,7 @@ export default function ModelProvidersPage() {
                             setModelSearchKeyword("");
                             setModelListDialogOpen(true);
                           }}
-                          disabled={!form.getValues("provider_id") || form.getValues("provider_id") === 0}
+                          disabled={providers.length === 0}
                         >
                           模型列表
                         </Button>
@@ -1258,20 +1343,29 @@ export default function ModelProvidersPage() {
                     </div>
                     {selectedProviderModels.length > 0 && (
                       <div className="max-h-32 overflow-y-auto border rounded-md p-2 space-y-1">
-                        {selectedProviderModels.map((modelId) => (
-                          <div key={modelId} className="flex items-center justify-between text-sm py-1 px-2 bg-muted/50 rounded">
-                            <span className="truncate">{modelId}</span>
+                        {selectedProviderModels.map((selection) => {
+                          const selectionKey = buildSelectionKey(selection.providerId, selection.modelId);
+                          return (
+                            <div key={selectionKey} className="flex items-center justify-between text-sm py-1 px-2 bg-muted/50 rounded">
+                              <span className="truncate">{selection.providerName} / {selection.modelId}</span>
                             <Button
                               type="button"
                               variant="ghost"
                               size="sm"
                               className="h-5 w-5 p-0"
-                              onClick={() => setSelectedProviderModels(selectedProviderModels.filter(id => id !== modelId))}
+                              onClick={() =>
+                                setSelectedProviderModels((prev) =>
+                                  prev.filter(
+                                    (item) => buildSelectionKey(item.providerId, item.modelId) !== selectionKey
+                                  )
+                                )
+                              }
                             >
                               ✕
                             </Button>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1585,7 +1679,7 @@ export default function ModelProvidersPage() {
           <DialogHeader>
             <DialogTitle>选择模型</DialogTitle>
             <DialogDescription>
-              从提供商的全部模型缓存中选择要关联的模型
+            从提供商的全部模型缓存中选择要关联的模型
             </DialogDescription>
           </DialogHeader>
           
@@ -1603,23 +1697,9 @@ export default function ModelProvidersPage() {
             {/* 操作按钮 */}
             <div className="flex items-center justify-between flex-shrink-0">
               <span className="text-sm text-muted-foreground">
-                {loadingProviderModels ? "加载中..." : (() => {
-                  const currentProviderId = form.getValues("provider_id");
-                  const existingModels = new Set(
-                    modelProviders
-                      .filter(mp => mp.ProviderID === currentProviderId)
-                      .map(mp => mp.ProviderModel)
-                  );
-                  const availableModels = providerModels.filter(m =>
-                    m.id.toLowerCase().includes(modelSearchKeyword.toLowerCase()) &&
-                    !existingModels.has(m.id)
-                  );
-                  const existingCount = providerModels.filter(m =>
-                    m.id.toLowerCase().includes(modelSearchKeyword.toLowerCase()) &&
-                    existingModels.has(m.id)
-                  ).length;
-                  return `共 ${availableModels.length} 个可选模型${existingCount > 0 ? `（${existingCount} 个已关联）` : ''}`;
-                })()}
+                {loadingProviderModels
+                  ? "加载中..."
+                  : `共 ${visibleAvailableModels.length} 个可选模型${visibleExistingCount > 0 ? `（${visibleExistingCount} 个已关联）` : ""}`}
               </span>
               <div className="flex gap-2">
                 <Button
@@ -1627,21 +1707,23 @@ export default function ModelProvidersPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    const currentProviderId = form.getValues("provider_id");
-                    const existingModels = new Set(
-                      modelProviders
-                        .filter(mp => mp.ProviderID === currentProviderId)
-                        .map(mp => mp.ProviderModel)
-                    );
-                    const filteredModels = providerModels.filter(m =>
-                      m.id.toLowerCase().includes(modelSearchKeyword.toLowerCase()) &&
-                      !existingModels.has(m.id)
-                    );
-                    setSelectedProviderModels(filteredModels.map(m => m.id));
+                    setSelectedProviderModels((prev) => {
+                      const merged = new Map(
+                        prev.map((item) => [buildSelectionKey(item.providerId, item.modelId), item])
+                      );
+                      visibleAvailableModels.forEach((model) => {
+                        merged.set(buildSelectionKey(model.providerId, model.id), {
+                          providerId: model.providerId,
+                          providerName: model.providerName,
+                          modelId: model.id,
+                        });
+                      });
+                      return Array.from(merged.values());
+                    });
                   }}
-                  disabled={loadingProviderModels || providerModels.length === 0}
+                  disabled={loadingProviderModels || visibleAvailableModels.length === 0}
                 >
-                  全选
+                  全选可选
                 </Button>
                 <Button
                   type="button"
@@ -1656,7 +1738,7 @@ export default function ModelProvidersPage() {
             </div>
             
             {/* 模型列表 */}
-            <div className="flex-1 min-h-0 overflow-y-auto border rounded-md p-2 space-y-1">
+            <div className="flex-1 min-h-0 overflow-y-auto border rounded-md p-2 space-y-2">
               {loadingProviderModels ? (
                 <div className="flex items-center justify-center py-4">
                   <Spinner className="h-4 w-4" />
@@ -1666,49 +1748,90 @@ export default function ModelProvidersPage() {
                 <div className="text-center py-4 text-sm text-muted-foreground">
                   暂无全部模型缓存，请先在提供商管理页同步
                 </div>
-              ) : (
-                (() => {
-                  const currentProviderId = form.getValues("provider_id");
-                  const existingModels = new Set(
-                    modelProviders
-                      .filter(mp => mp.ProviderID === currentProviderId)
-                      .map(mp => mp.ProviderModel)
-                  );
-                  return providerModels
-                    .filter(model => model.id.toLowerCase().includes(modelSearchKeyword.toLowerCase()))
-                    .map((model) => {
-                      const isExisting = existingModels.has(model.id);
-                      return (
-                        <div key={model.id} className={`flex items-center space-x-2 py-1 ${isExisting ? 'opacity-50' : ''}`}>
-                          <Checkbox
-                            id={`dialog-model-${model.id}`}
-                            checked={selectedProviderModels.includes(model.id)}
-                            disabled={isExisting}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                setSelectedProviderModels([...selectedProviderModels, model.id]);
-                              } else {
-                                setSelectedProviderModels(selectedProviderModels.filter(id => id !== model.id));
-                              }
-                            }}
-                          />
-                          <Label
-                            htmlFor={`dialog-model-${model.id}`}
-                            className={`text-sm cursor-pointer truncate flex-1 ${isExisting ? 'cursor-not-allowed' : ''}`}
-                          >
-                            {model.id}
-                            {isExisting && <span className="ml-2 text-xs text-muted-foreground">（已关联）</span>}
-                          </Label>
-                        </div>
-                      );
-                    });
-                })()
-              )}
-              {!loadingProviderModels && providerModels.length > 0 &&
-                providerModels.filter(model => model.id.toLowerCase().includes(modelSearchKeyword.toLowerCase())).length === 0 && (
+              ) : visibleProviderGroups.length === 0 ? (
                 <div className="text-center py-4 text-sm text-muted-foreground">
                   没有匹配的模型
                 </div>
+              ) : (
+                visibleProviderGroups.map((group) => {
+                  const isCollapsed = collapsedProviders[group.provider.ID] ?? false;
+                  return (
+                    <div key={group.provider.ID} className="rounded-md border">
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between px-2 py-2 text-left hover:bg-muted/70 transition"
+                        onClick={() => toggleProviderCollapse(group.provider.ID)}
+                      >
+                        <div className="flex items-center gap-2">
+                          {isCollapsed ? (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          )}
+                          <span className="font-medium">{group.provider.Name}</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {group.models.length} 个模型
+                        </span>
+                      </button>
+                      {!isCollapsed && (
+                        <div className="divide-y">
+                          {group.models.map((model) => {
+                            const selectionKey = buildSelectionKey(model.providerId, model.id);
+                            const isExisting = existingAssociationKeys.has(selectionKey);
+                            const checked = selectedKeys.has(selectionKey);
+                            return (
+                              <div
+                                key={selectionKey}
+                                className={`flex items-center gap-2 px-3 py-2 ${isExisting ? "opacity-60" : ""}`}
+                              >
+                                <Checkbox
+                                  id={`dialog-model-${selectionKey}`}
+                                  checked={checked}
+                                  disabled={isExisting}
+                                  onCheckedChange={(checkedValue) => {
+                                    if (checkedValue) {
+                                      setSelectedProviderModels((prev) => {
+                                        const merged = new Map(
+                                          prev.map((item) => [buildSelectionKey(item.providerId, item.modelId), item])
+                                        );
+                                        merged.set(selectionKey, {
+                                          providerId: model.providerId,
+                                          providerName: model.providerName,
+                                          modelId: model.id,
+                                        });
+                                        return Array.from(merged.values());
+                                      });
+                                    } else {
+                                      setSelectedProviderModels((prev) =>
+                                        prev.filter(
+                                          (item) =>
+                                            buildSelectionKey(item.providerId, item.modelId) !== selectionKey
+                                        )
+                                      );
+                                    }
+                                  }}
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <Label
+                                    htmlFor={`dialog-model-${selectionKey}`}
+                                    className={`text-sm cursor-pointer truncate ${isExisting ? "cursor-not-allowed" : ""}`}
+                                  >
+                                    {model.id}
+                                    {isExisting && (
+                                      <span className="ml-2 text-xs text-muted-foreground">（已关联）</span>
+                                    )}
+                                  </Label>
+                                  <p className="text-xs text-muted-foreground">提供商：{model.providerName}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
             

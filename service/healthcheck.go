@@ -485,7 +485,7 @@ func (h *HealthChecker) CheckSingle(ctx context.Context, mpID uint) (*models.Hea
 }
 
 // GetHealthCheckSettings 获取健康检测设置
-func GetHealthCheckSettings(ctx context.Context) (enabled bool, interval int, failureThreshold int, autoEnable bool, logRetentionCount int) {
+func GetHealthCheckSettings(ctx context.Context) (enabled bool, interval int, failureThreshold int, autoEnable bool, logRetentionCount int, countAsSuccess bool, countAsFailure bool) {
 	checker := GetHealthChecker()
 
 	enabled = checker.isEnabled(ctx)
@@ -503,33 +503,41 @@ func GetHealthCheckSettings(ctx context.Context) (enabled bool, interval int, fa
 	failureThreshold = checker.getFailureThreshold(ctx)
 	autoEnable = checker.getAutoEnable(ctx)
 	logRetentionCount = checker.getLogRetentionCount(ctx)
+	countAsSuccess = shouldCountHealthCheckSuccess(ctx)
+	countAsFailure = shouldCountHealthCheckFailure(ctx)
 
 	return
 }
 
 // HealthCheckSettingsJSON 健康检测设置 JSON 结构
 type HealthCheckSettingsJSON struct {
-	Enabled           bool `json:"enabled"`
-	Interval          int  `json:"interval"`
-	FailureThreshold  int  `json:"failure_threshold"`
-	AutoEnable        bool `json:"auto_enable"`
-	LogRetentionCount int  `json:"log_retention_count"`
+	Enabled                 bool `json:"enabled"`
+	Interval                int  `json:"interval"`
+	FailureThreshold        int  `json:"failure_threshold"`
+	AutoEnable              bool `json:"auto_enable"`
+	LogRetentionCount       int  `json:"log_retention_count"`
+	CountHealthCheckSuccess bool `json:"count_health_check_as_success"`
+	CountHealthCheckFailure bool `json:"count_health_check_as_failure"`
 }
 
 // MarshalJSON 序列化健康检测设置
 func (s HealthCheckSettingsJSON) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		Enabled           bool `json:"enabled"`
-		Interval          int  `json:"interval"`
-		FailureThreshold  int  `json:"failure_threshold"`
-		AutoEnable        bool `json:"auto_enable"`
-		LogRetentionCount int  `json:"log_retention_count"`
+		Enabled                 bool `json:"enabled"`
+		Interval                int  `json:"interval"`
+		FailureThreshold        int  `json:"failure_threshold"`
+		AutoEnable              bool `json:"auto_enable"`
+		LogRetentionCount       int  `json:"log_retention_count"`
+		CountHealthCheckSuccess bool `json:"count_health_check_as_success"`
+		CountHealthCheckFailure bool `json:"count_health_check_as_failure"`
 	}{
-		Enabled:           s.Enabled,
-		Interval:          s.Interval,
-		FailureThreshold:  s.FailureThreshold,
-		AutoEnable:        s.AutoEnable,
-		LogRetentionCount: s.LogRetentionCount,
+		Enabled:                 s.Enabled,
+		Interval:                s.Interval,
+		FailureThreshold:        s.FailureThreshold,
+		AutoEnable:              s.AutoEnable,
+		LogRetentionCount:       s.LogRetentionCount,
+		CountHealthCheckSuccess: s.CountHealthCheckSuccess,
+		CountHealthCheckFailure: s.CountHealthCheckFailure,
 	})
 }
 

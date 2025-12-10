@@ -47,6 +47,7 @@ export default function SettingsPage() {
       const data = await getHealthCheckSettings();
       setHealthCheckSettings(data);
       setOriginalHealthCheckSettings(data);
+      syncHealthCheckCountFlags(data.count_health_check_as_success, data.count_health_check_as_failure);
       setHasHealthCheckChanges(false);
     } catch (error) {
       toast.error("加载健康检测设置失败: " + (error as Error).message);
@@ -181,40 +182,36 @@ export default function SettingsPage() {
     }
   };
 
-  const handleCountHealthCheckAsSuccessChange = (checked: boolean) => {
+  const syncHealthCheckCountFlags = (success: boolean, failure: boolean) => {
     if (settings) {
-      const newSettings = { ...settings, count_health_check_as_success: checked };
-      setSettings(newSettings);
-      checkHasChanges(newSettings);
+      const merged = {
+        ...settings,
+        count_health_check_as_success: success,
+        count_health_check_as_failure: failure,
+      };
+      setSettings(merged);
+      checkHasChanges(merged);
     }
   };
 
-  const handleCountHealthCheckAsFailureChange = (checked: boolean) => {
-    if (settings) {
-      const newSettings = { ...settings, count_health_check_as_failure: checked };
-      setSettings(newSettings);
-      checkHasChanges(newSettings);
-    }
-  };
-
-  const checkHasChanges = (newSettings: Settings) => {
-    if (!originalSettings) return;
+  const checkHasChanges = (newSettings: Settings, baseline: Settings | null = originalSettings) => {
+    if (!baseline) return;
     const changed =
-      originalSettings.strict_capability_match !== newSettings.strict_capability_match ||
-      originalSettings.auto_weight_decay !== newSettings.auto_weight_decay ||
-      originalSettings.auto_weight_decay_default !== newSettings.auto_weight_decay_default ||
-      originalSettings.auto_weight_decay_step !== newSettings.auto_weight_decay_step ||
-      originalSettings.auto_weight_increase_step !== newSettings.auto_weight_increase_step ||
-      originalSettings.auto_weight_increase_max !== newSettings.auto_weight_increase_max ||
-      originalSettings.auto_priority_decay !== newSettings.auto_priority_decay ||
-      originalSettings.auto_priority_decay_default !== newSettings.auto_priority_decay_default ||
-      originalSettings.auto_priority_decay_step !== newSettings.auto_priority_decay_step ||
-      originalSettings.auto_priority_decay_threshold !== newSettings.auto_priority_decay_threshold ||
-      originalSettings.auto_priority_increase_step !== newSettings.auto_priority_increase_step ||
-      originalSettings.auto_priority_increase_max !== newSettings.auto_priority_increase_max ||
-      originalSettings.log_retention_count !== newSettings.log_retention_count ||
-      originalSettings.count_health_check_as_success !== newSettings.count_health_check_as_success ||
-      originalSettings.count_health_check_as_failure !== newSettings.count_health_check_as_failure;
+      baseline.strict_capability_match !== newSettings.strict_capability_match ||
+      baseline.auto_weight_decay !== newSettings.auto_weight_decay ||
+      baseline.auto_weight_decay_default !== newSettings.auto_weight_decay_default ||
+      baseline.auto_weight_decay_step !== newSettings.auto_weight_decay_step ||
+      baseline.auto_weight_increase_step !== newSettings.auto_weight_increase_step ||
+      baseline.auto_weight_increase_max !== newSettings.auto_weight_increase_max ||
+      baseline.auto_priority_decay !== newSettings.auto_priority_decay ||
+      baseline.auto_priority_decay_default !== newSettings.auto_priority_decay_default ||
+      baseline.auto_priority_decay_step !== newSettings.auto_priority_decay_step ||
+      baseline.auto_priority_decay_threshold !== newSettings.auto_priority_decay_threshold ||
+      baseline.auto_priority_increase_step !== newSettings.auto_priority_increase_step ||
+      baseline.auto_priority_increase_max !== newSettings.auto_priority_increase_max ||
+      baseline.log_retention_count !== newSettings.log_retention_count ||
+      baseline.count_health_check_as_success !== newSettings.count_health_check_as_success ||
+      baseline.count_health_check_as_failure !== newSettings.count_health_check_as_failure;
     setHasChanges(changed);
   };
 
@@ -283,6 +280,24 @@ export default function SettingsPage() {
     }
   };
 
+  const handleHealthCheckCountAsSuccessChange = (checked: boolean) => {
+    if (healthCheckSettings) {
+      const newSettings = { ...healthCheckSettings, count_health_check_as_success: checked };
+      setHealthCheckSettings(newSettings);
+      syncHealthCheckCountFlags(newSettings.count_health_check_as_success, newSettings.count_health_check_as_failure);
+      checkHealthCheckHasChanges(newSettings);
+    }
+  };
+
+  const handleHealthCheckCountAsFailureChange = (checked: boolean) => {
+    if (healthCheckSettings) {
+      const newSettings = { ...healthCheckSettings, count_health_check_as_failure: checked };
+      setHealthCheckSettings(newSettings);
+      syncHealthCheckCountFlags(newSettings.count_health_check_as_success, newSettings.count_health_check_as_failure);
+      checkHealthCheckHasChanges(newSettings);
+    }
+  };
+
   const checkHealthCheckHasChanges = (newSettings: HealthCheckSettings) => {
     if (!originalHealthCheckSettings) return;
     const changed =
@@ -290,7 +305,9 @@ export default function SettingsPage() {
       originalHealthCheckSettings.interval !== newSettings.interval ||
       originalHealthCheckSettings.failure_threshold !== newSettings.failure_threshold ||
       originalHealthCheckSettings.auto_enable !== newSettings.auto_enable ||
-      originalHealthCheckSettings.log_retention_count !== newSettings.log_retention_count;
+      originalHealthCheckSettings.log_retention_count !== newSettings.log_retention_count ||
+      originalHealthCheckSettings.count_health_check_as_success !== newSettings.count_health_check_as_success ||
+      originalHealthCheckSettings.count_health_check_as_failure !== newSettings.count_health_check_as_failure;
     setHasHealthCheckChanges(changed);
   };
 
@@ -302,6 +319,23 @@ export default function SettingsPage() {
       const updated = await updateHealthCheckSettings(healthCheckSettings);
       setHealthCheckSettings(updated);
       setOriginalHealthCheckSettings(updated);
+      if (settings) {
+        const mergedSettings = {
+          ...settings,
+          count_health_check_as_success: updated.count_health_check_as_success,
+          count_health_check_as_failure: updated.count_health_check_as_failure,
+        };
+        const updatedBaseline = originalSettings
+          ? {
+              ...originalSettings,
+              count_health_check_as_success: updated.count_health_check_as_success,
+              count_health_check_as_failure: updated.count_health_check_as_failure,
+            }
+          : null;
+        setOriginalSettings(updatedBaseline);
+        setSettings(mergedSettings);
+        checkHasChanges(mergedSettings, updatedBaseline);
+      }
       setHasHealthCheckChanges(false);
       toast.success("健康检测设置保存成功");
     } catch (error) {
@@ -668,48 +702,6 @@ export default function SettingsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>健康检测计入调用策略</CardTitle>
-            <CardDescription>
-              控制健康检测结果是否参与成功自增或失败衰减，避免与调用统计混淆。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="count-health-check-as-success" className="text-base font-medium">
-                  健康检测计入成功调用
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  开启后，模型自动健康检测的成功结果也会触发权重/优先级自增。
-                </p>
-              </div>
-              <Switch
-                id="count-health-check-as-success"
-                checked={settings?.count_health_check_as_success ?? true}
-                onCheckedChange={handleCountHealthCheckAsSuccessChange}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="count-health-check-as-failure" className="text-base font-medium">
-                  健康检测计入失败调用衰减
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  开启后，健康检测失败会视作一次调用失败，触发权重/优先级衰减，帮助自动下调异常供应商。
-                </p>
-              </div>
-              <Switch
-                id="count-health-check-as-failure"
-                checked={settings?.count_health_check_as_failure ?? false}
-                onCheckedChange={handleCountHealthCheckAsFailureChange}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
             <CardTitle>日志管理</CardTitle>
             <CardDescription>
               配置日志保留策略和管理日志数据
@@ -746,6 +738,45 @@ export default function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            <div className="space-y-4 rounded-lg border p-4">
+              <div className="space-y-1">
+                <Label className="text-base font-medium">健康检测计入调用策略</Label>
+                <p className="text-sm text-muted-foreground">
+                  控制健康检测结果是否参与成功自增或失败衰减，避免与调用统计混淆。
+                </p>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base font-medium" htmlFor="count-health-check-as-success">
+                    健康检测计入成功调用
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    开启后，模型自动健康检测的成功结果也会触发权重/优先级自增。
+                  </p>
+                </div>
+                <Switch
+                  id="count-health-check-as-success"
+                  checked={healthCheckSettings?.count_health_check_as_success ?? true}
+                  onCheckedChange={handleHealthCheckCountAsSuccessChange}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base font-medium" htmlFor="count-health-check-as-failure">
+                    健康检测计入失败调用衰减
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    开启后，健康检测失败会视作一次调用失败，触发权重/优先级衰减，帮助自动下调异常供应商。
+                  </p>
+                </div>
+                <Switch
+                  id="count-health-check-as-failure"
+                  checked={healthCheckSettings?.count_health_check_as_failure ?? false}
+                  onCheckedChange={handleHealthCheckCountAsFailureChange}
+                />
+              </div>
+            </div>
+
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="health-check-enabled" className="text-base font-medium">

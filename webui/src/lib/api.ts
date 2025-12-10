@@ -499,6 +499,8 @@ export interface HealthCheckSettings {
   failure_threshold: number;
   auto_enable: boolean;
   log_retention_count: number;
+  count_health_check_as_success: boolean;
+  count_health_check_as_failure: boolean;
 }
 
 export interface HealthCheckLog {

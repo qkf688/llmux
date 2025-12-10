@@ -1437,33 +1437,39 @@ func BatchDeleteLogs(c *gin.Context) {
 
 // HealthCheckSettingsResponse 健康检测设置响应结构
 type HealthCheckSettingsResponse struct {
-	Enabled           bool `json:"enabled"`
-	Interval          int  `json:"interval"`
-	FailureThreshold  int  `json:"failure_threshold"`
-	AutoEnable        bool `json:"auto_enable"`
-	LogRetentionCount int  `json:"log_retention_count"`
+	Enabled                 bool `json:"enabled"`
+	Interval                int  `json:"interval"`
+	FailureThreshold        int  `json:"failure_threshold"`
+	AutoEnable              bool `json:"auto_enable"`
+	LogRetentionCount       int  `json:"log_retention_count"`
+	CountHealthCheckSuccess bool `json:"count_health_check_as_success"`
+	CountHealthCheckFailure bool `json:"count_health_check_as_failure"`
 }
 
 // UpdateHealthCheckSettingsRequest 更新健康检测设置请求结构
 type UpdateHealthCheckSettingsRequest struct {
-	Enabled           bool `json:"enabled"`
-	Interval          int  `json:"interval"`
-	FailureThreshold  int  `json:"failure_threshold"`
-	AutoEnable        bool `json:"auto_enable"`
-	LogRetentionCount int  `json:"log_retention_count"`
+	Enabled                 bool `json:"enabled"`
+	Interval                int  `json:"interval"`
+	FailureThreshold        int  `json:"failure_threshold"`
+	AutoEnable              bool `json:"auto_enable"`
+	LogRetentionCount       int  `json:"log_retention_count"`
+	CountHealthCheckSuccess bool `json:"count_health_check_as_success"`
+	CountHealthCheckFailure bool `json:"count_health_check_as_failure"`
 }
 
 // GetHealthCheckSettings 获取健康检测设置
 func GetHealthCheckSettings(c *gin.Context) {
 	ctx := c.Request.Context()
-	enabled, interval, failureThreshold, autoEnable, logRetentionCount := service.GetHealthCheckSettings(ctx)
+	enabled, interval, failureThreshold, autoEnable, logRetentionCount, countAsSuccess, countAsFailure := service.GetHealthCheckSettings(ctx)
 
 	response := HealthCheckSettingsResponse{
-		Enabled:           enabled,
-		Interval:          interval,
-		FailureThreshold:  failureThreshold,
-		AutoEnable:        autoEnable,
-		LogRetentionCount: logRetentionCount,
+		Enabled:                 enabled,
+		Interval:                interval,
+		FailureThreshold:        failureThreshold,
+		AutoEnable:              autoEnable,
+		LogRetentionCount:       logRetentionCount,
+		CountHealthCheckSuccess: countAsSuccess,
+		CountHealthCheckFailure: countAsFailure,
 	}
 
 	common.Success(c, response)
@@ -1532,6 +1538,28 @@ func UpdateHealthCheckSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyHealthCheckLogRetentionCount).
 		Update(ctx, "value", strconv.Itoa(req.LogRetentionCount)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	countHealthCheckSuccess := "false"
+	if req.CountHealthCheckSuccess {
+		countHealthCheckSuccess = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyHealthCheckCountAsSuccess).
+		Update(ctx, "value", countHealthCheckSuccess); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	countHealthCheckFailure := "false"
+	if req.CountHealthCheckFailure {
+		countHealthCheckFailure = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyHealthCheckCountAsFailure).
+		Update(ctx, "value", countHealthCheckFailure); err != nil {
 		common.InternalServerError(c, "Failed to update settings: "+err.Error())
 		return
 	}

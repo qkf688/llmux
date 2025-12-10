@@ -327,8 +327,14 @@ export interface ProviderModel {
   owned_by: string;
 }
 
-export async function getProviderModels(providerId: number): Promise<ProviderModel[]> {
-  return apiRequest<ProviderModel[]>(`/providers/models/${providerId}`);
+export async function getProviderModels(providerId: number, options: { source?: "upstream" | "all" } = {}): Promise<ProviderModel[]> {
+  const params = new URLSearchParams();
+  if (options.source) {
+    params.append("source", options.source);
+  }
+  const queryString = params.toString();
+  const endpoint = queryString ? `/providers/models/${providerId}?${queryString}` : `/providers/models/${providerId}`;
+  return apiRequest<ProviderModel[]>(endpoint);
 }
 
 // Logs API functions

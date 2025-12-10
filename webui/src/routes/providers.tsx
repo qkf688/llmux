@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
@@ -57,6 +58,7 @@ import {
   getProviderModels
 } from "@/lib/api";
 import type { Provider, ProviderTemplate, ProviderModel } from "@/lib/api";
+import { buildConfigWithAllModels, parseAllModelsFromConfig } from "@/lib/provider-models";
 import { toast } from "sonner";
 
 // 定义表单验证模式
@@ -133,20 +135,7 @@ function parseCustomModelsInput(input?: string): string[] {
     .filter(Boolean);
 }
 
-function extractCustomModels(config: string): string[] {
-  try {
-    const parsed = JSON.parse(config);
-    if (!Array.isArray(parsed.custom_models)) {
-      return [];
-    }
-    return parsed.custom_models
-      .filter((item: unknown) => typeof item === "string")
-      .map((item: string) => item.trim())
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
-}
+const extractAllModels = (config: string) => parseAllModelsFromConfig(config);
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -160,9 +149,14 @@ export default function ProvidersPage() {
   const [providerModels, setProviderModels] = useState<ProviderModel[]>([]);
   const [filteredProviderModels, setFilteredProviderModels] = useState<ProviderModel[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
-  const [customModelsOpen, setCustomModelsOpen] = useState(false);
-  const [customModelsList, setCustomModelsList] = useState<string[]>([]);
-  const [customModelsProviderName, setCustomModelsProviderName] = useState<string>("");
+  const [selectedUpstreamModels, setSelectedUpstreamModels] = useState<string[]>([]);
+  const [upstreamModelsCache, setUpstreamModelsCache] = useState<Record<number, ProviderModel[]>>({});
+  const [allModelsOpen, setAllModelsOpen] = useState(false);
+  const [allModelsProvider, setAllModelsProvider] = useState<Provider | null>(null);
+  const [allModelsList, setAllModelsList] = useState<string[]>([]);
+  const [selectedAllModels, setSelectedAllModels] = useState<string[]>([]);
+  const [customModelInput, setCustomModelInput] = useState("");
+  const [addingModels, setAddingModels] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
 
   // 筛选条件
@@ -199,6 +193,18 @@ export default function ProvidersPage() {
     fetchProviders();
   }, [nameFilter, typeFilter]);
 
+  useEffect(() => {
+    if (!modelsOpen) {
+      setSelectedUpstreamModels([]);
+    }
+  }, [modelsOpen]);
+
+  useEffect(() => {
+    if (!allModelsOpen) {
+      setSelectedAllModels([]);
+    }
+  }, [allModelsOpen]);
+
   const fetchProviders = async () => {
     try {
       setLoading(true);
@@ -229,14 +235,17 @@ export default function ProvidersPage() {
     }
   };
 
-  const fetchProviderModels = async (providerId: number) => {
+  const fetchProviderModels = async (providerId: number, source: "upstream" | "all" = "upstream") => {
     try {
       setModelsLoading(true);
-      const data = await getProviderModels(providerId);
+      const data = await getProviderModels(providerId, { source });
       // 确保 data 是数组，防止后端返回 null 导致白屏
       const models = Array.isArray(data) ? data : [];
       setProviderModels(models);
       setFilteredProviderModels(models);
+      if (source === "upstream") {
+        setUpstreamModelsCache((prev) => ({ ...prev, [providerId]: models }));
+      }
     } catch (err) {
       console.error("获取提供商模型失败", err);
       setProviderModels([]);
@@ -249,7 +258,147 @@ export default function ProvidersPage() {
   const openModelsDialog = async (providerId: number) => {
     setModelsOpen(true);
     setModelsOpenId(providerId);
-    await fetchProviderModels(providerId);
+    setSelectedUpstreamModels([]);
+
+    const cached = upstreamModelsCache[providerId];
+    if (cached && cached.length > 0) {
+      setProviderModels(cached);
+      setFilteredProviderModels(cached);
+      return;
+    }
+    await fetchProviderModels(providerId, "upstream");
+  };
+
+  const getAllModelsForProvider = (providerId: number): string[] => {
+    const provider = providers.find((item) => item.ID === providerId);
+    if (!provider) return [];
+    return extractAllModels(provider.Config);
+  };
+
+  const toggleSelectAllModels = () => {
+    if (allModelsList.length === 0) return;
+    if (selectedAllModels.length === allModelsList.length) {
+      setSelectedAllModels([]);
+    } else {
+      setSelectedAllModels(allModelsList);
+    }
+  };
+
+  const persistAllModels = async (provider: Provider, models: string[]) => {
+    const nextConfig = buildConfigWithAllModels(provider.Config, models);
+    await updateProvider(provider.ID, {
+      name: provider.Name,
+      type: provider.Type,
+      config: nextConfig,
+      console: provider.Console || "",
+      proxy: provider.Proxy || ""
+    });
+    setProviders((prev) =>
+      prev.map((item) => item.ID === provider.ID ? { ...item, Config: nextConfig } : item)
+    );
+    return nextConfig;
+  };
+
+  const handleAddUpstreamToAll = async () => {
+    if (!modelsOpenId) return;
+    const provider = providers.find((item) => item.ID === modelsOpenId);
+    if (!provider) return;
+
+    const existing = extractAllModels(provider.Config);
+    const merged = Array.from(new Set([...existing, ...selectedUpstreamModels]));
+    if (merged.length === existing.length) {
+      toast.info("没有新的模型需要添加");
+      return;
+    }
+
+    try {
+      setAddingModels(true);
+      const nextConfig = await persistAllModels(provider, merged);
+      if (allModelsProvider && allModelsProvider.ID === provider.ID) {
+        setAllModelsProvider({ ...provider, Config: nextConfig });
+        setAllModelsList(merged);
+      }
+      setSelectedUpstreamModels([]);
+      toast.success(`已添加 ${merged.length - existing.length} 个模型到全部模型`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`添加模型失败: ${message}`);
+      console.error(err);
+    } finally {
+      setAddingModels(false);
+    }
+  };
+
+  const handleAddCustomModels = async () => {
+    if (!allModelsProvider) return;
+    const additions = parseCustomModelsInput(customModelInput);
+    if (additions.length === 0) {
+      toast.error("请先输入要添加的模型名称");
+      return;
+    }
+    const existing = extractAllModels(allModelsProvider.Config);
+    const merged = Array.from(new Set([...existing, ...additions]));
+    if (merged.length === existing.length) {
+      toast.info("没有新的模型需要添加");
+      return;
+    }
+    try {
+      setAddingModels(true);
+      const nextConfig = await persistAllModels(allModelsProvider, merged);
+      const updatedProvider = { ...allModelsProvider, Config: nextConfig };
+      setAllModelsProvider(updatedProvider);
+      setAllModelsList(merged);
+      setCustomModelInput("");
+      toast.success(`已添加 ${merged.length - existing.length} 个自定义模型`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`添加自定义模型失败: ${message}`);
+      console.error(err);
+    } finally {
+      setAddingModels(false);
+    }
+  };
+
+  const removeModelsFromAll = async (modelsToRemove: string[]) => {
+    if (!allModelsProvider || modelsToRemove.length === 0) return;
+    const existing = extractAllModels(allModelsProvider.Config);
+    const removalSet = new Set(modelsToRemove.map((item) => item.toLowerCase()));
+    const next = existing.filter((item) => !removalSet.has(item.toLowerCase()));
+    const removedCount = existing.length - next.length;
+    if (removedCount === 0) {
+      toast.info("没有可删除的模型");
+      return;
+    }
+
+    try {
+      setAddingModels(true);
+      const nextConfig = await persistAllModels(allModelsProvider, next);
+      const updatedProvider = { ...allModelsProvider, Config: nextConfig };
+      setAllModelsProvider(updatedProvider);
+      setAllModelsList(next);
+      setSelectedAllModels([]);
+      toast.success(`已从全部模型移除 ${removedCount} 个模型`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`移除模型失败: ${message}`);
+      console.error(err);
+    } finally {
+      setAddingModels(false);
+    }
+  };
+
+  const handleRemoveModelFromAll = async (modelId: string) => {
+    await removeModelsFromAll([modelId]);
+  };
+
+  const handleRemoveSelectedModels = async () => {
+    await removeModelsFromAll(selectedAllModels);
+  };
+
+  const refreshUpstreamModels = async () => {
+    if (!modelsOpenId) return;
+    setSelectedUpstreamModels([]);
+    await fetchProviderModels(modelsOpenId, "upstream");
   };
 
   const copyModelName = async (modelName: string) => {
@@ -257,11 +406,13 @@ export default function ProvidersPage() {
     toast.success(`已复制模型名称: ${modelName}`);
   };
 
-  const openCustomModelsDialog = (provider: Provider) => {
-    const customModels = extractCustomModels(provider.Config);
-    setCustomModelsList(customModels);
-    setCustomModelsProviderName(provider.Name);
-    setCustomModelsOpen(true);
+  const openAllModelsDialog = (provider: Provider) => {
+    const allModels = extractAllModels(provider.Config);
+    setAllModelsProvider(provider);
+    setAllModelsList(allModels);
+    setSelectedAllModels([]);
+    setCustomModelInput("");
+    setAllModelsOpen(true);
   };
 
   const handleCreate = async (values: z.infer<typeof formSchema>) => {
@@ -354,6 +505,26 @@ export default function ProvidersPage() {
 
   const hasFilter = nameFilter.trim() !== "" || typeFilter !== "all";
 
+  const savedModelSet = new Set(getAllModelsForProvider(modelsOpenId || 0).map((item) => item.toLowerCase()));
+  const selectableModelIds = filteredProviderModels
+    .filter((model) => !savedModelSet.has(model.id.toLowerCase()))
+    .map((model) => model.id);
+  const isAllSelectableChecked = selectableModelIds.length > 0 && selectableModelIds.every((id) => selectedUpstreamModels.includes(id));
+
+  const toggleSelectAll = () => {
+    if (selectableModelIds.length === 0) {
+      setSelectedUpstreamModels([]);
+      return;
+    }
+    const hasUnselected = selectableModelIds.some((id) => !selectedUpstreamModels.includes(id));
+    setSelectedUpstreamModels((prev) => {
+      if (hasUnselected) {
+        return Array.from(new Set([...prev, ...selectableModelIds]));
+      }
+      return prev.filter((id) => !selectableModelIds.includes(id));
+    });
+  };
+
   return (
     <div className="h-full min-h-0 flex flex-col gap-4 p-1">
       <div className="flex flex-col gap-2 flex-shrink-0">
@@ -417,14 +588,14 @@ export default function ProvidersPage() {
                     <TableHead>ID</TableHead>
                     <TableHead>名称</TableHead>
                     <TableHead>类型</TableHead>
-                    <TableHead>自定义模型</TableHead>
+                    <TableHead>全部模型</TableHead>
                     <TableHead>控制台</TableHead>
                     <TableHead className="w-[260px]">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {providers.map((provider) => {
-                    const customModels = extractCustomModels(provider.Config);
+                    const allModels = extractAllModels(provider.Config);
                     return (
                       <TableRow key={provider.ID}>
                         <TableCell className="font-mono text-xs text-muted-foreground">{provider.ID}</TableCell>
@@ -434,10 +605,9 @@ export default function ProvidersPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => openCustomModelsDialog(provider)}
-                            disabled={customModels.length === 0}
+                            onClick={() => openAllModelsDialog(provider)}
                           >
-                            查看{customModels.length > 0 ? `（${customModels.length}）` : ""}
+                            全部模型{allModels.length > 0 ? `（${allModels.length}）` : ""}
                           </Button>
                         </TableCell>
                         <TableCell>
@@ -491,7 +661,7 @@ export default function ProvidersPage() {
             </div>
             <div className="sm:hidden flex-1 min-h-0 overflow-y-auto px-2 py-3 divide-y divide-border">
               {providers.map((provider) => {
-                const customModels = extractCustomModels(provider.Config);
+                const allModels = extractAllModels(provider.Config);
                 return (
                   <div key={provider.ID} className="py-3 space-y-3">
                     <div className="flex items-start justify-between gap-2">
@@ -503,10 +673,9 @@ export default function ProvidersPage() {
                           variant="outline"
                           size="sm"
                           className="h-7 px-2 text-xs mt-1"
-                          onClick={() => openCustomModelsDialog(provider)}
-                          disabled={customModels.length === 0}
+                          onClick={() => openAllModelsDialog(provider)}
                         >
-                          自定义模型{customModels.length > 0 ? `（${customModels.length}）` : ""}
+                          全部模型{allModels.length > 0 ? `（${allModels.length}）` : ""}
                         </Button>
                         {provider.Console && (
                           <Button
@@ -680,9 +849,9 @@ export default function ProvidersPage() {
                 name="custom_models"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>自定义模型（可选）</FormLabel>
+                    <FormLabel>全部模型（可选，本地缓存）</FormLabel>
                     <FormControl>
-                      <Textarea {...field} placeholder="每行一个模型 ID，优先使用此列表，无需从提供商获取" className="h-28" />
+                      <Textarea {...field} placeholder="每行一个模型 ID，优先使用此列表，无需从上游重复获取" className="h-28" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -763,36 +932,106 @@ export default function ProvidersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 自定义模型对话框 */}
-      <Dialog open={customModelsOpen} onOpenChange={setCustomModelsOpen}>
-        <DialogContent className="max-w-md">
+      {/* 全部模型对话框 */}
+      <Dialog open={allModelsOpen} onOpenChange={setAllModelsOpen}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{customModelsProviderName || "当前提供商"}的自定义模型</DialogTitle>
-            <DialogDescription>展示该提供商配置的自定义模型列表</DialogDescription>
+            <DialogTitle>{allModelsProvider?.Name || "当前提供商"}的全部模型</DialogTitle>
+            <DialogDescription>
+              手动维护模型缓存，可添加自定义模型或批量删除不再需要的条目。
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="max-h-80 overflow-y-auto">
-            {customModelsList.length === 0 ? (
-              <div className="text-center text-muted-foreground py-6">未配置自定义模型</div>
-            ) : (
-              <div className="space-y-2">
-                {customModelsList.map((model, index) => (
-                  <div
-                    key={`${model}-${index}`}
-                    className="flex items-center justify-between rounded-md border px-3 py-2"
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold">全部模型列表</p>
+                  <span className="text-xs text-muted-foreground">已缓存 {allModelsList.length} 个</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={toggleSelectAllModels}
+                    disabled={allModelsList.length === 0}
                   >
-                    <span className="font-mono text-sm text-primary">{model}</span>
-                    <Button variant="ghost" size="sm" onClick={() => copyModelName(model)}>
-                      复制
-                    </Button>
-                  </div>
-                ))}
+                    {selectedAllModels.length === allModelsList.length && allModelsList.length > 0 ? "取消全选" : "全选"}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleRemoveSelectedModels}
+                    disabled={selectedAllModels.length === 0 || addingModels}
+                  >
+                    {addingModels ? "删除中..." : `删除所选${selectedAllModels.length > 0 ? `（${selectedAllModels.length}）` : ""}`}
+                  </Button>
+                </div>
               </div>
-            )}
+              <div className="border rounded-md max-h-60 overflow-y-auto divide-y">
+                {allModelsList.length === 0 ? (
+                  <div className="text-sm text-muted-foreground text-center py-4">暂无缓存模型</div>
+                ) : (
+                  allModelsList.map((model) => {
+                    const checked = selectedAllModels.includes(model);
+                    return (
+                      <div key={model} className="flex items-center justify-between px-3 py-2 text-sm gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(value) => {
+                              if (value) {
+                                setSelectedAllModels((prev) => Array.from(new Set([...prev, model])));
+                              } else {
+                                setSelectedAllModels((prev) => prev.filter((item) => item !== model));
+                              }
+                            }}
+                            aria-label={`选择模型 ${model}`}
+                          />
+                          <span className="truncate">{model}</span>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2"
+                            onClick={() => copyModelName(model)}
+                          >
+                            复制
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2"
+                            onClick={() => handleRemoveModelFromAll(model)}
+                            disabled={addingModels}
+                          >
+                            移除
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+              <div className="space-y-2">
+                <Textarea
+                  value={customModelInput}
+                  onChange={(e) => setCustomModelInput(e.target.value)}
+                  placeholder="每行一个模型 ID，可用来自定义或补充上游未返回的模型"
+                  className="h-28"
+                />
+                <div className="flex justify-end">
+                  <Button onClick={handleAddCustomModels} disabled={addingModels || !allModelsProvider}>
+                    {addingModels ? "提交中..." : "添加到全部模型"}
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <DialogFooter>
-            <Button onClick={() => setCustomModelsOpen(false)}>关闭</Button>
+            <Button onClick={() => setAllModelsOpen(false)}>关闭</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -801,15 +1040,43 @@ export default function ProvidersPage() {
       <Dialog open={modelsOpen} onOpenChange={setModelsOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{providers.find(v => v.ID === modelsOpenId)?.Name}模型列表</DialogTitle>
+            <DialogTitle>{providers.find(v => v.ID === modelsOpenId)?.Name} 上游模型</DialogTitle>
             <DialogDescription>
-              当前提供商的所有可用模型
+              从上游拉取的模型列表，勾选后可加入“全部模型”缓存。
             </DialogDescription>
           </DialogHeader>
 
-          {/* 搜索框 */}
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="text-sm text-muted-foreground">
+              {modelsLoading
+                ? "正在从上游获取..."
+                : `上游返回 ${providerModels.length} 个，已缓存 ${getAllModelsForProvider(modelsOpenId || 0).length} 个`}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={toggleSelectAll}
+                disabled={selectableModelIds.length === 0}
+              >
+                {isAllSelectableChecked ? "取消全选" : "全选可添加"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={refreshUpstreamModels} disabled={!modelsOpenId || modelsLoading}>
+                {modelsLoading ? "刷新中" : "刷新上游"}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleAddUpstreamToAll}
+                disabled={selectedUpstreamModels.length === 0 || addingModels}
+              >
+                {addingModels ? "同步中..." : `添加到全部模型${selectedUpstreamModels.length > 0 ? `（${selectedUpstreamModels.length}）` : ""}`}
+              </Button>
+            </div>
+          </div>
+
           {!modelsLoading && providerModels.length > 0 && (
-            <div className="mb-4">
+            <div className="mb-3">
               <Input
                 placeholder="搜索模型 ID"
                 onChange={(e) => {
@@ -831,38 +1098,63 @@ export default function ProvidersPage() {
           {modelsLoading ? (
             <Loading message="加载模型列表" />
           ) : (
-            <div className="max-h-96 overflow-y-auto">
+            <div className="max-h-96 overflow-y-auto space-y-2">
               {filteredProviderModels.length === 0 ? (
                 <div className="text-center text-gray-500 py-8">
                   {providerModels.length === 0 ? '暂无模型数据' : '未找到匹配的模型'}
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {filteredProviderModels.map((model, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between p-2 border rounded-lg"
-                    >
-                      <div className="flex-1">
-                        <div className="font-medium">{model.id}</div>
+                (() => {
+                  return filteredProviderModels.map((model) => {
+                    const isSaved = savedModelSet.has(model.id.toLowerCase());
+                    const checked = selectedUpstreamModels.includes(model.id);
+                    return (
+                      <div
+                        key={model.id}
+                        className="flex items-center justify-between p-2 border rounded-lg"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <Checkbox
+                            checked={checked}
+                            disabled={isSaved}
+                            onCheckedChange={(value) => {
+                              if (value) {
+                                setSelectedUpstreamModels((prev) => Array.from(new Set([...prev, model.id])));
+                              } else {
+                                setSelectedUpstreamModels((prev) => prev.filter((item) => item !== model.id));
+                              }
+                            }}
+                          />
+                          <div className="min-w-0">
+                            <div className="font-medium truncate">{model.id}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {isSaved ? "已在全部模型" : "未添加"}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {isSaved ? (
+                            <span className="text-xs text-green-600">已缓存</span>
+                          ) : null}
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => copyModelName(model.id)}
+                                  className="min-w-12"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" aria-hidden="true" className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                                </Button>
+                              </TooltipTrigger>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
                       </div>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => copyModelName(model.id)}
-                              className="min-w-12"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true" className="h-4 w-4"><path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
-                            </Button>
-                          </TooltipTrigger>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                  ))}
-                </div>
+                    );
+                  });
+                })()
               )}
             </div>
           )}

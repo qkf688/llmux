@@ -57,11 +57,11 @@ import {
   deleteModel,
   batchDeleteModels,
   getProviders,
-  getProviderModels,
 } from "@/lib/api";
 import type { Model, Provider, ProviderModel } from "@/lib/api";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+import { parseAllModelsFromConfig, toProviderModelList } from "@/lib/provider-models";
 
 type MobileInfoItemProps = {
   label: string;
@@ -118,7 +118,6 @@ export default function ModelsPage() {
   });
 
   useEffect(() => {
-    console.log("Fetching models...");
     fetchModels();
     fetchProviders();
   }, []);
@@ -126,11 +125,11 @@ export default function ModelsPage() {
   // 当选择供应商变化时，获取该供应商的模型列表
   useEffect(() => {
     if (selectedProviderId) {
-      fetchProviderModels(parseInt(selectedProviderId));
+      loadProviderModelsFromCache(parseInt(selectedProviderId));
     } else {
       setProviderModels([]);
     }
-  }, [selectedProviderId]);
+  }, [selectedProviderId, providers]);
 
   const fetchModels = async () => {
     try {
@@ -155,18 +154,12 @@ export default function ModelsPage() {
     }
   };
 
-  const fetchProviderModels = async (providerId: number) => {
-    try {
-      setLoadingProviderModels(true);
-      const data = await getProviderModels(providerId);
-      setProviderModels(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`获取供应商模型列表失败: ${message}`);
-      setProviderModels([]);
-    } finally {
-      setLoadingProviderModels(false);
-    }
+  const loadProviderModelsFromCache = (providerId: number) => {
+    setLoadingProviderModels(true);
+    const provider = providers.find((item) => item.ID === providerId);
+    const cached = provider ? toProviderModelList(parseAllModelsFromConfig(provider.Config)) : [];
+    setProviderModels(cached);
+    setLoadingProviderModels(false);
   };
 
   const handleSelectProviderModel = (modelId: string) => {
@@ -184,6 +177,10 @@ export default function ModelsPage() {
   const openModelPicker = () => {
     if (!selectedProviderId) {
       toast.error("请先选择供应商");
+      return;
+    }
+    if (providerModels.length === 0) {
+      toast.error("该供应商暂无“全部模型”，请先在提供商管理页同步或添加模型");
       return;
     }
     setModelPickerOpen(true);
@@ -517,7 +514,7 @@ export default function ModelsPage() {
               {/* 供应商选择（仅在创建模式下显示） */}
               {!editingModel && (
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">从供应商获取模型（可选）</label>
+                  <label className="text-sm font-medium">从全部模型选择（可选）</label>
                   <div className="flex gap-2">
                     <Select
                       value={selectedProviderId}
@@ -659,7 +656,7 @@ export default function ModelsPage() {
           <DialogHeader>
             <DialogTitle>选择模型</DialogTitle>
             <DialogDescription>
-              从供应商 {providers.find(p => p.ID.toString() === selectedProviderId)?.Name} 的模型列表中选择
+              从供应商 {providers.find(p => p.ID.toString() === selectedProviderId)?.Name} 的全部模型缓存中选择
             </DialogDescription>
           </DialogHeader>
           
@@ -682,7 +679,7 @@ export default function ModelsPage() {
               </div>
             ) : filteredProviderModels.length === 0 ? (
               <div className="flex items-center justify-center h-32 text-muted-foreground">
-                {modelSearchQuery ? "没有找到匹配的模型" : "该供应商暂无可用模型"}
+                {modelSearchQuery ? "没有找到匹配的模型" : "该供应商暂无全部模型缓存，请先在提供商管理页同步"}
               </div>
             ) : (
               <div className="divide-y">

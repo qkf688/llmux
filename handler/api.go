@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -88,12 +89,23 @@ func GetProviders(c *gin.Context) {
 
 func GetProviderModels(c *gin.Context) {
 	id := c.Param("id")
+	source := c.Query("source")
 	provider, err := gorm.G[models.Provider](models.DB).Where("id = ?", id).First(c.Request.Context())
 	if err != nil {
 		common.InternalServerError(c, err.Error())
 		return
 	}
-	chatModel, err := providers.New(provider.Type, provider.Config, provider.Proxy)
+
+	config := provider.Config
+	if source == "upstream" {
+		if cleanedConfig, err := dropCustomModels(config); err == nil {
+			config = cleanedConfig
+		} else {
+			slog.Warn("failed to strip custom models for upstream refresh", "provider_id", id, "error", err)
+		}
+	}
+
+	chatModel, err := providers.New(provider.Type, config, provider.Proxy)
 	if err != nil {
 		common.InternalServerError(c, "Failed to get models: "+err.Error())
 		return
@@ -108,6 +120,21 @@ func GetProviderModels(c *gin.Context) {
 		models = []providers.Model{}
 	}
 	common.Success(c, models)
+}
+
+func dropCustomModels(config string) (string, error) {
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(config), &parsed); err != nil {
+		return "", err
+	}
+
+	delete(parsed, "custom_models")
+
+	updated, err := json.Marshal(parsed)
+	if err != nil {
+		return "", err
+	}
+	return string(updated), nil
 }
 
 // CreateProvider 创建提供商

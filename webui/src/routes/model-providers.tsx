@@ -58,7 +58,6 @@ import {
   getModels,
   getProviders,
   testModelProvider,
-  getProviderModels,
   getSettings
 } from "@/lib/api";
 import type { ModelWithProvider, Model, Provider, ProviderModel, Settings } from "@/lib/api";
@@ -67,6 +66,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
+import { parseAllModelsFromConfig, toProviderModelList } from "@/lib/provider-models";
 
 type MobileInfoItemProps = {
   label: string;
@@ -265,23 +265,16 @@ export default function ModelProvidersPage() {
     }
   };
 
-  const fetchProviderModels = async (providerId: number) => {
+  const fetchProviderModels = (providerId: number) => {
     if (!providerId) {
       setProviderModels([]);
       return;
     }
-    try {
-      setLoadingProviderModels(true);
-      const data = await getProviderModels(providerId);
-      setProviderModels(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`获取提供商模型列表失败: ${message}`);
-      console.error(err);
-      setProviderModels([]);
-    } finally {
-      setLoadingProviderModels(false);
-    }
+    setLoadingProviderModels(true);
+    const provider = providers.find((item) => item.ID === providerId);
+    const cached = provider ? toProviderModelList(parseAllModelsFromConfig(provider.Config)) : [];
+    setProviderModels(cached);
+    setLoadingProviderModels(false);
   };
 
   const fetchModelProviders = async (modelId: number) => {
@@ -1592,7 +1585,7 @@ export default function ModelProvidersPage() {
           <DialogHeader>
             <DialogTitle>选择模型</DialogTitle>
             <DialogDescription>
-              从提供商模型列表中选择要关联的模型
+              从提供商的全部模型缓存中选择要关联的模型
             </DialogDescription>
           </DialogHeader>
           
@@ -1667,11 +1660,11 @@ export default function ModelProvidersPage() {
               {loadingProviderModels ? (
                 <div className="flex items-center justify-center py-4">
                   <Spinner className="h-4 w-4" />
-                  <span className="ml-2 text-sm">加载模型列表...</span>
+                  <span className="ml-2 text-sm">加载全部模型...</span>
                 </div>
               ) : providerModels.length === 0 ? (
                 <div className="text-center py-4 text-sm text-muted-foreground">
-                  暂无可用模型
+                  暂无全部模型缓存，请先在提供商管理页同步
                 </div>
               ) : (
                 (() => {

@@ -134,6 +134,7 @@ const (
 	SettingKeyHealthCheckAutoEnable        = "health_check_auto_enable"         // 检测成功后是否自动启用
 	SettingKeyHealthCheckLogRetentionCount = "health_check_log_retention_count" // 健康检测日志保留条数，0表示不限制
 	SettingKeyHealthCheckCountAsSuccess    = "health_check_count_as_success"    // 健康检测成功是否计入成功调用
+	SettingKeyHealthCheckCountAsFailure    = "health_check_count_as_failure"    // 健康检测失败是否计入失败调用（触发衰减）
 )
 
 // HealthCheckLog 模型健康检测日志

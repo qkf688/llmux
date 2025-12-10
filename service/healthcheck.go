@@ -230,7 +230,7 @@ func (h *HealthChecker) checkOne(ctx context.Context, mp *models.ModelWithProvid
 	go EnforceHealthCheckLogRetention(context.Background())
 
 	// 处理检测结果
-	h.handleCheckResult(ctx, mp, checkErr == nil)
+	h.handleCheckResult(ctx, mp, provider.Name, checkErr == nil)
 }
 
 // doCheck 执行实际的检测请求
@@ -294,7 +294,7 @@ func (e *HealthCheckError) Error() string {
 }
 
 // handleCheckResult 处理检测结果
-func (h *HealthChecker) handleCheckResult(ctx context.Context, mp *models.ModelWithProvider, success bool) {
+func (h *HealthChecker) handleCheckResult(ctx context.Context, mp *models.ModelWithProvider, providerName string, success bool) {
 	failureThreshold := h.getFailureThreshold(ctx)
 	autoEnable := h.getAutoEnable(ctx)
 
@@ -321,6 +321,11 @@ func (h *HealthChecker) handleCheckResult(ctx context.Context, mp *models.ModelW
 		if err != nil {
 			slog.Error("failed to get consecutive failures", "id", mp.ID, "error", err)
 			return
+		}
+
+		if shouldCountHealthCheckFailure(ctx) {
+			applyWeightDecayByModelProviderID(ctx, mp.ID, providerName, mp.ProviderModel)
+			applyPriorityDecayByModelProviderID(ctx, mp.ID, providerName, mp.ProviderModel)
 		}
 
 		if failCount >= failureThreshold && (mp.Status == nil || *mp.Status) {
@@ -474,7 +479,7 @@ func (h *HealthChecker) CheckSingle(ctx context.Context, mpID uint) (*models.Hea
 	go EnforceHealthCheckLogRetention(context.Background())
 
 	// 处理检测结果
-	h.handleCheckResult(ctx, &mp, checkErr == nil)
+	h.handleCheckResult(ctx, &mp, provider.Name, checkErr == nil)
 
 	return &log, nil
 }

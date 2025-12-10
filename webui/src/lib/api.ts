@@ -434,6 +434,7 @@ export interface Settings {
   auto_priority_increase_max: number;
   log_retention_count: number;
   count_health_check_as_success: boolean;
+  count_health_check_as_failure: boolean;
 }
 
 export async function getSettings(): Promise<Settings> {

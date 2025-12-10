@@ -901,6 +901,7 @@ type SettingsResponse struct {
 	AutoPriorityIncreaseMax    int  `json:"auto_priority_increase_max"`
 	LogRetentionCount          int  `json:"log_retention_count"`
 	CountHealthCheckAsSuccess  bool `json:"count_health_check_as_success"`
+	CountHealthCheckAsFailure  bool `json:"count_health_check_as_failure"`
 }
 
 // UpdateSettingsRequest 更新设置请求结构
@@ -919,6 +920,7 @@ type UpdateSettingsRequest struct {
 	AutoPriorityIncreaseMax    int  `json:"auto_priority_increase_max"`
 	LogRetentionCount          int  `json:"log_retention_count"`
 	CountHealthCheckAsSuccess  bool `json:"count_health_check_as_success"`
+	CountHealthCheckAsFailure  bool `json:"count_health_check_as_failure"`
 }
 
 // GetSettings 获取所有设置
@@ -945,6 +947,7 @@ func GetSettings(c *gin.Context) {
 		AutoPriorityIncreaseStep:   1,
 		AutoPriorityIncreaseMax:    100,
 		CountHealthCheckAsSuccess:  true,
+		CountHealthCheckAsFailure:  false,
 	}
 
 	for _, setting := range settings {
@@ -997,6 +1000,8 @@ func GetSettings(c *gin.Context) {
 			}
 		case models.SettingKeyHealthCheckCountAsSuccess:
 			response.CountHealthCheckAsSuccess = setting.Value == "true"
+		case models.SettingKeyHealthCheckCountAsFailure:
+			response.CountHealthCheckAsFailure = setting.Value == "true"
 		}
 	}
 
@@ -1190,6 +1195,17 @@ func UpdateSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyHealthCheckCountAsSuccess).
 		Update(ctx, "value", countHealthCheckValue); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	countHealthCheckFailureValue := "false"
+	if req.CountHealthCheckAsFailure {
+		countHealthCheckFailureValue = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyHealthCheckCountAsFailure).
+		Update(ctx, "value", countHealthCheckFailureValue); err != nil {
 		common.InternalServerError(c, "Failed to update settings: "+err.Error())
 		return
 	}

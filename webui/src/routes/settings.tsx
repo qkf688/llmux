@@ -189,6 +189,14 @@ export default function SettingsPage() {
     }
   };
 
+  const handleCountHealthCheckAsFailureChange = (checked: boolean) => {
+    if (settings) {
+      const newSettings = { ...settings, count_health_check_as_failure: checked };
+      setSettings(newSettings);
+      checkHasChanges(newSettings);
+    }
+  };
+
   const checkHasChanges = (newSettings: Settings) => {
     if (!originalSettings) return;
     const changed =
@@ -205,7 +213,8 @@ export default function SettingsPage() {
       originalSettings.auto_priority_increase_step !== newSettings.auto_priority_increase_step ||
       originalSettings.auto_priority_increase_max !== newSettings.auto_priority_increase_max ||
       originalSettings.log_retention_count !== newSettings.log_retention_count ||
-      originalSettings.count_health_check_as_success !== newSettings.count_health_check_as_success;
+      originalSettings.count_health_check_as_success !== newSettings.count_health_check_as_success ||
+      originalSettings.count_health_check_as_failure !== newSettings.count_health_check_as_failure;
     setHasChanges(changed);
   };
 
@@ -654,7 +663,17 @@ export default function SettingsPage() {
                 className="w-32"
               />
             </div>
+          </CardContent>
+        </Card>
 
+        <Card>
+          <CardHeader>
+            <CardTitle>健康检测计入调用策略</CardTitle>
+            <CardDescription>
+              控制健康检测结果是否参与成功自增或失败衰减，避免与调用统计混淆。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="count-health-check-as-success" className="text-base font-medium">
@@ -668,6 +687,22 @@ export default function SettingsPage() {
                 id="count-health-check-as-success"
                 checked={settings?.count_health_check_as_success ?? true}
                 onCheckedChange={handleCountHealthCheckAsSuccessChange}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="count-health-check-as-failure" className="text-base font-medium">
+                  健康检测计入失败调用衰减
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  开启后，健康检测失败会视作一次调用失败，触发权重/优先级衰减，帮助自动下调异常供应商。
+                </p>
+              </div>
+              <Switch
+                id="count-health-check-as-failure"
+                checked={settings?.count_health_check_as_failure ?? false}
+                onCheckedChange={handleCountHealthCheckAsFailureChange}
               />
             </div>
           </CardContent>

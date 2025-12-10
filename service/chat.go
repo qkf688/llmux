@@ -198,9 +198,6 @@ func applyWeightDecay(ctx context.Context, log models.ChatLog, modelWithProvider
 		return
 	}
 
-	// 获取衰减步长
-	decayStep := getAutoWeightDecayStep(ctx)
-
 	// 查找对应的 ModelWithProvider
 	for id, mwp := range modelWithProviderMap {
 		// 获取供应商信息以匹配日志
@@ -209,20 +206,7 @@ func applyWeightDecay(ctx context.Context, log models.ChatLog, modelWithProvider
 			continue
 		}
 		if provider.Name == log.ProviderName && mwp.ProviderModel == log.ProviderModel {
-			// 计算新权重
-			newWeight := mwp.Weight - decayStep
-			if newWeight < 1 {
-				newWeight = 1
-			}
-
-			// 更新数据库中的权重
-			if _, err := gorm.G[models.ModelWithProvider](models.DB).
-				Where("id = ?", id).
-				Update(ctx, "weight", newWeight); err != nil {
-				slog.Error("update weight error", "error", err, "id", id)
-			} else {
-				slog.Info("weight decay applied", "provider", log.ProviderName, "model", log.ProviderModel, "old_weight", mwp.Weight, "new_weight", newWeight)
-			}
+			applyWeightDecayByModelProviderID(ctx, id, log.ProviderName, log.ProviderModel)
 			break
 		}
 	}
@@ -261,10 +245,6 @@ func applyPriorityDecay(ctx context.Context, log models.ChatLog, modelWithProvid
 		return
 	}
 
-	// 获取衰减步长和阈值
-	decayStep := getAutoPriorityDecayStep(ctx)
-	threshold := getAutoPriorityDecayThreshold(ctx)
-
 	// 查找对应的 ModelWithProvider
 	for id, mwp := range modelWithProviderMap {
 		// 获取供应商信息以匹配日志
@@ -273,32 +253,7 @@ func applyPriorityDecay(ctx context.Context, log models.ChatLog, modelWithProvid
 			continue
 		}
 		if provider.Name == log.ProviderName && mwp.ProviderModel == log.ProviderModel {
-			// 计算新优先级
-			newPriority := mwp.Priority - decayStep
-			if newPriority < 0 {
-				newPriority = 0
-			}
-
-			// 更新数据库中的优先级
-			if _, err := gorm.G[models.ModelWithProvider](models.DB).
-				Where("id = ?", id).
-				Update(ctx, "priority", newPriority); err != nil {
-				slog.Error("update priority error", "error", err, "id", id)
-			} else {
-				slog.Info("priority decay applied", "provider", log.ProviderName, "model", log.ProviderModel, "old_priority", mwp.Priority, "new_priority", newPriority)
-			}
-
-			// 如果优先级达到阈值，自动禁用该关联模型
-			if newPriority <= threshold {
-				falseVal := false
-				if _, err := gorm.G[models.ModelWithProvider](models.DB).
-					Where("id = ?", id).
-					Updates(ctx, models.ModelWithProvider{Status: &falseVal}); err != nil {
-					slog.Error("auto disable model provider error", "error", err, "id", id)
-				} else {
-					slog.Warn("model provider auto disabled due to low priority", "provider", log.ProviderName, "model", log.ProviderModel, "priority", newPriority, "threshold", threshold)
-				}
-			}
+			applyPriorityDecayByModelProviderID(ctx, id, log.ProviderName, log.ProviderModel)
 			break
 		}
 	}

@@ -138,6 +138,7 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				return nil, 0, err
 			}
 
+			applySuccessAdjustments(ctx, *id)
 			return res, logId, nil
 		}
 	}

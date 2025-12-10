@@ -418,11 +418,16 @@ export interface Settings {
   auto_weight_decay: boolean;
   auto_weight_decay_default: number;
   auto_weight_decay_step: number;
+  auto_weight_increase_step: number;
+  auto_weight_increase_max: number;
   auto_priority_decay: boolean;
   auto_priority_decay_default: number;
   auto_priority_decay_step: number;
   auto_priority_decay_threshold: number;
+  auto_priority_increase_step: number;
+  auto_priority_increase_max: number;
   log_retention_count: number;
+  count_health_check_as_success: boolean;
 }
 
 export async function getSettings(): Promise<Settings> {

@@ -109,6 +109,22 @@ export default function SettingsPage() {
     }
   };
 
+  const handleAutoWeightIncreaseStepChange = (value: number) => {
+    if (settings) {
+      const newSettings = { ...settings, auto_weight_increase_step: value };
+      setSettings(newSettings);
+      checkHasChanges(newSettings);
+    }
+  };
+
+  const handleAutoWeightIncreaseMaxChange = (value: number) => {
+    if (settings) {
+      const newSettings = { ...settings, auto_weight_increase_max: value };
+      setSettings(newSettings);
+      checkHasChanges(newSettings);
+    }
+  };
+
   const handleAutoPriorityDecayChange = (checked: boolean) => {
     if (settings) {
       const newSettings = { ...settings, auto_priority_decay: checked };
@@ -141,9 +157,33 @@ export default function SettingsPage() {
     }
   };
 
+  const handleAutoPriorityIncreaseStepChange = (value: number) => {
+    if (settings) {
+      const newSettings = { ...settings, auto_priority_increase_step: value };
+      setSettings(newSettings);
+      checkHasChanges(newSettings);
+    }
+  };
+
+  const handleAutoPriorityIncreaseMaxChange = (value: number) => {
+    if (settings) {
+      const newSettings = { ...settings, auto_priority_increase_max: value };
+      setSettings(newSettings);
+      checkHasChanges(newSettings);
+    }
+  };
+
   const handleLogRetentionCountChange = (value: number) => {
     if (settings) {
       const newSettings = { ...settings, log_retention_count: value };
+      setSettings(newSettings);
+      checkHasChanges(newSettings);
+    }
+  };
+
+  const handleCountHealthCheckAsSuccessChange = (checked: boolean) => {
+    if (settings) {
+      const newSettings = { ...settings, count_health_check_as_success: checked };
       setSettings(newSettings);
       checkHasChanges(newSettings);
     }
@@ -156,11 +196,16 @@ export default function SettingsPage() {
       originalSettings.auto_weight_decay !== newSettings.auto_weight_decay ||
       originalSettings.auto_weight_decay_default !== newSettings.auto_weight_decay_default ||
       originalSettings.auto_weight_decay_step !== newSettings.auto_weight_decay_step ||
+      originalSettings.auto_weight_increase_step !== newSettings.auto_weight_increase_step ||
+      originalSettings.auto_weight_increase_max !== newSettings.auto_weight_increase_max ||
       originalSettings.auto_priority_decay !== newSettings.auto_priority_decay ||
       originalSettings.auto_priority_decay_default !== newSettings.auto_priority_decay_default ||
       originalSettings.auto_priority_decay_step !== newSettings.auto_priority_decay_step ||
       originalSettings.auto_priority_decay_threshold !== newSettings.auto_priority_decay_threshold ||
-      originalSettings.log_retention_count !== newSettings.log_retention_count;
+      originalSettings.auto_priority_increase_step !== newSettings.auto_priority_increase_step ||
+      originalSettings.auto_priority_increase_max !== newSettings.auto_priority_increase_max ||
+      originalSettings.log_retention_count !== newSettings.log_retention_count ||
+      originalSettings.count_health_check_as_success !== newSettings.count_health_check_as_success;
     setHasChanges(changed);
   };
 
@@ -527,6 +572,104 @@ export default function SettingsPage() {
                 </div>
               </>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>成功调用自增</CardTitle>
+            <CardDescription>
+              配置成功调用后自动提升权重与优先级的策略，便于恢复被衰减的供应商表现。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="auto-weight-increase-step" className="text-base font-medium">
+                权重增加步长
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                每次调用成功后增加的权重值，上限受下方限制影响。
+              </p>
+              <Input
+                id="auto-weight-increase-step"
+                type="number"
+                min={1}
+                max={100}
+                value={settings?.auto_weight_increase_step ?? 1}
+                onChange={(e) => handleAutoWeightIncreaseStepChange(parseInt(e.target.value) || 1)}
+                className="w-32"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="auto-weight-increase-max" className="text-base font-medium">
+                权重增加上限
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                成功自增后的最大权重值，防止无限增长。默认 100。
+              </p>
+              <Input
+                id="auto-weight-increase-max"
+                type="number"
+                min={1}
+                max={10000}
+                value={settings?.auto_weight_increase_max ?? 100}
+                onChange={(e) => handleAutoWeightIncreaseMaxChange(parseInt(e.target.value) || 100)}
+                className="w-32"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="auto-priority-increase-step" className="text-base font-medium">
+                优先级增加步长
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                每次调用成功后增加的优先级值。
+              </p>
+              <Input
+                id="auto-priority-increase-step"
+                type="number"
+                min={1}
+                max={100}
+                value={settings?.auto_priority_increase_step ?? 1}
+                onChange={(e) => handleAutoPriorityIncreaseStepChange(parseInt(e.target.value) || 1)}
+                className="w-32"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="auto-priority-increase-max" className="text-base font-medium">
+                优先级增加上限
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                成功自增后的最大优先级值。避免超过预期范围，默认 100。
+              </p>
+              <Input
+                id="auto-priority-increase-max"
+                type="number"
+                min={0}
+                max={10000}
+                value={settings?.auto_priority_increase_max ?? 100}
+                onChange={(e) => handleAutoPriorityIncreaseMaxChange(parseInt(e.target.value) || 100)}
+                className="w-32"
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="count-health-check-as-success" className="text-base font-medium">
+                  健康检测计入成功调用
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  开启后，模型自动健康检测的成功结果也会触发权重/优先级自增。
+                </p>
+              </div>
+              <Switch
+                id="count-health-check-as-success"
+                checked={settings?.count_health_check_as_success ?? true}
+                onCheckedChange={handleCountHealthCheckAsSuccessChange}
+              />
+            </div>
           </CardContent>
         </Card>
 

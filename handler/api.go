@@ -864,11 +864,16 @@ type SettingsResponse struct {
 	AutoWeightDecay            bool `json:"auto_weight_decay"`
 	AutoWeightDecayDefault     int  `json:"auto_weight_decay_default"`
 	AutoWeightDecayStep        int  `json:"auto_weight_decay_step"`
+	AutoWeightIncreaseStep     int  `json:"auto_weight_increase_step"`
+	AutoWeightIncreaseMax      int  `json:"auto_weight_increase_max"`
 	AutoPriorityDecay          bool `json:"auto_priority_decay"`
 	AutoPriorityDecayDefault   int  `json:"auto_priority_decay_default"`
 	AutoPriorityDecayStep      int  `json:"auto_priority_decay_step"`
 	AutoPriorityDecayThreshold int  `json:"auto_priority_decay_threshold"`
+	AutoPriorityIncreaseStep   int  `json:"auto_priority_increase_step"`
+	AutoPriorityIncreaseMax    int  `json:"auto_priority_increase_max"`
 	LogRetentionCount          int  `json:"log_retention_count"`
+	CountHealthCheckAsSuccess  bool `json:"count_health_check_as_success"`
 }
 
 // UpdateSettingsRequest 更新设置请求结构
@@ -877,11 +882,16 @@ type UpdateSettingsRequest struct {
 	AutoWeightDecay            bool `json:"auto_weight_decay"`
 	AutoWeightDecayDefault     int  `json:"auto_weight_decay_default"`
 	AutoWeightDecayStep        int  `json:"auto_weight_decay_step"`
+	AutoWeightIncreaseStep     int  `json:"auto_weight_increase_step"`
+	AutoWeightIncreaseMax      int  `json:"auto_weight_increase_max"`
 	AutoPriorityDecay          bool `json:"auto_priority_decay"`
 	AutoPriorityDecayDefault   int  `json:"auto_priority_decay_default"`
 	AutoPriorityDecayStep      int  `json:"auto_priority_decay_step"`
 	AutoPriorityDecayThreshold int  `json:"auto_priority_decay_threshold"`
+	AutoPriorityIncreaseStep   int  `json:"auto_priority_increase_step"`
+	AutoPriorityIncreaseMax    int  `json:"auto_priority_increase_max"`
 	LogRetentionCount          int  `json:"log_retention_count"`
+	CountHealthCheckAsSuccess  bool `json:"count_health_check_as_success"`
 }
 
 // GetSettings 获取所有设置
@@ -898,11 +908,16 @@ func GetSettings(c *gin.Context) {
 		AutoWeightDecay:            false,
 		AutoWeightDecayDefault:     100,
 		AutoWeightDecayStep:        1,
+		AutoWeightIncreaseStep:     1,
+		AutoWeightIncreaseMax:      100,
 		AutoPriorityDecay:          false,
 		AutoPriorityDecayDefault:   100,
 		AutoPriorityDecayStep:      1,
 		AutoPriorityDecayThreshold: 90,
 		LogRetentionCount:          100, // 默认保留100条
+		AutoPriorityIncreaseStep:   1,
+		AutoPriorityIncreaseMax:    100,
+		CountHealthCheckAsSuccess:  true,
 	}
 
 	for _, setting := range settings {
@@ -919,6 +934,14 @@ func GetSettings(c *gin.Context) {
 			if val, err := strconv.Atoi(setting.Value); err == nil {
 				response.AutoWeightDecayStep = val
 			}
+		case models.SettingKeyAutoWeightIncreaseStep:
+			if val, err := strconv.Atoi(setting.Value); err == nil {
+				response.AutoWeightIncreaseStep = val
+			}
+		case models.SettingKeyAutoWeightIncreaseMax:
+			if val, err := strconv.Atoi(setting.Value); err == nil {
+				response.AutoWeightIncreaseMax = val
+			}
 		case models.SettingKeyAutoPriorityDecay:
 			response.AutoPriorityDecay = setting.Value == "true"
 		case models.SettingKeyAutoPriorityDecayDefault:
@@ -933,10 +956,20 @@ func GetSettings(c *gin.Context) {
 			if val, err := strconv.Atoi(setting.Value); err == nil {
 				response.AutoPriorityDecayThreshold = val
 			}
+		case models.SettingKeyAutoPriorityIncreaseStep:
+			if val, err := strconv.Atoi(setting.Value); err == nil {
+				response.AutoPriorityIncreaseStep = val
+			}
+		case models.SettingKeyAutoPriorityIncreaseMax:
+			if val, err := strconv.Atoi(setting.Value); err == nil {
+				response.AutoPriorityIncreaseMax = val
+			}
 		case models.SettingKeyLogRetentionCount:
 			if val, err := strconv.Atoi(setting.Value); err == nil {
 				response.LogRetentionCount = val
 			}
+		case models.SettingKeyHealthCheckCountAsSuccess:
+			response.CountHealthCheckAsSuccess = setting.Value == "true"
 		}
 	}
 
@@ -1004,6 +1037,27 @@ func UpdateSettings(c *gin.Context) {
 		return
 	}
 
+	if req.AutoWeightIncreaseStep < 1 {
+		req.AutoWeightIncreaseStep = 1
+	}
+	if req.AutoWeightIncreaseMax < 1 {
+		req.AutoWeightIncreaseMax = 100
+	}
+
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyAutoWeightIncreaseStep).
+		Update(ctx, "value", strconv.Itoa(req.AutoWeightIncreaseStep)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyAutoWeightIncreaseMax).
+		Update(ctx, "value", strconv.Itoa(req.AutoWeightIncreaseMax)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
 	// 如果刚刚开启自动权重衰减（之前是关闭的，现在是开启的），自动重置所有权重
 	if req.AutoWeightDecay && !currentAutoWeightDecay {
 		if _, err := gorm.G[models.ModelWithProvider](models.DB).
@@ -1061,6 +1115,27 @@ func UpdateSettings(c *gin.Context) {
 		return
 	}
 
+	if req.AutoPriorityIncreaseStep < 1 {
+		req.AutoPriorityIncreaseStep = 1
+	}
+	if req.AutoPriorityIncreaseMax < 0 {
+		req.AutoPriorityIncreaseMax = 100
+	}
+
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyAutoPriorityIncreaseStep).
+		Update(ctx, "value", strconv.Itoa(req.AutoPriorityIncreaseStep)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyAutoPriorityIncreaseMax).
+		Update(ctx, "value", strconv.Itoa(req.AutoPriorityIncreaseMax)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
 	// 如果刚刚开启自动优先级衰减（之前是关闭的，现在是开启的），自动重置所有优先级
 	if req.AutoPriorityDecay && !currentAutoPriorityDecay {
 		if _, err := gorm.G[models.ModelWithProvider](models.DB).
@@ -1079,6 +1154,17 @@ func UpdateSettings(c *gin.Context) {
 		} else {
 			slog.Info("auto re-enable all model providers on enabling auto priority decay")
 		}
+	}
+
+	countHealthCheckValue := "false"
+	if req.CountHealthCheckAsSuccess {
+		countHealthCheckValue = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyHealthCheckCountAsSuccess).
+		Update(ctx, "value", countHealthCheckValue); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
 	}
 
 	// 更新日志保留条数设置

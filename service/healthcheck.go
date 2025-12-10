@@ -300,6 +300,10 @@ func (h *HealthChecker) handleCheckResult(ctx context.Context, mp *models.ModelW
 
 	if success {
 		// 检测成功
+		if shouldCountHealthCheckSuccess(ctx) {
+			applySuccessAdjustments(ctx, mp.ID)
+		}
+
 		if autoEnable && (mp.Status == nil || !*mp.Status) {
 			// 自动启用
 			trueVal := true

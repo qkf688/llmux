@@ -53,10 +53,14 @@ func initDefaultSettings(ctx context.Context) {
 		{Key: SettingKeyAutoWeightDecay, Value: "false"},         // 默认关闭自动权重衰减
 		{Key: SettingKeyAutoWeightDecayDefault, Value: "100"},    // 默认权重值100
 		{Key: SettingKeyAutoWeightDecayStep, Value: "1"},         // 默认每次失败减少1
+		{Key: SettingKeyAutoWeightIncreaseStep, Value: "1"},      // 默认每次成功增加1
+		{Key: SettingKeyAutoWeightIncreaseMax, Value: "100"},     // 默认权重上限100
 		{Key: SettingKeyAutoPriorityDecay, Value: "false"},       // 默认关闭自动优先级衰减
 		{Key: SettingKeyAutoPriorityDecayDefault, Value: "100"},  // 默认优先级值100
 		{Key: SettingKeyAutoPriorityDecayStep, Value: "1"},       // 默认每次失败减少1
 		{Key: SettingKeyAutoPriorityDecayThreshold, Value: "90"}, // 默认优先级阈值90，达到此值自动禁用
+		{Key: SettingKeyAutoPriorityIncreaseStep, Value: "1"},    // 默认每次成功增加1
+		{Key: SettingKeyAutoPriorityIncreaseMax, Value: "100"},   // 默认优先级上限100
 		{Key: SettingKeyLogRetentionCount, Value: "100"},         // 默认保留100条日志，0表示不限制
 		// 健康检测相关默认设置
 		{Key: SettingKeyHealthCheckEnabled, Value: "false"},         // 默认关闭健康检测
@@ -64,6 +68,7 @@ func initDefaultSettings(ctx context.Context) {
 		{Key: SettingKeyHealthCheckFailureThreshold, Value: "3"},    // 默认失败3次后禁用
 		{Key: SettingKeyHealthCheckAutoEnable, Value: "false"},      // 默认检测成功不自动启用
 		{Key: SettingKeyHealthCheckLogRetentionCount, Value: "100"}, // 默认保留100条健康检测日志，0 表示不限制
+		{Key: SettingKeyHealthCheckCountAsSuccess, Value: "true"},   // 默认健康检测成功计入成功调用
 	}
 
 	for _, setting := range defaultSettings {

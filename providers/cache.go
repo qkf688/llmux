@@ -44,12 +44,14 @@ func GetClient(responseHeaderTimeout time.Duration) *http.Client {
 	transport := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
 		DialContext:           dialer.DialContext,
-		ForceAttemptHTTP2:     true,
+		ForceAttemptHTTP2:     false, // 禁用强制HTTP/2，让系统自动协商
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 		ResponseHeaderTimeout: responseHeaderTimeout,
+		DisableKeepAlives:     false,
+		MaxIdleConnsPerHost:   10,
 	}
 
 	client := &http.Client{
@@ -66,12 +68,14 @@ func GetClient(responseHeaderTimeout time.Duration) *http.Client {
 func GetClientWithProxy(responseHeaderTimeout time.Duration, proxyURL string) *http.Client {
 	transport := &http.Transport{
 		DialContext:           dialer.DialContext,
-		ForceAttemptHTTP2:     true,
+		ForceAttemptHTTP2:     false, // 禁用强制HTTP/2，让系统自动协商，避免HTTP/2超时问题
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 		ResponseHeaderTimeout: responseHeaderTimeout,
+		DisableKeepAlives:     false, // 保持连接复用以提高性能
+		MaxIdleConnsPerHost:   10,    // 限制每个主机的空闲连接数
 	}
 
 	// 如果提供了代理URL，使用它；否则使用环境变量

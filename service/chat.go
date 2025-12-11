@@ -60,7 +60,8 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 
 			provider := providerMap[modelWithProvider.ProviderID]
 
-			chatModel, err := providers.New(style, provider.Config, provider.Proxy)
+			// 使用供应商的实际类型创建 provider 实例，而不是客户端格式
+			chatModel, err := providers.New(provider.Type, provider.Config, provider.Proxy)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -96,7 +97,20 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				},
 			}
 
-			req, err := chatModel.BuildReq(httptrace.WithClientTrace(ctx, trace), header, modelWithProvider.ProviderModel, before.raw)
+			// 格式转换：如果客户端格式与供应商格式不一致，进行转换
+			requestBody := before.raw
+			if style != provider.Type {
+				tm := NewTransformerManager(style, provider.Type)
+				convertedBody, err := tm.ProcessRequest(ctx, before.raw)
+				if err != nil {
+					retryLog <- log.WithError(fmt.Errorf("transform request error: %v", err))
+					delete(weightItems, *id)
+					continue
+				}
+				requestBody = convertedBody
+			}
+
+			req, err := chatModel.BuildReq(httptrace.WithClientTrace(ctx, trace), header, modelWithProvider.ProviderModel, requestBody)
 			if err != nil {
 				retryLog <- log.WithError(err)
 				// 构建请求失败 移除待选
@@ -136,6 +150,19 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 			if err != nil {
 				res.Body.Close()
 				return nil, 0, err
+			}
+
+			// 格式转换：如果客户端格式与供应商格式不一致，转换响应
+			if style != provider.Type {
+				tm := NewTransformerManager(style, provider.Type)
+				convertedRes, err := tm.ProcessResponse(res)
+				if err != nil {
+					retryLog <- log.WithError(fmt.Errorf("transform response error: %v", err))
+					res.Body.Close()
+					delete(weightItems, *id)
+					continue
+				}
+				res = convertedRes
 			}
 
 			applySuccessAdjustments(ctx, *id)
@@ -487,9 +514,10 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 
 	modelWithProviderMap := lo.KeyBy(modelWithProviders, func(mp models.ModelWithProvider) uint { return mp.ID })
 
+	// 不再按 style 过滤供应商，因为现在支持格式转换
+	// 客户端可以使用任意格式请求任意类型的供应商
 	providers, err := gorm.G[models.Provider](models.DB).
 		Where("id IN ?", lo.Map(modelWithProviders, func(mp models.ModelWithProvider, _ int) uint { return mp.ProviderID })).
-		Where("type = ?", style).
 		Find(ctx)
 	if err != nil {
 		return nil, err

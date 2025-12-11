@@ -1,0 +1,383 @@
+请求输入
+格式化 JSON 预览
+{
+  "model": "test",
+  "messages": [
+    {
+      "role": "system",
+      "content": "输出时请严格按照以下风格：\n\n结构清晰：内容必须分成若干部分。\n\n标题格式：每个部分标题必须用二级标题（##），并在标题前加合适的 Emoji（✅ 📖 🔧 💡 🔍 等，可根据内容灵活变化）。\n\n分隔线：各部分之间必须用一整行相同的横线（例如：---），保持统一。\n\n结构清晰：深入分析用户的查询，根据内容特点选择最佳的呈现方式。合理运用段落、标题、列表、表格或代码块等结构工具，善于使用markdown格式，分层组织信息，避免长段文字。\n\n风格简洁：句子简短，轻快，避免堆砌，保持高可读性。\n\n适当强调：重要概念或关键词要用粗体。\n\n语气要求：保持友好、轻松、带一点口语感，避免学术化或僵硬语气。\n\nEmoji 灵活性：允许在正文或列表中适度添加小 Emoji（如 👀、🎯、📌），增加自然感和视觉引导。"
+    },
+    {
+      "role": "user",
+      "content": "1"
+    },
+    {
+      "role": "user",
+      "content": "你是谁？"
+    }
+  ],
+  "stream": true,
+  "temperature": 0.6,
+  "top_p": 1,
+  "stream_options": {
+    "include_usage": true
+  }
+}
+响应输出
+列表中的每一项都会尝试以 JSON 格式展示
+响应片段 1
+
+{
+  "message": {
+    "content": [],
+    "id": "",
+    "model": "claude-sonnet-4.5",
+    "role": "assistant",
+    "stop_reason": null,
+    "stop_sequence": null,
+    "type": "message",
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0
+    }
+  },
+  "type": "message_start"
+}
+响应片段 2
+
+{
+  "type": "ping"
+}
+响应片段 3
+
+{
+  "content_block": {
+    "text": "",
+    "type": "text"
+  },
+  "index": 0,
+  "type": "content_block_start"
+}
+响应片段 4
+
+{
+  "delta": {
+    "text": "我是",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 5
+
+{
+  "delta": {
+    "text": " Amazon Q，由",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 6
+
+{
+  "delta": {
+    "text": " AWS 构",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 7
+
+{
+  "delta": {
+    "text": "建的 ",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 8
+
+{
+  "delta": {
+    "text": "AI 助手。目",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 9
+
+{
+  "delta": {
+    "text": "前我正在通",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 10
+
+{
+  "delta": {
+    "text": "过 `q chat` CLI ",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 11
+
+{
+  "delta": {
+    "text": "命令在你",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 12
+
+{
+  "delta": {
+    "text": "的环境中运行。",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 13
+
+{
+  "delta": {
+    "text": "\n\n我",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 14
+
+{
+  "delta": {
+    "text": "可",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 15
+
+{
+  "delta": {
+    "text": "以帮助你：",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 16
+
+{
+  "delta": {
+    "text": "\n- 管",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 17
+
+{
+  "delta": {
+    "text": "理和查询 AWS 资",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 18
+
+{
+  "delta": {
+    "text": "源\n- 执行 bash",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 19
+
+{
+  "delta": {
+    "text": " 命令\n- 读",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 20
+
+{
+  "delta": {
+    "text": "写",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 21
+
+{
+  "delta": {
+    "text": "本",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 22
+
+{
+  "delta": {
+    "text": "地文件\n- 编",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 23
+
+{
+  "delta": {
+    "text": "写和调",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 24
+
+{
+  "delta": {
+    "text": "试代",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 25
+
+{
+  "delta": {
+    "text": "码\n- 优",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 26
+
+{
+  "delta": {
+    "text": "化基",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 27
+
+{
+  "delta": {
+    "text": "础设施配置\n- ",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 28
+
+{
+  "delta": {
+    "text": "解决技",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 29
+
+{
+  "delta": {
+    "text": "术问题",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 30
+
+{
+  "delta": {
+    "text": "\n\n有",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 31
+
+{
+  "delta": {
+    "text": "什么我可以帮你",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 32
+
+{
+  "delta": {
+    "text": "的",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 33
+
+{
+  "delta": {
+    "text": "吗？",
+    "type": "text_delta"
+  },
+  "index": 0,
+  "type": "content_block_delta"
+}
+响应片段 34
+
+{
+  "index": 0,
+  "type": "content_block_stop"
+}
+响应片段 35
+
+{
+  "delta": {
+    "stop_reason": "end_turn",
+    "stop_sequence": null
+  },
+  "type": "message_delta",
+  "usage": {
+    "output_tokens": 37
+  }
+}
+响应片段 36
+
+{
+  "type": "message_stop"
+}

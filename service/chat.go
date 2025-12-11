@@ -330,23 +330,24 @@ func getAutoPriorityDecayThreshold(ctx context.Context) int {
 func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, processer Processer, logId uint, before Before, ioLog bool) {
 	recordFunc := func() error {
 		defer reader.Close()
-		if ioLog {
-			if err := gorm.G[models.ChatIO](models.DB).Create(ctx, &models.ChatIO{
-				Input: string(before.raw),
-				LogId: logId,
-			}); err != nil {
-				return err
-			}
-		}
+		
 		log, output, err := processer(ctx, reader, before.Stream, reqStart)
 		if err != nil {
 			return err
 		}
+		
+		// 更新日志记录
 		if _, err := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, *log); err != nil {
 			return err
 		}
+		
+		// 只有在启用 IO 日志时才记录输入输出
 		if ioLog {
-			if _, err := gorm.G[models.ChatIO](models.DB).Where("log_id = ?", logId).Updates(ctx, models.ChatIO{OutputUnion: *output}); err != nil {
+			if err := gorm.G[models.ChatIO](models.DB).Create(ctx, &models.ChatIO{
+				Input:       string(before.raw),
+				LogId:       logId,
+				OutputUnion: *output,
+			}); err != nil {
 				return err
 			}
 		}

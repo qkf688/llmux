@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useFieldArray, useForm } from "react-hook-form";
+import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -766,7 +766,14 @@ export default function ModelProvidersPage() {
     modelProviders.map((mp) => buildSelectionKey(mp.ProviderID, mp.ProviderModel))
   );
   const searchKeywordLower = modelSearchKeyword.toLowerCase();
+  const selectedProviderId = useWatch({
+    control: form.control,
+    name: "provider_id"
+  });
   const visibleProviderGroups = providerModelGroups
+    .filter((group) =>
+      selectedProviderId && selectedProviderId > 0 ? group.provider.ID === selectedProviderId : true
+    )
     .map((group) => ({
       ...group,
       models: group.models.filter((model) =>

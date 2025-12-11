@@ -473,8 +473,8 @@ export default function SettingsPage() {
                 type="number"
                 min={1}
                 max={1000}
-                value={settings?.auto_weight_decay_default ?? 100}
-                onChange={(e) => handleAutoWeightDecayDefaultChange(parseInt(e.target.value) || 100)}
+                value={settings?.auto_weight_decay_default ?? 5}
+                onChange={(e) => handleAutoWeightDecayDefaultChange(parseInt(e.target.value) || 5)}
                 className="w-32"
               />
             </div>
@@ -502,7 +502,7 @@ export default function SettingsPage() {
                 <div className="space-y-0.5">
                   <Label className="text-base font-medium">重置所有权重</Label>
                   <p className="text-sm text-muted-foreground">
-                    将所有模型关联的权重重置为默认值 ({settings?.auto_weight_decay_default ?? 100})。
+                    将所有模型关联的权重重置为默认值 ({settings?.auto_weight_decay_default ?? 5})。
                   </p>
                 </div>
                 <Button

@@ -51,7 +51,7 @@ func initDefaultSettings(ctx context.Context) {
 	defaultSettings := []Setting{
 		{Key: SettingKeyStrictCapabilityMatch, Value: "false"},   // 默认关闭严格能力匹配
 		{Key: SettingKeyAutoWeightDecay, Value: "false"},         // 默认关闭自动权重衰减
-		{Key: SettingKeyAutoWeightDecayDefault, Value: "100"},    // 默认权重值100
+		{Key: SettingKeyAutoWeightDecayDefault, Value: "5"},      // 默认权重值5
 		{Key: SettingKeyAutoWeightDecayStep, Value: "1"},         // 默认每次失败减少1
 		{Key: SettingKeyAutoSuccessIncrease, Value: "true"},      // 默认开启成功调用自增
 		{Key: SettingKeyAutoWeightIncreaseStep, Value: "1"},      // 默认每次成功增加1

@@ -178,7 +178,7 @@ export default function ModelProvidersPage() {
       structured_output: false,
       image: false,
       with_header: false,
-      weight: 1,
+      weight: 5,
       priority: 100,
       customer_headers: [],
     },
@@ -413,7 +413,7 @@ export default function ModelProvidersPage() {
         structured_output: false,
         image: false,
         with_header: false,
-        weight: 1,
+        weight: settings?.auto_weight_decay_default || 5,
         priority: 100,
         customer_headers: []
       });
@@ -672,8 +672,8 @@ export default function ModelProvidersPage() {
   const openCreateDialog = () => {
     setEditingAssociation(null);
     setSelectedProviderModels([]);
-    // 如果开启了自动权重衰减，使用设置中的默认权重值
-    const defaultWeight = settings?.auto_weight_decay ? (settings.auto_weight_decay_default || 100) : 1;
+    // 始终使用设置中的默认权重值
+    const defaultWeight = settings?.auto_weight_decay_default || 5;
     form.reset({
       model_id: selectedModelId || 0,
       provider_name: "",

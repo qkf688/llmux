@@ -461,64 +461,60 @@ export default function SettingsPage() {
               />
             </div>
 
-            {settings?.auto_weight_decay && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="auto-weight-decay-default" className="text-base font-medium">
-                    默认权重值
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    重置权重时使用的默认值，也是新创建关联的推荐权重值。
-                  </p>
-                  <Input
-                    id="auto-weight-decay-default"
-                    type="number"
-                    min={1}
-                    max={1000}
-                    value={settings?.auto_weight_decay_default ?? 100}
-                    onChange={(e) => handleAutoWeightDecayDefaultChange(parseInt(e.target.value) || 100)}
-                    className="w-32"
-                  />
-                </div>
+            <div className="space-y-2">
+              <Label htmlFor="auto-weight-decay-default" className="text-base font-medium">
+                默认权重值
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                重置权重时使用的默认值，也是新创建关联的推荐权重值。
+              </p>
+              <Input
+                id="auto-weight-decay-default"
+                type="number"
+                min={1}
+                max={1000}
+                value={settings?.auto_weight_decay_default ?? 100}
+                onChange={(e) => handleAutoWeightDecayDefaultChange(parseInt(e.target.value) || 100)}
+                className="w-32"
+              />
+            </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="auto-weight-decay-step" className="text-base font-medium">
-                    衰减步长
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    每次调用失败时减少的权重值。
-                  </p>
-                  <Input
-                    id="auto-weight-decay-step"
-                    type="number"
-                    min={1}
-                    max={100}
-                    value={settings?.auto_weight_decay_step ?? 1}
-                    onChange={(e) => handleAutoWeightDecayStepChange(parseInt(e.target.value) || 1)}
-                    className="w-32"
-                  />
-                </div>
+            <div className="space-y-2">
+              <Label htmlFor="auto-weight-decay-step" className="text-base font-medium">
+                衰减步长
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                每次调用失败时减少的权重值。
+              </p>
+              <Input
+                id="auto-weight-decay-step"
+                type="number"
+                min={1}
+                max={100}
+                value={settings?.auto_weight_decay_step ?? 1}
+                onChange={(e) => handleAutoWeightDecayStepChange(parseInt(e.target.value) || 1)}
+                className="w-32"
+              />
+            </div>
 
-                <div className="pt-4 border-t">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label className="text-base font-medium">重置所有权重</Label>
-                      <p className="text-sm text-muted-foreground">
-                        将所有模型关联的权重重置为默认值 ({settings?.auto_weight_decay_default ?? 100})。
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      onClick={handleResetAllWeights}
-                      disabled={resettingWeights}
-                    >
-                      {resettingWeights ? <Spinner className="w-4 h-4 mr-2" /> : null}
-                      重置权重
-                    </Button>
-                  </div>
+            <div className="pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base font-medium">重置所有权重</Label>
+                  <p className="text-sm text-muted-foreground">
+                    将所有模型关联的权重重置为默认值 ({settings?.auto_weight_decay_default ?? 100})。
+                  </p>
                 </div>
-              </>
-            )}
+                <Button
+                  variant="outline"
+                  onClick={handleResetAllWeights}
+                  disabled={resettingWeights}
+                >
+                  {resettingWeights ? <Spinner className="w-4 h-4 mr-2" /> : null}
+                  重置权重
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -548,82 +544,78 @@ export default function SettingsPage() {
               />
             </div>
 
-            {settings?.auto_priority_decay && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="auto-priority-decay-default" className="text-base font-medium">
-                    默认优先级值
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    新创建关联的默认优先级值，也是重置优先级时使用的值。
-                  </p>
-                  <Input
-                    id="auto-priority-decay-default"
-                    type="number"
-                    min={1}
-                    max={1000}
-                    value={settings?.auto_priority_decay_default ?? 100}
-                    onChange={(e) => handleAutoPriorityDecayDefaultChange(parseInt(e.target.value) || 100)}
-                    className="w-32"
-                  />
-                </div>
+            <div className="space-y-2">
+              <Label htmlFor="auto-priority-decay-default" className="text-base font-medium">
+                默认优先级值
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                新创建关联的默认优先级值，也是重置优先级时使用的值。
+              </p>
+              <Input
+                id="auto-priority-decay-default"
+                type="number"
+                min={1}
+                max={1000}
+                value={settings?.auto_priority_decay_default ?? 100}
+                onChange={(e) => handleAutoPriorityDecayDefaultChange(parseInt(e.target.value) || 100)}
+                className="w-32"
+              />
+            </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="auto-priority-decay-step" className="text-base font-medium">
-                    衰减步长
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    每次调用失败时减少的优先级值。
-                  </p>
-                  <Input
-                    id="auto-priority-decay-step"
-                    type="number"
-                    min={1}
-                    max={100}
-                    value={settings?.auto_priority_decay_step ?? 1}
-                    onChange={(e) => handleAutoPriorityDecayStepChange(parseInt(e.target.value) || 1)}
-                    className="w-32"
-                  />
-                </div>
+            <div className="space-y-2">
+              <Label htmlFor="auto-priority-decay-step" className="text-base font-medium">
+                衰减步长
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                每次调用失败时减少的优先级值。
+              </p>
+              <Input
+                id="auto-priority-decay-step"
+                type="number"
+                min={1}
+                max={100}
+                value={settings?.auto_priority_decay_step ?? 1}
+                onChange={(e) => handleAutoPriorityDecayStepChange(parseInt(e.target.value) || 1)}
+                className="w-32"
+              />
+            </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="auto-priority-decay-threshold" className="text-base font-medium">
-                    禁用阈值
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    当优先级降到此值或以下时，自动禁用该供应商关联。
-                  </p>
-                  <Input
-                    id="auto-priority-decay-threshold"
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={settings?.auto_priority_decay_threshold ?? 90}
-                    onChange={(e) => handleAutoPriorityDecayThresholdChange(parseInt(e.target.value) || 90)}
-                    className="w-32"
-                  />
-                </div>
+            <div className="space-y-2">
+              <Label htmlFor="auto-priority-decay-threshold" className="text-base font-medium">
+                禁用阈值
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                当优先级降到此值或以下时，自动禁用该供应商关联。
+              </p>
+              <Input
+                id="auto-priority-decay-threshold"
+                type="number"
+                min={0}
+                max={100}
+                value={settings?.auto_priority_decay_threshold ?? 90}
+                onChange={(e) => handleAutoPriorityDecayThresholdChange(parseInt(e.target.value) || 90)}
+                className="w-32"
+              />
+            </div>
 
-                <div className="pt-4 border-t">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label className="text-base font-medium">重置所有优先级</Label>
-                      <p className="text-sm text-muted-foreground">
-                        将所有模型关联的优先级重置为默认值 ({settings?.auto_priority_decay_default ?? 100})，并重新启用所有关联。
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      onClick={handleResetAllPriorities}
-                      disabled={resettingPriorities}
-                    >
-                      {resettingPriorities ? <Spinner className="w-4 h-4 mr-2" /> : null}
-                      重置优先级
-                    </Button>
-                  </div>
+            <div className="pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base font-medium">重置所有优先级</Label>
+                  <p className="text-sm text-muted-foreground">
+                    将所有模型关联的优先级重置为默认值 ({settings?.auto_priority_decay_default ?? 100})，并重新启用所有关联。
+                  </p>
                 </div>
-              </>
-            )}
+                <Button
+                  variant="outline"
+                  onClick={handleResetAllPriorities}
+                  disabled={resettingPriorities}
+                >
+                  {resettingPriorities ? <Spinner className="w-4 h-4 mr-2" /> : null}
+                  重置优先级
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
 

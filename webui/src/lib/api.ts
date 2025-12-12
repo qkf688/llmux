@@ -473,6 +473,17 @@ export async function resetModelPriorities(modelId?: number): Promise<ResetPrior
   });
 }
 
+export interface EnableAssociationsResponse {
+  updated: number;
+}
+
+export async function enableAllAssociations(modelId?: number): Promise<EnableAssociationsResponse> {
+  return apiRequest<EnableAssociationsResponse>('/settings/enable-all-associations', {
+    method: 'POST',
+    body: JSON.stringify({ model_id: modelId }),
+  });
+}
+
 // Log management API functions
 export async function deleteLog(id: number): Promise<void> {
   await apiRequest<void>(`/logs/${id}`, {

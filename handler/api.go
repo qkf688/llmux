@@ -1329,21 +1329,48 @@ func ResetModelPriorities(c *gin.Context) {
 		return
 	}
 
-	// 同时重新启用所有关联模型
+	common.Success(c, map[string]interface{}{
+		"updated":          result,
+		"default_priority": defaultPriority,
+	})
+}
+
+// EnableAllAssociationsRequest 启用所有关联请求结构
+type EnableAllAssociationsRequest struct {
+	ModelID *uint `json:"model_id"` // 可选，为空时启用所有模型的关联
+}
+
+// EnableAllAssociations 启用所有模型关联
+func EnableAllAssociations(c *gin.Context) {
+	var req EnableAllAssociationsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// 启用所有关联模型
 	trueVal := true
+	var result int
+	var err error
 	if req.ModelID != nil {
-		gorm.G[models.ModelWithProvider](models.DB).
+		result, err = gorm.G[models.ModelWithProvider](models.DB).
 			Where("model_id = ?", *req.ModelID).
 			Updates(ctx, models.ModelWithProvider{Status: &trueVal})
 	} else {
-		gorm.G[models.ModelWithProvider](models.DB).
+		result, err = gorm.G[models.ModelWithProvider](models.DB).
 			Where("1 = 1").
 			Updates(ctx, models.ModelWithProvider{Status: &trueVal})
 	}
 
+	if err != nil {
+		common.InternalServerError(c, "Failed to enable associations: "+err.Error())
+		return
+	}
+
 	common.Success(c, map[string]interface{}{
-		"updated":          result,
-		"default_priority": defaultPriority,
+		"updated": result,
 	})
 }
 

@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { getSettings, updateSettings, resetModelWeights, resetModelPriorities, getHealthCheckSettings, updateHealthCheckSettings, runHealthCheckAll } from "@/lib/api";
+import { getSettings, updateSettings, resetModelWeights, resetModelPriorities, enableAllAssociations, getHealthCheckSettings, updateHealthCheckSettings, runHealthCheckAll } from "@/lib/api";
 import type { Settings, HealthCheckSettings } from "@/lib/api";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -17,6 +17,7 @@ export default function SettingsPage() {
   const [savingHealthCheck, setSavingHealthCheck] = useState(false);
   const [resettingWeights, setResettingWeights] = useState(false);
   const [resettingPriorities, setResettingPriorities] = useState(false);
+  const [enablingAssociations, setEnablingAssociations] = useState(false);
   const [runningHealthCheck, setRunningHealthCheck] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [hasHealthCheckChanges, setHasHealthCheckChanges] = useState(false);
@@ -240,11 +241,23 @@ export default function SettingsPage() {
     try {
       setResettingPriorities(true);
       const result = await resetModelPriorities();
-      toast.success(`已重置 ${result.updated} 个模型关联的优先级到 ${result.default_priority}，并重新启用`);
+      toast.success(`已重置 ${result.updated} 个模型关联的优先级到 ${result.default_priority}`);
     } catch (error) {
       toast.error("重置优先级失败: " + (error as Error).message);
     } finally {
       setResettingPriorities(false);
+    }
+  };
+
+  const handleEnableAllAssociations = async () => {
+    try {
+      setEnablingAssociations(true);
+      const result = await enableAllAssociations();
+      toast.success(`已启用 ${result.updated} 个模型关联`);
+    } catch (error) {
+      toast.error("启用关联失败: " + (error as Error).message);
+    } finally {
+      setEnablingAssociations(false);
     }
   };
 
@@ -598,12 +611,12 @@ export default function SettingsPage() {
               />
             </div>
 
-            <div className="pt-4 border-t">
+            <div className="pt-4 border-t space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label className="text-base font-medium">重置所有优先级</Label>
                   <p className="text-sm text-muted-foreground">
-                    将所有模型关联的优先级重置为默认值 ({settings?.auto_priority_decay_default ?? 100})，并重新启用所有关联。
+                    将所有模型关联的优先级重置为默认值 ({settings?.auto_priority_decay_default ?? 100})。
                   </p>
                 </div>
                 <Button
@@ -613,6 +626,22 @@ export default function SettingsPage() {
                 >
                   {resettingPriorities ? <Spinner className="w-4 h-4 mr-2" /> : null}
                   重置优先级
+                </Button>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base font-medium">启用所有关联</Label>
+                  <p className="text-sm text-muted-foreground">
+                    重新启用所有已禁用的模型关联。
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={handleEnableAllAssociations}
+                  disabled={enablingAssociations}
+                >
+                  {enablingAssociations ? <Spinner className="w-4 h-4 mr-2" /> : null}
+                  启用所有关联
                 </Button>
               </div>
             </div>

@@ -92,6 +92,7 @@ func main() {
 	api.PUT("/settings", handler.UpdateSettings)
 	api.POST("/settings/reset-weights", handler.ResetModelWeights)
 	api.POST("/settings/reset-priorities", handler.ResetModelPriorities)
+	api.POST("/settings/enable-all-associations", handler.EnableAllAssociations)
 
 	// Health check management
 	api.GET("/health-check/settings", handler.GetHealthCheckSettings)

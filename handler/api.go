@@ -887,42 +887,44 @@ func GetUserAgents(c *gin.Context) {
 
 // SettingsResponse 设置响应结构
 type SettingsResponse struct {
-	StrictCapabilityMatch      bool `json:"strict_capability_match"`
-	AutoWeightDecay            bool `json:"auto_weight_decay"`
-	AutoWeightDecayDefault     int  `json:"auto_weight_decay_default"`
-	AutoWeightDecayStep        int  `json:"auto_weight_decay_step"`
-	AutoSuccessIncrease        bool `json:"auto_success_increase"`
-	AutoWeightIncreaseStep     int  `json:"auto_weight_increase_step"`
-	AutoWeightIncreaseMax      int  `json:"auto_weight_increase_max"`
-	AutoPriorityDecay          bool `json:"auto_priority_decay"`
-	AutoPriorityDecayDefault   int  `json:"auto_priority_decay_default"`
-	AutoPriorityDecayStep      int  `json:"auto_priority_decay_step"`
-	AutoPriorityDecayThreshold int  `json:"auto_priority_decay_threshold"`
-	AutoPriorityIncreaseStep   int  `json:"auto_priority_increase_step"`
-	AutoPriorityIncreaseMax    int  `json:"auto_priority_increase_max"`
-	LogRetentionCount          int  `json:"log_retention_count"`
-	CountHealthCheckAsSuccess  bool `json:"count_health_check_as_success"`
-	CountHealthCheckAsFailure  bool `json:"count_health_check_as_failure"`
+	StrictCapabilityMatch           bool `json:"strict_capability_match"`
+	AutoWeightDecay                 bool `json:"auto_weight_decay"`
+	AutoWeightDecayDefault          int  `json:"auto_weight_decay_default"`
+	AutoWeightDecayStep             int  `json:"auto_weight_decay_step"`
+	AutoSuccessIncrease             bool `json:"auto_success_increase"`
+	AutoWeightIncreaseStep          int  `json:"auto_weight_increase_step"`
+	AutoWeightIncreaseMax           int  `json:"auto_weight_increase_max"`
+	AutoPriorityDecay               bool `json:"auto_priority_decay"`
+	AutoPriorityDecayDefault        int  `json:"auto_priority_decay_default"`
+	AutoPriorityDecayStep           int  `json:"auto_priority_decay_step"`
+	AutoPriorityDecayThreshold      int  `json:"auto_priority_decay_threshold"`
+	AutoPriorityDecayDisableEnabled bool `json:"auto_priority_decay_disable_enabled"`
+	AutoPriorityIncreaseStep        int  `json:"auto_priority_increase_step"`
+	AutoPriorityIncreaseMax         int  `json:"auto_priority_increase_max"`
+	LogRetentionCount               int  `json:"log_retention_count"`
+	CountHealthCheckAsSuccess       bool `json:"count_health_check_as_success"`
+	CountHealthCheckAsFailure       bool `json:"count_health_check_as_failure"`
 }
 
 // UpdateSettingsRequest 更新设置请求结构
 type UpdateSettingsRequest struct {
-	StrictCapabilityMatch      bool `json:"strict_capability_match"`
-	AutoWeightDecay            bool `json:"auto_weight_decay"`
-	AutoWeightDecayDefault     int  `json:"auto_weight_decay_default"`
-	AutoWeightDecayStep        int  `json:"auto_weight_decay_step"`
-	AutoSuccessIncrease        bool `json:"auto_success_increase"`
-	AutoWeightIncreaseStep     int  `json:"auto_weight_increase_step"`
-	AutoWeightIncreaseMax      int  `json:"auto_weight_increase_max"`
-	AutoPriorityDecay          bool `json:"auto_priority_decay"`
-	AutoPriorityDecayDefault   int  `json:"auto_priority_decay_default"`
-	AutoPriorityDecayStep      int  `json:"auto_priority_decay_step"`
-	AutoPriorityDecayThreshold int  `json:"auto_priority_decay_threshold"`
-	AutoPriorityIncreaseStep   int  `json:"auto_priority_increase_step"`
-	AutoPriorityIncreaseMax    int  `json:"auto_priority_increase_max"`
-	LogRetentionCount          int  `json:"log_retention_count"`
-	CountHealthCheckAsSuccess  bool `json:"count_health_check_as_success"`
-	CountHealthCheckAsFailure  bool `json:"count_health_check_as_failure"`
+	StrictCapabilityMatch           bool `json:"strict_capability_match"`
+	AutoWeightDecay                 bool `json:"auto_weight_decay"`
+	AutoWeightDecayDefault          int  `json:"auto_weight_decay_default"`
+	AutoWeightDecayStep             int  `json:"auto_weight_decay_step"`
+	AutoSuccessIncrease             bool `json:"auto_success_increase"`
+	AutoWeightIncreaseStep          int  `json:"auto_weight_increase_step"`
+	AutoWeightIncreaseMax           int  `json:"auto_weight_increase_max"`
+	AutoPriorityDecay               bool `json:"auto_priority_decay"`
+	AutoPriorityDecayDefault        int  `json:"auto_priority_decay_default"`
+	AutoPriorityDecayStep           int  `json:"auto_priority_decay_step"`
+	AutoPriorityDecayThreshold      int  `json:"auto_priority_decay_threshold"`
+	AutoPriorityDecayDisableEnabled bool `json:"auto_priority_decay_disable_enabled"`
+	AutoPriorityIncreaseStep        int  `json:"auto_priority_increase_step"`
+	AutoPriorityIncreaseMax         int  `json:"auto_priority_increase_max"`
+	LogRetentionCount               int  `json:"log_retention_count"`
+	CountHealthCheckAsSuccess       bool `json:"count_health_check_as_success"`
+	CountHealthCheckAsFailure       bool `json:"count_health_check_as_failure"`
 }
 
 // GetSettings 获取所有设置
@@ -935,22 +937,23 @@ func GetSettings(c *gin.Context) {
 
 	// 构建响应
 	response := SettingsResponse{
-		StrictCapabilityMatch:      true, // 默认值
-		AutoWeightDecay:            false,
-		AutoWeightDecayDefault:     100,
-		AutoWeightDecayStep:        1,
-		AutoSuccessIncrease:        true,
-		AutoWeightIncreaseStep:     1,
-		AutoWeightIncreaseMax:      100,
-		AutoPriorityDecay:          false,
-		AutoPriorityDecayDefault:   100,
-		AutoPriorityDecayStep:      1,
-		AutoPriorityDecayThreshold: 90,
-		LogRetentionCount:          100, // 默认保留100条
-		AutoPriorityIncreaseStep:   1,
-		AutoPriorityIncreaseMax:    100,
-		CountHealthCheckAsSuccess:  true,
-		CountHealthCheckAsFailure:  false,
+		StrictCapabilityMatch:           true, // 默认值
+		AutoWeightDecay:                 false,
+		AutoWeightDecayDefault:          100,
+		AutoWeightDecayStep:             1,
+		AutoSuccessIncrease:             true,
+		AutoWeightIncreaseStep:          1,
+		AutoWeightIncreaseMax:           100,
+		AutoPriorityDecay:               false,
+		AutoPriorityDecayDefault:        100,
+		AutoPriorityDecayStep:           1,
+		AutoPriorityDecayThreshold:      90,
+		AutoPriorityDecayDisableEnabled: true, // 默认启用自动禁用功能
+		LogRetentionCount:               100,  // 默认保留100条
+		AutoPriorityIncreaseStep:        1,
+		AutoPriorityIncreaseMax:         100,
+		CountHealthCheckAsSuccess:       true,
+		CountHealthCheckAsFailure:       false,
 	}
 
 	for _, setting := range settings {
@@ -991,6 +994,8 @@ func GetSettings(c *gin.Context) {
 			if val, err := strconv.Atoi(setting.Value); err == nil {
 				response.AutoPriorityDecayThreshold = val
 			}
+		case models.SettingKeyAutoPriorityDecayDisableEnabled:
+			response.AutoPriorityDecayDisableEnabled = setting.Value == "true"
 		case models.SettingKeyAutoPriorityIncreaseStep:
 			if val, err := strconv.Atoi(setting.Value); err == nil {
 				response.AutoPriorityIncreaseStep = val
@@ -1128,6 +1133,18 @@ func UpdateSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyAutoPriorityDecayThreshold).
 		Update(ctx, "value", strconv.Itoa(req.AutoPriorityDecayThreshold)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新自动优先级衰减禁用开关
+	autoPriorityDecayDisableEnabledValue := "false"
+	if req.AutoPriorityDecayDisableEnabled {
+		autoPriorityDecayDisableEnabledValue = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyAutoPriorityDecayDisableEnabled).
+		Update(ctx, "value", autoPriorityDecayDisableEnabledValue); err != nil {
 		common.InternalServerError(c, "Failed to update settings: "+err.Error())
 		return
 	}

@@ -118,13 +118,14 @@ const (
 	SettingKeyAutoWeightIncreaseStep = "auto_weight_increase_step" // 自动权重增加步长（每次成功增加的权重）
 	SettingKeyAutoWeightIncreaseMax  = "auto_weight_increase_max"  // 自动权重增加的上限
 
-	SettingKeyAutoPriorityDecay          = "auto_priority_decay"           // 自动优先级衰减开关
-	SettingKeyAutoPriorityDecayDefault   = "auto_priority_decay_default"   // 自动优先级衰减默认优先级
-	SettingKeyAutoPriorityDecayStep      = "auto_priority_decay_step"      // 自动优先级衰减步长（每次失败减少的优先级）
-	SettingKeyAutoPriorityDecayThreshold = "auto_priority_decay_threshold" // 自动优先级衰减阈值（达到此值自动禁用）
-	SettingKeyAutoPriorityIncreaseStep   = "auto_priority_increase_step"   // 自动优先级增加步长（每次成功增加的优先级）
-	SettingKeyAutoPriorityIncreaseMax    = "auto_priority_increase_max"    // 自动优先级增加的上限
-	SettingKeyAutoSuccessIncrease        = "auto_success_increase"         // 成功调用后是否执行自增
+	SettingKeyAutoPriorityDecay                = "auto_priority_decay"                  // 自动优先级衰减开关
+	SettingKeyAutoPriorityDecayDefault         = "auto_priority_decay_default"         // 自动优先级衰减默认优先级
+	SettingKeyAutoPriorityDecayStep            = "auto_priority_decay_step"            // 自动优先级衰减步长（每次失败减少的优先级）
+	SettingKeyAutoPriorityDecayThreshold       = "auto_priority_decay_threshold"       // 自动优先级衰减阈值（达到此值自动禁用）
+	SettingKeyAutoPriorityDecayDisableEnabled  = "auto_priority_decay_disable_enabled" // 是否启用自动禁用功能（达到阈值时禁用）
+	SettingKeyAutoPriorityIncreaseStep         = "auto_priority_increase_step"         // 自动优先级增加步长（每次成功增加的优先级）
+	SettingKeyAutoPriorityIncreaseMax          = "auto_priority_increase_max"          // 自动优先级增加的上限
+	SettingKeyAutoSuccessIncrease              = "auto_success_increase"               // 成功调用后是否执行自增
 
 	SettingKeyLogRetentionCount = "log_retention_count" // 日志保留条数，0表示不限制
 

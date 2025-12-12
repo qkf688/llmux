@@ -200,6 +200,7 @@ func applyPriorityDecayByModelProviderID(ctx context.Context, modelProviderID ui
 
 	decayStep := getAutoPriorityDecayStep(ctx)
 	threshold := getAutoPriorityDecayThreshold(ctx)
+	disableEnabled := getAutoPriorityDecayDisableEnabled(ctx)
 
 	mp, err := gorm.G[models.ModelWithProvider](models.DB).Where("id = ?", modelProviderID).First(ctx)
 	if err != nil {
@@ -223,7 +224,8 @@ func applyPriorityDecayByModelProviderID(ctx context.Context, modelProviderID ui
 
 	slog.Info("priority decay applied", "provider", providerName, "model", providerModel, "id", modelProviderID, "old_priority", mp.Priority, "new_priority", newPriority)
 
-	if newPriority <= threshold {
+	// 只有在启用自动禁用功能时才执行禁用操作
+	if disableEnabled && newPriority <= threshold {
 		falseVal := false
 		if _, err := gorm.G[models.ModelWithProvider](models.DB).
 			Where("id = ?", modelProviderID).
@@ -253,6 +255,17 @@ func shouldCountHealthCheckFailure(ctx context.Context) bool {
 		First(ctx)
 	if err != nil {
 		return false
+	}
+	return setting.Value == "true"
+}
+
+// getAutoPriorityDecayDisableEnabled 获取自动优先级衰减禁用开关
+func getAutoPriorityDecayDisableEnabled(ctx context.Context) bool {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyAutoPriorityDecayDisableEnabled).
+		First(ctx)
+	if err != nil {
+		return true // 默认启用自动禁用功能
 	}
 	return setting.Value == "true"
 }

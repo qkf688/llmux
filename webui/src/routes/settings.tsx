@@ -167,6 +167,14 @@ export default function SettingsPage() {
     }
   };
 
+  const handleAutoPriorityDecayDisableEnabledChange = (checked: boolean) => {
+    if (settings) {
+      const newSettings = { ...settings, auto_priority_decay_disable_enabled: checked };
+      setSettings(newSettings);
+      checkHasChanges(newSettings);
+    }
+  };
+
   const handleAutoPriorityIncreaseStepChange = (value: number) => {
     if (settings) {
       const newSettings = { ...settings, auto_priority_increase_step: value };
@@ -217,6 +225,7 @@ export default function SettingsPage() {
       baseline.auto_priority_decay_default !== newSettings.auto_priority_decay_default ||
       baseline.auto_priority_decay_step !== newSettings.auto_priority_decay_step ||
       baseline.auto_priority_decay_threshold !== newSettings.auto_priority_decay_threshold ||
+      baseline.auto_priority_decay_disable_enabled !== newSettings.auto_priority_decay_disable_enabled ||
       baseline.auto_priority_increase_step !== newSettings.auto_priority_increase_step ||
       baseline.auto_priority_increase_max !== newSettings.auto_priority_increase_max ||
       baseline.log_retention_count !== newSettings.log_retention_count ||
@@ -593,22 +602,40 @@ export default function SettingsPage() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="auto-priority-decay-threshold" className="text-base font-medium">
-                禁用阈值
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                当优先级降到此值或以下时，自动禁用该供应商关联。
-              </p>
-              <Input
-                id="auto-priority-decay-threshold"
-                type="number"
-                min={0}
-                max={100}
-                value={settings?.auto_priority_decay_threshold ?? 90}
-                onChange={(e) => handleAutoPriorityDecayThresholdChange(parseInt(e.target.value) || 90)}
-                className="w-32"
-              />
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="auto-priority-decay-disable-enabled" className="text-base font-medium">
+                    启用自动禁用
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    开启后，当优先级降到禁用阈值时，自动禁用该供应商关联。关闭后仅衰减优先级，不会自动禁用。
+                  </p>
+                </div>
+                <Switch
+                  id="auto-priority-decay-disable-enabled"
+                  checked={settings?.auto_priority_decay_disable_enabled ?? true}
+                  onCheckedChange={handleAutoPriorityDecayDisableEnabledChange}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="auto-priority-decay-threshold" className="text-base font-medium">
+                  禁用阈值
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  当优先级降到此值或以下时的处理策略，由上方开关控制是否自动禁用。
+                </p>
+                <Input
+                  id="auto-priority-decay-threshold"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={settings?.auto_priority_decay_threshold ?? 90}
+                  onChange={(e) => handleAutoPriorityDecayThresholdChange(parseInt(e.target.value) || 90)}
+                  className="w-32"
+                />
+              </div>
             </div>
 
             <div className="pt-4 border-t space-y-4">

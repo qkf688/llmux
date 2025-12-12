@@ -431,6 +431,7 @@ export interface Settings {
   auto_priority_decay_default: number;
   auto_priority_decay_step: number;
   auto_priority_decay_threshold: number;
+  auto_priority_decay_disable_enabled: boolean;
   auto_priority_increase_step: number;
   auto_priority_increase_max: number;
   log_retention_count: number;

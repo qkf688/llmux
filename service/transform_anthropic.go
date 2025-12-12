@@ -68,8 +68,11 @@ func TransformUnifiedToAnthropic(unified *UnifiedRequest) ([]byte, error) {
 		"stream":   unified.Stream,
 	}
 
+	// Anthropic 格式要求必须有 max_tokens,如果没有设置则使用默认值
 	if unified.MaxTokens > 0 {
 		req["max_tokens"] = unified.MaxTokens
+	} else {
+		req["max_tokens"] = 4096 // 设置默认值
 	}
 	if unified.Temperature != nil {
 		req["temperature"] = *unified.Temperature
@@ -83,7 +86,35 @@ func TransformUnifiedToAnthropic(unified *UnifiedRequest) ([]byte, error) {
 
 	// 转换消息
 	messages := []interface{}{}
+	
+	// 先统计非 system 消息的数量
+	nonSystemCount := 0
 	for _, msg := range unified.Messages {
+		if msg.Role != "system" {
+			nonSystemCount++
+		}
+	}
+	
+	// 只有在有非 system 消息时才提取 system 消息
+	extractSystem := nonSystemCount > 0
+	
+	for _, msg := range unified.Messages {
+		// Anthropic 格式只接受 user 和 assistant 角色
+		// 只在有其他消息时才将 system 消息提取到单独字段
+		if msg.Role == "system" && extractSystem {
+			// 将 system 消息内容合并到 system 字段
+			if msg.Content != nil {
+				if contentStr, ok := msg.Content.(string); ok && contentStr != "" {
+					if existing, ok := req["system"].(string); ok && existing != "" {
+						req["system"] = existing + "\n\n" + contentStr
+					} else {
+						req["system"] = contentStr
+					}
+				}
+			}
+			continue // 跳过此消息，不添加到 messages 数组
+		}
+
 		msgMap := map[string]interface{}{
 			"role": msg.Role,
 		}

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -35,10 +36,37 @@ func TransformOpenAIToUnified(rawBody []byte) (*UnifiedRequest, error) {
 
 	// 转换消息
 	if messages, ok := req["messages"].([]interface{}); ok {
+		// 先统计非 system 消息的数量
+		nonSystemCount := 0
 		for _, msg := range messages {
 			msgMap := msg.(map[string]interface{})
+			if getString(msgMap, "role") != "system" {
+				nonSystemCount++
+			}
+		}
+
+		// 只有在有非 system 消息时才提取 system 消息
+		// 否则保持原样以便提供商返回合适的错误
+		extractSystem := nonSystemCount > 0
+
+		for _, msg := range messages {
+			msgMap := msg.(map[string]interface{})
+			role := getString(msgMap, "role")
+
+			// 只在有其他消息时才提取 system 消息
+			if role == "system" && extractSystem {
+				if content, ok := msgMap["content"].(string); ok && content != "" {
+					if unified.System != "" {
+						unified.System += "\n\n" + content
+					} else {
+						unified.System = content
+					}
+				}
+				continue // 不将 system 消息添加到 messages 数组
+			}
+
 			unified.Messages = append(unified.Messages, UnifiedMessage{
-				Role:      getString(msgMap, "role"),
+				Role:      role,
 				Content:   msgMap["content"],
 				ToolCalls: parseOpenAIToolCalls(msgMap),
 			})
@@ -85,6 +113,15 @@ func TransformUnifiedToOpenAI(unified *UnifiedRequest) ([]byte, error) {
 
 	// 转换消息
 	messages := []interface{}{}
+
+	// 如果有 system 字段,添加为第一条消息
+	if unified.System != "" {
+		messages = append(messages, map[string]interface{}{
+			"role":    "system",
+			"content": unified.System,
+		})
+	}
+
 	for _, msg := range unified.Messages {
 		msgMap := map[string]interface{}{
 			"role": msg.Role,
@@ -139,20 +176,21 @@ func TransformProviderResponse(response *http.Response, providerType, clientType
 		return response, nil
 	}
 
-	// 读取响应体
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		return nil, err
-	}
-	response.Body.Close()
-
 	// 检查是否是流式响应
 	contentType := response.Header.Get("Content-Type")
 	isStream := strings.Contains(contentType, "text/event-stream")
 
 	if isStream {
-		return transformStreamResponse(response, body, providerType, clientType)
+		// 流式响应：直接从 Body 读取器进行实时转换
+		return transformStreamResponseRealtime(response, providerType, clientType)
 	}
+
+	// 非流式响应：读取完整响应体后转换
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, err
+	}
+	response.Body.Close()
 
 	return transformNonStreamResponse(response, body, providerType, clientType)
 }
@@ -205,15 +243,274 @@ func transformNonStreamResponse(response *http.Response, body []byte, providerTy
 	return newResponse, nil
 }
 
+// transformStreamResponseRealtime 实时流式响应转换（直接从 Body 读取器转换）
+func transformStreamResponseRealtime(response *http.Response, providerType, clientType string) (*http.Response, error) {
+	pr, pw := io.Pipe()
+
+	go func() {
+		defer pw.Close()
+		defer response.Body.Close()
+
+		scanner := bufio.NewScanner(response.Body)
+		scanner.Buffer(make([]byte, 0, 8192), 1024*1024)
+
+		var currentEvent string
+		for scanner.Scan() {
+			line := scanner.Text()
+			if line == "" {
+				// 空行是 SSE 消息分隔符
+				currentEvent = "" // 重置事件类型
+				continue
+			}
+	
+			// 处理 event 行（记录事件类型）- 兼容带空格和不带空格两种格式
+			if strings.HasPrefix(line, "event:") {
+				currentEvent = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+				continue
+			}
+	
+			// 处理 data 行 - 兼容带空格和不带空格两种格式
+			if !strings.HasPrefix(line, "data:") {
+				continue
+			}
+	
+			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+			if data == "" {
+				continue
+			}
+	
+			// Anthropic → OpenAI 转换
+			if providerType == "anthropic" && clientType == "openai" {
+				if data == "[DONE]" {
+					fmt.Fprintf(pw, "data: [DONE]\n\n")
+					continue
+				}
+
+				var chunk map[string]interface{}
+				if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+					continue
+				}
+
+				// 优先使用 event 行的事件类型,如果没有则从 JSON 中获取
+				eventType := currentEvent
+				if eventType == "" {
+					eventType = getString(chunk, "type")
+				}
+
+				switch eventType {
+				case "message_start", "content_block_start", "ping", "content_block_stop":
+					// 忽略这些事件
+					continue
+
+				case "content_block_delta":
+					// 提取文本内容并转换为 OpenAI 格式
+					if delta, ok := chunk["delta"].(map[string]interface{}); ok {
+						if text := getString(delta, "text"); text != "" {
+							openaiChunk := map[string]interface{}{
+								"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+								"object":  "chat.completion.chunk",
+								"created": time.Now().Unix(),
+								"model":   "claude",
+								"choices": []map[string]interface{}{
+									{
+										"index": 0,
+										"delta": map[string]interface{}{
+											"content": text,
+										},
+										"finish_reason": nil,
+									},
+								},
+							}
+							chunkData, _ := json.Marshal(openaiChunk)
+							fmt.Fprintf(pw, "data: %s\n\n", string(chunkData))
+						}
+					}
+
+				case "message_delta":
+					// 发送结束块
+					stopReason := "stop"
+					if delta, ok := chunk["delta"].(map[string]interface{}); ok {
+						if reason := getString(delta, "stop_reason"); reason != "" {
+							if reason == "end_turn" {
+								stopReason = "stop"
+							} else if reason == "tool_use" {
+								stopReason = "tool_calls"
+							}
+						}
+					}
+
+					finalChunk := map[string]interface{}{
+						"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+						"object":  "chat.completion.chunk",
+						"created": time.Now().Unix(),
+						"model":   "claude",
+						"choices": []map[string]interface{}{
+							{
+								"index":         0,
+								"delta":         map[string]interface{}{},
+								"finish_reason": stopReason,
+							},
+						},
+					}
+
+					// 添加 usage 信息
+					if usage, ok := chunk["usage"].(map[string]interface{}); ok {
+						finalChunk["usage"] = map[string]interface{}{
+							"prompt_tokens":     int(getFloat(usage, "input_tokens")),
+							"completion_tokens": int(getFloat(usage, "output_tokens")),
+							"total_tokens":      int(getFloat(usage, "input_tokens") + getFloat(usage, "output_tokens")),
+						}
+					}
+
+					chunkData, _ := json.Marshal(finalChunk)
+					fmt.Fprintf(pw, "data: %s\n\n", string(chunkData))
+
+				case "message_stop":
+					// 发送 [DONE]
+					fmt.Fprintf(pw, "data: [DONE]\n\n")
+				}
+			} else if providerType == "openai" && clientType == "anthropic" {
+				// OpenAI → Anthropic 转换
+				if data == "[DONE]" {
+					messageStop := map[string]interface{}{"type": "message_stop"}
+					stopData, _ := json.Marshal(messageStop)
+					fmt.Fprintf(pw, "event: message_stop\ndata: %s\n\n", string(stopData))
+					continue
+				}
+
+				var chunk map[string]interface{}
+				if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+					continue
+				}
+
+				if choices, ok := chunk["choices"].([]interface{}); ok && len(choices) > 0 {
+					choice := choices[0].(map[string]interface{})
+
+					if delta, ok := choice["delta"].(map[string]interface{}); ok {
+						// 处理角色信息（第一个chunk）
+						if role := getString(delta, "role"); role != "" {
+							messageStart := map[string]interface{}{
+								"type": "message_start",
+								"message": map[string]interface{}{
+									"id":      getString(chunk, "id"),
+									"type":    "message",
+									"role":    "assistant",
+									"content": []interface{}{},
+									"model":   getString(chunk, "model"),
+									"usage": map[string]interface{}{
+										"input_tokens":  0,
+										"output_tokens": 0,
+									},
+								},
+							}
+							startData, _ := json.Marshal(messageStart)
+							fmt.Fprintf(pw, "event: message_start\ndata: %s\n\n", string(startData))
+
+							blockStart := map[string]interface{}{
+								"type":  "content_block_start",
+								"index": 0,
+								"content_block": map[string]interface{}{
+									"type": "text",
+									"text": "",
+								},
+							}
+							blockData, _ := json.Marshal(blockStart)
+							fmt.Fprintf(pw, "event: content_block_start\ndata: %s\n\n", string(blockData))
+						}
+
+						// 处理内容
+						if content := getString(delta, "content"); content != "" {
+							contentDelta := map[string]interface{}{
+								"type":  "content_block_delta",
+								"index": 0,
+								"delta": map[string]interface{}{
+									"type": "text_delta",
+									"text": content,
+								},
+							}
+							contentDeltaData, _ := json.Marshal(contentDelta)
+							fmt.Fprintf(pw, "event: content_block_delta\ndata: %s\n\n", string(contentDeltaData))
+						}
+
+						// 处理结束
+						if finishReason := getString(choice, "finish_reason"); finishReason != "" {
+							blockStop := map[string]interface{}{
+								"type":  "content_block_stop",
+								"index": 0,
+							}
+							stopData, _ := json.Marshal(blockStop)
+							fmt.Fprintf(pw, "event: content_block_stop\ndata: %s\n\n", string(stopData))
+
+							stopReason := "end_turn"
+							if finishReason == "tool_calls" {
+								stopReason = "tool_use"
+							} else if finishReason == "length" {
+								stopReason = "max_tokens"
+							}
+
+							messageDelta := map[string]interface{}{
+								"type": "message_delta",
+								"delta": map[string]interface{}{
+									"stop_reason": stopReason,
+								},
+							}
+
+							if usage, ok := chunk["usage"].(map[string]interface{}); ok {
+								messageDelta["usage"] = map[string]interface{}{
+									"input_tokens":  int(getFloat(usage, "prompt_tokens")),
+									"output_tokens": int(getFloat(usage, "completion_tokens")),
+								}
+							}
+
+							messageDeltaData, _ := json.Marshal(messageDelta)
+							fmt.Fprintf(pw, "event: message_delta\ndata: %s\n\n", string(messageDeltaData))
+
+							messageStop := map[string]interface{}{"type": "message_stop"}
+							stopMsgData, _ := json.Marshal(messageStop)
+							fmt.Fprintf(pw, "event: message_stop\ndata: %s\n\n", string(stopMsgData))
+						}
+					}
+				}
+			} else {
+				// 其他场景：直接透传
+				fmt.Fprintf(pw, "data: %s\n\n", data)
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			pw.CloseWithError(err)
+		}
+	}()
+
+	newResponse := &http.Response{
+		Status:        response.Status,
+		StatusCode:    response.StatusCode,
+		Proto:         response.Proto,
+		ProtoMajor:    response.ProtoMajor,
+		ProtoMinor:    response.ProtoMinor,
+		Header:        response.Header.Clone(),
+		Body:          pr,
+		ContentLength: -1,
+	}
+
+	return newResponse, nil
+}
+
+// transformStreamResponse 流式响应转换（从完整 body 转换，用于兼容旧代码）
 func transformStreamResponse(response *http.Response, body []byte, providerType, clientType string) (*http.Response, error) {
 	pr, pw := io.Pipe()
 
 	go func() {
 		defer pw.Close()
 
-		// 如果格式相同，直接透传
+		// 如果格式相同，逐行透传以保持流式特性
 		if providerType == clientType {
-			pw.Write(body)
+			lines := strings.Split(string(body), "\n")
+			for _, line := range lines {
+				if line != "" {
+					fmt.Fprintf(pw, "%s\n", line)
+				}
+			}
 			return
 		}
 

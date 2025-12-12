@@ -93,22 +93,19 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 			reqStart := time.Now()
 			trace := &httptrace.ClientTrace{
 				GotFirstResponseByte: func() {
-					fmt.Printf("响应时间: %v", time.Since(reqStart))
+					slog.Debug("first response byte received", "response_time", time.Since(reqStart))
 				},
 			}
 
-			// 格式转换：如果客户端格式与供应商格式不一致，进行转换
-			requestBody := before.raw
-			if style != provider.Type {
-				tm := NewTransformerManager(style, provider.Type)
-				convertedBody, err := tm.ProcessRequest(ctx, before.raw)
-				if err != nil {
-					retryLog <- log.WithError(fmt.Errorf("transform request error: %v", err))
-					delete(weightItems, *id)
-					continue
-				}
-				requestBody = convertedBody
+			// 格式转换：总是进行转换以确保数据标准化(处理 system 消息、max_tokens 等)
+			tm := NewTransformerManager(style, provider.Type)
+			convertedBody, err := tm.ProcessRequest(ctx, before.raw)
+			if err != nil {
+				retryLog <- log.WithError(fmt.Errorf("transform request error: %v", err))
+				delete(weightItems, *id)
+				continue
 			}
+			requestBody := convertedBody
 
 			req, err := chatModel.BuildReq(httptrace.WithClientTrace(ctx, trace), header, modelWithProvider.ProviderModel, requestBody)
 			if err != nil {
@@ -152,18 +149,15 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				return nil, 0, err
 			}
 
-			// 格式转换：如果客户端格式与供应商格式不一致，转换响应
-			if style != provider.Type {
-				tm := NewTransformerManager(style, provider.Type)
-				convertedRes, err := tm.ProcessResponse(res)
-				if err != nil {
-					retryLog <- log.WithError(fmt.Errorf("transform response error: %v", err))
-					res.Body.Close()
-					delete(weightItems, *id)
-					continue
-				}
-				res = convertedRes
+			// 格式转换：总是进行转换以确保响应格式标准化
+			convertedRes, err := tm.ProcessResponse(res)
+			if err != nil {
+				retryLog <- log.WithError(fmt.Errorf("transform response error: %v", err))
+				res.Body.Close()
+				delete(weightItems, *id)
+				continue
 			}
+			res = convertedRes
 
 			applySuccessAdjustments(ctx, *id)
 			return res, logId, nil
@@ -330,17 +324,17 @@ func getAutoPriorityDecayThreshold(ctx context.Context) int {
 func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, processer Processer, logId uint, before Before, ioLog bool) {
 	recordFunc := func() error {
 		defer reader.Close()
-		
+
 		log, output, err := processer(ctx, reader, before.Stream, reqStart)
 		if err != nil {
 			return err
 		}
-		
+
 		// 更新日志记录
 		if _, err := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, *log); err != nil {
 			return err
 		}
-		
+
 		// 只有在启用 IO 日志时才记录输入输出
 		if ioLog {
 			if err := gorm.G[models.ChatIO](models.DB).Create(ctx, &models.ChatIO{

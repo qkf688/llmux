@@ -8,3 +8,5 @@ db
 .spec-workflow
 CLAUDE.md
 .gocache
+test.txt
+test_stream.bat

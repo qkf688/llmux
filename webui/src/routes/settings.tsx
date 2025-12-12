@@ -295,6 +295,14 @@ export default function SettingsPage() {
     }
   };
 
+  const handleHealthCheckFailureDisableEnabledChange = (checked: boolean) => {
+    if (healthCheckSettings) {
+      const newSettings = { ...healthCheckSettings, failure_disable_enabled: checked };
+      setHealthCheckSettings(newSettings);
+      checkHealthCheckHasChanges(newSettings);
+    }
+  };
+
   const handleHealthCheckAutoEnableChange = (checked: boolean) => {
     if (healthCheckSettings) {
       const newSettings = { ...healthCheckSettings, auto_enable: checked };
@@ -335,6 +343,7 @@ export default function SettingsPage() {
       originalHealthCheckSettings.enabled !== newSettings.enabled ||
       originalHealthCheckSettings.interval !== newSettings.interval ||
       originalHealthCheckSettings.failure_threshold !== newSettings.failure_threshold ||
+      originalHealthCheckSettings.failure_disable_enabled !== newSettings.failure_disable_enabled ||
       originalHealthCheckSettings.auto_enable !== newSettings.auto_enable ||
       originalHealthCheckSettings.log_retention_count !== newSettings.log_retention_count ||
       originalHealthCheckSettings.count_health_check_as_success !== newSettings.count_health_check_as_success ||
@@ -890,22 +899,40 @@ export default function SettingsPage() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="health-check-failure-threshold" className="text-base font-medium">
-                失败次数阈值
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                连续检测失败达到此次数后，自动禁用该模型提供商。
-              </p>
-              <Input
-                id="health-check-failure-threshold"
-                type="number"
-                min={1}
-                max={10}
-                value={healthCheckSettings?.failure_threshold ?? 3}
-                onChange={(e) => handleHealthCheckFailureThresholdChange(parseInt(e.target.value) || 3)}
-                className="w-32"
-              />
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="health-check-failure-disable-enabled" className="text-base font-medium">
+                    启用失败自动禁用
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    开启后，当连续失败次数达到阈值时，自动禁用该供应商关联。关闭后仅记录失败状态，不会自动禁用。
+                  </p>
+                </div>
+                <Switch
+                  id="health-check-failure-disable-enabled"
+                  checked={healthCheckSettings?.failure_disable_enabled ?? true}
+                  onCheckedChange={handleHealthCheckFailureDisableEnabledChange}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="health-check-failure-threshold" className="text-base font-medium">
+                  失败次数阈值
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  连续检测失败次数的阈值，达到此值后的处理策略由上方开关控制。
+                </p>
+                <Input
+                  id="health-check-failure-threshold"
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={healthCheckSettings?.failure_threshold ?? 3}
+                  onChange={(e) => handleHealthCheckFailureThresholdChange(parseInt(e.target.value) || 3)}
+                  className="w-32"
+                />
+              </div>
             </div>
 
             <div className="space-y-2">

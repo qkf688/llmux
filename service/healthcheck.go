@@ -297,6 +297,7 @@ func (e *HealthCheckError) Error() string {
 func (h *HealthChecker) handleCheckResult(ctx context.Context, mp *models.ModelWithProvider, providerName string, success bool) {
 	failureThreshold := h.getFailureThreshold(ctx)
 	autoEnable := h.getAutoEnable(ctx)
+	failureDisableEnabled := h.getFailureDisableEnabled(ctx)
 
 	if success {
 		// 检测成功
@@ -328,7 +329,8 @@ func (h *HealthChecker) handleCheckResult(ctx context.Context, mp *models.ModelW
 			applyPriorityDecayByModelProviderID(ctx, mp.ID, providerName, mp.ProviderModel)
 		}
 
-		if failCount >= failureThreshold && (mp.Status == nil || *mp.Status) {
+		// 只有在启用失败自动禁用功能时，才执行自动禁用逻辑
+		if failureDisableEnabled && failCount >= failureThreshold && (mp.Status == nil || *mp.Status) {
 			// 超过阈值，自动禁用
 			falseVal := false
 			if _, err := gorm.G[models.ModelWithProvider](models.DB).
@@ -419,6 +421,17 @@ func (h *HealthChecker) getAutoEnable(ctx context.Context) bool {
 	return setting.Value == "true"
 }
 
+// getFailureDisableEnabled 获取是否启用失败自动禁用功能
+func (h *HealthChecker) getFailureDisableEnabled(ctx context.Context) bool {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyHealthCheckFailureDisableEnabled).
+		First(ctx)
+	if err != nil {
+		return true // 默认启用
+	}
+	return setting.Value == "true"
+}
+
 // getLogRetentionCount 获取健康检测日志保留条数
 func (h *HealthChecker) getLogRetentionCount(ctx context.Context) int {
 	setting, err := gorm.G[models.Setting](models.DB).
@@ -485,7 +498,7 @@ func (h *HealthChecker) CheckSingle(ctx context.Context, mpID uint) (*models.Hea
 }
 
 // GetHealthCheckSettings 获取健康检测设置
-func GetHealthCheckSettings(ctx context.Context) (enabled bool, interval int, failureThreshold int, autoEnable bool, logRetentionCount int, countAsSuccess bool, countAsFailure bool) {
+func GetHealthCheckSettings(ctx context.Context) (enabled bool, interval int, failureThreshold int, failureDisableEnabled bool, autoEnable bool, logRetentionCount int, countAsSuccess bool, countAsFailure bool) {
 	checker := GetHealthChecker()
 
 	enabled = checker.isEnabled(ctx)
@@ -501,6 +514,7 @@ func GetHealthCheckSettings(ctx context.Context) (enabled bool, interval int, fa
 	}
 
 	failureThreshold = checker.getFailureThreshold(ctx)
+	failureDisableEnabled = checker.getFailureDisableEnabled(ctx)
 	autoEnable = checker.getAutoEnable(ctx)
 	logRetentionCount = checker.getLogRetentionCount(ctx)
 	countAsSuccess = shouldCountHealthCheckSuccess(ctx)
@@ -514,6 +528,7 @@ type HealthCheckSettingsJSON struct {
 	Enabled                 bool `json:"enabled"`
 	Interval                int  `json:"interval"`
 	FailureThreshold        int  `json:"failure_threshold"`
+	FailureDisableEnabled   bool `json:"failure_disable_enabled"`
 	AutoEnable              bool `json:"auto_enable"`
 	LogRetentionCount       int  `json:"log_retention_count"`
 	CountHealthCheckSuccess bool `json:"count_health_check_as_success"`
@@ -526,6 +541,7 @@ func (s HealthCheckSettingsJSON) MarshalJSON() ([]byte, error) {
 		Enabled                 bool `json:"enabled"`
 		Interval                int  `json:"interval"`
 		FailureThreshold        int  `json:"failure_threshold"`
+		FailureDisableEnabled   bool `json:"failure_disable_enabled"`
 		AutoEnable              bool `json:"auto_enable"`
 		LogRetentionCount       int  `json:"log_retention_count"`
 		CountHealthCheckSuccess bool `json:"count_health_check_as_success"`
@@ -534,6 +550,7 @@ func (s HealthCheckSettingsJSON) MarshalJSON() ([]byte, error) {
 		Enabled:                 s.Enabled,
 		Interval:                s.Interval,
 		FailureThreshold:        s.FailureThreshold,
+		FailureDisableEnabled:   s.FailureDisableEnabled,
 		AutoEnable:              s.AutoEnable,
 		LogRetentionCount:       s.LogRetentionCount,
 		CountHealthCheckSuccess: s.CountHealthCheckSuccess,

@@ -1498,6 +1498,7 @@ type HealthCheckSettingsResponse struct {
 	Enabled                 bool `json:"enabled"`
 	Interval                int  `json:"interval"`
 	FailureThreshold        int  `json:"failure_threshold"`
+	FailureDisableEnabled   bool `json:"failure_disable_enabled"`
 	AutoEnable              bool `json:"auto_enable"`
 	LogRetentionCount       int  `json:"log_retention_count"`
 	CountHealthCheckSuccess bool `json:"count_health_check_as_success"`
@@ -1509,6 +1510,7 @@ type UpdateHealthCheckSettingsRequest struct {
 	Enabled                 bool `json:"enabled"`
 	Interval                int  `json:"interval"`
 	FailureThreshold        int  `json:"failure_threshold"`
+	FailureDisableEnabled   bool `json:"failure_disable_enabled"`
 	AutoEnable              bool `json:"auto_enable"`
 	LogRetentionCount       int  `json:"log_retention_count"`
 	CountHealthCheckSuccess bool `json:"count_health_check_as_success"`
@@ -1518,12 +1520,13 @@ type UpdateHealthCheckSettingsRequest struct {
 // GetHealthCheckSettings 获取健康检测设置
 func GetHealthCheckSettings(c *gin.Context) {
 	ctx := c.Request.Context()
-	enabled, interval, failureThreshold, autoEnable, logRetentionCount, countAsSuccess, countAsFailure := service.GetHealthCheckSettings(ctx)
+	enabled, interval, failureThreshold, failureDisableEnabled, autoEnable, logRetentionCount, countAsSuccess, countAsFailure := service.GetHealthCheckSettings(ctx)
 
 	response := HealthCheckSettingsResponse{
 		Enabled:                 enabled,
 		Interval:                interval,
 		FailureThreshold:        failureThreshold,
+		FailureDisableEnabled:   failureDisableEnabled,
 		AutoEnable:              autoEnable,
 		LogRetentionCount:       logRetentionCount,
 		CountHealthCheckSuccess: countAsSuccess,
@@ -1573,6 +1576,18 @@ func UpdateHealthCheckSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyHealthCheckFailureThreshold).
 		Update(ctx, "value", strconv.Itoa(req.FailureThreshold)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新失败自动禁用开关
+	failureDisableEnabledValue := "false"
+	if req.FailureDisableEnabled {
+		failureDisableEnabledValue = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyHealthCheckFailureDisableEnabled).
+		Update(ctx, "value", failureDisableEnabledValue); err != nil {
 		common.InternalServerError(c, "Failed to update settings: "+err.Error())
 		return
 	}

@@ -130,13 +130,14 @@ const (
 	SettingKeyLogRetentionCount = "log_retention_count" // 日志保留条数，0表示不限制
 
 	// 模型健康检测相关设置
-	SettingKeyHealthCheckEnabled           = "health_check_enabled"             // 健康检测总开关
-	SettingKeyHealthCheckInterval          = "health_check_interval"            // 健康检测间隔（分钟）
-	SettingKeyHealthCheckFailureThreshold  = "health_check_failure_threshold"   // 失败次数阈值（超过此值自动禁用）
-	SettingKeyHealthCheckAutoEnable        = "health_check_auto_enable"         // 检测成功后是否自动启用
-	SettingKeyHealthCheckLogRetentionCount = "health_check_log_retention_count" // 健康检测日志保留条数，0表示不限制
-	SettingKeyHealthCheckCountAsSuccess    = "health_check_count_as_success"    // 健康检测成功是否计入成功调用
-	SettingKeyHealthCheckCountAsFailure    = "health_check_count_as_failure"    // 健康检测失败是否计入失败调用（触发衰减）
+	SettingKeyHealthCheckEnabled                 = "health_check_enabled"                   // 健康检测总开关
+	SettingKeyHealthCheckInterval                = "health_check_interval"                  // 健康检测间隔（分钟）
+	SettingKeyHealthCheckFailureThreshold        = "health_check_failure_threshold"         // 失败次数阈值（超过此值自动禁用）
+	SettingKeyHealthCheckFailureDisableEnabled   = "health_check_failure_disable_enabled"   // 是否启用失败自动禁用功能
+	SettingKeyHealthCheckAutoEnable              = "health_check_auto_enable"               // 检测成功后是否自动启用
+	SettingKeyHealthCheckLogRetentionCount       = "health_check_log_retention_count"       // 健康检测日志保留条数，0表示不限制
+	SettingKeyHealthCheckCountAsSuccess          = "health_check_count_as_success"          // 健康检测成功是否计入成功调用
+	SettingKeyHealthCheckCountAsFailure          = "health_check_count_as_failure"          // 健康检测失败是否计入失败调用（触发衰减）
 )
 
 // HealthCheckLog 模型健康检测日志

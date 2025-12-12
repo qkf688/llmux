@@ -510,6 +510,7 @@ export interface HealthCheckSettings {
   enabled: boolean;
   interval: number;
   failure_threshold: number;
+  failure_disable_enabled: boolean;
   auto_enable: boolean;
   log_retention_count: number;
   count_health_check_as_success: boolean;

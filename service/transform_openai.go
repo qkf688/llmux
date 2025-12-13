@@ -65,11 +65,20 @@ func TransformOpenAIToUnified(rawBody []byte) (*UnifiedRequest, error) {
 				continue // 不将 system 消息添加到 messages 数组
 			}
 
-			unified.Messages = append(unified.Messages, UnifiedMessage{
+			msg := UnifiedMessage{
 				Role:      role,
 				Content:   msgMap["content"],
 				ToolCalls: parseOpenAIToolCalls(msgMap),
-			})
+			}
+			
+			// 处理 tool 角色消息的 tool_call_id
+			if role == "tool" {
+				if toolCallID, ok := msgMap["tool_call_id"].(string); ok {
+					msg.ToolCallID = toolCallID
+				}
+			}
+			
+			unified.Messages = append(unified.Messages, msg)
 		}
 	}
 
@@ -142,6 +151,10 @@ func TransformUnifiedToOpenAI(unified *UnifiedRequest) ([]byte, error) {
 				})
 			}
 			msgMap["tool_calls"] = toolCalls
+		}
+		// 处理 tool 角色消息的 tool_call_id
+		if msg.Role == "tool" && msg.ToolCallID != "" {
+			msgMap["tool_call_id"] = msg.ToolCallID
 		}
 		messages = append(messages, msgMap)
 	}
@@ -262,23 +275,23 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 				currentEvent = "" // 重置事件类型
 				continue
 			}
-	
+
 			// 处理 event 行（记录事件类型）- 兼容带空格和不带空格两种格式
 			if strings.HasPrefix(line, "event:") {
 				currentEvent = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
 				continue
 			}
-	
+
 			// 处理 data 行 - 兼容带空格和不带空格两种格式
 			if !strings.HasPrefix(line, "data:") {
 				continue
 			}
-	
+
 			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 			if data == "" {
 				continue
 			}
-	
+
 			// Anthropic → OpenAI 转换
 			if providerType == "anthropic" && clientType == "openai" {
 				if data == "[DONE]" {
@@ -298,14 +311,16 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 				}
 
 				switch eventType {
-				case "message_start", "content_block_start", "ping", "content_block_stop":
+				case "message_start", "ping":
 					// 忽略这些事件
 					continue
 
-				case "content_block_delta":
-					// 提取文本内容并转换为 OpenAI 格式
-					if delta, ok := chunk["delta"].(map[string]interface{}); ok {
-						if text := getString(delta, "text"); text != "" {
+				case "content_block_start":
+					// 处理工具调用开始
+					if contentBlock, ok := chunk["content_block"].(map[string]interface{}); ok {
+						blockType := getString(contentBlock, "type")
+						if blockType == "tool_use" {
+							// 工具调用开始，发送角色信息
 							openaiChunk := map[string]interface{}{
 								"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
 								"object":  "chat.completion.chunk",
@@ -315,7 +330,18 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 									{
 										"index": 0,
 										"delta": map[string]interface{}{
-											"content": text,
+											"role": "assistant",
+											"tool_calls": []map[string]interface{}{
+												{
+													"index": getFloat(chunk, "index"),
+													"id":    getString(contentBlock, "id"),
+													"type":  "function",
+													"function": map[string]interface{}{
+														"name":      getString(contentBlock, "name"),
+														"arguments": "",
+													},
+												},
+											},
 										},
 										"finish_reason": nil,
 									},
@@ -325,6 +351,67 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 							fmt.Fprintf(pw, "data: %s\n\n", string(chunkData))
 						}
 					}
+					continue
+
+				case "content_block_delta":
+					// 提取文本内容或工具调用参数并转换为 OpenAI 格式
+					if delta, ok := chunk["delta"].(map[string]interface{}); ok {
+						deltaType := getString(delta, "type")
+
+						if deltaType == "text_delta" {
+							if text := getString(delta, "text"); text != "" {
+								openaiChunk := map[string]interface{}{
+									"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+									"object":  "chat.completion.chunk",
+									"created": time.Now().Unix(),
+									"model":   "claude",
+									"choices": []map[string]interface{}{
+										{
+											"index": 0,
+											"delta": map[string]interface{}{
+												"content": text,
+											},
+											"finish_reason": nil,
+										},
+									},
+								}
+								chunkData, _ := json.Marshal(openaiChunk)
+								fmt.Fprintf(pw, "data: %s\n\n", string(chunkData))
+							}
+						} else if deltaType == "input_json_delta" {
+							// 工具调用参数增量
+							if partialJson := getString(delta, "partial_json"); partialJson != "" {
+								openaiChunk := map[string]interface{}{
+									"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+									"object":  "chat.completion.chunk",
+									"created": time.Now().Unix(),
+									"model":   "claude",
+									"choices": []map[string]interface{}{
+										{
+											"index": 0,
+											"delta": map[string]interface{}{
+												"tool_calls": []map[string]interface{}{
+													{
+														"index": getFloat(chunk, "index"),
+														"function": map[string]interface{}{
+															"arguments": partialJson,
+														},
+													},
+												},
+											},
+											"finish_reason": nil,
+										},
+									},
+								}
+								chunkData, _ := json.Marshal(openaiChunk)
+								fmt.Fprintf(pw, "data: %s\n\n", string(chunkData))
+							}
+						}
+					}
+
+				case "content_block_stop":
+					// 忽略内容块停止事件
+					continue
 
 				case "message_delta":
 					// 发送结束块
@@ -856,14 +943,26 @@ func parseOpenAIToolCalls(msgMap map[string]interface{}) []UnifiedToolCall {
 	var toolCalls []UnifiedToolCall
 	if tcs, ok := msgMap["tool_calls"].([]interface{}); ok {
 		for _, tc := range tcs {
-			tcMap := tc.(map[string]interface{})
-			funcMap := tcMap["function"].(map[string]interface{})
+			tcMap, ok := tc.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			funcMap, ok := tcMap["function"].(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			argsStr := getString(funcMap, "arguments")
+			if argsStr == "" {
+				argsStr = "{}"
+			}
+
 			toolCalls = append(toolCalls, UnifiedToolCall{
 				ID:   getString(tcMap, "id"),
 				Type: getString(tcMap, "type"),
 				Function: UnifiedToolCallFunction{
 					Name:      getString(funcMap, "name"),
-					Arguments: getString(funcMap, "arguments"),
+					Arguments: argsStr,
 				},
 			})
 		}

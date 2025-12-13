@@ -108,6 +108,11 @@ type AnthropicUsage struct {
 	CacheReadInputTokens     int64  `json:"cache_read_input_tokens"`
 	OutputTokens             int64  `json:"output_tokens"`
 	ServiceTier              string `json:"service_tier"`
+	// OpenAI 兼容字段（某些提供商如 kimi 会同时返回）
+	PromptTokens     int64 `json:"prompt_tokens"`
+	CompletionTokens int64 `json:"completion_tokens"`
+	TotalTokens      int64 `json:"total_tokens"`
+	CachedTokens     int64 `json:"cached_tokens"`
 }
 
 func ProcesserOpenAiRes(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {

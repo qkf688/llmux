@@ -9,9 +9,10 @@ import (
 
 // UnifiedMessage 统一消息格式
 type UnifiedMessage struct {
-	Role      string            `json:"role"`
-	Content   interface{}       `json:"content,omitempty"`
-	ToolCalls []UnifiedToolCall `json:"tool_calls,omitempty"`
+	Role       string            `json:"role"`
+	Content    interface{}       `json:"content,omitempty"`
+	ToolCalls  []UnifiedToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string            `json:"tool_call_id,omitempty"` // OpenAI tool 角色消息的 tool_call_id
 }
 
 // UnifiedToolCall 统一工具调用格式

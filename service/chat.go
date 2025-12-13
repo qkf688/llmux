@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/atopos31/llmio/balancer"
-	"github.com/atopos31/llmio/consts"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/providers"
 	"github.com/samber/lo"
@@ -67,7 +66,8 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 			}
 
 			// 为当前provider创建带代理的client
-			client := providers.GetClientWithProxy(time.Second*time.Duration(providersWithMeta.TimeOut)/3, chatModel.GetProxy())
+			// 使用完整的超时时间,特别是对于工具调用场景需要更长的等待时间
+			client := providers.GetClientWithProxy(time.Second*time.Duration(providersWithMeta.TimeOut), chatModel.GetProxy())
 
 			slog.Info("using provider", "provider", provider.Name, "model", modelWithProvider.ProviderModel, "proxy", chatModel.GetProxy())
 
@@ -469,7 +469,7 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 			if _, err := SaveChatLog(ctx, models.ChatLog{
 				Name:   before.Model,
 				Status: "error",
-				Style:  consts.StyleOpenAI,
+				Style:  style,
 				Error:  err.Error(),
 			}); err != nil {
 				return nil, err

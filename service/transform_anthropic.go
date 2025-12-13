@@ -34,11 +34,25 @@ func TransformAnthropicToUnified(rawBody []byte) (*UnifiedRequest, error) {
 	if messages, ok := req["messages"].([]interface{}); ok {
 		for _, msg := range messages {
 			msgMap := msg.(map[string]interface{})
-			unified.Messages = append(unified.Messages, UnifiedMessage{
+			unifiedMsg := UnifiedMessage{
 				Role:      getString(msgMap, "role"),
 				Content:   msgMap["content"],
 				ToolCalls: parseAnthropicToolCalls(msgMap),
-			})
+			}
+			
+			// 解析 tool_result 类型的内容
+			if content, ok := msgMap["content"].([]interface{}); ok {
+				for _, item := range content {
+					if itemMap, ok := item.(map[string]interface{}); ok {
+						if getString(itemMap, "type") == "tool_result" {
+							unifiedMsg.ToolCallID = getString(itemMap, "tool_use_id")
+							break
+						}
+					}
+				}
+			}
+			
+			unified.Messages = append(unified.Messages, unifiedMsg)
 		}
 	}
 
@@ -86,7 +100,7 @@ func TransformUnifiedToAnthropic(unified *UnifiedRequest) ([]byte, error) {
 
 	// 转换消息
 	messages := []interface{}{}
-	
+
 	// 先统计非 system 消息的数量
 	nonSystemCount := 0
 	for _, msg := range unified.Messages {
@@ -94,10 +108,10 @@ func TransformUnifiedToAnthropic(unified *UnifiedRequest) ([]byte, error) {
 			nonSystemCount++
 		}
 	}
-	
+
 	// 只有在有非 system 消息时才提取 system 消息
 	extractSystem := nonSystemCount > 0
-	
+
 	for _, msg := range unified.Messages {
 		// Anthropic 格式只接受 user 和 assistant 角色
 		// 只在有其他消息时才将 system 消息提取到单独字段
@@ -115,6 +129,27 @@ func TransformUnifiedToAnthropic(unified *UnifiedRequest) ([]byte, error) {
 			continue // 跳过此消息，不添加到 messages 数组
 		}
 
+		// 处理 tool 角色消息，转换为 Anthropic 的 tool_result 格式
+		if msg.Role == "tool" {
+			contentArray := []interface{}{}
+			var contentStr string
+			if msg.Content != nil {
+				if str, ok := msg.Content.(string); ok {
+					contentStr = str
+				}
+			}
+			contentArray = append(contentArray, map[string]interface{}{
+				"type":        "tool_result",
+				"tool_use_id": msg.ToolCallID,
+				"content":     contentStr,
+			})
+			messages = append(messages, map[string]interface{}{
+				"role":    "user",
+				"content": contentArray,
+			})
+			continue
+		}
+
 		msgMap := map[string]interface{}{
 			"role": msg.Role,
 		}
@@ -122,20 +157,37 @@ func TransformUnifiedToAnthropic(unified *UnifiedRequest) ([]byte, error) {
 			msgMap["content"] = msg.Content
 		}
 		if len(msg.ToolCalls) > 0 {
-			toolUse := []interface{}{}
+			// 如果有工具调用，需要构建包含文本和工具调用的内容数组
+			contentArray := []interface{}{}
+
+			// 如果有文本内容，先添加文本块
+			if msg.Content != nil {
+				if contentStr, ok := msg.Content.(string); ok && contentStr != "" {
+					contentArray = append(contentArray, map[string]interface{}{
+						"type": "text",
+						"text": contentStr,
+					})
+				}
+			}
+
+			// 添加工具调用块
 			for _, tc := range msg.ToolCalls {
 				var args map[string]interface{}
 				if tc.Function.Arguments != "" {
-					json.Unmarshal([]byte(tc.Function.Arguments), &args)
+					if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
+						args = map[string]interface{}{}
+					}
+				} else {
+					args = map[string]interface{}{}
 				}
-				toolUse = append(toolUse, map[string]interface{}{
+				contentArray = append(contentArray, map[string]interface{}{
 					"type":  "tool_use",
 					"id":    tc.ID,
 					"name":  tc.Function.Name,
 					"input": args,
 				})
 			}
-			msgMap["content"] = toolUse
+			msgMap["content"] = contentArray
 		}
 		messages = append(messages, msgMap)
 	}
@@ -288,13 +340,23 @@ func parseAnthropicToolCalls(msgMap map[string]interface{}) []UnifiedToolCall {
 		for _, item := range content {
 			if itemMap, ok := item.(map[string]interface{}); ok {
 				if getString(itemMap, "type") == "tool_use" {
-					args, _ := json.Marshal(itemMap["input"])
+					var argsStr string
+					if input := itemMap["input"]; input != nil {
+						if inputMap, ok := input.(map[string]interface{}); ok {
+							if argsBytes, err := json.Marshal(inputMap); err == nil {
+								argsStr = string(argsBytes)
+							}
+						}
+					}
+					if argsStr == "" {
+						argsStr = "{}"
+					}
 					toolCalls = append(toolCalls, UnifiedToolCall{
 						ID:   getString(itemMap, "id"),
 						Type: "function",
 						Function: UnifiedToolCallFunction{
 							Name:      getString(itemMap, "name"),
-							Arguments: string(args),
+							Arguments: argsStr,
 						},
 					})
 				}

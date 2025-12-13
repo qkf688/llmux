@@ -64,6 +64,13 @@ type ChatLog struct {
 	ChunkTime      time.Duration // chunk耗时
 	Tps            float64
 	Usage
+
+	// 原始请求和响应内容
+	RequestHeaders     string // 请求头JSON字符串
+	RequestBody        string // 请求体
+	ResponseHeaders    string // 响应头JSON字符串
+	ResponseBody       string // 响应体（转换后）
+	RawResponseBody    string // 原始响应体（转换前）
 }
 
 func (l ChatLog) WithError(err error) ChatLog {
@@ -118,26 +125,27 @@ const (
 	SettingKeyAutoWeightIncreaseStep = "auto_weight_increase_step" // 自动权重增加步长（每次成功增加的权重）
 	SettingKeyAutoWeightIncreaseMax  = "auto_weight_increase_max"  // 自动权重增加的上限
 
-	SettingKeyAutoPriorityDecay                = "auto_priority_decay"                  // 自动优先级衰减开关
-	SettingKeyAutoPriorityDecayDefault         = "auto_priority_decay_default"         // 自动优先级衰减默认优先级
-	SettingKeyAutoPriorityDecayStep            = "auto_priority_decay_step"            // 自动优先级衰减步长（每次失败减少的优先级）
-	SettingKeyAutoPriorityDecayThreshold       = "auto_priority_decay_threshold"       // 自动优先级衰减阈值（达到此值自动禁用）
-	SettingKeyAutoPriorityDecayDisableEnabled  = "auto_priority_decay_disable_enabled" // 是否启用自动禁用功能（达到阈值时禁用）
-	SettingKeyAutoPriorityIncreaseStep         = "auto_priority_increase_step"         // 自动优先级增加步长（每次成功增加的优先级）
-	SettingKeyAutoPriorityIncreaseMax          = "auto_priority_increase_max"          // 自动优先级增加的上限
-	SettingKeyAutoSuccessIncrease              = "auto_success_increase"               // 成功调用后是否执行自增
+	SettingKeyAutoPriorityDecay               = "auto_priority_decay"                 // 自动优先级衰减开关
+	SettingKeyAutoPriorityDecayDefault        = "auto_priority_decay_default"         // 自动优先级衰减默认优先级
+	SettingKeyAutoPriorityDecayStep           = "auto_priority_decay_step"            // 自动优先级衰减步长（每次失败减少的优先级）
+	SettingKeyAutoPriorityDecayThreshold      = "auto_priority_decay_threshold"       // 自动优先级衰减阈值（达到此值自动禁用）
+	SettingKeyAutoPriorityDecayDisableEnabled = "auto_priority_decay_disable_enabled" // 是否启用自动禁用功能（达到阈值时禁用）
+	SettingKeyAutoPriorityIncreaseStep        = "auto_priority_increase_step"         // 自动优先级增加步长（每次成功增加的优先级）
+	SettingKeyAutoPriorityIncreaseMax         = "auto_priority_increase_max"          // 自动优先级增加的上限
+	SettingKeyAutoSuccessIncrease             = "auto_success_increase"               // 成功调用后是否执行自增
 
-	SettingKeyLogRetentionCount = "log_retention_count" // 日志保留条数，0表示不限制
+	SettingKeyLogRetentionCount     = "log_retention_count"      // 日志保留条数，0表示不限制
+	SettingKeyLogRawRequestResponse = "log_raw_request_response" // 是否记录原始请求响应内容
 
 	// 模型健康检测相关设置
-	SettingKeyHealthCheckEnabled                 = "health_check_enabled"                   // 健康检测总开关
-	SettingKeyHealthCheckInterval                = "health_check_interval"                  // 健康检测间隔（分钟）
-	SettingKeyHealthCheckFailureThreshold        = "health_check_failure_threshold"         // 失败次数阈值（超过此值自动禁用）
-	SettingKeyHealthCheckFailureDisableEnabled   = "health_check_failure_disable_enabled"   // 是否启用失败自动禁用功能
-	SettingKeyHealthCheckAutoEnable              = "health_check_auto_enable"               // 检测成功后是否自动启用
-	SettingKeyHealthCheckLogRetentionCount       = "health_check_log_retention_count"       // 健康检测日志保留条数，0表示不限制
-	SettingKeyHealthCheckCountAsSuccess          = "health_check_count_as_success"          // 健康检测成功是否计入成功调用
-	SettingKeyHealthCheckCountAsFailure          = "health_check_count_as_failure"          // 健康检测失败是否计入失败调用（触发衰减）
+	SettingKeyHealthCheckEnabled               = "health_check_enabled"                 // 健康检测总开关
+	SettingKeyHealthCheckInterval              = "health_check_interval"                // 健康检测间隔（分钟）
+	SettingKeyHealthCheckFailureThreshold      = "health_check_failure_threshold"       // 失败次数阈值（超过此值自动禁用）
+	SettingKeyHealthCheckFailureDisableEnabled = "health_check_failure_disable_enabled" // 是否启用失败自动禁用功能
+	SettingKeyHealthCheckAutoEnable            = "health_check_auto_enable"             // 检测成功后是否自动启用
+	SettingKeyHealthCheckLogRetentionCount     = "health_check_log_retention_count"     // 健康检测日志保留条数，0表示不限制
+	SettingKeyHealthCheckCountAsSuccess        = "health_check_count_as_success"        // 健康检测成功是否计入成功调用
+	SettingKeyHealthCheckCountAsFailure        = "health_check_count_as_failure"        // 健康检测失败是否计入失败调用（触发衰减）
 )
 
 // HealthCheckLog 模型健康检测日志

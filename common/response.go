@@ -93,4 +93,3 @@ func Forbidden(c *gin.Context, message string) {
 		Message: message,
 	})
 }
- 

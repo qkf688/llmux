@@ -116,4 +116,3 @@ func writeHeader(c *gin.Context, stream bool, header http.Header) {
 	}
 	c.Writer.Flush()
 }
- 

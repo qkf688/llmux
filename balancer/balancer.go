@@ -25,4 +25,3 @@ func WeightedRandom[T comparable](items map[T]int) (*T, error) {
 	}
 	return nil, fmt.Errorf("unexpected error")
 }
- 

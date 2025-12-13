@@ -66,7 +66,7 @@ func (a *Anthropic) Models(ctx context.Context) ([]Model, error) {
 	req.Header.Set("x-api-key", a.APIKey)
 	req.Header.Set("anthropic-version", a.Version)
 	req.Header.Set("anthropic-beta", a.Beta)
-	
+
 	// 使用带代理的客户端
 	client := GetClientWithProxy(30*time.Second, a.Proxy)
 	res, err := client.Do(req)

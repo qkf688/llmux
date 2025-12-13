@@ -70,14 +70,14 @@ func TransformOpenAIToUnified(rawBody []byte) (*UnifiedRequest, error) {
 				Content:   msgMap["content"],
 				ToolCalls: parseOpenAIToolCalls(msgMap),
 			}
-			
+
 			// 处理 tool 角色消息的 tool_call_id
 			if role == "tool" {
 				if toolCallID, ok := msgMap["tool_call_id"].(string); ok {
 					msg.ToolCallID = toolCallID
 				}
 			}
-			
+
 			unified.Messages = append(unified.Messages, msg)
 		}
 	}

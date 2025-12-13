@@ -7,4 +7,3 @@ const (
 	StyleOpenAIRes Style = "openai-res"
 	StyleAnthropic Style = "anthropic"
 )
- 

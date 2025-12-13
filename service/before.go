@@ -146,4 +146,3 @@ func BeforerAnthropic(data []byte) (*Before, error) {
 		raw:              data,
 	}, nil
 }
- 

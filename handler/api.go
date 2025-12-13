@@ -902,6 +902,7 @@ type SettingsResponse struct {
 	AutoPriorityIncreaseStep        int  `json:"auto_priority_increase_step"`
 	AutoPriorityIncreaseMax         int  `json:"auto_priority_increase_max"`
 	LogRetentionCount               int  `json:"log_retention_count"`
+	LogRawRequestResponse           bool `json:"log_raw_request_response"`
 	CountHealthCheckAsSuccess       bool `json:"count_health_check_as_success"`
 	CountHealthCheckAsFailure       bool `json:"count_health_check_as_failure"`
 }
@@ -923,6 +924,7 @@ type UpdateSettingsRequest struct {
 	AutoPriorityIncreaseStep        int  `json:"auto_priority_increase_step"`
 	AutoPriorityIncreaseMax         int  `json:"auto_priority_increase_max"`
 	LogRetentionCount               int  `json:"log_retention_count"`
+	LogRawRequestResponse           bool `json:"log_raw_request_response"`
 	CountHealthCheckAsSuccess       bool `json:"count_health_check_as_success"`
 	CountHealthCheckAsFailure       bool `json:"count_health_check_as_failure"`
 }
@@ -1008,6 +1010,8 @@ func GetSettings(c *gin.Context) {
 			if val, err := strconv.Atoi(setting.Value); err == nil {
 				response.LogRetentionCount = val
 			}
+		case models.SettingKeyLogRawRequestResponse:
+			response.LogRawRequestResponse = setting.Value == "true"
 		case models.SettingKeyHealthCheckCountAsSuccess:
 			response.CountHealthCheckAsSuccess = setting.Value == "true"
 		case models.SettingKeyHealthCheckCountAsFailure:
@@ -1196,6 +1200,18 @@ func UpdateSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyLogRetentionCount).
 		Update(ctx, "value", strconv.Itoa(req.LogRetentionCount)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新原始请求响应记录开关
+	logRawValue := "false"
+	if req.LogRawRequestResponse {
+		logRawValue = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyLogRawRequestResponse).
+		Update(ctx, "value", logRawValue); err != nil {
 		common.InternalServerError(c, "Failed to update settings: "+err.Error())
 		return
 	}

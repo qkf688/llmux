@@ -68,4 +68,3 @@ func Counts(c *gin.Context) {
 
 	common.Success(c, results)
 }
- 

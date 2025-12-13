@@ -115,9 +115,22 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				continue
 			}
 
+			// 提前创建日志记录,确保所有请求都被记录
+			logId, err := SaveChatLog(ctx, log)
+			if err != nil {
+				slog.Error("failed to create log before request", "error", err)
+				return nil, 0, err
+			}
+
 			res, err := client.Do(req)
 			if err != nil {
-				retryLog <- log.WithError(err)
+				// 更新日志状态为错误
+				if _, updateErr := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, models.ChatLog{
+					Status: "error",
+					Error:  err.Error(),
+				}); updateErr != nil {
+					slog.Error("failed to update log status", "error", updateErr)
+				}
 				// 请求失败 移除待选
 				delete(weightItems, *id)
 				delete(priorityItems, *id)
@@ -129,7 +142,13 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				if err != nil {
 					slog.Error("read body error", "error", err)
 				}
-				retryLog <- log.WithError(fmt.Errorf("status: %d, body: %s", res.StatusCode, string(byteBody)))
+				// 更新日志状态为错误
+				if _, updateErr := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, models.ChatLog{
+					Status: "error",
+					Error:  fmt.Sprintf("status: %d, body: %s", res.StatusCode, string(byteBody)),
+				}); updateErr != nil {
+					slog.Error("failed to update log status", "error", updateErr)
+				}
 
 				if res.StatusCode == http.StatusTooManyRequests {
 					// 达到RPM限制 降低权重
@@ -141,12 +160,6 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				}
 				res.Body.Close()
 				continue
-			}
-
-			logId, err := SaveChatLog(ctx, log)
-			if err != nil {
-				res.Body.Close()
-				return nil, 0, err
 			}
 
 			// 格式转换：总是进行转换以确保响应格式标准化
@@ -327,11 +340,20 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 
 		log, output, err := processer(ctx, reader, before.Stream, reqStart)
 		if err != nil {
+			slog.Error("processer error", "log_id", logId, "error", err)
+			// 更新日志状态为错误
+			if _, updateErr := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, models.ChatLog{
+				Status: "error",
+				Error:  fmt.Sprintf("processer error: %v", err),
+			}); updateErr != nil {
+				slog.Error("failed to update log status on processer error", "log_id", logId, "error", updateErr)
+			}
 			return err
 		}
 
 		// 更新日志记录
 		if _, err := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, *log); err != nil {
+			slog.Error("failed to update log", "log_id", logId, "error", err)
 			return err
 		}
 
@@ -342,13 +364,14 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 				LogId:       logId,
 				OutputUnion: *output,
 			}); err != nil {
+				slog.Error("failed to create chat io", "log_id", logId, "error", err)
 				return err
 			}
 		}
 		return nil
 	}
 	if err := recordFunc(); err != nil {
-		slog.Error("record log error", "error", err)
+		slog.Error("record log error", "log_id", logId, "error", err)
 	}
 }
 

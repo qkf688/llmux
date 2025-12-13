@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/atopos31/llmio/models"
@@ -17,7 +18,7 @@ func TransformAnthropicToUnified(rawBody []byte) (*UnifiedRequest, error) {
 	unified := &UnifiedRequest{
 		Model:  getString(req, "model"),
 		Stream: getBool(req, "stream"),
-		System: getString(req, "system"),
+		System: extractSystem(req["system"]),
 	}
 
 	if maxTokens, ok := req["max_tokens"].(float64); ok {
@@ -72,6 +73,29 @@ func TransformAnthropicToUnified(rawBody []byte) (*UnifiedRequest, error) {
 	}
 
 	return unified, nil
+}
+
+// extractSystem 支持 Anthropic system 为字符串或数组的情况，确保 system 不被静默丢失
+func extractSystem(value interface{}) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case []interface{}:
+		var parts []string
+		for _, item := range v {
+			switch m := item.(type) {
+			case map[string]interface{}:
+				if text, ok := m["text"].(string); ok && text != "" {
+					parts = append(parts, text)
+				} else if content, ok := m["content"].(string); ok && content != "" {
+					parts = append(parts, content)
+				}
+			}
+		}
+		return strings.Join(parts, "\n")
+	default:
+		return ""
+	}
 }
 
 // TransformUnifiedToAnthropic 将统一格式转换为 Anthropic 格式

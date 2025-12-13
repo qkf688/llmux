@@ -97,15 +97,25 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				},
 			}
 
-			// 格式转换：总是进行转换以确保数据标准化(处理 system 消息、max_tokens 等)
-			tm := NewTransformerManager(style, provider.Type)
-			convertedBody, err := tm.ProcessRequest(ctx, before.raw)
-			if err != nil {
-				retryLog <- log.WithError(fmt.Errorf("transform request error: %v", err))
-				delete(weightItems, *id)
-				continue
+			// 判断是否需要格式转换
+			// 当客户端格式与供应商类型一致时，直接透传原始请求体
+			var requestBody []byte
+			if style == provider.Type {
+				// 直接透传，不进行格式转换
+				slog.Debug("passthrough mode", "client_type", style, "provider_type", provider.Type)
+				requestBody = before.raw
+			} else {
+				// 需要格式转换
+				slog.Debug("transform mode", "client_type", style, "provider_type", provider.Type)
+				tm := NewTransformerManager(style, provider.Type)
+				convertedBody, err := tm.ProcessRequest(ctx, before.raw)
+				if err != nil {
+					retryLog <- log.WithError(fmt.Errorf("transform request error: %v", err))
+					delete(weightItems, *id)
+					continue
+				}
+				requestBody = convertedBody
 			}
-			requestBody := convertedBody
 
 			req, err := chatModel.BuildReq(httptrace.WithClientTrace(ctx, trace), header, modelWithProvider.ProviderModel, requestBody)
 			if err != nil {
@@ -162,15 +172,23 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				continue
 			}
 
-			// 格式转换：总是进行转换以确保响应格式标准化
-			convertedRes, err := tm.ProcessResponse(res)
-			if err != nil {
-				retryLog <- log.WithError(fmt.Errorf("transform response error: %v", err))
-				res.Body.Close()
-				delete(weightItems, *id)
-				continue
+			// 判断是否需要响应格式转换
+			// 当客户端格式与供应商类型一致时，直接透传响应
+			if style != provider.Type {
+				// 需要格式转换
+				tm := NewTransformerManager(style, provider.Type)
+				convertedRes, err := tm.ProcessResponse(res)
+				if err != nil {
+					retryLog <- log.WithError(fmt.Errorf("transform response error: %v", err))
+					res.Body.Close()
+					delete(weightItems, *id)
+					continue
+				}
+				res = convertedRes
+			} else {
+				// 直接透传响应，不进行格式转换
+				slog.Debug("passthrough response", "client_type", style, "provider_type", provider.Type)
 			}
-			res = convertedRes
 
 			applySuccessAdjustments(ctx, *id)
 			return res, logId, nil

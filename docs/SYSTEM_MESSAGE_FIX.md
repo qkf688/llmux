@@ -103,7 +103,7 @@ if unified.System != "" {
 if unified.MaxTokens > 0 {
     req["max_tokens"] = unified.MaxTokens
 } else {
-    req["max_tokens"] = 4096 // 设置默认值
+    req["max_tokens"] = 8192 // 设置默认值
 }
 ```
 

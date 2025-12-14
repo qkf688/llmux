@@ -359,12 +359,6 @@ export interface ChatLog {
   completion_tokens: number;
   total_tokens: number;
   prompt_tokens_details: PromptTokensDetails;
-  // 新增字段：原始请求和响应内容
-  RequestHeaders?: string;
-  RequestBody?: string;
-  ResponseHeaders?: string;
-  ResponseBody?: string;
-  RawResponseBody?: string; // 原始响应体（转换前）
 }
 
 export interface PromptTokensDetails {
@@ -441,7 +435,6 @@ export interface Settings {
   auto_priority_increase_step: number;
   auto_priority_increase_max: number;
   log_retention_count: number;
-  log_raw_request_response: boolean;
   count_health_check_as_success: boolean;
   count_health_check_as_failure: boolean;
 }

@@ -199,14 +199,6 @@ export default function SettingsPage() {
     }
   };
 
-  const handleLogRawRequestResponseChange = (checked: boolean) => {
-    if (settings) {
-      const newSettings = { ...settings, log_raw_request_response: checked };
-      setSettings(newSettings);
-      checkHasChanges(newSettings);
-    }
-  };
-
   const syncHealthCheckCountFlags = (success: boolean, failure: boolean) => {
     if (settings) {
       const merged = {
@@ -237,7 +229,6 @@ export default function SettingsPage() {
       baseline.auto_priority_increase_step !== newSettings.auto_priority_increase_step ||
       baseline.auto_priority_increase_max !== newSettings.auto_priority_increase_max ||
       baseline.log_retention_count !== newSettings.log_retention_count ||
-      baseline.log_raw_request_response !== newSettings.log_raw_request_response ||
       baseline.count_health_check_as_success !== newSettings.count_health_check_as_success ||
       baseline.count_health_check_as_failure !== newSettings.count_health_check_as_failure;
     setHasChanges(changed);
@@ -820,24 +811,6 @@ export default function SettingsPage() {
                 value={settings?.log_retention_count ?? 100}
                 onChange={(e) => handleLogRetentionCountChange(parseInt(e.target.value) || 0)}
                 className="w-32"
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="log-raw-request-response" className="text-base font-medium">
-                  记录原始请求响应
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  开启后，系统会在日志中记录完整的原始请求和响应内容，包括请求头、请求体、响应头和响应体。
-                  <br />
-                  <span className="text-amber-600 dark:text-amber-500">注意：这会显著增加日志存储空间占用。</span>
-                </p>
-              </div>
-              <Switch
-                id="log-raw-request-response"
-                checked={settings?.log_raw_request_response ?? false}
-                onCheckedChange={handleLogRawRequestResponseChange}
               />
             </div>
           </CardContent>

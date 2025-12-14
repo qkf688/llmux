@@ -63,16 +63,15 @@ func initDefaultSettings(ctx context.Context) {
 		{Key: SettingKeyAutoPriorityIncreaseStep, Value: "1"},    // 默认每次成功增加1
 		{Key: SettingKeyAutoPriorityIncreaseMax, Value: "100"},   // 默认优先级上限100
 		{Key: SettingKeyLogRetentionCount, Value: "100"},         // 默认保留100条日志，0表示不限制
-		{Key: SettingKeyLogRawRequestResponse, Value: "false"},   // 默认关闭原始请求响应记录
 		// 健康检测相关默认设置
-		{Key: SettingKeyHealthCheckEnabled, Value: "false"},              // 默认关闭健康检测
-		{Key: SettingKeyHealthCheckInterval, Value: "60"},                // 默认检测间隔60分钟
-		{Key: SettingKeyHealthCheckFailureThreshold, Value: "3"},         // 默认失败3次后禁用
-		{Key: SettingKeyHealthCheckFailureDisableEnabled, Value: "true"}, // 默认启用失败自动禁用功能
-		{Key: SettingKeyHealthCheckAutoEnable, Value: "false"},           // 默认检测成功不自动启用
-		{Key: SettingKeyHealthCheckLogRetentionCount, Value: "100"},      // 默认保留100条健康检测日志，0 表示不限制
-		{Key: SettingKeyHealthCheckCountAsSuccess, Value: "true"},        // 默认健康检测成功计入成功调用
-		{Key: SettingKeyHealthCheckCountAsFailure, Value: "false"},       // 默认健康检测失败不计入失败调用
+		{Key: SettingKeyHealthCheckEnabled, Value: "false"},                // 默认关闭健康检测
+		{Key: SettingKeyHealthCheckInterval, Value: "60"},                  // 默认检测间隔60分钟
+		{Key: SettingKeyHealthCheckFailureThreshold, Value: "3"},           // 默认失败3次后禁用
+		{Key: SettingKeyHealthCheckFailureDisableEnabled, Value: "true"},   // 默认启用失败自动禁用功能
+		{Key: SettingKeyHealthCheckAutoEnable, Value: "false"},             // 默认检测成功不自动启用
+		{Key: SettingKeyHealthCheckLogRetentionCount, Value: "100"},        // 默认保留100条健康检测日志，0 表示不限制
+		{Key: SettingKeyHealthCheckCountAsSuccess, Value: "true"},          // 默认健康检测成功计入成功调用
+		{Key: SettingKeyHealthCheckCountAsFailure, Value: "false"},         // 默认健康检测失败不计入失败调用
 	}
 
 	for _, setting := range defaultSettings {

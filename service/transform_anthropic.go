@@ -40,7 +40,7 @@ func TransformAnthropicToUnified(rawBody []byte) (*UnifiedRequest, error) {
 				Content:   msgMap["content"],
 				ToolCalls: parseAnthropicToolCalls(msgMap),
 			}
-
+			
 			// 解析 tool_result 类型的内容
 			if content, ok := msgMap["content"].([]interface{}); ok {
 				for _, item := range content {
@@ -52,7 +52,7 @@ func TransformAnthropicToUnified(rawBody []byte) (*UnifiedRequest, error) {
 					}
 				}
 			}
-
+			
 			unified.Messages = append(unified.Messages, unifiedMsg)
 		}
 	}

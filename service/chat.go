@@ -1,9 +1,7 @@
 package service
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -119,24 +117,6 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				requestBody = convertedBody
 			}
 
-			// 检查是否启用原始请求响应记录
-			logRawEnabled := getLogRawRequestResponse(ctx)
-
-			var requestHeadersJSON []byte
-			var requestBodyStr string
-
-			if logRawEnabled {
-				// 记录原始请求头信息（客户端发送的完整头部）
-				requestHeadersJSON, err = json.Marshal(reqMeta.Header)
-				if err != nil {
-					slog.Error("failed to marshal request headers", "error", err)
-					requestHeadersJSON = []byte("{}")
-				}
-
-				// 记录完整的请求体，不做大小限制
-				requestBodyStr = string(requestBody)
-			}
-
 			req, err := chatModel.BuildReq(httptrace.WithClientTrace(ctx, trace), header, modelWithProvider.ProviderModel, requestBody)
 			if err != nil {
 				retryLog <- log.WithError(err)
@@ -172,29 +152,11 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				if err != nil {
 					slog.Error("read body error", "error", err)
 				}
-				
-				// 准备错误日志更新数据
-				errorUpdate := models.ChatLog{
+				// 更新日志状态为错误
+				if _, updateErr := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, models.ChatLog{
 					Status: "error",
 					Error:  fmt.Sprintf("status: %d, body: %s", res.StatusCode, string(byteBody)),
-				}
-				
-				// 如果启用了日志记录，也记录请求和响应信息
-				if logRawEnabled {
-					responseHeadersJSON, err := json.Marshal(res.Header)
-					if err != nil {
-						slog.Error("failed to marshal response headers", "error", err)
-						responseHeadersJSON = []byte("{}")
-					}
-					
-					errorUpdate.RequestHeaders = string(requestHeadersJSON)
-					errorUpdate.RequestBody = requestBodyStr
-					errorUpdate.ResponseHeaders = string(responseHeadersJSON)
-					errorUpdate.RawResponseBody = string(byteBody)
-				}
-				
-				// 更新日志状态为错误
-				if _, updateErr := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, errorUpdate); updateErr != nil {
+				}); updateErr != nil {
 					slog.Error("failed to update log status", "error", updateErr)
 				}
 
@@ -208,22 +170,6 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				}
 				res.Body.Close()
 				continue
-			}
-
-			// 记录原始响应体（转换前）
-			var rawResponseBodyStr string
-			if logRawEnabled {
-				// 读取原始响应体
-				bodyBytes, err := io.ReadAll(res.Body)
-				if err != nil {
-					slog.Error("failed to read raw response body", "error", err)
-				} else {
-					res.Body.Close()
-					// 保存完整的原始响应体，不做大小限制
-					rawResponseBodyStr = string(bodyBytes)
-					// 重新创建响应体供后续使用
-					res.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-				}
 			}
 
 			// 判断是否需要响应格式转换
@@ -242,32 +188,6 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 			} else {
 				// 直接透传响应，不进行格式转换
 				slog.Debug("passthrough response", "client_type", style, "provider_type", provider.Type)
-			}
-
-			// 记录响应头和原始响应体信息（仅在启用时）
-			if logRawEnabled {
-				responseHeadersJSON, err := json.Marshal(res.Header)
-				if err != nil {
-					slog.Error("failed to marshal response headers", "error", err)
-					responseHeadersJSON = []byte("{}")
-				}
-
-				// 更新日志记录原始请求响应内容
-				updateData := models.ChatLog{
-					RequestHeaders:  string(requestHeadersJSON),
-					RequestBody:     requestBodyStr,
-					ResponseHeaders: string(responseHeadersJSON),
-				}
-				
-				// 如果需要格式转换，RawResponseBody 存储转换前的内容
-				// 如果不需要格式转换，RawResponseBody 存储原始内容（与 ResponseBody 相同）
-				if rawResponseBodyStr != "" {
-					updateData.RawResponseBody = rawResponseBodyStr
-				}
-				
-				if _, updateErr := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, updateData); updateErr != nil {
-					slog.Error("failed to update log with request/response headers", "error", updateErr)
-				}
 			}
 
 			applySuccessAdjustments(ctx, *id)
@@ -450,27 +370,7 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 		}
 
 		// 更新日志记录
-		logUpdate := *log
-
-		// 检查是否启用原始请求响应记录
-		if getLogRawRequestResponse(ctx) {
-			// 记录完整的响应体内容
-			var responseBodyStr string
-			if output != nil {
-				if output.OfString != "" {
-					responseBodyStr = output.OfString
-				} else if len(output.OfStringArray) > 0 {
-					// 对于流式响应，记录所有chunk
-					for _, chunk := range output.OfStringArray {
-						responseBodyStr += chunk + "\n"
-					}
-				}
-			}
-
-			logUpdate.ResponseBody = responseBodyStr
-		}
-
-		if _, err := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, logUpdate); err != nil {
+		if _, err := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, *log); err != nil {
 			slog.Error("failed to update log", "log_id", logId, "error", err)
 			return err
 		}
@@ -704,17 +604,6 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 func getStrictCapabilityMatch(ctx context.Context) bool {
 	setting, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyStrictCapabilityMatch).
-		First(ctx)
-	if err != nil {
-		return false // 默认关闭
-	}
-	return setting.Value == "true"
-}
-
-// getLogRawRequestResponse 获取是否记录原始请求响应设置
-func getLogRawRequestResponse(ctx context.Context) bool {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyLogRawRequestResponse).
 		First(ctx)
 	if err != nil {
 		return false // 默认关闭

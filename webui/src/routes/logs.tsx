@@ -41,13 +41,12 @@ type DetailCardProps = {
   label: string;
   value: ReactNode;
   mono?: boolean;
-  maxLines?: number;
 };
 
-const DetailCard = ({ label, value, mono = false, maxLines }: DetailCardProps) => (
+const DetailCard = ({ label, value, mono = false }: DetailCardProps) => (
   <div className="rounded-md border bg-muted/20 p-3 space-y-1">
     <p className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</p>
-    <div className={`text-sm break-words ${mono ? 'font-mono text-xs' : ''} ${maxLines ? `max-h-[${maxLines * 1.2}rem] overflow-hidden` : ''}`}>
+    <div className={`text-sm break-words ${mono ? 'font-mono text-xs' : ''}`}>
       {value ?? '-'}
     </div>
   </div>
@@ -560,17 +559,6 @@ export default function LogsPage() {
                         <p>{log.Style || '-'}</p>
                       </div>
                     </div>
-                    {/* 显示请求响应内容大小提示 */}
-                    <div className="grid grid-cols-2 gap-3 text-xs ml-6">
-                      <div className="space-y-1">
-                        <p className="text-muted-foreground text-[10px] uppercase tracking-wide">请求头</p>
-                        <p className="font-medium">{log.RequestHeaders ? `${log.RequestHeaders.length} 字节` : '-'}</p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-muted-foreground text-[10px] uppercase tracking-wide">响应头</p>
-                        <p className="font-medium">{log.ResponseHeaders ? `${log.ResponseHeaders.length} 字节` : '-'}</p>
-                      </div>
-                    </div>
                   </div>
                 ))}
               </div>
@@ -667,55 +655,6 @@ export default function LogsPage() {
                     <DetailCard label="重试次数" value={selectedLog.Retry ?? 0} />
                   </div>
                 </div>
-                {(selectedLog.RequestHeaders || selectedLog.RequestBody || selectedLog.ResponseHeaders || selectedLog.RawResponseBody || selectedLog.ResponseBody) && (
-                  <div className="space-y-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">请求响应内容</p>
-                    <div className="space-y-4">
-                      {selectedLog.RequestHeaders && (
-                        <div className="rounded-md border bg-muted/20 p-3 space-y-1">
-                          <p className="text-[11px] text-muted-foreground uppercase tracking-wide">请求头 ({selectedLog.RequestHeaders.length} 字节)</p>
-                          <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
-                            {selectedLog.RequestHeaders}
-                          </pre>
-                        </div>
-                      )}
-                      {selectedLog.RequestBody && (
-                        <div className="rounded-md border bg-muted/20 p-3 space-y-1">
-                          <p className="text-[11px] text-muted-foreground uppercase tracking-wide">请求体 ({selectedLog.RequestBody.length} 字节)</p>
-                          <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
-                            {selectedLog.RequestBody}
-                          </pre>
-                        </div>
-                      )}
-                      {selectedLog.ResponseHeaders && (
-                        <div className="rounded-md border bg-muted/20 p-3 space-y-1">
-                          <p className="text-[11px] text-muted-foreground uppercase tracking-wide">响应头 ({selectedLog.ResponseHeaders.length} 字节)</p>
-                          <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
-                            {selectedLog.ResponseHeaders}
-                          </pre>
-                        </div>
-                      )}
-                      {selectedLog.RawResponseBody && (
-                        <div className="rounded-md border bg-blue-50 dark:bg-blue-950/20 p-3 space-y-1">
-                          <p className="text-[11px] text-blue-700 dark:text-blue-400 uppercase tracking-wide">
-                            {selectedLog.ResponseBody ? '原始响应体 - 转换前' : '响应体'} ({selectedLog.RawResponseBody.length} 字节)
-                          </p>
-                          <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-blue-900 dark:text-blue-200">
-                            {selectedLog.RawResponseBody}
-                          </pre>
-                        </div>
-                      )}
-                      {selectedLog.ResponseBody && (
-                        <div className="rounded-md border bg-green-50 dark:bg-green-950/20 p-3 space-y-1">
-                          <p className="text-[11px] text-green-700 dark:text-green-400 uppercase tracking-wide">响应体 - 转换后 ({selectedLog.ResponseBody.length} 字节)</p>
-                          <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-green-900 dark:text-green-200">
-                            {selectedLog.ResponseBody}
-                          </pre>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
                 <div className="space-y-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">性能指标</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

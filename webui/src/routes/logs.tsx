@@ -26,7 +26,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import Loading from "@/components/loading";
 import { getLogs, getProviders, getModels, getUserAgents, deleteLog, batchDeleteLogs, type ChatLog, type Provider, type Model, getProviderTemplates, clearAllLogs } from "@/lib/api";
-import { ChevronLeft, ChevronRight, RefreshCw, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, Trash2, Download } from "lucide-react";
 import { toast } from "sonner";
 
 // 格式化时间显示
@@ -165,6 +165,43 @@ export default function LogsPage() {
   const handleViewChatIO = (log: ChatLog) => {
     if (!canViewChatIO(log)) return;
     navigate(`/logs/${log.ID}/chat-io`);
+  };
+
+  // 导出请求响应内容
+  const handleExportRequestResponse = (log: ChatLog) => {
+    try {
+      const exportData = {
+        log_id: log.ID,
+        created_at: log.CreatedAt,
+        model_name: log.Name,
+        provider_name: log.ProviderName,
+        provider_model: log.ProviderModel,
+        status: log.Status,
+        request: {
+          headers: log.RequestHeaders || null,
+          body: log.RequestBody || null,
+        },
+        response: {
+          headers: log.ResponseHeaders || null,
+          body: log.ResponseBody || null,
+          raw_body: log.RawResponseBody || null,
+        },
+      };
+
+      const jsonString = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `log-${log.ID}-request-response-${new Date().getTime()}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success("导出成功");
+    } catch (error) {
+      toast.error("导出失败: " + (error as Error).message);
+    }
   };
 
   // 选择相关函数
@@ -669,7 +706,17 @@ export default function LogsPage() {
                 </div>
                 {(selectedLog.RequestHeaders || selectedLog.RequestBody || selectedLog.ResponseHeaders || selectedLog.RawResponseBody || selectedLog.ResponseBody) && (
                   <div className="space-y-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">请求响应内容</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">请求响应内容</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleExportRequestResponse(selectedLog)}
+                      >
+                        <Download className="size-4 mr-1" />
+                        导出请求响应
+                      </Button>
+                    </div>
                     <div className="space-y-4">
                       {selectedLog.RequestHeaders && (
                         <div className="rounded-md border bg-muted/20 p-3 space-y-1">

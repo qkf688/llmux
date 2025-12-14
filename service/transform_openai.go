@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -265,10 +266,15 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 		defer response.Body.Close()
 
 		scanner := bufio.NewScanner(response.Body)
-		scanner.Buffer(make([]byte, 0, 8192), 1024*1024)
+		// 增加初始缓冲区大小到 64KB，最大 15MB（与 process.go 一致）
+		scanner.Buffer(make([]byte, 0, 64*1024), 15*1024*1024)
 
 		var currentEvent string
+		lineCount := 0
+		errorCount := 0
+
 		for scanner.Scan() {
+			lineCount++
 			line := scanner.Text()
 			if line == "" {
 				// 空行是 SSE 消息分隔符
@@ -295,12 +301,33 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 			// Anthropic → OpenAI 转换
 			if providerType == "anthropic" && clientType == "openai" {
 				if data == "[DONE]" {
-					fmt.Fprintf(pw, "data: [DONE]\n\n")
+					if _, err := fmt.Fprintf(pw, "data: [DONE]\n\n"); err != nil {
+						slog.Error("failed to write to pipe in stream transformation",
+							"provider_type", providerType,
+							"client_type", clientType,
+							"line", lineCount,
+							"error", err)
+						pw.CloseWithError(err)
+						return
+					}
 					continue
 				}
 
 				var chunk map[string]interface{}
 				if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+					errorCount++
+					slog.Error("failed to parse SSE chunk in stream transformation",
+						"provider_type", providerType,
+						"client_type", clientType,
+						"line", lineCount,
+						"data_length", len(data),
+						"error", err,
+						"data_preview", func() string {
+							if len(data) > 100 {
+								return data[:100]
+							}
+							return data
+						}())
 					continue
 				}
 
@@ -348,7 +375,15 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 								},
 							}
 							chunkData, _ := json.Marshal(openaiChunk)
-							fmt.Fprintf(pw, "data: %s\n\n", string(chunkData))
+							if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(chunkData)); err != nil {
+								slog.Error("failed to write to pipe in stream transformation",
+									"provider_type", providerType,
+									"client_type", clientType,
+									"line", lineCount,
+									"error", err)
+								pw.CloseWithError(err)
+								return
+							}
 						}
 					}
 					continue
@@ -376,7 +411,15 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 									},
 								}
 								chunkData, _ := json.Marshal(openaiChunk)
-								fmt.Fprintf(pw, "data: %s\n\n", string(chunkData))
+								if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(chunkData)); err != nil {
+									slog.Error("failed to write to pipe in stream transformation",
+										"provider_type", providerType,
+										"client_type", clientType,
+										"line", lineCount,
+										"error", err)
+									pw.CloseWithError(err)
+									return
+								}
 							}
 						} else if deltaType == "input_json_delta" {
 							// 工具调用参数增量
@@ -404,7 +447,15 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 									},
 								}
 								chunkData, _ := json.Marshal(openaiChunk)
-								fmt.Fprintf(pw, "data: %s\n\n", string(chunkData))
+								if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(chunkData)); err != nil {
+									slog.Error("failed to write to pipe in stream transformation",
+										"provider_type", providerType,
+										"client_type", clientType,
+										"line", lineCount,
+										"error", err)
+									pw.CloseWithError(err)
+									return
+								}
 							}
 						}
 					}
@@ -450,23 +501,60 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 					}
 
 					chunkData, _ := json.Marshal(finalChunk)
-					fmt.Fprintf(pw, "data: %s\n\n", string(chunkData))
+					if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(chunkData)); err != nil {
+						slog.Error("failed to write to pipe in stream transformation",
+							"provider_type", providerType,
+							"client_type", clientType,
+							"line", lineCount,
+							"error", err)
+						pw.CloseWithError(err)
+						return
+					}
 
 				case "message_stop":
 					// 发送 [DONE]
-					fmt.Fprintf(pw, "data: [DONE]\n\n")
+					if _, err := fmt.Fprintf(pw, "data: [DONE]\n\n"); err != nil {
+						slog.Error("failed to write to pipe in stream transformation",
+							"provider_type", providerType,
+							"client_type", clientType,
+							"line", lineCount,
+							"error", err)
+						pw.CloseWithError(err)
+						return
+					}
 				}
 			} else if providerType == "openai" && clientType == "anthropic" {
 				// OpenAI → Anthropic 转换
 				if data == "[DONE]" {
 					messageStop := map[string]interface{}{"type": "message_stop"}
 					stopData, _ := json.Marshal(messageStop)
-					fmt.Fprintf(pw, "event: message_stop\ndata: %s\n\n", string(stopData))
+					if _, err := fmt.Fprintf(pw, "event: message_stop\ndata: %s\n\n", string(stopData)); err != nil {
+						slog.Error("failed to write to pipe in stream transformation",
+							"provider_type", providerType,
+							"client_type", clientType,
+							"line", lineCount,
+							"error", err)
+						pw.CloseWithError(err)
+						return
+					}
 					continue
 				}
 
 				var chunk map[string]interface{}
 				if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+					errorCount++
+					slog.Error("failed to parse SSE chunk in stream transformation",
+						"provider_type", providerType,
+						"client_type", clientType,
+						"line", lineCount,
+						"data_length", len(data),
+						"error", err,
+						"data_preview", func() string {
+							if len(data) > 100 {
+								return data[:100]
+							}
+							return data
+						}())
 					continue
 				}
 
@@ -491,7 +579,15 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 								},
 							}
 							startData, _ := json.Marshal(messageStart)
-							fmt.Fprintf(pw, "event: message_start\ndata: %s\n\n", string(startData))
+							if _, err := fmt.Fprintf(pw, "event: message_start\ndata: %s\n\n", string(startData)); err != nil {
+								slog.Error("failed to write to pipe in stream transformation",
+									"provider_type", providerType,
+									"client_type", clientType,
+									"line", lineCount,
+									"error", err)
+								pw.CloseWithError(err)
+								return
+							}
 
 							blockStart := map[string]interface{}{
 								"type":  "content_block_start",
@@ -502,7 +598,15 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 								},
 							}
 							blockData, _ := json.Marshal(blockStart)
-							fmt.Fprintf(pw, "event: content_block_start\ndata: %s\n\n", string(blockData))
+							if _, err := fmt.Fprintf(pw, "event: content_block_start\ndata: %s\n\n", string(blockData)); err != nil {
+								slog.Error("failed to write to pipe in stream transformation",
+									"provider_type", providerType,
+									"client_type", clientType,
+									"line", lineCount,
+									"error", err)
+								pw.CloseWithError(err)
+								return
+							}
 						}
 
 						// 处理内容
@@ -516,7 +620,15 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 								},
 							}
 							contentDeltaData, _ := json.Marshal(contentDelta)
-							fmt.Fprintf(pw, "event: content_block_delta\ndata: %s\n\n", string(contentDeltaData))
+							if _, err := fmt.Fprintf(pw, "event: content_block_delta\ndata: %s\n\n", string(contentDeltaData)); err != nil {
+								slog.Error("failed to write to pipe in stream transformation",
+									"provider_type", providerType,
+									"client_type", clientType,
+									"line", lineCount,
+									"error", err)
+								pw.CloseWithError(err)
+								return
+							}
 						}
 
 						// 处理结束
@@ -526,7 +638,15 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 								"index": 0,
 							}
 							stopData, _ := json.Marshal(blockStop)
-							fmt.Fprintf(pw, "event: content_block_stop\ndata: %s\n\n", string(stopData))
+							if _, err := fmt.Fprintf(pw, "event: content_block_stop\ndata: %s\n\n", string(stopData)); err != nil {
+								slog.Error("failed to write to pipe in stream transformation",
+									"provider_type", providerType,
+									"client_type", clientType,
+									"line", lineCount,
+									"error", err)
+								pw.CloseWithError(err)
+								return
+							}
 
 							stopReason := "end_turn"
 							if finishReason == "tool_calls" {
@@ -550,22 +670,58 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 							}
 
 							messageDeltaData, _ := json.Marshal(messageDelta)
-							fmt.Fprintf(pw, "event: message_delta\ndata: %s\n\n", string(messageDeltaData))
+							if _, err := fmt.Fprintf(pw, "event: message_delta\ndata: %s\n\n", string(messageDeltaData)); err != nil {
+								slog.Error("failed to write to pipe in stream transformation",
+									"provider_type", providerType,
+									"client_type", clientType,
+									"line", lineCount,
+									"error", err)
+								pw.CloseWithError(err)
+								return
+							}
 
 							messageStop := map[string]interface{}{"type": "message_stop"}
 							stopMsgData, _ := json.Marshal(messageStop)
-							fmt.Fprintf(pw, "event: message_stop\ndata: %s\n\n", string(stopMsgData))
+							if _, err := fmt.Fprintf(pw, "event: message_stop\ndata: %s\n\n", string(stopMsgData)); err != nil {
+								slog.Error("failed to write to pipe in stream transformation",
+									"provider_type", providerType,
+									"client_type", clientType,
+									"line", lineCount,
+									"error", err)
+								pw.CloseWithError(err)
+								return
+							}
 						}
 					}
 				}
 			} else {
 				// 其他场景：直接透传
-				fmt.Fprintf(pw, "data: %s\n\n", data)
+				if _, err := fmt.Fprintf(pw, "data: %s\n\n", data); err != nil {
+					slog.Error("failed to write to pipe in stream transformation",
+						"provider_type", providerType,
+						"client_type", clientType,
+						"line", lineCount,
+						"error", err)
+					pw.CloseWithError(err)
+					return
+				}
 			}
 		}
 
 		if err := scanner.Err(); err != nil {
+			slog.Error("scanner error in stream transformation",
+				"provider_type", providerType,
+				"client_type", clientType,
+				"lines_processed", lineCount,
+				"errors_encountered", errorCount,
+				"error", err)
 			pw.CloseWithError(err)
+		} else {
+			slog.Debug("stream transformation completed",
+				"provider_type", providerType,
+				"client_type", clientType,
+				"lines_processed", lineCount,
+				"errors_encountered", errorCount)
 		}
 	}()
 

@@ -61,6 +61,7 @@ import {
 } from "@/lib/api";
 import type { Model, Provider, ProviderModel } from "@/lib/api";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { parseAllModelsFromConfig, toProviderModelList } from "@/lib/provider-models";
 
@@ -105,7 +106,8 @@ export default function ModelsPage() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
-  
+  const [togglingIOLog, setTogglingIOLog] = useState<Record<number, boolean>>({});
+
   // 供应商相关状态
   const [providers, setProviders] = useState<Provider[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState<string>("all");
@@ -312,6 +314,43 @@ export default function ModelsPage() {
     }
   };
 
+  const handleToggleIOLog = async (model: Model) => {
+    const modelId = model.ID;
+    const newIOLogValue = !model.IOLog;
+
+    // 设置加载状态
+    setTogglingIOLog(prev => ({ ...prev, [modelId]: true }));
+
+    try {
+      await updateModel(modelId, {
+        name: model.Name,
+        remark: model.Remark,
+        max_retry: model.MaxRetry,
+        time_out: model.TimeOut,
+        io_log: newIOLogValue,
+      });
+
+      // 更新本地状态
+      setModels(prevModels =>
+        prevModels.map(m =>
+          m.ID === modelId ? { ...m, IOLog: newIOLogValue } : m
+        )
+      );
+
+      toast.success(`模型 ${model.Name} 的 IO 记录已${newIOLogValue ? '开启' : '关闭'}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`切换 IO 记录失败: ${message}`);
+    } finally {
+      // 清除加载状态
+      setTogglingIOLog(prev => {
+        const next = { ...prev };
+        delete next[modelId];
+        return next;
+      });
+    }
+  };
+
   const isAllSelected = models.length > 0 && selectedIds.length === models.length;
   const isPartialSelected = selectedIds.length > 0 && selectedIds.length < models.length;
 
@@ -406,9 +445,11 @@ export default function ModelsPage() {
                       <TableCell>{model.MaxRetry}</TableCell>
                       <TableCell>{model.TimeOut}</TableCell>
                       <TableCell>
-                        <span className={model.IOLog ? "text-green-500" : "text-red-500"}>
-                          {model.IOLog ? '✓' : '✗'}
-                        </span>
+                        <Switch
+                          checked={model.IOLog}
+                          onCheckedChange={() => handleToggleIOLog(model)}
+                          disabled={togglingIOLog[model.ID]}
+                        />
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-2">
@@ -510,10 +551,16 @@ export default function ModelsPage() {
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <MobileInfoItem label="重试次数" value={model.MaxRetry} />
                     <MobileInfoItem label="超时时间" value={`${model.TimeOut} 秒`} />
-                    <MobileInfoItem
-                      label="IO 记录"
-                      value={<span className={model.IOLog ? "text-green-600" : "text-red-600"}>{model.IOLog ? '✓' : '✗'}</span>}
-                    />
+                    <div className="space-y-1">
+                      <p className="text-[11px] text-muted-foreground uppercase tracking-wide">IO 记录</p>
+                      <div className="flex items-center">
+                        <Switch
+                          checked={model.IOLog}
+                          onCheckedChange={() => handleToggleIOLog(model)}
+                          disabled={togglingIOLog[model.ID]}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}

@@ -606,8 +606,12 @@ export default function ProvidersPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => openAllModelsDialog(provider)}
+                            className="gap-1.5"
                           >
-                            全部模型{allModels.length > 0 ? `（${allModels.length}）` : ""}
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                            </svg>
+                            {allModels.length}
                           </Button>
                         </TableCell>
                         <TableCell>
@@ -672,10 +676,13 @@ export default function ProvidersPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-7 px-2 text-xs mt-1"
+                          className="h-7 px-2 text-xs mt-1 gap-1.5"
                           onClick={() => openAllModelsDialog(provider)}
                         >
-                          全部模型{allModels.length > 0 ? `（${allModels.length}）` : ""}
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                          </svg>
+                          {allModels.length}
                         </Button>
                         {provider.Console && (
                           <Button

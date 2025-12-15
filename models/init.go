@@ -64,6 +64,7 @@ func initDefaultSettings(ctx context.Context) {
 		{Key: SettingKeyAutoPriorityIncreaseMax, Value: "10"},    // 默认优先级上限10
 		{Key: SettingKeyLogRetentionCount, Value: "100"},         // 默认保留100条日志，0表示不限制
 		{Key: SettingKeyLogRawRequestResponse, Value: "false"},   // 默认关闭原始请求响应记录
+		{Key: SettingKeyDisableAllLogs, Value: "false"},          // 默认不关闭所有日志记录
 		// 健康检测相关默认设置
 		{Key: SettingKeyHealthCheckEnabled, Value: "false"},              // 默认关闭健康检测
 		{Key: SettingKeyHealthCheckInterval, Value: "60"},                // 默认检测间隔60分钟

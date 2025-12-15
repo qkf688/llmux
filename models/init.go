@@ -55,13 +55,13 @@ func initDefaultSettings(ctx context.Context) {
 		{Key: SettingKeyAutoWeightDecayStep, Value: "1"},         // 默认每次失败减少1
 		{Key: SettingKeyAutoSuccessIncrease, Value: "true"},      // 默认开启成功调用自增
 		{Key: SettingKeyAutoWeightIncreaseStep, Value: "1"},      // 默认每次成功增加1
-		{Key: SettingKeyAutoWeightIncreaseMax, Value: "100"},     // 默认权重上限100
+		{Key: SettingKeyAutoWeightIncreaseMax, Value: "5"},       // 默认权重上限5
 		{Key: SettingKeyAutoPriorityDecay, Value: "false"},       // 默认关闭自动优先级衰减
-		{Key: SettingKeyAutoPriorityDecayDefault, Value: "100"},  // 默认优先级值100
+		{Key: SettingKeyAutoPriorityDecayDefault, Value: "10"},   // 默认优先级值10
 		{Key: SettingKeyAutoPriorityDecayStep, Value: "1"},       // 默认每次失败减少1
 		{Key: SettingKeyAutoPriorityDecayThreshold, Value: "90"}, // 默认优先级阈值90，达到此值自动禁用
 		{Key: SettingKeyAutoPriorityIncreaseStep, Value: "1"},    // 默认每次成功增加1
-		{Key: SettingKeyAutoPriorityIncreaseMax, Value: "100"},   // 默认优先级上限100
+		{Key: SettingKeyAutoPriorityIncreaseMax, Value: "10"},    // 默认优先级上限10
 		{Key: SettingKeyLogRetentionCount, Value: "100"},         // 默认保留100条日志，0表示不限制
 		{Key: SettingKeyLogRawRequestResponse, Value: "false"},   // 默认关闭原始请求响应记录
 		// 健康检测相关默认设置
@@ -91,8 +91,8 @@ func initDefaultSettings(ctx context.Context) {
 
 // initPriorityField 初始化优先级字段，为现有记录设置默认优先级
 func initPriorityField(ctx context.Context) {
-	// 为 priority 为 0 的记录设置默认优先级 100
-	if _, err := gorm.G[ModelWithProvider](DB).Where("priority = 0 OR priority IS NULL").Update(ctx, "priority", 100); err != nil {
+	// 为 priority 为 0 的记录设置默认优先级 10
+	if _, err := gorm.G[ModelWithProvider](DB).Where("priority = 0 OR priority IS NULL").Update(ctx, "priority", 10); err != nil {
 		panic(err)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/atopos31/llmio/common"
@@ -88,8 +89,16 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 
 	pr, pw := io.Pipe()
 	tee := io.TeeReader(res.Body, pw)
+
+	// 使用 WaitGroup 等待日志处理完成，防止pipe过早关闭导致数据丢失
+	var wg sync.WaitGroup
+	wg.Add(1)
+
 	// 异步处理输出并记录 tokens
-	go service.RecordLog(context.Background(), startReq, pr, postProcessor, logId, *before, providersWithMeta.IOLog)
+	go func() {
+		defer wg.Done()
+		service.RecordLog(context.Background(), startReq, pr, postProcessor, logId, *before, providersWithMeta.IOLog)
+	}()
 
 	writeHeader(c, before.Stream, res.Header)
 	if _, err := io.Copy(c.Writer, tee); err != nil {
@@ -98,7 +107,11 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 		return
 	}
 
+	// 关闭写入端，让读取端知道数据已发送完
 	pw.Close()
+
+	// 等待日志处理完成，确保所有数据都被正确记录
+	wg.Wait()
 }
 
 func writeHeader(c *gin.Context, stream bool, header http.Header) {

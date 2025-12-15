@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -18,6 +18,12 @@ export function LogsSettings({ settings, onSettingsChange }: LogsSettingsProps) 
   const [saving, setSaving] = useState(false);
   const [localSettings, setLocalSettings] = useState(settings);
   const [hasChanges, setHasChanges] = useState(false);
+
+  // 同步父组件的 settings 变化到 localSettings
+  useEffect(() => {
+    setLocalSettings(settings);
+    setHasChanges(false);
+  }, [settings]);
 
   const updateLocalSettings = (updates: Partial<Settings>) => {
     if (localSettings) {

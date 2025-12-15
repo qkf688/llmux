@@ -174,7 +174,7 @@ export default function ModelProvidersPage() {
       model_id: 0,
       provider_name: "",
       provider_id: 0,
-      tool_call: false,
+      tool_call: true,
       structured_output: false,
       image: false,
       with_header: false,
@@ -409,7 +409,7 @@ export default function ModelProvidersPage() {
         model_id: selectedModelId || 0,
         provider_name: "",
         provider_id: 0,
-        tool_call: false,
+        tool_call: true,
         structured_output: false,
         image: false,
         with_header: false,
@@ -678,7 +678,7 @@ export default function ModelProvidersPage() {
       model_id: selectedModelId || 0,
       provider_name: "",
       provider_id: 0,
-      tool_call: false,
+      tool_call: true,
       structured_output: false,
       image: false,
       with_header: false,
@@ -891,7 +891,7 @@ export default function ModelProvidersPage() {
         ) : (
           <div className="h-full flex flex-col">
             <div className="hidden sm:block w-full overflow-x-auto">
-              <Table className="min-w-[1150px]">
+              <Table className="min-w-[950px]">
                 <TableHeader className="z-10 sticky top-0 bg-secondary/80 text-secondary-foreground">
                   <TableRow>
                     <TableHead className="w-[50px]">
@@ -910,10 +910,7 @@ export default function ModelProvidersPage() {
                     <TableHead>提供商模型</TableHead>
                     <TableHead>类型</TableHead>
                     <TableHead>提供商</TableHead>
-                    <TableHead>工具调用</TableHead>
-                    <TableHead>结构化输出</TableHead>
-                    <TableHead>视觉</TableHead>
-                    <TableHead>请求头透传</TableHead>
+                    <TableHead>能力</TableHead>
                     <TableHead>权重</TableHead>
                     <TableHead>优先级</TableHead>
                     <TableHead>启用</TableHead>
@@ -957,24 +954,23 @@ export default function ModelProvidersPage() {
                         <TableCell>{provider?.Type ?? '未知'}</TableCell>
                         <TableCell>{provider?.Name ?? '未知'}</TableCell>
                         <TableCell>
-                          <span className={association.ToolCall ? "text-green-600" : "text-red-600"}>
-                            {association.ToolCall ? '✓' : '✗'}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className={association.StructuredOutput ? "text-green-600" : "text-red-600"}>
-                            {association.StructuredOutput ? '✓' : '✗'}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className={association.Image ? "text-green-600" : "text-red-600"}>
-                            {association.Image ? '✓' : '✗'}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className={association.WithHeader ? "text-green-600" : "text-red-600"}>
-                            {association.WithHeader ? '✓' : '✗'}
-                          </span>
+                          <div className="flex flex-wrap gap-1">
+                            {association.ToolCall && (
+                              <span className="px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-700 rounded whitespace-nowrap">工具</span>
+                            )}
+                            {association.StructuredOutput && (
+                              <span className="px-1.5 py-0.5 text-[10px] bg-purple-100 text-purple-700 rounded whitespace-nowrap">结构化</span>
+                            )}
+                            {association.Image && (
+                              <span className="px-1.5 py-0.5 text-[10px] bg-green-100 text-green-700 rounded whitespace-nowrap">视觉</span>
+                            )}
+                            {association.WithHeader && (
+                              <span className="px-1.5 py-0.5 text-[10px] bg-orange-100 text-orange-700 rounded whitespace-nowrap">透传</span>
+                            )}
+                            {!association.ToolCall && !association.StructuredOutput && !association.Image && !association.WithHeader && (
+                              <span className="text-xs text-muted-foreground">无</span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>{association.Weight}</TableCell>
                         <TableCell>{association.Priority ?? 100}</TableCell>
@@ -1114,25 +1110,32 @@ export default function ModelProvidersPage() {
                       <MobileInfoItem label="权重" value={association.Weight} />
                       <MobileInfoItem label="优先级" value={association.Priority ?? 100} />
                     </div>
-                    <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="space-y-3 text-xs">
                       <MobileInfoItem
-                        label="请求头透传"
-                        value={<span className={association.WithHeader ? "text-green-600" : "text-red-600"}>{association.WithHeader ? '✓' : '✗'}</span>}
+                        label="模型能力"
+                        value={
+                          <div className="flex flex-wrap gap-1">
+                            {association.ToolCall && (
+                              <span className="px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-700 rounded whitespace-nowrap">工具</span>
+                            )}
+                            {association.StructuredOutput && (
+                              <span className="px-1.5 py-0.5 text-[10px] bg-purple-100 text-purple-700 rounded whitespace-nowrap">结构化</span>
+                            )}
+                            {association.Image && (
+                              <span className="px-1.5 py-0.5 text-[10px] bg-green-100 text-green-700 rounded whitespace-nowrap">视觉</span>
+                            )}
+                            {association.WithHeader && (
+                              <span className="px-1.5 py-0.5 text-[10px] bg-orange-100 text-orange-700 rounded whitespace-nowrap">透传</span>
+                            )}
+                            {!association.ToolCall && !association.StructuredOutput && !association.Image && !association.WithHeader && (
+                              <span className="text-xs text-muted-foreground">无</span>
+                            )}
+                          </div>
+                        }
                       />
-                      <MobileInfoItem
-                        label="工具调用"
-                        value={<span className={association.ToolCall ? "text-green-600" : "text-red-600"}>{association.ToolCall ? '✓' : '✗'}</span>}
-                      />
-                      <MobileInfoItem
-                        label="结构化输出"
-                        value={<span className={association.StructuredOutput ? "text-green-600" : "text-red-600"}>{association.StructuredOutput ? '✓' : '✗'}</span>}
-                      />
-                      <MobileInfoItem
-                        label="视觉能力"
-                        value={<span className={association.Image ? "text-green-600" : "text-red-600"}>{association.Image ? '✓' : '✗'}</span>}
-                      />
-                      <MobileInfoItem
-                        label="最近状态"
+                      <div className="grid grid-cols-2 gap-3">
+                        <MobileInfoItem
+                          label="最近状态"
                         value={
                           <div className="flex items-center gap-1">
                             {statusBars ? (
@@ -1152,27 +1155,28 @@ export default function ModelProvidersPage() {
                           </div>
                         }
                       />
-                      <MobileInfoItem
-                        label="健康检测"
-                        value={
-                          <div className="flex items-center gap-1">
-                            {healthBars ? (
-                              healthBars.length > 0 ? (
-                                healthBars.map((isSuccess, index) => (
-                                  <div
-                                    key={index}
-                                    className={`w-1 h-4 rounded ${isSuccess ? 'bg-emerald-500' : 'bg-orange-500'}`}
-                                  />
-                                ))
+                        <MobileInfoItem
+                          label="健康检测"
+                          value={
+                            <div className="flex items-center gap-1">
+                              {healthBars ? (
+                                healthBars.length > 0 ? (
+                                  healthBars.map((isSuccess, index) => (
+                                    <div
+                                      key={index}
+                                      className={`w-1 h-4 rounded ${isSuccess ? 'bg-emerald-500' : 'bg-orange-500'}`}
+                                    />
+                                  ))
+                                ) : (
+                                  <span className="text-muted-foreground text-[11px]">无数据</span>
+                                )
                               ) : (
-                                <span className="text-muted-foreground text-[11px]">无数据</span>
-                              )
-                            ) : (
-                              <Spinner />
-                            )}
-                          </div>
-                        }
-                      />
+                                <Spinner />
+                              )}
+                            </div>
+                          }
+                        />
+                      </div>
                     </div>
                     <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
                       <p className="text-xs text-muted-foreground">启用状态</p>

@@ -903,6 +903,7 @@ type SettingsResponse struct {
 	AutoPriorityIncreaseMax         int  `json:"auto_priority_increase_max"`
 	LogRetentionCount               int  `json:"log_retention_count"`
 	LogRawRequestResponse           bool `json:"log_raw_request_response"`
+	DisableAllLogs                  bool `json:"disable_all_logs"`
 	CountHealthCheckAsSuccess       bool `json:"count_health_check_as_success"`
 	CountHealthCheckAsFailure       bool `json:"count_health_check_as_failure"`
 }
@@ -925,6 +926,7 @@ type UpdateSettingsRequest struct {
 	AutoPriorityIncreaseMax         int  `json:"auto_priority_increase_max"`
 	LogRetentionCount               int  `json:"log_retention_count"`
 	LogRawRequestResponse           bool `json:"log_raw_request_response"`
+	DisableAllLogs                  bool `json:"disable_all_logs"`
 	CountHealthCheckAsSuccess       bool `json:"count_health_check_as_success"`
 	CountHealthCheckAsFailure       bool `json:"count_health_check_as_failure"`
 }
@@ -1012,6 +1014,8 @@ func GetSettings(c *gin.Context) {
 			}
 		case models.SettingKeyLogRawRequestResponse:
 			response.LogRawRequestResponse = setting.Value == "true"
+		case models.SettingKeyDisableAllLogs:
+			response.DisableAllLogs = setting.Value == "true"
 		case models.SettingKeyHealthCheckCountAsSuccess:
 			response.CountHealthCheckAsSuccess = setting.Value == "true"
 		case models.SettingKeyHealthCheckCountAsFailure:
@@ -1212,6 +1216,18 @@ func UpdateSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyLogRawRequestResponse).
 		Update(ctx, "value", logRawValue); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新完全关闭日志记录开关
+	disableAllLogsValue := "false"
+	if req.DisableAllLogs {
+		disableAllLogsValue = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyDisableAllLogs).
+		Update(ctx, "value", disableAllLogsValue); err != nil {
 		common.InternalServerError(c, "Failed to update settings: "+err.Error())
 		return
 	}

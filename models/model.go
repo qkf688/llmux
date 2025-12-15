@@ -136,6 +136,7 @@ const (
 
 	SettingKeyLogRetentionCount     = "log_retention_count"      // 日志保留条数，0表示不限制
 	SettingKeyLogRawRequestResponse = "log_raw_request_response" // 是否记录原始请求响应内容
+	SettingKeyDisableAllLogs        = "disable_all_logs"         // 是否完全关闭所有日志记录
 
 	// 模型健康检测相关设置
 	SettingKeyHealthCheckEnabled               = "health_check_enabled"                 // 健康检测总开关

@@ -207,6 +207,14 @@ export default function SettingsPage() {
     }
   };
 
+  const handleDisableAllLogsChange = (checked: boolean) => {
+    if (settings) {
+      const newSettings = { ...settings, disable_all_logs: checked };
+      setSettings(newSettings);
+      checkHasChanges(newSettings);
+    }
+  };
+
   const syncHealthCheckCountFlags = (success: boolean, failure: boolean) => {
     if (settings) {
       const merged = {
@@ -238,6 +246,7 @@ export default function SettingsPage() {
       baseline.auto_priority_increase_max !== newSettings.auto_priority_increase_max ||
       baseline.log_retention_count !== newSettings.log_retention_count ||
       baseline.log_raw_request_response !== newSettings.log_raw_request_response ||
+      baseline.disable_all_logs !== newSettings.disable_all_logs ||
       baseline.count_health_check_as_success !== newSettings.count_health_check_as_success ||
       baseline.count_health_check_as_failure !== newSettings.count_health_check_as_failure;
     setHasChanges(changed);
@@ -838,6 +847,22 @@ export default function SettingsPage() {
                 id="log-raw-request-response"
                 checked={settings?.log_raw_request_response ?? false}
                 onCheckedChange={handleLogRawRequestResponseChange}
+              />
+            </div>
+
+            <div className="flex items-center justify-between space-x-4">
+              <div className="space-y-0.5">
+                <Label className="text-base font-medium" htmlFor="disable-all-logs">
+                  完全关闭日志记录
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  开启后，系统将不记录任何请求日志，可大幅提升性能（提升100-200%）。建议仅在极致性能要求下使用，关闭后无法在界面查看请求历史。
+                </p>
+              </div>
+              <Switch
+                id="disable-all-logs"
+                checked={settings?.disable_all_logs ?? false}
+                onCheckedChange={handleDisableAllLogsChange}
               />
             </div>
           </CardContent>

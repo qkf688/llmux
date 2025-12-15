@@ -494,6 +494,11 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 }
 
 func SaveChatLog(ctx context.Context, log models.ChatLog) (uint, error) {
+	// 检查是否完全关闭日志记录
+	if getDisableAllLogs(ctx) {
+		return 0, nil // 返回0表示不记录日志
+	}
+
 	if err := gorm.G[models.ChatLog](models.DB).Create(ctx, &log); err != nil {
 		return 0, err
 	}
@@ -718,6 +723,17 @@ func getLogRawRequestResponse(ctx context.Context) bool {
 		First(ctx)
 	if err != nil {
 		return false // 默认关闭
+	}
+	return setting.Value == "true"
+}
+
+// getDisableAllLogs 获取是否完全关闭日志记录
+func getDisableAllLogs(ctx context.Context) bool {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyDisableAllLogs).
+		First(ctx)
+	if err != nil {
+		return false // 默认不关闭（即记录日志）
 	}
 	return setting.Value == "true"
 }

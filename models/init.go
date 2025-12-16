@@ -78,6 +78,9 @@ func initDefaultSettings(ctx context.Context) {
 		{Key: SettingKeyDisablePerformanceTracking, Value: "false"}, // 默认不关闭性能追踪
 		{Key: SettingKeyDisableTokenCounting, Value: "false"},       // 默认不关闭 token 统计
 		{Key: SettingKeyEnableRequestTrace, Value: "true"},          // 默认启用请求追踪
+		{Key: SettingKeyStripResponseHeaders, Value: "false"},       // 默认不移除响应头
+		{Key: SettingKeyEnableFormatConversion, Value: "true"},      // 默认启用格式转换
+		{Key: SettingKeyAutoPriorityDecayDisableEnabled, Value: "true"}, // 默认启用自动禁用功能
 	}
 
 	for _, setting := range defaultSettings {

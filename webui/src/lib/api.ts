@@ -449,6 +449,8 @@ export interface Settings {
   disable_performance_tracking: boolean;
   disable_token_counting: boolean;
   enable_request_trace: boolean;
+  strip_response_headers: boolean;
+  enable_format_conversion: boolean;
 }
 
 export async function getSettings(): Promise<Settings> {

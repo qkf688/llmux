@@ -910,6 +910,8 @@ type SettingsResponse struct {
 	DisablePerformanceTracking bool `json:"disable_performance_tracking"`
 	DisableTokenCounting       bool `json:"disable_token_counting"`
 	EnableRequestTrace         bool `json:"enable_request_trace"`
+	StripResponseHeaders       bool `json:"strip_response_headers"`
+	EnableFormatConversion     bool `json:"enable_format_conversion"`
 }
 
 // UpdateSettingsRequest 更新设置请求结构
@@ -937,6 +939,8 @@ type UpdateSettingsRequest struct {
 	DisablePerformanceTracking bool `json:"disable_performance_tracking"`
 	DisableTokenCounting       bool `json:"disable_token_counting"`
 	EnableRequestTrace         bool `json:"enable_request_trace"`
+	StripResponseHeaders       bool `json:"strip_response_headers"`
+	EnableFormatConversion     bool `json:"enable_format_conversion"`
 }
 
 // GetSettings 获取所有设置
@@ -970,6 +974,8 @@ func GetSettings(c *gin.Context) {
 		DisablePerformanceTracking: false,
 		DisableTokenCounting:       false,
 		EnableRequestTrace:         true, // 默认启用
+		StripResponseHeaders:       false,
+		EnableFormatConversion:     true,
 	}
 
 	for _, setting := range settings {
@@ -1038,6 +1044,10 @@ func GetSettings(c *gin.Context) {
 			response.DisableTokenCounting = setting.Value == "true"
 		case models.SettingKeyEnableRequestTrace:
 			response.EnableRequestTrace = setting.Value == "true"
+		case models.SettingKeyStripResponseHeaders:
+			response.StripResponseHeaders = setting.Value == "true"
+		case models.SettingKeyEnableFormatConversion:
+			response.EnableFormatConversion = setting.Value == "true"
 		}
 	}
 
@@ -1280,6 +1290,30 @@ func UpdateSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyEnableRequestTrace).
 		Update(ctx, "value", enableRequestTraceValue); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新移除响应头设置
+	stripResponseHeadersValue := "false"
+	if req.StripResponseHeaders {
+		stripResponseHeadersValue = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyStripResponseHeaders).
+		Update(ctx, "value", stripResponseHeadersValue); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新格式转换设置
+	enableFormatConversionValue := "false"
+	if req.EnableFormatConversion {
+		enableFormatConversionValue = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyEnableFormatConversion).
+		Update(ctx, "value", enableFormatConversionValue); err != nil {
 		common.InternalServerError(c, "Failed to update settings: "+err.Error())
 		return
 	}

@@ -152,6 +152,8 @@ const (
 	SettingKeyDisablePerformanceTracking = "disable_performance_tracking" // 关闭性能追踪（首包时间、TPS）
 	SettingKeyDisableTokenCounting       = "disable_token_counting"       // 关闭 token 统计
 	SettingKeyEnableRequestTrace         = "enable_request_trace"         // 启用请求追踪（httptrace）
+	SettingKeyStripResponseHeaders       = "strip_response_headers"       // 移除不必要的响应头
+	SettingKeyEnableFormatConversion     = "enable_format_conversion"     // 允许格式转换（关闭则只能直连）
 )
 
 // HealthCheckLog 模型健康检测日志

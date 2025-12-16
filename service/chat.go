@@ -106,10 +106,18 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 			// 判断是否需要格式转换
 			// 当客户端格式与供应商类型一致时，直接透传原始请求体
 			var requestBody []byte
+			enableFormatConversion := getEnableFormatConversion(ctx)
+
 			if style == provider.Type {
 				// 直接透传，不进行格式转换
 				slog.Debug("passthrough mode", "client_type", style, "provider_type", provider.Type)
 				requestBody = before.raw
+			} else if !enableFormatConversion {
+				// 格式转换已关闭，跳过此供应商
+				slog.Debug("format conversion disabled, skipping provider", "client_type", style, "provider_type", provider.Type)
+				delete(weightItems, *id)
+				delete(priorityItems, *id)
+				continue
 			} else {
 				// 需要格式转换
 				slog.Debug("transform mode", "client_type", style, "provider_type", provider.Type)
@@ -772,6 +780,28 @@ func getDisableTokenCounting(ctx context.Context) bool {
 func getEnableRequestTrace(ctx context.Context) bool {
 	setting, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyEnableRequestTrace).
+		First(ctx)
+	if err != nil {
+		return true // 默认启用
+	}
+	return setting.Value == "true"
+}
+
+// GetStripResponseHeaders 获取是否移除不必要的响应头（导出供 handler 使用）
+func GetStripResponseHeaders(ctx context.Context) bool {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyStripResponseHeaders).
+		First(ctx)
+	if err != nil {
+		return false // 默认不移除
+	}
+	return setting.Value == "true"
+}
+
+// getEnableFormatConversion 获取是否启用格式转换
+func getEnableFormatConversion(ctx context.Context) bool {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyEnableFormatConversion).
 		First(ctx)
 	if err != nil {
 		return true // 默认启用

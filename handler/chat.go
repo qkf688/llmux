@@ -100,7 +100,7 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 		service.RecordLog(context.Background(), startReq, pr, postProcessor, logId, *before, providersWithMeta.IOLog)
 	}()
 
-	writeHeader(c, before.Stream, res.Header)
+	writeHeader(c, ctx, before.Stream, res.Header)
 	if _, err := io.Copy(c.Writer, tee); err != nil {
 		pw.CloseWithError(err)
 		common.InternalServerError(c, err.Error())
@@ -114,8 +114,22 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 	wg.Wait()
 }
 
-func writeHeader(c *gin.Context, stream bool, header http.Header) {
+func writeHeader(c *gin.Context, ctx context.Context, stream bool, header http.Header) {
+	// 检查是否需要移除不必要的响应头
+	stripHeaders := service.GetStripResponseHeaders(ctx)
+
+	// 需要保留的核心响应头
+	essentialHeaders := map[string]bool{
+		"Content-Type":      true,
+		"X-Request-Id":      true,
+		"X-Ratelimit-Limit": true,
+	}
+
 	for k, values := range header {
+		// 如果开启了移除响应头选项，只保留必要的头
+		if stripHeaders && !essentialHeaders[k] {
+			continue
+		}
 		for _, value := range values {
 			c.Writer.Header().Add(k, value)
 		}

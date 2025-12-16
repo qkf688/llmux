@@ -207,6 +207,42 @@ export function LogsSettings({ settings, onSettingsChange }: LogsSettingsProps) 
               onCheckedChange={(checked) => updateLocalSettings({ enable_request_trace: checked })}
             />
           </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="strip-response-headers" className="text-base font-medium">
+                移除不必要的响应头
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                开启后，系统将只保留核心响应头（Content-Type、X-Request-Id 等），移除其他响应头。
+                <br />
+                可减少网络传输数据量，适度提升性能。
+              </p>
+            </div>
+            <Switch
+              id="strip-response-headers"
+              checked={localSettings?.strip_response_headers ?? false}
+              onCheckedChange={(checked) => updateLocalSettings({ strip_response_headers: checked })}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="enable-format-conversion" className="text-base font-medium">
+                启用格式转换
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                开启后，系统允许在不同 API 格式间转换（如 OpenAI ↔ Anthropic）。
+                <br />
+                关闭后只能使用与提供商类型匹配的格式，可减少转换开销，提升性能。
+              </p>
+            </div>
+            <Switch
+              id="enable-format-conversion"
+              checked={localSettings?.enable_format_conversion ?? true}
+              onCheckedChange={(checked) => updateLocalSettings({ enable_format_conversion: checked })}
+            />
+          </div>
         </CardContent>
       </Card>
     </div>

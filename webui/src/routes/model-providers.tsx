@@ -137,6 +137,7 @@ export default function ModelProvidersPage() {
   const [selectedTestId, setSelectedTestId] = useState<number | null>(null);
   const [testType, setTestType] = useState<"connectivity" | "react">("connectivity");
   const [selectedProviderType, setSelectedProviderType] = useState<string>("all");
+  const [selectedProviderFilter, setSelectedProviderFilter] = useState<string>("all");
   const [reactTestResult, setReactTestResult] = useState<{
     loading: boolean;
     messages: string;
@@ -162,6 +163,7 @@ export default function ModelProvidersPage() {
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [collapsedProviders, setCollapsedProviders] = useState<Record<number, boolean>>({});
+  const [searchKeyword, setSearchKeyword] = useState("");
 
   const dialogClose = () => {
     setTestDialogOpen(false)
@@ -750,15 +752,28 @@ export default function ModelProvidersPage() {
   // 获取唯一的提供商类型列表
   const providerTypes = Array.from(new Set(providers.map(p => p.Type).filter(Boolean)));
 
-  // 根据选择的提供商类型过滤模型提供商关联
-  const filteredModelProviders = selectedProviderType && selectedProviderType !== "all"
-    ? modelProviders.filter(association => {
-      const provider = providers.find(p => p.ID === association.ProviderID);
-      return provider?.Type === selectedProviderType;
-    })
-    : modelProviders;
+  // 根据选择的提供商类型、具体提供商和搜索关键词过滤模型提供商关联
+  const filteredModelProviders = modelProviders.filter(association => {
+    const provider = providers.find(p => p.ID === association.ProviderID);
 
-  const hasAssociationFilter = selectedProviderType !== "all";
+    // 提供商类型筛选
+    const typeMatch = selectedProviderType === "all" || provider?.Type === selectedProviderType;
+
+    // 具体提供商筛选
+    const providerMatch = selectedProviderFilter === "all" || association.ProviderID.toString() === selectedProviderFilter;
+
+    // 搜索关键词筛选
+    const keyword = searchKeyword.toLowerCase().trim();
+    const searchMatch = !keyword ||
+      association.ProviderModel.toLowerCase().includes(keyword) ||
+      (provider?.Name ?? "").toLowerCase().includes(keyword) ||
+      (provider?.Type ?? "").toLowerCase().includes(keyword) ||
+      association.ID.toString().includes(keyword);
+
+    return typeMatch && providerMatch && searchMatch;
+  });
+
+  const hasAssociationFilter = selectedProviderType !== "all" || selectedProviderFilter !== "all" || searchKeyword.trim() !== "";
 
   const isAllAssociationsSelected = filteredModelProviders.length > 0 && selectedAssociationIds.length === filteredModelProviders.length;
   const isPartialAssociationsSelected = selectedAssociationIds.length > 0 && selectedAssociationIds.length < filteredModelProviders.length;
@@ -805,8 +820,9 @@ export default function ModelProvidersPage() {
         </div>
       </div>
       <div className="flex flex-col gap-2 flex-shrink-0">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:gap-4">
-          <div className="flex flex-col gap-1 text-xs col-span-2 sm:col-span-1">
+        {/* 第一行：模型选择 + 提供商类型筛选 + 具体提供商筛选 */}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
+          <div className="flex flex-col gap-1 text-xs">
             <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">关联模型</Label>
             <Select value={selectedModelId?.toString() || ""} onValueChange={handleModelChange}>
               <SelectTrigger className="h-8 w-full text-xs px-2">
@@ -821,14 +837,14 @@ export default function ModelProvidersPage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex flex-col gap-1 text-xs col-span-2 sm:col-span-1">
+          <div className="flex flex-col gap-1 text-xs">
             <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">提供商类型</Label>
             <Select value={selectedProviderType} onValueChange={setSelectedProviderType}>
               <SelectTrigger className="h-8 w-full text-xs px-2">
                 <SelectValue placeholder="按类型筛选" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">全部</SelectItem>
+                <SelectItem value="all">全部类型</SelectItem>
                 {providerTypes.map((type) => (
                   <SelectItem key={type} value={type}>
                     {type}
@@ -837,11 +853,39 @@ export default function ModelProvidersPage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex items-end col-span-2 sm:col-span-1 sm:justify-end gap-2">
+          <div className="flex flex-col gap-1 text-xs">
+            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">具体提供商</Label>
+            <Select value={selectedProviderFilter} onValueChange={setSelectedProviderFilter}>
+              <SelectTrigger className="h-8 w-full text-xs px-2">
+                <SelectValue placeholder="按提供商筛选" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部提供商</SelectItem>
+                {providers.map((provider) => (
+                  <SelectItem key={provider.ID} value={provider.ID.toString()}>
+                    {provider.Name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* 第二行：搜索框 + 操作按钮 */}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex-1">
+            <Input
+              placeholder="搜索提供商、模型名称或ID..."
+              value={searchKeyword}
+              onChange={(e) => setSearchKeyword(e.target.value)}
+              className="h-8 text-xs"
+            />
+          </div>
+          <div className="flex gap-2 sm:flex-shrink-0">
             {selectedAssociationIds.length > 0 && (
               <AlertDialog open={batchDeleteDialogOpen} onOpenChange={setBatchDeleteDialogOpen}>
                 <AlertDialogTrigger asChild>
-                  <Button variant="destructive" className="h-8 text-xs">
+                  <Button variant="destructive" className="h-8 text-xs flex-1 sm:flex-initial">
                     批量删除 ({selectedAssociationIds.length})
                   </Button>
                 </AlertDialogTrigger>
@@ -864,7 +908,7 @@ export default function ModelProvidersPage() {
             <Button
               onClick={openCreateDialog}
               disabled={!selectedModelId}
-              className="h-8 w-full text-xs sm:w-auto sm:ml-auto"
+              className="h-8 text-xs flex-1 sm:flex-initial"
             >
               添加关联
             </Button>
@@ -887,7 +931,7 @@ export default function ModelProvidersPage() {
           </div>
         ) : filteredModelProviders.length === 0 ? (
           <div className="flex h-full items-center justify-center text-muted-foreground text-sm text-center px-6">
-            {hasAssociationFilter ? '当前类型暂无关联' : '该模型还没有关联的提供商'}
+            {hasAssociationFilter ? '没有匹配的关联记录' : '该模型还没有关联的提供商'}
           </div>
         ) : (
           <div className="h-full flex flex-col">

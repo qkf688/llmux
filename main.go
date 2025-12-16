@@ -101,6 +101,7 @@ func main() {
 	api.DELETE("/health-check/logs", handler.ClearHealthCheckLogs)
 	api.POST("/health-check/run/:id", handler.RunHealthCheck)
 	api.POST("/health-check/run-all", handler.RunHealthCheckAll)
+	api.GET("/health-check/batch/:batchId", handler.GetBatchHealthCheckStatus)
 
 	// Provider connectivity test
 	api.GET("/test/:id", handler.ProviderTestHandler)

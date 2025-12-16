@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { updateHealthCheckSettings, runHealthCheckAll } from "@/lib/api";
+import { updateHealthCheckSettings } from "@/lib/api";
 import type { HealthCheckSettings } from "@/lib/api";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -18,7 +18,6 @@ export function HealthCheckSettingsTab({ healthCheckSettings, onHealthCheckSetti
   const [saving, setSaving] = useState(false);
   const [localSettings, setLocalSettings] = useState(healthCheckSettings);
   const [hasChanges, setHasChanges] = useState(false);
-  const [runningHealthCheck, setRunningHealthCheck] = useState(false);
 
   const updateLocalSettings = (updates: Partial<HealthCheckSettings>) => {
     if (localSettings) {
@@ -48,18 +47,6 @@ export function HealthCheckSettingsTab({ healthCheckSettings, onHealthCheckSetti
   const handleReset = () => {
     setLocalSettings(healthCheckSettings);
     setHasChanges(false);
-  };
-
-  const handleRunHealthCheckAll = async () => {
-    try {
-      setRunningHealthCheck(true);
-      await runHealthCheckAll();
-      toast.success("已启动所有模型提供商的健康检测");
-    } catch (error) {
-      toast.error("启动健康检测失败: " + (error as Error).message);
-    } finally {
-      setRunningHealthCheck(false);
-    }
   };
 
   return (
@@ -247,33 +234,6 @@ export function HealthCheckSettingsTab({ healthCheckSettings, onHealthCheckSetti
               checked={localSettings?.count_health_check_as_failure ?? false}
               onCheckedChange={(checked) => updateLocalSettings({ count_health_check_as_failure: checked })}
             />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>手动操作</CardTitle>
-          <CardDescription>
-            立即执行健康检测
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label className="text-base font-medium">手动执行检测</Label>
-              <p className="text-sm text-muted-foreground">
-                立即对所有模型提供商执行一次健康检测。
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              onClick={handleRunHealthCheckAll}
-              disabled={runningHealthCheck}
-            >
-              {runningHealthCheck ? <Spinner className="w-4 h-4 mr-2" /> : null}
-              执行检测
-            </Button>
           </div>
         </CardContent>
       </Card>

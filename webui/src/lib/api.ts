@@ -542,6 +542,7 @@ export interface HealthCheckSettings {
 export interface HealthCheckLog {
   ID: number;
   CreatedAt: string;
+  batch_id?: string;
   model_provider_id: number;
   model_name: string;
   provider_name: string;
@@ -558,6 +559,16 @@ export interface HealthCheckLogsResponse {
   page: number;
   page_size: number;
   pages: number;
+}
+
+export interface BatchHealthCheckStatus {
+  batch_id: string;
+  total_count: number;
+  success: number;
+  failed: number;
+  pending: number;
+  completed: boolean;
+  logs: HealthCheckLog[];
 }
 
 export async function getHealthCheckSettings(): Promise<HealthCheckSettings> {
@@ -605,8 +616,12 @@ export async function runHealthCheck(id: number): Promise<HealthCheckLog> {
   });
 }
 
-export async function runHealthCheckAll(): Promise<{ message: string }> {
-  return apiRequest<{ message: string }>('/health-check/run-all', {
+export async function runHealthCheckAll(): Promise<{ batch_id: string; message: string }> {
+  return apiRequest<{ batch_id: string; message: string }>('/health-check/run-all', {
     method: 'POST',
   });
+}
+
+export async function getBatchHealthCheckStatus(batchId: string): Promise<BatchHealthCheckStatus> {
+  return apiRequest<BatchHealthCheckStatus>(`/health-check/batch/${batchId}`);
 }

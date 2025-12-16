@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -13,9 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Loading from "@/components/loading";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { getHealthCheckLogs, getProviders, getModels, clearHealthCheckLogs, type HealthCheckLog, type Provider, type Model } from "@/lib/api";
-import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { getHealthCheckLogs, getProviders, getModels, clearHealthCheckLogs, runHealthCheckAll, getBatchHealthCheckStatus, type HealthCheckLog, type Provider, type Model } from "@/lib/api";
+import { ChevronLeft, ChevronRight, RefreshCw, Play, Loader2, Eye } from "lucide-react";
 import { toast } from "sonner";
+import { HealthCheckResultDialog } from "@/components/health-check-result-dialog";
 
 // 格式化时间显示
 const formatTime = (milliseconds: number): string => {
@@ -57,6 +58,13 @@ export default function HealthCheckLogsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
   const [clearingLogs, setClearingLogs] = useState(false);
+  // 健康检测结果对话框
+  const [resultDialogOpen, setResultDialogOpen] = useState(false);
+  const [currentBatchId, setCurrentBatchId] = useState<string | null>(null);
+  // 后台检测状态追踪
+  const [backgroundBatchId, setBackgroundBatchId] = useState<string | null>(null);
+  const [backgroundCheckComplete, setBackgroundCheckComplete] = useState(false);
+  const backgroundIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // 获取数据
   const fetchProviders = async () => {
@@ -146,9 +154,176 @@ export default function HealthCheckLogsPage() {
     }
   };
 
+  const handleRunHealthCheck = async () => {
+    // 如果已有检测在进行中，直接打开对话框
+    if (backgroundBatchId && !backgroundCheckComplete) {
+      setResultDialogOpen(true);
+      return;
+    }
+
+    // 启动新的检测
+    try {
+      const { batch_id } = await runHealthCheckAll();
+      setCurrentBatchId(batch_id);
+      setBackgroundBatchId(batch_id);
+      setBackgroundCheckComplete(false);
+      setResultDialogOpen(true);
+      // 保存到 localStorage
+      localStorage.setItem('healthCheckBatchId', batch_id);
+      localStorage.setItem('healthCheckCompleted', 'false');
+      startBackgroundPolling(batch_id);
+    } catch (error) {
+      toast.error("启动健康检测失败: " + (error as Error).message);
+    }
+  };
+
+  const handleResultDialogClose = (openState: boolean) => {
+    setResultDialogOpen(openState);
+    if (!openState) {
+      // 对话框关闭时，如果检测未完成，继续后台轮询
+      // 否则清理状态
+      if (backgroundCheckComplete) {
+        setCurrentBatchId(null);
+        setBackgroundBatchId(null);
+        fetchLogs();
+      }
+    }
+  };
+
+  const handleShowProgress = () => {
+    setResultDialogOpen(true);
+  };
+
+  const handleDismissBanner = () => {
+    setBackgroundBatchId(null);
+    stopBackgroundPolling();
+    // 清除 localStorage
+    localStorage.removeItem('healthCheckBatchId');
+    localStorage.removeItem('healthCheckCompleted');
+  };
+
+  // 后台轮询检测状态
+  const startBackgroundPolling = (batchId: string) => {
+    // 清理旧的定时器
+    if (backgroundIntervalRef.current) {
+      clearInterval(backgroundIntervalRef.current);
+    }
+
+    // 设置新的定时器
+    backgroundIntervalRef.current = setInterval(async () => {
+      try {
+        const status = await getBatchHealthCheckStatus(batchId);
+        if (status.completed) {
+          setBackgroundCheckComplete(true);
+          // 更新 localStorage
+          localStorage.setItem('healthCheckCompleted', 'true');
+          stopBackgroundPolling();
+          // 如果对话框是关闭状态，刷新日志列表
+          if (!resultDialogOpen) {
+            fetchLogs();
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch background batch status:", error);
+      }
+    }, 3000); // 每3秒检查一次
+  };
+
+  const stopBackgroundPolling = () => {
+    if (backgroundIntervalRef.current) {
+      clearInterval(backgroundIntervalRef.current);
+      backgroundIntervalRef.current = null;
+    }
+  };
+
+  // 组件挂载时恢复状态
+  useEffect(() => {
+    const savedBatchId = localStorage.getItem('healthCheckBatchId');
+    const savedCompleted = localStorage.getItem('healthCheckCompleted') === 'true';
+
+    if (savedBatchId) {
+      setBackgroundBatchId(savedBatchId);
+      setCurrentBatchId(savedBatchId);
+      setBackgroundCheckComplete(savedCompleted);
+
+      // 如果未完成，继续轮询
+      if (!savedCompleted) {
+        startBackgroundPolling(savedBatchId);
+      }
+    }
+  }, []);
+
+  // 组件卸载时清理定时器
+  useEffect(() => {
+    return () => {
+      stopBackgroundPolling();
+    };
+  }, []);
+
   // 布局开始
   return (
     <div className="h-full min-h-0 flex flex-col gap-4 p-1">
+      {/* 后台检测进行中提示横幅 */}
+      {backgroundBatchId && !resultDialogOpen && !backgroundCheckComplete && (
+        <div className="flex-shrink-0 rounded-lg border bg-primary/10 border-primary/30 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Loader2 className="size-4 animate-spin text-primary" />
+              <span>健康检测正在后台运行中...</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleShowProgress}
+                className="h-7"
+              >
+                <Eye className="size-4 mr-1" />
+                查看进度
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDismissBanner}
+                className="h-7 text-muted-foreground"
+              >
+                忽略
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 检测完成提示横幅 */}
+      {backgroundBatchId && !resultDialogOpen && backgroundCheckComplete && (
+        <div className="flex-shrink-0 rounded-lg border bg-green-500/10 border-green-500/30 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-green-600">健康检测已完成</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleShowProgress}
+                className="h-7"
+              >
+                <Eye className="size-4 mr-1" />
+                查看结果
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDismissBanner}
+                className="h-7 text-muted-foreground"
+              >
+                关闭
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 顶部标题和刷新 */}
       <div className="flex flex-col gap-2 flex-shrink-0">
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -157,6 +332,23 @@ export default function HealthCheckLogsPage() {
             <p className="text-sm text-muted-foreground">查看模型提供商的健康检测历史记录</p>
           </div>
           <div className="flex gap-2 ml-auto">
+            <Button
+              onClick={handleRunHealthCheck}
+              variant="default"
+              className="shrink-0"
+            >
+              {backgroundBatchId && !backgroundCheckComplete ? (
+                <>
+                  <Eye className="size-4 mr-2" />
+                  查看进度
+                </>
+              ) : (
+                <>
+                  <Play className="size-4 mr-2" />
+                  执行检测
+                </>
+              )}
+            </Button>
             <AlertDialog open={isClearDialogOpen} onOpenChange={setIsClearDialogOpen}>
               <AlertDialogTrigger asChild>
                 <Button
@@ -434,6 +626,13 @@ export default function HealthCheckLogsPage() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* 健康检测结果对话框 */}
+      <HealthCheckResultDialog
+        open={resultDialogOpen}
+        onOpenChange={handleResultDialogClose}
+        batchId={currentBatchId}
+      />
     </div>
   );
 }

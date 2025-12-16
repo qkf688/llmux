@@ -181,8 +181,13 @@ func (h *HealthChecker) checkAll() {
 	slog.Info("health check completed")
 }
 
-// checkOne 检查单个模型提供商
+// checkOne 检查单个模型提供商（内部定时任务使用，无 batchID）
 func (h *HealthChecker) checkOne(ctx context.Context, mp *models.ModelWithProvider) {
+	h.checkOneWithBatch(ctx, mp, "")
+}
+
+// checkOneWithBatch 检查单个模型提供商（支持 batchID）
+func (h *HealthChecker) checkOneWithBatch(ctx context.Context, mp *models.ModelWithProvider, batchID string) {
 	start := time.Now()
 
 	// 获取提供商信息
@@ -205,6 +210,7 @@ func (h *HealthChecker) checkOne(ctx context.Context, mp *models.ModelWithProvid
 
 	// 记录日志
 	log := models.HealthCheckLog{
+		BatchID:         batchID,
 		ModelProviderID: mp.ID,
 		ModelName:       model.Name,
 		ProviderName:    provider.Name,
@@ -216,10 +222,10 @@ func (h *HealthChecker) checkOne(ctx context.Context, mp *models.ModelWithProvid
 	if checkErr != nil {
 		log.Status = "error"
 		log.Error = checkErr.Error()
-		slog.Warn("health check failed", "model", model.Name, "provider", provider.Name, "error", checkErr)
+		slog.Warn("health check failed", "model", model.Name, "provider", provider.Name, "error", checkErr, "batch_id", batchID)
 	} else {
 		log.Status = "success"
-		slog.Info("health check passed", "model", model.Name, "provider", provider.Name, "response_time", responseTime)
+		slog.Info("health check passed", "model", model.Name, "provider", provider.Name, "response_time", responseTime, "batch_id", batchID)
 	}
 
 	// 保存日志
@@ -449,6 +455,11 @@ func (h *HealthChecker) getLogRetentionCount(ctx context.Context) int {
 
 // CheckSingle 手动检测单个模型提供商
 func (h *HealthChecker) CheckSingle(ctx context.Context, mpID uint) (*models.HealthCheckLog, error) {
+	return h.CheckSingleWithBatch(ctx, mpID, "")
+}
+
+// CheckSingleWithBatch 手动检测单个模型提供商（支持 batchID）
+func (h *HealthChecker) CheckSingleWithBatch(ctx context.Context, mpID uint, batchID string) (*models.HealthCheckLog, error) {
 	mp, err := gorm.G[models.ModelWithProvider](models.DB).Where("id = ?", mpID).First(ctx)
 	if err != nil {
 		return nil, err
@@ -469,6 +480,7 @@ func (h *HealthChecker) CheckSingle(ctx context.Context, mpID uint) (*models.Hea
 	responseTime := time.Since(start).Milliseconds()
 
 	log := models.HealthCheckLog{
+		BatchID:         batchID,
 		ModelProviderID: mp.ID,
 		ModelName:       model.Name,
 		ProviderName:    provider.Name,
@@ -495,6 +507,25 @@ func (h *HealthChecker) CheckSingle(ctx context.Context, mpID uint) (*models.Hea
 	h.handleCheckResult(ctx, &mp, provider.Name, checkErr == nil)
 
 	return &log, nil
+}
+
+// CheckAllWithBatch 批量检测所有模型提供商（手动触发，带 batchID）
+func (h *HealthChecker) CheckAllWithBatch(ctx context.Context, batchID string) error {
+	// 获取所有模型提供商关联
+	modelProviders, err := gorm.G[models.ModelWithProvider](models.DB).Find(ctx)
+	if err != nil {
+		slog.Error("failed to get model providers for batch health check", "error", err, "batch_id", batchID)
+		return err
+	}
+
+	slog.Info("starting batch health check", "count", len(modelProviders), "batch_id", batchID)
+
+	for _, mp := range modelProviders {
+		h.checkOneWithBatch(ctx, &mp, batchID)
+	}
+
+	slog.Info("batch health check completed", "batch_id", batchID)
+	return nil
 }
 
 // GetHealthCheckSettings 获取健康检测设置

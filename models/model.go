@@ -168,12 +168,13 @@ const (
 // HealthCheckLog 模型健康检测日志
 type HealthCheckLog struct {
 	gorm.Model
-	ModelProviderID uint      `gorm:"index" json:"model_provider_id"` // 关联的 ModelWithProvider ID
-	ModelName       string    `gorm:"index" json:"model_name"`        // 模型名称
-	ProviderName    string    `gorm:"index" json:"provider_name"`     // 提供商名称
-	ProviderModel   string    `json:"provider_model"`                 // 提供商模型名称
-	Status          string    `gorm:"index" json:"status"`            // 检测状态: success, error
-	Error           string    `json:"error,omitempty"`                // 错误信息
-	ResponseTime    int64     `json:"response_time"`                  // 响应时间（毫秒）
-	CheckedAt       time.Time `gorm:"index" json:"checked_at"`        // 检测时间
+	BatchID         string    `gorm:"index" json:"batch_id,omitempty"`    // 批次ID，用于批量检测追踪
+	ModelProviderID uint      `gorm:"index" json:"model_provider_id"`     // 关联的 ModelWithProvider ID
+	ModelName       string    `gorm:"index" json:"model_name"`            // 模型名称
+	ProviderName    string    `gorm:"index" json:"provider_name"`         // 提供商名称
+	ProviderModel   string    `json:"provider_model"`                     // 提供商模型名称
+	Status          string    `gorm:"index" json:"status"`                // 检测状态: success, error
+	Error           string    `json:"error,omitempty"`                    // 错误信息
+	ResponseTime    int64     `json:"response_time"`                      // 响应时间（毫秒）
+	CheckedAt       time.Time `gorm:"index" json:"checked_at"`            // 检测时间
 }

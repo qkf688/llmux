@@ -93,10 +93,14 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 			header := buildHeaders(reqMeta.Header, withHeader, modelWithProvider.CustomerHeaders, before.Stream)
 
 			reqStart := time.Now()
-			trace := &httptrace.ClientTrace{
-				GotFirstResponseByte: func() {
-					slog.Debug("first response byte received", "response_time", time.Since(reqStart))
-				},
+			// 根据设置决定是否启用请求追踪
+			var trace *httptrace.ClientTrace
+			if getEnableRequestTrace(ctx) {
+				trace = &httptrace.ClientTrace{
+					GotFirstResponseByte: func() {
+						slog.Debug("first response byte received", "response_time", time.Since(reqStart))
+					},
+				}
 			}
 
 			// 判断是否需要格式转换
@@ -436,7 +440,11 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 	recordFunc := func() error {
 		defer reader.Close()
 
-		log, output, err := processer(ctx, reader, before.Stream, reqStart)
+		// 获取性能追踪和 token 统计的开关设置
+		disablePerformanceTracking := getDisablePerformanceTracking(ctx)
+		disableTokenCounting := getDisableTokenCounting(ctx)
+
+		log, output, err := processer(ctx, reader, before.Stream, reqStart, disablePerformanceTracking, disableTokenCounting)
 		if err != nil {
 			slog.Error("processer error", "log_id", logId, "error", err)
 			// 更新日志状态为错误
@@ -734,6 +742,39 @@ func getDisableAllLogs(ctx context.Context) bool {
 		First(ctx)
 	if err != nil {
 		return false // 默认不关闭（即记录日志）
+	}
+	return setting.Value == "true"
+}
+
+// getDisablePerformanceTracking 获取是否关闭性能追踪
+func getDisablePerformanceTracking(ctx context.Context) bool {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyDisablePerformanceTracking).
+		First(ctx)
+	if err != nil {
+		return false // 默认不关闭
+	}
+	return setting.Value == "true"
+}
+
+// getDisableTokenCounting 获取是否关闭 token 统计
+func getDisableTokenCounting(ctx context.Context) bool {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyDisableTokenCounting).
+		First(ctx)
+	if err != nil {
+		return false // 默认不关闭
+	}
+	return setting.Value == "true"
+}
+
+// getEnableRequestTrace 获取是否启用请求追踪
+func getEnableRequestTrace(ctx context.Context) bool {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyEnableRequestTrace).
+		First(ctx)
+	if err != nil {
+		return true // 默认启用
 	}
 	return setting.Value == "true"
 }

@@ -906,6 +906,10 @@ type SettingsResponse struct {
 	DisableAllLogs                  bool `json:"disable_all_logs"`
 	CountHealthCheckAsSuccess       bool `json:"count_health_check_as_success"`
 	CountHealthCheckAsFailure       bool `json:"count_health_check_as_failure"`
+	// 性能优化相关设置
+	DisablePerformanceTracking bool `json:"disable_performance_tracking"`
+	DisableTokenCounting       bool `json:"disable_token_counting"`
+	EnableRequestTrace         bool `json:"enable_request_trace"`
 }
 
 // UpdateSettingsRequest 更新设置请求结构
@@ -929,6 +933,10 @@ type UpdateSettingsRequest struct {
 	DisableAllLogs                  bool `json:"disable_all_logs"`
 	CountHealthCheckAsSuccess       bool `json:"count_health_check_as_success"`
 	CountHealthCheckAsFailure       bool `json:"count_health_check_as_failure"`
+	// 性能优化相关设置
+	DisablePerformanceTracking bool `json:"disable_performance_tracking"`
+	DisableTokenCounting       bool `json:"disable_token_counting"`
+	EnableRequestTrace         bool `json:"enable_request_trace"`
 }
 
 // GetSettings 获取所有设置
@@ -958,6 +966,10 @@ func GetSettings(c *gin.Context) {
 		AutoPriorityIncreaseMax:         100,
 		CountHealthCheckAsSuccess:       true,
 		CountHealthCheckAsFailure:       false,
+		// 性能优化相关默认值
+		DisablePerformanceTracking: false,
+		DisableTokenCounting:       false,
+		EnableRequestTrace:         true, // 默认启用
 	}
 
 	for _, setting := range settings {
@@ -1020,6 +1032,12 @@ func GetSettings(c *gin.Context) {
 			response.CountHealthCheckAsSuccess = setting.Value == "true"
 		case models.SettingKeyHealthCheckCountAsFailure:
 			response.CountHealthCheckAsFailure = setting.Value == "true"
+		case models.SettingKeyDisablePerformanceTracking:
+			response.DisablePerformanceTracking = setting.Value == "true"
+		case models.SettingKeyDisableTokenCounting:
+			response.DisableTokenCounting = setting.Value == "true"
+		case models.SettingKeyEnableRequestTrace:
+			response.EnableRequestTrace = setting.Value == "true"
 		}
 	}
 
@@ -1228,6 +1246,40 @@ func UpdateSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyDisableAllLogs).
 		Update(ctx, "value", disableAllLogsValue); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新性能优化相关设置
+	disablePerformanceTrackingValue := "false"
+	if req.DisablePerformanceTracking {
+		disablePerformanceTrackingValue = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyDisablePerformanceTracking).
+		Update(ctx, "value", disablePerformanceTrackingValue); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	disableTokenCountingValue := "false"
+	if req.DisableTokenCounting {
+		disableTokenCountingValue = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyDisableTokenCounting).
+		Update(ctx, "value", disableTokenCountingValue); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	enableRequestTraceValue := "false"
+	if req.EnableRequestTrace {
+		enableRequestTraceValue = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyEnableRequestTrace).
+		Update(ctx, "value", enableRequestTraceValue); err != nil {
 		common.InternalServerError(c, "Failed to update settings: "+err.Error())
 		return
 	}

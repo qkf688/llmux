@@ -22,9 +22,9 @@ const (
 	DefaultChunkArrayCapacity = 128             // 预分配chunk数组容量，减少扩容
 )
 
-type Processer func(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error)
+type Processer func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error)
 
-func ProcesserOpenAI(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
+func ProcesserOpenAI(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
 	// 首字时延
 	var firstChunkTime time.Duration
 	var once sync.Once
@@ -42,12 +42,16 @@ func ProcesserOpenAI(ctx context.Context, pr io.Reader, stream bool, start time.
 	}
 
 	for chunk := range ScannerToken(scanner) {
-		once.Do(func() {
-			firstChunkTime = time.Since(start)
-		})
+		if !disablePerformanceTracking {
+			once.Do(func() {
+				firstChunkTime = time.Since(start)
+			})
+		}
 		if !stream {
 			output.OfString = chunk
-			usageStr = gjson.Get(chunk, "usage").String()
+			if !disableTokenCounting {
+				usageStr = gjson.Get(chunk, "usage").String()
+			}
 			break
 		}
 
@@ -75,7 +79,7 @@ func ProcesserOpenAI(ctx context.Context, pr io.Reader, stream bool, start time.
 		output.OfStringArray = append(output.OfStringArray, chunk)
 
 		// 优化1: 只在还没找到usage时才查询，避免重复查询
-		if usageStr == "" {
+		if !disableTokenCounting && usageStr == "" {
 			usage := gjson.Get(chunk, "usage")
 			if usage.Exists() && usage.Get("total_tokens").Int() != 0 {
 				usageStr = usage.String()
@@ -88,19 +92,23 @@ func ProcesserOpenAI(ctx context.Context, pr io.Reader, stream bool, start time.
 
 	// token用量
 	var openaiUsage models.Usage
-	usage := []byte(usageStr)
-	if json.Valid(usage) {
-		if err := json.Unmarshal(usage, &openaiUsage); err != nil {
-			return nil, nil, err
+	if !disableTokenCounting {
+		usage := []byte(usageStr)
+		if json.Valid(usage) {
+			if err := json.Unmarshal(usage, &openaiUsage); err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 
-	chunkTime := time.Since(start) - firstChunkTime
-
-	// 计算 TPS，避免除零错误
+	var chunkTime time.Duration
 	var tps float64
-	if chunkTime.Seconds() > 0 {
-		tps = float64(openaiUsage.TotalTokens) / chunkTime.Seconds()
+	if !disablePerformanceTracking {
+		chunkTime = time.Since(start) - firstChunkTime
+		// 计算 TPS，避免除零错误
+		if chunkTime.Seconds() > 0 {
+			tps = float64(openaiUsage.TotalTokens) / chunkTime.Seconds()
+		}
 	}
 
 	return &models.ChatLog{
@@ -135,7 +143,7 @@ type AnthropicUsage struct {
 	CachedTokens     int64 `json:"cached_tokens"`
 }
 
-func ProcesserOpenAiRes(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
+func ProcesserOpenAiRes(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
 	// 首字时延
 	var firstChunkTime time.Duration
 	var once sync.Once
@@ -153,12 +161,16 @@ func ProcesserOpenAiRes(ctx context.Context, pr io.Reader, stream bool, start ti
 	}
 
 	for chunk := range ScannerToken(scanner) {
-		once.Do(func() {
-			firstChunkTime = time.Since(start)
-		})
+		if !disablePerformanceTracking {
+			once.Do(func() {
+				firstChunkTime = time.Since(start)
+			})
+		}
 		if !stream {
 			output.OfString = chunk
-			usageStr = gjson.Get(chunk, "usage").String()
+			if !disableTokenCounting {
+				usageStr = gjson.Get(chunk, "usage").String()
+			}
 			break
 		}
 
@@ -176,7 +188,7 @@ func ProcesserOpenAiRes(ctx context.Context, pr io.Reader, stream bool, start ti
 		output.OfStringArray = append(output.OfStringArray, content)
 
 		// 优化: 只在特定事件时查询usage，避免重复查询
-		if usageStr == "" && event == "response.completed" {
+		if !disableTokenCounting && usageStr == "" && event == "response.completed" {
 			usageStr = gjson.Get(content, "response.usage").String()
 		}
 	}
@@ -185,19 +197,23 @@ func ProcesserOpenAiRes(ctx context.Context, pr io.Reader, stream bool, start ti
 	}
 
 	var openAIResUsage OpenAIResUsage
-	usage := []byte(usageStr)
-	if json.Valid(usage) {
-		if err := json.Unmarshal(usage, &openAIResUsage); err != nil {
-			return nil, nil, err
+	if !disableTokenCounting {
+		usage := []byte(usageStr)
+		if json.Valid(usage) {
+			if err := json.Unmarshal(usage, &openAIResUsage); err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 
-	chunkTime := time.Since(start) - firstChunkTime
-
-	// 计算 TPS，避免除零错误
+	var chunkTime time.Duration
 	var tps float64
-	if chunkTime.Seconds() > 0 {
-		tps = float64(openAIResUsage.TotalTokens) / chunkTime.Seconds()
+	if !disablePerformanceTracking {
+		chunkTime = time.Since(start) - firstChunkTime
+		// 计算 TPS，避免除零错误
+		if chunkTime.Seconds() > 0 {
+			tps = float64(openAIResUsage.TotalTokens) / chunkTime.Seconds()
+		}
 	}
 
 	return &models.ChatLog{
@@ -215,7 +231,7 @@ func ProcesserOpenAiRes(ctx context.Context, pr io.Reader, stream bool, start ti
 	}, &output, nil
 }
 
-func ProcesserAnthropic(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
+func ProcesserAnthropic(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
 	// 首字时延
 	var firstChunkTime time.Duration
 	var once sync.Once
@@ -234,12 +250,16 @@ func ProcesserAnthropic(ctx context.Context, pr io.Reader, stream bool, start ti
 	}
 
 	for chunk := range ScannerToken(scanner) {
-		once.Do(func() {
-			firstChunkTime = time.Since(start)
-		})
+		if !disablePerformanceTracking {
+			once.Do(func() {
+				firstChunkTime = time.Since(start)
+			})
+		}
 		if !stream {
 			output.OfString = chunk
-			usageStr = gjson.Get(chunk, "usage").String()
+			if !disableTokenCounting {
+				usageStr = gjson.Get(chunk, "usage").String()
+			}
 			break
 		}
 
@@ -256,7 +276,7 @@ func ProcesserAnthropic(ctx context.Context, pr io.Reader, stream bool, start ti
 		output.OfStringArray = append(output.OfStringArray, after)
 
 		// 优化: 只在特定事件时查询usage，避免重复查询
-		if usageStr == "" && event == "message_delta" {
+		if !disableTokenCounting && usageStr == "" && event == "message_delta" {
 			usageStr = gjson.Get(after, "usage").String()
 		}
 	}
@@ -265,20 +285,25 @@ func ProcesserAnthropic(ctx context.Context, pr io.Reader, stream bool, start ti
 	}
 
 	var athropicUsage AnthropicUsage
-	usage := []byte(usageStr)
-	if json.Valid(usage) {
-		if err := json.Unmarshal(usage, &athropicUsage); err != nil {
-			return nil, nil, err
+	if !disableTokenCounting {
+		usage := []byte(usageStr)
+		if json.Valid(usage) {
+			if err := json.Unmarshal(usage, &athropicUsage); err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 
-	chunkTime := time.Since(start) - firstChunkTime
-	totalTokens := athropicUsage.InputTokens + athropicUsage.OutputTokens
-
-	// 计算 TPS，避免除零错误
+	var chunkTime time.Duration
+	var totalTokens int64
 	var tps float64
-	if chunkTime.Seconds() > 0 {
-		tps = float64(totalTokens) / chunkTime.Seconds()
+	if !disablePerformanceTracking {
+		chunkTime = time.Since(start) - firstChunkTime
+		totalTokens = athropicUsage.InputTokens + athropicUsage.OutputTokens
+		// 计算 TPS，避免除零错误
+		if chunkTime.Seconds() > 0 {
+			tps = float64(totalTokens) / chunkTime.Seconds()
+		}
 	}
 
 	return &models.ChatLog{

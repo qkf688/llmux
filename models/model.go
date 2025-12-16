@@ -147,6 +147,11 @@ const (
 	SettingKeyHealthCheckLogRetentionCount     = "health_check_log_retention_count"     // 健康检测日志保留条数，0表示不限制
 	SettingKeyHealthCheckCountAsSuccess        = "health_check_count_as_success"        // 健康检测成功是否计入成功调用
 	SettingKeyHealthCheckCountAsFailure        = "health_check_count_as_failure"        // 健康检测失败是否计入失败调用（触发衰减）
+
+	// 性能优化相关设置
+	SettingKeyDisablePerformanceTracking = "disable_performance_tracking" // 关闭性能追踪（首包时间、TPS）
+	SettingKeyDisableTokenCounting       = "disable_token_counting"       // 关闭 token 统计
+	SettingKeyEnableRequestTrace         = "enable_request_trace"         // 启用请求追踪（httptrace）
 )
 
 // HealthCheckLog 模型健康检测日志

@@ -445,6 +445,10 @@ export interface Settings {
   disable_all_logs: boolean;
   count_health_check_as_success: boolean;
   count_health_check_as_failure: boolean;
+  // 性能优化相关设置
+  disable_performance_tracking: boolean;
+  disable_token_counting: boolean;
+  enable_request_trace: boolean;
 }
 
 export async function getSettings(): Promise<Settings> {

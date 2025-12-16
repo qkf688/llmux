@@ -941,17 +941,17 @@ export default function ProvidersPage() {
 
       {/* 全部模型对话框 */}
       <Dialog open={allModelsOpen} onOpenChange={setAllModelsOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>{allModelsProvider?.Name || "当前提供商"}的全部模型</DialogTitle>
             <DialogDescription>
               手动维护模型缓存，可添加自定义模型或批量删除不再需要的条目。
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-col gap-4 flex-1 min-h-0">
+            <div className="flex flex-col gap-2 flex-1 min-h-0">
+              <div className="flex items-center justify-between gap-2 flex-shrink-0">
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-semibold">全部模型列表</p>
                   <span className="text-xs text-muted-foreground">已缓存 {allModelsList.length} 个</span>
@@ -975,7 +975,7 @@ export default function ProvidersPage() {
                   </Button>
                 </div>
               </div>
-              <div className="border rounded-md max-h-60 overflow-y-auto divide-y">
+              <div className="border rounded-md flex-1 min-h-0 overflow-y-auto divide-y">
                 {allModelsList.length === 0 ? (
                   <div className="text-sm text-muted-foreground text-center py-4">暂无缓存模型</div>
                 ) : (
@@ -1021,12 +1021,12 @@ export default function ProvidersPage() {
                   })
                 )}
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 flex-shrink-0">
                 <Textarea
                   value={customModelInput}
                   onChange={(e) => setCustomModelInput(e.target.value)}
                   placeholder="每行一个模型 ID，可用来自定义或补充上游未返回的模型"
-                  className="h-28"
+                  className="h-20 resize-none"
                 />
                 <div className="flex justify-end">
                   <Button onClick={handleAddCustomModels} disabled={addingModels || !allModelsProvider}>
@@ -1037,7 +1037,7 @@ export default function ProvidersPage() {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex-shrink-0">
             <Button onClick={() => setAllModelsOpen(false)}>关闭</Button>
           </DialogFooter>
         </DialogContent>

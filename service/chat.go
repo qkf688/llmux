@@ -95,12 +95,14 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 			reqStart := time.Now()
 			// 根据设置决定是否启用请求追踪
 			var trace *httptrace.ClientTrace
+			var reqCtx context.Context = ctx
 			if getEnableRequestTrace(ctx) {
 				trace = &httptrace.ClientTrace{
 					GotFirstResponseByte: func() {
 						slog.Debug("first response byte received", "response_time", time.Since(reqStart))
 					},
 				}
+				reqCtx = httptrace.WithClientTrace(ctx, trace)
 			}
 
 			// 判断是否需要格式转换
@@ -132,24 +134,28 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 			}
 
 			// 检查是否启用原始请求响应记录
-			logRawEnabled := getLogRawRequestResponse(ctx)
+			logRawOptions := getLogRawRequestResponse(ctx)
 
 			var requestHeadersJSON []byte
 			var requestBodyStr string
 
-			if logRawEnabled {
+			if logRawOptions.RequestHeaders || logRawOptions.RequestBody {
 				// 记录原始请求头信息（客户端发送的完整头部）
-				requestHeadersJSON, err = json.Marshal(reqMeta.Header)
-				if err != nil {
-					slog.Error("failed to marshal request headers", "error", err)
-					requestHeadersJSON = []byte("{}")
+				if logRawOptions.RequestHeaders {
+					requestHeadersJSON, err = json.Marshal(reqMeta.Header)
+					if err != nil {
+						slog.Error("failed to marshal request headers", "error", err)
+						requestHeadersJSON = []byte("{}")
+					}
 				}
 
 				// 记录完整的请求体，不做大小限制
-				requestBodyStr = string(requestBody)
+				if logRawOptions.RequestBody {
+					requestBodyStr = string(requestBody)
+				}
 			}
 
-			req, err := chatModel.BuildReq(httptrace.WithClientTrace(ctx, trace), header, modelWithProvider.ProviderModel, requestBody)
+			req, err := chatModel.BuildReq(reqCtx, header, modelWithProvider.ProviderModel, requestBody)
 			if err != nil {
 				retryLog <- log.WithError(err)
 				// 构建请求失败 移除待选
@@ -173,6 +179,9 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				}); updateErr != nil {
 					slog.Error("failed to update log status", "error", updateErr)
 				}
+				// 应用权重和优先级衰减
+				applyWeightDecayByModelProviderID(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
+				applyPriorityDecayByModelProviderID(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
 				// 请求失败 移除待选
 				delete(weightItems, *id)
 				delete(priorityItems, *id)
@@ -192,23 +201,35 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				}
 				
 				// 如果启用了日志记录，也记录请求和响应信息
-				if logRawEnabled {
-					responseHeadersJSON, err := json.Marshal(res.Header)
-					if err != nil {
-						slog.Error("failed to marshal response headers", "error", err)
-						responseHeadersJSON = []byte("{}")
+				if logRawOptions.RequestHeaders || logRawOptions.RequestBody || logRawOptions.ResponseHeaders || logRawOptions.RawResponseBody {
+					if logRawOptions.ResponseHeaders {
+						responseHeadersJSON, err := json.Marshal(res.Header)
+						if err != nil {
+							slog.Error("failed to marshal response headers", "error", err)
+							responseHeadersJSON = []byte("{}")
+						}
+						errorUpdate.ResponseHeaders = string(responseHeadersJSON)
 					}
-					
-					errorUpdate.RequestHeaders = string(requestHeadersJSON)
-					errorUpdate.RequestBody = requestBodyStr
-					errorUpdate.ResponseHeaders = string(responseHeadersJSON)
-					errorUpdate.RawResponseBody = string(byteBody)
+
+					if logRawOptions.RequestHeaders {
+						errorUpdate.RequestHeaders = string(requestHeadersJSON)
+					}
+					if logRawOptions.RequestBody {
+						errorUpdate.RequestBody = requestBodyStr
+					}
+					if logRawOptions.RawResponseBody {
+						errorUpdate.RawResponseBody = string(byteBody)
+					}
 				}
 				
 				// 更新日志状态为错误
 				if _, updateErr := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, errorUpdate); updateErr != nil {
 					slog.Error("failed to update log status", "error", updateErr)
 				}
+
+				// 应用权重和优先级衰减
+				applyWeightDecayByModelProviderID(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
+				applyPriorityDecayByModelProviderID(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
 
 				if res.StatusCode == http.StatusTooManyRequests {
 					// 达到RPM限制 降低权重
@@ -224,7 +245,7 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 
 			// 记录原始响应体（转换前）
 			var rawResponseBodyStr string
-			if logRawEnabled {
+			if logRawOptions.RawResponseBody {
 				// 读取原始响应体
 				bodyBytes, err := io.ReadAll(res.Body)
 				if err != nil {
@@ -245,7 +266,16 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				tm := NewTransformerManager(style, provider.Type)
 				convertedRes, err := tm.ProcessResponse(res)
 				if err != nil {
-					retryLog <- log.WithError(fmt.Errorf("transform response error: %v", err))
+					// 更新日志状态为错误
+					if _, updateErr := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, models.ChatLog{
+						Status: "error",
+						Error:  fmt.Sprintf("transform response error: %v", err),
+					}); updateErr != nil {
+						slog.Error("failed to update log status", "error", updateErr)
+					}
+					// 应用权重和优先级衰减
+					applyWeightDecayByModelProviderID(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
+					applyPriorityDecayByModelProviderID(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
 					res.Body.Close()
 					delete(weightItems, *id)
 					continue
@@ -257,26 +287,32 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 			}
 
 			// 记录响应头和原始响应体信息（仅在启用时）
-			if logRawEnabled {
-				responseHeadersJSON, err := json.Marshal(res.Header)
-				if err != nil {
-					slog.Error("failed to marshal response headers", "error", err)
-					responseHeadersJSON = []byte("{}")
+			if logRawOptions.RequestHeaders || logRawOptions.RequestBody || logRawOptions.ResponseHeaders || logRawOptions.RawResponseBody {
+				// 更新日志记录原始请求响应内容
+				updateData := models.ChatLog{}
+
+				if logRawOptions.ResponseHeaders {
+					responseHeadersJSON, err := json.Marshal(res.Header)
+					if err != nil {
+						slog.Error("failed to marshal response headers", "error", err)
+						responseHeadersJSON = []byte("{}")
+					}
+					updateData.ResponseHeaders = string(responseHeadersJSON)
 				}
 
-				// 更新日志记录原始请求响应内容
-				updateData := models.ChatLog{
-					RequestHeaders:  string(requestHeadersJSON),
-					RequestBody:     requestBodyStr,
-					ResponseHeaders: string(responseHeadersJSON),
+				if logRawOptions.RequestHeaders {
+					updateData.RequestHeaders = string(requestHeadersJSON)
 				}
-				
+				if logRawOptions.RequestBody {
+					updateData.RequestBody = requestBodyStr
+				}
+
 				// 如果需要格式转换，RawResponseBody 存储转换前的内容
 				// 如果不需要格式转换，RawResponseBody 存储原始内容（与 ResponseBody 相同）
-				if rawResponseBodyStr != "" {
+				if logRawOptions.RawResponseBody && rawResponseBodyStr != "" {
 					updateData.RawResponseBody = rawResponseBodyStr
 				}
-				
+
 				if _, updateErr := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, updateData); updateErr != nil {
 					slog.Error("failed to update log with request/response headers", "error", updateErr)
 				}
@@ -469,7 +505,8 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 		logUpdate := *log
 
 		// 检查是否启用原始请求响应记录
-		if getLogRawRequestResponse(ctx) {
+		logRawOptions := getLogRawRequestResponse(ctx)
+		if logRawOptions.ResponseBody {
 			// 记录完整的响应体内容
 			var responseBodyStr string
 			if output != nil {
@@ -732,15 +769,20 @@ func getStrictCapabilityMatch(ctx context.Context) bool {
 	return setting.Value == "true"
 }
 
-// getLogRawRequestResponse 获取是否记录原始请求响应设置
-func getLogRawRequestResponse(ctx context.Context) bool {
+// getLogRawRequestResponse 获取原始请求响应记录选项
+func getLogRawRequestResponse(ctx context.Context) models.RawLogOptions {
 	setting, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyLogRawRequestResponse).
 		First(ctx)
 	if err != nil {
-		return false // 默认关闭
+		return models.RawLogOptions{} // 默认全部关闭
 	}
-	return setting.Value == "true"
+
+	var options models.RawLogOptions
+	if err := json.Unmarshal([]byte(setting.Value), &options); err != nil {
+		return models.RawLogOptions{} // 解析失败，默认全部关闭
+	}
+	return options
 }
 
 // getDisableAllLogs 获取是否完全关闭日志记录

@@ -108,22 +108,144 @@ export function LogsSettings({ settings, onSettingsChange }: LogsSettingsProps) 
             />
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="space-y-4">
             <div className="space-y-0.5">
-              <Label htmlFor="log-raw-request-response" className="text-base font-medium">
+              <Label className="text-base font-medium">
                 记录原始请求响应
               </Label>
               <p className="text-sm text-muted-foreground">
-                开启后，系统会在日志中记录完整的原始请求和响应内容。
+                选择需要记录的内容。您可以根据需要选择性记录以优化存储空间。
                 <br />
-                <span className="text-amber-600 dark:text-amber-500">注意：这会显著增加日志存储空间占用。</span>
+                <span className="text-amber-600 dark:text-amber-500">注意：记录内容越多，日志存储空间占用越大。</span>
               </p>
             </div>
-            <Switch
-              id="log-raw-request-response"
-              checked={localSettings?.log_raw_request_response ?? false}
-              onCheckedChange={(checked) => updateLocalSettings({ log_raw_request_response: checked })}
-            />
+
+            <div className="space-y-3 pl-4 border-l-2 border-muted">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="log-request-headers" className="text-sm font-medium">
+                    请求头
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    记录客户端发送的完整 HTTP 请求头信息
+                  </p>
+                </div>
+                <Switch
+                  id="log-request-headers"
+                  checked={localSettings?.log_raw_request_response?.request_headers ?? false}
+                  onCheckedChange={(checked) => updateLocalSettings({
+                    log_raw_request_response: {
+                      ...localSettings?.log_raw_request_response,
+                      request_headers: checked,
+                      request_body: localSettings?.log_raw_request_response?.request_body ?? false,
+                      response_headers: localSettings?.log_raw_request_response?.response_headers ?? false,
+                      response_body: localSettings?.log_raw_request_response?.response_body ?? false,
+                      raw_response_body: localSettings?.log_raw_request_response?.raw_response_body ?? false,
+                    }
+                  })}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="log-request-body" className="text-sm font-medium">
+                    请求体
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    记录完整的请求体内容（包含提示词等）
+                  </p>
+                </div>
+                <Switch
+                  id="log-request-body"
+                  checked={localSettings?.log_raw_request_response?.request_body ?? false}
+                  onCheckedChange={(checked) => updateLocalSettings({
+                    log_raw_request_response: {
+                      ...localSettings?.log_raw_request_response,
+                      request_headers: localSettings?.log_raw_request_response?.request_headers ?? false,
+                      request_body: checked,
+                      response_headers: localSettings?.log_raw_request_response?.response_headers ?? false,
+                      response_body: localSettings?.log_raw_request_response?.response_body ?? false,
+                      raw_response_body: localSettings?.log_raw_request_response?.raw_response_body ?? false,
+                    }
+                  })}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="log-response-headers" className="text-sm font-medium">
+                    响应头
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    记录服务端返回的 HTTP 响应头信息
+                  </p>
+                </div>
+                <Switch
+                  id="log-response-headers"
+                  checked={localSettings?.log_raw_request_response?.response_headers ?? false}
+                  onCheckedChange={(checked) => updateLocalSettings({
+                    log_raw_request_response: {
+                      ...localSettings?.log_raw_request_response,
+                      request_headers: localSettings?.log_raw_request_response?.request_headers ?? false,
+                      request_body: localSettings?.log_raw_request_response?.request_body ?? false,
+                      response_headers: checked,
+                      response_body: localSettings?.log_raw_request_response?.response_body ?? false,
+                      raw_response_body: localSettings?.log_raw_request_response?.raw_response_body ?? false,
+                    }
+                  })}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="log-response-body" className="text-sm font-medium">
+                    响应体
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    记录转换后的响应体内容（实际返回给客户端的内容）
+                  </p>
+                </div>
+                <Switch
+                  id="log-response-body"
+                  checked={localSettings?.log_raw_request_response?.response_body ?? false}
+                  onCheckedChange={(checked) => updateLocalSettings({
+                    log_raw_request_response: {
+                      ...localSettings?.log_raw_request_response,
+                      request_headers: localSettings?.log_raw_request_response?.request_headers ?? false,
+                      request_body: localSettings?.log_raw_request_response?.request_body ?? false,
+                      response_headers: localSettings?.log_raw_request_response?.response_headers ?? false,
+                      response_body: checked,
+                      raw_response_body: localSettings?.log_raw_request_response?.raw_response_body ?? false,
+                    }
+                  })}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="log-raw-response-body" className="text-sm font-medium">
+                    原始响应体
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    记录格式转换前的原始响应体（用于调试格式转换问题）
+                  </p>
+                </div>
+                <Switch
+                  id="log-raw-response-body"
+                  checked={localSettings?.log_raw_request_response?.raw_response_body ?? false}
+                  onCheckedChange={(checked) => updateLocalSettings({
+                    log_raw_request_response: {
+                      ...localSettings?.log_raw_request_response,
+                      request_headers: localSettings?.log_raw_request_response?.request_headers ?? false,
+                      request_body: localSettings?.log_raw_request_response?.request_body ?? false,
+                      response_headers: localSettings?.log_raw_request_response?.response_headers ?? false,
+                      response_body: localSettings?.log_raw_request_response?.response_body ?? false,
+                      raw_response_body: checked,
+                    }
+                  })}
+                />
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center justify-between space-x-4">

@@ -425,6 +425,14 @@ export async function getChatIO(logId: number): Promise<ChatIO> {
 }
 
 // Settings API functions
+export interface RawLogOptions {
+  request_headers: boolean;
+  request_body: boolean;
+  response_headers: boolean;
+  response_body: boolean;
+  raw_response_body: boolean;
+}
+
 export interface Settings {
   strict_capability_match: boolean;
   auto_weight_decay: boolean;
@@ -441,7 +449,7 @@ export interface Settings {
   auto_priority_increase_step: number;
   auto_priority_increase_max: number;
   log_retention_count: number;
-  log_raw_request_response: boolean;
+  log_raw_request_response: RawLogOptions;
   disable_all_logs: boolean;
   count_health_check_as_success: boolean;
   count_health_check_as_failure: boolean;

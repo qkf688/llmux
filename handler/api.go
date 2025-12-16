@@ -901,9 +901,9 @@ type SettingsResponse struct {
 	AutoPriorityDecayDisableEnabled bool `json:"auto_priority_decay_disable_enabled"`
 	AutoPriorityIncreaseStep        int  `json:"auto_priority_increase_step"`
 	AutoPriorityIncreaseMax         int  `json:"auto_priority_increase_max"`
-	LogRetentionCount               int  `json:"log_retention_count"`
-	LogRawRequestResponse           bool `json:"log_raw_request_response"`
-	DisableAllLogs                  bool `json:"disable_all_logs"`
+	LogRetentionCount               int                   `json:"log_retention_count"`
+	LogRawRequestResponse           models.RawLogOptions  `json:"log_raw_request_response"`
+	DisableAllLogs                  bool                  `json:"disable_all_logs"`
 	CountHealthCheckAsSuccess       bool `json:"count_health_check_as_success"`
 	CountHealthCheckAsFailure       bool `json:"count_health_check_as_failure"`
 	// 性能优化相关设置
@@ -930,9 +930,9 @@ type UpdateSettingsRequest struct {
 	AutoPriorityDecayDisableEnabled bool `json:"auto_priority_decay_disable_enabled"`
 	AutoPriorityIncreaseStep        int  `json:"auto_priority_increase_step"`
 	AutoPriorityIncreaseMax         int  `json:"auto_priority_increase_max"`
-	LogRetentionCount               int  `json:"log_retention_count"`
-	LogRawRequestResponse           bool `json:"log_raw_request_response"`
-	DisableAllLogs                  bool `json:"disable_all_logs"`
+	LogRetentionCount               int                   `json:"log_retention_count"`
+	LogRawRequestResponse           models.RawLogOptions  `json:"log_raw_request_response"`
+	DisableAllLogs                  bool                  `json:"disable_all_logs"`
 	CountHealthCheckAsSuccess       bool `json:"count_health_check_as_success"`
 	CountHealthCheckAsFailure       bool `json:"count_health_check_as_failure"`
 	// 性能优化相关设置
@@ -1031,7 +1031,10 @@ func GetSettings(c *gin.Context) {
 				response.LogRetentionCount = val
 			}
 		case models.SettingKeyLogRawRequestResponse:
-			response.LogRawRequestResponse = setting.Value == "true"
+			var options models.RawLogOptions
+			if err := json.Unmarshal([]byte(setting.Value), &options); err == nil {
+				response.LogRawRequestResponse = options
+			}
 		case models.SettingKeyDisableAllLogs:
 			response.DisableAllLogs = setting.Value == "true"
 		case models.SettingKeyHealthCheckCountAsSuccess:
@@ -1236,14 +1239,15 @@ func UpdateSettings(c *gin.Context) {
 		return
 	}
 
-	// 更新原始请求响应记录开关
-	logRawValue := "false"
-	if req.LogRawRequestResponse {
-		logRawValue = "true"
+	// 更新原始请求响应记录选项
+	logRawOptionsJSON, err := json.Marshal(req.LogRawRequestResponse)
+	if err != nil {
+		common.InternalServerError(c, "Failed to marshal log raw options: "+err.Error())
+		return
 	}
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyLogRawRequestResponse).
-		Update(ctx, "value", logRawValue); err != nil {
+		Update(ctx, "value", string(logRawOptionsJSON)); err != nil {
 		common.InternalServerError(c, "Failed to update settings: "+err.Error())
 		return
 	}

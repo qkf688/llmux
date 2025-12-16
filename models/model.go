@@ -116,6 +116,15 @@ type Setting struct {
 	Value string // 设置值
 }
 
+// RawLogOptions 原始日志记录选项
+type RawLogOptions struct {
+	RequestHeaders  bool `json:"request_headers"`   // 记录请求头
+	RequestBody     bool `json:"request_body"`      // 记录请求体
+	ResponseHeaders bool `json:"response_headers"`  // 记录响应头
+	ResponseBody    bool `json:"response_body"`     // 记录响应体
+	RawResponseBody bool `json:"raw_response_body"` // 记录原始响应体（转换前）
+}
+
 // 设置键常量
 const (
 	SettingKeyStrictCapabilityMatch  = "strict_capability_match"   // 严格能力匹配开关
@@ -135,7 +144,7 @@ const (
 	SettingKeyAutoSuccessIncrease             = "auto_success_increase"               // 成功调用后是否执行自增
 
 	SettingKeyLogRetentionCount     = "log_retention_count"      // 日志保留条数，0表示不限制
-	SettingKeyLogRawRequestResponse = "log_raw_request_response" // 是否记录原始请求响应内容
+	SettingKeyLogRawRequestResponse = "log_raw_request_response" // 原始请求响应记录选项（JSON格式的RawLogOptions）
 	SettingKeyDisableAllLogs        = "disable_all_logs"         // 是否完全关闭所有日志记录
 
 	// 模型健康检测相关设置

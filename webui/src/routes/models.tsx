@@ -120,6 +120,9 @@ export default function ModelsPage() {
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [modelSearchQuery, setModelSearchQuery] = useState("");
 
+  // 主列表搜索状态
+  const [searchQuery, setSearchQuery] = useState("");
+
   // 初始化表单
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -354,12 +357,23 @@ export default function ModelsPage() {
   const isAllSelected = models.length > 0 && selectedIds.length === models.length;
   const isPartialSelected = selectedIds.length > 0 && selectedIds.length < models.length;
 
+  // 过滤模型列表
+  const filteredModels = models.filter((model) =>
+    model.Name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="h-full min-h-0 flex flex-col gap-4 p-1">
       <div className="flex flex-col gap-2 flex-shrink-0">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-3">
             <h2 className="text-2xl font-bold tracking-tight">模型管理</h2>
+            <Input
+              placeholder="搜索模型名称..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-48"
+            />
           </div>
           <div className="flex w-full sm:w-auto items-center justify-end gap-2">
             {selectedIds.length > 0 && (
@@ -400,6 +414,10 @@ export default function ModelsPage() {
           <div className="flex h-full items-center justify-center text-muted-foreground">
             暂无模型数据
           </div>
+        ) : filteredModels.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-muted-foreground">
+            没有找到匹配的模型
+          </div>
         ) : (
           <div className="h-full flex flex-col">
             <div className="hidden sm:block w-full overflow-x-auto">
@@ -428,7 +446,7 @@ export default function ModelsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {models.map((model) => (
+                  {filteredModels.map((model) => (
                     <TableRow key={model.ID}>
                       <TableCell>
                         <Checkbox
@@ -504,7 +522,7 @@ export default function ModelsPage() {
                   {selectedIds.length > 0 ? `已选择 ${selectedIds.length} 项` : "全选"}
                 </span>
               </div>
-              {models.map((model) => (
+              {filteredModels.map((model) => (
                 <div key={model.ID} className="py-3 space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0 flex-1">

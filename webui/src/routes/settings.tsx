@@ -65,16 +65,16 @@ export default function SettingsPage() {
           <p className="text-muted-foreground">管理系统全局配置</p>
         </div>
 
-        <Tabs defaultValue="routing" className="w-full">
+        <Tabs defaultValue="general" className="w-full">
           <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="routing">路由</TabsTrigger>
+            <TabsTrigger value="general">通用</TabsTrigger>
             <TabsTrigger value="balancer">负载均衡</TabsTrigger>
             <TabsTrigger value="logs">日志</TabsTrigger>
             <TabsTrigger value="health-check">健康检测</TabsTrigger>
             <TabsTrigger value="about">关于</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="routing" className="mt-6">
+          <TabsContent value="general" className="mt-6">
             <RoutingSettings
               settings={settings}
               onSettingsChange={handleSettingsChange}

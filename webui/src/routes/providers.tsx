@@ -27,6 +27,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Form,
   FormControl,
@@ -51,14 +52,16 @@ import Loading from "@/components/loading";
 import { Label } from "@/components/ui/label";
 import {
   getProviders,
+  getSettings,
   createProvider,
   updateProvider,
   deleteProvider,
   getProviderTemplates,
-  getProviderModels
+  getProviderModels,
+  syncProviderModels
 } from "@/lib/api";
 import type { Provider, ProviderTemplate, ProviderModel } from "@/lib/api";
-import { buildConfigWithAllModels, parseAllModelsFromConfig } from "@/lib/provider-models";
+import { buildConfigWithModels, parseAllModelsFromConfig, parseUpstreamModelsFromConfig, parseCustomModelsFromConfig } from "@/lib/provider-models";
 import { toast } from "sonner";
 
 // 定义表单验证模式
@@ -73,6 +76,7 @@ const formSchema = z.object({
   console: z.string().optional(),
   custom_models: z.string().optional(),
   proxy: z.string().optional(),
+  model_endpoint: z.boolean().optional(),
 });
 
 // 将表单字段转换为 JSON 配置字符串
@@ -158,6 +162,11 @@ export default function ProvidersPage() {
   const [customModelInput, setCustomModelInput] = useState("");
   const [addingModels, setAddingModels] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [syncingModels, setSyncingModels] = useState(false);
+  const [upstreamModelsList, setUpstreamModelsList] = useState<string[]>([]);
+  const [upstreamStatus, setUpstreamStatus] = useState<'loading' | 'success' | 'empty' | 'error' | 'disabled'>('disabled');
+  const [autoAssociateOnAddEnabled, setAutoAssociateOnAddEnabled] = useState(false);
+  const [autoCleanOnDeleteEnabled, setAutoCleanOnDeleteEnabled] = useState(false);
 
   // 筛选条件
   const [nameFilter, setNameFilter] = useState<string>("");
@@ -177,6 +186,7 @@ export default function ProvidersPage() {
       console: "",
       custom_models: "",
       proxy: "",
+      model_endpoint: true,
     },
   });
 
@@ -186,6 +196,7 @@ export default function ProvidersPage() {
   useEffect(() => {
     fetchProviders();
     fetchProviderTemplates();
+    fetchSettings();
   }, []);
 
   // 监听筛选条件变化
@@ -233,6 +244,30 @@ export default function ProvidersPage() {
     } catch (err) {
       console.error("获取提供商模板失败", err);
     }
+  };
+
+  const fetchSettings = async () => {
+    try {
+      const data = await getSettings();
+      setAutoAssociateOnAddEnabled(data.auto_associate_on_add ?? false);
+      setAutoCleanOnDeleteEnabled(data.auto_clean_on_delete ?? false);
+    } catch (err) {
+      console.error("获取系统设置失败", err);
+      setAutoAssociateOnAddEnabled(false);
+      setAutoCleanOnDeleteEnabled(false);
+    }
+  };
+
+  const buildAutoActionsDescription = (options: { associate?: boolean; clean?: boolean }) => {
+    const actions: string[] = [];
+    if (options.associate && autoAssociateOnAddEnabled) {
+      actions.push("自动关联");
+    }
+    if (options.clean && autoCleanOnDeleteEnabled) {
+      actions.push("自动清理无效关联");
+    }
+    if (actions.length === 0) return undefined;
+    return `已触发${actions.join("、")}（后台异步）`;
   };
 
   const fetchProviderModels = async (providerId: number, source: "upstream" | "all" = "upstream") => {
@@ -284,8 +319,8 @@ export default function ProvidersPage() {
     }
   };
 
-  const persistAllModels = async (provider: Provider, models: string[]) => {
-    const nextConfig = buildConfigWithAllModels(provider.Config, models);
+  const persistModels = async (provider: Provider, upstreamModels: string[], customModels: string[]) => {
+    const nextConfig = buildConfigWithModels(provider.Config, upstreamModels, customModels);
     await updateProvider(provider.ID, {
       name: provider.Name,
       type: provider.Type,
@@ -304,22 +339,25 @@ export default function ProvidersPage() {
     const provider = providers.find((item) => item.ID === modelsOpenId);
     if (!provider) return;
 
-    const existing = extractAllModels(provider.Config);
-    const merged = Array.from(new Set([...existing, ...selectedUpstreamModels]));
-    if (merged.length === existing.length) {
+    const upstream = parseUpstreamModelsFromConfig(provider.Config);
+    const custom = parseCustomModelsFromConfig(provider.Config);
+    const merged = Array.from(new Set([...upstream, ...selectedUpstreamModels]));
+    if (merged.length === upstream.length) {
       toast.info("没有新的模型需要添加");
       return;
     }
 
     try {
       setAddingModels(true);
-      const nextConfig = await persistAllModels(provider, merged);
+      const nextConfig = await persistModels(provider, merged, custom);
       if (allModelsProvider && allModelsProvider.ID === provider.ID) {
         setAllModelsProvider({ ...provider, Config: nextConfig });
-        setAllModelsList(merged);
+        setAllModelsList([...merged, ...custom]);
       }
       setSelectedUpstreamModels([]);
-      toast.success(`已添加 ${merged.length - existing.length} 个模型到全部模型`);
+      toast.success(`已添加 ${merged.length - upstream.length} 个模型到上游模型`, {
+        description: buildAutoActionsDescription({ associate: true }),
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast.error(`添加模型失败: ${message}`);
@@ -336,20 +374,23 @@ export default function ProvidersPage() {
       toast.error("请先输入要添加的模型名称");
       return;
     }
-    const existing = extractAllModels(allModelsProvider.Config);
-    const merged = Array.from(new Set([...existing, ...additions]));
-    if (merged.length === existing.length) {
+    const upstream = parseUpstreamModelsFromConfig(allModelsProvider.Config);
+    const custom = parseCustomModelsFromConfig(allModelsProvider.Config);
+    const merged = Array.from(new Set([...custom, ...additions]));
+    if (merged.length === custom.length) {
       toast.info("没有新的模型需要添加");
       return;
     }
     try {
       setAddingModels(true);
-      const nextConfig = await persistAllModels(allModelsProvider, merged);
+      const nextConfig = await persistModels(allModelsProvider, upstream, merged);
       const updatedProvider = { ...allModelsProvider, Config: nextConfig };
       setAllModelsProvider(updatedProvider);
-      setAllModelsList(merged);
+      setAllModelsList([...upstream, ...merged]);
       setCustomModelInput("");
-      toast.success(`已添加 ${merged.length - existing.length} 个自定义模型`);
+      toast.success(`已添加 ${merged.length - custom.length} 个自定义模型`, {
+        description: buildAutoActionsDescription({ associate: true }),
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast.error(`添加自定义模型失败: ${message}`);
@@ -361,10 +402,12 @@ export default function ProvidersPage() {
 
   const removeModelsFromAll = async (modelsToRemove: string[]) => {
     if (!allModelsProvider || modelsToRemove.length === 0) return;
-    const existing = extractAllModels(allModelsProvider.Config);
+    const upstream = parseUpstreamModelsFromConfig(allModelsProvider.Config);
+    const custom = parseCustomModelsFromConfig(allModelsProvider.Config);
     const removalSet = new Set(modelsToRemove.map((item) => item.toLowerCase()));
-    const next = existing.filter((item) => !removalSet.has(item.toLowerCase()));
-    const removedCount = existing.length - next.length;
+    const nextUpstream = upstream.filter((item) => !removalSet.has(item.toLowerCase()));
+    const nextCustom = custom.filter((item) => !removalSet.has(item.toLowerCase()));
+    const removedCount = (upstream.length - nextUpstream.length) + (custom.length - nextCustom.length);
     if (removedCount === 0) {
       toast.info("没有可删除的模型");
       return;
@@ -372,12 +415,14 @@ export default function ProvidersPage() {
 
     try {
       setAddingModels(true);
-      const nextConfig = await persistAllModels(allModelsProvider, next);
+      const nextConfig = await persistModels(allModelsProvider, nextUpstream, nextCustom);
       const updatedProvider = { ...allModelsProvider, Config: nextConfig };
       setAllModelsProvider(updatedProvider);
-      setAllModelsList(next);
+      setAllModelsList([...nextUpstream, ...nextCustom]);
       setSelectedAllModels([]);
-      toast.success(`已从全部模型移除 ${removedCount} 个模型`);
+      toast.success(`已移除 ${removedCount} 个模型`, {
+        description: buildAutoActionsDescription({ clean: true }),
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast.error(`移除模型失败: ${message}`);
@@ -395,6 +440,28 @@ export default function ProvidersPage() {
     await removeModelsFromAll(selectedAllModels);
   };
 
+  const handleToggleModelEndpoint = async (provider: Provider) => {
+    const newValue = !(provider.ModelEndpoint ?? true);
+    try {
+      await updateProvider(provider.ID, {
+        name: provider.Name,
+        type: provider.Type,
+        config: provider.Config,
+        console: provider.Console || "",
+        proxy: provider.Proxy || "",
+        model_endpoint: newValue
+      });
+      setProviders((prev) =>
+        prev.map((item) => item.ID === provider.ID ? { ...item, ModelEndpoint: newValue } : item)
+      );
+      toast.success(`已${newValue ? "启用" : "禁用"}模型端点`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`更新模型端点失败: ${message}`);
+      console.error(err);
+    }
+  };
+
   const refreshUpstreamModels = async () => {
     if (!modelsOpenId) return;
     setSelectedUpstreamModels([]);
@@ -406,13 +473,101 @@ export default function ProvidersPage() {
     toast.success(`已复制模型名称: ${modelName}`);
   };
 
-  const openAllModelsDialog = (provider: Provider) => {
+  const openAllModelsDialog = async (provider: Provider) => {
     const allModels = extractAllModels(provider.Config);
     setAllModelsProvider(provider);
     setAllModelsList(allModels);
     setSelectedAllModels([]);
     setCustomModelInput("");
     setAllModelsOpen(true);
+
+    // 如果支持模型端点，获取上游模型列表
+    if (provider.ModelEndpoint ?? true) {
+      setUpstreamStatus('loading');
+      try {
+        const upstreamModels = await getProviderModels(provider.ID, { source: "upstream" });
+        const modelIds = upstreamModels.map(m => m.id);
+        setUpstreamModelsList(modelIds);
+        setUpstreamStatus(modelIds.length > 0 ? 'success' : 'empty');
+      } catch (err) {
+        console.error("获取上游模型失败", err);
+        setUpstreamModelsList([]);
+        setUpstreamStatus('error');
+      }
+    } else {
+      setUpstreamModelsList([]);
+      setUpstreamStatus('disabled');
+    }
+  };
+
+  const handleSyncUpstreamModels = async () => {
+    if (!allModelsProvider) return;
+
+    try {
+      setSyncingModels(true);
+      setUpstreamStatus('loading');
+      const result = await syncProviderModels(allModelsProvider.ID);
+
+      if ('message' in result) {
+        toast.info(result.message);
+        // 重新获取上游模型状态
+        try {
+          const upstreamModels = await getProviderModels(allModelsProvider.ID, { source: "upstream" });
+          const modelIds = upstreamModels.map(m => m.id);
+          setUpstreamModelsList(modelIds);
+          setUpstreamStatus(modelIds.length > 0 ? 'success' : 'empty');
+        } catch (err) {
+          console.error("获取上游模型失败", err);
+          setUpstreamModelsList([]);
+          setUpstreamStatus('error');
+        }
+        return;
+      }
+
+      const { AddedCount, RemovedCount } = result;
+
+      if (AddedCount > 0 || RemovedCount > 0) {
+        toast.success(`同步完成：新增 ${AddedCount} 个，删除 ${RemovedCount} 个模型`, {
+          description: buildAutoActionsDescription({
+            associate: AddedCount > 0,
+            clean: RemovedCount > 0,
+          }),
+        });
+      } else {
+        toast.info("没有检测到模型变化");
+      }
+
+      // 刷新提供商列表
+      await fetchProviders();
+
+      // 更新当前弹窗的模型列表
+      const updatedProviders = await getProviders({});
+      const updatedProvider = updatedProviders.find(p => p.ID === allModelsProvider.ID);
+      if (updatedProvider) {
+        const updatedModels = extractAllModels(updatedProvider.Config);
+        setAllModelsList(updatedModels);
+        setAllModelsProvider(updatedProvider);
+
+        // 重新获取上游模型列表
+        try {
+          const upstreamModels = await getProviderModels(updatedProvider.ID, { source: "upstream" });
+          const modelIds = upstreamModels.map(m => m.id);
+          setUpstreamModelsList(modelIds);
+          setUpstreamStatus(modelIds.length > 0 ? 'success' : 'empty');
+        } catch (err) {
+          console.error("获取上游模型失败", err);
+          setUpstreamModelsList([]);
+          setUpstreamStatus('error');
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`同步失败: ${message}`);
+      console.error(err);
+      setUpstreamStatus('error');
+    } finally {
+      setSyncingModels(false);
+    }
   };
 
   const handleCreate = async (values: z.infer<typeof formSchema>) => {
@@ -423,11 +578,12 @@ export default function ProvidersPage() {
         type: values.type,
         config: config,
         console: values.console || "",
-        proxy: values.proxy || ""
+        proxy: values.proxy || "",
+        model_endpoint: values.model_endpoint ?? true
       });
       setOpen(false);
       toast.success(`提供商 ${values.name} 创建成功`);
-      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "", proxy: "" });
+      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "", proxy: "", model_endpoint: true });
       fetchProviders();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -445,12 +601,13 @@ export default function ProvidersPage() {
         type: values.type,
         config: config,
         console: values.console || "",
-        proxy: values.proxy || ""
+        proxy: values.proxy || "",
+        model_endpoint: values.model_endpoint
       });
       setOpen(false);
       toast.success(`提供商 ${values.name} 更新成功`);
       setEditingProvider(null);
-      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "", proxy: "" });
+      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "", proxy: "", model_endpoint: true });
       fetchProviders();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -466,7 +623,12 @@ export default function ProvidersPage() {
       await deleteProvider(deleteId);
       setDeleteId(null);
       fetchProviders();
-      toast.success(`提供商 ${targetProvider?.Name ?? deleteId} 删除成功`);
+      const message = `提供商 ${targetProvider?.Name ?? deleteId} 删除成功`;
+      if (autoCleanOnDeleteEnabled) {
+        toast.success(message, { description: "已触发自动清理无效关联（后台异步）" });
+      } else {
+        toast.success(message);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast.error(`删除提供商失败: ${message}`);
@@ -488,6 +650,7 @@ export default function ProvidersPage() {
       console: provider.Console || "",
       custom_models: configFields.custom_models.join("\n"),
       proxy: provider.Proxy || "",
+      model_endpoint: provider.ModelEndpoint ?? true,
     });
     setOpen(true);
   };
@@ -495,7 +658,7 @@ export default function ProvidersPage() {
   const openCreateDialog = () => {
     setEditingProvider(null);
     setShowApiKey(false);
-    form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "", proxy: "" });
+    form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "", proxy: "", model_endpoint: true });
     setOpen(true);
   };
 
@@ -589,7 +752,7 @@ export default function ProvidersPage() {
                     <TableHead>名称</TableHead>
                     <TableHead>类型</TableHead>
                     <TableHead>全部模型</TableHead>
-                    <TableHead>控制台</TableHead>
+                    <TableHead>模型端点</TableHead>
                     <TableHead className="w-[260px]">操作</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -615,18 +778,10 @@ export default function ProvidersPage() {
                           </Button>
                         </TableCell>
                         <TableCell>
-                          {provider.Console ? (
-                            <Button
-                              title={provider.Console}
-                              variant="outline"
-                              size="sm"
-                              onClick={() => window.open(provider.Console, '_blank')}
-                            >
-                              前往
-                            </Button>
-                          ) : (
-                            <span className="text-muted-foreground">暂未设置</span>
-                          )}
+                          <Switch
+                            checked={provider.ModelEndpoint ?? true}
+                            onCheckedChange={() => handleToggleModelEndpoint(provider)}
+                          />
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-2">
@@ -634,7 +789,7 @@ export default function ProvidersPage() {
                               编辑
                             </Button>
                             <Button variant="secondary" size="sm" onClick={() => openModelsDialog(provider.ID)}>
-                              模型列表
+                              获取模型
                             </Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
@@ -684,15 +839,13 @@ export default function ProvidersPage() {
                           </svg>
                           {allModels.length}
                         </Button>
-                        {provider.Console && (
-                          <Button
-                            variant="link"
-                            className="px-0 h-auto text-[11px]"
-                            onClick={() => window.open(provider.Console, '_blank')}
-                          >
-                            控制台
-                          </Button>
-                        )}
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[11px] text-muted-foreground">模型端点:</span>
+                          <Switch
+                            checked={provider.ModelEndpoint ?? true}
+                            onCheckedChange={() => handleToggleModelEndpoint(provider)}
+                          />
+                        </div>
                       </div>
                       <div className="flex flex-wrap justify-end gap-1.5">
                         <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => openEditDialog(provider)}>
@@ -926,6 +1079,27 @@ export default function ProvidersPage() {
                 )}
               />
 
+              <FormField
+                control={form.control}
+                name="model_endpoint"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-0.5">
+                      <FormLabel>模型端点</FormLabel>
+                      <div className="text-sm text-muted-foreground">
+                        是否支持从上游获取模型列表
+                      </div>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                   取消
@@ -949,6 +1123,49 @@ export default function ProvidersPage() {
             </DialogDescription>
           </DialogHeader>
 
+          {/* 上游模型状态提示 */}
+          {upstreamStatus === 'loading' && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-800">
+              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              正在获取上游模型...
+            </div>
+          )}
+          {upstreamStatus === 'success' && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-md text-sm text-green-800">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              已获取 {upstreamModelsList.length} 个上游模型
+            </div>
+          )}
+          {upstreamStatus === 'empty' && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-800">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              上游未返回任何模型
+            </div>
+          )}
+          {upstreamStatus === 'error' && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-md text-sm text-red-800">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              获取上游模型失败
+            </div>
+          )}
+          {upstreamStatus === 'disabled' && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm text-gray-600">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              该提供商未启用模型端点
+            </div>
+          )}
+
           <div className="flex flex-col gap-4 flex-1 min-h-0">
             <div className="flex flex-col gap-2 flex-1 min-h-0">
               <div className="flex items-center justify-between gap-2 flex-shrink-0">
@@ -957,6 +1174,16 @@ export default function ProvidersPage() {
                   <span className="text-xs text-muted-foreground">已缓存 {allModelsList.length} 个</span>
                 </div>
                 <div className="flex items-center gap-2">
+                  {(allModelsProvider?.ModelEndpoint ?? true) && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleSyncUpstreamModels}
+                      disabled={syncingModels}
+                    >
+                      {syncingModels ? "同步中..." : "同步上游模型"}
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
@@ -981,6 +1208,8 @@ export default function ProvidersPage() {
                 ) : (
                   allModelsList.map((model) => {
                     const checked = selectedAllModels.includes(model);
+                    const upstreamModels = allModelsProvider ? parseUpstreamModelsFromConfig(allModelsProvider.Config) : [];
+                    const isUpstream = upstreamModels.includes(model);
                     return (
                       <div key={model} className="flex items-center justify-between px-3 py-2 text-sm gap-3">
                         <div className="flex items-center gap-3 min-w-0">
@@ -995,7 +1224,18 @@ export default function ProvidersPage() {
                             }}
                             aria-label={`选择模型 ${model}`}
                           />
-                          <span className="truncate">{model}</span>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="truncate">{model}</span>
+                            {isUpstream ? (
+                              <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                上游
+                              </span>
+                            ) : (
+                              <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                                自定义
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <Button

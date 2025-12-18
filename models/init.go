@@ -24,10 +24,12 @@ func Init(ctx context.Context, path string) {
 		&Provider{},
 		&Model{},
 		&ModelWithProvider{},
+		&ModelTemplateItem{},
 		&ChatLog{},
 		&ChatIO{},
 		&Setting{},
 		&HealthCheckLog{},
+		&ModelSyncLog{},
 	); err != nil {
 		panic(err)
 	}
@@ -81,6 +83,14 @@ func initDefaultSettings(ctx context.Context) {
 		{Key: SettingKeyStripResponseHeaders, Value: "false"},       // 默认不移除响应头
 		{Key: SettingKeyEnableFormatConversion, Value: "true"},      // 默认启用格式转换
 		{Key: SettingKeyAutoPriorityDecayDisableEnabled, Value: "true"}, // 默认启用自动禁用功能
+		// 模型同步相关默认设置
+		{Key: SettingKeyModelSyncEnabled, Value: "false"},         // 默认关闭自动同步
+		{Key: SettingKeyModelSyncInterval, Value: "12"},           // 默认12小时同步一次
+		{Key: SettingKeyModelSyncLogRetentionCount, Value: "100"}, // 默认保留100条
+		{Key: SettingKeyModelSyncLogRetentionDays, Value: "7"},    // 默认保留7天
+		// 模型关联相关默认设置
+		{Key: SettingKeyAutoAssociateOnAdd, Value: "false"},    // 默认关闭自动关联
+		{Key: SettingKeyAutoCleanOnDelete, Value: "false"},     // 默认关闭自动清理
 	}
 
 	for _, setting := range defaultSettings {

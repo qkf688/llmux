@@ -9,6 +9,7 @@ export interface Provider {
   Config: string;
   Console: string;
   Proxy: string;
+  ModelEndpoint?: boolean;
 }
 
 export interface Model {
@@ -117,6 +118,7 @@ export async function createProvider(provider: {
   config: string;
   console: string;
   proxy: string;
+  model_endpoint?: boolean;
 }): Promise<Provider> {
   return apiRequest<Provider>('/providers', {
     method: 'POST',
@@ -130,6 +132,7 @@ export async function updateProvider(id: number, provider: {
   config?: string;
   console?: string;
   proxy?: string;
+  model_endpoint?: boolean;
 }): Promise<Provider> {
   return apiRequest<Provider>(`/providers/${id}`, {
     method: 'PUT',
@@ -459,6 +462,14 @@ export interface Settings {
   enable_request_trace: boolean;
   strip_response_headers: boolean;
   enable_format_conversion: boolean;
+  // 模型同步相关设置
+  model_sync_enabled: boolean;
+  model_sync_interval: number;
+  model_sync_log_retention_count: number;
+  model_sync_log_retention_days: number;
+  // 模型关联相关设置
+  auto_associate_on_add: boolean;
+  auto_clean_on_delete: boolean;
 }
 
 export async function getSettings(): Promise<Settings> {
@@ -504,6 +515,63 @@ export async function enableAllAssociations(modelId?: number): Promise<EnableAss
   return apiRequest<EnableAssociationsResponse>('/settings/enable-all-associations', {
     method: 'POST',
     body: JSON.stringify({ model_id: modelId }),
+  });
+}
+
+export interface AssociationPreview {
+  model_id: number;
+  model_name: string;
+  provider_id: number;
+  provider_name: string;
+  provider_model: string;
+}
+
+export interface ModelTemplateItem {
+  name: string;
+  sources: string[];
+}
+
+export interface ModelTemplate {
+  model_id: number;
+  model_name: string;
+  items: ModelTemplateItem[];
+}
+
+export async function getModelTemplate(modelId: number): Promise<ModelTemplate> {
+  return apiRequest<ModelTemplate>(`/models/${modelId}/template`);
+}
+
+export async function addModelTemplateItem(modelId: number, name: string): Promise<ModelTemplate> {
+  return apiRequest<ModelTemplate>(`/models/${modelId}/template/items`, {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function deleteModelTemplateItem(modelId: number, name: string): Promise<ModelTemplate> {
+  return apiRequest<ModelTemplate>(`/models/${modelId}/template/items`, {
+    method: 'DELETE',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function previewAutoAssociate(): Promise<AssociationPreview[]> {
+  return apiRequest<AssociationPreview[]>('/model-providers/auto-associate/preview');
+}
+
+export async function autoAssociateModels(): Promise<{ added: number }> {
+  return apiRequest<{ added: number }>('/model-providers/auto-associate', {
+    method: 'POST',
+  });
+}
+
+export async function previewCleanInvalid(): Promise<AssociationPreview[]> {
+  return apiRequest<AssociationPreview[]>('/model-providers/clean-invalid/preview');
+}
+
+export async function cleanInvalidAssociations(): Promise<{ removed: number }> {
+  return apiRequest<{ removed: number }>('/model-providers/clean-invalid', {
+    method: 'POST',
   });
 }
 
@@ -624,4 +692,62 @@ export async function runHealthCheckAll(): Promise<{ batch_id: string; message: 
 
 export async function getBatchHealthCheckStatus(batchId: string): Promise<BatchHealthCheckStatus> {
   return apiRequest<BatchHealthCheckStatus>(`/health-check/batch/${batchId}`);
+}
+
+// Model Sync API functions
+
+export interface ModelSyncLog {
+  ID: number;
+  ProviderID: number;
+  ProviderName: string;
+  AddedCount: number;
+  RemovedCount: number;
+  AddedModels: string[];
+  RemovedModels: string[];
+  SyncedAt: string;
+}
+
+export interface ModelSyncLogsResponse {
+  data: ModelSyncLog[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total: number;
+    total_pages: number;
+  };
+}
+
+export async function syncProviderModels(providerId: number): Promise<ModelSyncLog | { message: string }> {
+  return apiRequest<ModelSyncLog | { message: string }>(`/model-sync/${providerId}`, {
+    method: 'POST',
+  });
+}
+
+export async function getModelSyncLogs(params: {
+  page?: number;
+  page_size?: number;
+  provider_id?: number;
+} = {}): Promise<ModelSyncLogsResponse> {
+  const queryParams = new URLSearchParams();
+  if (params.page) queryParams.append('page', params.page.toString());
+  if (params.page_size) queryParams.append('page_size', params.page_size.toString());
+  if (params.provider_id) queryParams.append('provider_id', params.provider_id.toString());
+
+  const queryString = queryParams.toString();
+  const endpoint = queryString ? `/model-sync/logs?${queryString}` : '/model-sync/logs';
+
+  return apiRequest<ModelSyncLogsResponse>(endpoint);
+}
+
+export async function deleteModelSyncLogs(ids: number[]): Promise<{ deleted: number }> {
+  return apiRequest<{ deleted: number }>('/model-sync/logs', {
+    method: 'DELETE',
+    body: JSON.stringify({ ids }),
+  });
+}
+
+export async function clearModelSyncLogs(): Promise<{ deleted: number }> {
+  return apiRequest<{ deleted: number }>('/model-sync/logs/clear', {
+    method: 'DELETE',
+  });
 }

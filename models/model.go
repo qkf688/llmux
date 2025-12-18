@@ -9,11 +9,12 @@ import (
 
 type Provider struct {
 	gorm.Model
-	Name    string
-	Type    string
-	Config  string
-	Console string // 控制台地址
-	Proxy   string // 代理地址
+	Name          string
+	Type          string
+	Config        string
+	Console       string // 控制台地址
+	Proxy         string // 代理地址
+	ModelEndpoint *bool  // 是否支持从上游获取模型列表，默认true
 }
 
 type AnthropicConfig struct {
@@ -24,11 +25,12 @@ type AnthropicConfig struct {
 
 type Model struct {
 	gorm.Model
-	Name     string
-	Remark   string
-	MaxRetry int   // 重试次数限制
-	TimeOut  int   // 超时时间 单位秒
-	IOLog    *bool // 是否记录IO
+	Name       string
+	Remark     string
+	MaxRetry   int   // 重试次数限制
+	TimeOut    int   // 超时时间 单位秒
+	IOLog      *bool // 是否记录IO
+	IsUpstream *bool // 是否是上游模型（true=上游，false=自定义）
 }
 
 type ModelWithProvider struct {
@@ -44,6 +46,13 @@ type ModelWithProvider struct {
 	CustomerHeaders  map[string]string `gorm:"serializer:json"` // 自定义headers
 	Weight           int
 	Priority         int // 优先级，值越高越优先选择
+}
+
+// ModelTemplateItem 模型模板条目：用于将 provider_model 映射到 ModelID（区分大小写、去重）
+type ModelTemplateItem struct {
+	gorm.Model
+	ModelID uint   `gorm:"uniqueIndex:idx_model_template_item;not null"`
+	Name    string `gorm:"uniqueIndex:idx_model_template_item;not null"`
 }
 
 type ChatLog struct {
@@ -163,6 +172,16 @@ const (
 	SettingKeyEnableRequestTrace         = "enable_request_trace"         // 启用请求追踪（httptrace）
 	SettingKeyStripResponseHeaders       = "strip_response_headers"       // 移除不必要的响应头
 	SettingKeyEnableFormatConversion     = "enable_format_conversion"     // 允许格式转换（关闭则只能直连）
+
+	// 模型同步相关设置
+	SettingKeyModelSyncEnabled         = "model_sync_enabled"          // 自动同步模型开关
+	SettingKeyModelSyncInterval        = "model_sync_interval"         // 同步间隔（小时）
+	SettingKeyModelSyncLogRetentionCount = "model_sync_log_retention_count" // 同步日志保留条数
+	SettingKeyModelSyncLogRetentionDays  = "model_sync_log_retention_days"  // 同步日志保留天数
+
+	// 模型关联相关设置
+	SettingKeyAutoAssociateOnAdd    = "auto_associate_on_add"    // 添加模型时自动关联
+	SettingKeyAutoCleanOnDelete     = "auto_clean_on_delete"     // 删除模型时自动清理关联
 )
 
 // HealthCheckLog 模型健康检测日志
@@ -177,4 +196,16 @@ type HealthCheckLog struct {
 	Error           string    `json:"error,omitempty"`                    // 错误信息
 	ResponseTime    int64     `json:"response_time"`                      // 响应时间（毫秒）
 	CheckedAt       time.Time `gorm:"index" json:"checked_at"`            // 检测时间
+}
+
+// ModelSyncLog 模型同步日志
+type ModelSyncLog struct {
+	gorm.Model
+	ProviderID    uint      `gorm:"index" json:"ProviderID"`
+	ProviderName  string    `gorm:"index" json:"ProviderName"`
+	AddedCount    int       `json:"AddedCount"`
+	RemovedCount  int       `json:"RemovedCount"`
+	AddedModels   []string  `gorm:"serializer:json" json:"AddedModels"`
+	RemovedModels []string  `gorm:"serializer:json" json:"RemovedModels"`
+	SyncedAt      time.Time `gorm:"index" json:"SyncedAt"`
 }

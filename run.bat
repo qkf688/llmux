@@ -19,6 +19,7 @@ echo Building webui...
 cd /d "%~dp0webui"
 if not exist "package.json" (
     echo Failed to change directory to webui or package.json not found
+    pause
     exit /b 1
 )
 
@@ -26,9 +27,11 @@ call pnpm run build
 if errorlevel 1 (
     echo Failed to build webui
     cd /d "%~dp0"
+    pause
     exit /b 1
 )
 
 cd /d "%~dp0"
 echo Starting server...
 go run main.go
+pause

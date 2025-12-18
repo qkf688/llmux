@@ -27,6 +27,10 @@ func init() {
 
 	// 启动健康检测服务
 	go service.GetHealthChecker().Start(ctx)
+
+	// 启动模型自动同步服务
+	syncService := service.NewModelSyncService(models.DB)
+	syncService.StartAutoSync(ctx)
 }
 
 func main() {
@@ -62,6 +66,9 @@ func main() {
 	api.GET("/models", handler.GetModels)
 	api.POST("/models", handler.CreateModel)
 	api.PUT("/models/:id", handler.UpdateModel)
+	api.GET("/models/:id/template", handler.GetModelTemplate)
+	api.POST("/models/:id/template/items", handler.AddModelTemplateItem)
+	api.DELETE("/models/:id/template/items", handler.DeleteModelTemplateItem)
 	api.DELETE("/models/batch", handler.BatchDeleteModels)
 	api.DELETE("/models/:id", handler.DeleteModel)
 
@@ -74,6 +81,10 @@ func main() {
 	api.PATCH("/model-providers/:id/status", handler.UpdateModelProviderStatus)
 	api.DELETE("/model-providers/batch", handler.BatchDeleteModelProviders)
 	api.DELETE("/model-providers/:id", handler.DeleteModelProvider)
+	api.GET("/model-providers/auto-associate/preview", handler.PreviewAutoAssociate)
+	api.POST("/model-providers/auto-associate", handler.AutoAssociateModels)
+	api.GET("/model-providers/clean-invalid/preview", handler.PreviewCleanInvalid)
+	api.POST("/model-providers/clean-invalid", handler.CleanInvalidAssociations)
 
 	// System status and monitoring
 	api.GET("/logs", handler.GetRequestLogs)
@@ -106,6 +117,12 @@ func main() {
 	// Provider connectivity test
 	api.GET("/test/:id", handler.ProviderTestHandler)
 	api.GET("/test/react/:id", handler.TestReactHandler)
+
+	// Model sync management
+	api.POST("/model-sync/:id", handler.SyncProviderModels)
+	api.GET("/model-sync/logs", handler.GetModelSyncLogs)
+	api.DELETE("/model-sync/logs", handler.DeleteModelSyncLogs)
+	api.DELETE("/model-sync/logs/clear", handler.ClearModelSyncLogs)
 
 	setwebui(router)
 	router.Run(":7070")

@@ -58,13 +58,28 @@ import {
   getModels,
   getProviders,
   testModelProvider,
-  getSettings
+  getSettings,
+  autoAssociateModels,
+  cleanInvalidAssociations,
+  previewAutoAssociate,
+  previewCleanInvalid,
+  getModelTemplate,
+  addModelTemplateItem,
+  deleteModelTemplateItem
 } from "@/lib/api";
-import type { ModelWithProvider, Model, Provider, ProviderModel, Settings } from "@/lib/api";
+import type {
+  ModelWithProvider,
+  Model,
+  Provider,
+  ProviderModel,
+  Settings,
+  AssociationPreview,
+  ModelTemplate
+} from "@/lib/api";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
+import { RefreshCw, ChevronDown, ChevronRight, Plus, X } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { parseAllModelsFromConfig, toProviderModelList } from "@/lib/provider-models";
 
@@ -164,6 +179,14 @@ export default function ModelProvidersPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [collapsedProviders, setCollapsedProviders] = useState<Record<number, boolean>>({});
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [previewData, setPreviewData] = useState<AssociationPreview[]>([]);
+  const [previewType, setPreviewType] = useState<"associate" | "clean">("associate");
+  const [executing, setExecuting] = useState(false);
+  const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
+  const [templateLoading, setTemplateLoading] = useState(false);
+  const [templateData, setTemplateData] = useState<ModelTemplate | null>(null);
+  const [templateNewItem, setTemplateNewItem] = useState("");
 
   const dialogClose = () => {
     setTestDialogOpen(false)
@@ -233,6 +256,18 @@ export default function ModelProvidersPage() {
       fetchModelProviders(selectedModelId);
     }
   }, [selectedModelId]);
+
+  useEffect(() => {
+    if (!templateEditorOpen || !selectedModelId) return;
+    setTemplateLoading(true);
+    getModelTemplate(selectedModelId)
+      .then((data) => setTemplateData(data))
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        toast.error(`加载模板失败: ${message}`);
+      })
+      .finally(() => setTemplateLoading(false));
+  }, [templateEditorOpen, selectedModelId]);
 
   const buildPayload = (
     values: FormValues,
@@ -731,11 +766,95 @@ export default function ModelProvidersPage() {
     }
   };
 
+  const handleAutoAssociate = async () => {
+    try {
+      setPreviewType("associate");
+      const data = await previewAutoAssociate();
+      setPreviewData(data);
+      setPreviewDialogOpen(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`获取预览失败: ${message}`);
+    }
+  };
+
+  const handleCleanInvalid = async () => {
+    try {
+      setPreviewType("clean");
+      const data = await previewCleanInvalid();
+      setPreviewData(data);
+      setPreviewDialogOpen(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`获取预览失败: ${message}`);
+    }
+  };
+
+  const executePreviewAction = async () => {
+    try {
+      setExecuting(true);
+      if (previewType === "associate") {
+        const result = await autoAssociateModels();
+        toast.success(`成功添加 ${result.added} 个关联`);
+      } else {
+        const result = await cleanInvalidAssociations();
+        toast.success(`成功清除 ${result.removed} 个无效关联`);
+      }
+      setPreviewDialogOpen(false);
+      if (selectedModelId) {
+        fetchModelProviders(selectedModelId);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`操作失败: ${message}`);
+    } finally {
+      setExecuting(false);
+    }
+  };
+
+  const handleToggleTemplateEditor = () => {
+    setTemplateEditorOpen((prev) => !prev);
+  };
+
+  const handleAddTemplateItem = async () => {
+    if (!selectedModelId) return;
+    const name = templateNewItem.trim();
+    if (!name) return;
+    setTemplateLoading(true);
+    try {
+      const data = await addModelTemplateItem(selectedModelId, name);
+      setTemplateData(data);
+      setTemplateNewItem("");
+      toast.success("已添加模板项");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`添加模板项失败: ${message}`);
+    } finally {
+      setTemplateLoading(false);
+    }
+  };
+
+  const handleDeleteTemplateItem = async (name: string) => {
+    if (!selectedModelId) return;
+    setTemplateLoading(true);
+    try {
+      const data = await deleteModelTemplateItem(selectedModelId, name);
+      setTemplateData(data);
+      toast.success("已删除手动模板项");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`删除模板项失败: ${message}`);
+    } finally {
+      setTemplateLoading(false);
+    }
+  };
+
   const handleModelChange = (modelId: string) => {
     const id = parseInt(modelId);
     setSelectedModelId(id);
     setSelectedAssociationIds([]); // 切换模型时清空选择
     setSelectedProviderModels([]);
+    setTemplateEditorOpen(false);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("modelId", id.toString());
     setSearchParams(nextParams);
@@ -906,6 +1025,28 @@ export default function ModelProvidersPage() {
               </AlertDialog>
             )}
             <Button
+              onClick={handleToggleTemplateEditor}
+              variant="outline"
+              disabled={!selectedModelId}
+              className="h-8 text-xs flex-1 sm:flex-initial"
+            >
+              模板编辑
+            </Button>
+            <Button
+              onClick={handleAutoAssociate}
+              variant="outline"
+              className="h-8 text-xs flex-1 sm:flex-initial"
+            >
+              一键关联
+            </Button>
+            <Button
+              onClick={handleCleanInvalid}
+              variant="outline"
+              className="h-8 text-xs flex-1 sm:flex-initial"
+            >
+              清除无效
+            </Button>
+            <Button
               onClick={openCreateDialog}
               disabled={!selectedModelId}
               className="h-8 text-xs flex-1 sm:flex-initial"
@@ -920,6 +1061,102 @@ export default function ModelProvidersPage() {
           {statusError}
         </div>
       )}
+      <Dialog open={templateEditorOpen} onOpenChange={setTemplateEditorOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>模板编辑</DialogTitle>
+            <DialogDescription>
+              模板用于自动关联匹配：区分大小写，自动包含 Model.Name 与既有关联 ProviderModel；此处可手动补充别名。
+            </DialogDescription>
+          </DialogHeader>
+
+          {!selectedModelId ? (
+            <div className="text-sm text-muted-foreground">请先选择一个模型</div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs text-muted-foreground">
+                  当前模型：<span className="font-mono">{selectedModelId}</span>
+                </div>
+                {templateLoading && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Spinner className="h-4 w-4" />
+                    加载中...
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  placeholder="新增模板项（区分大小写，如 gpt-4o-2024-08-06）"
+                  value={templateNewItem}
+                  onChange={(e) => setTemplateNewItem(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddTemplateItem();
+                    }
+                  }}
+                  className="h-8 text-xs"
+                  disabled={templateLoading}
+                />
+                <Button
+                  onClick={handleAddTemplateItem}
+                  className="h-8 text-xs sm:w-auto"
+                  disabled={templateLoading || templateNewItem.trim().length === 0}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  添加
+                </Button>
+              </div>
+
+              {(templateData?.items ?? []).length === 0 ? (
+                <div className="text-xs text-muted-foreground">暂无模板项</div>
+              ) : (
+                <div className="max-h-80 overflow-auto rounded-md border">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-background">
+                      <TableRow>
+                        <TableHead className="w-[55%]">模板项</TableHead>
+                        <TableHead className="w-[35%]">来源</TableHead>
+                        <TableHead className="w-[10%] text-right">操作</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {templateData?.items.map((item) => {
+                        const canRemoveManual = item.sources.includes("manual");
+                        return (
+                          <TableRow key={item.name}>
+                            <TableCell className="py-2">
+                              <span className="font-mono text-xs break-all">{item.name}</span>
+                            </TableCell>
+                            <TableCell className="py-2">
+                              <span className="text-xs text-muted-foreground">{item.sources.join(", ")}</span>
+                            </TableCell>
+                            <TableCell className="py-2 text-right">
+                              {canRemoveManual && (
+                                <Button
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0"
+                                  onClick={() => handleDeleteTemplateItem(item.name)}
+                                  disabled={templateLoading}
+                                  title="删除手动模板项"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
       <div className="flex-1 min-h-0 border rounded-md bg-background shadow-sm">
         {loading ? (
           <div className="flex h-full items-center justify-center">
@@ -1899,6 +2136,61 @@ export default function ModelProvidersPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setModelListDialogOpen(false)}>
               确定
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 预览对话框 */}
+      <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>
+              {previewType === "associate" ? "一键关联预览" : "清除无效关联预览"}
+            </DialogTitle>
+            <DialogDescription>
+              {previewType === "associate"
+                ? `将添加 ${previewData.length} 个新关联`
+                : `将删除 ${previewData.length} 个无效关联`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto border rounded-md">
+            {previewData.length === 0 ? (
+              <div className="flex items-center justify-center h-32 text-muted-foreground">
+                {previewType === "associate" ? "没有可添加的关联" : "没有无效关联"}
+              </div>
+            ) : (
+              <Table>
+                <TableHeader className="sticky top-0 bg-secondary/80">
+                  <TableRow>
+                    <TableHead>模型</TableHead>
+                    <TableHead>提供商</TableHead>
+                    <TableHead>提供商模型</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {previewData.map((item, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="font-medium">{item.model_name}</TableCell>
+                      <TableCell>{item.provider_name}</TableCell>
+                      <TableCell className="text-muted-foreground">{item.provider_model}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreviewDialogOpen(false)} disabled={executing}>
+              取消
+            </Button>
+            <Button
+              onClick={executePreviewAction}
+              disabled={executing || previewData.length === 0}
+            >
+              {executing ? "执行中..." : "确认执行"}
             </Button>
           </DialogFooter>
         </DialogContent>

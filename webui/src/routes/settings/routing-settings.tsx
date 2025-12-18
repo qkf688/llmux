@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { updateSettings } from "@/lib/api";
 import type { Settings } from "@/lib/api";
@@ -52,8 +53,8 @@ export function RoutingSettings({ settings, onSettingsChange }: RoutingSettingsP
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold">路由设置</h2>
-          <p className="text-sm text-muted-foreground">配置请求路由和负载均衡相关选项</p>
+          <h2 className="text-xl font-semibold">通用设置</h2>
+          <p className="text-sm text-muted-foreground">配置系统通用选项</p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -97,6 +98,88 @@ export function RoutingSettings({ settings, onSettingsChange }: RoutingSettingsP
               checked={localSettings?.strict_capability_match ?? true}
               onCheckedChange={handleStrictCapabilityMatchChange}
             />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>模型自动同步</CardTitle>
+          <CardDescription>
+            配置上游模型自动同步选项
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="model-sync-enabled" className="text-base font-medium">
+                启用自动同步
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                开启后，系统将定期自动同步启用模型端点的提供商的上游模型列表
+              </p>
+            </div>
+            <Switch
+              id="model-sync-enabled"
+              checked={localSettings?.model_sync_enabled ?? false}
+              onCheckedChange={(checked) => {
+                if (localSettings) {
+                  setLocalSettings({ ...localSettings, model_sync_enabled: checked });
+                  setHasChanges(true);
+                }
+              }}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="model-sync-interval">同步间隔（小时）</Label>
+            <Input
+              id="model-sync-interval"
+              type="number"
+              min="1"
+              value={localSettings?.model_sync_interval ?? 12}
+              onChange={(e) => {
+                if (localSettings) {
+                  setLocalSettings({ ...localSettings, model_sync_interval: parseInt(e.target.value) || 12 });
+                  setHasChanges(true);
+                }
+              }}
+            />
+            <p className="text-sm text-muted-foreground">默认12小时同步一次</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="model-sync-log-retention-count">日志保留条数</Label>
+            <Input
+              id="model-sync-log-retention-count"
+              type="number"
+              min="0"
+              value={localSettings?.model_sync_log_retention_count ?? 100}
+              onChange={(e) => {
+                if (localSettings) {
+                  setLocalSettings({ ...localSettings, model_sync_log_retention_count: parseInt(e.target.value) || 100 });
+                  setHasChanges(true);
+                }
+              }}
+            />
+            <p className="text-sm text-muted-foreground">默认保留100条，0表示不限制</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="model-sync-log-retention-days">日志保留天数</Label>
+            <Input
+              id="model-sync-log-retention-days"
+              type="number"
+              min="0"
+              value={localSettings?.model_sync_log_retention_days ?? 7}
+              onChange={(e) => {
+                if (localSettings) {
+                  setLocalSettings({ ...localSettings, model_sync_log_retention_days: parseInt(e.target.value) || 7 });
+                  setHasChanges(true);
+                }
+              }}
+            />
+            <p className="text-sm text-muted-foreground">默认保留7天，0表示不限制</p>
           </div>
         </CardContent>
       </Card>

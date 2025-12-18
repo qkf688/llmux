@@ -595,6 +595,13 @@ export async function clearAllLogs(): Promise<{ deleted: number }> {
   });
 }
 
+// Maintenance API functions
+export async function vacuumDatabase(): Promise<{ message: string }> {
+  return apiRequest<{ message: string }>('/maintenance/vacuum', {
+    method: 'POST',
+  });
+}
+
 // Health Check API functions
 export interface HealthCheckSettings {
   enabled: boolean;

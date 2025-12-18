@@ -1632,8 +1632,6 @@ func UpdateSettings(c *gin.Context) {
 
 // cleanupExcessLogs 清理超出保留条数的日志
 func cleanupExcessLogs(retentionCount int) {
-	ctx := context.Background()
-
 	// 获取总日志数
 	var total int64
 	if err := models.DB.Model(&models.ChatLog{}).Count(&total).Error; err != nil {
@@ -1662,17 +1660,17 @@ func cleanupExcessLogs(retentionCount int) {
 		}
 
 		// 删除对应的ChatIO记录
-		if _, err := gorm.G[models.ChatIO](models.DB).
+		if err := models.DB.Unscoped().
 			Where("log_id IN ?", ids).
-			Delete(ctx); err != nil {
+			Delete(&models.ChatIO{}).Error; err != nil {
 			slog.Error("failed to delete chat io records", "error", err)
 		}
 
 		// 删除日志记录
-		if _, err := gorm.G[models.ChatLog](models.DB).
+		if err := models.DB.Unscoped().
 			Where("id IN ?", ids).
-			Delete(ctx); err != nil {
-			slog.Error("failed to delete logs", "error", err)
+			Delete(&models.ChatLog{}).Error; err != nil {
+			slog.Error("failed to delete logs hard", "error", err)
 			return
 		}
 
@@ -1847,25 +1845,23 @@ func DeleteLog(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-
-	// 删除对应的ChatIO记录
-	if _, err := gorm.G[models.ChatIO](models.DB).
+	// 删除对应的ChatIO记录（硬删）
+	if err := models.DB.Unscoped().
 		Where("log_id = ?", id).
-		Delete(ctx); err != nil {
+		Delete(&models.ChatIO{}).Error; err != nil {
 		slog.Warn("failed to delete chat io record", "log_id", id, "error", err)
 	}
 
-	// 删除日志记录
-	result, err := gorm.G[models.ChatLog](models.DB).
+	// 删除日志记录（硬删）
+	result := models.DB.Unscoped().
 		Where("id = ?", id).
-		Delete(ctx)
-	if err != nil {
-		common.InternalServerError(c, "Failed to delete log: "+err.Error())
+		Delete(&models.ChatLog{})
+	if result.Error != nil {
+		common.InternalServerError(c, "Failed to delete log: "+result.Error.Error())
 		return
 	}
 
-	if result == 0 {
+	if result.RowsAffected == 0 {
 		common.NotFound(c, "Log not found")
 		return
 	}
@@ -1891,26 +1887,24 @@ func BatchDeleteLogs(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-
 	// 删除对应的ChatIO记录
-	if _, err := gorm.G[models.ChatIO](models.DB).
+	if err := models.DB.Unscoped().
 		Where("log_id IN ?", req.IDs).
-		Delete(ctx); err != nil {
+		Delete(&models.ChatIO{}).Error; err != nil {
 		slog.Warn("failed to delete chat io records", "error", err)
 	}
 
 	// 删除日志记录
-	result, err := gorm.G[models.ChatLog](models.DB).
+	result := models.DB.Unscoped().
 		Where("id IN ?", req.IDs).
-		Delete(ctx)
-	if err != nil {
-		common.InternalServerError(c, "Failed to delete logs: "+err.Error())
+		Delete(&models.ChatLog{})
+	if result.Error != nil {
+		common.InternalServerError(c, "Failed to delete logs: "+result.Error.Error())
 		return
 	}
 
 	common.Success(c, map[string]interface{}{
-		"deleted": result,
+		"deleted": result.RowsAffected,
 	})
 }
 
@@ -2146,18 +2140,16 @@ func GetHealthCheckLogs(c *gin.Context) {
 
 // ClearHealthCheckLogs 清空健康检测日志
 func ClearHealthCheckLogs(c *gin.Context) {
-	ctx := c.Request.Context()
-
-	result, err := gorm.G[models.HealthCheckLog](models.DB).
+	result := models.DB.Unscoped().
 		Where("1 = 1").
-		Delete(ctx)
-	if err != nil {
-		common.InternalServerError(c, "Failed to clear health check logs: "+err.Error())
+		Delete(&models.HealthCheckLog{})
+	if result.Error != nil {
+		common.InternalServerError(c, "Failed to clear health check logs: "+result.Error.Error())
 		return
 	}
 
 	common.Success(c, map[string]interface{}{
-		"deleted": result,
+		"deleted": result.RowsAffected,
 	})
 }
 
@@ -2268,26 +2260,38 @@ func GetBatchHealthCheckStatus(c *gin.Context) {
 
 // ClearAllLogs 清空所有日志
 func ClearAllLogs(c *gin.Context) {
-	ctx := c.Request.Context()
-
 	// 删除所有ChatIO记录
-	if _, err := gorm.G[models.ChatIO](models.DB).
+	if err := models.DB.Unscoped().
 		Where("1 = 1").
-		Delete(ctx); err != nil {
+		Delete(&models.ChatIO{}).Error; err != nil {
 		slog.Warn("failed to delete all chat io records", "error", err)
 	}
 
 	// 删除所有日志记录
-	result, err := gorm.G[models.ChatLog](models.DB).
+	result := models.DB.Unscoped().
 		Where("1 = 1").
-		Delete(ctx)
-	if err != nil {
-		common.InternalServerError(c, "Failed to clear logs: "+err.Error())
+		Delete(&models.ChatLog{})
+	if result.Error != nil {
+		common.InternalServerError(c, "Failed to clear logs: "+result.Error.Error())
 		return
 	}
 
 	common.Success(c, map[string]interface{}{
-		"deleted": result,
+		"deleted": result.RowsAffected,
+	})
+}
+
+// VacuumDatabase 对 SQLite 执行 VACUUM 以回收磁盘空间
+func VacuumDatabase(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	if err := models.DB.WithContext(ctx).Exec("VACUUM").Error; err != nil {
+		common.InternalServerError(c, "Failed to vacuum database: "+err.Error())
+		return
+	}
+
+	common.Success(c, map[string]interface{}{
+		"message": "VACUUM completed",
 	})
 }
 
@@ -2416,29 +2420,27 @@ func DeleteModelSyncLogs(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-	result, err := gorm.G[models.ModelSyncLog](models.DB).Where("id IN ?", req.IDs).Delete(ctx)
-	if err != nil {
-		common.InternalServerError(c, "Failed to delete logs: "+err.Error())
+	result := models.DB.Unscoped().Where("id IN ?", req.IDs).Delete(&models.ModelSyncLog{})
+	if result.Error != nil {
+		common.InternalServerError(c, "Failed to delete logs: "+result.Error.Error())
 		return
 	}
 
 	common.Success(c, map[string]interface{}{
-		"deleted": result,
+		"deleted": result.RowsAffected,
 	})
 }
 
 // ClearModelSyncLogs 清空所有模型同步日志
 func ClearModelSyncLogs(c *gin.Context) {
-	ctx := c.Request.Context()
-	result, err := gorm.G[models.ModelSyncLog](models.DB).Where("1 = 1").Delete(ctx)
-	if err != nil {
-		common.InternalServerError(c, "Failed to clear logs: "+err.Error())
+	result := models.DB.Unscoped().Where("1 = 1").Delete(&models.ModelSyncLog{})
+	if result.Error != nil {
+		common.InternalServerError(c, "Failed to clear logs: "+result.Error.Error())
 		return
 	}
 
 	common.Success(c, map[string]interface{}{
-		"deleted": result,
+		"deleted": result.RowsAffected,
 	})
 }
 

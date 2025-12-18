@@ -93,6 +93,7 @@ func main() {
 	api.DELETE("/logs/clear", handler.ClearAllLogs)
 	api.DELETE("/logs/:id", handler.DeleteLog)
 	api.GET("/user-agents", handler.GetUserAgents)
+	api.POST("/maintenance/vacuum", handler.VacuumDatabase)
 
 	// System configuration
 	api.GET("/config", handler.GetSystemConfig)

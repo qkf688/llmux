@@ -25,8 +25,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import Loading from "@/components/loading";
-import { getLogs, getProviders, getModels, getUserAgents, deleteLog, batchDeleteLogs, type ChatLog, type Provider, type Model, getProviderTemplates, clearAllLogs } from "@/lib/api";
-import { ChevronLeft, ChevronRight, RefreshCw, Trash2, Download } from "lucide-react";
+import { getLogs, getProviders, getModels, getUserAgents, deleteLog, batchDeleteLogs, type ChatLog, type Provider, type Model, getProviderTemplates, clearAllLogs, vacuumDatabase } from "@/lib/api";
+import { ChevronLeft, ChevronRight, RefreshCw, Trash2, Download, HardDrive } from "lucide-react";
 import { toast } from "sonner";
 
 // 格式化时间显示
@@ -87,6 +87,8 @@ export default function LogsPage() {
   const [logToDelete, setLogToDelete] = useState<number | null>(null);
   const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false);
   const [isClearingAll, setIsClearingAll] = useState(false);
+  const [isVacuuming, setIsVacuuming] = useState(false);
+  const [vacuumDialogOpen, setVacuumDialogOpen] = useState(false);
   // 获取数据
   const fetchProviders = async () => {
     try {
@@ -156,6 +158,18 @@ export default function LogsPage() {
   };
   const handleRefresh = () => {
     fetchLogs();
+  };
+  const handleVacuum = async () => {
+    try {
+      setIsVacuuming(true);
+      const res = await vacuumDatabase();
+      toast.success(res.message || "VACUUM 完成（执行期间数据库会短暂锁定）");
+    } catch (error) {
+      toast.error("VACUUM 失败: " + (error as Error).message);
+    } finally {
+      setIsVacuuming(false);
+      setVacuumDialogOpen(false);
+    }
   };
   const openDetailDialog = (log: ChatLog) => {
     setSelectedLog(log);
@@ -305,6 +319,37 @@ export default function LogsPage() {
             <h2 className="text-2xl font-bold tracking-tight">请求日志</h2>
           </div>
           <div className="flex gap-2 ml-auto">
+            <AlertDialog open={vacuumDialogOpen} onOpenChange={setVacuumDialogOpen}>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={isVacuuming}
+                  onClick={() => setVacuumDialogOpen(true)}
+                >
+                  <HardDrive className="size-4 mr-1" />
+                  {isVacuuming ? "VACUUM..." : "VACUUM"}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>执行 VACUUM</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    将对数据库执行 VACUUM 以回收空间，过程会短暂锁库，建议在低峰期操作。是否继续？
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isVacuuming}>取消</AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={isVacuuming}
+                    onClick={handleVacuum}
+                  >
+                    确认执行
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
             <AlertDialog open={clearAllDialogOpen} onOpenChange={setClearAllDialogOpen}>
               <AlertDialogTrigger asChild>
                 <Button

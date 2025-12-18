@@ -58,7 +58,8 @@ import {
   deleteProvider,
   getProviderTemplates,
   getProviderModels,
-  syncProviderModels
+  syncProviderModels,
+  syncAllProviderModels
 } from "@/lib/api";
 import type { Provider, ProviderTemplate, ProviderModel } from "@/lib/api";
 import { buildConfigWithModels, parseAllModelsFromConfig, parseUpstreamModelsFromConfig, parseCustomModelsFromConfig } from "@/lib/provider-models";
@@ -163,6 +164,7 @@ export default function ProvidersPage() {
   const [addingModels, setAddingModels] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [syncingModels, setSyncingModels] = useState(false);
+  const [syncingAll, setSyncingAll] = useState(false);
   const [upstreamModelsList, setUpstreamModelsList] = useState<string[]>([]);
   const [upstreamStatus, setUpstreamStatus] = useState<'loading' | 'success' | 'empty' | 'error' | 'disabled'>('disabled');
   const [autoAssociateOnAddEnabled, setAutoAssociateOnAddEnabled] = useState(false);
@@ -480,24 +482,8 @@ export default function ProvidersPage() {
     setSelectedAllModels([]);
     setCustomModelInput("");
     setAllModelsOpen(true);
-
-    // 如果支持模型端点，获取上游模型列表
-    if (provider.ModelEndpoint ?? true) {
-      setUpstreamStatus('loading');
-      try {
-        const upstreamModels = await getProviderModels(provider.ID, { source: "upstream" });
-        const modelIds = upstreamModels.map(m => m.id);
-        setUpstreamModelsList(modelIds);
-        setUpstreamStatus(modelIds.length > 0 ? 'success' : 'empty');
-      } catch (err) {
-        console.error("获取上游模型失败", err);
-        setUpstreamModelsList([]);
-        setUpstreamStatus('error');
-      }
-    } else {
-      setUpstreamModelsList([]);
-      setUpstreamStatus('disabled');
-    }
+    setUpstreamModelsList([]);
+    setUpstreamStatus('disabled');
   };
 
   const handleSyncUpstreamModels = async () => {
@@ -567,6 +553,34 @@ export default function ProvidersPage() {
       setUpstreamStatus('error');
     } finally {
       setSyncingModels(false);
+    }
+  };
+
+  const handleSyncAllProviders = async () => {
+    try {
+      setSyncingAll(true);
+      const result = await syncAllProviderModels();
+      const addedTotal = typeof (result as any).added_total === "number" ? (result as any).added_total : 0;
+      const removedTotal = typeof (result as any).removed_total === "number" ? (result as any).removed_total : 0;
+      const syncedProviders = typeof (result as any).synced_providers === "number"
+        ? (result as any).synced_providers
+        : Array.isArray((result as any).logs) ? (result as any).logs.length : 0;
+
+      if (Array.isArray((result as any).logs) && (result as any).logs.length > 0) {
+        toast.success(`同步完成：新增 ${addedTotal} 个，删除 ${removedTotal} 个模型`, {
+          description: syncedProviders > 0 ? `涉及 ${syncedProviders} 个提供商` : undefined,
+        });
+      } else {
+        toast.info((result as any).message ?? "没有检测到模型变化");
+      }
+
+      await fetchProviders();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`同步失败: ${message}`);
+      console.error(err);
+    } finally {
+      setSyncingAll(false);
     }
   };
 
@@ -696,6 +710,15 @@ export default function ProvidersPage() {
             <h2 className="text-2xl font-bold tracking-tight">提供商管理</h2>
           </div>
           <div className="flex w-full sm:w-auto items-center justify-end gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleSyncAllProviders}
+              disabled={syncingAll}
+              className="h-9"
+            >
+              {syncingAll ? "同步中..." : "一键同步上游模型"}
+            </Button>
           </div>
         </div>
       </div>
@@ -1004,19 +1027,6 @@ export default function ProvidersPage() {
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="custom_models"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>全部模型（可选，本地缓存）</FormLabel>
-                    <FormControl>
-                      <Textarea {...field} placeholder="每行一个模型 ID，优先使用此列表，无需从上游重复获取" className="h-28" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
 
               {/* Anthropic 特有字段 */}
               {watchedType === "anthropic" && (
@@ -1155,14 +1165,6 @@ export default function ProvidersPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
               获取上游模型失败
-            </div>
-          )}
-          {upstreamStatus === 'disabled' && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm text-gray-600">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              该提供商未启用模型端点
             </div>
           )}
 

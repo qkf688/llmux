@@ -406,8 +406,8 @@ type ModelTemplateItemResponse struct {
 }
 
 type ModelTemplateResponse struct {
-	ModelID   uint                     `json:"model_id"`
-	ModelName string                   `json:"model_name"`
+	ModelID   uint                        `json:"model_id"`
+	ModelName string                      `json:"model_name"`
 	Items     []ModelTemplateItemResponse `json:"items"`
 }
 
@@ -1153,25 +1153,25 @@ func GetUserAgents(c *gin.Context) {
 
 // SettingsResponse 设置响应结构
 type SettingsResponse struct {
-	StrictCapabilityMatch           bool `json:"strict_capability_match"`
-	AutoWeightDecay                 bool `json:"auto_weight_decay"`
-	AutoWeightDecayDefault          int  `json:"auto_weight_decay_default"`
-	AutoWeightDecayStep             int  `json:"auto_weight_decay_step"`
-	AutoSuccessIncrease             bool `json:"auto_success_increase"`
-	AutoWeightIncreaseStep          int  `json:"auto_weight_increase_step"`
-	AutoWeightIncreaseMax           int  `json:"auto_weight_increase_max"`
-	AutoPriorityDecay               bool `json:"auto_priority_decay"`
-	AutoPriorityDecayDefault        int  `json:"auto_priority_decay_default"`
-	AutoPriorityDecayStep           int  `json:"auto_priority_decay_step"`
-	AutoPriorityDecayThreshold      int  `json:"auto_priority_decay_threshold"`
-	AutoPriorityDecayDisableEnabled bool `json:"auto_priority_decay_disable_enabled"`
-	AutoPriorityIncreaseStep        int  `json:"auto_priority_increase_step"`
-	AutoPriorityIncreaseMax         int  `json:"auto_priority_increase_max"`
-	LogRetentionCount               int                   `json:"log_retention_count"`
-	LogRawRequestResponse           models.RawLogOptions  `json:"log_raw_request_response"`
-	DisableAllLogs                  bool                  `json:"disable_all_logs"`
-	CountHealthCheckAsSuccess       bool `json:"count_health_check_as_success"`
-	CountHealthCheckAsFailure       bool `json:"count_health_check_as_failure"`
+	StrictCapabilityMatch           bool                 `json:"strict_capability_match"`
+	AutoWeightDecay                 bool                 `json:"auto_weight_decay"`
+	AutoWeightDecayDefault          int                  `json:"auto_weight_decay_default"`
+	AutoWeightDecayStep             int                  `json:"auto_weight_decay_step"`
+	AutoSuccessIncrease             bool                 `json:"auto_success_increase"`
+	AutoWeightIncreaseStep          int                  `json:"auto_weight_increase_step"`
+	AutoWeightIncreaseMax           int                  `json:"auto_weight_increase_max"`
+	AutoPriorityDecay               bool                 `json:"auto_priority_decay"`
+	AutoPriorityDecayDefault        int                  `json:"auto_priority_decay_default"`
+	AutoPriorityDecayStep           int                  `json:"auto_priority_decay_step"`
+	AutoPriorityDecayThreshold      int                  `json:"auto_priority_decay_threshold"`
+	AutoPriorityDecayDisableEnabled bool                 `json:"auto_priority_decay_disable_enabled"`
+	AutoPriorityIncreaseStep        int                  `json:"auto_priority_increase_step"`
+	AutoPriorityIncreaseMax         int                  `json:"auto_priority_increase_max"`
+	LogRetentionCount               int                  `json:"log_retention_count"`
+	LogRawRequestResponse           models.RawLogOptions `json:"log_raw_request_response"`
+	DisableAllLogs                  bool                 `json:"disable_all_logs"`
+	CountHealthCheckAsSuccess       bool                 `json:"count_health_check_as_success"`
+	CountHealthCheckAsFailure       bool                 `json:"count_health_check_as_failure"`
 	// 性能优化相关设置
 	DisablePerformanceTracking bool `json:"disable_performance_tracking"`
 	DisableTokenCounting       bool `json:"disable_token_counting"`
@@ -1185,25 +1185,25 @@ type SettingsResponse struct {
 
 // UpdateSettingsRequest 更新设置请求结构
 type UpdateSettingsRequest struct {
-	StrictCapabilityMatch           bool `json:"strict_capability_match"`
-	AutoWeightDecay                 bool `json:"auto_weight_decay"`
-	AutoWeightDecayDefault          int  `json:"auto_weight_decay_default"`
-	AutoWeightDecayStep             int  `json:"auto_weight_decay_step"`
-	AutoSuccessIncrease             bool `json:"auto_success_increase"`
-	AutoWeightIncreaseStep          int  `json:"auto_weight_increase_step"`
-	AutoWeightIncreaseMax           int  `json:"auto_weight_increase_max"`
-	AutoPriorityDecay               bool `json:"auto_priority_decay"`
-	AutoPriorityDecayDefault        int  `json:"auto_priority_decay_default"`
-	AutoPriorityDecayStep           int  `json:"auto_priority_decay_step"`
-	AutoPriorityDecayThreshold      int  `json:"auto_priority_decay_threshold"`
-	AutoPriorityDecayDisableEnabled bool `json:"auto_priority_decay_disable_enabled"`
-	AutoPriorityIncreaseStep        int  `json:"auto_priority_increase_step"`
-	AutoPriorityIncreaseMax         int  `json:"auto_priority_increase_max"`
-	LogRetentionCount               int                   `json:"log_retention_count"`
-	LogRawRequestResponse           models.RawLogOptions  `json:"log_raw_request_response"`
-	DisableAllLogs                  bool                  `json:"disable_all_logs"`
-	CountHealthCheckAsSuccess       bool `json:"count_health_check_as_success"`
-	CountHealthCheckAsFailure       bool `json:"count_health_check_as_failure"`
+	StrictCapabilityMatch           bool                 `json:"strict_capability_match"`
+	AutoWeightDecay                 bool                 `json:"auto_weight_decay"`
+	AutoWeightDecayDefault          int                  `json:"auto_weight_decay_default"`
+	AutoWeightDecayStep             int                  `json:"auto_weight_decay_step"`
+	AutoSuccessIncrease             bool                 `json:"auto_success_increase"`
+	AutoWeightIncreaseStep          int                  `json:"auto_weight_increase_step"`
+	AutoWeightIncreaseMax           int                  `json:"auto_weight_increase_max"`
+	AutoPriorityDecay               bool                 `json:"auto_priority_decay"`
+	AutoPriorityDecayDefault        int                  `json:"auto_priority_decay_default"`
+	AutoPriorityDecayStep           int                  `json:"auto_priority_decay_step"`
+	AutoPriorityDecayThreshold      int                  `json:"auto_priority_decay_threshold"`
+	AutoPriorityDecayDisableEnabled bool                 `json:"auto_priority_decay_disable_enabled"`
+	AutoPriorityIncreaseStep        int                  `json:"auto_priority_increase_step"`
+	AutoPriorityIncreaseMax         int                  `json:"auto_priority_increase_max"`
+	LogRetentionCount               int                  `json:"log_retention_count"`
+	LogRawRequestResponse           models.RawLogOptions `json:"log_raw_request_response"`
+	DisableAllLogs                  bool                 `json:"disable_all_logs"`
+	CountHealthCheckAsSuccess       bool                 `json:"count_health_check_as_success"`
+	CountHealthCheckAsFailure       bool                 `json:"count_health_check_as_failure"`
 	// 性能优化相关设置
 	DisablePerformanceTracking bool `json:"disable_performance_tracking"`
 	DisableTokenCounting       bool `json:"disable_token_counting"`
@@ -2202,13 +2202,13 @@ func RunHealthCheckAll(c *gin.Context) {
 
 // BatchHealthCheckStatus 批次健康检测状态响应
 type BatchHealthCheckStatus struct {
-	BatchID    string                    `json:"batch_id"`
-	TotalCount int                       `json:"total_count"`
-	Success    int                       `json:"success"`
-	Failed     int                       `json:"failed"`
-	Pending    int                       `json:"pending"`
-	Completed  bool                      `json:"completed"`
-	Logs       []models.HealthCheckLog   `json:"logs"`
+	BatchID    string                  `json:"batch_id"`
+	TotalCount int                     `json:"total_count"`
+	Success    int                     `json:"success"`
+	Failed     int                     `json:"failed"`
+	Pending    int                     `json:"pending"`
+	Completed  bool                    `json:"completed"`
+	Logs       []models.HealthCheckLog `json:"logs"`
 }
 
 // GetBatchHealthCheckStatus 查询批次健康检测状态
@@ -2315,6 +2315,40 @@ func SyncProviderModels(c *gin.Context) {
 	}
 
 	common.Success(c, syncLog)
+}
+
+// SyncAllProviders 同步所有启用模型端点的提供商
+func SyncAllProviders(c *gin.Context) {
+	ctx := c.Request.Context()
+	syncService := service.NewModelSyncService(models.DB)
+
+	logs, err := syncService.SyncAllProviders(ctx)
+	if err != nil {
+		common.InternalServerError(c, "Failed to sync models: "+err.Error())
+		return
+	}
+
+	if len(logs) == 0 {
+		common.Success(c, map[string]interface{}{
+			"message": "No changes detected",
+		})
+		return
+	}
+
+	addedTotal := 0
+	removedTotal := 0
+	for _, log := range logs {
+		addedTotal += log.AddedCount
+		removedTotal += log.RemovedCount
+	}
+
+	common.Success(c, map[string]interface{}{
+		"message":          "Sync completed",
+		"logs":             logs,
+		"synced_providers": len(logs),
+		"added_total":      addedTotal,
+		"removed_total":    removedTotal,
+	})
 }
 
 // GetModelSyncLogs 获取模型同步日志列表

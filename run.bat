@@ -23,7 +23,14 @@ if not exist "package.json" (
     exit /b 1
 )
 
-call pnpm run build
+where pnpm >nul 2>&1
+if errorlevel 1 (
+    echo pnpm not found in PATH
+    pause
+    exit /b 1
+)
+
+pnpm run build
 if errorlevel 1 (
     echo Failed to build webui
     cd /d "%~dp0"

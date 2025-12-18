@@ -130,7 +130,9 @@ func (s *ModelSyncService) SyncProviderModels(ctx context.Context, providerID ui
 func (s *ModelSyncService) SyncAllProviders(ctx context.Context) ([]*models.ModelSyncLog, error) {
 	// 获取所有启用模型端点的提供商
 	var providers []models.Provider
-	if err := s.db.WithContext(ctx).Where("model_endpoint = ?", true).Find(&providers).Error; err != nil {
+	if err := s.db.WithContext(ctx).
+		Where("model_endpoint IS NULL OR model_endpoint = ?", true).
+		Find(&providers).Error; err != nil {
 		return nil, err
 	}
 

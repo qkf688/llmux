@@ -723,6 +723,18 @@ export async function syncProviderModels(providerId: number): Promise<ModelSyncL
   });
 }
 
+export async function syncAllProviderModels(): Promise<{
+  message?: string;
+  logs?: ModelSyncLog[];
+  synced_providers?: number;
+  added_total?: number;
+  removed_total?: number;
+}> {
+  return apiRequest(`/model-sync/all`, {
+    method: 'POST',
+  });
+}
+
 export async function getModelSyncLogs(params: {
   page?: number;
   page_size?: number;

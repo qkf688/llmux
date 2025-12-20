@@ -161,6 +161,7 @@ export default function ProvidersPage() {
   const [allModelsList, setAllModelsList] = useState<string[]>([]);
   const [selectedAllModels, setSelectedAllModels] = useState<string[]>([]);
   const [customModelInput, setCustomModelInput] = useState("");
+  const [allModelsSearchQuery, setAllModelsSearchQuery] = useState("");
   const [addingModels, setAddingModels] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [syncingModels, setSyncingModels] = useState(false);
@@ -313,11 +314,13 @@ export default function ProvidersPage() {
   };
 
   const toggleSelectAllModels = () => {
-    if (allModelsList.length === 0) return;
-    if (selectedAllModels.length === allModelsList.length) {
-      setSelectedAllModels([]);
+    if (filteredAllModels.length === 0) return;
+    if (selectedAllModels.length >= filteredAllModels.length && filteredAllModels.every(m => selectedAllModels.includes(m))) {
+      // 如果当前选中的包含所有过滤后的模型，则取消选中这些
+      setSelectedAllModels(selectedAllModels.filter(m => !filteredAllModels.includes(m)));
     } else {
-      setSelectedAllModels(allModelsList);
+      // 否则选中所有过滤后的模型
+      setSelectedAllModels(Array.from(new Set([...selectedAllModels, ...filteredAllModels])));
     }
   };
 
@@ -481,6 +484,7 @@ export default function ProvidersPage() {
     setAllModelsList(allModels);
     setSelectedAllModels([]);
     setCustomModelInput("");
+    setAllModelsSearchQuery("");
     setAllModelsOpen(true);
     setUpstreamModelsList([]);
     setUpstreamStatus('disabled');
@@ -687,6 +691,11 @@ export default function ProvidersPage() {
     .filter((model) => !savedModelSet.has(model.id.toLowerCase()))
     .map((model) => model.id);
   const isAllSelectableChecked = selectableModelIds.length > 0 && selectableModelIds.every((id) => selectedUpstreamModels.includes(id));
+
+  // 过滤全部模型列表
+  const filteredAllModels = allModelsSearchQuery.trim() === ""
+    ? allModelsList
+    : allModelsList.filter(model => model.toLowerCase().includes(allModelsSearchQuery.toLowerCase()));
 
   const toggleSelectAll = () => {
     if (selectableModelIds.length === 0) {
@@ -1173,8 +1182,18 @@ export default function ProvidersPage() {
               <div className="flex items-center justify-between gap-2 flex-shrink-0">
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-semibold">全部模型列表</p>
-                  <span className="text-xs text-muted-foreground">已缓存 {allModelsList.length} 个</span>
+                  <span className="text-xs text-muted-foreground">
+                    {allModelsSearchQuery
+                      ? `匹配 ${filteredAllModels.length} 个 / 共 ${allModelsList.length} 个`
+                      : `已缓存 ${allModelsList.length} 个`}
+                  </span>
                 </div>
+                <Input
+                  placeholder="搜索模型名称..."
+                  value={allModelsSearchQuery}
+                  onChange={(e) => setAllModelsSearchQuery(e.target.value)}
+                  className="w-48 h-8"
+                />
                 <div className="flex items-center gap-2">
                   {(allModelsProvider?.ModelEndpoint ?? true) && (
                     <Button
@@ -1190,9 +1209,9 @@ export default function ProvidersPage() {
                     variant="outline"
                     size="sm"
                     onClick={toggleSelectAllModels}
-                    disabled={allModelsList.length === 0}
+                    disabled={filteredAllModels.length === 0}
                   >
-                    {selectedAllModels.length === allModelsList.length && allModelsList.length > 0 ? "取消全选" : "全选"}
+                    {filteredAllModels.length > 0 && filteredAllModels.every(m => selectedAllModels.includes(m)) ? "取消全选" : "全选"}
                   </Button>
                   <Button
                     variant="destructive"
@@ -1207,8 +1226,10 @@ export default function ProvidersPage() {
               <div className="border rounded-md flex-1 min-h-0 overflow-y-auto divide-y">
                 {allModelsList.length === 0 ? (
                   <div className="text-sm text-muted-foreground text-center py-4">暂无缓存模型</div>
+                ) : filteredAllModels.length === 0 ? (
+                  <div className="text-sm text-muted-foreground text-center py-4">没有找到匹配的模型</div>
                 ) : (
-                  allModelsList.map((model) => {
+                  filteredAllModels.map((model) => {
                     const checked = selectedAllModels.includes(model);
                     const upstreamModels = allModelsProvider ? parseUpstreamModelsFromConfig(allModelsProvider.Config) : [];
                     const isUpstream = upstreamModels.includes(model);

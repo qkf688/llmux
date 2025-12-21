@@ -312,6 +312,13 @@ export async function testModelProvider(id: number): Promise<any> {
   return apiRequest<any>(`/test/${id}`);
 }
 
+export async function testProviderModel(providerId: number, model: string): Promise<any> {
+  return apiRequest<any>(`/providers/${providerId}/test`, {
+    method: "POST",
+    body: JSON.stringify({ model }),
+  });
+}
+
 // Provider Templates API functions
 export interface ProviderTemplate {
   type: string;

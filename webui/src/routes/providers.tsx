@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Tooltip,
+  TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -59,11 +60,13 @@ import {
   getProviderTemplates,
   getProviderModels,
   syncProviderModels,
-  syncAllProviderModels
+  syncAllProviderModels,
+  testProviderModel
 } from "@/lib/api";
 import type { Provider, ProviderTemplate, ProviderModel } from "@/lib/api";
 import { buildConfigWithModels, parseAllModelsFromConfig, parseUpstreamModelsFromConfig, parseCustomModelsFromConfig } from "@/lib/provider-models";
 import { toast } from "sonner";
+import { Spinner } from "@/components/ui/spinner";
 
 // 定义表单验证模式
 const formSchema = z.object({
@@ -162,6 +165,7 @@ export default function ProvidersPage() {
   const [selectedAllModels, setSelectedAllModels] = useState<string[]>([]);
   const [customModelInput, setCustomModelInput] = useState("");
   const [allModelsSearchQuery, setAllModelsSearchQuery] = useState("");
+  const [allModelsTestResults, setAllModelsTestResults] = useState<Record<string, { loading: boolean; success: boolean | null; error?: string }>>({});
   const [addingModels, setAddingModels] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [syncingModels, setSyncingModels] = useState(false);
@@ -216,6 +220,7 @@ export default function ProvidersPage() {
   useEffect(() => {
     if (!allModelsOpen) {
       setSelectedAllModels([]);
+      setAllModelsTestResults({});
     }
   }, [allModelsOpen]);
 
@@ -478,6 +483,27 @@ export default function ProvidersPage() {
     toast.success(`已复制模型名称: ${modelName}`);
   };
 
+  const handleTestAllModel = async (modelName: string) => {
+    if (!allModelsProvider) return;
+    setAllModelsTestResults((prev) => ({
+      ...prev,
+      [modelName]: { loading: true, success: null }
+    }));
+    try {
+      await testProviderModel(allModelsProvider.ID, modelName);
+      setAllModelsTestResults((prev) => ({
+        ...prev,
+        [modelName]: { loading: false, success: true }
+      }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setAllModelsTestResults((prev) => ({
+        ...prev,
+        [modelName]: { loading: false, success: false, error: message }
+      }));
+    }
+  };
+
   const openAllModelsDialog = async (provider: Provider) => {
     const allModels = extractAllModels(provider.Config);
     setAllModelsProvider(provider);
@@ -485,6 +511,7 @@ export default function ProvidersPage() {
     setSelectedAllModels([]);
     setCustomModelInput("");
     setAllModelsSearchQuery("");
+    setAllModelsTestResults({});
     setAllModelsOpen(true);
     setUpstreamModelsList([]);
     setUpstreamStatus('disabled');
@@ -1194,36 +1221,89 @@ export default function ProvidersPage() {
                   onChange={(e) => setAllModelsSearchQuery(e.target.value)}
                   className="w-48 h-8"
                 />
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   {(allModelsProvider?.ModelEndpoint ?? true) && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleSyncUpstreamModels}
-                      disabled={syncingModels}
-                    >
-                      {syncingModels ? "同步中..." : "同步上游模型"}
-                    </Button>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="secondary"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={handleSyncUpstreamModels}
+                            disabled={syncingModels}
+                          >
+                            {syncingModels ? (
+                              <Spinner className="h-4 w-4" />
+                            ) : (
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{syncingModels ? "同步中..." : "同步上游模型"}</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={toggleSelectAllModels}
-                    disabled={filteredAllModels.length === 0}
-                  >
-                    {filteredAllModels.length > 0 && filteredAllModels.every(m => selectedAllModels.includes(m)) ? "取消全选" : "全选"}
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleRemoveSelectedModels}
-                    disabled={selectedAllModels.length === 0 || addingModels}
-                  >
-                    {addingModels ? "删除中..." : `删除所选${selectedAllModels.length > 0 ? `（${selectedAllModels.length}）` : ""}`}
-                  </Button>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={toggleSelectAllModels}
+                          disabled={filteredAllModels.length === 0}
+                        >
+                          {filteredAllModels.length > 0 && filteredAllModels.every(m => selectedAllModels.includes(m)) ? (
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          ) : (
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {filteredAllModels.length > 0 && filteredAllModels.every(m => selectedAllModels.includes(m)) ? "取消全选" : "全选"}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={handleRemoveSelectedModels}
+                          disabled={selectedAllModels.length === 0 || addingModels}
+                        >
+                          {addingModels ? (
+                            <Spinner className="h-4 w-4" />
+                          ) : (
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {addingModels ? "删除中..." : `删除所选${selectedAllModels.length > 0 ? `（${selectedAllModels.length}）` : ""}`}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  {selectedAllModels.length > 0 && (
+                    <span className="text-xs text-muted-foreground ml-1">
+                      已选 {selectedAllModels.length} 个
+                    </span>
+                  )}
                 </div>
               </div>
-              <div className="border rounded-md flex-1 min-h-0 overflow-y-auto divide-y">
+              <div className="border rounded-md flex-1 min-h-0 overflow-y-auto">
                 {allModelsList.length === 0 ? (
                   <div className="text-sm text-muted-foreground text-center py-4">暂无缓存模型</div>
                 ) : filteredAllModels.length === 0 ? (
@@ -1233,9 +1313,15 @@ export default function ProvidersPage() {
                     const checked = selectedAllModels.includes(model);
                     const upstreamModels = allModelsProvider ? parseUpstreamModelsFromConfig(allModelsProvider.Config) : [];
                     const isUpstream = upstreamModels.includes(model);
+                    const testResult = allModelsTestResults[model];
                     return (
-                      <div key={model} className="flex items-center justify-between px-3 py-2 text-sm gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        key={model}
+                        className={`flex items-center justify-between px-3 py-2.5 text-sm gap-2 transition-colors border-b last:border-b-0 ${
+                          checked ? "bg-blue-50/80" : "hover:bg-muted/50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
                           <Checkbox
                             checked={checked}
                             onCheckedChange={(value) => {
@@ -1247,62 +1333,114 @@ export default function ProvidersPage() {
                             }}
                             aria-label={`选择模型 ${model}`}
                           />
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="truncate">{model}</span>
-                            {isUpstream ? (
-                              <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                上游
-                              </span>
-                            ) : (
-                              <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                                自定义
-                              </span>
-                            )}
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="truncate font-mono text-xs">{model}</span>
+                            <span className={`flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                              isUpstream
+                                ? "bg-blue-100 text-blue-700"
+                                : "bg-gray-100 text-gray-600"
+                            }`}>
+                              {isUpstream ? "上游" : "自定义"}
+                            </span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 px-2"
-                            onClick={() => copyModelName(model)}
-                          >
-                            复制
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2"
-                            onClick={() => handleRemoveModelFromAll(model)}
-                            disabled={addingModels}
-                          >
-                            移除
-                          </Button>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => handleTestAllModel(model)}
+                                  disabled={!!testResult?.loading}
+                                >
+                                  {testResult?.loading ? (
+                                    <Spinner className="h-3.5 w-3.5" />
+                                  ) : testResult?.success === true ? (
+                                    <svg className="h-3.5 w-3.5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  ) : testResult?.success === false ? (
+                                    <svg className="h-3.5 w-3.5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  ) : (
+                                    <svg className="h-3.5 w-3.5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {testResult?.loading ? "测试中..." :
+                                 testResult?.success === true ? "测试成功" :
+                                 testResult?.success === false ? testResult.error || "测试失败" :
+                                 "测试模型可用性"}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => copyModelName(model)}
+                                >
+                                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                  </svg>
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>复制名称</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                  onClick={() => handleRemoveModelFromAll(model)}
+                                  disabled={addingModels}
+                                >
+                                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>移除</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </div>
                       </div>
                     );
                   })
                 )}
               </div>
-              <div className="space-y-2 flex-shrink-0">
+              <div className="flex items-center justify-between gap-3 flex-shrink-0">
                 <Textarea
                   value={customModelInput}
                   onChange={(e) => setCustomModelInput(e.target.value)}
                   placeholder="每行一个模型 ID，可用来自定义或补充上游未返回的模型"
-                  className="h-20 resize-none"
+                  className="h-16 resize-none flex-1"
                 />
-                <div className="flex justify-end">
-                  <Button onClick={handleAddCustomModels} disabled={addingModels || !allModelsProvider}>
-                    {addingModels ? "提交中..." : "添加到全部模型"}
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handleAddCustomModels} disabled={addingModels || !allModelsProvider}>
+                    {addingModels ? "提交中..." : "添加"}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setAllModelsOpen(false)}>
+                    关闭
                   </Button>
                 </div>
               </div>
             </div>
           </div>
-
-          <DialogFooter className="flex-shrink-0">
-            <Button onClick={() => setAllModelsOpen(false)}>关闭</Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 

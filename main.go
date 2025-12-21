@@ -58,6 +58,7 @@ func main() {
 	api.GET("/providers/template", handler.GetProviderTemplates)
 	api.GET("/providers", handler.GetProviders)
 	api.GET("/providers/models/:id", handler.GetProviderModels)
+	api.POST("/providers/:id/test", handler.ProviderModelTestHandler)
 	api.POST("/providers", handler.CreateProvider)
 	api.PUT("/providers/:id", handler.UpdateProvider)
 	api.DELETE("/providers/:id", handler.DeleteProvider)

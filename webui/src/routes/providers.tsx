@@ -1206,12 +1206,12 @@ export default function ProvidersPage() {
 
           <div className="flex flex-col gap-4 flex-1 min-h-0">
             <div className="flex flex-col gap-2 flex-1 min-h-0">
-              <div className="flex items-center justify-between gap-2 flex-shrink-0">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between flex-shrink-0">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold">模型列表</p>
-                  <span className="text-xs text-muted-foreground">
+                  <p className="text-sm font-semibold whitespace-nowrap">模型列表</p>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
                     {allModelsSearchQuery
-                      ? `匹配 ${filteredAllModels.length} 个 / 共 ${allModelsList.length} 个`
+                      ? `匹配 ${filteredAllModels.length} / ${allModelsList.length}`
                       : `${allModelsList.length} 个`}
                   </span>
                 </div>
@@ -1219,7 +1219,7 @@ export default function ProvidersPage() {
                   placeholder="搜索模型名称..."
                   value={allModelsSearchQuery}
                   onChange={(e) => setAllModelsSearchQuery(e.target.value)}
-                  className="w-48 h-8"
+                  className="w-full h-8 sm:w-48"
                 />
                 <div className="flex items-center gap-1">
                   {(allModelsProvider?.ModelEndpoint ?? true) && (
@@ -1296,11 +1296,13 @@ export default function ProvidersPage() {
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
-                  {selectedAllModels.length > 0 && (
-                    <span className="text-xs text-muted-foreground ml-1">
-                      已选 {selectedAllModels.length} 个
-                    </span>
-                  )}
+                  <span
+                    className={`text-xs text-muted-foreground ml-1 inline-flex min-w-[64px] justify-end tabular-nums ${
+                      selectedAllModels.length > 0 ? "" : "invisible"
+                    }`}
+                  >
+                    已选 {selectedAllModels.length} 个
+                  </span>
                 </div>
               </div>
               <div className="border rounded-md flex-1 min-h-0 overflow-y-auto">

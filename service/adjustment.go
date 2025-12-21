@@ -269,3 +269,66 @@ func getAutoPriorityDecayDisableEnabled(ctx context.Context) bool {
 	}
 	return setting.Value == "true"
 }
+
+func getConsecutiveFailureThreshold(ctx context.Context) int {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyConsecutiveFailureThreshold).
+		First(ctx)
+	if err != nil {
+		return 3
+	}
+	threshold, err := strconv.Atoi(setting.Value)
+	if err != nil || threshold < 1 {
+		return 3
+	}
+	return threshold
+}
+
+func getConsecutiveFailureDisableEnabled(ctx context.Context) bool {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyConsecutiveFailureDisableEnabled).
+		First(ctx)
+	if err != nil {
+		return true
+	}
+	return setting.Value == "true"
+}
+
+func incrementConsecutiveFailures(ctx context.Context, modelProviderID uint, providerName, providerModel string) {
+	if !getConsecutiveFailureDisableEnabled(ctx) {
+		return
+	}
+
+	threshold := getConsecutiveFailureThreshold(ctx)
+	mp, err := gorm.G[models.ModelWithProvider](models.DB).Where("id = ?", modelProviderID).First(ctx)
+	if err != nil {
+		return
+	}
+
+	newCount := mp.ConsecutiveFailures + 1
+	updates := models.ModelWithProvider{ConsecutiveFailures: newCount}
+	shouldDisable := newCount >= threshold && (mp.Status == nil || *mp.Status)
+	if shouldDisable {
+		falseVal := false
+		updates.Status = &falseVal
+	}
+
+	if _, err := gorm.G[models.ModelWithProvider](models.DB).
+		Where("id = ?", modelProviderID).
+		Updates(ctx, updates); err != nil {
+		slog.Error("update consecutive failure count error", "error", err, "id", modelProviderID)
+		return
+	}
+
+	if shouldDisable {
+		slog.Warn("model provider auto disabled due to consecutive failures", "provider", providerName, "model", providerModel, "id", modelProviderID, "fail_count", newCount, "threshold", threshold)
+	}
+}
+
+func resetConsecutiveFailures(ctx context.Context, modelProviderID uint) {
+	if _, err := gorm.G[models.ModelWithProvider](models.DB).
+		Where("id = ? AND consecutive_failures != 0", modelProviderID).
+		Update(ctx, "consecutive_failures", 0); err != nil {
+		slog.Error("reset consecutive failure count error", "error", err, "id", modelProviderID)
+	}
+}

@@ -458,6 +458,8 @@ export interface Settings {
   auto_priority_decay_disable_enabled: boolean;
   auto_priority_increase_step: number;
   auto_priority_increase_max: number;
+  consecutive_failure_threshold: number;
+  consecutive_failure_disable_enabled: boolean;
   log_retention_count: number;
   log_raw_request_response: RawLogOptions;
   disable_all_logs: boolean;

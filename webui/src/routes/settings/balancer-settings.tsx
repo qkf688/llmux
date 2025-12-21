@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { updateSettings, resetModelWeights, resetModelPriorities, enableAllAssociations } from "@/lib/api";
+import { updateSettings } from "@/lib/api";
 import type { Settings } from "@/lib/api";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -18,9 +18,6 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
   const [saving, setSaving] = useState(false);
   const [localSettings, setLocalSettings] = useState(settings);
   const [hasChanges, setHasChanges] = useState(false);
-  const [resettingWeights, setResettingWeights] = useState(false);
-  const [resettingPriorities, setResettingPriorities] = useState(false);
-  const [enablingAssociations, setEnablingAssociations] = useState(false);
 
   const updateLocalSettings = (updates: Partial<Settings>) => {
     if (localSettings) {
@@ -52,41 +49,6 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
     setHasChanges(false);
   };
 
-  const handleResetAllWeights = async () => {
-    try {
-      setResettingWeights(true);
-      const result = await resetModelWeights();
-      toast.success(`已重置 ${result.updated} 个模型关联的权重到 ${result.default_weight}`);
-    } catch (error) {
-      toast.error("重置权重失败: " + (error as Error).message);
-    } finally {
-      setResettingWeights(false);
-    }
-  };
-
-  const handleResetAllPriorities = async () => {
-    try {
-      setResettingPriorities(true);
-      const result = await resetModelPriorities();
-      toast.success(`已重置 ${result.updated} 个模型关联的优先级到 ${result.default_priority}`);
-    } catch (error) {
-      toast.error("重置优先级失败: " + (error as Error).message);
-    } finally {
-      setResettingPriorities(false);
-    }
-  };
-
-  const handleEnableAllAssociations = async () => {
-    try {
-      setEnablingAssociations(true);
-      const result = await enableAllAssociations();
-      toast.success(`已启用 ${result.updated} 个模型关联`);
-    } catch (error) {
-      toast.error("启用关联失败: " + (error as Error).message);
-    } finally {
-      setEnablingAssociations(false);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -174,24 +136,6 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
             />
           </div>
 
-          <div className="pt-4 border-t">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label className="text-base font-medium">重置所有权重</Label>
-                <p className="text-sm text-muted-foreground">
-                  将所有模型关联的权重重置为默认值 ({localSettings?.auto_weight_decay_default ?? 5})。
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={handleResetAllWeights}
-                disabled={resettingWeights}
-              >
-                {resettingWeights ? <Spinner className="w-4 h-4 mr-2" /> : null}
-                重置权重
-              </Button>
-            </div>
-          </div>
         </CardContent>
       </Card>
 
@@ -292,39 +236,51 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
             </div>
           </div>
 
-          <div className="pt-4 border-t space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label className="text-base font-medium">重置所有优先级</Label>
-                <p className="text-sm text-muted-foreground">
-                  将所有模型关联的优先级重置为默认值 ({localSettings?.auto_priority_decay_default ?? 10})。
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={handleResetAllPriorities}
-                disabled={resettingPriorities}
-              >
-                {resettingPriorities ? <Spinner className="w-4 h-4 mr-2" /> : null}
-                重置优先级
-              </Button>
+        </CardContent>
+      </Card>
+
+      {/* 连续失败禁用 */}
+      <Card>
+        <CardHeader>
+          <CardTitle>连续失败禁用</CardTitle>
+          <CardDescription>
+            配置连续调用失败后的自动禁用策略
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="consecutive-failure-disable-enabled" className="text-base font-medium">
+                启用连续失败禁用
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                开启后，模型关联在连续调用失败达到阈值时会自动禁用。
+              </p>
             </div>
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label className="text-base font-medium">启用所有关联</Label>
-                <p className="text-sm text-muted-foreground">
-                  重新启用所有已禁用的模型关联。
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={handleEnableAllAssociations}
-                disabled={enablingAssociations}
-              >
-                {enablingAssociations ? <Spinner className="w-4 h-4 mr-2" /> : null}
-                启用所有关联
-              </Button>
-            </div>
+            <Switch
+              id="consecutive-failure-disable-enabled"
+              checked={localSettings?.consecutive_failure_disable_enabled ?? true}
+              onCheckedChange={(checked) => updateLocalSettings({ consecutive_failure_disable_enabled: checked })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="consecutive-failure-threshold" className="text-base font-medium">
+              连续失败次数
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              连续调用失败达到此值时自动禁用该模型关联。
+            </p>
+            <Input
+              id="consecutive-failure-threshold"
+              type="number"
+              min={1}
+              max={100}
+              value={localSettings?.consecutive_failure_threshold ?? 3}
+              onChange={(e) => updateLocalSettings({ consecutive_failure_threshold: parseInt(e.target.value) || 3 })}
+              className="w-32"
+              disabled={!localSettings?.consecutive_failure_disable_enabled}
+            />
           </div>
         </CardContent>
       </Card>

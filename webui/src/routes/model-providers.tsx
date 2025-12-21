@@ -65,7 +65,10 @@ import {
   previewCleanInvalid,
   getModelTemplate,
   addModelTemplateItem,
-  deleteModelTemplateItem
+  deleteModelTemplateItem,
+  resetModelWeights,
+  resetModelPriorities,
+  enableAllAssociations
 } from "@/lib/api";
 import type {
   ModelWithProvider,
@@ -187,6 +190,10 @@ export default function ModelProvidersPage() {
   const [templateLoading, setTemplateLoading] = useState(false);
   const [templateData, setTemplateData] = useState<ModelTemplate | null>(null);
   const [templateNewItem, setTemplateNewItem] = useState("");
+  const [resettingWeights, setResettingWeights] = useState(false);
+  const [resettingPriorities, setResettingPriorities] = useState(false);
+  const [enablingAssociations, setEnablingAssociations] = useState(false);
+  const [operationScope, setOperationScope] = useState<"current" | "all">("current");
 
   const dialogClose = () => {
     setTestDialogOpen(false)
@@ -790,6 +797,57 @@ export default function ModelProvidersPage() {
     }
   };
 
+  const handleResetWeights = async () => {
+    if (!selectedModelId && !isGlobalScope) return;
+    try {
+      setResettingWeights(true);
+      const result = await resetModelWeights(isGlobalScope ? undefined : (selectedModelId ?? undefined));
+      toast.success(`已重置 ${result.updated} 个模型关联的权重到 ${result.default_weight}`);
+      if (selectedModelId) {
+        fetchModelProviders(selectedModelId);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`重置权重失败: ${message}`);
+    } finally {
+      setResettingWeights(false);
+    }
+  };
+
+  const handleResetPriorities = async () => {
+    if (!selectedModelId && !isGlobalScope) return;
+    try {
+      setResettingPriorities(true);
+      const result = await resetModelPriorities(isGlobalScope ? undefined : (selectedModelId ?? undefined));
+      toast.success(`已重置 ${result.updated} 个模型关联的优先级到 ${result.default_priority}`);
+      if (selectedModelId) {
+        fetchModelProviders(selectedModelId);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`重置优先级失败: ${message}`);
+    } finally {
+      setResettingPriorities(false);
+    }
+  };
+
+  const handleEnableAssociations = async () => {
+    if (!selectedModelId && !isGlobalScope) return;
+    try {
+      setEnablingAssociations(true);
+      const result = await enableAllAssociations(isGlobalScope ? undefined : (selectedModelId ?? undefined));
+      toast.success(`已启用 ${result.updated} 个模型关联`);
+      if (selectedModelId) {
+        fetchModelProviders(selectedModelId);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`启用关联失败: ${message}`);
+    } finally {
+      setEnablingAssociations(false);
+    }
+  };
+
   const executePreviewAction = async () => {
     try {
       setExecuting(true);
@@ -924,6 +982,8 @@ export default function ModelProvidersPage() {
   const selectedKeys = new Set(
     selectedProviderModels.map((item) => buildSelectionKey(item.providerId, item.modelId))
   );
+  const selectedModel = models.find((model) => model.ID === selectedModelId) || null;
+  const isGlobalScope = operationScope === "all";
 
   if (loading && models.length === 0 && providers.length === 0) return <Loading message="加载模型和提供商" />;
 
@@ -937,6 +997,53 @@ export default function ModelProvidersPage() {
           <div className="flex w-full sm:w-auto items-center justify-end gap-2">
           </div>
         </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span className="flex items-center gap-2">
+          <span>范围：</span>
+          <Select value={operationScope} onValueChange={(value) => setOperationScope(value as "current" | "all")}>
+            <SelectTrigger className="h-6 w-[96px] text-xs px-2">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="current">当前模型</SelectItem>
+              <SelectItem value="all">全部模型</SelectItem>
+            </SelectContent>
+          </Select>
+        </span>
+        <span>
+          模型：<span className="text-foreground">{isGlobalScope ? "全部" : (selectedModel?.Name ?? "未选择")}</span>
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 px-2 text-xs"
+          onClick={handleResetWeights}
+          disabled={(!selectedModelId && !isGlobalScope) || resettingWeights}
+        >
+          {resettingWeights ? <Spinner className="w-3 h-3 mr-1.5" /> : null}
+          重置权重
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 px-2 text-xs"
+          onClick={handleResetPriorities}
+          disabled={(!selectedModelId && !isGlobalScope) || resettingPriorities}
+        >
+          {resettingPriorities ? <Spinner className="w-3 h-3 mr-1.5" /> : null}
+          重置优先级
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 px-2 text-xs"
+          onClick={handleEnableAssociations}
+          disabled={(!selectedModelId && !isGlobalScope) || enablingAssociations}
+        >
+          {enablingAssociations ? <Spinner className="w-3 h-3 mr-1.5" /> : null}
+          启用所有关联
+        </Button>
       </div>
       <div className="flex flex-col gap-2 flex-shrink-0">
         {/* 第一行：模型选择 + 提供商类型筛选 + 具体提供商筛选 */}

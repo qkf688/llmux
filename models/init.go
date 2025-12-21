@@ -64,6 +64,8 @@ func initDefaultSettings(ctx context.Context) {
 		{Key: SettingKeyAutoPriorityDecayThreshold, Value: "90"}, // 默认优先级阈值90，达到此值自动禁用
 		{Key: SettingKeyAutoPriorityIncreaseStep, Value: "1"},    // 默认每次成功增加1
 		{Key: SettingKeyAutoPriorityIncreaseMax, Value: "10"},    // 默认优先级上限10
+		{Key: SettingKeyConsecutiveFailureThreshold, Value: "3"}, // 默认连续失败3次后禁用
+		{Key: SettingKeyConsecutiveFailureDisableEnabled, Value: "true"}, // 默认启用连续失败自动禁用
 		{Key: SettingKeyLogRetentionCount, Value: "100"}, // 默认保留100条日志，0表示不限制
 		{Key: SettingKeyLogRawRequestResponse, Value: `{"request_headers":false,"request_body":false,"response_headers":false,"response_body":false,"raw_response_body":false}`}, // 默认关闭所有原始日志记录
 		{Key: SettingKeyDisableAllLogs, Value: "false"}, // 默认不关闭所有日志记录

@@ -316,7 +316,7 @@ func (h *HealthChecker) handleCheckResult(ctx context.Context, mp *models.ModelW
 			trueVal := true
 			if _, err := gorm.G[models.ModelWithProvider](models.DB).
 				Where("id = ?", mp.ID).
-				Updates(ctx, models.ModelWithProvider{Status: &trueVal}); err != nil {
+				Updates(ctx, models.ModelWithProvider{Status: &trueVal, ConsecutiveFailures: 0}); err != nil {
 				slog.Error("failed to enable model provider after health check success", "id", mp.ID, "error", err)
 			} else {
 				slog.Info("model provider auto-enabled after health check success", "id", mp.ID)

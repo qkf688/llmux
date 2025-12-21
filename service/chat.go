@@ -179,6 +179,7 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				}); updateErr != nil {
 					slog.Error("failed to update log status", "error", updateErr)
 				}
+				incrementConsecutiveFailures(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
 				// 应用权重和优先级衰减
 				applyWeightDecayByModelProviderID(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
 				applyPriorityDecayByModelProviderID(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
@@ -227,6 +228,7 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 					slog.Error("failed to update log status", "error", updateErr)
 				}
 
+				incrementConsecutiveFailures(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
 				// 应用权重和优先级衰减
 				applyWeightDecayByModelProviderID(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
 				applyPriorityDecayByModelProviderID(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
@@ -273,6 +275,7 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 					}); updateErr != nil {
 						slog.Error("failed to update log status", "error", updateErr)
 					}
+					incrementConsecutiveFailures(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
 					// 应用权重和优先级衰减
 					applyWeightDecayByModelProviderID(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
 					applyPriorityDecayByModelProviderID(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
@@ -318,6 +321,7 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				}
 			}
 
+			resetConsecutiveFailures(ctx, *id)
 			applySuccessAdjustments(ctx, *id)
 			return res, logId, nil
 		}

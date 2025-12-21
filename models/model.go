@@ -46,6 +46,7 @@ type ModelWithProvider struct {
 	CustomerHeaders  map[string]string `gorm:"serializer:json"` // 自定义headers
 	Weight           int
 	Priority         int // 优先级，值越高越优先选择
+	ConsecutiveFailures int // 连续调用失败次数
 }
 
 // ModelTemplateItem 模型模板条目：用于将 provider_model 映射到 ModelID（区分大小写、去重）
@@ -151,6 +152,8 @@ const (
 	SettingKeyAutoPriorityIncreaseStep        = "auto_priority_increase_step"         // 自动优先级增加步长（每次成功增加的优先级）
 	SettingKeyAutoPriorityIncreaseMax         = "auto_priority_increase_max"          // 自动优先级增加的上限
 	SettingKeyAutoSuccessIncrease             = "auto_success_increase"               // 成功调用后是否执行自增
+	SettingKeyConsecutiveFailureThreshold     = "consecutive_failure_threshold"       // 连续失败次数阈值（达到阈值自动禁用）
+	SettingKeyConsecutiveFailureDisableEnabled = "consecutive_failure_disable_enabled" // 是否启用连续失败自动禁用
 
 	SettingKeyLogRetentionCount     = "log_retention_count"      // 日志保留条数，0表示不限制
 	SettingKeyLogRawRequestResponse = "log_raw_request_response" // 原始请求响应记录选项（JSON格式的RawLogOptions）

@@ -946,6 +946,9 @@ func UpdateModelProviderStatus(c *gin.Context) {
 	updates := models.ModelWithProvider{
 		Status: &status,
 	}
+	if status {
+		updates.ConsecutiveFailures = 0
+	}
 
 	if _, err := gorm.G[models.ModelWithProvider](models.DB).Where("id = ?", id).Updates(c.Request.Context(), updates); err != nil {
 		common.InternalServerError(c, "Failed to update status: "+err.Error())
@@ -1167,6 +1170,8 @@ type SettingsResponse struct {
 	AutoPriorityDecayDisableEnabled bool                 `json:"auto_priority_decay_disable_enabled"`
 	AutoPriorityIncreaseStep        int                  `json:"auto_priority_increase_step"`
 	AutoPriorityIncreaseMax         int                  `json:"auto_priority_increase_max"`
+	ConsecutiveFailureThreshold     int                  `json:"consecutive_failure_threshold"`
+	ConsecutiveFailureDisableEnabled bool                `json:"consecutive_failure_disable_enabled"`
 	LogRetentionCount               int                  `json:"log_retention_count"`
 	LogRawRequestResponse           models.RawLogOptions `json:"log_raw_request_response"`
 	DisableAllLogs                  bool                 `json:"disable_all_logs"`
@@ -1199,6 +1204,8 @@ type UpdateSettingsRequest struct {
 	AutoPriorityDecayDisableEnabled bool                 `json:"auto_priority_decay_disable_enabled"`
 	AutoPriorityIncreaseStep        int                  `json:"auto_priority_increase_step"`
 	AutoPriorityIncreaseMax         int                  `json:"auto_priority_increase_max"`
+	ConsecutiveFailureThreshold     int                  `json:"consecutive_failure_threshold"`
+	ConsecutiveFailureDisableEnabled bool                `json:"consecutive_failure_disable_enabled"`
 	LogRetentionCount               int                  `json:"log_retention_count"`
 	LogRawRequestResponse           models.RawLogOptions `json:"log_raw_request_response"`
 	DisableAllLogs                  bool                 `json:"disable_all_logs"`
@@ -1240,6 +1247,8 @@ func GetSettings(c *gin.Context) {
 		LogRetentionCount:               100,  // 默认保留100条
 		AutoPriorityIncreaseStep:        1,
 		AutoPriorityIncreaseMax:         100,
+		ConsecutiveFailureThreshold:     3,
+		ConsecutiveFailureDisableEnabled: true,
 		CountHealthCheckAsSuccess:       true,
 		CountHealthCheckAsFailure:       false,
 		// 性能优化相关默认值
@@ -1298,6 +1307,12 @@ func GetSettings(c *gin.Context) {
 			if val, err := strconv.Atoi(setting.Value); err == nil {
 				response.AutoPriorityIncreaseMax = val
 			}
+		case models.SettingKeyConsecutiveFailureThreshold:
+			if val, err := strconv.Atoi(setting.Value); err == nil {
+				response.ConsecutiveFailureThreshold = val
+			}
+		case models.SettingKeyConsecutiveFailureDisableEnabled:
+			response.ConsecutiveFailureDisableEnabled = setting.Value == "true"
 		case models.SettingKeyLogRetentionCount:
 			if val, err := strconv.Atoi(setting.Value); err == nil {
 				response.LogRetentionCount = val
@@ -1481,6 +1496,28 @@ func UpdateSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyAutoPriorityIncreaseMax).
 		Update(ctx, "value", strconv.Itoa(req.AutoPriorityIncreaseMax)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	if req.ConsecutiveFailureThreshold < 1 {
+		req.ConsecutiveFailureThreshold = 3
+	}
+
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyConsecutiveFailureThreshold).
+		Update(ctx, "value", strconv.Itoa(req.ConsecutiveFailureThreshold)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	consecutiveFailureDisableValue := "false"
+	if req.ConsecutiveFailureDisableEnabled {
+		consecutiveFailureDisableValue = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyConsecutiveFailureDisableEnabled).
+		Update(ctx, "value", consecutiveFailureDisableValue); err != nil {
 		common.InternalServerError(c, "Failed to update settings: "+err.Error())
 		return
 	}
@@ -1793,11 +1830,11 @@ func EnableAllAssociations(c *gin.Context) {
 	if req.ModelID != nil {
 		result, err = gorm.G[models.ModelWithProvider](models.DB).
 			Where("model_id = ?", *req.ModelID).
-			Updates(ctx, models.ModelWithProvider{Status: &trueVal})
+			Updates(ctx, models.ModelWithProvider{Status: &trueVal, ConsecutiveFailures: 0})
 	} else {
 		result, err = gorm.G[models.ModelWithProvider](models.DB).
 			Where("1 = 1").
-			Updates(ctx, models.ModelWithProvider{Status: &trueVal})
+			Updates(ctx, models.ModelWithProvider{Status: &trueVal, ConsecutiveFailures: 0})
 	}
 
 	if err != nil {

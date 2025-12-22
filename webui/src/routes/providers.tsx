@@ -167,6 +167,9 @@ export default function ProvidersPage() {
   const [allModelsSearchQuery, setAllModelsSearchQuery] = useState("");
   const [allModelsTestResults, setAllModelsTestResults] = useState<Record<string, { loading: boolean; success: boolean | null; error?: string }>>({});
   const [addingModels, setAddingModels] = useState(false);
+  const [batchTesting, setBatchTesting] = useState(false);
+  const [batchTestProgress, setBatchTestProgress] = useState({ total: 0, completed: 0, success: 0, failed: 0, testing: 0 });
+  const [testAbortController, setTestAbortController] = useState<AbortController | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
   const [syncingModels, setSyncingModels] = useState(false);
   const [syncingAll, setSyncingAll] = useState(false);
@@ -524,6 +527,125 @@ export default function ProvidersPage() {
     setSelectedAllModels(prev =>
       Array.from(new Set([...prev, ...failedModels]))
     );
+  };
+
+  // 批量测试核心逻辑
+  const testSingleModelInBatch = async (
+    model: string,
+    testing: Set<string>,
+    signal: AbortSignal
+  ) => {
+    if (signal.aborted) {
+      testing.delete(model);
+      return;
+    }
+
+    try {
+      await handleTestAllModel(model);
+      
+      setBatchTestProgress(prev => ({
+        ...prev,
+        completed: prev.completed + 1,
+        success: prev.success + 1,
+        testing: testing.size - 1
+      }));
+    } catch (error) {
+      setBatchTestProgress(prev => ({
+        ...prev,
+        completed: prev.completed + 1,
+        failed: prev.failed + 1,
+        testing: testing.size - 1
+      }));
+    } finally {
+      testing.delete(model);
+    }
+  };
+
+  const startBatchTest = async (models: string[]) => {
+    if (models.length === 0) {
+      toast.error("没有可测试的模型");
+      return;
+    }
+
+    // 初始化状态
+    setBatchTesting(true);
+    setBatchTestProgress({
+      total: models.length,
+      completed: 0,
+      success: 0,
+      failed: 0,
+      testing: 0
+    });
+
+    const abortController = new AbortController();
+    setTestAbortController(abortController);
+
+    // 并发控制
+    const concurrency = 3;
+    const queue = [...models];
+    const testing = new Set<string>();
+
+    try {
+      while (queue.length > 0 && !abortController.signal.aborted) {
+        // 控制并发数
+        while (testing.size < concurrency && queue.length > 0) {
+          const model = queue.shift()!;
+          testing.add(model);
+          
+          setBatchTestProgress(prev => ({
+            ...prev,
+            testing: testing.size
+          }));
+
+          // 异步测试
+          testSingleModelInBatch(model, testing, abortController.signal);
+        }
+
+        // 等待至少一个完成
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      // 等待所有测试完成
+      while (testing.size > 0 && !abortController.signal.aborted) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      // 显示完成通知
+      if (!abortController.signal.aborted) {
+        const { success, failed } = batchTestProgress;
+        toast.success(
+          `批量测试完成：成功 ${success} 个，失败 ${failed} 个`,
+          { duration: 5000 }
+        );
+      }
+    } finally {
+      setBatchTesting(false);
+      setTestAbortController(null);
+    }
+  };
+
+  const handleBatchTestAll = async () => {
+    const models = filteredAllModels;
+    if (models.length === 0) {
+      toast.error("没有可测试的模型");
+      return;
+    }
+    await startBatchTest(models);
+  };
+
+  const handleBatchTestSelected = async () => {
+    if (selectedAllModels.length === 0) {
+      toast.error("请先选择要测试的模型");
+      return;
+    }
+    await startBatchTest(selectedAllModels);
+  };
+
+  const handleCancelBatchTest = () => {
+    if (testAbortController) {
+      testAbortController.abort();
+      toast.info("已取消批量测试");
+    }
   };
 
   const openAllModelsDialog = async (provider: Provider) => {
@@ -1251,6 +1373,35 @@ export default function ProvidersPage() {
                     </div>
                   )}
                 </div>
+
+                {/* 批量测试进度条 */}
+                {batchTesting && (
+                  <div className="flex items-center gap-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-md">
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between text-xs text-blue-800 mb-1">
+                        <span>
+                          测试进度：{batchTestProgress.completed}/{batchTestProgress.total}
+                          (成功: {batchTestProgress.success}, 失败: {batchTestProgress.failed}, 进行中: {batchTestProgress.testing})
+                        </span>
+                        <span>{Math.round((batchTestProgress.completed / batchTestProgress.total) * 100)}%</span>
+                      </div>
+                      <div className="w-full bg-blue-200 rounded-full h-2">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${(batchTestProgress.completed / batchTestProgress.total) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCancelBatchTest}
+                      className="h-7 text-xs"
+                    >
+                      取消
+                    </Button>
+                  </div>
+                )}
                 <Input
                   placeholder="搜索模型名称..."
                   value={allModelsSearchQuery}
@@ -1267,7 +1418,7 @@ export default function ProvidersPage() {
                             size="icon"
                             className="h-8 w-8"
                             onClick={handleSyncUpstreamModels}
-                            disabled={syncingModels}
+                            disabled={syncingModels || batchTesting}
                           >
                             {syncingModels ? (
                               <Spinner className="h-4 w-4" />
@@ -1283,7 +1434,51 @@ export default function ProvidersPage() {
                     </TooltipProvider>
                   )}
                   
-                  {/* 新增：选择成功和失败按钮 */}
+                  {/* 批量测试按钮 */}
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="default"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={handleBatchTestAll}
+                          disabled={filteredAllModels.length === 0 || batchTesting || addingModels}
+                        >
+                          {batchTesting ? (
+                            <Spinner className="h-4 w-4" />
+                          ) : (
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>批量测试所有模型</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={handleBatchTestSelected}
+                          disabled={selectedAllModels.length === 0 || batchTesting || addingModels}
+                        >
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                          </svg>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>批量测试选中的 {selectedAllModels.length} 个模型</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  
+                  {/* 选择成功和失败按钮 */}
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -1292,7 +1487,7 @@ export default function ProvidersPage() {
                           size="icon"
                           className="h-8 w-8"
                           onClick={selectAllSuccessful}
-                          disabled={Object.values(allModelsTestResults).filter(r => r.success === true).length === 0}
+                          disabled={Object.values(allModelsTestResults).filter(r => r.success === true).length === 0 || batchTesting}
                         >
                           <svg className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -1311,7 +1506,7 @@ export default function ProvidersPage() {
                           size="icon"
                           className="h-8 w-8"
                           onClick={selectAllFailed}
-                          disabled={Object.values(allModelsTestResults).filter(r => r.success === false).length === 0}
+                          disabled={Object.values(allModelsTestResults).filter(r => r.success === false).length === 0 || batchTesting}
                         >
                           <svg className="h-4 w-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -1329,7 +1524,7 @@ export default function ProvidersPage() {
                           size="icon"
                           className="h-8 w-8"
                           onClick={toggleSelectAllModels}
-                          disabled={filteredAllModels.length === 0}
+                          disabled={filteredAllModels.length === 0 || batchTesting}
                         >
                           {filteredAllModels.length > 0 && filteredAllModels.every(m => selectedAllModels.includes(m)) ? (
                             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1355,7 +1550,7 @@ export default function ProvidersPage() {
                           size="icon"
                           className="h-8 w-8"
                           onClick={handleRemoveSelectedModels}
-                          disabled={selectedAllModels.length === 0 || addingModels}
+                          disabled={selectedAllModels.length === 0 || addingModels || batchTesting}
                         >
                           {addingModels ? (
                             <Spinner className="h-4 w-4" />
@@ -1430,7 +1625,7 @@ export default function ProvidersPage() {
                                   size="icon"
                                   className="h-7 w-7"
                                   onClick={() => handleTestAllModel(model)}
-                                  disabled={!!testResult?.loading}
+                                  disabled={!!testResult?.loading || batchTesting}
                                 >
                                   {testResult?.loading ? (
                                     <Spinner className="h-3.5 w-3.5" />
@@ -1484,7 +1679,7 @@ export default function ProvidersPage() {
                                   size="icon"
                                   className="h-7 w-7 text-muted-foreground hover:text-destructive"
                                   onClick={() => handleRemoveModelFromAll(model)}
-                                  disabled={addingModels}
+                                  disabled={addingModels || batchTesting}
                                 >
                                   <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1508,7 +1703,7 @@ export default function ProvidersPage() {
                   className="h-16 resize-none flex-1"
                 />
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={handleAddCustomModels} disabled={addingModels || !allModelsProvider}>
+                  <Button size="sm" onClick={handleAddCustomModels} disabled={addingModels || !allModelsProvider || batchTesting}>
                     {addingModels ? "提交中..." : "添加"}
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setAllModelsOpen(false)}>

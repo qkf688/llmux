@@ -29,7 +29,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -82,10 +81,17 @@ import type {
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { RefreshCw, ChevronDown, ChevronRight, Plus, X } from "lucide-react";
+import { RefreshCw, ChevronDown, ChevronRight, Plus, X, Trash2, TestTube, TestTubes, CheckCircle, XCircle } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { parseAllModelsFromConfig, toProviderModelList } from "@/lib/provider-models";
 import { ExpandableError } from "@/components/expandable-error";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type MobileInfoItemProps = {
   label: string;
@@ -157,6 +163,7 @@ export default function ModelProvidersPage() {
   const [testType, setTestType] = useState<"connectivity" | "react">("connectivity");
   const [selectedProviderType, setSelectedProviderType] = useState<string>("all");
   const [selectedProviderFilter, setSelectedProviderFilter] = useState<string>("all");
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("all");
   const [reactTestResult, setReactTestResult] = useState<{
     loading: boolean;
     messages: string;
@@ -195,6 +202,22 @@ export default function ModelProvidersPage() {
   const [resettingPriorities, setResettingPriorities] = useState(false);
   const [enablingAssociations, setEnablingAssociations] = useState(false);
   const [operationScope, setOperationScope] = useState<"current" | "all">("current");
+  
+  // 批量测试相关状态
+  const [batchTesting, setBatchTesting] = useState(false);
+  const [batchTestProgress, setBatchTestProgress] = useState({
+    total: 0,
+    completed: 0,
+    success: 0,
+    failed: 0,
+    testing: 0
+  });
+  const [testAbortController, setTestAbortController] = useState<AbortController | null>(null);
+  const [associationTestResults, setAssociationTestResults] = useState<Record<number, {
+    loading: boolean;
+    success: boolean | null;
+    error?: string
+  }>>({});
 
   const dialogClose = () => {
     setTestDialogOpen(false)
@@ -914,10 +937,196 @@ export default function ModelProvidersPage() {
     setSelectedAssociationIds([]); // 切换模型时清空选择
     setSelectedProviderModels([]);
     setTemplateEditorOpen(false);
+    setAssociationTestResults({}); // 切换模型时清空测试结果
+    setSelectedStatusFilter("all"); // 切换模型时重置启用状态筛选器
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("modelId", id.toString());
     setSearchParams(nextParams);
     form.setValue("model_id", id);
+  };
+
+  // 批量测试核心逻辑
+  const testSingleAssociationInBatch = async (
+    associationId: number,
+    testing: Set<number>,
+    signal: AbortSignal,
+    counters: { success: number; failed: number }
+  ) => {
+    if (signal.aborted) {
+      testing.delete(associationId);
+      return;
+    }
+
+    try {
+      setAssociationTestResults(prev => ({
+        ...prev,
+        [associationId]: { loading: true, success: null }
+      }));
+
+      await testModelProvider(associationId);
+      
+      setAssociationTestResults(prev => ({
+        ...prev,
+        [associationId]: { loading: false, success: true }
+      }));
+      
+      // 使用局部计数器
+      counters.success++;
+      
+      setBatchTestProgress(prev => ({
+        ...prev,
+        completed: prev.completed + 1,
+        success: counters.success,
+        testing: testing.size - 1
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setAssociationTestResults(prev => ({
+        ...prev,
+        [associationId]: { loading: false, success: false, error: message }
+      }));
+      
+      // 使用局部计数器
+      counters.failed++;
+      
+      setBatchTestProgress(prev => ({
+        ...prev,
+        completed: prev.completed + 1,
+        failed: counters.failed,
+        testing: testing.size - 1
+      }));
+    } finally {
+      testing.delete(associationId);
+    }
+  };
+
+  const startBatchTest = async (associationIds: number[]) => {
+    if (associationIds.length === 0) {
+      toast.error("没有可测试的关联");
+      return;
+    }
+
+    setBatchTesting(true);
+    setBatchTestProgress({
+      total: associationIds.length,
+      completed: 0,
+      success: 0,
+      failed: 0,
+      testing: 0
+    });
+
+    const abortController = new AbortController();
+    setTestAbortController(abortController);
+
+    // 添加局部计数器
+    const counters = {
+      success: 0,
+      failed: 0
+    };
+
+    const concurrency = 3;
+    const queue = [...associationIds];
+    const testing = new Set<number>();
+    const promises: Promise<void>[] = [];
+
+    try {
+      while (queue.length > 0 && !abortController.signal.aborted) {
+        while (testing.size < concurrency && queue.length > 0) {
+          const id = queue.shift()!;
+          testing.add(id);
+          
+          setBatchTestProgress(prev => ({
+            ...prev,
+            testing: testing.size
+          }));
+
+          // 传递计数器引用
+          const testPromise = testSingleAssociationInBatch(id, testing, abortController.signal, counters);
+          promises.push(testPromise);
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      // 等待所有测试任务真正完成
+      await Promise.all(promises);
+
+      // 使用局部计数器显示结果
+      if (!abortController.signal.aborted) {
+        toast.success(
+          `批量测试完成：成功 ${counters.success} 个，失败 ${counters.failed} 个`,
+          { duration: 5000 }
+        );
+      }
+    } finally {
+      setBatchTesting(false);
+      setTestAbortController(null);
+    }
+  };
+
+  const handleBatchTestAll = async () => {
+    const ids = filteredModelProviders.map(mp => mp.ID);
+    await startBatchTest(ids);
+  };
+
+  const handleBatchTestSelected = async () => {
+    if (selectedAssociationIds.length === 0) {
+      toast.error("请先选择要测试的关联");
+      return;
+    }
+    await startBatchTest(selectedAssociationIds);
+  };
+
+  const handleCancelBatchTest = () => {
+    if (testAbortController) {
+      testAbortController.abort();
+      toast.info("已取消批量测试");
+    }
+  };
+
+  const selectAllSuccessful = () => {
+    const visibleIds = new Set(filteredModelProviders.map(mp => mp.ID));
+    const successfulIds = Object.entries(associationTestResults)
+      .filter(([id, result]) => result.success === true && visibleIds.has(parseInt(id)))
+      .map(([id]) => parseInt(id));
+    
+    if (successfulIds.length === 0) {
+      toast.info("当前列表中没有测试成功的项");
+      return;
+    }
+    
+    setSelectedAssociationIds(successfulIds);
+    
+    toast.success(`已选择 ${successfulIds.length} 个测试成功的项`);
+  };
+
+  const selectAllFailed = () => {
+    const visibleIds = new Set(filteredModelProviders.map(mp => mp.ID));
+    const failedIds = Object.entries(associationTestResults)
+      .filter(([id, result]) => result.success === false && visibleIds.has(parseInt(id)))
+      .map(([id]) => parseInt(id));
+    
+    if (failedIds.length === 0) {
+      toast.info("当前列表中没有测试失败的项");
+      return;
+    }
+    
+    setSelectedAssociationIds(failedIds);
+    
+    toast.success(`已选择 ${failedIds.length} 个测试失败的项`);
+  };
+
+  // ✅ 新增：清除批量测试结果
+  const clearBatchTestResults = () => {
+    setBatchTestProgress({
+      total: 0,
+      completed: 0,
+      success: 0,
+      failed: 0,
+      testing: 0
+    });
+    setAssociationTestResults({});
+    toast.info("已清除测试结果");
   };
 
   const toggleProviderCollapse = (providerId: number) => {
@@ -930,7 +1139,7 @@ export default function ModelProvidersPage() {
   // 获取唯一的提供商类型列表
   const providerTypes = Array.from(new Set(providers.map(p => p.Type).filter(Boolean)));
 
-  // 根据选择的提供商类型、具体提供商和搜索关键词过滤模型提供商关联
+  // 根据选择的提供商类型、具体提供商、启用状态和搜索关键词过滤模型提供商关联
   const filteredModelProviders = modelProviders.filter(association => {
     const provider = providers.find(p => p.ID === association.ProviderID);
 
@@ -940,6 +1149,12 @@ export default function ModelProvidersPage() {
     // 具体提供商筛选
     const providerMatch = selectedProviderFilter === "all" || association.ProviderID.toString() === selectedProviderFilter;
 
+    // 启用状态筛选
+    const statusMatch =
+      selectedStatusFilter === "all" ||
+      (selectedStatusFilter === "enabled" && (association.Status ?? true)) ||
+      (selectedStatusFilter === "disabled" && !(association.Status ?? true));
+
     // 搜索关键词筛选
     const keyword = searchKeyword.toLowerCase().trim();
     const searchMatch = !keyword ||
@@ -948,10 +1163,10 @@ export default function ModelProvidersPage() {
       (provider?.Type ?? "").toLowerCase().includes(keyword) ||
       association.ID.toString().includes(keyword);
 
-    return typeMatch && providerMatch && searchMatch;
+    return typeMatch && providerMatch && statusMatch && searchMatch;
   });
 
-  const hasAssociationFilter = selectedProviderType !== "all" || selectedProviderFilter !== "all" || searchKeyword.trim() !== "";
+  const hasAssociationFilter = selectedProviderType !== "all" || selectedProviderFilter !== "all" || selectedStatusFilter !== "all" || searchKeyword.trim() !== "";
 
   const isAllAssociationsSelected = filteredModelProviders.length > 0 && selectedAssociationIds.length === filteredModelProviders.length;
   const isPartialAssociationsSelected = selectedAssociationIds.length > 0 && selectedAssociationIds.length < filteredModelProviders.length;
@@ -1048,7 +1263,7 @@ export default function ModelProvidersPage() {
       </div>
       <div className="flex flex-col gap-2 flex-shrink-0">
         {/* 第一行：模型选择 + 提供商类型筛选 + 具体提供商筛选 */}
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
           <div className="flex flex-col gap-1 text-xs">
             <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">关联模型</Label>
             <Select value={selectedModelId?.toString() || ""} onValueChange={handleModelChange}>
@@ -1096,6 +1311,19 @@ export default function ModelProvidersPage() {
               </SelectContent>
             </Select>
           </div>
+          <div className="flex flex-col gap-1 text-xs">
+            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">启用状态</Label>
+            <Select value={selectedStatusFilter} onValueChange={setSelectedStatusFilter}>
+              <SelectTrigger className="h-8 w-full text-xs px-2">
+                <SelectValue placeholder="按状态筛选" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部状态</SelectItem>
+                <SelectItem value="enabled">已启用</SelectItem>
+                <SelectItem value="disabled">未启用</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* 第二行：搜索框 + 操作按钮 */}
@@ -1108,30 +1336,124 @@ export default function ModelProvidersPage() {
               className="h-8 text-xs"
             />
           </div>
-          <div className="flex gap-2 sm:flex-shrink-0">
-            {selectedAssociationIds.length > 0 && (
-              <AlertDialog open={batchDeleteDialogOpen} onOpenChange={setBatchDeleteDialogOpen}>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive" className="h-8 text-xs flex-1 sm:flex-initial">
-                    批量删除 ({selectedAssociationIds.length})
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>确定要批量删除这些关联吗？</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      此操作无法撤销。这将永久删除选中的 {selectedAssociationIds.length} 个模型提供商关联。
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel disabled={batchDeleting}>取消</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleBatchDeleteAssociations} disabled={batchDeleting}>
-                      {batchDeleting ? "删除中..." : "确认删除"}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
+          <div className="flex gap-2 sm:flex-shrink-0 flex-wrap">
+            {/* 批量操作下拉菜单 */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="h-8 text-xs flex-1 sm:flex-initial"
+                >
+                  批量操作
+                  {selectedAssociationIds.length > 0 && (
+                    <span className="ml-1">({selectedAssociationIds.length})</span>
+                  )}
+                  <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              
+              <DropdownMenuContent align="start" className="w-56">
+                {/* 批量删除 */}
+                <DropdownMenuItem
+                  disabled={selectedAssociationIds.length === 0}
+                  onClick={() => setBatchDeleteDialogOpen(true)}
+                  className="cursor-pointer"
+                >
+                  <Trash2 className="mr-2 h-4 w-4 text-destructive" />
+                  <span>批量删除</span>
+                  {selectedAssociationIds.length > 0 && (
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {selectedAssociationIds.length}
+                    </span>
+                  )}
+                </DropdownMenuItem>
+                
+                {/* 批量测试选中 */}
+                <DropdownMenuItem
+                  disabled={selectedAssociationIds.length === 0 || batchTesting}
+                  onClick={handleBatchTestSelected}
+                  className="cursor-pointer"
+                >
+                  <TestTube className="mr-2 h-4 w-4" />
+                  <span>批量测试选中</span>
+                  {selectedAssociationIds.length > 0 && (
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {selectedAssociationIds.length}
+                    </span>
+                  )}
+                </DropdownMenuItem>
+                
+                {/* 批量测试全部 */}
+                <DropdownMenuItem
+                  disabled={filteredModelProviders.length === 0 || batchTesting}
+                  onClick={handleBatchTestAll}
+                  className="cursor-pointer"
+                >
+                  {batchTesting ? <Spinner className="mr-2 h-4 w-4" /> : <TestTubes className="mr-2 h-4 w-4" />}
+                  <span>批量测试全部</span>
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {filteredModelProviders.length}
+                  </span>
+                </DropdownMenuItem>
+                
+                <DropdownMenuSeparator />
+                
+                {/* 选择成功项 */}
+                <DropdownMenuItem
+                  disabled={
+                    Object.keys(associationTestResults).length === 0 ||
+                    !Object.values(associationTestResults).some(r => r.success === true)
+                  }
+                  onClick={selectAllSuccessful}
+                  className="cursor-pointer"
+                >
+                  <CheckCircle className="mr-2 h-4 w-4 text-green-600" />
+                  <span>选择成功项</span>
+                  {Object.values(associationTestResults).filter(r => r.success === true).length > 0 && (
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {Object.values(associationTestResults).filter(r => r.success === true).length}
+                    </span>
+                  )}
+                </DropdownMenuItem>
+                
+                {/* 选择失败项 */}
+                <DropdownMenuItem
+                  disabled={
+                    Object.keys(associationTestResults).length === 0 ||
+                    !Object.values(associationTestResults).some(r => r.success === false)
+                  }
+                  onClick={selectAllFailed}
+                  className="cursor-pointer"
+                >
+                  <XCircle className="mr-2 h-4 w-4 text-red-600" />
+                  <span>选择失败项</span>
+                  {Object.values(associationTestResults).filter(r => r.success === false).length > 0 && (
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {Object.values(associationTestResults).filter(r => r.success === false).length}
+                    </span>
+                  )}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* 批量删除确认对话框 */}
+            <AlertDialog open={batchDeleteDialogOpen} onOpenChange={setBatchDeleteDialogOpen}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>确定要批量删除这些关联吗？</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    此操作无法撤销。这将永久删除选中的 {selectedAssociationIds.length} 个模型提供商关联。
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={batchDeleting}>取消</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleBatchDeleteAssociations} disabled={batchDeleting}>
+                    {batchDeleting ? "删除中..." : "确认删除"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            
             <Button
               onClick={handleToggleTemplateEditor}
               variant="outline"
@@ -1164,6 +1486,92 @@ export default function ModelProvidersPage() {
           </div>
         </div>
       </div>
+      
+      {/* 批量测试进度条 */}
+      {(batchTesting || batchTestProgress.total > 0) && (
+        <div className="rounded-md border bg-card p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h3 className="text-sm font-medium">
+                {batchTesting ? "批量测试进行中" : "批量测试完成"}
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                进度: {batchTestProgress.completed} / {batchTestProgress.total}
+                {batchTesting && batchTestProgress.testing > 0 && ` (正在测试: ${batchTestProgress.testing})`}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {batchTesting ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCancelBatchTest}
+                  className="h-8 text-xs"
+                >
+                  取消测试
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearBatchTestResults}
+                  className="h-8 text-xs"
+                >
+                  清除结果
+                </Button>
+              )}
+            </div>
+          </div>
+          
+          {batchTesting && (
+            <div className="w-full bg-secondary rounded-full h-2">
+              <div
+                className="bg-primary h-2 rounded-full transition-all duration-300"
+                style={{ width: `${(batchTestProgress.completed / batchTestProgress.total) * 100}%` }}
+              />
+            </div>
+          )}
+          
+          <div className="flex gap-4 text-xs">
+            <span className="text-green-600">成功: {batchTestProgress.success}</span>
+            <span className="text-red-600">失败: {batchTestProgress.failed}</span>
+          </div>
+          
+          {/* 快捷选择（仅测试完成且有结果时显示） */}
+          {!batchTesting && Object.keys(associationTestResults).length > 0 && (
+            <div className="flex items-center gap-2 pt-2 border-t">
+              <span className="text-xs text-muted-foreground">快捷选择:</span>
+              <div className="flex gap-2 flex-1 justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={selectAllSuccessful}
+                  disabled={
+                    Object.keys(associationTestResults).length === 0 ||
+                    !Object.values(associationTestResults).some(r => r.success === true)
+                  }
+                  className="h-7 text-xs"
+                >
+                  选择成功项
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={selectAllFailed}
+                  disabled={
+                    Object.keys(associationTestResults).length === 0 ||
+                    !Object.values(associationTestResults).some(r => r.success === false)
+                  }
+                  className="h-7 text-xs"
+                >
+                  选择失败项
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {statusError && (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {statusError}
@@ -1319,6 +1727,7 @@ export default function ModelProvidersPage() {
                       </div>
                     </TableHead>
                     <TableHead>健康检测</TableHead>
+                    <TableHead>测试结果</TableHead>
                     <TableHead>操作</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1420,6 +1829,26 @@ export default function ModelProvidersPage() {
                           </div>
                         </TableCell>
                         <TableCell>
+                          {associationTestResults[association.ID] ? (
+                            <div className="flex items-center gap-2">
+                              {associationTestResults[association.ID].loading ? (
+                                <>
+                                  <Spinner className="w-4 h-4" />
+                                  <span className="text-xs text-muted-foreground">测试中</span>
+                                </>
+                              ) : associationTestResults[association.ID].success === true ? (
+                                <span className="text-xs text-green-600 font-medium">✓ 成功</span>
+                              ) : associationTestResults[association.ID].success === false ? (
+                                <span className="text-xs text-red-600 font-medium" title={associationTestResults[association.ID].error}>
+                                  ✗ 失败
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
                           <div className="flex flex-wrap gap-2">
                             <Button variant="outline" size="sm" onClick={() => openEditDialog(association)}>
                               编辑
@@ -1453,21 +1882,120 @@ export default function ModelProvidersPage() {
               </Table>
             </div>
             <div className="sm:hidden flex-1 min-h-0 overflow-y-auto px-2 py-3 divide-y divide-border">
-              {/* 移动端全选 */}
-              <div className="py-2 flex items-center gap-2 border-b">
-                <Checkbox
-                  checked={isAllAssociationsSelected}
-                  ref={(el) => {
-                    if (el) {
-                      (el as unknown as HTMLInputElement).indeterminate = isPartialAssociationsSelected;
-                    }
-                  }}
-                  onCheckedChange={handleSelectAllAssociations}
-                  aria-label="全选"
-                />
-                <span className="text-sm text-muted-foreground">
-                  {selectedAssociationIds.length > 0 ? `已选择 ${selectedAssociationIds.length} 项` : "全选"}
-                </span>
+              {/* 移动端全选和批量操作 */}
+              <div className="py-2 space-y-2 border-b">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={isAllAssociationsSelected}
+                    ref={(el) => {
+                      if (el) {
+                        (el as unknown as HTMLInputElement).indeterminate = isPartialAssociationsSelected;
+                      }
+                    }}
+                    onCheckedChange={handleSelectAllAssociations}
+                    aria-label="全选"
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    {selectedAssociationIds.length > 0 ? `已选择 ${selectedAssociationIds.length} 项` : "全选"}
+                  </span>
+                </div>
+                {/* 移动端批量操作下拉菜单 */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs w-full"
+                    >
+                      批量操作
+                      {selectedAssociationIds.length > 0 && ` (${selectedAssociationIds.length})`}
+                      <ChevronDown className="ml-2 h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  
+                  <DropdownMenuContent align="start" className="w-[calc(100vw-2rem)]">
+                    {/* 批量删除 */}
+                    <DropdownMenuItem
+                      disabled={selectedAssociationIds.length === 0}
+                      onClick={() => setBatchDeleteDialogOpen(true)}
+                      className="cursor-pointer"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4 text-destructive" />
+                      <span>批量删除</span>
+                      {selectedAssociationIds.length > 0 && (
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {selectedAssociationIds.length}
+                        </span>
+                      )}
+                    </DropdownMenuItem>
+                    
+                    {/* 批量测试选中 */}
+                    <DropdownMenuItem
+                      disabled={selectedAssociationIds.length === 0 || batchTesting}
+                      onClick={handleBatchTestSelected}
+                      className="cursor-pointer"
+                    >
+                      {batchTesting ? <Spinner className="mr-2 h-4 w-4" /> : <TestTube className="mr-2 h-4 w-4" />}
+                      <span>批量测试选中</span>
+                      {selectedAssociationIds.length > 0 && (
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {selectedAssociationIds.length}
+                        </span>
+                      )}
+                    </DropdownMenuItem>
+                    
+                    {/* 批量测试全部 */}
+                    <DropdownMenuItem
+                      disabled={filteredModelProviders.length === 0 || batchTesting}
+                      onClick={handleBatchTestAll}
+                      className="cursor-pointer"
+                    >
+                      {batchTesting ? <Spinner className="mr-2 h-4 w-4" /> : <TestTubes className="mr-2 h-4 w-4" />}
+                      <span>批量测试全部</span>
+                      <span className="ml-auto text-xs text-muted-foreground">
+                        {filteredModelProviders.length}
+                      </span>
+                    </DropdownMenuItem>
+                    
+                    <DropdownMenuSeparator />
+                    
+                    {/* 选择成功项 */}
+                    <DropdownMenuItem
+                      disabled={
+                        Object.keys(associationTestResults).length === 0 ||
+                        !Object.values(associationTestResults).some(r => r.success === true)
+                      }
+                      onClick={selectAllSuccessful}
+                      className="cursor-pointer"
+                    >
+                      <CheckCircle className="mr-2 h-4 w-4 text-green-600" />
+                      <span>选择成功项</span>
+                      {Object.values(associationTestResults).filter(r => r.success === true).length > 0 && (
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {Object.values(associationTestResults).filter(r => r.success === true).length}
+                        </span>
+                      )}
+                    </DropdownMenuItem>
+                    
+                    {/* 选择失败项 */}
+                    <DropdownMenuItem
+                      disabled={
+                        Object.keys(associationTestResults).length === 0 ||
+                        !Object.values(associationTestResults).some(r => r.success === false)
+                      }
+                      onClick={selectAllFailed}
+                      className="cursor-pointer"
+                    >
+                      <XCircle className="mr-2 h-4 w-4 text-red-600" />
+                      <span>选择失败项</span>
+                      {Object.values(associationTestResults).filter(r => r.success === false).length > 0 && (
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {Object.values(associationTestResults).filter(r => r.success === false).length}
+                        </span>
+                      )}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
               {filteredModelProviders.map((association) => {
                 const provider = providers.find(p => p.ID === association.ProviderID);
@@ -1580,6 +2108,31 @@ export default function ModelProvidersPage() {
                         />
                       </div>
                     </div>
+                    {/* 移动端测试结果 */}
+                    {associationTestResults[association.ID] && (
+                      <div className="rounded-md border bg-muted/30 px-3 py-2">
+                        <p className="text-xs text-muted-foreground mb-1">测试结果</p>
+                        <div className="flex items-center gap-2">
+                          {associationTestResults[association.ID].loading ? (
+                            <>
+                              <Spinner className="w-4 h-4" />
+                              <span className="text-sm">测试中...</span>
+                            </>
+                          ) : associationTestResults[association.ID].success === true ? (
+                            <span className="text-sm text-green-600 font-medium">✓ 测试成功</span>
+                          ) : associationTestResults[association.ID].success === false ? (
+                            <div className="flex-1">
+                              <span className="text-sm text-red-600 font-medium">✗ 测试失败</span>
+                              {associationTestResults[association.ID].error && (
+                                <p className="text-xs text-muted-foreground mt-1 break-words">
+                                  {associationTestResults[association.ID].error}
+                                </p>
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    )}
                     <div className="flex flex-wrap justify-end gap-1.5">
                       <Button
                         variant="outline"

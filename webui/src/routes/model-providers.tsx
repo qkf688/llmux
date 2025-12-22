@@ -85,6 +85,7 @@ import { toast } from "sonner";
 import { RefreshCw, ChevronDown, ChevronRight, Plus, X } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { parseAllModelsFromConfig, toProviderModelList } from "@/lib/provider-models";
+import { ExpandableError } from "@/components/expandable-error";
 
 type MobileInfoItemProps = {
   label: string;
@@ -2018,12 +2019,15 @@ export default function ModelProvidersPage() {
                   <span className="ml-2">测试中...</span>
                 </div>
               ) : selectedTestId && testResults[selectedTestId] ? (
-                <div className={`p-4 rounded-md ${testResults[selectedTestId].result?.error ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}`}>
-                  <p>{testResults[selectedTestId].result?.error ? testResults[selectedTestId].result?.error : "测试成功"}</p>
-                  {testResults[selectedTestId].result?.message && (
-                    <p className="mt-2">{testResults[selectedTestId].result.message}</p>
-                  )}
-                </div>
+                <ExpandableError
+                  error={{
+                    message: testResults[selectedTestId].result?.error ||
+                             testResults[selectedTestId].result?.message ||
+                             "测试成功",
+                  }}
+                  isSuccess={!testResults[selectedTestId].result?.error}
+                  defaultExpanded={!!testResults[selectedTestId].result?.error}
+                />
               ) : (
                 <p className="text-gray-500">点击"执行测试"开始测试</p>
               )}
@@ -2037,24 +2041,36 @@ export default function ModelProvidersPage() {
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
                   <span className="ml-2">测试中...</span>
                 </div>
-              ) : (
-                <>
-                  {reactTestResult.error ? (
-                    <div className="p-4 rounded-md bg-red-100 text-red-800">
-                      <p>测试失败: {reactTestResult.error}</p>
-                    </div>
-                  ) : reactTestResult.success !== null ? (
-                    <div className={`p-4 rounded-md ${reactTestResult.success ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
-                      <p>{reactTestResult.success ? "测试成功！" : "测试失败"}</p>
-                    </div>
-                  ) : null}
+              ) : reactTestResult.error ? (
+                <ExpandableError
+                  error={{
+                    message: reactTestResult.error,
+                  }}
+                  isSuccess={false}
+                  defaultExpanded={true}
+                />
+              ) : reactTestResult.success !== null ? (
+                <ExpandableError
+                  error={{
+                    message: reactTestResult.success ? "React Agent 能力测试通过" : "React Agent 能力测试失败",
+                    summary: reactTestResult.success ? "测试成功" : "测试失败",
+                  }}
+                  isSuccess={reactTestResult.success}
+                  defaultExpanded={false}
+                />
+              ) : null}
 
-
-                </>
+              {reactTestResult.messages && (
+                <div className="mt-4">
+                  <p className="text-xs font-medium text-gray-600 mb-1">测试日志</p>
+                  <Textarea
+                    name="logs"
+                    className="max-h-48 resize-none whitespace-pre overflow-x-auto font-mono text-xs"
+                    readOnly
+                    value={reactTestResult.messages}
+                  />
+                </div>
               )}
-
-              {reactTestResult.messages && <Textarea name="logs" className="mt-4 max-h-50 resize-none whitespace-pre overflow-x-auto" readOnly value={reactTestResult.messages}>
-              </Textarea>}
             </div>
           )}
 

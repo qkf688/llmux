@@ -100,24 +100,58 @@ func ProviderTestHandler(c *gin.Context) {
 	header := buildTestHeaders(c.Request.Header, chatModel.WithHeader, chatModel.CustomerHeaders)
 	req, err := providerInstance.BuildReq(ctx, header, chatModel.Model, []byte(testBody))
 	if err != nil {
-		common.ErrorWithHttpStatus(c, http.StatusOK, 502, "Failed to connect to provider: "+err.Error())
+		common.ErrorWithHttpStatus(c, http.StatusOK, 502, buildDetailedError("network", "构建请求失败", err.Error(), map[string]string{
+			"provider": chatModel.Name,
+			"model":    chatModel.Model,
+		}))
 		return
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		common.ErrorWithHttpStatus(c, http.StatusOK, 502, "Failed to connect to provider: "+err.Error())
+		common.ErrorWithHttpStatus(c, http.StatusOK, 502, buildDetailedError("network", "连接提供商失败", err.Error(), map[string]string{
+			"provider": chatModel.Name,
+			"model":    chatModel.Model,
+			"proxy":    proxyURL,
+		}))
 		return
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		common.ErrorWithHttpStatus(c, http.StatusOK, res.StatusCode, "Provider returned non-200 status code: "+strconv.Itoa(res.StatusCode))
+		// 读取响应体以获取更详细的错误信息
+		bodyBytes, _ := io.ReadAll(res.Body)
+		bodyStr := string(bodyBytes)
+
+		// 尝试解析JSON错误响应
+		var errorDetail string
+		var jsonErr map[string]interface{}
+		if json.Unmarshal(bodyBytes, &jsonErr) == nil {
+			if errMsg, ok := jsonErr["error"].(map[string]interface{}); ok {
+				if message, ok := errMsg["message"].(string); ok {
+					errorDetail = message
+				} else if msg, ok := errMsg["error"].(string); ok {
+					errorDetail = msg
+				}
+			}
+		}
+		if errorDetail == "" {
+			errorDetail = bodyStr
+		}
+
+		common.ErrorWithHttpStatus(c, http.StatusOK, res.StatusCode, buildDetailedError(getErrorTypeFromStatus(res.StatusCode), "提供商返回错误", errorDetail, map[string]string{
+			"provider":    chatModel.Name,
+			"model":       chatModel.Model,
+			"status_code": strconv.Itoa(res.StatusCode),
+		}))
 		return
 	}
 
 	content, err := io.ReadAll(res.Body)
 	if err != nil {
-		common.ErrorWithHttpStatus(c, http.StatusOK, res.StatusCode, "Failed to read res body: "+err.Error())
+		common.ErrorWithHttpStatus(c, http.StatusOK, res.StatusCode, buildDetailedError("network", "读取响应失败", err.Error(), map[string]string{
+			"provider": chatModel.Name,
+			"model":    chatModel.Model,
+		}))
 		return
 	}
 
@@ -382,4 +416,58 @@ func buildTestHeaders(source http.Header, withHeader *bool, customHeaders map[st
 	}
 
 	return header
+}
+
+// buildDetailedError 构建详细的错误信息
+func buildDetailedError(errorType string, summary string, detail string, context map[string]string) string {
+	// 构建错误信息
+	var sb strings.Builder
+	
+	// 错误类型和概要
+	sb.WriteString(fmt.Sprintf("[%s] %s\n\n", getErrorTypeLabel(errorType), summary))
+	
+	// 详细信息
+	sb.WriteString(fmt.Sprintf("详细信息: %s\n", detail))
+	
+	// 上下文信息
+	if len(context) > 0 {
+		sb.WriteString("\n上下文信息:\n")
+		for key, value := range context {
+			sb.WriteString(fmt.Sprintf("  - %s: %s\n", key, value))
+		}
+	}
+	
+	return sb.String()
+}
+
+// getErrorTypeFromStatus 根据HTTP状态码返回错误类型
+func getErrorTypeFromStatus(statusCode int) string {
+	switch {
+	case statusCode == 401 || statusCode == 403:
+		return "auth"
+	case statusCode == 404:
+		return "provider"
+	case statusCode >= 400 && statusCode < 500:
+		return "validation"
+	case statusCode >= 500:
+		return "provider"
+	default:
+		return "unknown"
+	}
+}
+
+// getErrorTypeLabel 获取错误类型的可读标签
+func getErrorTypeLabel(errorType string) string {
+	labels := map[string]string{
+		"network":   "网络错误",
+		"auth":      "认证错误",
+		"provider":  "提供商错误",
+		"timeout":   "超时错误",
+		"validation": "验证错误",
+		"unknown":   "未知错误",
+	}
+	if label, ok := labels[errorType]; ok {
+		return label
+	}
+	return "未知错误"
 }

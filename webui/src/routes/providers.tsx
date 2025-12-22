@@ -1796,7 +1796,9 @@ export default function ProvidersPage() {
                     return (
                       <div
                         key={model.id}
-                        className="flex items-center justify-between p-2 border rounded-lg"
+                        className={`flex items-center justify-between p-2 border rounded-lg ${
+                          isSaved ? "border-gray-300 bg-gray-50/50" : "border-border bg-background"
+                        }`}
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           <Checkbox
@@ -1811,16 +1813,12 @@ export default function ProvidersPage() {
                             }}
                           />
                           <div className="min-w-0">
-                            <div className="font-medium truncate">{model.id}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {isSaved ? "已在全部模型" : "未添加"}
+                            <div className={`font-medium truncate ${isSaved ? "text-muted-foreground/70" : ""}`}>
+                              {model.id}
                             </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          {isSaved ? (
-                            <span className="text-xs text-green-600">已缓存</span>
-                          ) : null}
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>

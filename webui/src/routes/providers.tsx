@@ -1350,29 +1350,39 @@ export default function ProvidersPage() {
 
           <div className="flex flex-col gap-4 flex-1 min-h-0">
             <div className="flex flex-col gap-2 flex-1 min-h-0">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between flex-shrink-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold whitespace-nowrap">模型列表</p>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {allModelsSearchQuery
-                      ? `匹配 ${filteredAllModels.length} / ${allModelsList.length}`
-                      : `${allModelsList.length} 个`}
-                  </span>
-                  
-                  {/* 测试结果统计 */}
-                  {Object.keys(allModelsTestResults).length > 0 && (
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="text-muted-foreground">|</span>
-                      <span>已测试: {Object.keys(allModelsTestResults).length}</span>
-                      <span className="text-green-600">
-                        成功: {Object.values(allModelsTestResults).filter(r => r.success === true).length}
-                      </span>
-                      <span className="text-red-600">
-                        失败: {Object.values(allModelsTestResults).filter(r => r.success === false).length}
-                      </span>
-                    </div>
-                  )}
+              <div className="flex flex-col gap-2 flex-shrink-0">
+                {/* 第一行：标题 + 数量 + 搜索框 */}
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold whitespace-nowrap">模型列表</p>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      {allModelsSearchQuery
+                        ? `匹配 ${filteredAllModels.length} / ${allModelsList.length}`
+                        : `${allModelsList.length} 个`}
+                    </span>
+                  </div>
+                  <Input
+                    placeholder="搜索模型名称..."
+                    value={allModelsSearchQuery}
+                    onChange={(e) => setAllModelsSearchQuery(e.target.value)}
+                    className="h-8 flex-1 min-w-0"
+                  />
                 </div>
+                
+                {/* 第二行：测试结果统计（条件渲染）*/}
+                {Object.keys(allModelsTestResults).length > 0 && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>已测试: {Object.keys(allModelsTestResults).length}</span>
+                    <span className="text-muted-foreground">|</span>
+                    <span className="text-green-600">
+                      成功: {Object.values(allModelsTestResults).filter(r => r.success === true).length}
+                    </span>
+                    <span className="text-muted-foreground">|</span>
+                    <span className="text-red-600">
+                      失败: {Object.values(allModelsTestResults).filter(r => r.success === false).length}
+                    </span>
+                  </div>
+                )}
 
                 {/* 批量测试进度条 */}
                 {batchTesting && (
@@ -1402,13 +1412,8 @@ export default function ProvidersPage() {
                     </Button>
                   </div>
                 )}
-                <Input
-                  placeholder="搜索模型名称..."
-                  value={allModelsSearchQuery}
-                  onChange={(e) => setAllModelsSearchQuery(e.target.value)}
-                  className="w-full h-8 sm:w-48"
-                />
-                <div className="flex items-center gap-1">
+
+                <div className="flex items-center gap-1 flex-wrap">
                   {(allModelsProvider?.ModelEndpoint ?? true) && (
                     <TooltipProvider>
                       <Tooltip>

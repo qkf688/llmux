@@ -504,6 +504,28 @@ export default function ProvidersPage() {
     }
   };
 
+  // 选择所有测试成功的模型
+  const selectAllSuccessful = () => {
+    const successfulModels = Object.entries(allModelsTestResults)
+      .filter(([_, result]) => result.success === true)
+      .map(([modelName]) => modelName);
+    
+    setSelectedAllModels(prev =>
+      Array.from(new Set([...prev, ...successfulModels]))
+    );
+  };
+
+  // 选择所有测试失败的模型
+  const selectAllFailed = () => {
+    const failedModels = Object.entries(allModelsTestResults)
+      .filter(([_, result]) => result.success === false)
+      .map(([modelName]) => modelName);
+    
+    setSelectedAllModels(prev =>
+      Array.from(new Set([...prev, ...failedModels]))
+    );
+  };
+
   const openAllModelsDialog = async (provider: Provider) => {
     const allModels = extractAllModels(provider.Config);
     setAllModelsProvider(provider);
@@ -1214,6 +1236,20 @@ export default function ProvidersPage() {
                       ? `匹配 ${filteredAllModels.length} / ${allModelsList.length}`
                       : `${allModelsList.length} 个`}
                   </span>
+                  
+                  {/* 测试结果统计 */}
+                  {Object.keys(allModelsTestResults).length > 0 && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-muted-foreground">|</span>
+                      <span>已测试: {Object.keys(allModelsTestResults).length}</span>
+                      <span className="text-green-600">
+                        成功: {Object.values(allModelsTestResults).filter(r => r.success === true).length}
+                      </span>
+                      <span className="text-red-600">
+                        失败: {Object.values(allModelsTestResults).filter(r => r.success === false).length}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <Input
                   placeholder="搜索模型名称..."
@@ -1246,6 +1282,45 @@ export default function ProvidersPage() {
                       </Tooltip>
                     </TooltipProvider>
                   )}
+                  
+                  {/* 新增：选择成功和失败按钮 */}
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={selectAllSuccessful}
+                          disabled={Object.values(allModelsTestResults).filter(r => r.success === true).length === 0}
+                        >
+                          <svg className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>选择测试成功的模型</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={selectAllFailed}
+                          disabled={Object.values(allModelsTestResults).filter(r => r.success === false).length === 0}
+                        >
+                          <svg className="h-4 w-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>选择测试失败的模型</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>

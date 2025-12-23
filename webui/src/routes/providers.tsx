@@ -513,9 +513,13 @@ export default function ProvidersPage() {
       .filter(([_, result]) => result.success === true)
       .map(([modelName]) => modelName);
     
-    setSelectedAllModels(prev =>
-      Array.from(new Set([...prev, ...successfulModels]))
-    );
+    if (successfulModels.length === 0) {
+      toast.info("当前没有测试成功的模型");
+      return;
+    }
+    
+    setSelectedAllModels(successfulModels);
+    toast.success(`已选择 ${successfulModels.length} 个测试成功的模型`);
   };
 
   // 选择所有测试失败的模型
@@ -524,9 +528,13 @@ export default function ProvidersPage() {
       .filter(([_, result]) => result.success === false)
       .map(([modelName]) => modelName);
     
-    setSelectedAllModels(prev =>
-      Array.from(new Set([...prev, ...failedModels]))
-    );
+    if (failedModels.length === 0) {
+      toast.info("当前没有测试失败的模型");
+      return;
+    }
+    
+    setSelectedAllModels(failedModels);
+    toast.success(`已选择 ${failedModels.length} 个测试失败的模型`);
   };
 
   // 批量测试核心逻辑

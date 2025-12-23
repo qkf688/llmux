@@ -80,6 +80,7 @@ func main() {
 	api.POST("/model-providers", handler.CreateModelProvider)
 	api.PUT("/model-providers/:id", handler.UpdateModelProvider)
 	api.PATCH("/model-providers/:id/status", handler.UpdateModelProviderStatus)
+	api.PATCH("/model-providers/batch/status", handler.BatchUpdateModelProvidersStatus)
 	api.DELETE("/model-providers/batch", handler.BatchDeleteModelProviders)
 	api.DELETE("/model-providers/:id", handler.DeleteModelProvider)
 	api.GET("/model-providers/auto-associate/preview", handler.PreviewAutoAssociate)

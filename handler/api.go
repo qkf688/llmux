@@ -989,6 +989,12 @@ type BatchDeleteModelProvidersRequest struct {
 	IDs []uint `json:"ids"`
 }
 
+// BatchUpdateModelProvidersStatusRequest represents the request body for batch updating model-provider associations status
+type BatchUpdateModelProvidersStatusRequest struct {
+	IDs    []uint `json:"ids"`
+	Status bool   `json:"status"`
+}
+
 // BatchDeleteModelProviders 批量删除模型提供商关联
 func BatchDeleteModelProviders(c *gin.Context) {
 	var req BatchDeleteModelProvidersRequest
@@ -1010,6 +1016,44 @@ func BatchDeleteModelProviders(c *gin.Context) {
 
 	common.Success(c, map[string]interface{}{
 		"deleted": result,
+	})
+}
+
+// BatchUpdateModelProvidersStatus 批量更新模型提供商关联状态
+func BatchUpdateModelProvidersStatus(c *gin.Context) {
+	var req BatchUpdateModelProvidersStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		common.BadRequest(c, "No IDs provided")
+		return
+	}
+
+	ctx := c.Request.Context()
+	status := req.Status
+	updates := models.ModelWithProvider{
+		Status: &status,
+	}
+
+	// 如果是启用操作，同时重置连续失败次数
+	if status {
+		updates.ConsecutiveFailures = 0
+	}
+
+	result, err := gorm.G[models.ModelWithProvider](models.DB).
+		Where("id IN ?", req.IDs).
+		Updates(ctx, updates)
+
+	if err != nil {
+		common.InternalServerError(c, "Failed to update status: "+err.Error())
+		return
+	}
+
+	common.Success(c, map[string]interface{}{
+		"updated": result,
 	})
 }
 

@@ -54,6 +54,7 @@ import {
   updateModelProviderStatus,
   deleteModelProvider,
   batchDeleteModelProviders,
+  batchUpdateModelProvidersStatus,
   getModels,
   getProviders,
   testModelProvider,
@@ -187,6 +188,7 @@ export default function ModelProvidersPage() {
   const [selectedAssociationIds, setSelectedAssociationIds] = useState<number[]>([]);
   const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
+  const [batchUpdatingStatus, setBatchUpdatingStatus] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [collapsedProviders, setCollapsedProviders] = useState<Record<number, boolean>>({});
   const [searchKeyword, setSearchKeyword] = useState("");
@@ -797,6 +799,33 @@ export default function ModelProvidersPage() {
     }
   };
 
+  const handleBatchUpdateStatus = async (status: boolean) => {
+    if (selectedAssociationIds.length === 0) {
+      toast.error("请先选择要操作的关联");
+      return;
+    }
+    
+    setBatchUpdatingStatus(true);
+    try {
+      const result = await batchUpdateModelProvidersStatus(selectedAssociationIds, status);
+      toast.success(`成功${status ? '启用' : '停用'} ${result.updated} 个关联`);
+      
+      // 更新本地状态
+      setModelProviders(prev =>
+        prev.map(item =>
+          selectedAssociationIds.includes(item.ID)
+            ? { ...item, Status: status }
+            : item
+        )
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`批量${status ? '启用' : '停用'}失败: ${message}`);
+    } finally {
+      setBatchUpdatingStatus(false);
+    }
+  };
+
   const handleAutoAssociate = async () => {
     try {
       setPreviewType("associate");
@@ -1368,6 +1397,40 @@ export default function ModelProvidersPage() {
                   )}
                 </DropdownMenuItem>
                 
+                <DropdownMenuSeparator />
+                
+                {/* 批量启用 */}
+                <DropdownMenuItem
+                  disabled={selectedAssociationIds.length === 0 || batchUpdatingStatus}
+                  onClick={() => handleBatchUpdateStatus(true)}
+                  className="cursor-pointer"
+                >
+                  {batchUpdatingStatus ? <Spinner className="mr-2 h-4 w-4" /> : <CheckCircle className="mr-2 h-4 w-4 text-green-600" />}
+                  <span>批量启用</span>
+                  {selectedAssociationIds.length > 0 && (
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {selectedAssociationIds.length}
+                    </span>
+                  )}
+                </DropdownMenuItem>
+                
+                {/* 批量停用 */}
+                <DropdownMenuItem
+                  disabled={selectedAssociationIds.length === 0 || batchUpdatingStatus}
+                  onClick={() => handleBatchUpdateStatus(false)}
+                  className="cursor-pointer"
+                >
+                  {batchUpdatingStatus ? <Spinner className="mr-2 h-4 w-4" /> : <XCircle className="mr-2 h-4 w-4 text-orange-600" />}
+                  <span>批量停用</span>
+                  {selectedAssociationIds.length > 0 && (
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {selectedAssociationIds.length}
+                    </span>
+                  )}
+                </DropdownMenuItem>
+                
+                <DropdownMenuSeparator />
+                
                 {/* 批量测试选中 */}
                 <DropdownMenuItem
                   disabled={selectedAssociationIds.length === 0 || batchTesting}
@@ -1928,6 +1991,40 @@ export default function ModelProvidersPage() {
                         </span>
                       )}
                     </DropdownMenuItem>
+                    
+                    <DropdownMenuSeparator />
+                    
+                    {/* 批量启用 */}
+                    <DropdownMenuItem
+                      disabled={selectedAssociationIds.length === 0 || batchUpdatingStatus}
+                      onClick={() => handleBatchUpdateStatus(true)}
+                      className="cursor-pointer"
+                    >
+                      {batchUpdatingStatus ? <Spinner className="mr-2 h-4 w-4" /> : <CheckCircle className="mr-2 h-4 w-4 text-green-600" />}
+                      <span>批量启用</span>
+                      {selectedAssociationIds.length > 0 && (
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {selectedAssociationIds.length}
+                        </span>
+                      )}
+                    </DropdownMenuItem>
+                    
+                    {/* 批量停用 */}
+                    <DropdownMenuItem
+                      disabled={selectedAssociationIds.length === 0 || batchUpdatingStatus}
+                      onClick={() => handleBatchUpdateStatus(false)}
+                      className="cursor-pointer"
+                    >
+                      {batchUpdatingStatus ? <Spinner className="mr-2 h-4 w-4" /> : <XCircle className="mr-2 h-4 w-4 text-orange-600" />}
+                      <span>批量停用</span>
+                      {selectedAssociationIds.length > 0 && (
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {selectedAssociationIds.length}
+                        </span>
+                      )}
+                    </DropdownMenuItem>
+                    
+                    <DropdownMenuSeparator />
                     
                     {/* 批量测试选中 */}
                     <DropdownMenuItem

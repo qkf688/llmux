@@ -268,6 +268,16 @@ export async function batchDeleteModelProviders(ids: number[]): Promise<{ delete
   });
 }
 
+export async function batchUpdateModelProvidersStatus(
+  ids: number[],
+  status: boolean
+): Promise<{ updated: number }> {
+  return apiRequest<{ updated: number }>('/model-providers/batch/status', {
+    method: 'PATCH',
+    body: JSON.stringify({ ids, status }),
+  });
+}
+
 // System API functions
 export async function getSystemStatus(): Promise<SystemStatus> {
   return apiRequest<SystemStatus>('/status');

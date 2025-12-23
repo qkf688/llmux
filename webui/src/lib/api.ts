@@ -779,3 +779,32 @@ export async function clearModelSyncLogs(): Promise<{ deleted: number }> {
     method: 'DELETE',
   });
 }
+
+// Database Stats API functions
+export interface TableStat {
+  name: string;
+  display_name: string;
+  count: number;
+  estimated_size_human: string;
+}
+
+export interface DatabaseStats {
+  file_path: string;
+  file_size: number;
+  file_size_human: string;
+  table_stats: TableStat[];
+  page_count: number;
+  page_size: number;
+  free_pages: number;
+  last_vacuum_at?: string;
+  can_vacuum: boolean;
+  // Additional fields for database info section
+  db_path: string;
+  sqlite_version: string;
+  encoding: string;
+  last_modified: string;
+}
+
+export async function getDatabaseStats(): Promise<DatabaseStats> {
+  return apiRequest<DatabaseStats>('/system/database-stats');
+}

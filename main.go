@@ -99,6 +99,7 @@ func main() {
 	// System configuration
 	api.GET("/config", handler.GetSystemConfig)
 	api.PUT("/config", handler.UpdateSystemConfig)
+	api.GET("/system/database-stats", handler.GetDatabaseStats)
 
 	// Settings
 	api.GET("/settings", handler.GetSettings)

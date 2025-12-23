@@ -12,7 +12,8 @@ import {
   FaChevronRight,
   FaCog,
   FaHeartbeat,
-  FaSync
+  FaSync,
+  FaDatabase
 } from "react-icons/fa";
 import { useTheme } from "@/components/theme-provider";
 
@@ -39,6 +40,7 @@ export default function Layout() {
     { to: "/logs", label: "请求日志", icon: <FaFileAlt /> },
     { to: "/health-check-logs", label: "健康检测日志", icon: <FaHeartbeat /> },
     { to: "/model-sync-logs", label: "模型同步日志", icon: <FaSync /> },
+    { to: "/database", label: "数据库管理", icon: <FaDatabase /> },
     { to: "/settings", label: "系统设置", icon: <FaCog /> },
   ];
 

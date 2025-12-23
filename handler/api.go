@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/atopos31/llmio/common"
 	"github.com/atopos31/llmio/models"
@@ -3032,4 +3034,137 @@ func triggerAutoClean(ctx context.Context) {
 	if removedCount > 0 {
 		slog.Info("auto-cleaned invalid associations", "count", removedCount)
 	}
+}
+
+// DatabaseStatsResponse 数据库统计响应结构
+type DatabaseStatsResponse struct {
+	FilePath      string      `json:"file_path"`
+	FileSize      int64       `json:"file_size"`
+	FileSizeHuman string      `json:"file_size_human"`
+	TableStats    []TableStat `json:"table_stats"`
+	PageCount     int64       `json:"page_count"`
+	PageSize      int         `json:"page_size"`
+	FreePages     int64       `json:"free_pages"`
+	LastVacuumAt  *time.Time  `json:"last_vacuum_at"`
+	CanVacuum     bool        `json:"can_vacuum"`
+	// Additional fields for frontend
+	DBPath        string `json:"db_path"`
+	SQLiteVersion string `json:"sqlite_version"`
+	Encoding      string `json:"encoding"`
+	LastModified  string `json:"last_modified"`
+}
+
+// TableStat 表统计信息
+type TableStat struct {
+	Name               string `json:"name"`
+	DisplayName        string `json:"display_name"`
+	Count              int64  `json:"count"`
+	EstimatedSizeHuman string `json:"estimated_size_human"`
+}
+
+// GetDatabaseStats 获取数据库统计信息
+func GetDatabaseStats(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// 获取数据库文件路径和大小
+	dbPath := models.GetDBPath()
+	fileInfo, err := os.Stat(dbPath)
+	if err != nil {
+		common.InternalServerError(c, "Failed to get database file info: "+err.Error())
+		return
+	}
+
+	// 获取数据库页面信息
+	var pageCount int64
+	var pageSize int
+	var freePages int64
+
+	// 获取页面数量
+	if err := models.DB.WithContext(ctx).Raw("PRAGMA page_count").Scan(&pageCount).Error; err != nil {
+		slog.Warn("failed to get page_count", "error", err)
+		pageCount = 0
+	}
+
+	// 获取页面大小
+	if err := models.DB.WithContext(ctx).Raw("PRAGMA page_size").Scan(&pageSize).Error; err != nil {
+		slog.Warn("failed to get page_size", "error", err)
+		pageSize = 4096 // 默认值
+	}
+
+	// 获取空闲页面数
+	if err := models.DB.WithContext(ctx).Raw("PRAGMA freelist_count").Scan(&freePages).Error; err != nil {
+		slog.Warn("failed to get freelist_count", "error", err)
+		freePages = 0
+	}
+
+	// 获取 SQLite 版本
+	var sqliteVersion string
+	if err := models.DB.WithContext(ctx).Raw("SELECT sqlite_version()").Scan(&sqliteVersion).Error; err != nil {
+		slog.Warn("failed to get sqlite_version", "error", err)
+		sqliteVersion = "unknown"
+	}
+
+	// 获取编码
+	var encoding string
+	if err := models.DB.WithContext(ctx).Raw("PRAGMA encoding").Scan(&encoding).Error; err != nil {
+		slog.Warn("failed to get encoding", "error", err)
+		encoding = "UTF-8"
+	}
+
+	// 获取各表的记录数和估算大小
+	tableStats := []TableStat{
+		{Name: "providers", DisplayName: "提供商", Count: getTableCount(ctx, "providers"), EstimatedSizeHuman: formatBytes(getTableCount(ctx, "providers") * 1024)},
+		{Name: "models", DisplayName: "模型", Count: getTableCount(ctx, "models"), EstimatedSizeHuman: formatBytes(getTableCount(ctx, "models") * 512)},
+		{Name: "model_with_providers", DisplayName: "模型关联", Count: getTableCount(ctx, "model_with_providers"), EstimatedSizeHuman: formatBytes(getTableCount(ctx, "model_with_providers") * 512)},
+		{Name: "model_template_items", DisplayName: "模型模板", Count: getTableCount(ctx, "model_template_items"), EstimatedSizeHuman: formatBytes(getTableCount(ctx, "model_template_items") * 256)},
+		{Name: "chat_logs", DisplayName: "聊天日志", Count: getTableCount(ctx, "chat_logs"), EstimatedSizeHuman: formatBytes(getTableCount(ctx, "chat_logs") * 2048)},
+		{Name: "chat_ios", DisplayName: "聊天输入输出", Count: getTableCount(ctx, "chat_ios"), EstimatedSizeHuman: formatBytes(getTableCount(ctx, "chat_ios") * 4096)},
+		{Name: "settings", DisplayName: "系统设置", Count: getTableCount(ctx, "settings"), EstimatedSizeHuman: formatBytes(getTableCount(ctx, "settings") * 256)},
+		{Name: "health_check_logs", DisplayName: "健康检测日志", Count: getTableCount(ctx, "health_check_logs"), EstimatedSizeHuman: formatBytes(getTableCount(ctx, "health_check_logs") * 1024)},
+		{Name: "model_sync_logs", DisplayName: "模型同步日志", Count: getTableCount(ctx, "model_sync_logs"), EstimatedSizeHuman: formatBytes(getTableCount(ctx, "model_sync_logs") * 512)},
+	}
+
+	// 计算是否需要 VACUUM（空闲页面超过总页数的 10%）
+	canVacuum := pageCount > 0 && freePages > 0 && float64(freePages)/float64(pageCount) > 0.1
+
+	response := DatabaseStatsResponse{
+		FilePath:      dbPath,
+		FileSize:      fileInfo.Size(),
+		FileSizeHuman: formatBytes(fileInfo.Size()),
+		TableStats:    tableStats,
+		PageCount:     pageCount,
+		PageSize:      pageSize,
+		FreePages:     freePages,
+		CanVacuum:     canVacuum,
+		DBPath:        dbPath,
+		SQLiteVersion: sqliteVersion,
+		Encoding:      encoding,
+		LastModified:  fileInfo.ModTime().Format(time.RFC3339),
+	}
+
+	common.Success(c, response)
+}
+
+// getTableCount 获取表的记录数
+func getTableCount(ctx context.Context, tableName string) int64 {
+	var count int64
+	if err := models.DB.WithContext(ctx).Table(tableName).Count(&count).Error; err != nil {
+		slog.Warn("failed to count table", "table", tableName, "error", err)
+		return 0
+	}
+	return count
+}
+
+// formatBytes 格式化字节数为人类可读格式
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }

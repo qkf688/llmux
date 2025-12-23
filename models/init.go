@@ -51,22 +51,22 @@ func Init(ctx context.Context, path string) {
 // initDefaultSettings 初始化默认设置
 func initDefaultSettings(ctx context.Context) {
 	defaultSettings := []Setting{
-		{Key: SettingKeyStrictCapabilityMatch, Value: "false"},   // 默认关闭严格能力匹配
-		{Key: SettingKeyAutoWeightDecay, Value: "false"},         // 默认关闭自动权重衰减
-		{Key: SettingKeyAutoWeightDecayDefault, Value: "5"},      // 默认权重值5
-		{Key: SettingKeyAutoWeightDecayStep, Value: "1"},         // 默认每次失败减少1
-		{Key: SettingKeyAutoSuccessIncrease, Value: "true"},      // 默认开启成功调用自增
-		{Key: SettingKeyAutoWeightIncreaseStep, Value: "1"},      // 默认每次成功增加1
-		{Key: SettingKeyAutoWeightIncreaseMax, Value: "5"},       // 默认权重上限5
-		{Key: SettingKeyAutoPriorityDecay, Value: "false"},       // 默认关闭自动优先级衰减
-		{Key: SettingKeyAutoPriorityDecayDefault, Value: "10"},   // 默认优先级值10
-		{Key: SettingKeyAutoPriorityDecayStep, Value: "1"},       // 默认每次失败减少1
-		{Key: SettingKeyAutoPriorityDecayThreshold, Value: "90"}, // 默认优先级阈值90，达到此值自动禁用
-		{Key: SettingKeyAutoPriorityIncreaseStep, Value: "1"},    // 默认每次成功增加1
-		{Key: SettingKeyAutoPriorityIncreaseMax, Value: "10"},    // 默认优先级上限10
-		{Key: SettingKeyConsecutiveFailureThreshold, Value: "3"}, // 默认连续失败3次后禁用
+		{Key: SettingKeyStrictCapabilityMatch, Value: "false"},           // 默认关闭严格能力匹配
+		{Key: SettingKeyAutoWeightDecay, Value: "false"},                 // 默认关闭自动权重衰减
+		{Key: SettingKeyAutoWeightDecayDefault, Value: "5"},              // 默认权重值5
+		{Key: SettingKeyAutoWeightDecayStep, Value: "1"},                 // 默认每次失败减少1
+		{Key: SettingKeyAutoSuccessIncrease, Value: "true"},              // 默认开启成功调用自增
+		{Key: SettingKeyAutoWeightIncreaseStep, Value: "1"},              // 默认每次成功增加1
+		{Key: SettingKeyAutoWeightIncreaseMax, Value: "5"},               // 默认权重上限5
+		{Key: SettingKeyAutoPriorityDecay, Value: "false"},               // 默认关闭自动优先级衰减
+		{Key: SettingKeyAutoPriorityDecayDefault, Value: "10"},           // 默认优先级值10
+		{Key: SettingKeyAutoPriorityDecayStep, Value: "1"},               // 默认每次失败减少1
+		{Key: SettingKeyAutoPriorityDecayThreshold, Value: "90"},         // 默认优先级阈值90，达到此值自动禁用
+		{Key: SettingKeyAutoPriorityIncreaseStep, Value: "1"},            // 默认每次成功增加1
+		{Key: SettingKeyAutoPriorityIncreaseMax, Value: "10"},            // 默认优先级上限10
+		{Key: SettingKeyConsecutiveFailureThreshold, Value: "3"},         // 默认连续失败3次后禁用
 		{Key: SettingKeyConsecutiveFailureDisableEnabled, Value: "true"}, // 默认启用连续失败自动禁用
-		{Key: SettingKeyLogRetentionCount, Value: "100"}, // 默认保留100条日志，0表示不限制
+		{Key: SettingKeyLogRetentionCount, Value: "100"},                 // 默认保留100条日志，0表示不限制
 		{Key: SettingKeyLogRawRequestResponse, Value: `{"request_headers":false,"request_body":false,"response_headers":false,"response_body":false,"raw_response_body":false}`}, // 默认关闭所有原始日志记录
 		{Key: SettingKeyDisableAllLogs, Value: "false"}, // 默认不关闭所有日志记录
 		// 健康检测相关默认设置
@@ -79,11 +79,11 @@ func initDefaultSettings(ctx context.Context) {
 		{Key: SettingKeyHealthCheckCountAsSuccess, Value: "true"},        // 默认健康检测成功计入成功调用
 		{Key: SettingKeyHealthCheckCountAsFailure, Value: "false"},       // 默认健康检测失败不计入失败调用
 		// 性能优化相关默认设置
-		{Key: SettingKeyDisablePerformanceTracking, Value: "false"}, // 默认不关闭性能追踪
-		{Key: SettingKeyDisableTokenCounting, Value: "false"},       // 默认不关闭 token 统计
-		{Key: SettingKeyEnableRequestTrace, Value: "true"},          // 默认启用请求追踪
-		{Key: SettingKeyStripResponseHeaders, Value: "false"},       // 默认不移除响应头
-		{Key: SettingKeyEnableFormatConversion, Value: "true"},      // 默认启用格式转换
+		{Key: SettingKeyDisablePerformanceTracking, Value: "false"},     // 默认不关闭性能追踪
+		{Key: SettingKeyDisableTokenCounting, Value: "false"},           // 默认不关闭 token 统计
+		{Key: SettingKeyEnableRequestTrace, Value: "true"},              // 默认启用请求追踪
+		{Key: SettingKeyStripResponseHeaders, Value: "false"},           // 默认不移除响应头
+		{Key: SettingKeyEnableFormatConversion, Value: "true"},          // 默认启用格式转换
 		{Key: SettingKeyAutoPriorityDecayDisableEnabled, Value: "true"}, // 默认启用自动禁用功能
 		// 模型同步相关默认设置
 		{Key: SettingKeyModelSyncEnabled, Value: "false"},         // 默认关闭自动同步
@@ -91,8 +91,8 @@ func initDefaultSettings(ctx context.Context) {
 		{Key: SettingKeyModelSyncLogRetentionCount, Value: "100"}, // 默认保留100条
 		{Key: SettingKeyModelSyncLogRetentionDays, Value: "7"},    // 默认保留7天
 		// 模型关联相关默认设置
-		{Key: SettingKeyAutoAssociateOnAdd, Value: "false"},    // 默认关闭自动关联
-		{Key: SettingKeyAutoCleanOnDelete, Value: "false"},     // 默认关闭自动清理
+		{Key: SettingKeyAutoAssociateOnAdd, Value: "false"}, // 默认关闭自动关联
+		{Key: SettingKeyAutoCleanOnDelete, Value: "false"},  // 默认关闭自动清理
 	}
 
 	for _, setting := range defaultSettings {
@@ -117,7 +117,22 @@ func initPriorityField(ctx context.Context) {
 	}
 }
 
+var dbPath string
+
+// SetDBPath 设置数据库路径
+func SetDBPath(path string) {
+	dbPath = path
+}
+
+// GetDBPath 获取数据库路径
+func GetDBPath() string {
+	return dbPath
+}
+
 func ensureDBFile(path string) error {
+	// 保存数据库路径
+	SetDBPath(path)
+
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}

@@ -16,6 +16,7 @@ const LoginPage = lazy(() => import('./routes/login'));
 const SettingsPage = lazy(() => import('./routes/settings'));
 const HealthCheckLogsPage = lazy(() => import('./routes/health-check-logs'));
 const ModelSyncLogsPage = lazy(() => import('./routes/model-sync-logs'));
+const DatabasePage = lazy(() => import('./routes/database'));
 
 // 简单的加载组件
 const PageLoader = () => (
@@ -40,6 +41,7 @@ function App() {
               <Route path="logs/:logId/chat-io" element={<LogChatPage />} />
               <Route path="health-check-logs" element={<HealthCheckLogsPage />} />
               <Route path="model-sync-logs" element={<ModelSyncLogsPage />} />
+              <Route path="database" element={<DatabasePage />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>
           </Routes>

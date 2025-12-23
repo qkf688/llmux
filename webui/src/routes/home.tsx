@@ -1,14 +1,17 @@
 "use client"
 
 import { useState, useEffect, Suspense, lazy } from "react";
+import { useNavigate } from "react-router-dom";
+import { Database } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Loading from "@/components/loading";
 import {
   getMetrics,
-  getModelCounts
+  getModelCounts,
+  getDatabaseStats
 } from "@/lib/api";
-import type { MetricsData, ModelCount } from "@/lib/api";
+import type { MetricsData, ModelCount, DatabaseStats } from "@/lib/api";
 import { toast } from "sonner";
 
 // 懒加载图表组件
@@ -41,6 +44,7 @@ const AnimatedCounter = ({ value, duration = 1000 }: { value: number; duration?:
 };
 
 export default function Home() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [activeChart, setActiveChart] = useState<"distribution" | "ranking">("distribution");
   
@@ -48,9 +52,10 @@ export default function Home() {
   const [todayMetrics, setTodayMetrics] = useState<MetricsData>({ reqs: 0, tokens: 0 });
   const [totalMetrics, setTotalMetrics] = useState<MetricsData>({ reqs: 0, tokens: 0 });
   const [modelCounts, setModelCounts] = useState<ModelCount[]>([]);
+  const [dbStats, setDbStats] = useState<DatabaseStats | null>(null);
 
   useEffect(() => {
-    Promise.all([fetchTodayMetrics(), fetchTotalMetrics(), fetchModelCounts()]);
+    Promise.all([fetchTodayMetrics(), fetchTotalMetrics(), fetchModelCounts(), fetchDatabaseStats()]);
   }, []);
   
   const fetchTodayMetrics = async () => {
@@ -85,6 +90,16 @@ export default function Home() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchDatabaseStats = async () => {
+    try {
+      const data = await getDatabaseStats();
+      setDbStats(data);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`获取数据库统计失败: ${message}`);
     }
   };
 
@@ -132,8 +147,46 @@ export default function Home() {
             <AnimatedCounter value={totalMetrics.tokens} />
           </CardContent>
         </Card>
-      </div>
-      
+       </div>
+
+      {/* 数据库概览卡片 */}
+      {dbStats && (
+        <Card
+          className="cursor-pointer hover:bg-accent/50 transition-colors"
+          onClick={() => navigate("/database")}
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <div>
+              <CardTitle className="text-base">数据库状态</CardTitle>
+              <CardDescription>点击查看详情</CardDescription>
+            </div>
+            <Database className="h-5 w-5 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <div className="text-2xl font-bold">{dbStats.file_size_human}</div>
+                <p className="text-xs text-muted-foreground">文件大小</p>
+              </div>
+              <div>
+                <div className="text-2xl font-bold">
+                  {dbStats.page_count > 0
+                    ? ((dbStats.page_count - dbStats.free_pages) / dbStats.page_count * 100).toFixed(1)
+                    : "0"}%
+                </div>
+                <p className="text-xs text-muted-foreground">使用率</p>
+              </div>
+              <div>
+                <div className="text-2xl font-bold">
+                  {dbStats.table_stats.reduce((sum, t) => sum + t.count, 0).toLocaleString()}
+                </div>
+                <p className="text-xs text-muted-foreground">总记录数</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+       
       <Card>
         <CardHeader>
           <CardTitle>模型数据分析</CardTitle>

@@ -3212,3 +3212,531 @@ func formatBytes(bytes int64) string {
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
+
+// ExportMetadata 导出元数据
+type ExportMetadata struct {
+	ExportedTypes []string `json:"exported_types"`
+	TotalCount    int      `json:"total_count"`
+}
+
+// ExportConfigResponse 导出配置响应结构
+type ExportConfigResponse struct {
+	Version      string                     `json:"version"`
+	ExportedAt   string                     `json:"exported_at"`
+	Metadata     ExportMetadata             `json:"metadata"`
+	Providers    []models.Provider          `json:"providers,omitempty"`
+	Models       []models.Model             `json:"models,omitempty"`
+	Associations []models.ModelWithProvider `json:"model_with_providers,omitempty"`
+	Templates    []models.ModelTemplateItem `json:"model_template_items,omitempty"`
+	Settings     []models.Setting           `json:"settings,omitempty"`
+}
+
+// ExportConfig 导出配置数据
+func ExportConfig(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// 获取要导出的类型（逗号分隔）
+	typesParam := c.Query("types")
+	var types []string
+	if typesParam != "" {
+		types = strings.Split(typesParam, ",")
+	} else {
+		// 默认导出所有类型
+		types = []string{"providers", "models", "associations", "templates", "settings"}
+	}
+
+	response := ExportConfigResponse{
+		Version:    "1.0",
+		ExportedAt: time.Now().Format(time.RFC3339),
+		Metadata: ExportMetadata{
+			ExportedTypes: types,
+		},
+	}
+
+	totalCount := 0
+
+	// 根据类型导出数据
+	for _, t := range types {
+		switch strings.TrimSpace(t) {
+		case "providers":
+			providers, err := gorm.G[models.Provider](models.DB).Find(ctx)
+			if err != nil {
+				common.InternalServerError(c, "Failed to get providers: "+err.Error())
+				return
+			}
+			response.Providers = providers
+			totalCount += len(providers)
+
+		case "models":
+			modelsList, err := gorm.G[models.Model](models.DB).Find(ctx)
+			if err != nil {
+				common.InternalServerError(c, "Failed to get models: "+err.Error())
+				return
+			}
+			response.Models = modelsList
+			totalCount += len(modelsList)
+
+		case "associations":
+			associations, err := gorm.G[models.ModelWithProvider](models.DB).Find(ctx)
+			if err != nil {
+				common.InternalServerError(c, "Failed to get associations: "+err.Error())
+				return
+			}
+			response.Associations = associations
+			totalCount += len(associations)
+
+		case "templates":
+			templates, err := gorm.G[models.ModelTemplateItem](models.DB).Find(ctx)
+			if err != nil {
+				common.InternalServerError(c, "Failed to get templates: "+err.Error())
+				return
+			}
+			response.Templates = templates
+			totalCount += len(templates)
+
+		case "settings":
+			settings, err := gorm.G[models.Setting](models.DB).Find(ctx)
+			if err != nil {
+				common.InternalServerError(c, "Failed to get settings: "+err.Error())
+				return
+			}
+			response.Settings = settings
+			totalCount += len(settings)
+		}
+	}
+
+	response.Metadata.TotalCount = totalCount
+
+	// 设置响应头，建议下载文件名
+	timestamp := time.Now().Format("20060102-150405")
+	filename := fmt.Sprintf("llmio-config-%s-%s.json", strings.Join(types, "-"), timestamp)
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Header("Content-Type", "application/json")
+
+	common.Success(c, response)
+}
+
+// ImportConfigRequest 导入配置请求结构
+type ImportConfigRequest struct {
+	Mode  string   `json:"mode"`  // "merge" 或 "replace"
+	Types []string `json:"types"` // 要导入的数据类型
+	Data  string   `json:"data"`  // JSON 格式的配置数据
+}
+
+// ImportResult 导入结果
+type ImportResult struct {
+	Imported int      `json:"imported"`
+	Skipped  int      `json:"skipped"`
+	Errors   []string `json:"errors,omitempty"`
+}
+
+// ImportConfigResponse 导入配置响应结构
+type ImportConfigResponse struct {
+	Providers    ImportResult `json:"providers"`
+	Models       ImportResult `json:"models"`
+	Associations ImportResult `json:"associations"`
+	Templates    ImportResult `json:"templates"`
+	Settings     ImportResult `json:"settings"`
+	TotalTime    string       `json:"total_time"`
+}
+
+// ImportConfig 导入配置数据
+func ImportConfig(c *gin.Context) {
+	ctx := c.Request.Context()
+	startTime := time.Now()
+
+	// 解析表单数据
+	mode := c.PostForm("mode")
+	if mode == "" {
+		mode = "merge" // 默认合并模式
+	}
+	if mode != "merge" && mode != "replace" {
+		common.BadRequest(c, "Invalid mode, must be 'merge' or 'replace'")
+		return
+	}
+
+	typesParam := c.PostForm("types")
+	var types []string
+	if typesParam != "" {
+		types = strings.Split(typesParam, ",")
+	} else {
+		types = []string{"providers", "models", "associations", "templates", "settings"}
+	}
+
+	// 获取上传的文件
+	file, err := c.FormFile("file")
+	if err != nil {
+		common.BadRequest(c, "No file uploaded: "+err.Error())
+		return
+	}
+
+	// 打开文件
+	f, err := file.Open()
+	if err != nil {
+		common.InternalServerError(c, "Failed to open file: "+err.Error())
+		return
+	}
+	defer f.Close()
+
+	// 解析 JSON
+	var configData ExportConfigResponse
+	if err := json.NewDecoder(f).Decode(&configData); err != nil {
+		common.BadRequest(c, "Invalid JSON format: "+err.Error())
+		return
+	}
+
+	response := ImportConfigResponse{}
+
+	// 开启事务
+	tx := models.DB.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		common.InternalServerError(c, "Failed to start transaction: "+tx.Error.Error())
+		return
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			common.InternalServerError(c, fmt.Sprintf("Import failed: %v", r))
+		}
+	}()
+
+	// 按类型导入数据
+	for _, t := range types {
+		switch strings.TrimSpace(t) {
+		case "providers":
+			result := importProviders(tx, configData.Providers, mode)
+			response.Providers = result
+			if len(result.Errors) > 0 {
+				tx.Rollback()
+				common.InternalServerError(c, "Failed to import providers: "+strings.Join(result.Errors, "; "))
+				return
+			}
+
+		case "models":
+			result := importModels(tx, configData.Models, mode)
+			response.Models = result
+			if len(result.Errors) > 0 {
+				tx.Rollback()
+				common.InternalServerError(c, "Failed to import models: "+strings.Join(result.Errors, "; "))
+				return
+			}
+
+		case "associations":
+			result := importAssociations(tx, configData.Associations, mode)
+			response.Associations = result
+			if len(result.Errors) > 0 {
+				tx.Rollback()
+				common.InternalServerError(c, "Failed to import associations: "+strings.Join(result.Errors, "; "))
+				return
+			}
+
+		case "templates":
+			result := importTemplates(tx, configData.Templates, mode)
+			response.Templates = result
+			if len(result.Errors) > 0 {
+				tx.Rollback()
+				common.InternalServerError(c, "Failed to import templates: "+strings.Join(result.Errors, "; "))
+				return
+			}
+
+		case "settings":
+			result := importSettings(tx, configData.Settings)
+			response.Settings = result
+			if len(result.Errors) > 0 {
+				tx.Rollback()
+				common.InternalServerError(c, "Failed to import settings: "+strings.Join(result.Errors, "; "))
+				return
+			}
+		}
+	}
+
+	// 提交事务
+	if err := tx.Commit().Error; err != nil {
+		common.InternalServerError(c, "Failed to commit transaction: "+err.Error())
+		return
+	}
+
+	response.TotalTime = time.Since(startTime).String()
+	common.Success(c, response)
+}
+
+// importProviders 导入提供商
+func importProviders(tx *gorm.DB, providers []models.Provider, mode string) ImportResult {
+	result := ImportResult{}
+
+	if mode == "replace" {
+		// 清空现有数据
+		if err := tx.Unscoped().Where("1 = 1").Delete(&models.Provider{}).Error; err != nil {
+			result.Errors = append(result.Errors, "Failed to clear providers: "+err.Error())
+			return result
+		}
+	}
+
+	for _, provider := range providers {
+		// 检查是否已存在
+		var existing models.Provider
+		err := tx.Where("name = ?", provider.Name).First(&existing).Error
+
+		if err == nil {
+			// 已存在
+			if mode == "merge" {
+				result.Skipped++
+				continue
+			}
+		} else if err != gorm.ErrRecordNotFound {
+			result.Errors = append(result.Errors, fmt.Sprintf("Failed to check provider %s: %v", provider.Name, err))
+			return result
+		}
+
+		// 清除 ID 以便创建新记录
+		provider.ID = 0
+		provider.CreatedAt = time.Time{}
+		provider.UpdatedAt = time.Time{}
+
+		if err := tx.Create(&provider).Error; err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("Failed to import provider %s: %v", provider.Name, err))
+			return result
+		}
+		result.Imported++
+	}
+
+	return result
+}
+
+// importModels 导入模型
+func importModels(tx *gorm.DB, modelsList []models.Model, mode string) ImportResult {
+	result := ImportResult{}
+
+	if mode == "replace" {
+		if err := tx.Unscoped().Where("1 = 1").Delete(&models.Model{}).Error; err != nil {
+			result.Errors = append(result.Errors, "Failed to clear models: "+err.Error())
+			return result
+		}
+	}
+
+	for _, model := range modelsList {
+		var existing models.Model
+		err := tx.Where("name = ?", model.Name).First(&existing).Error
+
+		if err == nil {
+			if mode == "merge" {
+				result.Skipped++
+				continue
+			}
+		} else if err != gorm.ErrRecordNotFound {
+			result.Errors = append(result.Errors, fmt.Sprintf("Failed to check model %s: %v", model.Name, err))
+			return result
+		}
+
+		model.ID = 0
+		model.CreatedAt = time.Time{}
+		model.UpdatedAt = time.Time{}
+
+		if err := tx.Create(&model).Error; err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("Failed to import model %s: %v", model.Name, err))
+			return result
+		}
+		result.Imported++
+	}
+
+	return result
+}
+
+// importAssociations 导入模型关联
+func importAssociations(tx *gorm.DB, associations []models.ModelWithProvider, mode string) ImportResult {
+	result := ImportResult{}
+
+	if mode == "replace" {
+		if err := tx.Unscoped().Where("1 = 1").Delete(&models.ModelWithProvider{}).Error; err != nil {
+			result.Errors = append(result.Errors, "Failed to clear associations: "+err.Error())
+			return result
+		}
+	}
+
+	// 构建模型和提供商的映射（通过名称查找ID）
+	var modelsList []models.Model
+	if err := tx.Find(&modelsList).Error; err != nil {
+		result.Errors = append(result.Errors, "Failed to get models: "+err.Error())
+		return result
+	}
+	modelIDByName := make(map[string]uint)
+	for _, m := range modelsList {
+		modelIDByName[m.Name] = m.ID
+	}
+
+	var providersList []models.Provider
+	if err := tx.Find(&providersList).Error; err != nil {
+		result.Errors = append(result.Errors, "Failed to get providers: "+err.Error())
+		return result
+	}
+	providerIDByName := make(map[string]uint)
+	for _, p := range providersList {
+		providerIDByName[p.Name] = p.ID
+	}
+
+	for _, assoc := range associations {
+		// 通过原始的 ModelID 和 ProviderID 查找对应的名称
+		var modelName string
+		var providerName string
+
+		// 从导入数据中查找模型名称
+		for _, m := range modelsList {
+			if m.ID == assoc.ModelID {
+				modelName = m.Name
+				break
+			}
+		}
+
+		// 从导入数据中查找提供商名称
+		for _, p := range providersList {
+			if p.ID == assoc.ProviderID {
+				providerName = p.Name
+				break
+			}
+		}
+
+		// 获取当前数据库中的 ID
+		newModelID, modelExists := modelIDByName[modelName]
+		newProviderID, providerExists := providerIDByName[providerName]
+
+		if !modelExists || !providerExists {
+			result.Skipped++
+			continue
+		}
+
+		// 检查是否已存在
+		var existing models.ModelWithProvider
+		err := tx.Where("model_id = ? AND provider_id = ? AND provider_model = ?",
+			newModelID, newProviderID, assoc.ProviderModel).First(&existing).Error
+
+		if err == nil {
+			if mode == "merge" {
+				result.Skipped++
+				continue
+			}
+		} else if err != gorm.ErrRecordNotFound {
+			result.Errors = append(result.Errors, fmt.Sprintf("Failed to check association: %v", err))
+			return result
+		}
+
+		// 更新 ID
+		assoc.ID = 0
+		assoc.ModelID = newModelID
+		assoc.ProviderID = newProviderID
+		assoc.CreatedAt = time.Time{}
+		assoc.UpdatedAt = time.Time{}
+
+		if err := tx.Create(&assoc).Error; err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("Failed to import association: %v", err))
+			return result
+		}
+		result.Imported++
+	}
+
+	return result
+}
+
+// importTemplates 导入模型模板
+func importTemplates(tx *gorm.DB, templates []models.ModelTemplateItem, mode string) ImportResult {
+	result := ImportResult{}
+
+	if mode == "replace" {
+		if err := tx.Unscoped().Where("1 = 1").Delete(&models.ModelTemplateItem{}).Error; err != nil {
+			result.Errors = append(result.Errors, "Failed to clear templates: "+err.Error())
+			return result
+		}
+	}
+
+	// 构建模型映射
+	var modelsList []models.Model
+	if err := tx.Find(&modelsList).Error; err != nil {
+		result.Errors = append(result.Errors, "Failed to get models: "+err.Error())
+		return result
+	}
+	modelIDByName := make(map[string]uint)
+	for _, m := range modelsList {
+		modelIDByName[m.Name] = m.ID
+	}
+
+	for _, template := range templates {
+		// 查找模型名称
+		var modelName string
+		for _, m := range modelsList {
+			if m.ID == template.ModelID {
+				modelName = m.Name
+				break
+			}
+		}
+
+		newModelID, exists := modelIDByName[modelName]
+		if !exists {
+			result.Skipped++
+			continue
+		}
+
+		// 检查是否已存在
+		var existing models.ModelTemplateItem
+		err := tx.Where("model_id = ? AND name = ?", newModelID, template.Name).First(&existing).Error
+
+		if err == nil {
+			if mode == "merge" {
+				result.Skipped++
+				continue
+			}
+		} else if err != gorm.ErrRecordNotFound {
+			result.Errors = append(result.Errors, fmt.Sprintf("Failed to check template: %v", err))
+			return result
+		}
+
+		template.ID = 0
+		template.ModelID = newModelID
+		template.CreatedAt = time.Time{}
+		template.UpdatedAt = time.Time{}
+		template.DeletedAt = gorm.DeletedAt{}
+
+		if err := tx.Create(&template).Error; err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("Failed to import template: %v", err))
+			return result
+		}
+		result.Imported++
+	}
+
+	return result
+}
+
+// importSettings 导入系统设置（总是更新）
+func importSettings(tx *gorm.DB, settings []models.Setting) ImportResult {
+	result := ImportResult{}
+
+	for _, setting := range settings {
+		// 检查是否已存在
+		var existing models.Setting
+		err := tx.Where("key = ?", setting.Key).First(&existing).Error
+
+		if err == nil {
+			// 更新现有设置
+			if err := tx.Model(&existing).Update("value", setting.Value).Error; err != nil {
+				result.Errors = append(result.Errors, fmt.Sprintf("Failed to update setting %s: %v", setting.Key, err))
+				return result
+			}
+			result.Imported++
+		} else if err == gorm.ErrRecordNotFound {
+			// 创建新设置
+			setting.ID = 0
+			setting.CreatedAt = time.Time{}
+			setting.UpdatedAt = time.Time{}
+
+			if err := tx.Create(&setting).Error; err != nil {
+				result.Errors = append(result.Errors, fmt.Sprintf("Failed to import setting %s: %v", setting.Key, err))
+				return result
+			}
+			result.Imported++
+		} else {
+			result.Errors = append(result.Errors, fmt.Sprintf("Failed to check setting %s: %v", setting.Key, err))
+			return result
+		}
+	}
+
+	return result
+}

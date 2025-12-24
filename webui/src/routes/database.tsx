@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -12,10 +12,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Database, HardDrive, Table as TableIcon, RefreshCw, Trash2, ArrowLeft } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Database, HardDrive, Table as TableIcon, RefreshCw, Trash2, ArrowLeft, Download, Upload } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { getDatabaseStats, vacuumDatabase, type DatabaseStats } from "@/lib/api";
+import { getDatabaseStats, vacuumDatabase, exportConfig, importConfig, type DatabaseStats, type ExportType } from "@/lib/api";
 
 export default function DatabasePage() {
   const navigate = useNavigate();
@@ -23,6 +34,19 @@ export default function DatabasePage() {
   const [loading, setLoading] = useState(true);
   const [vacuuming, setVacuuming] = useState(false);
   const [showVacuumDialog, setShowVacuumDialog] = useState(false);
+  
+  // 导出相关状态
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportTypes, setExportTypes] = useState<ExportType[]>(['providers', 'models', 'associations', 'templates', 'settings']);
+  
+  // 导入相关状态
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
+  const [importTypes, setImportTypes] = useState<ExportType[]>(['providers', 'models', 'associations', 'templates', 'settings']);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchStats = async () => {
     setLoading(true);
@@ -50,6 +74,86 @@ export default function DatabasePage() {
     } finally {
       setVacuuming(false);
     }
+  };
+
+  const handleExport = async () => {
+    if (exportTypes.length === 0) {
+      toast.error("请至少选择一种数据类型");
+      return;
+    }
+    
+    setExporting(true);
+    try {
+      await exportConfig(exportTypes);
+      toast.success("配置导出成功");
+      setShowExportDialog(false);
+    } catch (error) {
+      toast.error(`导出失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      console.error(error);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile) {
+      toast.error("请选择要导入的文件");
+      return;
+    }
+    
+    if (importTypes.length === 0) {
+      toast.error("请至少选择一种数据类型");
+      return;
+    }
+    
+    setImporting(true);
+    try {
+      const result = await importConfig({
+        mode: importMode,
+        types: importTypes,
+        file: selectedFile,
+      });
+      
+      // 构建结果消息
+      const messages: string[] = [];
+      if (result.providers.imported > 0) messages.push(`提供商: ${result.providers.imported} 条`);
+      if (result.models.imported > 0) messages.push(`模型: ${result.models.imported} 条`);
+      if (result.associations.imported > 0) messages.push(`关联: ${result.associations.imported} 条`);
+      if (result.templates.imported > 0) messages.push(`模板: ${result.templates.imported} 条`);
+      if (result.settings.imported > 0) messages.push(`设置: ${result.settings.imported} 条`);
+      
+      const skippedCount = result.providers.skipped + result.models.skipped +
+                          result.associations.skipped + result.templates.skipped + result.settings.skipped;
+      
+      toast.success(
+        `导入成功！已导入: ${messages.join(', ')}${skippedCount > 0 ? `，跳过: ${skippedCount} 条` : ''}`,
+        { duration: 5000 }
+      );
+      
+      setShowImportDialog(false);
+      setSelectedFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      fetchStats();
+    } catch (error) {
+      toast.error(`导入失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      console.error(error);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const toggleExportType = (type: ExportType) => {
+    setExportTypes(prev =>
+      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+    );
+  };
+
+  const toggleImportType = (type: ExportType) => {
+    setImportTypes(prev =>
+      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+    );
   };
 
   useEffect(() => {
@@ -88,6 +192,24 @@ export default function DatabasePage() {
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             刷新
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setShowExportDialog(true)}
+            disabled={exporting || loading}
+            className="gap-2"
+          >
+            <Download className="h-4 w-4" />
+            导出配置
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setShowImportDialog(true)}
+            disabled={importing || loading}
+            className="gap-2"
+          >
+            <Upload className="h-4 w-4" />
+            导入配置
           </Button>
           <Button
             variant="destructive"
@@ -257,6 +379,226 @@ export default function DatabasePage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 导出配置对话框 */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>导出配置</DialogTitle>
+            <DialogDescription>
+              选择要导出的数据类型，系统将生成 JSON 格式的配置文件
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="export-providers"
+                  checked={exportTypes.includes('providers')}
+                  onCheckedChange={() => toggleExportType('providers')}
+                />
+                <Label htmlFor="export-providers" className="cursor-pointer">
+                  提供商配置
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="export-models"
+                  checked={exportTypes.includes('models')}
+                  onCheckedChange={() => toggleExportType('models')}
+                />
+                <Label htmlFor="export-models" className="cursor-pointer">
+                  模型配置
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="export-associations"
+                  checked={exportTypes.includes('associations')}
+                  onCheckedChange={() => toggleExportType('associations')}
+                />
+                <Label htmlFor="export-associations" className="cursor-pointer">
+                  模型关联
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="export-templates"
+                  checked={exportTypes.includes('templates')}
+                  onCheckedChange={() => toggleExportType('templates')}
+                />
+                <Label htmlFor="export-templates" className="cursor-pointer">
+                  模型模板
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="export-settings"
+                  checked={exportTypes.includes('settings')}
+                  onCheckedChange={() => toggleExportType('settings')}
+                />
+                <Label htmlFor="export-settings" className="cursor-pointer">
+                  系统设置
+                </Label>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowExportDialog(false)}
+              disabled={exporting}
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleExport}
+              disabled={exporting || exportTypes.length === 0}
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              {exporting ? "导出中..." : "导出"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 导入配置对话框 */}
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>导入配置</DialogTitle>
+            <DialogDescription>
+              选择配置文件和导入模式，系统将根据您的选择导入数据
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {/* 文件选择 */}
+            <div className="space-y-2">
+              <Label>选择配置文件</Label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              />
+              {selectedFile && (
+                <p className="text-sm text-muted-foreground">
+                  已选择: {selectedFile.name}
+                </p>
+              )}
+            </div>
+
+            {/* 导入模式 */}
+            <div className="space-y-2">
+              <Label>导入模式</Label>
+              <RadioGroup value={importMode} onValueChange={(value) => setImportMode(value as 'merge' | 'replace')}>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="merge" id="mode-merge" />
+                  <Label htmlFor="mode-merge" className="cursor-pointer font-normal">
+                    合并模式 - 保留现有数据，仅添加新数据
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="replace" id="mode-replace" />
+                  <Label htmlFor="mode-replace" className="cursor-pointer font-normal text-destructive">
+                    覆盖模式 - 清空现有数据，完全替换（危险操作）
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            {/* 数据类型选择 */}
+            <div className="space-y-2">
+              <Label>选择要导入的数据类型</Label>
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="import-providers"
+                    checked={importTypes.includes('providers')}
+                    onCheckedChange={() => toggleImportType('providers')}
+                  />
+                  <Label htmlFor="import-providers" className="cursor-pointer">
+                    提供商配置
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="import-models"
+                    checked={importTypes.includes('models')}
+                    onCheckedChange={() => toggleImportType('models')}
+                  />
+                  <Label htmlFor="import-models" className="cursor-pointer">
+                    模型配置
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="import-associations"
+                    checked={importTypes.includes('associations')}
+                    onCheckedChange={() => toggleImportType('associations')}
+                  />
+                  <Label htmlFor="import-associations" className="cursor-pointer">
+                    模型关联
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="import-templates"
+                    checked={importTypes.includes('templates')}
+                    onCheckedChange={() => toggleImportType('templates')}
+                  />
+                  <Label htmlFor="import-templates" className="cursor-pointer">
+                    模型模板
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="import-settings"
+                    checked={importTypes.includes('settings')}
+                    onCheckedChange={() => toggleImportType('settings')}
+                  />
+                  <Label htmlFor="import-settings" className="cursor-pointer">
+                    系统设置
+                  </Label>
+                </div>
+              </div>
+            </div>
+
+            {/* 警告提示 */}
+            {importMode === 'replace' && (
+              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                ⚠️ 警告：覆盖模式将删除所选类型的所有现有数据！请确保已备份重要数据。
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowImportDialog(false);
+                setSelectedFile(null);
+                if (fileInputRef.current) {
+                  fileInputRef.current.value = '';
+                }
+              }}
+              disabled={importing}
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleImport}
+              disabled={importing || !selectedFile || importTypes.length === 0}
+              className="gap-2"
+              variant={importMode === 'replace' ? 'destructive' : 'default'}
+            >
+              <Upload className="h-4 w-4" />
+              {importing ? "导入中..." : "导入"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

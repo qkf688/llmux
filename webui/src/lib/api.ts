@@ -818,3 +818,108 @@ export interface DatabaseStats {
 export async function getDatabaseStats(): Promise<DatabaseStats> {
   return apiRequest<DatabaseStats>('/system/database-stats');
 }
+
+// Config Import/Export API functions
+export type ExportType = 'providers' | 'models' | 'associations' | 'templates' | 'settings';
+
+export interface ExportOptions {
+  types: ExportType[];
+}
+
+export interface ImportOptions {
+  mode: 'merge' | 'replace';
+  types: ExportType[];
+  file: File;
+}
+
+export interface ImportResult {
+  imported: number;
+  skipped: number;
+  errors?: string[];
+}
+
+export interface ImportConfigResponse {
+  providers: ImportResult;
+  models: ImportResult;
+  associations: ImportResult;
+  templates: ImportResult;
+  settings: ImportResult;
+  total_time: string;
+}
+
+export async function exportConfig(types: ExportType[]): Promise<void> {
+  const token = localStorage.getItem("authToken");
+  const params = new URLSearchParams();
+  params.append('types', types.join(','));
+  
+  const response = await fetch(`${API_BASE}/system/export-config?${params.toString()}`, {
+    method: 'GET',
+    headers: {
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (response.status === 401) {
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+
+  if (!response.ok) {
+    throw new Error(`Export failed: ${response.status} ${response.statusText}`);
+  }
+
+  // 获取文件名（从 Content-Disposition 头）
+  const contentDisposition = response.headers.get('Content-Disposition');
+  let filename = `llmio-config-${types.join('-')}-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+  
+  if (contentDisposition) {
+    const filenameMatch = contentDisposition.match(/filename=(.+)/);
+    if (filenameMatch) {
+      filename = filenameMatch[1].replace(/['"]/g, '');
+    }
+  }
+
+  // 下载文件
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
+export async function importConfig(options: ImportOptions): Promise<ImportConfigResponse> {
+  const token = localStorage.getItem("authToken");
+  const formData = new FormData();
+  formData.append('file', options.file);
+  formData.append('mode', options.mode);
+  formData.append('types', options.types.join(','));
+
+  const response = await fetch(`${API_BASE}/system/import-config`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (response.status === 401) {
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Import failed: ${errorText}`);
+  }
+
+  const data = await response.json();
+  if (data.code !== 200) {
+    throw new Error(`${data.message}`);
+  }
+  
+  return data.data as ImportConfigResponse;
+}

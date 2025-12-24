@@ -101,6 +101,8 @@ func main() {
 	api.GET("/config", handler.GetSystemConfig)
 	api.PUT("/config", handler.UpdateSystemConfig)
 	api.GET("/system/database-stats", handler.GetDatabaseStats)
+	api.GET("/system/export-config", handler.ExportConfig)
+	api.POST("/system/import-config", handler.ImportConfig)
 
 	// Settings
 	api.GET("/settings", handler.GetSettings)

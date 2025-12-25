@@ -3778,6 +3778,30 @@ func importTemplates(tx *gorm.DB, templates []models.ModelTemplateItem, mode str
 	return result
 }
 
+// areValuesEqual 比较两个设置值是否相等，考虑 JSON 字符串情况
+func areValuesEqual(val1, val2 string) bool {
+	// 先检查直接字符串相等
+	if val1 == val2 {
+		return true
+	}
+
+	// 尝试解析为 JSON 对象进行比较
+	var json1, json2 interface{}
+	err1 := json.Unmarshal([]byte(val1), &json1)
+	err2 := json.Unmarshal([]byte(val2), &json2)
+
+	// 如果两个都是有效的 JSON，则比较它们的结构化内容
+	if err1 == nil && err2 == nil {
+		// 重新序列化为标准格式后比较
+		normalized1, _ := json.Marshal(json1)
+		normalized2, _ := json.Marshal(json2)
+		return string(normalized1) == string(normalized2)
+	}
+
+	// 否则，使用直接字符串比较
+	return false
+}
+
 // importSettings 导入系统设置
 func importSettings(tx *gorm.DB, settings []models.Setting, mode string) ImportResult {
 	result := ImportResult{}
@@ -3791,7 +3815,7 @@ func importSettings(tx *gorm.DB, settings []models.Setting, mode string) ImportR
 			// 记录已存在
 			if mode == "merge" {
 				// 合并模式下，只有值不同才更新
-				if existing.Value == setting.Value {
+				if areValuesEqual(existing.Value, setting.Value) {
 					// 值相同，跳过
 					result.Skipped++
 					continue

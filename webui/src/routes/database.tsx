@@ -125,8 +125,11 @@ export default function DatabasePage() {
       const skippedCount = result.providers.skipped + result.models.skipped +
                           result.associations.skipped + result.templates.skipped + result.settings.skipped;
       
+      // 当没有任何类型被导入时，显示"0"而不是空字符串
+      const importedText = messages.length > 0 ? messages.join(', ') : '0';
+      
       toast.success(
-        `导入成功！已导入: ${messages.join(', ')}${skippedCount > 0 ? `，跳过: ${skippedCount} 条` : ''}`,
+        `导入成功！已导入: ${importedText}${skippedCount > 0 ? `，跳过: ${skippedCount} 条` : ''}`,
         { duration: 5000 }
       );
       

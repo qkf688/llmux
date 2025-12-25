@@ -46,6 +46,16 @@ export default function DatabasePage() {
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
   const [importTypes, setImportTypes] = useState<ExportType[]>(['providers', 'models', 'associations', 'templates', 'settings']);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  // 预览相关状态
+  const [previewData, setPreviewData] = useState<{
+    providers: number;
+    models: number;
+    associations: number;
+    templates: number;
+    settings: number;
+  } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchStats = async () => {
@@ -157,6 +167,45 @@ export default function DatabasePage() {
     setImportTypes(prev =>
       prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
     );
+  };
+
+  // 预览文件函数
+  const handlePreviewFile = (file: File) => {
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setPreviewData(null);
+
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const data = JSON.parse(content);
+
+        // 提取各类型数据的数量
+        const preview = {
+          providers: Array.isArray(data.providers) ? data.providers.length : 0,
+          models: Array.isArray(data.models) ? data.models.length : 0,
+          associations: Array.isArray(data.model_with_providers) ? data.model_with_providers.length : 0,
+          templates: Array.isArray(data.model_template_items) ? data.model_template_items.length : 0,
+          settings: Array.isArray(data.settings) ? data.settings.length : 0
+        };
+
+        setPreviewData(preview);
+      } catch (error) {
+        setPreviewError('无法解析文件内容，请确保选择的是有效的JSON配置文件');
+        console.error('预览文件失败:', error);
+      } finally {
+        setPreviewLoading(false);
+      }
+    };
+
+    reader.onerror = () => {
+      setPreviewError('读取文件失败，请重试');
+      setPreviewLoading(false);
+    };
+
+    reader.readAsText(file);
   };
 
   useEffect(() => {
@@ -483,7 +532,16 @@ export default function DatabasePage() {
                 ref={fileInputRef}
                 type="file"
                 accept=".json"
-                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null;
+                  setSelectedFile(file);
+                  if (file) {
+                    handlePreviewFile(file);
+                  } else {
+                    setPreviewData(null);
+                    setPreviewError(null);
+                  }
+                }}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               />
               {selectedFile && (
@@ -569,6 +627,46 @@ export default function DatabasePage() {
               </div>
             </div>
 
+            {/* 预览区域 */}
+            {selectedFile && (
+              <div className="space-y-2">
+                <Label>文件内容预览</Label>
+                {previewLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+                    <span className="ml-2 text-sm text-muted-foreground">加载预览中...</span>
+                  </div>
+                ) : previewError ? (
+                  <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                    ❌ {previewError}
+                  </div>
+                ) : previewData ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 p-3 rounded-md border border-muted">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">提供商配置</span>
+                      <span className="font-medium">{previewData.providers} 条</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">模型配置</span>
+                      <span className="font-medium">{previewData.models} 条</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">模型关联</span>
+                      <span className="font-medium">{previewData.associations} 条</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">模型模板</span>
+                      <span className="font-medium">{previewData.templates} 条</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">系统设置</span>
+                      <span className="font-medium">{previewData.settings} 条</span>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
+
             {/* 警告提示 */}
             {importMode === 'replace' && (
               <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
@@ -582,6 +680,8 @@ export default function DatabasePage() {
               onClick={() => {
                 setShowImportDialog(false);
                 setSelectedFile(null);
+                setPreviewData(null);
+                setPreviewError(null);
                 if (fileInputRef.current) {
                   fileInputRef.current.value = '';
                 }

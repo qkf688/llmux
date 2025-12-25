@@ -3311,9 +3311,10 @@ func ExportConfig(c *gin.Context) {
 	timestamp := time.Now().Format("20060102-150405")
 	filename := fmt.Sprintf("llmio-config-%s-%s.json", strings.Join(types, "-"), timestamp)
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
-	c.Header("Content-Type", "application/json")
+	c.Header("Content-Type", "application/json; charset=utf-8")
 
-	common.Success(c, response)
+	// 直接返回 JSON，不使用 common.Success 包装
+	c.JSON(200, response)
 }
 
 // ImportConfigRequest 导入配置请求结构
@@ -3363,6 +3364,8 @@ func ImportConfig(c *gin.Context) {
 		types = []string{"providers", "models", "associations", "templates", "settings"}
 	}
 
+	slog.Info("import config started", "mode", mode, "types", types)
+
 	// 获取上传的文件
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -3385,6 +3388,14 @@ func ImportConfig(c *gin.Context) {
 		return
 	}
 
+	// 记录导入文件中的数据数量
+	slog.Info("import file parsed",
+		"providers_count", len(configData.Providers),
+		"models_count", len(configData.Models),
+		"associations_count", len(configData.Associations),
+		"templates_count", len(configData.Templates),
+		"settings_count", len(configData.Settings))
+
 	response := ImportConfigResponse{}
 
 	// 开启事务
@@ -3397,6 +3408,7 @@ func ImportConfig(c *gin.Context) {
 	defer func() {
 		if r := recover(); r != nil {
 			tx.Rollback()
+			slog.Error("import panic recovered", "error", r)
 			common.InternalServerError(c, fmt.Sprintf("Import failed: %v", r))
 		}
 	}()
@@ -3405,6 +3417,15 @@ func ImportConfig(c *gin.Context) {
 	for _, t := range types {
 		switch strings.TrimSpace(t) {
 		case "providers":
+			if len(configData.Providers) == 0 && mode == "replace" {
+				slog.Warn("no providers in import file, skipping to prevent data loss in replace mode")
+				response.Providers = ImportResult{
+					Errors: []string{"No providers found in import file"},
+				}
+				tx.Rollback()
+				common.BadRequest(c, "No providers found in import file. In replace mode, this would delete all existing providers.")
+				return
+			}
 			result := importProviders(tx, configData.Providers, mode)
 			response.Providers = result
 			if len(result.Errors) > 0 {
@@ -3414,6 +3435,15 @@ func ImportConfig(c *gin.Context) {
 			}
 
 		case "models":
+			if len(configData.Models) == 0 && mode == "replace" {
+				slog.Warn("no models in import file, skipping to prevent data loss in replace mode")
+				response.Models = ImportResult{
+					Errors: []string{"No models found in import file"},
+				}
+				tx.Rollback()
+				common.BadRequest(c, "No models found in import file. In replace mode, this would delete all existing models.")
+				return
+			}
 			result := importModels(tx, configData.Models, mode)
 			response.Models = result
 			if len(result.Errors) > 0 {
@@ -3423,7 +3453,16 @@ func ImportConfig(c *gin.Context) {
 			}
 
 		case "associations":
-			result := importAssociations(tx, configData.Associations, mode)
+			if len(configData.Associations) == 0 && mode == "replace" {
+				slog.Warn("no associations in import file, skipping to prevent data loss in replace mode")
+				response.Associations = ImportResult{
+					Errors: []string{"No associations found in import file"},
+				}
+				tx.Rollback()
+				common.BadRequest(c, "No associations found in import file. In replace mode, this would delete all existing associations.")
+				return
+			}
+			result := importAssociations(tx, configData.Associations, mode, configData.Models, configData.Providers)
 			response.Associations = result
 			if len(result.Errors) > 0 {
 				tx.Rollback()
@@ -3432,7 +3471,16 @@ func ImportConfig(c *gin.Context) {
 			}
 
 		case "templates":
-			result := importTemplates(tx, configData.Templates, mode)
+			if len(configData.Templates) == 0 && mode == "replace" {
+				slog.Warn("no templates in import file, skipping to prevent data loss in replace mode")
+				response.Templates = ImportResult{
+					Errors: []string{"No templates found in import file"},
+				}
+				tx.Rollback()
+				common.BadRequest(c, "No templates found in import file. In replace mode, this would delete all existing templates.")
+				return
+			}
+			result := importTemplates(tx, configData.Templates, mode, configData.Models)
 			response.Templates = result
 			if len(result.Errors) > 0 {
 				tx.Rollback()
@@ -3441,7 +3489,7 @@ func ImportConfig(c *gin.Context) {
 			}
 
 		case "settings":
-			result := importSettings(tx, configData.Settings)
+			result := importSettings(tx, configData.Settings, mode)
 			response.Settings = result
 			if len(result.Errors) > 0 {
 				tx.Rollback()
@@ -3453,11 +3501,20 @@ func ImportConfig(c *gin.Context) {
 
 	// 提交事务
 	if err := tx.Commit().Error; err != nil {
+		slog.Error("failed to commit transaction", "error", err)
 		common.InternalServerError(c, "Failed to commit transaction: "+err.Error())
 		return
 	}
 
 	response.TotalTime = time.Since(startTime).String()
+	slog.Info("import completed successfully",
+		"providers_imported", response.Providers.Imported,
+		"models_imported", response.Models.Imported,
+		"associations_imported", response.Associations.Imported,
+		"templates_imported", response.Templates.Imported,
+		"settings_imported", response.Settings.Imported,
+		"total_time", response.TotalTime)
+
 	common.Success(c, response)
 }
 
@@ -3508,23 +3565,31 @@ func importProviders(tx *gorm.DB, providers []models.Provider, mode string) Impo
 func importModels(tx *gorm.DB, modelsList []models.Model, mode string) ImportResult {
 	result := ImportResult{}
 
+	slog.Info("importModels called", "mode", mode, "count", len(modelsList))
+
 	if mode == "replace" {
 		if err := tx.Unscoped().Where("1 = 1").Delete(&models.Model{}).Error; err != nil {
+			slog.Error("failed to clear models", "error", err)
 			result.Errors = append(result.Errors, "Failed to clear models: "+err.Error())
 			return result
 		}
+		slog.Info("cleared all models in replace mode")
 	}
 
-	for _, model := range modelsList {
+	for i, model := range modelsList {
+		slog.Info("processing model", "index", i, "name", model.Name)
+
 		var existing models.Model
 		err := tx.Where("name = ?", model.Name).First(&existing).Error
 
 		if err == nil {
+			slog.Info("model already exists", "name", model.Name, "mode", mode)
 			if mode == "merge" {
 				result.Skipped++
 				continue
 			}
 		} else if err != gorm.ErrRecordNotFound {
+			slog.Error("failed to check model", "name", model.Name, "error", err)
 			result.Errors = append(result.Errors, fmt.Sprintf("Failed to check model %s: %v", model.Name, err))
 			return result
 		}
@@ -3534,17 +3599,20 @@ func importModels(tx *gorm.DB, modelsList []models.Model, mode string) ImportRes
 		model.UpdatedAt = time.Time{}
 
 		if err := tx.Create(&model).Error; err != nil {
+			slog.Error("failed to create model", "name", model.Name, "error", err)
 			result.Errors = append(result.Errors, fmt.Sprintf("Failed to import model %s: %v", model.Name, err))
 			return result
 		}
+		slog.Info("created model", "name", model.Name)
 		result.Imported++
 	}
 
+	slog.Info("importModels completed", "imported", result.Imported, "skipped", result.Skipped)
 	return result
 }
 
 // importAssociations 导入模型关联
-func importAssociations(tx *gorm.DB, associations []models.ModelWithProvider, mode string) ImportResult {
+func importAssociations(tx *gorm.DB, associations []models.ModelWithProvider, mode string, importedModels []models.Model, importedProviders []models.Provider) ImportResult {
 	result := ImportResult{}
 
 	if mode == "replace" {
@@ -3554,53 +3622,53 @@ func importAssociations(tx *gorm.DB, associations []models.ModelWithProvider, mo
 		}
 	}
 
-	// 构建模型和提供商的映射（通过名称查找ID）
-	var modelsList []models.Model
-	if err := tx.Find(&modelsList).Error; err != nil {
-		result.Errors = append(result.Errors, "Failed to get models: "+err.Error())
-		return result
-	}
-	modelIDByName := make(map[string]uint)
-	for _, m := range modelsList {
-		modelIDByName[m.Name] = m.ID
+	// 构建导入数据的 ID 到名称的映射
+	importModelIDToName := make(map[uint]string)
+	for _, m := range importedModels {
+		importModelIDToName[m.ID] = m.Name
 	}
 
-	var providersList []models.Provider
-	if err := tx.Find(&providersList).Error; err != nil {
-		result.Errors = append(result.Errors, "Failed to get providers: "+err.Error())
+	importProviderIDToName := make(map[uint]string)
+	for _, p := range importedProviders {
+		importProviderIDToName[p.ID] = p.Name
+	}
+
+	// 构建当前数据库的名称到 ID 的映射
+	var currentModels []models.Model
+	if err := tx.Find(&currentModels).Error; err != nil {
+		result.Errors = append(result.Errors, "Failed to get current models: "+err.Error())
 		return result
 	}
-	providerIDByName := make(map[string]uint)
-	for _, p := range providersList {
-		providerIDByName[p.Name] = p.ID
+	modelNameToID := make(map[string]uint)
+	for _, m := range currentModels {
+		modelNameToID[m.Name] = m.ID
+	}
+
+	var currentProviders []models.Provider
+	if err := tx.Find(&currentProviders).Error; err != nil {
+		result.Errors = append(result.Errors, "Failed to get current providers: "+err.Error())
+		return result
+	}
+	providerNameToID := make(map[string]uint)
+	for _, p := range currentProviders {
+		providerNameToID[p.Name] = p.ID
 	}
 
 	for _, assoc := range associations {
-		// 通过原始的 ModelID 和 ProviderID 查找对应的名称
-		var modelName string
-		var providerName string
-
-		// 从导入数据中查找模型名称
-		for _, m := range modelsList {
-			if m.ID == assoc.ModelID {
-				modelName = m.Name
-				break
-			}
-		}
-
-		// 从导入数据中查找提供商名称
-		for _, p := range providersList {
-			if p.ID == assoc.ProviderID {
-				providerName = p.Name
-				break
-			}
-		}
-
-		// 获取当前数据库中的 ID
-		newModelID, modelExists := modelIDByName[modelName]
-		newProviderID, providerExists := providerIDByName[providerName]
+		// 从导入数据中获取名称
+		modelName, modelExists := importModelIDToName[assoc.ModelID]
+		providerName, providerExists := importProviderIDToName[assoc.ProviderID]
 
 		if !modelExists || !providerExists {
+			result.Skipped++
+			continue
+		}
+
+		// 在当前数据库中查找 ID
+		newModelID, modelFound := modelNameToID[modelName]
+		newProviderID, providerFound := providerNameToID[providerName]
+
+		if !modelFound || !providerFound {
 			result.Skipped++
 			continue
 		}
@@ -3638,7 +3706,7 @@ func importAssociations(tx *gorm.DB, associations []models.ModelWithProvider, mo
 }
 
 // importTemplates 导入模型模板
-func importTemplates(tx *gorm.DB, templates []models.ModelTemplateItem, mode string) ImportResult {
+func importTemplates(tx *gorm.DB, templates []models.ModelTemplateItem, mode string, importedModels []models.Model) ImportResult {
 	result := ImportResult{}
 
 	if mode == "replace" {
@@ -3648,29 +3716,34 @@ func importTemplates(tx *gorm.DB, templates []models.ModelTemplateItem, mode str
 		}
 	}
 
-	// 构建模型映射
-	var modelsList []models.Model
-	if err := tx.Find(&modelsList).Error; err != nil {
-		result.Errors = append(result.Errors, "Failed to get models: "+err.Error())
+	// 构建导入数据的 ID 到名称的映射
+	importModelIDToName := make(map[uint]string)
+	for _, m := range importedModels {
+		importModelIDToName[m.ID] = m.Name
+	}
+
+	// 构建当前数据库的名称到 ID 的映射
+	var currentModels []models.Model
+	if err := tx.Find(&currentModels).Error; err != nil {
+		result.Errors = append(result.Errors, "Failed to get current models: "+err.Error())
 		return result
 	}
-	modelIDByName := make(map[string]uint)
-	for _, m := range modelsList {
-		modelIDByName[m.Name] = m.ID
+	modelNameToID := make(map[string]uint)
+	for _, m := range currentModels {
+		modelNameToID[m.Name] = m.ID
 	}
 
 	for _, template := range templates {
-		// 查找模型名称
-		var modelName string
-		for _, m := range modelsList {
-			if m.ID == template.ModelID {
-				modelName = m.Name
-				break
-			}
+		// 从导入数据中获取模型名称
+		modelName, exists := importModelIDToName[template.ModelID]
+		if !exists {
+			result.Skipped++
+			continue
 		}
 
-		newModelID, exists := modelIDByName[modelName]
-		if !exists {
+		// 在当前数据库中查找模型 ID
+		newModelID, found := modelNameToID[modelName]
+		if !found {
 			result.Skipped++
 			continue
 		}
@@ -3705,8 +3778,8 @@ func importTemplates(tx *gorm.DB, templates []models.ModelTemplateItem, mode str
 	return result
 }
 
-// importSettings 导入系统设置（总是更新）
-func importSettings(tx *gorm.DB, settings []models.Setting) ImportResult {
+// importSettings 导入系统设置
+func importSettings(tx *gorm.DB, settings []models.Setting, mode string) ImportResult {
 	result := ImportResult{}
 
 	for _, setting := range settings {
@@ -3715,6 +3788,15 @@ func importSettings(tx *gorm.DB, settings []models.Setting) ImportResult {
 		err := tx.Where("key = ?", setting.Key).First(&existing).Error
 
 		if err == nil {
+			// 记录已存在
+			if mode == "merge" {
+				// 合并模式下，只有值不同才更新
+				if existing.Value == setting.Value {
+					// 值相同，跳过
+					result.Skipped++
+					continue
+				}
+			}
 			// 更新现有设置
 			if err := tx.Model(&existing).Update("value", setting.Value).Error; err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("Failed to update setting %s: %v", setting.Key, err))

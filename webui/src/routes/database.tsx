@@ -219,58 +219,63 @@ export default function DatabasePage() {
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Database className="h-8 w-8 text-primary" />
+          <Database className="h-8 w-8 text-primary flex-shrink-0" />
           <div>
-            <h1 className="text-3xl font-bold">数据库管理</h1>
-            <p className="text-muted-foreground">查看数据库状态和执行维护操作</p>
+            <h1 className="text-2xl sm:text-3xl font-bold">数据库管理</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">查看数据库状态和执行维护操作</p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
             onClick={() => navigate("/")}
-            className="gap-2"
+            className="gap-2 text-xs sm:text-sm"
+            size="sm"
           >
-            <ArrowLeft className="h-4 w-4" />
-            返回首页
+            <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4" />
+            返回
           </Button>
           <Button
             variant="outline"
             onClick={fetchStats}
             disabled={loading}
-            className="gap-2"
+            className="gap-2 text-xs sm:text-sm"
+            size="sm"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${loading ? "animate-spin" : ""}`} />
             刷新
           </Button>
           <Button
             variant="outline"
             onClick={() => setShowExportDialog(true)}
             disabled={exporting || loading}
-            className="gap-2"
+            className="gap-2 text-xs sm:text-sm"
+            size="sm"
           >
-            <Download className="h-4 w-4" />
-            导出配置
+            <Download className="h-3 w-3 sm:h-4 sm:h-4" />
+            导出
           </Button>
           <Button
             variant="outline"
             onClick={() => setShowImportDialog(true)}
             disabled={importing || loading}
-            className="gap-2"
+            className="gap-2 text-xs sm:text-sm"
+            size="sm"
           >
-            <Upload className="h-4 w-4" />
-            导入配置
+            <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
+            导入
           </Button>
           <Button
             variant="destructive"
             onClick={() => setShowVacuumDialog(true)}
             disabled={vacuuming || loading}
-            className="gap-2"
+            className="gap-2 text-xs sm:text-sm"
+            size="sm"
           >
-            <Trash2 className={`h-4 w-4 ${vacuuming ? "animate-pulse" : ""}`} />
-            {vacuuming ? "压缩中..." : "VACUUM 压缩"}
+            <Trash2 className={`h-3 w-3 sm:h-4 sm:w-4 ${vacuuming ? "animate-pulse" : ""}`} />
+            压缩
           </Button>
         </div>
       </div>

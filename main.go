@@ -127,6 +127,7 @@ func main() {
 	// Model sync management
 	api.POST("/model-sync/:id", handler.SyncProviderModels)
 	api.POST("/model-sync/all", handler.SyncAllProviders)
+	api.GET("/model-sync/stats", handler.GetModelSyncStats)
 	api.GET("/model-sync/logs", handler.GetModelSyncLogs)
 	api.DELETE("/model-sync/logs", handler.DeleteModelSyncLogs)
 	api.DELETE("/model-sync/logs/clear", handler.ClearModelSyncLogs)

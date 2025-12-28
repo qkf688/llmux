@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -57,7 +58,12 @@ func (o *OpenAIRes) Models(ctx context.Context) ([]Model, error) {
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("status code: %d", res.StatusCode)
+		// 读取响应体以获取详细错误信息
+		bodyBytes, readErr := io.ReadAll(res.Body)
+		if readErr != nil {
+			return nil, fmt.Errorf("status code: %d, failed to read response body: %v", res.StatusCode, readErr)
+		}
+		return nil, fmt.Errorf("status code: %d, response: %s", res.StatusCode, string(bodyBytes))
 	}
 
 	var modelList ModelList

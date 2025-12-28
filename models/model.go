@@ -206,6 +206,8 @@ type ModelSyncLog struct {
 	gorm.Model
 	ProviderID    uint      `gorm:"index" json:"ProviderID"`
 	ProviderName  string    `gorm:"index" json:"ProviderName"`
+	Status        string    `gorm:"index" json:"Status"`           // 同步状态: success, error, unchanged
+	Error         string    `json:"Error,omitempty"`               // 错误信息
 	AddedCount    int       `json:"AddedCount"`
 	RemovedCount  int       `json:"RemovedCount"`
 	AddedModels   []string  `gorm:"serializer:json" json:"AddedModels"`

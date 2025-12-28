@@ -24,6 +24,7 @@ func NewModelSyncService(db *gorm.DB) *ModelSyncService {
 }
 
 // SyncProviderModels 同步单个提供商的上游模型
+// 返回日志记录（无论是否有变化），以及可能的错误
 func (s *ModelSyncService) SyncProviderModels(ctx context.Context, providerID uint) (*models.ModelSyncLog, error) {
 	// 获取提供商信息
 	provider, err := gorm.G[models.Provider](s.db).Where("id = ?", providerID).First(ctx)
@@ -34,7 +35,22 @@ func (s *ModelSyncService) SyncProviderModels(ctx context.Context, providerID ui
 
 	// 检查是否支持模型端点（nil 视为 true）
 	if provider.ModelEndpoint != nil && !*provider.ModelEndpoint {
-		return nil, nil // 不支持模型端点，直接返回
+		// 不支持模型端点，创建一条 error 日志并返回
+		syncLog := &models.ModelSyncLog{
+			ProviderID:   providerID,
+			ProviderName: provider.Name,
+			Status:       "error",
+			Error:        "model_endpoint disabled",
+			AddedCount:   0,
+			RemovedCount: 0,
+			AddedModels:  []string{},
+			RemovedModels: []string{},
+			SyncedAt:     time.Now(),
+		}
+		if createErr := gorm.G[models.ModelSyncLog](s.db).Create(ctx, syncLog); createErr != nil {
+			slog.Error("failed to create sync log", "error", createErr)
+		}
+		return syncLog, nil
 	}
 
 	// 获取当前上游模型
@@ -49,13 +65,43 @@ func (s *ModelSyncService) SyncProviderModels(ctx context.Context, providerID ui
 	chatModel, err := providers.New(provider.Type, config, provider.Proxy)
 	if err != nil {
 		slog.Error("failed to create provider client", "provider_id", providerID, "error", err)
-		return nil, err
+		// 创建 error 日志
+		syncLog := &models.ModelSyncLog{
+			ProviderID:   providerID,
+			ProviderName: provider.Name,
+			Status:       "error",
+			Error:        err.Error(),
+			AddedCount:   0,
+			RemovedCount: 0,
+			AddedModels:  []string{},
+			RemovedModels: []string{},
+			SyncedAt:     time.Now(),
+		}
+		if createErr := gorm.G[models.ModelSyncLog](s.db).Create(ctx, syncLog); createErr != nil {
+			slog.Error("failed to create sync log", "error", createErr)
+		}
+		return syncLog, nil
 	}
 
 	upstreamModels, err := chatModel.Models(ctx)
 	if err != nil {
 		slog.Error("failed to fetch upstream models", "provider_id", providerID, "error", err)
-		return nil, err
+		// 创建 error 日志
+		syncLog := &models.ModelSyncLog{
+			ProviderID:   providerID,
+			ProviderName: provider.Name,
+			Status:       "error",
+			Error:        err.Error(),
+			AddedCount:   0,
+			RemovedCount: 0,
+			AddedModels:  []string{},
+			RemovedModels: []string{},
+			SyncedAt:     time.Now(),
+		}
+		if createErr := gorm.G[models.ModelSyncLog](s.db).Create(ctx, syncLog); createErr != nil {
+			slog.Error("failed to create sync log", "error", createErr)
+		}
+		return syncLog, nil
 	}
 
 	// 比较差异
@@ -85,26 +131,31 @@ func (s *ModelSyncService) SyncProviderModels(ctx context.Context, providerID ui
 		}
 	}
 
-	// 如果没有变化，不记录日志
-	if len(addedModels) == 0 && len(removedModels) == 0 {
-		return nil, nil
+	// 判断状态
+	status := "success"
+	hasChanges := len(addedModels) > 0 || len(removedModels) > 0
+	if !hasChanges {
+		status = "unchanged"
 	}
 
-	// 更新配置
-	var updatedModels []string
-	for _, model := range upstreamModels {
-		updatedModels = append(updatedModels, model.ID)
+	// 更新配置（仅当有变化时）
+	if hasChanges {
+		var updatedModels []string
+		for _, model := range upstreamModels {
+			updatedModels = append(updatedModels, model.ID)
+		}
+
+		newConfig := buildConfigWithAllModels(provider.Config, updatedModels)
+		if _, err := gorm.G[models.Provider](s.db).Where("id = ?", providerID).Update(ctx, "config", newConfig); err != nil {
+			slog.Error("failed to update provider config", "error", err)
+		}
 	}
 
-	newConfig := buildConfigWithAllModels(provider.Config, updatedModels)
-	if _, err := gorm.G[models.Provider](s.db).Where("id = ?", providerID).Update(ctx, "config", newConfig); err != nil {
-		return nil, err
-	}
-
-	// 创建同步日志
+	// 创建同步日志（无论是否有变化都创建）
 	syncLog := &models.ModelSyncLog{
 		ProviderID:    providerID,
 		ProviderName:  provider.Name,
+		Status:        status,
 		AddedCount:    len(addedModels),
 		RemovedCount:  len(removedModels),
 		AddedModels:   addedModels,
@@ -117,8 +168,10 @@ func (s *ModelSyncService) SyncProviderModels(ctx context.Context, providerID ui
 		return nil, err
 	}
 
-	// 触发自动关联和清理
-	s.triggerAutoActions(ctx, len(addedModels) > 0, len(removedModels) > 0)
+	// 触发自动关联和清理（仅当有变化时）
+	if hasChanges {
+		s.triggerAutoActions(ctx, len(addedModels) > 0, len(removedModels) > 0)
+	}
 
 	// 清理过期日志
 	s.cleanOldLogs(ctx)

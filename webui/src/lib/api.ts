@@ -726,6 +726,8 @@ export interface ModelSyncLog {
   ID: number;
   ProviderID: number;
   ProviderName: string;
+  Status: string;          // sync status: "success", "error", or "unchanged"
+  Error?: string;          // error message for failed syncs
   AddedCount: number;
   RemovedCount: number;
   AddedModels: string[];
@@ -761,15 +763,33 @@ export async function syncAllProviderModels(): Promise<{
   });
 }
 
+export interface ModelSyncStats {
+  last_sync_at?: string;       // 上次同步时间（可能为 null）
+  next_sync_at?: string;       // 下次自动同步时间（可能为 null）
+  sync_enabled: boolean;       // 是否启用自动同步
+  sync_interval: number;       // 同步间隔（小时）
+  total_providers: number;     // 总提供商数量
+  providers_with_updates: number;   // 有更新的提供商数量（status = "success"）
+  providers_unchanged: number;      // 没变化的提供商数量（status = "unchanged"）
+  providers_with_errors: number;    // 报错的提供商数量（status = "error"）
+  providers_never_synced: number;   // 从未同步的提供商数量
+}
+
+export async function getModelSyncStats(): Promise<ModelSyncStats> {
+  return apiRequest<ModelSyncStats>('/model-sync/stats');
+}
+
 export async function getModelSyncLogs(params: {
   page?: number;
   page_size?: number;
   provider_id?: number;
+  show_unchanged?: boolean;
 } = {}): Promise<ModelSyncLogsResponse> {
   const queryParams = new URLSearchParams();
   if (params.page) queryParams.append('page', params.page.toString());
   if (params.page_size) queryParams.append('page_size', params.page_size.toString());
   if (params.provider_id) queryParams.append('provider_id', params.provider_id.toString());
+  if (params.show_unchanged) queryParams.append('show_unchanged', 'true');
 
   const queryString = queryParams.toString();
   const endpoint = queryString ? `/model-sync/logs?${queryString}` : '/model-sync/logs';

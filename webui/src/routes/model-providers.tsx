@@ -82,8 +82,9 @@ import type {
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { RefreshCw, ChevronDown, ChevronRight, Plus, X, Trash2, TestTube, TestTubes, CheckCircle, XCircle } from "lucide-react";
+import { RefreshCw, ChevronDown, ChevronRight, ChevronUp, Plus, X, Trash2, TestTube, TestTubes, CheckCircle, XCircle, Filter } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
 import { parseAllModelsFromConfig, toProviderModelList } from "@/lib/provider-models";
 import { ExpandableError } from "@/components/expandable-error";
 import {
@@ -204,6 +205,15 @@ export default function ModelProvidersPage() {
   const [resettingPriorities, setResettingPriorities] = useState(false);
   const [enablingAssociations, setEnablingAssociations] = useState(false);
   const [operationScope, setOperationScope] = useState<"current" | "all">("current");
+  const [batchActionSheetOpen, setBatchActionSheetOpen] = useState(false);
+  
+  // 筛选面板折叠状态（移动端默认收起，桌面端默认展开）
+  const [filterPanelOpen, setFilterPanelOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 640; // sm 断点
+    }
+    return true;
+  });
   
   // 批量测试相关状态
   const [batchTesting, setBatchTesting] = useState(false);
@@ -1197,6 +1207,14 @@ export default function ModelProvidersPage() {
 
   const hasAssociationFilter = selectedProviderType !== "all" || selectedProviderFilter !== "all" || selectedStatusFilter !== "all" || searchKeyword.trim() !== "";
 
+  // 计算激活的筛选条件数量
+  const activeFilterCount = [
+    selectedProviderType !== 'all',
+    selectedProviderFilter !== 'all',
+    selectedStatusFilter !== 'all',
+    searchKeyword.trim() !== ''
+  ].filter(Boolean).length;
+
   const isAllAssociationsSelected = filteredModelProviders.length > 0 && selectedAssociationIds.length === filteredModelProviders.length;
   const isPartialAssociationsSelected = selectedAssociationIds.length > 0 && selectedAssociationIds.length < filteredModelProviders.length;
 
@@ -1291,8 +1309,41 @@ export default function ModelProvidersPage() {
         </Button>
       </div>
       <div className="flex flex-col gap-2 flex-shrink-0">
-        {/* 第一行：模型选择 + 提供商类型筛选 + 具体提供商筛选 */}
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
+        {/* 筛选面板切换按钮（仅在移动端显示） */}
+        <div className="sm:hidden">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setFilterPanelOpen(!filterPanelOpen)}
+            className="w-full justify-between h-9"
+          >
+            <span className="flex items-center gap-2">
+              <Filter className="h-4 w-4" />
+              <span>筛选与操作</span>
+              {activeFilterCount > 0 && (
+                <span className="bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded-full">
+                  {activeFilterCount}
+                </span>
+              )}
+            </span>
+            {filterPanelOpen ? (
+              <ChevronUp className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+
+        {/* 筛选面板内容 */}
+        <div
+          className={cn(
+            "flex flex-col gap-2 overflow-hidden transition-all duration-300 ease-in-out",
+            "sm:!max-h-none sm:!opacity-100", // 桌面端始终展开
+            filterPanelOpen ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0"
+          )}
+        >
+          {/* 第一行：模型选择 + 提供商类型筛选 + 具体提供商筛选 */}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
           <div className="flex flex-col gap-1 text-xs">
             <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">关联模型</Label>
             <Select value={selectedModelId?.toString() || ""} onValueChange={handleModelChange}>
@@ -1547,6 +1598,7 @@ export default function ModelProvidersPage() {
               添加关联
             </Button>
           </div>
+        </div>
         </div>
       </div>
       
@@ -1962,137 +2014,16 @@ export default function ModelProvidersPage() {
                     {selectedAssociationIds.length > 0 ? `已选择 ${selectedAssociationIds.length} 项` : "全选"}
                   </span>
                 </div>
-                {/* 移动端批量操作下拉菜单 */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs w-full"
-                    >
-                      批量操作
-                      {selectedAssociationIds.length > 0 && ` (${selectedAssociationIds.length})`}
-                      <ChevronDown className="ml-2 h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  
-                  <DropdownMenuContent align="start" className="w-[calc(100vw-2rem)]">
-                    {/* 批量删除 */}
-                    <DropdownMenuItem
-                      disabled={selectedAssociationIds.length === 0}
-                      onClick={() => setBatchDeleteDialogOpen(true)}
-                      className="cursor-pointer"
-                    >
-                      <Trash2 className="mr-2 h-4 w-4 text-destructive" />
-                      <span>批量删除</span>
-                      {selectedAssociationIds.length > 0 && (
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          {selectedAssociationIds.length}
-                        </span>
-                      )}
-                    </DropdownMenuItem>
-                    
-                    <DropdownMenuSeparator />
-                    
-                    {/* 批量启用 */}
-                    <DropdownMenuItem
-                      disabled={selectedAssociationIds.length === 0 || batchUpdatingStatus}
-                      onClick={() => handleBatchUpdateStatus(true)}
-                      className="cursor-pointer"
-                    >
-                      {batchUpdatingStatus ? <Spinner className="mr-2 h-4 w-4" /> : <CheckCircle className="mr-2 h-4 w-4 text-green-600" />}
-                      <span>批量启用</span>
-                      {selectedAssociationIds.length > 0 && (
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          {selectedAssociationIds.length}
-                        </span>
-                      )}
-                    </DropdownMenuItem>
-                    
-                    {/* 批量停用 */}
-                    <DropdownMenuItem
-                      disabled={selectedAssociationIds.length === 0 || batchUpdatingStatus}
-                      onClick={() => handleBatchUpdateStatus(false)}
-                      className="cursor-pointer"
-                    >
-                      {batchUpdatingStatus ? <Spinner className="mr-2 h-4 w-4" /> : <XCircle className="mr-2 h-4 w-4 text-orange-600" />}
-                      <span>批量停用</span>
-                      {selectedAssociationIds.length > 0 && (
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          {selectedAssociationIds.length}
-                        </span>
-                      )}
-                    </DropdownMenuItem>
-                    
-                    <DropdownMenuSeparator />
-                    
-                    {/* 批量测试选中 */}
-                    <DropdownMenuItem
-                      disabled={selectedAssociationIds.length === 0 || batchTesting}
-                      onClick={handleBatchTestSelected}
-                      className="cursor-pointer"
-                    >
-                      {batchTesting ? <Spinner className="mr-2 h-4 w-4" /> : <TestTube className="mr-2 h-4 w-4" />}
-                      <span>批量测试选中</span>
-                      {selectedAssociationIds.length > 0 && (
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          {selectedAssociationIds.length}
-                        </span>
-                      )}
-                    </DropdownMenuItem>
-                    
-                    {/* 批量测试全部 */}
-                    <DropdownMenuItem
-                      disabled={filteredModelProviders.length === 0 || batchTesting}
-                      onClick={handleBatchTestAll}
-                      className="cursor-pointer"
-                    >
-                      {batchTesting ? <Spinner className="mr-2 h-4 w-4" /> : <TestTubes className="mr-2 h-4 w-4" />}
-                      <span>批量测试全部</span>
-                      <span className="ml-auto text-xs text-muted-foreground">
-                        {filteredModelProviders.length}
-                      </span>
-                    </DropdownMenuItem>
-                    
-                    <DropdownMenuSeparator />
-                    
-                    {/* 选择成功项 */}
-                    <DropdownMenuItem
-                      disabled={
-                        Object.keys(associationTestResults).length === 0 ||
-                        !Object.values(associationTestResults).some(r => r.success === true)
-                      }
-                      onClick={selectAllSuccessful}
-                      className="cursor-pointer"
-                    >
-                      <CheckCircle className="mr-2 h-4 w-4 text-green-600" />
-                      <span>选择成功项</span>
-                      {Object.values(associationTestResults).filter(r => r.success === true).length > 0 && (
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          {Object.values(associationTestResults).filter(r => r.success === true).length}
-                        </span>
-                      )}
-                    </DropdownMenuItem>
-                    
-                    {/* 选择失败项 */}
-                    <DropdownMenuItem
-                      disabled={
-                        Object.keys(associationTestResults).length === 0 ||
-                        !Object.values(associationTestResults).some(r => r.success === false)
-                      }
-                      onClick={selectAllFailed}
-                      className="cursor-pointer"
-                    >
-                      <XCircle className="mr-2 h-4 w-4 text-red-600" />
-                      <span>选择失败项</span>
-                      {Object.values(associationTestResults).filter(r => r.success === false).length > 0 && (
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          {Object.values(associationTestResults).filter(r => r.success === false).length}
-                        </span>
-                      )}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                {/* 移动端批量操作按钮 */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBatchActionSheetOpen(true)}
+                  className="h-7 text-xs w-full"
+                >
+                  批量操作
+                  {selectedAssociationIds.length > 0 && ` (${selectedAssociationIds.length})`}
+                </Button>
               </div>
               {filteredModelProviders.map((association) => {
                 const provider = providers.find(p => p.ID === association.ProviderID);
@@ -2966,6 +2897,146 @@ export default function ModelProvidersPage() {
               {executing ? "执行中..." : "确认执行"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 移动端批量操作底部抽屉 */}
+      <Dialog open={batchActionSheetOpen} onOpenChange={setBatchActionSheetOpen}>
+        <DialogContent className="sm:max-w-lg p-0 gap-0 [&>button]:hidden">
+          <div className="flex flex-col max-h-[80vh]">
+            <DialogHeader className="px-4 py-3 border-b">
+              <div className="flex items-center justify-between">
+                <DialogTitle className="text-base">批量操作</DialogTitle>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setBatchActionSheetOpen(false)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </DialogHeader>
+            
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* 状态操作组 */}
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide px-1">状态操作</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    disabled={selectedAssociationIds.length === 0 || batchUpdatingStatus}
+                    onClick={() => { handleBatchUpdateStatus(true); setBatchActionSheetOpen(false); }}
+                    className="h-16 flex flex-col gap-1 items-center justify-center"
+                  >
+                    {batchUpdatingStatus ? <Spinner className="h-5 w-5" /> : <CheckCircle className="h-5 w-5 text-green-600" />}
+                    <span className="text-xs font-medium">批量启用</span>
+                    {selectedAssociationIds.length > 0 && (
+                      <span className="text-[10px] text-muted-foreground">{selectedAssociationIds.length} 项</span>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={selectedAssociationIds.length === 0 || batchUpdatingStatus}
+                    onClick={() => { handleBatchUpdateStatus(false); setBatchActionSheetOpen(false); }}
+                    className="h-16 flex flex-col gap-1 items-center justify-center"
+                  >
+                    {batchUpdatingStatus ? <Spinner className="h-5 w-5" /> : <XCircle className="h-5 w-5 text-orange-600" />}
+                    <span className="text-xs font-medium">批量停用</span>
+                    {selectedAssociationIds.length > 0 && (
+                      <span className="text-[10px] text-muted-foreground">{selectedAssociationIds.length} 项</span>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {/* 测试操作组 */}
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide px-1">测试操作</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    disabled={selectedAssociationIds.length === 0 || batchTesting}
+                    onClick={() => { handleBatchTestSelected(); setBatchActionSheetOpen(false); }}
+                    className="h-16 flex flex-col gap-1 items-center justify-center"
+                  >
+                    {batchTesting ? <Spinner className="h-5 w-5" /> : <TestTube className="h-5 w-5" />}
+                    <span className="text-xs font-medium">测试选中</span>
+                    {selectedAssociationIds.length > 0 && (
+                      <span className="text-[10px] text-muted-foreground">{selectedAssociationIds.length} 项</span>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={filteredModelProviders.length === 0 || batchTesting}
+                    onClick={() => { handleBatchTestAll(); setBatchActionSheetOpen(false); }}
+                    className="h-16 flex flex-col gap-1 items-center justify-center"
+                  >
+                    {batchTesting ? <Spinner className="h-5 w-5" /> : <TestTubes className="h-5 w-5" />}
+                    <span className="text-xs font-medium">测试全部</span>
+                    <span className="text-[10px] text-muted-foreground">{filteredModelProviders.length} 项</span>
+                  </Button>
+                </div>
+              </div>
+
+              {/* 选择操作组 */}
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide px-1">选择操作</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    disabled={
+                      Object.keys(associationTestResults).length === 0 ||
+                      !Object.values(associationTestResults).some(r => r.success === true)
+                    }
+                    onClick={() => { selectAllSuccessful(); setBatchActionSheetOpen(false); }}
+                    className="h-16 flex flex-col gap-1 items-center justify-center"
+                  >
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                    <span className="text-xs font-medium">选择成功</span>
+                    {Object.values(associationTestResults).filter(r => r.success === true).length > 0 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {Object.values(associationTestResults).filter(r => r.success === true).length} 项
+                      </span>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={
+                      Object.keys(associationTestResults).length === 0 ||
+                      !Object.values(associationTestResults).some(r => r.success === false)
+                    }
+                    onClick={() => { selectAllFailed(); setBatchActionSheetOpen(false); }}
+                    className="h-16 flex flex-col gap-1 items-center justify-center"
+                  >
+                    <XCircle className="h-5 w-5 text-red-600" />
+                    <span className="text-xs font-medium">选择失败</span>
+                    {Object.values(associationTestResults).filter(r => r.success === false).length > 0 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {Object.values(associationTestResults).filter(r => r.success === false).length} 项
+                      </span>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {/* 危险操作组 */}
+              <div className="space-y-2 pt-2 border-t">
+                <Button
+                  variant="destructive"
+                  disabled={selectedAssociationIds.length === 0}
+                  onClick={() => { setBatchDeleteDialogOpen(true); setBatchActionSheetOpen(false); }}
+                  className="w-full h-12 flex items-center justify-center gap-2"
+                >
+                  <Trash2 className="h-5 w-5" />
+                  <span className="font-medium">批量删除</span>
+                  {selectedAssociationIds.length > 0 && (
+                    <span className="ml-auto">{selectedAssociationIds.length} 项</span>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

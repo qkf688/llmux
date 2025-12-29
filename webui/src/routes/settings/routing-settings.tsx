@@ -36,7 +36,7 @@ export function RoutingSettings({ settings, onSettingsChange }: RoutingSettingsP
       setLocalSettings(updated);
       onSettingsChange(updated);
       setHasChanges(false);
-      toast.success("路由设置保存成功");
+      toast.success("通用设置保存成功");
     } catch (error) {
       toast.error("保存设置失败: " + (error as Error).message);
     } finally {
@@ -157,7 +157,7 @@ export function RoutingSettings({ settings, onSettingsChange }: RoutingSettingsP
               value={localSettings?.model_sync_log_retention_count ?? 100}
               onChange={(e) => {
                 if (localSettings) {
-                  setLocalSettings({ ...localSettings, model_sync_log_retention_count: parseInt(e.target.value) || 100 });
+                  setLocalSettings({ ...localSettings, model_sync_log_retention_count: parseInt(e.target.value) ?? 100 });
                   setHasChanges(true);
                 }
               }}
@@ -174,7 +174,7 @@ export function RoutingSettings({ settings, onSettingsChange }: RoutingSettingsP
               value={localSettings?.model_sync_log_retention_days ?? 7}
               onChange={(e) => {
                 if (localSettings) {
-                  setLocalSettings({ ...localSettings, model_sync_log_retention_days: parseInt(e.target.value) || 7 });
+                  setLocalSettings({ ...localSettings, model_sync_log_retention_days: parseInt(e.target.value) ?? 7 });
                   setHasChanges(true);
                 }
               }}

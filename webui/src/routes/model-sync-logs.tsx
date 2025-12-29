@@ -9,7 +9,7 @@ import { getModelSyncLogs, deleteModelSyncLogs, clearModelSyncLogs, syncAllProvi
 import type { ModelSyncLog, ModelSyncStats } from "@/lib/api";
 import { toast } from "sonner";
 import Loading from "@/components/loading";
-import { RefreshCw, Clock, CheckCircle, AlertTriangle, Layers, XCircle, MinusCircle } from "lucide-react";
+import { RefreshCw, Clock, CheckCircle, AlertTriangle, Layers, XCircle, MinusCircle, CheckSquare2, Trash2 } from "lucide-react";
 
 export default function ModelSyncLogsPage() {
   const [logs, setLogs] = useState<ModelSyncLog[]>([]);
@@ -264,25 +264,38 @@ export default function ModelSyncLogsPage() {
           <Button
             variant="outline"
             size="sm"
+            className="sm:h-9 h-7 sm:px-4 px-2 sm:text-sm text-xs"
             onClick={toggleSelectAll}
             disabled={logs.length === 0}
           >
-            {selectedLogs.length === logs.length && logs.length > 0 ? "取消全选" : "全选"}
+            <CheckSquare2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
+            <span className="hidden sm:inline">
+              {selectedLogs.length === logs.length && logs.length > 0 ? "取消全选" : "全选"}
+            </span>
+            <span className="sm:hidden">
+              {selectedLogs.length === logs.length && logs.length > 0 ? "取消" : "全选"}
+            </span>
           </Button>
           <Button
             variant="destructive"
             size="sm"
+            className="sm:h-9 h-7 sm:px-4 px-2 sm:text-sm text-xs"
             onClick={handleDelete}
             disabled={selectedLogs.length === 0}
           >
-            删除所选 ({selectedLogs.length})
+            <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
+            <span className="hidden sm:inline">删除所选 ({selectedLogs.length})</span>
+            <span className="sm:hidden">删除({selectedLogs.length})</span>
           </Button>
           <Button
             variant="destructive"
             size="sm"
+            className="sm:h-9 h-7 sm:px-4 px-2 sm:text-sm text-xs"
             onClick={() => setShowClearDialog(true)}
           >
-            清空全部
+            <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
+            <span className="hidden sm:inline">清空全部</span>
+            <span className="sm:hidden">清空</span>
           </Button>
         </div>
         <div className="flex items-center gap-2">
@@ -290,8 +303,9 @@ export default function ModelSyncLogsPage() {
             id="show-unchanged"
             checked={showUnchanged}
             onCheckedChange={setShowUnchanged}
+            className="sm:h-5 sm:w-9 h-4 w-7"
           />
-          <label htmlFor="show-unchanged" className="text-sm cursor-pointer">
+          <label htmlFor="show-unchanged" className="sm:text-sm text-xs cursor-pointer">
             显示全部
           </label>
         </div>
@@ -308,26 +322,77 @@ export default function ModelSyncLogsPage() {
           </div>
         ) : (
           <div className="h-full overflow-auto">
-            <Table>
-              <TableHeader className="sticky top-0 bg-secondary/80">
-                <TableRow>
-                  <TableHead className="w-12">
-                    <Checkbox
-                      checked={selectedLogs.length === logs.length && logs.length > 0}
-                      onCheckedChange={toggleSelectAll}
-                    />
-                  </TableHead>
-                  <TableHead>提供商</TableHead>
-                  <TableHead>同步时间</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead>变化</TableHead>
-                  <TableHead>操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {logs.map((log) => (
-                  <TableRow key={log.ID}>
-                    <TableCell>
+            <div className="hidden sm:block w-full">
+              <Table>
+                <TableHeader className="sticky top-0 bg-secondary/80">
+                  <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectedLogs.length === logs.length && logs.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </TableHead>
+                    <TableHead>提供商</TableHead>
+                    <TableHead>同步时间</TableHead>
+                    <TableHead>状态</TableHead>
+                    <TableHead>变化</TableHead>
+                    <TableHead>操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {logs.map((log) => (
+                    <TableRow key={log.ID}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedLogs.includes(log.ID)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedLogs([...selectedLogs, log.ID]);
+                            } else {
+                              setSelectedLogs(selectedLogs.filter(id => id !== log.ID));
+                            }
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">{log.ProviderName}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatDate(log.SyncedAt)}
+                      </TableCell>
+                      <TableCell>
+                        {renderStatusBadge(log.Status)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          {log.AddedCount > 0 && (
+                            <span className="text-green-600">+{log.AddedCount}</span>
+                          )}
+                          {log.RemovedCount > 0 && (
+                            <span className="text-red-600">-{log.RemovedCount}</span>
+                          )}
+                          {log.AddedCount === 0 && log.RemovedCount === 0 && log.Status !== "error" && (
+                            <span className="text-muted-foreground text-sm">-</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setDetailLog(log)}
+                        >
+                          查看详情
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="sm:hidden px-2 py-3 divide-y divide-border">
+              {logs.map((log) => (
+                <div key={log.ID} className={`py-3 space-y-2 my-1 px-1 ${selectedLogs.includes(log.ID) ? 'bg-muted/50 rounded' : ''}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2 min-w-0 flex-1">
                       <Checkbox
                         checked={selectedLogs.includes(log.ID)}
                         onCheckedChange={(checked) => {
@@ -337,41 +402,44 @@ export default function ModelSyncLogsPage() {
                             setSelectedLogs(selectedLogs.filter(id => id !== log.ID));
                           }
                         }}
+                        className="mt-1"
                       />
-                    </TableCell>
-                    <TableCell className="font-medium">{log.ProviderName}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatDate(log.SyncedAt)}
-                    </TableCell>
-                    <TableCell>
-                      {renderStatusBadge(log.Status)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        {log.AddedCount > 0 && (
-                          <span className="text-green-600">+{log.AddedCount}</span>
-                        )}
-                        {log.RemovedCount > 0 && (
-                          <span className="text-red-600">-{log.RemovedCount}</span>
-                        )}
-                        {log.AddedCount === 0 && log.RemovedCount === 0 && log.Status !== "error" && (
-                          <span className="text-muted-foreground text-sm">-</span>
-                        )}
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold text-sm truncate">{log.ProviderName}</h3>
+                        <p className="text-[11px] text-muted-foreground">{formatDate(log.SyncedAt)}</p>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setDetailLog(log)}
-                      >
-                        查看详情
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {renderStatusBadge(log.Status)}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-xs ml-6">
+                    <div className="space-y-1">
+                      <p className="text-muted-foreground text-[10px] uppercase tracking-wide">新增</p>
+                      <p className={`font-medium ${log.AddedCount > 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
+                        {log.AddedCount > 0 ? `+${log.AddedCount}` : '-'}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-muted-foreground text-[10px] uppercase tracking-wide">删除</p>
+                      <p className={`font-medium ${log.RemovedCount > 0 ? 'text-red-600' : 'text-muted-foreground'}`}>
+                        {log.RemovedCount > 0 ? `-${log.RemovedCount}` : '-'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex justify-end ml-6">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => setDetailLog(log)}
+                    >
+                      查看详情
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -381,17 +449,19 @@ export default function ModelSyncLogsPage() {
           <Button
             variant="outline"
             size="sm"
+            className="sm:h-9 h-7 sm:px-4 px-2 sm:text-sm text-xs"
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page === 1}
           >
             上一页
           </Button>
-          <span className="text-sm">
+          <span className="sm:text-sm text-xs">
             第 {page} / {totalPages} 页
           </span>
           <Button
             variant="outline"
             size="sm"
+            className="sm:h-9 h-7 sm:px-4 px-2 sm:text-sm text-xs"
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
           >

@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -65,10 +65,6 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { parseAllModelsFromConfig, toProviderModelList } from "@/lib/provider-models";
 
-type MobileInfoItemProps = {
-  label: string;
-  value: ReactNode;
-};
 
 type ProviderModelWithOwner = ProviderModel & {
   providerId: number;
@@ -79,13 +75,6 @@ type ProviderModelGroup = {
   provider: Provider;
   models: ProviderModelWithOwner[];
 };
-
-const MobileInfoItem = ({ label, value }: MobileInfoItemProps) => (
-  <div className="space-y-1">
-    <p className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</p>
-    <div className="text-sm font-medium break-words">{value}</div>
-  </div>
-);
 
 // 定义表单验证模式
 const formSchema = z.object({
@@ -505,7 +494,7 @@ export default function ModelsPage() {
                 </TableBody>
               </Table>
             </div>
-            <div className="sm:hidden flex-1 min-h-0 overflow-y-auto px-2 py-3 divide-y divide-border">
+            <div className="sm:hidden flex-1 min-h-0 overflow-y-auto px-2 py-2 divide-y divide-border">
               {/* 移动端全选 */}
               <div className="py-2 flex items-center gap-2 border-b">
                 <Checkbox
@@ -523,30 +512,55 @@ export default function ModelsPage() {
                 </span>
               </div>
               {filteredModels.map((model) => (
-                <div key={model.ID} className="py-3 space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <Checkbox
-                        checked={selectedIds.includes(model.ID)}
-                        onCheckedChange={(checked) => handleSelectOne(model.ID, !!checked)}
-                        aria-label={`选择 ${model.Name}`}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-sm truncate">{model.Name}</h3>
-                        <p className="text-[11px] text-muted-foreground">ID: {model.ID}</p>
-                      </div>
+                <div key={model.ID} className="py-2 space-y-2">
+                  {/* 标题行：复选框 + 名称 + ID */}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Checkbox
+                      checked={selectedIds.includes(model.ID)}
+                      onCheckedChange={(checked) => handleSelectOne(model.ID, !!checked)}
+                      aria-label={`选择 ${model.Name}`}
+                      className="shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold text-sm truncate">{model.Name}</h3>
+                      <p className="text-[10px] text-muted-foreground">ID: {model.ID}</p>
                     </div>
                   </div>
-                  <div className="flex flex-wrap justify-end gap-1.5">
-                    <Button variant="secondary" size="sm" className="h-7 px-2 text-xs" onClick={() => navigate(`/model-providers?modelId=${model.ID}`)}>
+                  
+                  {/* 配置信息单行 */}
+                  <div className="flex items-center gap-3 text-xs flex-wrap">
+                    <span className="text-muted-foreground">重试: <span className="font-medium text-foreground">{model.MaxRetry}</span></span>
+                    <span className="text-muted-foreground">超时: <span className="font-medium text-foreground">{model.TimeOut}s</span></span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-muted-foreground">IO:</span>
+                      <Switch
+                        checked={model.IOLog}
+                        onCheckedChange={() => handleToggleIOLog(model)}
+                        disabled={togglingIOLog[model.ID]}
+                        className="scale-75"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 备注信息（仅在有内容时显示） */}
+                  {model.Remark && (
+                    <div className="text-xs bg-muted/30 rounded px-2 py-1">
+                      <span className="text-muted-foreground">备注: </span>
+                      <span className="break-words">{model.Remark}</span>
+                    </div>
+                  )}
+
+                  {/* 操作按钮 */}
+                  <div className="flex justify-end gap-1.5 pt-1">
+                    <Button variant="secondary" size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate(`/model-providers?modelId=${model.ID}`)}>
                       关联
                     </Button>
-                    <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => openEditDialog(model)}>
+                    <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => openEditDialog(model)}>
                       编辑
                     </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="sm" className="h-7 px-2 text-xs" onClick={() => openDeleteDialog(model.ID)}>
+                        <Button variant="destructive" size="sm" className="h-7 px-2.5 text-xs" onClick={() => openDeleteDialog(model.ID)}>
                           删除
                         </Button>
                       </AlertDialogTrigger>
@@ -561,24 +575,6 @@ export default function ModelsPage() {
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
-                  </div>
-                  <div className="text-xs space-y-1">
-                    <p className="text-[11px] text-muted-foreground uppercase tracking-wide">备注</p>
-                    <p className="break-words">{model.Remark || "-"}</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <MobileInfoItem label="重试次数" value={model.MaxRetry} />
-                    <MobileInfoItem label="超时时间" value={`${model.TimeOut} 秒`} />
-                    <div className="space-y-1">
-                      <p className="text-[11px] text-muted-foreground uppercase tracking-wide">IO 记录</p>
-                      <div className="flex items-center">
-                        <Switch
-                          checked={model.IOLog}
-                          onCheckedChange={() => handleToggleIOLog(model)}
-                          disabled={togglingIOLog[model.ID]}
-                        />
-                      </div>
-                    </div>
                   </div>
                 </div>
               ))}
@@ -840,4 +836,3 @@ export default function ModelsPage() {
     </div>
   );
 }
- 

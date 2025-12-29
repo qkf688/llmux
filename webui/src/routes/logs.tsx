@@ -45,7 +45,7 @@ type DetailCardProps = {
 };
 
 const DetailCard = ({ label, value, mono = false, maxLines }: DetailCardProps) => (
-  <div className="rounded-md border bg-muted/20 p-3 space-y-1">
+  <div className="rounded-md border bg-muted/20 p-2 sm:p-3 space-y-1">
     <p className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</p>
     <div className={`text-sm break-words ${mono ? 'font-mono text-xs' : ''} ${maxLines ? `max-h-[${maxLines * 1.2}rem] overflow-hidden` : ''}`}>
       {value ?? '-'}
@@ -706,15 +706,15 @@ export default function LogsPage() {
       {/* 详情弹窗 */}
       {selectedLog && (
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="p-0 w-[92vw] sm:w-auto sm:max-w-2xl max-h-[95vh] flex flex-col">
-            <div className="p-4 border-b flex-shrink-0">
+        <DialogContent className="w-[95vw] sm:w-auto sm:max-w-2xl max-h-[85vh] sm:max-h-[90vh] flex flex-col p-4">
+            <div className="p-3 border-b flex-shrink-0 sm:p-4">
               <DialogHeader className="p-0">
                 <DialogTitle>日志详情: {selectedLog.ID}</DialogTitle>
               </DialogHeader>
             </div>
             <div className="overflow-y-auto p-3 flex-1">
-              <div className="space-y-6 text-sm">
-                <div className="space-y-3">
+              <div className="space-y-4 text-sm">
+                <div className="space-y-2">
                   <div className="space-y-2">
                     <div className="text-sm">
                       <span className="text-muted-foreground">创建时间：</span>
@@ -729,16 +729,16 @@ export default function LogsPage() {
                   </div>
                 </div>
                 {selectedLog.Error && (
-                  <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3">
-                    <p className="text-xs text-destructive uppercase tracking-wide mb-1">错误信息</p>
+                  <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 sm:p-3">
+                    <p className="text-xs text-destructive uppercase tracking-wide">错误信息</p>
                     <div className="text-destructive whitespace-pre-wrap break-words text-sm">
                       {selectedLog.Error}
                     </div>
                   </div>
                 )}
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">基本信息</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <DetailCard label="模型名称" value={selectedLog.Name} />
                     <DetailCard label="提供商" value={selectedLog.ProviderName || '-'} />
                     <DetailCard label="提供商模型" value={selectedLog.ProviderModel || '-'} mono />
@@ -750,7 +750,7 @@ export default function LogsPage() {
                   </div>
                 </div>
                 {(selectedLog.RequestHeaders || selectedLog.RequestBody || selectedLog.ResponseHeaders || selectedLog.RawResponseBody || selectedLog.ResponseBody) && (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">请求响应内容</p>
                       <Button
@@ -762,9 +762,9 @@ export default function LogsPage() {
                         导出请求响应
                       </Button>
                     </div>
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       {selectedLog.RequestHeaders && (
-                        <div className="rounded-md border bg-muted/20 p-3 space-y-1">
+                        <div className="rounded-md border bg-muted/20 p-2 space-y-1 sm:p-3">
                           <p className="text-[11px] text-muted-foreground uppercase tracking-wide">请求头 ({selectedLog.RequestHeaders.length} 字节)</p>
                           <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
                             {selectedLog.RequestHeaders}
@@ -772,7 +772,7 @@ export default function LogsPage() {
                         </div>
                       )}
                       {selectedLog.RequestBody && (
-                        <div className="rounded-md border bg-muted/20 p-3 space-y-1">
+                        <div className="rounded-md border bg-muted/20 p-2 space-y-1 sm:p-3">
                           <p className="text-[11px] text-muted-foreground uppercase tracking-wide">请求体 ({selectedLog.RequestBody.length} 字节)</p>
                           <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
                             {selectedLog.RequestBody}
@@ -780,7 +780,7 @@ export default function LogsPage() {
                         </div>
                       )}
                       {selectedLog.ResponseHeaders && (
-                        <div className="rounded-md border bg-muted/20 p-3 space-y-1">
+                        <div className="rounded-md border bg-muted/20 p-2 space-y-1 sm:p-3">
                           <p className="text-[11px] text-muted-foreground uppercase tracking-wide">响应头 ({selectedLog.ResponseHeaders.length} 字节)</p>
                           <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
                             {selectedLog.ResponseHeaders}
@@ -788,7 +788,7 @@ export default function LogsPage() {
                         </div>
                       )}
                       {selectedLog.RawResponseBody && (
-                        <div className="rounded-md border bg-blue-50 dark:bg-blue-950/20 p-3 space-y-1">
+                        <div className="rounded-md border bg-blue-50 dark:bg-blue-950/20 p-2 space-y-1 sm:p-3">
                           <p className="text-[11px] text-blue-700 dark:text-blue-400 uppercase tracking-wide">
                             {selectedLog.ResponseBody ? '原始响应体 - 转换前' : '响应体'} ({selectedLog.RawResponseBody.length} 字节)
                           </p>
@@ -798,7 +798,7 @@ export default function LogsPage() {
                         </div>
                       )}
                       {selectedLog.ResponseBody && (
-                        <div className="rounded-md border bg-green-50 dark:bg-green-950/20 p-3 space-y-1">
+                        <div className="rounded-md border bg-green-50 dark:bg-green-950/20 p-2 space-y-1 sm:p-3">
                           <p className="text-[11px] text-green-700 dark:text-green-400 uppercase tracking-wide">响应体 - 转换后 ({selectedLog.ResponseBody.length} 字节)</p>
                           <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-green-900 dark:text-green-200">
                             {selectedLog.ResponseBody}
@@ -808,18 +808,18 @@ export default function LogsPage() {
                     </div>
                   </div>
                 )}
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">性能指标</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                     <DetailCard label="代理耗时" value={formatDurationValue(selectedLog.ProxyTime)} />
                     <DetailCard label="首包耗时" value={formatDurationValue(selectedLog.FirstChunkTime)} />
                     <DetailCard label="完成耗时" value={formatDurationValue(selectedLog.ChunkTime)} />
                     <DetailCard label="TPS" value={formatTpsValue(selectedLog.Tps)} />
                   </div>
                 </div>
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Token 使用</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 sm:gap-4">
                     <DetailCard label="输入" value={formatTokenValue(selectedLog.prompt_tokens)} />
                     <DetailCard label="输出" value={formatTokenValue(selectedLog.completion_tokens)} />
                     <DetailCard label="总计" value={formatTokenValue(selectedLog.total_tokens)} />

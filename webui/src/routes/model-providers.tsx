@@ -120,9 +120,9 @@ const buildSelectionKey = (providerId: number, modelId: string) =>
   `${providerId}::${modelId.toLowerCase()}`;
 
 const MobileInfoItem = ({ label, value }: MobileInfoItemProps) => (
-  <div className="space-y-1">
+  <div className="space-y-0.5">
     <p className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</p>
-    <div className="text-sm font-medium break-words">{value}</div>
+    <div className="text-xs font-medium break-words">{value}</div>
   </div>
 );
 
@@ -1998,7 +1998,7 @@ export default function ModelProvidersPage() {
             </div>
             <div className="sm:hidden flex-1 min-h-0 overflow-y-auto px-2 py-3 divide-y divide-border">
               {/* 移动端全选和批量操作 */}
-              <div className="py-2 space-y-2 border-b">
+              <div className="py-1.5 space-y-1.5 border-b">
                 <div className="flex items-center gap-2">
                   <Checkbox
                     checked={isAllAssociationsSelected}
@@ -2031,7 +2031,7 @@ export default function ModelProvidersPage() {
                 const statusBars = providerStatus[association.ID];
                 const healthBars = healthStatus[association.ID];
                 return (
-                  <div key={association.ID} className="py-3 space-y-3">
+                  <div key={association.ID} className="py-2 space-y-2">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         <Checkbox
@@ -2040,12 +2040,12 @@ export default function ModelProvidersPage() {
                           aria-label={`选择 ${association.ProviderModel}`}
                         />
                         <div className="min-w-0 flex-1">
-                          <h3 className="font-semibold text-sm truncate">{provider?.Name ?? '未知提供商'}</h3>
-                          <p className="text-[11px] text-muted-foreground">提供商模型: {association.ProviderModel}</p>
+                          <h3 className="font-semibold text-xs truncate">{provider?.Name ?? '未知提供商'}</h3>
+                          <p className="text-[10px] text-muted-foreground">提供商模型: {association.ProviderModel}</p>
                         </div>
                       </div>
                       <span
-                        className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${isAssociationEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}
+                        className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${isAssociationEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}
                       >
                         {isAssociationEnabled ? '已启用' : '已停用'}
                       </span>
@@ -2124,10 +2124,10 @@ export default function ModelProvidersPage() {
                         />
                       </div>
                     </div>
-                    <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
-                      <p className="text-xs text-muted-foreground">启用状态</p>
+                    <div className="flex items-center justify-between rounded-md border bg-muted/30 px-2 py-1.5">
+                      <p className="text-[11px] text-muted-foreground">启用状态</p>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">{isAssociationEnabled ? "启用" : "停用"}</span>
+                        <span className="text-xs font-medium">{isAssociationEnabled ? "启用" : "停用"}</span>
                         <Switch
                           checked={isAssociationEnabled}
                           disabled={!!statusUpdating[association.ID]}
@@ -2138,13 +2138,13 @@ export default function ModelProvidersPage() {
                     </div>
                     {/* 移动端测试结果 */}
                     {associationTestResults[association.ID] && (
-                      <div className="rounded-md border bg-muted/30 px-3 py-2">
-                        <p className="text-xs text-muted-foreground mb-1">测试结果</p>
+                      <div className="rounded-md border bg-muted/30 px-2 py-1.5">
+                        <p className="text-[11px] text-muted-foreground mb-1">测试结果</p>
                         <div className="flex items-center gap-2">
                           {associationTestResults[association.ID].loading ? (
                             <>
                               <Spinner className="w-4 h-4" />
-                              <span className="text-sm">测试中...</span>
+                              <span className="text-xs">测试中...</span>
                             </>
                           ) : associationTestResults[association.ID].success === true ? (
                             <span className="text-sm text-green-600 font-medium">✓ 测试成功</span>
@@ -2161,7 +2161,7 @@ export default function ModelProvidersPage() {
                         </div>
                       </div>
                     )}
-                    <div className="flex flex-wrap justify-end gap-1.5">
+                    <div className="flex flex-wrap justify-end gap-1">
                       <Button
                         variant="outline"
                         size="sm"

@@ -56,13 +56,13 @@ export function LogsSettings({ settings, onSettingsChange }: LogsSettingsProps) 
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6">
+      <div className="flex items-center justify-between gap-2">
         <div>
-          <h2 className="text-xl font-semibold">日志管理</h2>
-          <p className="text-sm text-muted-foreground">配置日志保留策略和管理日志数据</p>
+          <h2 className="text-lg md:text-xl font-semibold">日志管理</h2>
+          <p className="text-xs md:text-sm text-muted-foreground">配置日志保留策略和管理日志数据</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-1.5 md:gap-2">
           <Button
             variant="outline"
             onClick={handleReset}
@@ -87,12 +87,12 @@ export function LogsSettings({ settings, onSettingsChange }: LogsSettingsProps) 
             管理系统日志的保留和记录策略
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="log-retention-count" className="text-base font-medium">
+        <CardContent className="space-y-4 md:space-y-6">
+          <div className="space-y-1.5">
+            <Label htmlFor="log-retention-count" className="text-sm md:text-base font-medium">
               日志保留条数
             </Label>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs md:text-sm text-muted-foreground">
               系统自动保留的最新日志条数。设置为 0 表示不限制。
               <br />
               修改此设置后，超出保留条数的旧日志将被自动删除。
@@ -108,22 +108,22 @@ export function LogsSettings({ settings, onSettingsChange }: LogsSettingsProps) 
             />
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3 md:space-y-4">
             <div className="space-y-0.5">
-              <Label className="text-base font-medium">
+              <Label className="text-sm md:text-base font-medium">
                 记录原始请求响应
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 选择需要记录的内容。您可以根据需要选择性记录以优化存储空间。
                 <br />
                 <span className="text-amber-600 dark:text-amber-500">注意：记录内容越多，日志存储空间占用越大。</span>
               </p>
             </div>
 
-            <div className="space-y-3 pl-4 border-l-2 border-muted">
-              <div className="flex items-center justify-between">
+            <div className="space-y-2.5 md:space-y-3 pl-3 md:pl-4 border-l-2 border-muted">
+              <div className="flex items-center justify-between gap-4">
                 <div className="space-y-0.5">
-                  <Label htmlFor="log-request-headers" className="text-sm font-medium">
+                  <Label htmlFor="log-request-headers" className="text-xs md:text-sm font-medium">
                     请求头
                   </Label>
                   <p className="text-xs text-muted-foreground">
@@ -146,9 +146,9 @@ export function LogsSettings({ settings, onSettingsChange }: LogsSettingsProps) 
                 />
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-4">
                 <div className="space-y-0.5">
-                  <Label htmlFor="log-request-body" className="text-sm font-medium">
+                  <Label htmlFor="log-request-body" className="text-xs md:text-sm font-medium">
                     请求体
                   </Label>
                   <p className="text-xs text-muted-foreground">
@@ -171,9 +171,9 @@ export function LogsSettings({ settings, onSettingsChange }: LogsSettingsProps) 
                 />
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-4">
                 <div className="space-y-0.5">
-                  <Label htmlFor="log-response-headers" className="text-sm font-medium">
+                  <Label htmlFor="log-response-headers" className="text-xs md:text-sm font-medium">
                     响应头
                   </Label>
                   <p className="text-xs text-muted-foreground">
@@ -196,9 +196,9 @@ export function LogsSettings({ settings, onSettingsChange }: LogsSettingsProps) 
                 />
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-4">
                 <div className="space-y-0.5">
-                  <Label htmlFor="log-response-body" className="text-sm font-medium">
+                  <Label htmlFor="log-response-body" className="text-xs md:text-sm font-medium">
                     响应体
                   </Label>
                   <p className="text-xs text-muted-foreground">
@@ -221,9 +221,9 @@ export function LogsSettings({ settings, onSettingsChange }: LogsSettingsProps) 
                 />
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-4">
                 <div className="space-y-0.5">
-                  <Label htmlFor="log-raw-response-body" className="text-sm font-medium">
+                  <Label htmlFor="log-raw-response-body" className="text-xs md:text-sm font-medium">
                     原始响应体
                   </Label>
                   <p className="text-xs text-muted-foreground">
@@ -248,12 +248,12 @@ export function LogsSettings({ settings, onSettingsChange }: LogsSettingsProps) 
             </div>
           </div>
 
-          <div className="flex items-center justify-between space-x-4">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label className="text-base font-medium" htmlFor="disable-all-logs">
+              <Label className="text-sm md:text-base font-medium" htmlFor="disable-all-logs">
                 完全关闭日志记录
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 开启后，系统将不记录任何请求日志，可大幅提升性能（提升100-200%）。
                 <br />
                 建议仅在极致性能要求下使用，关闭后无法在界面查看请求历史。
@@ -275,13 +275,13 @@ export function LogsSettings({ settings, onSettingsChange }: LogsSettingsProps) 
             通过关闭部分功能来提升系统性能和降低资源消耗
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
+        <CardContent className="space-y-4 md:space-y-6">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label htmlFor="disable-performance-tracking" className="text-base font-medium">
+              <Label htmlFor="disable-performance-tracking" className="text-sm md:text-base font-medium">
                 关闭性能追踪
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 关闭后，系统将不再记录首包时间和 TPS（每秒 token 数）等性能指标。
                 <br />
                 可减少时间计算和统计开销，适度提升性能。
@@ -294,12 +294,12 @@ export function LogsSettings({ settings, onSettingsChange }: LogsSettingsProps) 
             />
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label htmlFor="disable-token-counting" className="text-base font-medium">
+              <Label htmlFor="disable-token-counting" className="text-sm md:text-base font-medium">
                 关闭 Token 统计
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 关闭后，系统将不再统计和记录 token 使用量（输入/输出 token 数）。
                 <br />
                 可减少 JSON 解析和字段提取开销，适度提升性能。
@@ -312,12 +312,12 @@ export function LogsSettings({ settings, onSettingsChange }: LogsSettingsProps) 
             />
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label htmlFor="enable-request-trace" className="text-base font-medium">
+              <Label htmlFor="enable-request-trace" className="text-sm md:text-base font-medium">
                 启用请求追踪
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 开启后，系统将使用 HTTP 追踪来监控网络请求的详细信息（如首字节时间）。
                 <br />
                 关闭可减少少量追踪开销，但会影响调试能力。建议保持开启。
@@ -330,12 +330,12 @@ export function LogsSettings({ settings, onSettingsChange }: LogsSettingsProps) 
             />
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label htmlFor="strip-response-headers" className="text-base font-medium">
+              <Label htmlFor="strip-response-headers" className="text-sm md:text-base font-medium">
                 移除不必要的响应头
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 开启后，系统将只保留核心响应头（Content-Type、X-Request-Id 等），移除其他响应头。
                 <br />
                 可减少网络传输数据量，适度提升性能。
@@ -348,12 +348,12 @@ export function LogsSettings({ settings, onSettingsChange }: LogsSettingsProps) 
             />
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label htmlFor="enable-format-conversion" className="text-base font-medium">
+              <Label htmlFor="enable-format-conversion" className="text-sm md:text-base font-medium">
                 启用格式转换
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 开启后，系统允许在不同 API 格式间转换（如 OpenAI ↔ Anthropic）。
                 <br />
                 关闭后只能使用与提供商类型匹配的格式，可减少转换开销，提升性能。

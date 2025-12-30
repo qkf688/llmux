@@ -59,10 +59,10 @@ export default function SettingsPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="container mx-auto py-6 space-y-6 max-w-5xl">
+      <div className="container mx-auto py-4 md:py-6 space-y-4 md:space-y-6 max-w-5xl px-4">
         <div>
-          <h1 className="text-2xl font-bold">系统设置</h1>
-          <p className="text-muted-foreground">管理系统全局配置</p>
+          <h1 className="text-xl md:text-2xl font-bold">系统设置</h1>
+          <p className="text-sm text-muted-foreground">管理系统全局配置</p>
         </div>
 
         <Tabs defaultValue="general" className="w-full">
@@ -74,39 +74,39 @@ export default function SettingsPage() {
             <TabsTrigger value="about">关于</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="general" className="mt-6">
+          <TabsContent value="general" className="mt-4 md:mt-6">
             <RoutingSettings
               settings={settings}
               onSettingsChange={handleSettingsChange}
             />
           </TabsContent>
 
-          <TabsContent value="balancer" className="mt-6">
+          <TabsContent value="balancer" className="mt-4 md:mt-6">
             <BalancerSettings
               settings={settings}
               onSettingsChange={handleSettingsChange}
             />
           </TabsContent>
 
-          <TabsContent value="logs" className="mt-6">
+          <TabsContent value="logs" className="mt-4 md:mt-6">
             <LogsSettings
               settings={settings}
               onSettingsChange={handleSettingsChange}
             />
           </TabsContent>
 
-          <TabsContent value="health-check" className="mt-6">
+          <TabsContent value="health-check" className="mt-4 md:mt-6">
             <HealthCheckSettingsTab
               healthCheckSettings={healthCheckSettings}
               onHealthCheckSettingsChange={handleHealthCheckSettingsChange}
             />
           </TabsContent>
 
-          <TabsContent value="about" className="mt-6">
-            <div className="space-y-6">
+          <TabsContent value="about" className="mt-4 md:mt-6">
+            <div className="space-y-4 md:space-y-6">
               <div>
-                <h2 className="text-xl font-semibold">关于</h2>
-                <p className="text-sm text-muted-foreground">系统信息</p>
+                <h2 className="text-lg md:text-xl font-semibold">关于</h2>
+                <p className="text-xs md:text-sm text-muted-foreground">系统信息</p>
               </div>
               <Card>
                 <CardContent className="pt-6">

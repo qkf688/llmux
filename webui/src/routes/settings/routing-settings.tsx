@@ -50,13 +50,13 @@ export function RoutingSettings({ settings, onSettingsChange }: RoutingSettingsP
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6">
+      <div className="flex items-center justify-between gap-2">
         <div>
-          <h2 className="text-xl font-semibold">通用设置</h2>
-          <p className="text-sm text-muted-foreground">配置系统通用选项</p>
+          <h2 className="text-lg md:text-xl font-semibold">通用设置</h2>
+          <p className="text-xs md:text-sm text-muted-foreground">配置系统通用选项</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-1.5 md:gap-2">
           <Button
             variant="outline"
             onClick={handleReset}
@@ -81,13 +81,13 @@ export function RoutingSettings({ settings, onSettingsChange }: RoutingSettingsP
             配置请求路由时的能力匹配策略
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
+        <CardContent className="space-y-4 md:space-y-6">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label htmlFor="strict-capability-match" className="text-base font-medium">
+              <Label htmlFor="strict-capability-match" className="text-sm md:text-base font-medium">
                 严格能力匹配
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 开启后，系统会根据请求的能力需求（工具调用、结构化输出、图片处理）筛选供应商。
                 <br />
                 关闭后，系统将忽略能力匹配条件，允许请求发送到任何启用的供应商。
@@ -109,13 +109,13 @@ export function RoutingSettings({ settings, onSettingsChange }: RoutingSettingsP
             配置上游模型自动同步选项
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
+        <CardContent className="space-y-4 md:space-y-6">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label htmlFor="model-sync-enabled" className="text-base font-medium">
+              <Label htmlFor="model-sync-enabled" className="text-sm md:text-base font-medium">
                 启用自动同步
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 开启后，系统将定期自动同步启用模型端点的提供商的上游模型列表
               </p>
             </div>
@@ -131,8 +131,8 @@ export function RoutingSettings({ settings, onSettingsChange }: RoutingSettingsP
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="model-sync-interval">同步间隔（小时）</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="model-sync-interval" className="text-sm">同步间隔（小时）</Label>
             <Input
               id="model-sync-interval"
               type="number"
@@ -145,11 +145,11 @@ export function RoutingSettings({ settings, onSettingsChange }: RoutingSettingsP
                 }
               }}
             />
-            <p className="text-sm text-muted-foreground">默认12小时同步一次</p>
+            <p className="text-xs md:text-sm text-muted-foreground">默认12小时同步一次</p>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="model-sync-log-retention-count">日志保留条数</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="model-sync-log-retention-count" className="text-sm">日志保留条数</Label>
             <Input
               id="model-sync-log-retention-count"
               type="number"
@@ -162,11 +162,11 @@ export function RoutingSettings({ settings, onSettingsChange }: RoutingSettingsP
                 }
               }}
             />
-            <p className="text-sm text-muted-foreground">默认保留100条，0表示不限制</p>
+            <p className="text-xs md:text-sm text-muted-foreground">默认保留100条，0表示不限制</p>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="model-sync-log-retention-days">日志保留天数</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="model-sync-log-retention-days" className="text-sm">日志保留天数</Label>
             <Input
               id="model-sync-log-retention-days"
               type="number"
@@ -179,7 +179,7 @@ export function RoutingSettings({ settings, onSettingsChange }: RoutingSettingsP
                 }
               }}
             />
-            <p className="text-sm text-muted-foreground">默认保留7天，0表示不限制</p>
+            <p className="text-xs md:text-sm text-muted-foreground">默认保留7天，0表示不限制</p>
           </div>
         </CardContent>
       </Card>

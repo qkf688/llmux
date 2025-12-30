@@ -51,13 +51,13 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
 
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6">
+      <div className="flex items-center justify-between gap-2">
         <div>
-          <h2 className="text-xl font-semibold">负载均衡</h2>
-          <p className="text-sm text-muted-foreground">配置权重、优先级和自动调整策略</p>
+          <h2 className="text-lg md:text-xl font-semibold">负载均衡</h2>
+          <p className="text-xs md:text-sm text-muted-foreground">配置权重、优先级和自动调整策略</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-1.5 md:gap-2">
           <Button
             variant="outline"
             onClick={handleReset}
@@ -83,13 +83,13 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
             配置调用失败时自动降低供应商权重的行为
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
+        <CardContent className="space-y-4 md:space-y-6">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label htmlFor="auto-weight-decay" className="text-base font-medium">
+              <Label htmlFor="auto-weight-decay" className="text-sm md:text-base font-medium">
                 启用自动权重衰减
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 开启后，每次调用失败时，系统会自动减少对应供应商关联的权重。
               </p>
             </div>
@@ -100,11 +100,11 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="auto-weight-decay-default" className="text-base font-medium">
+          <div className="space-y-1.5">
+            <Label htmlFor="auto-weight-decay-default" className="text-sm md:text-base font-medium">
               默认权重值
             </Label>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs md:text-sm text-muted-foreground">
               重置权重时使用的默认值，也是新创建关联的推荐权重值。
             </p>
             <Input
@@ -118,11 +118,11 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="auto-weight-decay-step" className="text-base font-medium">
+          <div className="space-y-1.5">
+            <Label htmlFor="auto-weight-decay-step" className="text-sm md:text-base font-medium">
               衰减步长
             </Label>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs md:text-sm text-muted-foreground">
               每次调用失败时减少的权重值。
             </p>
             <Input
@@ -147,13 +147,13 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
             配置调用失败时自动降低供应商优先级的行为
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
+        <CardContent className="space-y-4 md:space-y-6">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label htmlFor="auto-priority-decay" className="text-base font-medium">
+              <Label htmlFor="auto-priority-decay" className="text-sm md:text-base font-medium">
                 启用自动优先级衰减
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 开启后，每次调用失败时，系统会自动减少对应供应商关联的优先级。
               </p>
             </div>
@@ -164,11 +164,11 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="auto-priority-decay-default" className="text-base font-medium">
+          <div className="space-y-1.5">
+            <Label htmlFor="auto-priority-decay-default" className="text-sm md:text-base font-medium">
               默认优先级值
             </Label>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs md:text-sm text-muted-foreground">
               新创建关联的默认优先级值，也是重置优先级时使用的值。
             </p>
             <Input
@@ -182,11 +182,11 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="auto-priority-decay-step" className="text-base font-medium">
+          <div className="space-y-1.5">
+            <Label htmlFor="auto-priority-decay-step" className="text-sm md:text-base font-medium">
               衰减步长
             </Label>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs md:text-sm text-muted-foreground">
               每次调用失败时减少的优先级值。
             </p>
             <Input
@@ -200,13 +200,13 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
             />
           </div>
 
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
+          <div className="space-y-3 md:space-y-4">
+            <div className="flex items-center justify-between gap-4">
               <div className="space-y-0.5">
-                <Label htmlFor="auto-priority-decay-disable-enabled" className="text-base font-medium">
+                <Label htmlFor="auto-priority-decay-disable-enabled" className="text-sm md:text-base font-medium">
                   启用自动禁用
                 </Label>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs md:text-sm text-muted-foreground">
                   开启后，当优先级降到禁用阈值时，自动禁用该供应商关联。
                 </p>
               </div>
@@ -217,11 +217,11 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="auto-priority-decay-threshold" className="text-base font-medium">
+            <div className="space-y-1.5">
+              <Label htmlFor="auto-priority-decay-threshold" className="text-sm md:text-base font-medium">
                 禁用阈值
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 当优先级降到此值或以下时的处理策略，由上方开关控制是否自动禁用。
               </p>
               <Input
@@ -247,13 +247,13 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
             配置连续调用失败后的自动禁用策略
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
+        <CardContent className="space-y-4 md:space-y-6">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label htmlFor="consecutive-failure-disable-enabled" className="text-base font-medium">
+              <Label htmlFor="consecutive-failure-disable-enabled" className="text-sm md:text-base font-medium">
                 启用连续失败禁用
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 开启后，模型关联在连续调用失败达到阈值时会自动禁用。
               </p>
             </div>
@@ -264,11 +264,11 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="consecutive-failure-threshold" className="text-base font-medium">
+          <div className="space-y-1.5">
+            <Label htmlFor="consecutive-failure-threshold" className="text-sm md:text-base font-medium">
               连续失败次数
             </Label>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs md:text-sm text-muted-foreground">
               连续调用失败达到此值时自动禁用该模型关联。
             </p>
             <Input
@@ -293,13 +293,13 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
             配置成功调用后自动提升权重与优先级的策略
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
+        <CardContent className="space-y-4 md:space-y-6">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label htmlFor="auto-success-increase" className="text-base font-medium">
+              <Label htmlFor="auto-success-increase" className="text-sm md:text-base font-medium">
                 启用成功自增
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 关闭后，成功调用不会自动提升权重或优先级。
               </p>
             </div>
@@ -310,11 +310,11 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="auto-weight-increase-step" className="text-base font-medium">
+          <div className="space-y-1.5">
+            <Label htmlFor="auto-weight-increase-step" className="text-sm md:text-base font-medium">
               权重增加步长
             </Label>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs md:text-sm text-muted-foreground">
               每次调用成功后增加的权重值。
             </p>
             <Input
@@ -329,11 +329,11 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="auto-weight-increase-max" className="text-base font-medium">
+          <div className="space-y-1.5">
+            <Label htmlFor="auto-weight-increase-max" className="text-sm md:text-base font-medium">
               权重增加上限
             </Label>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs md:text-sm text-muted-foreground">
               成功自增后的最大权重值，防止无限增长。
             </p>
             <Input
@@ -348,11 +348,11 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="auto-priority-increase-step" className="text-base font-medium">
+          <div className="space-y-1.5">
+            <Label htmlFor="auto-priority-increase-step" className="text-sm md:text-base font-medium">
               优先级增加步长
             </Label>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs md:text-sm text-muted-foreground">
               每次调用成功后增加的优先级值。
             </p>
             <Input
@@ -367,11 +367,11 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="auto-priority-increase-max" className="text-base font-medium">
+          <div className="space-y-1.5">
+            <Label htmlFor="auto-priority-increase-max" className="text-sm md:text-base font-medium">
               优先级增加上限
             </Label>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs md:text-sm text-muted-foreground">
               成功自增后的最大优先级值。
             </p>
             <Input
@@ -395,13 +395,13 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
             配置模型关联的自动添加和清理功能
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
+        <CardContent className="space-y-4 md:space-y-6">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label htmlFor="auto-associate-on-add" className="text-base font-medium">
+              <Label htmlFor="auto-associate-on-add" className="text-sm md:text-base font-medium">
                 添加时自动关联
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 新增提供商添加"全部模型"时，或提供商增加模型时，自动关联到模板匹配的模型（包含 Model.Name、既有关联 ProviderModel 与手动模板项）
               </p>
             </div>
@@ -412,12 +412,12 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
             />
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label htmlFor="auto-clean-on-delete" className="text-base font-medium">
+              <Label htmlFor="auto-clean-on-delete" className="text-sm md:text-base font-medium">
                 删除时自动清理
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 提供商被删除或模型减少时，自动清除无效的模型关联
               </p>
             </div>

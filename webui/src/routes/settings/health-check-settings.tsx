@@ -50,13 +50,13 @@ export function HealthCheckSettingsTab({ healthCheckSettings, onHealthCheckSetti
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6">
+      <div className="flex items-center justify-between gap-2">
         <div>
-          <h2 className="text-xl font-semibold">健康检测</h2>
-          <p className="text-sm text-muted-foreground">配置模型提供商的定时健康检测功能</p>
+          <h2 className="text-lg md:text-xl font-semibold">健康检测</h2>
+          <p className="text-xs md:text-sm text-muted-foreground">配置模型提供商的定时健康检测功能</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-1.5 md:gap-2">
           <Button
             variant="outline"
             onClick={handleReset}
@@ -81,13 +81,13 @@ export function HealthCheckSettingsTab({ healthCheckSettings, onHealthCheckSetti
             配置健康检测的基本参数
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
+        <CardContent className="space-y-4 md:space-y-6">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label htmlFor="health-check-enabled" className="text-base font-medium">
+              <Label htmlFor="health-check-enabled" className="text-sm md:text-base font-medium">
                 启用健康检测
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 开启后，系统会定时检测所有模型提供商的可用性。
               </p>
             </div>
@@ -98,11 +98,11 @@ export function HealthCheckSettingsTab({ healthCheckSettings, onHealthCheckSetti
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="health-check-interval" className="text-base font-medium">
+          <div className="space-y-1.5">
+            <Label htmlFor="health-check-interval" className="text-sm md:text-base font-medium">
               检测间隔（分钟）
             </Label>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs md:text-sm text-muted-foreground">
               每隔多少分钟执行一次健康检测。
             </p>
             <Input
@@ -116,11 +116,11 @@ export function HealthCheckSettingsTab({ healthCheckSettings, onHealthCheckSetti
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="health-check-log-retention-count" className="text-base font-medium">
+          <div className="space-y-1.5">
+            <Label htmlFor="health-check-log-retention-count" className="text-sm md:text-base font-medium">
               健康检测日志保留条数
             </Label>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs md:text-sm text-muted-foreground">
               系统自动保留的最新健康检测日志条数，设置为 0 表示不限制。
             </p>
             <Input
@@ -143,13 +143,13 @@ export function HealthCheckSettingsTab({ healthCheckSettings, onHealthCheckSetti
             配置健康检测失败时的处理策略
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
+        <CardContent className="space-y-4 md:space-y-6">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label htmlFor="health-check-failure-disable-enabled" className="text-base font-medium">
+              <Label htmlFor="health-check-failure-disable-enabled" className="text-sm md:text-base font-medium">
                 启用失败自动禁用
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 开启后，当连续失败次数达到阈值时，自动禁用该供应商关联。
               </p>
             </div>
@@ -160,11 +160,11 @@ export function HealthCheckSettingsTab({ healthCheckSettings, onHealthCheckSetti
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="health-check-failure-threshold" className="text-base font-medium">
+          <div className="space-y-1.5">
+            <Label htmlFor="health-check-failure-threshold" className="text-sm md:text-base font-medium">
               失败次数阈值
             </Label>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs md:text-sm text-muted-foreground">
               连续检测失败次数的阈值，达到此值后的处理策略由上方开关控制。
             </p>
             <Input
@@ -178,12 +178,12 @@ export function HealthCheckSettingsTab({ healthCheckSettings, onHealthCheckSetti
             />
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label htmlFor="health-check-auto-enable" className="text-base font-medium">
+              <Label htmlFor="health-check-auto-enable" className="text-sm md:text-base font-medium">
                 检测成功自动启用
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 开启后，当已禁用的模型提供商检测成功时，会自动重新启用。
               </p>
             </div>
@@ -203,13 +203,13 @@ export function HealthCheckSettingsTab({ healthCheckSettings, onHealthCheckSetti
             控制健康检测结果是否参与成功自增或失败衰减
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
+        <CardContent className="space-y-4 md:space-y-6">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label className="text-base font-medium" htmlFor="count-health-check-as-success">
+              <Label className="text-sm md:text-base font-medium" htmlFor="count-health-check-as-success">
                 健康检测计入成功调用
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 开启后，模型自动健康检测的成功结果也会触发权重/优先级自增。
               </p>
             </div>
@@ -220,12 +220,12 @@ export function HealthCheckSettingsTab({ healthCheckSettings, onHealthCheckSetti
             />
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label className="text-base font-medium" htmlFor="count-health-check-as-failure">
+              <Label className="text-sm md:text-base font-medium" htmlFor="count-health-check-as-failure">
                 健康检测计入失败调用衰减
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground">
                 开启后，健康检测失败会视作一次调用失败，触发权重/优先级衰减。
               </p>
             </div>

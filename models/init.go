@@ -78,6 +78,7 @@ func initDefaultSettings(ctx context.Context) {
 		{Key: SettingKeyHealthCheckLogRetentionCount, Value: "100"},      // 默认保留100条健康检测日志，0 表示不限制
 		{Key: SettingKeyHealthCheckCountAsSuccess, Value: "true"},        // 默认健康检测成功计入成功调用
 		{Key: SettingKeyHealthCheckCountAsFailure, Value: "false"},       // 默认健康检测失败不计入失败调用
+		{Key: SettingKeyHealthCheckCheckDisabledOnly, Value: "false"},    // 默认检测所有模型（不只检测停用的）
 		// 性能优化相关默认设置
 		{Key: SettingKeyDisablePerformanceTracking, Value: "false"},     // 默认不关闭性能追踪
 		{Key: SettingKeyDisableTokenCounting, Value: "false"},           // 默认不关闭 token 统计

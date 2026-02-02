@@ -2075,6 +2075,7 @@ type HealthCheckSettingsResponse struct {
 	LogRetentionCount       int  `json:"log_retention_count"`
 	CountHealthCheckSuccess bool `json:"count_health_check_as_success"`
 	CountHealthCheckFailure bool `json:"count_health_check_as_failure"`
+	CheckDisabledOnly       bool `json:"check_disabled_only"`
 }
 
 // UpdateHealthCheckSettingsRequest 更新健康检测设置请求结构
@@ -2087,12 +2088,13 @@ type UpdateHealthCheckSettingsRequest struct {
 	LogRetentionCount       int  `json:"log_retention_count"`
 	CountHealthCheckSuccess bool `json:"count_health_check_as_success"`
 	CountHealthCheckFailure bool `json:"count_health_check_as_failure"`
+	CheckDisabledOnly       bool `json:"check_disabled_only"`
 }
 
 // GetHealthCheckSettings 获取健康检测设置
 func GetHealthCheckSettings(c *gin.Context) {
 	ctx := c.Request.Context()
-	enabled, interval, failureThreshold, failureDisableEnabled, autoEnable, logRetentionCount, countAsSuccess, countAsFailure := service.GetHealthCheckSettings(ctx)
+	enabled, interval, failureThreshold, failureDisableEnabled, autoEnable, logRetentionCount, countAsSuccess, countAsFailure, checkDisabledOnly := service.GetHealthCheckSettings(ctx)
 
 	response := HealthCheckSettingsResponse{
 		Enabled:                 enabled,
@@ -2103,6 +2105,7 @@ func GetHealthCheckSettings(c *gin.Context) {
 		LogRetentionCount:       logRetentionCount,
 		CountHealthCheckSuccess: countAsSuccess,
 		CountHealthCheckFailure: countAsFailure,
+		CheckDisabledOnly:       checkDisabledOnly,
 	}
 
 	common.Success(c, response)
@@ -2205,6 +2208,18 @@ func UpdateHealthCheckSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyHealthCheckCountAsFailure).
 		Update(ctx, "value", countHealthCheckFailure); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新只检测停用的模型设置
+	checkDisabledOnly := "false"
+	if req.CheckDisabledOnly {
+		checkDisabledOnly = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyHealthCheckCheckDisabledOnly).
+		Update(ctx, "value", checkDisabledOnly); err != nil {
 		common.InternalServerError(c, "Failed to update settings: "+err.Error())
 		return
 	}

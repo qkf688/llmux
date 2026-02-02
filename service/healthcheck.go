@@ -165,14 +165,27 @@ func (h *HealthChecker) run() {
 func (h *HealthChecker) checkAll() {
 	ctx := context.Background()
 
-	// 获取所有模型提供商关联
-	modelProviders, err := gorm.G[models.ModelWithProvider](models.DB).Find(ctx)
+	// 检查是否只检测停用的模型
+	checkDisabledOnly := h.getCheckDisabledOnly(ctx)
+
+	// 获取模型提供商关联
+	var modelProviders []models.ModelWithProvider
+	var err error
+
+	if checkDisabledOnly {
+		// 只获取停用的模型提供商
+		falseVal := false
+		modelProviders, err = gorm.G[models.ModelWithProvider](models.DB).Where("status = ?", &falseVal).Find(ctx)
+	} else {
+		modelProviders, err = gorm.G[models.ModelWithProvider](models.DB).Find(ctx)
+	}
+
 	if err != nil {
 		slog.Error("failed to get model providers for health check", "error", err)
 		return
 	}
 
-	slog.Info("starting health check", "count", len(modelProviders))
+	slog.Info("starting health check", "count", len(modelProviders), "disabled_only", checkDisabledOnly)
 
 	for _, mp := range modelProviders {
 		h.checkOne(ctx, &mp)
@@ -438,6 +451,17 @@ func (h *HealthChecker) getFailureDisableEnabled(ctx context.Context) bool {
 	return setting.Value == "true"
 }
 
+// getCheckDisabledOnly 获取是否只检测停用的模型
+func (h *HealthChecker) getCheckDisabledOnly(ctx context.Context) bool {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyHealthCheckCheckDisabledOnly).
+		First(ctx)
+	if err != nil {
+		return false // 默认检测所有
+	}
+	return setting.Value == "true"
+}
+
 // getLogRetentionCount 获取健康检测日志保留条数
 func (h *HealthChecker) getLogRetentionCount(ctx context.Context) int {
 	setting, err := gorm.G[models.Setting](models.DB).
@@ -511,14 +535,27 @@ func (h *HealthChecker) CheckSingleWithBatch(ctx context.Context, mpID uint, bat
 
 // CheckAllWithBatch 批量检测所有模型提供商（手动触发，带 batchID）
 func (h *HealthChecker) CheckAllWithBatch(ctx context.Context, batchID string) error {
-	// 获取所有模型提供商关联
-	modelProviders, err := gorm.G[models.ModelWithProvider](models.DB).Find(ctx)
+	// 检查是否只检测停用的模型
+	checkDisabledOnly := h.getCheckDisabledOnly(ctx)
+
+	// 获取模型提供商关联
+	var modelProviders []models.ModelWithProvider
+	var err error
+
+	if checkDisabledOnly {
+		// 只获取停用的模型提供商
+		falseVal := false
+		modelProviders, err = gorm.G[models.ModelWithProvider](models.DB).Where("status = ?", &falseVal).Find(ctx)
+	} else {
+		modelProviders, err = gorm.G[models.ModelWithProvider](models.DB).Find(ctx)
+	}
+
 	if err != nil {
 		slog.Error("failed to get model providers for batch health check", "error", err, "batch_id", batchID)
 		return err
 	}
 
-	slog.Info("starting batch health check", "count", len(modelProviders), "batch_id", batchID)
+	slog.Info("starting batch health check", "count", len(modelProviders), "batch_id", batchID, "disabled_only", checkDisabledOnly)
 
 	for _, mp := range modelProviders {
 		h.checkOneWithBatch(ctx, &mp, batchID)
@@ -529,7 +566,7 @@ func (h *HealthChecker) CheckAllWithBatch(ctx context.Context, batchID string) e
 }
 
 // GetHealthCheckSettings 获取健康检测设置
-func GetHealthCheckSettings(ctx context.Context) (enabled bool, interval int, failureThreshold int, failureDisableEnabled bool, autoEnable bool, logRetentionCount int, countAsSuccess bool, countAsFailure bool) {
+func GetHealthCheckSettings(ctx context.Context) (enabled bool, interval int, failureThreshold int, failureDisableEnabled bool, autoEnable bool, logRetentionCount int, countAsSuccess bool, countAsFailure bool, checkDisabledOnly bool) {
 	checker := GetHealthChecker()
 
 	enabled = checker.isEnabled(ctx)
@@ -550,6 +587,7 @@ func GetHealthCheckSettings(ctx context.Context) (enabled bool, interval int, fa
 	logRetentionCount = checker.getLogRetentionCount(ctx)
 	countAsSuccess = shouldCountHealthCheckSuccess(ctx)
 	countAsFailure = shouldCountHealthCheckFailure(ctx)
+	checkDisabledOnly = checker.getCheckDisabledOnly(ctx)
 
 	return
 }
@@ -564,6 +602,7 @@ type HealthCheckSettingsJSON struct {
 	LogRetentionCount       int  `json:"log_retention_count"`
 	CountHealthCheckSuccess bool `json:"count_health_check_as_success"`
 	CountHealthCheckFailure bool `json:"count_health_check_as_failure"`
+	CheckDisabledOnly       bool `json:"check_disabled_only"`
 }
 
 // MarshalJSON 序列化健康检测设置
@@ -577,6 +616,7 @@ func (s HealthCheckSettingsJSON) MarshalJSON() ([]byte, error) {
 		LogRetentionCount       int  `json:"log_retention_count"`
 		CountHealthCheckSuccess bool `json:"count_health_check_as_success"`
 		CountHealthCheckFailure bool `json:"count_health_check_as_failure"`
+		CheckDisabledOnly       bool `json:"check_disabled_only"`
 	}{
 		Enabled:                 s.Enabled,
 		Interval:                s.Interval,
@@ -586,6 +626,7 @@ func (s HealthCheckSettingsJSON) MarshalJSON() ([]byte, error) {
 		LogRetentionCount:       s.LogRetentionCount,
 		CountHealthCheckSuccess: s.CountHealthCheckSuccess,
 		CountHealthCheckFailure: s.CountHealthCheckFailure,
+		CheckDisabledOnly:       s.CheckDisabledOnly,
 	})
 }
 

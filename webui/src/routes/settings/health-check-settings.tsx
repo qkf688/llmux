@@ -133,6 +133,22 @@ export function HealthCheckSettingsTab({ healthCheckSettings, onHealthCheckSetti
               className="w-32"
             />
           </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="health-check-disabled-only" className="text-sm md:text-base font-medium">
+                只检测停用的模型
+              </Label>
+              <p className="text-xs md:text-sm text-muted-foreground">
+                开启后，健康检测只会检查已停用的模型提供商。适合配合"检测成功自动启用"功能，实现停用模型的自动恢复。
+              </p>
+            </div>
+            <Switch
+              id="health-check-disabled-only"
+              checked={localSettings?.check_disabled_only ?? false}
+              onCheckedChange={(checked) => updateLocalSettings({ check_disabled_only: checked })}
+            />
+          </div>
         </CardContent>
       </Card>
 

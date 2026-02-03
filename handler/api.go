@@ -961,6 +961,37 @@ func UpdateModelProviderStatus(c *gin.Context) {
 	common.Success(c, existing)
 }
 
+// saveProviderModelToTemplate 将 ProviderModel 保存到模板项
+func saveProviderModelToTemplate(ctx context.Context, modelID uint, providerModel string) error {
+	if providerModel == "" {
+		return nil
+	}
+
+	// 检查是否已存在
+	count, err := gorm.G[models.ModelTemplateItem](models.DB).
+		Where("model_id = ? AND name = ?", modelID, providerModel).
+		Count(ctx, "id")
+	if err != nil {
+		return err
+	}
+
+	// 如果不存在则创建
+	if count == 0 {
+		item := models.ModelTemplateItem{
+			ModelID: modelID,
+			Name:    providerModel,
+		}
+		if err := gorm.G[models.ModelTemplateItem](models.DB).Create(ctx, &item); err != nil {
+			return err
+		}
+		slog.Info("auto-saved provider model to template",
+			"model_id", modelID,
+			"provider_model", providerModel)
+	}
+
+	return nil
+}
+
 // DeleteModelProvider 删除模型提供商关联
 func DeleteModelProvider(c *gin.Context) {
 	idStr := c.Param("id")
@@ -970,7 +1001,30 @@ func DeleteModelProvider(c *gin.Context) {
 		return
 	}
 
-	result, err := gorm.G[models.ModelWithProvider](models.DB).Where("id = ?", id).Delete(c.Request.Context())
+	ctx := c.Request.Context()
+
+	// 检查是否启用自动保存到模板
+	autoSave := getSettingBool(ctx, models.SettingKeyAutoSaveTemplateOnDelete)
+	if autoSave {
+		// 获取要删除的记录
+		assoc, err := gorm.G[models.ModelWithProvider](models.DB).
+			Where("id = ?", id).
+			First(ctx)
+		if err == nil {
+			// 保存到模板（失败不影响删除）
+			if err := saveProviderModelToTemplate(ctx, assoc.ModelID, assoc.ProviderModel); err != nil {
+				slog.Warn("failed to save provider model to template",
+					"error", err,
+					"model_id", assoc.ModelID,
+					"provider_model", assoc.ProviderModel)
+			}
+		}
+	}
+
+	// 执行删除
+	result, err := gorm.G[models.ModelWithProvider](models.DB).
+		Where("id = ?", id).
+		Delete(ctx)
 	if err != nil {
 		common.InternalServerError(c, "Failed to delete model-provider association: "+err.Error())
 		return
@@ -1008,7 +1062,32 @@ func BatchDeleteModelProviders(c *gin.Context) {
 		return
 	}
 
-	result, err := gorm.G[models.ModelWithProvider](models.DB).Where("id IN ?", req.IDs).Delete(c.Request.Context())
+	ctx := c.Request.Context()
+
+	// 检查是否启用自动保存到模板
+	autoSave := getSettingBool(ctx, models.SettingKeyAutoSaveTemplateOnDelete)
+	if autoSave {
+		// 获取要删除的所有记录
+		assocs, err := gorm.G[models.ModelWithProvider](models.DB).
+			Where("id IN ?", req.IDs).
+			Find(ctx)
+		if err == nil {
+			// 批量保存到模板
+			for _, assoc := range assocs {
+				if err := saveProviderModelToTemplate(ctx, assoc.ModelID, assoc.ProviderModel); err != nil {
+					slog.Warn("failed to save provider model to template",
+						"error", err,
+						"model_id", assoc.ModelID,
+						"provider_model", assoc.ProviderModel)
+				}
+			}
+		}
+	}
+
+	// 执行批量删除
+	result, err := gorm.G[models.ModelWithProvider](models.DB).
+		Where("id IN ?", req.IDs).
+		Delete(ctx)
 	if err != nil {
 		common.InternalServerError(c, "Failed to delete model-provider associations: "+err.Error())
 		return
@@ -1235,8 +1314,9 @@ type SettingsResponse struct {
 	ModelSyncLogRetentionCount int  `json:"model_sync_log_retention_count"`
 	ModelSyncLogRetentionDays  int  `json:"model_sync_log_retention_days"`
 	// 模型关联相关设置
-	AutoAssociateOnAdd bool `json:"auto_associate_on_add"`
-	AutoCleanOnDelete  bool `json:"auto_clean_on_delete"`
+	AutoAssociateOnAdd       bool `json:"auto_associate_on_add"`
+	AutoCleanOnDelete        bool `json:"auto_clean_on_delete"`
+	AutoSaveTemplateOnDelete bool `json:"auto_save_template_on_delete"`
 }
 
 // UpdateSettingsRequest 更新设置请求结构
@@ -1274,8 +1354,9 @@ type UpdateSettingsRequest struct {
 	ModelSyncLogRetentionCount int  `json:"model_sync_log_retention_count"`
 	ModelSyncLogRetentionDays  int  `json:"model_sync_log_retention_days"`
 	// 模型关联相关设置
-	AutoAssociateOnAdd bool `json:"auto_associate_on_add"`
-	AutoCleanOnDelete  bool `json:"auto_clean_on_delete"`
+	AutoAssociateOnAdd       bool `json:"auto_associate_on_add"`
+	AutoCleanOnDelete        bool `json:"auto_clean_on_delete"`
+	AutoSaveTemplateOnDelete bool `json:"auto_save_template_on_delete"`
 }
 
 // GetSettings 获取所有设置
@@ -1403,6 +1484,8 @@ func GetSettings(c *gin.Context) {
 			response.AutoAssociateOnAdd = setting.Value == "true"
 		case models.SettingKeyAutoCleanOnDelete:
 			response.AutoCleanOnDelete = setting.Value == "true"
+		case models.SettingKeyAutoSaveTemplateOnDelete:
+			response.AutoSaveTemplateOnDelete = setting.Value == "true"
 		case models.SettingKeyModelSyncEnabled:
 			response.ModelSyncEnabled = setting.Value == "true"
 		case models.SettingKeyModelSyncInterval:
@@ -1729,6 +1812,18 @@ func UpdateSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyAutoCleanOnDelete).
 		Update(ctx, "value", autoCleanValue); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新 auto_save_template_on_delete 设置
+	autoSaveTemplateValue := "false"
+	if req.AutoSaveTemplateOnDelete {
+		autoSaveTemplateValue = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyAutoSaveTemplateOnDelete).
+		Update(ctx, "value", autoSaveTemplateValue); err != nil {
 		common.InternalServerError(c, "Failed to update settings: "+err.Error())
 		return
 	}

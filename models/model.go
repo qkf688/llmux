@@ -184,8 +184,9 @@ const (
 	SettingKeyModelSyncLogRetentionDays  = "model_sync_log_retention_days"  // 同步日志保留天数
 
 	// 模型关联相关设置
-	SettingKeyAutoAssociateOnAdd    = "auto_associate_on_add"    // 添加模型时自动关联
-	SettingKeyAutoCleanOnDelete     = "auto_clean_on_delete"     // 删除模型时自动清理关联
+	SettingKeyAutoAssociateOnAdd       = "auto_associate_on_add"        // 添加模型时自动关联
+	SettingKeyAutoCleanOnDelete        = "auto_clean_on_delete"         // 删除模型时自动清理关联
+	SettingKeyAutoSaveTemplateOnDelete = "auto_save_template_on_delete" // 删除关联时自动保存到模板
 )
 
 // HealthCheckLog 模型健康检测日志

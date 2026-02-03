@@ -92,8 +92,9 @@ func initDefaultSettings(ctx context.Context) {
 		{Key: SettingKeyModelSyncLogRetentionCount, Value: "100"}, // 默认保留100条
 		{Key: SettingKeyModelSyncLogRetentionDays, Value: "7"},    // 默认保留7天
 		// 模型关联相关默认设置
-		{Key: SettingKeyAutoAssociateOnAdd, Value: "false"}, // 默认关闭自动关联
-		{Key: SettingKeyAutoCleanOnDelete, Value: "false"},  // 默认关闭自动清理
+		{Key: SettingKeyAutoAssociateOnAdd, Value: "false"},       // 默认关闭自动关联
+		{Key: SettingKeyAutoCleanOnDelete, Value: "false"},        // 默认关闭自动清理
+		{Key: SettingKeyAutoSaveTemplateOnDelete, Value: "false"}, // 默认关闭自动保存到模板
 	}
 
 	for _, setting := range defaultSettings {

@@ -489,6 +489,7 @@ export interface Settings {
   // 模型关联相关设置
   auto_associate_on_add: boolean;
   auto_clean_on_delete: boolean;
+  auto_save_template_on_delete: boolean;
 }
 
 export async function getSettings(): Promise<Settings> {

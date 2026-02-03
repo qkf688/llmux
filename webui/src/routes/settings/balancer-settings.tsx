@@ -427,6 +427,22 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
               onCheckedChange={(checked) => updateLocalSettings({ auto_clean_on_delete: checked })}
             />
           </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="auto-save-template-on-delete" className="text-sm md:text-base font-medium">
+                删除关联时自动保存到模板
+              </Label>
+              <p className="text-xs md:text-sm text-muted-foreground">
+                删除模型关联时，自动将 ProviderModel 保存到模板项中，保留模型名称以便未来使用
+              </p>
+            </div>
+            <Switch
+              id="auto-save-template-on-delete"
+              checked={localSettings?.auto_save_template_on_delete ?? false}
+              onCheckedChange={(checked) => updateLocalSettings({ auto_save_template_on_delete: checked })}
+            />
+          </div>
         </CardContent>
       </Card>
     </div>

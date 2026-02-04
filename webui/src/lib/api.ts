@@ -913,6 +913,47 @@ export async function exportConfig(types: ExportType[]): Promise<void> {
   document.body.removeChild(a);
 }
 
+/**
+ * 导出完整数据库文件
+ * 文件名格式: llmio_backup_YYYYMMDD_HHMMSS.db
+ */
+export async function exportDatabase(): Promise<void> {
+  const token = localStorage.getItem("authToken");
+
+  const response = await fetch(`${API_BASE}/system/export-database`, {
+    method: 'GET',
+    headers: {
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (response.status === 401) {
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: '导出数据库失败' }));
+    throw new Error(error.error || '导出数据库失败');
+  }
+
+  // 从响应头获取文件名
+  const contentDisposition = response.headers.get('Content-Disposition');
+  const filenameMatch = contentDisposition?.match(/filename=(.+)/);
+  const filename = filenameMatch ? filenameMatch[1].replace(/['"]/g, '') : 'llmio_backup.db';
+
+  // 创建 Blob 并触发下载
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
 export async function importConfig(options: ImportOptions): Promise<ImportConfigResponse> {
   const token = localStorage.getItem("authToken");
   const formData = new FormData();

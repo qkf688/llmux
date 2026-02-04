@@ -3558,6 +3558,46 @@ func ExportConfig(c *gin.Context) {
 	c.JSON(200, response)
 }
 
+// ExportDatabase 导出完整数据库文件
+func ExportDatabase(c *gin.Context) {
+	// 1. 获取数据库文件路径
+	dbPath := models.GetDBPath()
+
+	// 2. 检查文件是否存在并获取文件信息
+	fileInfo, err := os.Stat(dbPath)
+	if os.IsNotExist(err) {
+		common.NotFound(c, "数据库文件不存在")
+		return
+	}
+	if err != nil {
+		slog.Error("无法访问数据库文件", "error", err, "path", dbPath)
+		common.InternalServerError(c, "无法访问数据库文件")
+		return
+	}
+
+	// 3. 检查文件大小（可选警告）
+	if fileInfo.Size() > 100*1024*1024 { // 100MB
+		slog.Warn("导出的数据库文件较大", "size", fileInfo.Size(), "path", dbPath)
+	}
+
+	// 4. 生成带时间戳的文件名
+	timestamp := time.Now().Format("20060102_150405")
+	filename := fmt.Sprintf("llmio_backup_%s.db", timestamp)
+
+	// 5. 设置响应头
+	c.Header("Content-Description", "File Transfer")
+	c.Header("Content-Transfer-Encoding", "binary")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Header("Content-Type", "application/octet-stream")
+	c.Header("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
+
+	// 6. 记录导出操作
+	slog.Info("数据库导出", "filename", filename, "size", fileInfo.Size())
+
+	// 7. 直接发送文件
+	c.File(dbPath)
+}
+
 // ImportConfigRequest 导入配置请求结构
 type ImportConfigRequest struct {
 	Mode  string   `json:"mode"`  // "merge" 或 "replace"

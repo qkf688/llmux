@@ -102,6 +102,7 @@ func main() {
 	api.PUT("/config", handler.UpdateSystemConfig)
 	api.GET("/system/database-stats", handler.GetDatabaseStats)
 	api.GET("/system/export-config", handler.ExportConfig)
+	api.GET("/system/export-database", handler.ExportDatabase)
 	api.POST("/system/import-config", handler.ImportConfig)
 
 	// Settings

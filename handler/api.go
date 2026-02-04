@@ -667,6 +667,61 @@ func BatchDeleteModels(c *gin.Context) {
 	})
 }
 
+// BatchUpdateModelsRequest represents the request body for batch updating models
+type BatchUpdateModelsRequest struct {
+	IDs      []uint `json:"ids" binding:"required,min=1"`
+	MaxRetry *int   `json:"max_retry"` // 指针类型，nil 表示不更新
+	TimeOut  *int   `json:"time_out"`  // 指针类型，nil 表示不更新
+}
+
+// BatchUpdateModels 批量更新模型参数
+func BatchUpdateModels(c *gin.Context) {
+	var req BatchUpdateModelsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.BadRequest(c, "参数验证失败: "+err.Error())
+		return
+	}
+
+	// 验证至少有一个字段需要更新
+	if req.MaxRetry == nil && req.TimeOut == nil {
+		common.BadRequest(c, "至少需要更新一个字段")
+		return
+	}
+
+	// 验证值的合法性
+	if req.MaxRetry != nil && *req.MaxRetry < 0 {
+		common.BadRequest(c, "重试次数不能为负数")
+		return
+	}
+	if req.TimeOut != nil && *req.TimeOut < 0 {
+		common.BadRequest(c, "超时时间不能为负数")
+		return
+	}
+
+	// 构建更新 map
+	updates := make(map[string]interface{})
+	if req.MaxRetry != nil {
+		updates["max_retry"] = *req.MaxRetry
+	}
+	if req.TimeOut != nil {
+		updates["time_out"] = *req.TimeOut
+	}
+
+	// 执行批量更新
+	result := models.DB.Model(&models.Model{}).
+		Where("id IN ?", req.IDs).
+		Updates(updates)
+
+	if result.Error != nil {
+		common.InternalServerError(c, "更新失败: "+result.Error.Error())
+		return
+	}
+
+	common.Success(c, map[string]interface{}{
+		"updated": result.RowsAffected,
+	})
+}
+
 type ProviderTemplate struct {
 	Type     string `json:"type"`
 	Template string `json:"template"`

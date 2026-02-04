@@ -190,6 +190,17 @@ export async function batchDeleteModels(ids: number[]): Promise<{ deleted: numbe
   });
 }
 
+export async function batchUpdateModels(params: {
+  ids: number[];
+  max_retry?: number;
+  time_out?: number;
+}): Promise<{ updated: number }> {
+  return apiRequest<{ updated: number }>('/models/batch', {
+    method: 'PUT',
+    body: JSON.stringify(params),
+  });
+}
+
 // Model-Provider API functions
 export async function getModelProviders(modelId: number): Promise<ModelWithProvider[]> {
   return apiRequest<ModelWithProvider[]>(`/model-providers?model_id=${modelId}`);

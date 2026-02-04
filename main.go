@@ -71,6 +71,7 @@ func main() {
 	api.POST("/models/:id/template/items", handler.AddModelTemplateItem)
 	api.DELETE("/models/:id/template/items", handler.DeleteModelTemplateItem)
 	api.DELETE("/models/batch", handler.BatchDeleteModels)
+	api.PUT("/models/batch", handler.BatchUpdateModels)
 	api.DELETE("/models/:id", handler.DeleteModel)
 
 	// Model-provider association management

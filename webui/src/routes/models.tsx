@@ -57,6 +57,7 @@ import {
   updateModel,
   deleteModel,
   batchDeleteModels,
+  batchUpdateModels,
   getProviders,
 } from "@/lib/api";
 import type { Model, Provider, ProviderModel } from "@/lib/api";
@@ -85,6 +86,17 @@ const formSchema = z.object({
   io_log: z.boolean(),
 });
 
+// 批量设置表单验证模式
+const batchUpdateSchema = z.object({
+  enableMaxRetry: z.boolean(),
+  enableTimeOut: z.boolean(),
+  max_retry: z.number().min(0, { message: "重试次数不能为负数" }),
+  time_out: z.number().min(0, { message: "超时时间不能为负数" }),
+}).refine(
+  data => data.enableMaxRetry || data.enableTimeOut,
+  { message: "至少选择一个字段进行更新" }
+);
+
 export default function ModelsPage() {
   const navigate = useNavigate();
   const [models, setModels] = useState<Model[]>([]);
@@ -96,6 +108,10 @@ export default function ModelsPage() {
   const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [togglingIOLog, setTogglingIOLog] = useState<Record<number, boolean>>({});
+
+  // 批量设置状态
+  const [batchSettingsDialogOpen, setBatchSettingsDialogOpen] = useState(false);
+  const [batchUpdating, setBatchUpdating] = useState(false);
 
   // 供应商相关状态
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -121,6 +137,17 @@ export default function ModelsPage() {
       max_retry: 10,
       time_out: 60,
       io_log: false,
+    },
+  });
+
+  // 批量设置表单
+  const batchUpdateForm = useForm<z.infer<typeof batchUpdateSchema>>({
+    resolver: zodResolver(batchUpdateSchema),
+    defaultValues: {
+      enableMaxRetry: true,
+      enableTimeOut: true,
+      max_retry: 10,
+      time_out: 60,
     },
   });
 
@@ -343,6 +370,33 @@ export default function ModelsPage() {
     }
   };
 
+  const handleBatchUpdate = async (values: z.infer<typeof batchUpdateSchema>) => {
+    if (selectedIds.length === 0) return;
+    setBatchUpdating(true);
+    try {
+      const params: { ids: number[]; max_retry?: number; time_out?: number } = {
+        ids: selectedIds,
+      };
+      if (values.enableMaxRetry) {
+        params.max_retry = values.max_retry;
+      }
+      if (values.enableTimeOut) {
+        params.time_out = values.time_out;
+      }
+      const result = await batchUpdateModels(params);
+      toast.success(`成功更新 ${result.updated} 个模型`);
+      setSelectedIds([]);
+      setBatchSettingsDialogOpen(false);
+      batchUpdateForm.reset({ enableMaxRetry: true, enableTimeOut: true, max_retry: 10, time_out: 60 });
+      fetchModels();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`批量更新模型失败: ${message}`);
+    } finally {
+      setBatchUpdating(false);
+    }
+  };
+
   const isAllSelected = models.length > 0 && selectedIds.length === models.length;
   const isPartialSelected = selectedIds.length > 0 && selectedIds.length < models.length;
 
@@ -350,6 +404,17 @@ export default function ModelsPage() {
   const filteredModels = models.filter((model) =>
     model.Name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // 计算选中模型的统计信息
+  const selectedModels = models.filter(m => selectedIds.includes(m.ID));
+  const maxRetryRange = selectedModels.length > 0 ? {
+    min: Math.min(...selectedModels.map(m => m.MaxRetry)),
+    max: Math.max(...selectedModels.map(m => m.MaxRetry))
+  } : { min: 0, max: 0 };
+  const timeOutRange = selectedModels.length > 0 ? {
+    min: Math.min(...selectedModels.map(m => m.TimeOut)),
+    max: Math.max(...selectedModels.map(m => m.TimeOut))
+  } : { min: 0, max: 0 };
 
   return (
     <div className="h-full min-h-0 flex flex-col gap-4 p-1">
@@ -366,27 +431,36 @@ export default function ModelsPage() {
           </div>
           <div className="flex w-full sm:w-auto items-center justify-end gap-2">
             {selectedIds.length > 0 && (
-              <AlertDialog open={batchDeleteDialogOpen} onOpenChange={setBatchDeleteDialogOpen}>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive" className="w-full sm:w-auto">
-                    批量删除 ({selectedIds.length})
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>确定要批量删除这些模型吗？</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      此操作无法撤销。这将永久删除选中的 {selectedIds.length} 个模型。
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel disabled={batchDeleting}>取消</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleBatchDelete} disabled={batchDeleting}>
-                      {batchDeleting ? "删除中..." : "确认删除"}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <>
+                <Button
+                  variant="default"
+                  className="w-full sm:w-auto"
+                  onClick={() => setBatchSettingsDialogOpen(true)}
+                >
+                  批量设置 ({selectedIds.length})
+                </Button>
+                <AlertDialog open={batchDeleteDialogOpen} onOpenChange={setBatchDeleteDialogOpen}>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" className="w-full sm:w-auto">
+                      批量删除 ({selectedIds.length})
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>确定要批量删除这些模型吗？</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        此操作无法撤销。这将永久删除选中的 {selectedIds.length} 个模型。
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={batchDeleting}>取消</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleBatchDelete} disabled={batchDeleting}>
+                        {batchDeleting ? "删除中..." : "确认删除"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </>
             )}
             <Button onClick={openCreateDialog} className="w-full sm:w-auto sm:min-w-[120px]">
               添加模型
@@ -831,6 +905,139 @@ export default function ModelsPage() {
               </Button>
             </div>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 批量设置对话框 */}
+      <Dialog open={batchSettingsDialogOpen} onOpenChange={setBatchSettingsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>批量设置模型参数</DialogTitle>
+            <DialogDescription>
+              为选中的 {selectedIds.length} 个模型统一设置重试次数和超时时间
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* 统计信息卡片 */}
+          <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
+            <div className="text-sm">
+              <span className="text-muted-foreground">已选中：</span>
+              <span className="font-medium">{selectedIds.length} 个模型</span>
+            </div>
+            <div className="text-sm">
+              <span className="text-muted-foreground">当前重试次数范围：</span>
+              <span className="font-medium">
+                {maxRetryRange.min === maxRetryRange.max
+                  ? maxRetryRange.min
+                  : `${maxRetryRange.min} - ${maxRetryRange.max}`}
+              </span>
+            </div>
+            <div className="text-sm">
+              <span className="text-muted-foreground">当前超时时间范围：</span>
+              <span className="font-medium">
+                {timeOutRange.min === timeOutRange.max
+                  ? `${timeOutRange.min} 秒`
+                  : `${timeOutRange.min} - ${timeOutRange.max} 秒`}
+              </span>
+            </div>
+          </div>
+
+          <Form {...batchUpdateForm}>
+            <form onSubmit={batchUpdateForm.handleSubmit(handleBatchUpdate)} className="space-y-4">
+              {/* 重试次数 */}
+              <div className="flex items-center gap-4">
+                <FormField
+                  control={batchUpdateForm.control}
+                  name="enableMaxRetry"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center space-x-2 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={batchUpdateForm.control}
+                  name="max_retry"
+                  render={({ field }) => (
+                    <FormItem className="flex-1">
+                      <FormLabel>重试次数限制</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          {...field}
+                          onChange={e => field.onChange(+e.target.value)}
+                          disabled={!batchUpdateForm.watch("enableMaxRetry")}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* 超时时间 */}
+              <div className="flex items-center gap-4">
+                <FormField
+                  control={batchUpdateForm.control}
+                  name="enableTimeOut"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center space-x-2 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={batchUpdateForm.control}
+                  name="time_out"
+                  render={({ field }) => (
+                    <FormItem className="flex-1">
+                      <FormLabel>超时时间(秒)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          {...field}
+                          onChange={e => field.onChange(+e.target.value)}
+                          disabled={!batchUpdateForm.watch("enableTimeOut")}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                只有勾选的字段才会被更新
+              </p>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setBatchSettingsDialogOpen(false)}
+                  disabled={batchUpdating}
+                >
+                  取消
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={batchUpdating || (!batchUpdateForm.watch("enableMaxRetry") && !batchUpdateForm.watch("enableTimeOut"))}
+                >
+                  {batchUpdating ? "更新中..." : "确认设置"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </div>

@@ -1,0 +1,19 @@
+data: {"type":"response.created","sequence_number":0,"response":{"object":"response","id":"","model":"claude-sonnet-4.5","created_at":0,"output":[],"status":"in_progress"}}
+
+data: {"type":"response.in_progress","sequence_number":1,"response":{"object":"response","id":"","model":"claude-sonnet-4.5","created_at":0,"output":[],"status":"in_progress"}}
+
+data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"item_bI2zlbRlreIvgGbU","type":"message","role":"assistant","content":[],"status":"in_progress"}}
+
+data: {"type":"response.content_part.added","sequence_number":3,"output_index":0,"item_id":"item_bI2zlbRlreIvgGbU","content_index":0,"part":{"type":"output_text","text":""}}
+
+data: {"type":"response.output_text.delta","sequence_number":4,"output_index":0,"item_id":"item_bI2zlbRlreIvgGbU","content_index":0,"delta":"星"}
+
+data: {"type":"response.output_text.delta","sequence_number":5,"output_index":0,"item_id":"item_bI2zlbRlreIvgGbU","content_index":0,"delta":"辰"}
+
+data: {"type":"response.output_text.done","sequence_number":6,"output_index":0,"item_id":"item_bI2zlbRlreIvgGbU","content_index":0,"text":"星辰"}
+
+data: {"type":"response.content_part.done","sequence_number":7,"output_index":0,"item_id":"item_bI2zlbRlreIvgGbU","content_index":0,"part":{"type":"output_text","text":"星辰"}}
+
+data: {"type":"response.output_item.done","sequence_number":8,"output_index":0,"item":{"id":"item_bI2zlbRlreIvgGbU","type":"message","role":"assistant","content":[{"type":"output_text","text":"星辰"}],"status":"completed"}}
+
+data: {"type":"response.completed","sequence_number":9,"response":{"object":"response","id":"","model":"claude-sonnet-4.5","created_at":0,"output":[],"status":"completed","usage":{"input_tokens":0,"input_tokens_details":{"cached_tokens":0},"output_tokens":1,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":1}}}

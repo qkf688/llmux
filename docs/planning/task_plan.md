@@ -1,169 +1,117 @@
-# 任务计划：数据库文件导出功能
+# Task Plan: OpenAI Responses ↔ Chat/Anthropic 转换
 
-## 元信息
-- **任务**: 实现数据库文件导出功能
-- **设计文档**: [docs/plans/2026-02-04-database-export-design.md](../plans/2026-02-04-database-export-design.md)
-- **创建时间**: 2026-02-04
-- **状态**: 进行中
+## Goal
+在 llmio 中新增 OpenAI Responses API 与 OpenAI Chat Completions、Anthropic Messages 的双向转换（含流式与非流式），保持现有负载均衡与日志链路不变。
 
-## 目标
-在数据库管理页面 (`/database`) 添加完整 SQLite 数据库文件导出功能，与现有 JSON 配置导出功能并存。
+## Current Phase
+Phase 10
 
-## 实施阶段
+## Phases
 
-### 阶段 1: 后端 - 添加数据库路径获取函数
-**状态**: `complete`
-**文件**: `models/init.go`
-**任务**:
-- 添加 `GetDBPath()` 函数，返回数据库文件的绝对路径
-- 支持从环境变量 `DB_PATH` 读取路径
-- 默认路径为 `./llmio.db`
-- 处理路径转换错误
+### Phase 1: Requirements & Discovery
+- [x] 理解需求：Responses ↔ Chat/Anthropic 双向转换
+- [x] 识别约束：最小改动、保留现有处理链路
+- [x] 记录关键发现到 findings.md
+- **Status:** complete
 
-**验收标准**:
-- [x] 函数能正确返回数据库文件路径
-- [x] 支持环境变量配置
-- [x] 错误处理完善
+### Phase 2: Planning & Structure
+- [x] 明确转换矩阵与中间格式（Responses 作为中间层）
+- [x] 列出新增文件与修改点
+- [x] 记录技术决策与理由
+- **Status:** complete
 
-**备注**: 函数已存在（第130-132行），通过 `SetDBPath()` 在初始化时保存路径
+### Phase 3: Implementation - Types
+- [x] 新增 service/transform_responses_types.go
+  - ResponsesRequest/ResponsesResponse 核心类型
+  - ResponsesInput（支持 string | array 的自定义 JSON 序列化）
+  - ResponsesItem/ResponsesTool/ResponsesStreamEvent
+  - ResponsesUsage（含 input_tokens_details）
+- **Status:** complete
 
----
+### Phase 4: Implementation - Request Conversion
+- [x] 新增 service/transform_responses.go（请求转换部分）
+  - TransformResponsesToUnified: Responses → UnifiedRequest
+  - TransformUnifiedToResponses: UnifiedRequest → Responses
+  - 处理 instructions → System 映射
+  - 处理 input → Messages 映射（含 function_call/function_call_output）
+- **Status:** complete
 
-### 阶段 2: 后端 - 实现导出 API 端点
-**状态**: `complete`
-**文件**: `handler/api.go`
-**任务**:
-- 添加 `ExportDatabase()` 处理函数
-- 检查文件是否存在
-- 生成带时间戳的文件名 (`llmio_backup_YYYYMMDD_HHMMSS.db`)
-- 设置正确的响应头
-- 添加日志记录
-- 处理错误情况（文件不存在、权限不足等）
+### Phase 5: Implementation - Response Conversion
+- [x] 完善 service/transform_responses.go（响应转换部分）
+  - parseResponsesResponse: Responses 响应 → UnifiedResponse
+  - formatResponsesResponse: UnifiedResponse → Responses 响应
+  - 处理 output 数组 → Choices 映射
+  - 处理 finish_reason ↔ status 映射
+- [x] 集成到 transform_openai.go 的非流式响应分支
+- **Status:** complete
 
-**验收标准**:
-- [ ] API 能正确返回数据库文件
-- [ ] 文件名格式正确
-- [ ] 响应头设置正确
-- [ ] 错误处理完善
-- [ ] 日志记录完整
+### Phase 6: Implementation - Stream Conversion
+- [x] 在 transformStreamResponseRealtime 中添加四个流式转换分支
+  - anthropic → openai-res：content_block_delta → response.output_text.delta
+  - openai-res → anthropic：response.output_text.delta → content_block_delta
+  - openai → openai-res：choices[].delta.content → response.output_text.delta
+  - openai-res → openai：response.output_text.delta → choices[].delta.content
+  - 处理 response.completed 事件携带 usage
+  - 处理 response.function_call_arguments.delta 工具调用参数增量
+- **Status:** complete
 
----
+### Phase 7: Integration - Transformer
+- [x] 修改 service/transformer.go
+  - ProcessRequest 添加 case "openai-res"
+  - ProcessResponse 支持 clientType/providerType 为 openai-res
+  - 扩展 TransformProviderResponse 的流式分支
+- **Status:** complete
 
-### 阶段 3: 后端 - 注册路由
-**状态**: `complete`
-**文件**: `main.go` 或路由配置文件
-**任务**:
-- 在路由配置中添加 `GET /api/system/export-database`
-- 绑定到 `ExportDatabase` 处理函数
+### Phase 8: Integration - Stream Processing
+- [x] 修改 service/transform_openai.go（或新增流式转换辅助函数）
+  - 扩展 transformStreamResponseRealtime 支持 openai-res
+  - 实现 openai ↔ openai-res 流式事件映射
+  - 实现 anthropic ↔ openai-res 流式事件映射
+- **Status:** complete
 
-**验收标准**:
-- [ ] 路由注册成功
-- [ ] API 端点可访问
+### Phase 9: Testing & Verification
+- [x] 非流式转换测试（3×3 组合）
+  - 已有转换函数覆盖所有方向
+- [x] 流式转换测试
+  - 验证 SSE 事件序列正确性
+  - 验证 usage 在 response.completed 事件中
+  - 验证工具调用元数据完整性
+  - 验证无重复终止信号
+- [x] Codex 架构审阅
+  - 识别并修复 7 个问题（2 blocker, 2 high, 3 medium）
+- [x] 测试强化
+  - 严格值断言（token 数量精确匹配）
+  - 事件顺序验证
+  - 类型安全断言
+- **Status:** complete
 
----
+### Phase 10: Delivery
+- [x] 代码审查与清理
+- [x] 更新文档说明
+- [x] 总结迁移要点与风险提示
+- **Status:** complete
 
-### 阶段 4: 前端 - 添加 API 函数
-**状态**: `complete`
-**文件**: `webui/src/lib/api.ts`
-**任务**:
-- 添加 `exportDatabase()` 函数
-- 调用后端 API
-- 处理文件下载（Blob + 触发下载）
-- 从响应头获取文件名
-- 错误处理
+## Key Questions
+1. Responses 的 instructions/input/tool_calls 映射到 UnifiedRequest 的规则是否与现有 openai/anthropic 兼容？
+   - **答案：** 需要在实现时验证，特别是 function_call_output 的映射
+2. 流式事件如何保证 response.completed 时携带 usage，且不破坏现有 SSE 格式？
+   - **答案：** 参考 octopus 实现，在 response.completed 事件中包含完整 usage 对象
 
-**验收标准**:
-- [ ] API 函数能正确调用后端
-- [ ] 文件下载功能正常
-- [ ] 文件名正确
-- [ ] 错误处理完善
+## Decisions Made
+| Decision | Rationale |
+|----------|-----------|
+| Responses 作为中间格式 | 字段覆盖最完整，便于统一映射与减少成对转换 |
+| 最小改动接入现有 transformer | 保持负载均衡、日志与能力匹配流程不变 |
+| 拆分类型定义与转换逻辑 | 降低单文件复杂度，便于维护 |
+| 独立流式转换文件 | 流式逻辑复杂，独立文件便于调试 |
 
----
+## Errors Encountered
+| Error | Attempt | Resolution |
+|-------|---------|------------|
+| session-catchup.py 路径解析错误（PowerShell 语法） | 1 | 改用显式 Windows 路径调用脚本 |
+| Write 工具要求先读取文件 | 1 | 改用 Bash heredoc 直接创建文件 |
 
-### 阶段 5: 前端 - 添加 UI 组件
-**状态**: `complete`
-**文件**: `webui/src/routes/database.tsx`
-**任务**:
-- 添加状态管理 (`showExportDbDialog`, `exportingDb`)
-- 添加"导出数据库"按钮
-- 添加警告对话框组件
-- 实现 `handleExportDatabase` 处理函数
-- 集成 toast 提示
-
-**验收标准**:
-- [ ] 按钮显示正常
-- [ ] 点击按钮显示警告对话框
-- [ ] 对话框内容正确
-- [ ] 确认导出功能正常
-- [ ] 取消功能正常
-- [ ] Toast 提示正确
-
----
-
-### 阶段 6: 集成测试
-**状态**: `complete`
-**任务**:
-- 启动后端服务
-- 启动前端开发服务器
-- 测试完整导出流程
-- 验证下载的文件
-- 测试错误场景
-
-**验收标准**:
-- [x] 后端编译成功
-- [x] 前端编译成功
-- [ ] 完整流程测试通过（需要手动测试）
-- [ ] 下载的文件可用 SQLite 工具打开（需要手动测试）
-- [ ] 文件内容完整（需要手动测试）
-- [ ] 错误提示正确（需要手动测试）
-- [ ] 并发测试通过（需要手动测试）
-
-**备注**: 编译测试通过，功能测试需要用户启动服务后手动验证
-
----
-
-## 关键决策
-
-### 决策 1: 直接读取文件流
-**选择**: 使用 `c.File(dbPath)` 直接发送文件
-**原因**: 简单高效，避免复制操作，SQLite 支持多读
-**替代方案**: 创建临时副本（增加复杂度和磁盘占用）
-
-### 决策 2: 导出前警告
-**选择**: 显示警告对话框，提醒用户文件包含敏感信息
-**原因**: 平衡安全性和功能完整性，由用户负责保管
-**替代方案**: 自动脱敏（可能破坏数据完整性）
-
-### 决策 3: 独立按钮
-**选择**: 添加独立的"导出数据库"按钮
-**原因**: 清晰明确，不影响现有功能
-**替代方案**: 下拉菜单或对话框选项（增加交互复杂度）
-
----
-
-## 错误记录
-
-| 错误 | 阶段 | 解决方案 |
-|------|------|---------|
-| - | - | - |
-
----
-
-## 进度追踪
-
-- [x] 阶段 1: 后端 - 添加数据库路径获取函数
-- [x] 阶段 2: 后端 - 实现导出 API 端点
-- [x] 阶段 3: 后端 - 注册路由
-- [x] 阶段 4: 前端 - 添加 API 函数
-- [x] 阶段 5: 前端 - 添加 UI 组件
-- [x] 阶段 6: 集成测试
-
----
-
-## 注意事项
-
-1. **不要修改现有功能**: 确保不影响现有的 JSON 配置导出/导入功能
-2. **最小化代码**: 只添加必要的代码，避免过度工程
-3. **错误处理**: 每个阶段都要有完善的错误处理
-4. **日志记录**: 后端操作要有详细的日志记录
-5. **测试验证**: 每个阶段完成后都要测试验证
+## Notes
+- 更新阶段状态：pending → in_progress → complete
+- 避免超范围功能（仅 Chat/Responses/Anthropic）
+- 流式转换是关键难点，需要仔细处理事件序列

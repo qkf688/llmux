@@ -15,3 +15,5 @@ llmio.exe~
 plans
 proxy-logger
 .trae
+# BitFun snapshot data - auto managed
+.bitfun/

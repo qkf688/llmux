@@ -74,6 +74,53 @@ func BeforerOpenAIRes(data []byte) (*Before, error) {
 	if model == "" {
 		return nil, errors.New("model is empty")
 	}
+
+	// Cherry Studio 兼容：如果有 messages 字段，转换为 input 字段
+	if gjson.GetBytes(data, "messages").Exists() && !gjson.GetBytes(data, "input").Exists() {
+		messages := gjson.GetBytes(data, "messages").Array()
+		if len(messages) > 0 {
+			// 将 OpenAI Chat 格式的 messages 转换为 Responses API 的 input 格式
+			var inputItems []map[string]interface{}
+			for _, msg := range messages {
+				role := msg.Get("role").String()
+				content := msg.Get("content")
+
+				// 构建 ResponsesItem
+				item := map[string]interface{}{
+					"role": role,
+				}
+
+				// 处理 content（可能是 string 或 array）
+				if content.IsArray() {
+					// content 是数组，保持原样
+					item["content"] = content.Value()
+				} else {
+					// content 是字符串，转换为 input_text 格式的数组
+					item["content"] = []map[string]interface{}{
+						{
+							"type": "input_text",
+							"text": content.String(),
+						},
+					}
+				}
+
+				inputItems = append(inputItems, item)
+			}
+
+			var err error
+			data, err = sjson.SetBytes(data, "input", inputItems)
+			if err != nil {
+				return nil, err
+			}
+
+			// 删除原始的 messages 字段，避免混淆
+			data, err = sjson.DeleteBytes(data, "messages")
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	stream := gjson.GetBytes(data, "stream").Bool()
 	var toolCall bool
 	tools := gjson.GetBytes(data, "tools")

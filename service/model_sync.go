@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/atopos31/llmio/models"
@@ -104,6 +106,16 @@ func (s *ModelSyncService) SyncProviderModels(ctx context.Context, providerID ui
 		return syncLog, nil
 	}
 
+	// 应用过滤规则（如果启用）
+	if provider.ModelFilterEnabled != nil && *provider.ModelFilterEnabled {
+		filteredModels, err := s.filterModelsByRules(ctx, upstreamModels)
+		if err != nil {
+			slog.Warn("failed to filter models by rules", "provider_id", providerID, "error", err)
+		} else {
+			upstreamModels = filteredModels
+		}
+	}
+
 	// 比较差异
 	upstreamModelSet := make(map[string]bool)
 	for _, model := range upstreamModels {
@@ -181,6 +193,9 @@ func (s *ModelSyncService) SyncProviderModels(ctx context.Context, providerID ui
 
 // SyncAllProviders 同步所有启用模型端点的提供商
 func (s *ModelSyncService) SyncAllProviders(ctx context.Context) ([]*models.ModelSyncLog, error) {
+	// 生成批次ID
+	batchID := fmt.Sprintf("%d", time.Now().Unix())
+
 	// 获取所有启用模型端点的提供商
 	var providers []models.Provider
 	if err := s.db.WithContext(ctx).
@@ -197,11 +212,79 @@ func (s *ModelSyncService) SyncAllProviders(ctx context.Context) ([]*models.Mode
 			continue
 		}
 		if log != nil {
+			// 设置批次ID
+			log.BatchID = &batchID
+			if err := s.db.Model(log).Update("batch_id", batchID).Error; err != nil {
+				slog.Error("failed to update batch_id", "log_id", log.ID, "error", err)
+			}
 			logs = append(logs, log)
 		}
 	}
 
 	return logs, nil
+}
+
+// AddedModel 新增模型信息
+type AddedModel struct {
+	ModelName    string    `json:"model_name"`
+	ProviderName string    `json:"provider_name"`
+	AddedAt      time.Time `json:"added_at"`
+}
+
+// RecentAddedModelsResponse 最近新增模型响应
+type RecentAddedModelsResponse struct {
+	Data       []AddedModel `json:"data"`
+	SyncTime   *time.Time   `json:"sync_time,omitempty"`
+	TotalCount int          `json:"total_count"`
+}
+
+// GetRecentAddedModels 获取最近一次同步批次新增的模型
+func (s *ModelSyncService) GetRecentAddedModels(ctx context.Context) (*RecentAddedModelsResponse, error) {
+	// 1. 查找最新的 batch_id
+	var latestLog models.ModelSyncLog
+	err := s.db.WithContext(ctx).
+		Where("batch_id IS NOT NULL AND batch_id != ?", "").
+		Order("batch_id DESC").
+		First(&latestLog).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return &RecentAddedModelsResponse{Data: []AddedModel{}, TotalCount: 0}, nil
+		}
+		return nil, err
+	}
+
+	// 2. 查询该批次所有成功且有新增的日志
+	var logs []models.ModelSyncLog
+	err = s.db.WithContext(ctx).
+		Where("batch_id = ? AND status = ?", latestLog.BatchID, "success").
+		Where("added_count > 0").
+		Find(&logs).Error
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. 聚合 AddedModels
+	var result []AddedModel
+	for _, log := range logs {
+		for _, modelName := range log.AddedModels {
+			result = append(result, AddedModel{
+				ModelName:    modelName,
+				ProviderName: log.ProviderName,
+				AddedAt:      log.SyncedAt,
+			})
+		}
+	}
+
+	// 4. 按时间排序（最新的在前）
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].AddedAt.After(result[j].AddedAt)
+	})
+
+	return &RecentAddedModelsResponse{
+		Data:       result,
+		SyncTime:   &latestLog.SyncedAt,
+		TotalCount: len(result),
+	}, nil
 }
 
 // StartAutoSync 启动自动同步定时任务
@@ -535,4 +618,42 @@ func (s *ModelSyncService) cleanInvalidAssociations(ctx context.Context) {
 	if removedCount > 0 {
 		slog.Info("auto-cleaned invalid associations", "count", removedCount)
 	}
+}
+
+// filterModelsByRules 根据配置的规则过滤模型列表
+func (s *ModelSyncService) filterModelsByRules(ctx context.Context, upstreamModels []providers.Model) ([]providers.Model, error) {
+	// 获取过滤规则
+	setting, err := gorm.G[models.Setting](s.db).Where("key = ?", models.SettingKeyModelSyncFilterRules).First(ctx)
+	if err != nil {
+		return upstreamModels, err
+	}
+
+	var rules []string
+	if err := json.Unmarshal([]byte(setting.Value), &rules); err != nil {
+		return upstreamModels, err
+	}
+
+	if len(rules) == 0 {
+		return upstreamModels, nil
+	}
+
+	// 过滤模型
+	var filtered []providers.Model
+	for _, model := range upstreamModels {
+		if matchesAnyRule(model.ID, rules) {
+			filtered = append(filtered, model)
+		}
+	}
+
+	return filtered, nil
+}
+
+// matchesAnyRule 检查模型 ID 是否匹配任一规则
+func matchesAnyRule(modelID string, rules []string) bool {
+	for _, rule := range rules {
+		if strings.Contains(modelID, rule) {
+			return true
+		}
+	}
+	return false
 }

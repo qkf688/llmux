@@ -22,12 +22,13 @@ import (
 
 // ProviderRequest represents the request body for creating/updating a provider
 type ProviderRequest struct {
-	Name          string `json:"name"`
-	Type          string `json:"type"`
-	Config        string `json:"config"`
-	Console       string `json:"console"`
-	Proxy         string `json:"proxy"`
-	ModelEndpoint *bool  `json:"model_endpoint"`
+	Name               string `json:"name"`
+	Type               string `json:"type"`
+	Config             string `json:"config"`
+	Console            string `json:"console"`
+	Proxy              string `json:"proxy"`
+	ModelEndpoint      *bool  `json:"model_endpoint"`
+	ModelFilterEnabled *bool  `json:"model_filter_enabled"`
 }
 
 // ModelRequest represents the request body for creating/updating a model
@@ -168,13 +169,20 @@ func CreateProvider(c *gin.Context) {
 		modelEndpoint = *req.ModelEndpoint
 	}
 
+	// 如果没有指定ModelFilterEnabled，默认为false
+	modelFilterEnabled := false
+	if req.ModelFilterEnabled != nil {
+		modelFilterEnabled = *req.ModelFilterEnabled
+	}
+
 	provider := models.Provider{
-		Name:          req.Name,
-		Type:          req.Type,
-		Config:        req.Config,
-		Console:       req.Console,
-		Proxy:         req.Proxy,
-		ModelEndpoint: &modelEndpoint,
+		Name:               req.Name,
+		Type:               req.Type,
+		Config:             req.Config,
+		Console:            req.Console,
+		Proxy:              req.Proxy,
+		ModelEndpoint:      &modelEndpoint,
+		ModelFilterEnabled: &modelFilterEnabled,
 	}
 
 	if err := gorm.G[models.Provider](models.DB).Create(c.Request.Context(), &provider); err != nil {
@@ -215,12 +223,13 @@ func UpdateProvider(c *gin.Context) {
 
 	// Update fields
 	updates := models.Provider{
-		Name:          req.Name,
-		Type:          req.Type,
-		Config:        req.Config,
-		Console:       req.Console,
-		Proxy:         req.Proxy,
-		ModelEndpoint: req.ModelEndpoint,
+		Name:               req.Name,
+		Type:               req.Type,
+		Config:             req.Config,
+		Console:            req.Console,
+		Proxy:              req.Proxy,
+		ModelEndpoint:      req.ModelEndpoint,
+		ModelFilterEnabled: req.ModelFilterEnabled,
 	}
 
 	if _, err := gorm.G[models.Provider](models.DB).Where("id = ?", id).Updates(c.Request.Context(), updates); err != nil {
@@ -910,6 +919,16 @@ func CreateModelProvider(c *gin.Context) {
 		return
 	}
 
+	// 检查是否启用关联时自动保存到模板
+	if getSettingBool(c.Request.Context(), models.SettingKeyAutoSaveTemplateOnAssociate) {
+		if err := saveProviderModelToTemplate(c.Request.Context(), modelProvider.ModelID, modelProvider.ProviderModel); err != nil {
+			slog.Warn("failed to save provider model to template on create",
+				"error", err,
+				"model_id", modelProvider.ModelID,
+				"provider_model", modelProvider.ProviderModel)
+		}
+	}
+
 	common.Success(c, modelProvider)
 }
 
@@ -1047,6 +1066,45 @@ func saveProviderModelToTemplate(ctx context.Context, modelID uint, providerMode
 	return nil
 }
 
+// batchImportExistingAssociations 批量导入现有关联到模板
+func batchImportExistingAssociations(ctx context.Context) {
+	slog.Info("starting batch import of existing associations to template")
+
+	// 获取所有现有关联
+	assocs, err := gorm.G[models.ModelWithProvider](models.DB).Find(ctx)
+	if err != nil {
+		slog.Error("failed to fetch existing associations", "error", err)
+		return
+	}
+
+	imported := 0
+	skipped := 0
+	failed := 0
+
+	for _, assoc := range assocs {
+		if assoc.ProviderModel == "" {
+			skipped++
+			continue
+		}
+
+		if err := saveProviderModelToTemplate(ctx, assoc.ModelID, assoc.ProviderModel); err != nil {
+			slog.Warn("failed to import association to template",
+				"model_id", assoc.ModelID,
+				"provider_model", assoc.ProviderModel,
+				"error", err)
+			failed++
+		} else {
+			imported++
+		}
+	}
+
+	slog.Info("batch import completed",
+		"total", len(assocs),
+		"imported", imported,
+		"skipped", skipped,
+		"failed", failed)
+}
+
 // DeleteModelProvider 删除模型提供商关联
 func DeleteModelProvider(c *gin.Context) {
 	idStr := c.Param("id")
@@ -1056,30 +1114,9 @@ func DeleteModelProvider(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-
-	// 检查是否启用自动保存到模板
-	autoSave := getSettingBool(ctx, models.SettingKeyAutoSaveTemplateOnDelete)
-	if autoSave {
-		// 获取要删除的记录
-		assoc, err := gorm.G[models.ModelWithProvider](models.DB).
-			Where("id = ?", id).
-			First(ctx)
-		if err == nil {
-			// 保存到模板（失败不影响删除）
-			if err := saveProviderModelToTemplate(ctx, assoc.ModelID, assoc.ProviderModel); err != nil {
-				slog.Warn("failed to save provider model to template",
-					"error", err,
-					"model_id", assoc.ModelID,
-					"provider_model", assoc.ProviderModel)
-			}
-		}
-	}
-
-	// 执行删除
 	result, err := gorm.G[models.ModelWithProvider](models.DB).
 		Where("id = ?", id).
-		Delete(ctx)
+		Delete(c.Request.Context())
 	if err != nil {
 		common.InternalServerError(c, "Failed to delete model-provider association: "+err.Error())
 		return
@@ -1119,27 +1156,6 @@ func BatchDeleteModelProviders(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// 检查是否启用自动保存到模板
-	autoSave := getSettingBool(ctx, models.SettingKeyAutoSaveTemplateOnDelete)
-	if autoSave {
-		// 获取要删除的所有记录
-		assocs, err := gorm.G[models.ModelWithProvider](models.DB).
-			Where("id IN ?", req.IDs).
-			Find(ctx)
-		if err == nil {
-			// 批量保存到模板
-			for _, assoc := range assocs {
-				if err := saveProviderModelToTemplate(ctx, assoc.ModelID, assoc.ProviderModel); err != nil {
-					slog.Warn("failed to save provider model to template",
-						"error", err,
-						"model_id", assoc.ModelID,
-						"provider_model", assoc.ProviderModel)
-				}
-			}
-		}
-	}
-
-	// 执行批量删除
 	result, err := gorm.G[models.ModelWithProvider](models.DB).
 		Where("id IN ?", req.IDs).
 		Delete(ctx)
@@ -1364,14 +1380,19 @@ type SettingsResponse struct {
 	StripResponseHeaders       bool `json:"strip_response_headers"`
 	EnableFormatConversion     bool `json:"enable_format_conversion"`
 	// 模型同步相关设置
-	ModelSyncEnabled           bool `json:"model_sync_enabled"`
-	ModelSyncInterval          int  `json:"model_sync_interval"`
-	ModelSyncLogRetentionCount int  `json:"model_sync_log_retention_count"`
-	ModelSyncLogRetentionDays  int  `json:"model_sync_log_retention_days"`
+	ModelSyncEnabled           bool     `json:"model_sync_enabled"`
+	ModelSyncInterval          int      `json:"model_sync_interval"`
+	ModelSyncLogRetentionCount int      `json:"model_sync_log_retention_count"`
+	ModelSyncLogRetentionDays  int      `json:"model_sync_log_retention_days"`
+	ModelSyncFilterRules       []string `json:"model_sync_filter_rules"`
+	// 模板模糊匹配相关设置
+	TemplateFuzzyMatchEnabled    bool     `json:"template_fuzzy_match_enabled"`
+	TemplateFuzzyMatchSeparators []string `json:"template_fuzzy_match_separators"`
+	TemplateFuzzyMatchSuffixes   []string `json:"template_fuzzy_match_suffixes"`
 	// 模型关联相关设置
-	AutoAssociateOnAdd       bool `json:"auto_associate_on_add"`
-	AutoCleanOnDelete        bool `json:"auto_clean_on_delete"`
-	AutoSaveTemplateOnDelete bool `json:"auto_save_template_on_delete"`
+	AutoAssociateOnAdd          bool `json:"auto_associate_on_add"`
+	AutoCleanOnDelete           bool `json:"auto_clean_on_delete"`
+	AutoSaveTemplateOnAssociate bool `json:"auto_save_template_on_associate"`
 }
 
 // UpdateSettingsRequest 更新设置请求结构
@@ -1404,14 +1425,19 @@ type UpdateSettingsRequest struct {
 	StripResponseHeaders       bool `json:"strip_response_headers"`
 	EnableFormatConversion     bool `json:"enable_format_conversion"`
 	// 模型同步相关设置
-	ModelSyncEnabled           bool `json:"model_sync_enabled"`
-	ModelSyncInterval          int  `json:"model_sync_interval"`
-	ModelSyncLogRetentionCount int  `json:"model_sync_log_retention_count"`
-	ModelSyncLogRetentionDays  int  `json:"model_sync_log_retention_days"`
+	ModelSyncEnabled           bool     `json:"model_sync_enabled"`
+	ModelSyncInterval          int      `json:"model_sync_interval"`
+	ModelSyncLogRetentionCount int      `json:"model_sync_log_retention_count"`
+	ModelSyncLogRetentionDays  int      `json:"model_sync_log_retention_days"`
+	ModelSyncFilterRules       []string `json:"model_sync_filter_rules"`
+	// 模板模糊匹配相关设置
+	TemplateFuzzyMatchEnabled    bool     `json:"template_fuzzy_match_enabled"`
+	TemplateFuzzyMatchSeparators []string `json:"template_fuzzy_match_separators"`
+	TemplateFuzzyMatchSuffixes   []string `json:"template_fuzzy_match_suffixes"`
 	// 模型关联相关设置
-	AutoAssociateOnAdd       bool `json:"auto_associate_on_add"`
-	AutoCleanOnDelete        bool `json:"auto_clean_on_delete"`
-	AutoSaveTemplateOnDelete bool `json:"auto_save_template_on_delete"`
+	AutoAssociateOnAdd          bool `json:"auto_associate_on_add"`
+	AutoCleanOnDelete           bool `json:"auto_clean_on_delete"`
+	AutoSaveTemplateOnAssociate bool `json:"auto_save_template_on_associate"`
 }
 
 // GetSettings 获取所有设置
@@ -1450,10 +1476,15 @@ func GetSettings(c *gin.Context) {
 		StripResponseHeaders:       false,
 		EnableFormatConversion:     true,
 		// 模型同步相关默认值
-		ModelSyncEnabled:           false,
-		ModelSyncInterval:          12,
-		ModelSyncLogRetentionCount: 100,
-		ModelSyncLogRetentionDays:  7,
+		ModelSyncEnabled:             false,
+		ModelSyncInterval:            12,
+		ModelSyncLogRetentionCount:   100,
+		ModelSyncLogRetentionDays:    7,
+		ModelSyncFilterRules:         []string{},
+		// 模板模糊匹配相关默认值
+		TemplateFuzzyMatchEnabled:    false,
+		TemplateFuzzyMatchSeparators: []string{":", "-"},
+		TemplateFuzzyMatchSuffixes:   []string{"free"},
 	}
 
 	for _, setting := range settings {
@@ -1539,8 +1570,8 @@ func GetSettings(c *gin.Context) {
 			response.AutoAssociateOnAdd = setting.Value == "true"
 		case models.SettingKeyAutoCleanOnDelete:
 			response.AutoCleanOnDelete = setting.Value == "true"
-		case models.SettingKeyAutoSaveTemplateOnDelete:
-			response.AutoSaveTemplateOnDelete = setting.Value == "true"
+		case models.SettingKeyAutoSaveTemplateOnAssociate:
+			response.AutoSaveTemplateOnAssociate = setting.Value == "true"
 		case models.SettingKeyModelSyncEnabled:
 			response.ModelSyncEnabled = setting.Value == "true"
 		case models.SettingKeyModelSyncInterval:
@@ -1554,6 +1585,23 @@ func GetSettings(c *gin.Context) {
 		case models.SettingKeyModelSyncLogRetentionDays:
 			if val, err := strconv.Atoi(setting.Value); err == nil {
 				response.ModelSyncLogRetentionDays = val
+			}
+		case models.SettingKeyModelSyncFilterRules:
+			var rules []string
+			if err := json.Unmarshal([]byte(setting.Value), &rules); err == nil {
+				response.ModelSyncFilterRules = rules
+			}
+		case models.SettingKeyTemplateFuzzyMatchEnabled:
+			response.TemplateFuzzyMatchEnabled = setting.Value == "true"
+		case models.SettingKeyTemplateFuzzyMatchSeparators:
+			var seps []string
+			if err := json.Unmarshal([]byte(setting.Value), &seps); err == nil {
+				response.TemplateFuzzyMatchSeparators = seps
+			}
+		case models.SettingKeyTemplateFuzzyMatchSuffixes:
+			var suffs []string
+			if err := json.Unmarshal([]byte(setting.Value), &suffs); err == nil {
+				response.TemplateFuzzyMatchSuffixes = suffs
 			}
 		}
 	}
@@ -1871,16 +1919,26 @@ func UpdateSettings(c *gin.Context) {
 		return
 	}
 
-	// 更新 auto_save_template_on_delete 设置
+	// 更新 auto_save_template_on_associate 设置
+	// 检查是否首次开启，如果是则触发批量导入
+	oldAutoSaveValue := getSettingBool(ctx, models.SettingKeyAutoSaveTemplateOnAssociate)
+	newAutoSaveValue := req.AutoSaveTemplateOnAssociate
+
 	autoSaveTemplateValue := "false"
-	if req.AutoSaveTemplateOnDelete {
+	if newAutoSaveValue {
 		autoSaveTemplateValue = "true"
 	}
 	if _, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyAutoSaveTemplateOnDelete).
+		Where("key = ?", models.SettingKeyAutoSaveTemplateOnAssociate).
 		Update(ctx, "value", autoSaveTemplateValue); err != nil {
 		common.InternalServerError(c, "Failed to update settings: "+err.Error())
 		return
+	}
+
+	// 如果是首次开启，触发批量导入
+	if !oldAutoSaveValue && newAutoSaveValue {
+		go batchImportExistingAssociations(context.Background())
+		slog.Info("triggered batch import of existing associations")
 	}
 
 	// 更新模型同步开关
@@ -1924,6 +1982,57 @@ func UpdateSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyModelSyncLogRetentionDays).
 		Update(ctx, "value", strconv.Itoa(req.ModelSyncLogRetentionDays)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新模型同步过滤规则
+	filterRulesJSON, err := json.Marshal(req.ModelSyncFilterRules)
+	if err != nil {
+		common.InternalServerError(c, "Failed to marshal filter rules: "+err.Error())
+		return
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyModelSyncFilterRules).
+		Update(ctx, "value", string(filterRulesJSON)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新模板模糊匹配开关
+	templateFuzzyMatchValue := "false"
+	if req.TemplateFuzzyMatchEnabled {
+		templateFuzzyMatchValue = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyTemplateFuzzyMatchEnabled).
+		Update(ctx, "value", templateFuzzyMatchValue); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新模板模糊匹配分隔符
+	separatorsJSON, err := json.Marshal(req.TemplateFuzzyMatchSeparators)
+	if err != nil {
+		common.InternalServerError(c, "Failed to marshal separators: "+err.Error())
+		return
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyTemplateFuzzyMatchSeparators).
+		Update(ctx, "value", string(separatorsJSON)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新模板模糊匹配后缀
+	suffixesJSON, err := json.Marshal(req.TemplateFuzzyMatchSuffixes)
+	if err != nil {
+		common.InternalServerError(c, "Failed to marshal suffixes: "+err.Error())
+		return
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyTemplateFuzzyMatchSuffixes).
+		Update(ctx, "value", string(suffixesJSON)); err != nil {
 		common.InternalServerError(c, "Failed to update settings: "+err.Error())
 		return
 	}
@@ -2895,6 +3004,20 @@ func GetModelSyncStats(c *gin.Context) {
 	}
 
 	common.Success(c, response)
+}
+
+// GetRecentAddedModels 获取最近新增的模型
+func GetRecentAddedModels(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	syncService := service.NewModelSyncService(models.DB)
+	result, err := syncService.GetRecentAddedModels(ctx)
+	if err != nil {
+		common.InternalServerError(c, "Failed to get recent added models: "+err.Error())
+		return
+	}
+
+	common.Success(c, result)
 }
 
 // AssociationPreview 关联预览信息

@@ -159,6 +159,12 @@ func TransformUnifiedToOpenAI(unified *UnifiedRequest) ([]byte, error) {
 		}
 		messages = append(messages, msgMap)
 	}
+
+	// 验证 messages 不为空
+	if len(messages) == 0 {
+		return nil, fmt.Errorf("messages cannot be empty: OpenAI API requires at least one message")
+	}
+
 	req["messages"] = messages
 
 	// 转换工具
@@ -217,6 +223,8 @@ func transformNonStreamResponse(response *http.Response, body []byte, providerTy
 	switch providerType {
 	case "openai":
 		unified, err = parseOpenAIResponse(body)
+	case "openai-res":
+		unified, err = parseResponsesResponse(body)
 	case "anthropic":
 		unified, err = parseAnthropicResponse(body)
 	default:
@@ -232,6 +240,8 @@ func transformNonStreamResponse(response *http.Response, body []byte, providerTy
 	switch clientType {
 	case "openai":
 		newBody, err = formatOpenAIResponse(unified)
+	case "openai-res":
+		newBody, err = formatResponsesResponse(unified)
 	case "anthropic":
 		newBody, err = formatAnthropicResponse(unified)
 	default:
@@ -272,6 +282,10 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 		var currentEvent string
 		lineCount := 0
 		errorCount := 0
+		sequenceNumber := 0
+		accumulatedText := ""
+		var responseID string
+		var itemID string
 
 		for scanner.Scan() {
 			lineCount++
@@ -694,6 +708,946 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 						}
 					}
 				}
+			} else if providerType == "anthropic" && clientType == "openai-res" {
+				// Anthropic → Responses 转换
+				if data == "[DONE]" {
+					// Anthropic 不发送 [DONE]，忽略
+					continue
+				}
+
+				var chunk map[string]interface{}
+				if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+					errorCount++
+					slog.Error("failed to parse SSE chunk in stream transformation",
+						"provider_type", providerType,
+						"client_type", clientType,
+						"line", lineCount,
+						"error", err)
+					continue
+				}
+
+				eventType := currentEvent
+				if eventType == "" {
+					eventType = getString(chunk, "type")
+				}
+
+				switch eventType {
+				case "message_start":
+					// 获取 message ID 并生成 item ID
+					responseID = getNestedString(chunk, "message.id")
+					itemID = fmt.Sprintf("msg_%s", responseID)
+
+					// 发送 response.created 事件
+					responseCreated := map[string]interface{}{
+						"type":            "response.created",
+						"sequence_number": sequenceNumber,
+						"response": map[string]interface{}{
+							"object":     "response",
+							"id":         responseID,
+							"model":      getNestedString(chunk, "message.model"),
+							"created_at": 0,
+							"output":     []interface{}{},
+							"status":     "in_progress",
+						},
+					}
+					sequenceNumber++
+					createdData, _ := marshalWithTypeFirst(responseCreated)
+					if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(createdData)); err != nil {
+						pw.CloseWithError(err)
+						return
+					}
+
+					// 发送 response.in_progress 事件
+					responseInProgress := map[string]interface{}{
+						"type":            "response.in_progress",
+						"sequence_number": sequenceNumber,
+						"response": map[string]interface{}{
+							"object":     "response",
+							"id":         responseID,
+							"model":      getNestedString(chunk, "message.model"),
+							"created_at": 0,
+							"output":     []interface{}{},
+							"status":     "in_progress",
+						},
+					}
+					sequenceNumber++
+					inProgressData, _ := marshalWithTypeFirst(responseInProgress)
+					if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(inProgressData)); err != nil {
+						pw.CloseWithError(err)
+						return
+					}
+
+				case "content_block_start":
+					// 发送 response.output_item.added 事件
+					if contentBlock, ok := chunk["content_block"].(map[string]interface{}); ok {
+						_ = getString(contentBlock, "type") // 忽略 blockType，统一使用 message 类型
+						itemAdded := map[string]interface{}{
+							"type":            "response.output_item.added",
+							"sequence_number": sequenceNumber,
+							"output_index":    int(getFloat(chunk, "index")),
+							"item": map[string]interface{}{
+								"id":      itemID,
+								"type":    "message",
+								"role":    "assistant",
+								"content": []interface{}{},
+								"status":  "in_progress",
+							},
+						}
+						sequenceNumber++
+						addedData, _ := marshalWithTypeFirst(itemAdded)
+						if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(addedData)); err != nil {
+							pw.CloseWithError(err)
+							return
+						}
+
+						// 发送 response.content_part.added 事件
+						contentPartAdded := map[string]interface{}{
+							"type":            "response.content_part.added",
+							"sequence_number": sequenceNumber,
+							"output_index":    int(getFloat(chunk, "index")),
+							"item_id":         itemID,
+							"content_index":   0,
+							"part": map[string]interface{}{
+								"type": "output_text",
+								"text": "",
+							},
+						}
+						sequenceNumber++
+						partAddedData, _ := marshalWithTypeFirst(contentPartAdded)
+						if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(partAddedData)); err != nil {
+							pw.CloseWithError(err)
+							return
+						}
+
+						// 重置累积文本
+						accumulatedText = ""
+					}
+
+				case "content_block_delta":
+					if delta, ok := chunk["delta"].(map[string]interface{}); ok {
+						deltaType := getString(delta, "type")
+
+						if deltaType == "text_delta" {
+							// 发送 response.output_text.delta 事件
+							if text := getString(delta, "text"); text != "" {
+								accumulatedText += text
+								textDelta := map[string]interface{}{
+									"type":            "response.output_text.delta",
+									"sequence_number": sequenceNumber,
+									"output_index":    int(getFloat(chunk, "index")),
+									"item_id":         itemID,
+									"content_index":   0,
+									"delta":           text,
+								}
+								sequenceNumber++
+								deltaData, _ := marshalWithTypeFirst(textDelta)
+								if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(deltaData)); err != nil {
+									pw.CloseWithError(err)
+									return
+								}
+							}
+						} else if deltaType == "input_json_delta" {
+							// 发送 response.function_call_arguments.delta 事件
+							if partialJson := getString(delta, "partial_json"); partialJson != "" {
+								argsDelta := map[string]interface{}{
+									"type":            "response.function_call_arguments.delta",
+									"sequence_number": sequenceNumber,
+									"output_index":    int(getFloat(chunk, "index")),
+									"delta":           partialJson,
+								}
+								sequenceNumber++
+								deltaData, _ := marshalWithTypeFirst(argsDelta)
+								if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(deltaData)); err != nil {
+									pw.CloseWithError(err)
+									return
+								}
+							}
+						}
+					}
+
+				case "message_delta":
+					// 发送 response.output_text.done 事件
+					outputTextDone := map[string]interface{}{
+						"type":            "response.output_text.done",
+						"sequence_number": sequenceNumber,
+						"output_index":    0,
+						"item_id":         itemID,
+						"content_index":   0,
+						"text":            accumulatedText,
+					}
+					sequenceNumber++
+					textDoneData, _ := marshalWithTypeFirst(outputTextDone)
+					if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(textDoneData)); err != nil {
+						pw.CloseWithError(err)
+						return
+					}
+
+					// 发送 response.content_part.done 事件
+					contentPartDone := map[string]interface{}{
+						"type":            "response.content_part.done",
+						"sequence_number": sequenceNumber,
+						"output_index":    0,
+						"item_id":         itemID,
+						"content_index":   0,
+						"part": map[string]interface{}{
+							"type": "output_text",
+							"text": accumulatedText,
+						},
+					}
+					sequenceNumber++
+					partDoneData, _ := marshalWithTypeFirst(contentPartDone)
+					if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(partDoneData)); err != nil {
+						pw.CloseWithError(err)
+						return
+					}
+
+					// 发送 response.output_item.done 事件
+					outputItemDone := map[string]interface{}{
+						"type":            "response.output_item.done",
+						"sequence_number": sequenceNumber,
+						"output_index":    0,
+						"item": map[string]interface{}{
+							"id":   itemID,
+							"type": "message",
+							"role": "assistant",
+							"content": []map[string]interface{}{
+								{
+									"type": "output_text",
+									"text": accumulatedText,
+								},
+							},
+							"status": "completed",
+						},
+					}
+					sequenceNumber++
+					itemDoneData, _ := marshalWithTypeFirst(outputItemDone)
+					if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(itemDoneData)); err != nil {
+						pw.CloseWithError(err)
+						return
+					}
+
+					// 发送 response.completed 事件（含 usage）
+					status := "completed"
+					if delta, ok := chunk["delta"].(map[string]interface{}); ok {
+						if reason := getString(delta, "stop_reason"); reason != "" {
+							if reason == "max_tokens" {
+								status = "incomplete"
+							}
+						}
+					}
+
+					responseCompleted := map[string]interface{}{
+						"type":            "response.completed",
+						"sequence_number": sequenceNumber,
+						"response": map[string]interface{}{
+							"object":     "response",
+							"id":         responseID,
+							"model":      getNestedString(chunk, "message.model"),
+							"created_at": 0,
+							"output":     []interface{}{},
+							"status":     status,
+						},
+					}
+
+					// 添加 usage 信息
+					if usage, ok := chunk["usage"].(map[string]interface{}); ok {
+						usageMap := map[string]interface{}{
+							"input_tokens":  int(getFloat(usage, "input_tokens")),
+							"output_tokens": int(getFloat(usage, "output_tokens")),
+							"total_tokens":  int(getFloat(usage, "input_tokens") + getFloat(usage, "output_tokens")),
+						}
+						// 添加 input_tokens_details
+						if inputTokens := int(getFloat(usage, "input_tokens")); inputTokens > 0 {
+							usageMap["input_tokens_details"] = map[string]interface{}{
+								"cached_tokens": 0,
+							}
+						}
+						// 添加 output_tokens_details
+						if outputTokens := int(getFloat(usage, "output_tokens")); outputTokens > 0 {
+							usageMap["output_tokens_details"] = map[string]interface{}{
+								"reasoning_tokens": 0,
+							}
+						}
+						responseCompleted["response"].(map[string]interface{})["usage"] = usageMap
+					}
+
+					completedData, _ := marshalWithTypeFirst(responseCompleted)
+					if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(completedData)); err != nil {
+						pw.CloseWithError(err)
+						return
+					}
+
+				case "message_stop":
+					// Responses API 不需要单独的 stop 事件
+					continue
+				}
+
+			} else if providerType == "openai-res" && clientType == "anthropic" {
+				// Responses → Anthropic 转换
+				if data == "[DONE]" {
+					// [DONE] 被忽略，因为 response.completed 已发送 message_stop
+					continue
+				}
+
+				var chunk map[string]interface{}
+				if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+					errorCount++
+					slog.Error("failed to parse SSE chunk in stream transformation",
+						"provider_type", providerType,
+						"client_type", clientType,
+						"line", lineCount,
+						"error", err)
+					continue
+				}
+
+				eventType := currentEvent
+				if eventType == "" {
+					eventType = getString(chunk, "type")
+				}
+
+				switch eventType {
+				case "response.created":
+					// 发送 message_start 事件
+					messageStart := map[string]interface{}{
+						"type": "message_start",
+						"message": map[string]interface{}{
+							"id":      getNestedString(chunk, "response.id"),
+							"type":    "message",
+							"role":    "assistant",
+							"content": []interface{}{},
+							"model":   "responses-api",
+							"usage": map[string]interface{}{
+								"input_tokens":  0,
+								"output_tokens": 0,
+							},
+						},
+					}
+					startData, _ := json.Marshal(messageStart)
+					if _, err := fmt.Fprintf(pw, "event: message_start\ndata: %s\n\n", string(startData)); err != nil {
+						pw.CloseWithError(err)
+						return
+					}
+
+				case "response.output_item.added":
+					// 发送 content_block_start 事件
+					if item, ok := chunk["item"].(map[string]interface{}); ok {
+						itemType := getString(item, "type")
+						blockStart := map[string]interface{}{
+							"type":  "content_block_start",
+							"index": int(getFloat(chunk, "output_index")),
+							"content_block": map[string]interface{}{},
+						}
+
+						// 映射 Responses function_call → Anthropic tool_use
+						if itemType == "function_call" {
+							blockStart["content_block"] = map[string]interface{}{
+								"type": "tool_use",
+								"id":   getString(item, "id"),
+								"name": getString(item, "name"),
+							}
+						} else if itemType == "output_text" || itemType == "text" {
+							blockStart["content_block"] = map[string]interface{}{
+								"type": "text",
+								"text": "",
+							}
+						} else {
+							blockStart["content_block"] = map[string]interface{}{
+								"type": itemType,
+							}
+						}
+
+						blockData, _ := json.Marshal(blockStart)
+						if _, err := fmt.Fprintf(pw, "event: content_block_start\ndata: %s\n\n", string(blockData)); err != nil {
+							pw.CloseWithError(err)
+							return
+						}
+					}
+
+				case "response.output_text.delta":
+					// 发送 content_block_delta 事件（文本）
+					if delta := getString(chunk, "delta"); delta != "" {
+						contentDelta := map[string]interface{}{
+							"type":  "content_block_delta",
+							"index": int(getFloat(chunk, "output_index")),
+							"delta": map[string]interface{}{
+								"type": "text_delta",
+								"text": delta,
+							},
+						}
+						deltaData, _ := json.Marshal(contentDelta)
+						if _, err := fmt.Fprintf(pw, "event: content_block_delta\ndata: %s\n\n", string(deltaData)); err != nil {
+							pw.CloseWithError(err)
+							return
+						}
+					}
+
+				case "response.function_call_arguments.delta":
+					// 发送 content_block_delta 事件（工具参数）
+					if delta := getString(chunk, "delta"); delta != "" {
+						contentDelta := map[string]interface{}{
+							"type":  "content_block_delta",
+							"index": int(getFloat(chunk, "output_index")),
+							"delta": map[string]interface{}{
+								"type":         "input_json_delta",
+								"partial_json": delta,
+							},
+						}
+						deltaData, _ := json.Marshal(contentDelta)
+						if _, err := fmt.Fprintf(pw, "event: content_block_delta\ndata: %s\n\n", string(deltaData)); err != nil {
+							pw.CloseWithError(err)
+							return
+						}
+					}
+
+				case "response.completed":
+					// 发送 content_block_stop 和 message_delta 事件
+					stopReason := "end_turn"
+					blockStopIndex := 0
+					if response, ok := chunk["response"].(map[string]interface{}); ok {
+						status := getString(response, "status")
+						if status == "incomplete" {
+							stopReason = "max_tokens"
+						}
+						// 检查是否有工具调用（通过 output 判断）
+						if output, ok := response["output"].([]interface{}); ok && len(output) > 0 {
+							blockStopIndex = len(output) - 1
+							for _, item := range output {
+								if itemMap, ok := item.(map[string]interface{}); ok {
+									if getString(itemMap, "type") == "function_call" {
+										stopReason = "tool_use"
+										break
+									}
+								}
+							}
+						}
+					}
+
+					blockStop := map[string]interface{}{
+						"type":  "content_block_stop",
+						"index": blockStopIndex,
+					}
+					stopData, _ := json.Marshal(blockStop)
+					if _, err := fmt.Fprintf(pw, "event: content_block_stop\ndata: %s\n\n", string(stopData)); err != nil {
+						pw.CloseWithError(err)
+						return
+					}
+
+					messageDelta := map[string]interface{}{
+						"type": "message_delta",
+						"delta": map[string]interface{}{
+							"stop_reason": stopReason,
+						},
+					}
+
+					// 添加 usage 信息
+					if response, ok := chunk["response"].(map[string]interface{}); ok {
+						if usage, ok := response["usage"].(map[string]interface{}); ok {
+							messageDelta["usage"] = map[string]interface{}{
+								"input_tokens":  int(getFloat(usage, "input_tokens")),
+								"output_tokens": int(getFloat(usage, "output_tokens")),
+							}
+						}
+					}
+
+					deltaData, _ := json.Marshal(messageDelta)
+					if _, err := fmt.Fprintf(pw, "event: message_delta\ndata: %s\n\n", string(deltaData)); err != nil {
+						pw.CloseWithError(err)
+						return
+					}
+
+					messageStop := map[string]interface{}{"type": "message_stop"}
+					stopMsgData, _ := json.Marshal(messageStop)
+					if _, err := fmt.Fprintf(pw, "event: message_stop\ndata: %s\n\n", string(stopMsgData)); err != nil {
+						pw.CloseWithError(err)
+						return
+					}
+				}
+
+			} else if providerType == "openai" && clientType == "openai-res" {
+				// OpenAI → Responses 转换
+				if data == "[DONE]" {
+					// OpenAI 的 [DONE] 不需要转换
+					continue
+				}
+
+				var chunk map[string]interface{}
+				if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+					errorCount++
+					slog.Error("failed to parse SSE chunk in stream transformation",
+						"provider_type", providerType,
+						"client_type", clientType,
+						"line", lineCount,
+						"error", err)
+					continue
+				}
+
+				if choices, ok := chunk["choices"].([]interface{}); ok && len(choices) > 0 {
+					choice := choices[0].(map[string]interface{})
+
+					if delta, ok := choice["delta"].(map[string]interface{}); ok {
+						// 处理角色信息（第一个chunk）
+						if role := getString(delta, "role"); role != "" {
+							responseID = getString(chunk, "id")
+							itemID = fmt.Sprintf("msg_%s", responseID)
+
+							// response.created 事件
+							responseCreated := map[string]interface{}{
+								"type":            "response.created",
+								"sequence_number": sequenceNumber,
+								"response": map[string]interface{}{
+									"id":         responseID,
+									"object":     "response",
+									"model":      getString(chunk, "model"),
+									"created_at": int(getFloat(chunk, "created")),
+									"status":     "in_progress",
+									"output":     []interface{}{},
+								},
+							}
+							sequenceNumber++
+							createdData, _ := marshalWithTypeFirst(responseCreated)
+							if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(createdData)); err != nil {
+								pw.CloseWithError(err)
+								return
+							}
+
+							// response.in_progress 事件
+							responseInProgress := map[string]interface{}{
+								"type":            "response.in_progress",
+								"sequence_number": sequenceNumber,
+								"response": map[string]interface{}{
+									"id":         responseID,
+									"object":     "response",
+									"model":      getString(chunk, "model"),
+									"created_at": int(getFloat(chunk, "created")),
+									"status":     "in_progress",
+									"output":     []interface{}{},
+								},
+							}
+							sequenceNumber++
+							inProgressData, _ := marshalWithTypeFirst(responseInProgress)
+							if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(inProgressData)); err != nil {
+								pw.CloseWithError(err)
+								return
+							}
+
+							// response.output_item.added 事件
+							itemAdded := map[string]interface{}{
+								"type":            "response.output_item.added",
+								"sequence_number": sequenceNumber,
+								"output_index":    0,
+								"item": map[string]interface{}{
+									"id":      itemID,
+									"type":    "message",
+									"role":    role,
+									"content": []interface{}{},
+									"status":  "in_progress",
+								},
+							}
+							sequenceNumber++
+							addedData, _ := marshalWithTypeFirst(itemAdded)
+							if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(addedData)); err != nil {
+								pw.CloseWithError(err)
+								return
+							}
+
+							// response.content_part.added 事件
+							contentPartAdded := map[string]interface{}{
+								"type":            "response.content_part.added",
+								"sequence_number": sequenceNumber,
+								"output_index":    0,
+								"item_id":         itemID,
+								"content_index":   0,
+								"part": map[string]interface{}{
+									"type": "output_text",
+									"text": "",
+								},
+							}
+							sequenceNumber++
+							partAddedData, _ := marshalWithTypeFirst(contentPartAdded)
+							if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(partAddedData)); err != nil {
+								pw.CloseWithError(err)
+								return
+							}
+						}
+
+						// 处理文本内容
+						if content := getString(delta, "content"); content != "" {
+							accumulatedText += content
+							textDelta := map[string]interface{}{
+								"type":            "response.output_text.delta",
+								"sequence_number": sequenceNumber,
+								"output_index":    0,
+								"item_id":         itemID,
+								"content_index":   0,
+								"delta":           content,
+							}
+							sequenceNumber++
+							deltaData, _ := marshalWithTypeFirst(textDelta)
+							if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(deltaData)); err != nil {
+								pw.CloseWithError(err)
+								return
+							}
+						}
+
+						// 处理工具调用
+						if toolCalls, ok := delta["tool_calls"].([]interface{}); ok {
+							for _, tc := range toolCalls {
+								toolCall, ok := tc.(map[string]interface{})
+								if !ok {
+									continue
+								}
+								if function, ok := toolCall["function"].(map[string]interface{}); ok {
+									// 首包含 id/name 时，发送 output_item.added 事件
+									if id := getString(toolCall, "id"); id != "" {
+										itemAdded := map[string]interface{}{
+											"type":         "response.output_item.added",
+											"output_index": int(getFloat(toolCall, "index")),
+											"item": map[string]interface{}{
+												"type":      "function_call",
+												"id":        id,
+												"call_id":   id,
+												"name":      getString(function, "name"),
+												"arguments": "",
+											},
+										}
+										addedData, _ := json.Marshal(itemAdded)
+										if _, err := fmt.Fprintf(pw, "event: response.output_item.added\ndata: %s\n\n", string(addedData)); err != nil {
+											pw.CloseWithError(err)
+											return
+										}
+									}
+
+									// 参数增量
+									if args := getString(function, "arguments"); args != "" {
+										argsDelta := map[string]interface{}{
+											"type":         "response.function_call_arguments.delta",
+											"output_index": int(getFloat(toolCall, "index")),
+											"delta":        args,
+										}
+										deltaData, _ := json.Marshal(argsDelta)
+										if _, err := fmt.Fprintf(pw, "event: response.function_call_arguments.delta\ndata: %s\n\n", string(deltaData)); err != nil {
+											pw.CloseWithError(err)
+											return
+										}
+									}
+								}
+							}
+						}
+
+						// 处理结束
+						if finishReason := getString(choice, "finish_reason"); finishReason != "" {
+							// response.output_text.done 事件
+							outputTextDone := map[string]interface{}{
+								"type":            "response.output_text.done",
+								"sequence_number": sequenceNumber,
+								"output_index":    0,
+								"item_id":         itemID,
+								"content_index":   0,
+								"text":            accumulatedText,
+							}
+							sequenceNumber++
+							textDoneData, _ := marshalWithTypeFirst(outputTextDone)
+							if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(textDoneData)); err != nil {
+								pw.CloseWithError(err)
+								return
+							}
+
+							// response.content_part.done 事件
+							contentPartDone := map[string]interface{}{
+								"type":            "response.content_part.done",
+								"sequence_number": sequenceNumber,
+								"output_index":    0,
+								"item_id":         itemID,
+								"content_index":   0,
+								"part": map[string]interface{}{
+									"type": "output_text",
+									"text": accumulatedText,
+								},
+							}
+							sequenceNumber++
+							partDoneData, _ := marshalWithTypeFirst(contentPartDone)
+							if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(partDoneData)); err != nil {
+								pw.CloseWithError(err)
+								return
+							}
+
+							// response.output_item.done 事件
+							outputItemDone := map[string]interface{}{
+								"type":            "response.output_item.done",
+								"sequence_number": sequenceNumber,
+								"output_index":    0,
+								"item": map[string]interface{}{
+									"id":   itemID,
+									"type": "message",
+									"role": "assistant",
+									"content": []map[string]interface{}{
+										{
+											"type": "output_text",
+											"text": accumulatedText,
+										},
+									},
+									"status": "completed",
+								},
+							}
+							sequenceNumber++
+							itemDoneData, _ := marshalWithTypeFirst(outputItemDone)
+							if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(itemDoneData)); err != nil {
+								pw.CloseWithError(err)
+								return
+							}
+
+							status := "completed"
+							if finishReason == "length" {
+								status = "incomplete"
+							}
+
+							responseCompleted := map[string]interface{}{
+								"type":            "response.completed",
+								"sequence_number": sequenceNumber,
+								"response": map[string]interface{}{
+									"object":     "response",
+									"id":         responseID,
+									"model":      getString(chunk, "model"),
+									"created_at": int(getFloat(chunk, "created")),
+									"status":     status,
+									"output":     []interface{}{},
+								},
+							}
+
+							// 添加 usage 信息
+							if usage, ok := chunk["usage"].(map[string]interface{}); ok {
+								usageMap := map[string]interface{}{
+									"input_tokens":  int(getFloat(usage, "prompt_tokens")),
+									"output_tokens": int(getFloat(usage, "completion_tokens")),
+									"total_tokens":  int(getFloat(usage, "total_tokens")),
+								}
+								// 添加 input_tokens_details
+								if promptTokens := int(getFloat(usage, "prompt_tokens")); promptTokens > 0 {
+									usageMap["input_tokens_details"] = map[string]interface{}{
+										"cached_tokens": 0,
+									}
+								}
+								// 添加 output_tokens_details
+								if completionTokens := int(getFloat(usage, "completion_tokens")); completionTokens > 0 {
+									usageMap["output_tokens_details"] = map[string]interface{}{
+										"reasoning_tokens": 0,
+									}
+								}
+								responseCompleted["response"].(map[string]interface{})["usage"] = usageMap
+							}
+
+							completedData, _ := marshalWithTypeFirst(responseCompleted)
+							if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(completedData)); err != nil {
+								pw.CloseWithError(err)
+								return
+							}
+						}
+					}
+				}
+
+			} else if providerType == "openai-res" && clientType == "openai" {
+				// Responses → OpenAI 转换
+				if data == "[DONE]" {
+					// [DONE] 被忽略，因为 response.completed 已发送 [DONE]
+					continue
+				}
+
+				var chunk map[string]interface{}
+				if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+					errorCount++
+					slog.Error("failed to parse SSE chunk in stream transformation",
+						"provider_type", providerType,
+						"client_type", clientType,
+						"line", lineCount,
+						"error", err)
+					continue
+				}
+
+				eventType := currentEvent
+				if eventType == "" {
+					eventType = getString(chunk, "type")
+				}
+
+				switch eventType {
+				case "response.created":
+					// 发送角色信息
+					openaiChunk := map[string]interface{}{
+						"id":      getNestedString(chunk, "response.id"),
+						"object":  "chat.completion.chunk",
+						"created": time.Now().Unix(),
+						"model":   "responses-api",
+						"choices": []map[string]interface{}{
+							{
+								"index": 0,
+								"delta": map[string]interface{}{
+									"role": "assistant",
+								},
+								"finish_reason": nil,
+							},
+						},
+					}
+					chunkData, _ := json.Marshal(openaiChunk)
+					if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(chunkData)); err != nil {
+						pw.CloseWithError(err)
+						return
+					}
+
+				case "response.output_item.added":
+					// 处理工具调用开始（发送 id/type/name）
+					if item, ok := chunk["item"].(map[string]interface{}); ok {
+						itemType := getString(item, "type")
+						if itemType == "function_call" {
+							openaiChunk := map[string]interface{}{
+								"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+								"object":  "chat.completion.chunk",
+								"created": time.Now().Unix(),
+								"model":   "responses-api",
+								"choices": []map[string]interface{}{
+									{
+										"index": 0,
+										"delta": map[string]interface{}{
+											"tool_calls": []map[string]interface{}{
+												{
+													"index": int(getFloat(chunk, "output_index")),
+													"id":    getString(item, "id"),
+													"type":  "function",
+													"function": map[string]interface{}{
+														"name":      getString(item, "name"),
+														"arguments": "",
+													},
+												},
+											},
+										},
+										"finish_reason": nil,
+									},
+								},
+							}
+							chunkData, _ := json.Marshal(openaiChunk)
+							if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(chunkData)); err != nil {
+								pw.CloseWithError(err)
+								return
+							}
+						}
+					}
+
+				case "response.output_text.delta":
+					// 发送文本增量
+					if delta := getString(chunk, "delta"); delta != "" {
+						openaiChunk := map[string]interface{}{
+							"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+							"object":  "chat.completion.chunk",
+							"created": time.Now().Unix(),
+							"model":   "responses-api",
+							"choices": []map[string]interface{}{
+								{
+									"index": 0,
+									"delta": map[string]interface{}{
+										"content": delta,
+									},
+									"finish_reason": nil,
+								},
+							},
+						}
+						chunkData, _ := json.Marshal(openaiChunk)
+						if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(chunkData)); err != nil {
+							pw.CloseWithError(err)
+							return
+						}
+					}
+
+				case "response.function_call_arguments.delta":
+					// 发送工具调用参数增量
+					if delta := getString(chunk, "delta"); delta != "" {
+						openaiChunk := map[string]interface{}{
+							"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+							"object":  "chat.completion.chunk",
+							"created": time.Now().Unix(),
+							"model":   "responses-api",
+							"choices": []map[string]interface{}{
+								{
+									"index": 0,
+									"delta": map[string]interface{}{
+										"tool_calls": []map[string]interface{}{
+											{
+												"index": int(getFloat(chunk, "output_index")),
+												"function": map[string]interface{}{
+													"arguments": delta,
+												},
+											},
+										},
+									},
+									"finish_reason": nil,
+								},
+							},
+						}
+						chunkData, _ := json.Marshal(openaiChunk)
+						if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(chunkData)); err != nil {
+							pw.CloseWithError(err)
+							return
+						}
+					}
+
+				case "response.completed":
+					// 发送结束块
+					finishReason := "stop"
+					if response, ok := chunk["response"].(map[string]interface{}); ok {
+						status := getString(response, "status")
+						if status == "incomplete" {
+							finishReason = "length"
+						} else if status == "failed" {
+							finishReason = "stop"
+						}
+						// 检查是否有工具调用（通过 output 判断）
+						if output, ok := response["output"].([]interface{}); ok && len(output) > 0 {
+							for _, item := range output {
+								if itemMap, ok := item.(map[string]interface{}); ok {
+									if getString(itemMap, "type") == "function_call" {
+										finishReason = "tool_calls"
+										break
+									}
+								}
+							}
+						}
+					}
+
+					finalChunk := map[string]interface{}{
+						"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+						"object":  "chat.completion.chunk",
+						"created": time.Now().Unix(),
+						"model":   "responses-api",
+						"choices": []map[string]interface{}{
+							{
+								"index":         0,
+								"delta":         map[string]interface{}{},
+								"finish_reason": finishReason,
+							},
+						},
+					}
+
+					// 添加 usage 信息
+					if response, ok := chunk["response"].(map[string]interface{}); ok {
+						if usage, ok := response["usage"].(map[string]interface{}); ok {
+							finalChunk["usage"] = map[string]interface{}{
+								"prompt_tokens":     int(getFloat(usage, "input_tokens")),
+								"completion_tokens": int(getFloat(usage, "output_tokens")),
+								"total_tokens":      int(getFloat(usage, "total_tokens")),
+							}
+						}
+					}
+
+					chunkData, _ := json.Marshal(finalChunk)
+					if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(chunkData)); err != nil {
+						pw.CloseWithError(err)
+						return
+					}
+
+					// 发送 [DONE]
+					if _, err := fmt.Fprintf(pw, "data: [DONE]\n\n"); err != nil {
+						pw.CloseWithError(err)
+						return
+					}
+				}
+
 			} else {
 				// 其他场景：直接透传
 				if _, err := fmt.Fprintf(pw, "data: %s\n\n", data); err != nil {
@@ -1133,6 +2087,64 @@ func getString(m map[string]interface{}, key string) string {
 	return ""
 }
 
+// getNestedString 支持点路径取值，如 "response.id"
+func getNestedString(m map[string]interface{}, path string) string {
+	parts := strings.Split(path, ".")
+	current := m
+	for i, part := range parts {
+		if i == len(parts)-1 {
+			// 最后一个部分，取字符串值
+			if v, ok := current[part].(string); ok {
+				return v
+			}
+			return ""
+		}
+		// 中间部分，继续深入
+		if nested, ok := current[part].(map[string]interface{}); ok {
+			current = nested
+		} else {
+			return ""
+		}
+	}
+	return ""
+}
+
+// getNestedFloat 支持点路径取值，如 "response.usage.input_tokens"
+func getNestedFloat(m map[string]interface{}, path string) float64 {
+	parts := strings.Split(path, ".")
+	current := m
+	for i, part := range parts {
+		if i == len(parts)-1 {
+			// 最后一个部分，取数值
+			if v, ok := current[part].(float64); ok {
+				return v
+			}
+			return 0
+		}
+		// 中间部分，继续深入
+		if nested, ok := current[part].(map[string]interface{}); ok {
+			current = nested
+		} else {
+			return 0
+		}
+	}
+	return 0
+}
+
+// getNestedMap 支持点路径取值，返回嵌套的 map
+func getNestedMap(m map[string]interface{}, path string) map[string]interface{} {
+	parts := strings.Split(path, ".")
+	current := m
+	for _, part := range parts {
+		if nested, ok := current[part].(map[string]interface{}); ok {
+			current = nested
+		} else {
+			return nil
+		}
+	}
+	return current
+}
+
 func getBool(m map[string]interface{}, key string) bool {
 	if v, ok := m[key].(bool); ok {
 		return v
@@ -1145,4 +2157,156 @@ func getFloat(m map[string]interface{}, key string) float64 {
 		return v
 	}
 	return 0
+}
+
+// fieldOrder 定义各事件类型的字段顺序
+var fieldOrder = map[string][]string{
+	"response.created":           {"type", "sequence_number", "response"},
+	"response.in_progress":       {"type", "sequence_number", "response"},
+	"response.output_item.added": {"type", "sequence_number", "output_index", "item"},
+	"response.content_part.added": {"type", "sequence_number", "output_index", "item_id", "content_index", "part"},
+	"response.output_text.delta":  {"type", "sequence_number", "output_index", "item_id", "content_index", "delta"},
+	"response.output_text.done":   {"type", "sequence_number", "output_index", "item_id", "content_index", "text"},
+	"response.content_part.done":  {"type", "sequence_number", "output_index", "item_id", "content_index", "part"},
+	"response.output_item.done":   {"type", "sequence_number", "output_index", "item"},
+	"response.completed":          {"type", "sequence_number", "response"},
+}
+
+// nestedFieldOrder 定义嵌套对象的字段顺序
+var nestedFieldOrder = map[string][]string{
+	"response":               {"object", "id", "model", "created_at", "output", "status", "usage"},
+	"item":                   {"id", "type", "role", "content", "status"},
+	"part":                   {"type", "text"},
+	"usage":                  {"input_tokens", "input_tokens_details", "output_tokens", "output_tokens_details", "total_tokens"},
+	"input_tokens_details":   {"cached_tokens"},
+	"output_tokens_details":  {"reasoning_tokens"},
+	"content_item":           {"type", "text"},
+}
+
+// marshalWithTypeFirst 按照预定义顺序序列化 JSON
+func marshalWithTypeFirst(data map[string]interface{}) ([]byte, error) {
+	eventType, hasType := data["type"].(string)
+	if !hasType {
+		return json.Marshal(data)
+	}
+
+	// 获取该事件类型的字段顺序
+	order, exists := fieldOrder[eventType]
+	if !exists {
+		// 如果没有预定义顺序，type 在前，其他随机
+		return marshalWithOrder(data, []string{"type"})
+	}
+
+	return marshalWithOrder(data, order)
+}
+
+// marshalWithOrder 按指定顺序序列化对象
+func marshalWithOrder(data map[string]interface{}, order []string) ([]byte, error) {
+	result := "{"
+	first := true
+
+	// 按顺序输出字段
+	for _, key := range order {
+		value, exists := data[key]
+		if !exists {
+			continue
+		}
+
+		if !first {
+			result += ","
+		}
+		first = false
+
+		// 序列化值
+		valueJSON, err := marshalValue(value, key)
+		if err != nil {
+			return nil, err
+		}
+
+		result += fmt.Sprintf(`"%s":%s`, key, valueJSON)
+	}
+
+	// 输出未在顺序中的字段（如果有）
+	for key, value := range data {
+		// 检查是否已经输出过
+		found := false
+		for _, orderedKey := range order {
+			if key == orderedKey {
+				found = true
+				break
+			}
+		}
+		if found {
+			continue
+		}
+
+		if !first {
+			result += ","
+		}
+		first = false
+
+		valueJSON, err := marshalValue(value, key)
+		if err != nil {
+			return nil, err
+		}
+
+		result += fmt.Sprintf(`"%s":%s`, key, valueJSON)
+	}
+
+	result += "}"
+	return []byte(result), nil
+}
+
+// marshalValue 序列化值，对嵌套对象应用字段顺序
+func marshalValue(value interface{}, key string) (string, error) {
+	switch v := value.(type) {
+	case map[string]interface{}:
+		// 检查是否有预定义的字段顺序
+		if order, exists := nestedFieldOrder[key]; exists {
+			data, err := marshalWithOrder(v, order)
+			return string(data), err
+		}
+		// 没有预定义顺序，使用标准序列化
+		data, err := json.Marshal(v)
+		return string(data), err
+	case []interface{}:
+		// 处理数组
+		if len(v) == 0 {
+			return "[]", nil
+		}
+
+		result := "["
+		for i, item := range v {
+			if i > 0 {
+				result += ","
+			}
+
+			// 如果是 content 数组，应用 content_item 顺序
+			if key == "content" {
+				if itemMap, ok := item.(map[string]interface{}); ok {
+					if order, exists := nestedFieldOrder["content_item"]; exists {
+						data, err := marshalWithOrder(itemMap, order)
+						if err != nil {
+							return "", err
+						}
+						result += string(data)
+						continue
+					}
+				}
+			}
+
+			// 其他情况使用标准序列化
+			itemJSON, err := json.Marshal(item)
+			if err != nil {
+				return "", err
+			}
+			result += string(itemJSON)
+		}
+		result += "]"
+		return result, nil
+	default:
+		// 基本类型使用标准序列化
+		data, err := json.Marshal(v)
+		return string(data), err
+	}
 }

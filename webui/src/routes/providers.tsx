@@ -81,6 +81,7 @@ const formSchema = z.object({
   custom_models: z.string().optional(),
   proxy: z.string().optional(),
   model_endpoint: z.boolean().optional(),
+  model_filter_enabled: z.boolean().optional(),
 });
 
 // 将表单字段转换为 JSON 配置字符串
@@ -176,6 +177,7 @@ export default function ProvidersPage() {
   const [upstreamModelsList, setUpstreamModelsList] = useState<string[]>([]);
   const [upstreamStatus, setUpstreamStatus] = useState<'loading' | 'success' | 'empty' | 'error' | 'disabled'>('disabled');
   const [autoAssociateOnAddEnabled, setAutoAssociateOnAddEnabled] = useState(false);
+  const [updatingFilter, setUpdatingFilter] = useState<Record<number, boolean>>({});
   const [autoCleanOnDeleteEnabled, setAutoCleanOnDeleteEnabled] = useState(false);
 
   // 上游模型测试相关状态
@@ -203,6 +205,7 @@ export default function ProvidersPage() {
       custom_models: "",
       proxy: "",
       model_endpoint: true,
+      model_filter_enabled: false,
     },
   });
 
@@ -482,6 +485,23 @@ export default function ProvidersPage() {
     }
   };
 
+  const handleToggleModelFilter = async (provider: Provider, enabled: boolean) => {
+    setUpdatingFilter(prev => ({ ...prev, [provider.ID]: true }));
+    try {
+      await updateProvider(provider.ID, { model_filter_enabled: enabled });
+      setProviders((prev) =>
+        prev.map((item) => item.ID === provider.ID ? { ...item, ModelFilterEnabled: enabled } : item)
+      );
+      toast.success("已更新模型过滤设置");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`更新失败: ${message}`);
+      console.error(err);
+    } finally {
+      setUpdatingFilter(prev => ({ ...prev, [provider.ID]: false }));
+    }
+  };
+
   const refreshUpstreamModels = async () => {
     if (!modelsOpenId) return;
     setSelectedUpstreamModels([]);
@@ -489,8 +509,42 @@ export default function ProvidersPage() {
   };
 
   const copyModelName = async (modelName: string) => {
-    await navigator.clipboard.writeText(modelName);
-    toast.success(`已复制模型名称: ${modelName}`);
+    const fallbackCopy = (): boolean => {
+      try {
+        const textArea = document.createElement("textarea");
+        textArea.value = modelName;
+        textArea.setAttribute("readonly", "");
+        textArea.style.position = "fixed";
+        textArea.style.top = "0";
+        textArea.style.left = "0";
+        textArea.style.opacity = "0";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(textArea);
+        return ok;
+      } catch {
+        return false;
+      }
+    };
+
+    // 仅在安全上下文(HTTPS/localhost)下使用 Clipboard API
+    try {
+      if (window.isSecureContext && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(modelName);
+        toast.success(`已复制模型名称: ${modelName}`);
+        return;
+      }
+    } catch {
+      // Clipboard API 失败，降级到 execCommand
+    }
+
+    if (fallbackCopy()) {
+      toast.success(`已复制模型名称: ${modelName}`);
+    } else {
+      toast.error("复制失败：当前环境不支持自动复制，请手动复制");
+    }
   };
 
   const handleTestAllModel = async (modelName: string) => {
@@ -944,11 +998,12 @@ export default function ProvidersPage() {
         config: config,
         console: values.console || "",
         proxy: values.proxy || "",
-        model_endpoint: values.model_endpoint ?? true
+        model_endpoint: values.model_endpoint ?? true,
+        model_filter_enabled: values.model_filter_enabled ?? false
       });
       setOpen(false);
       toast.success(`提供商 ${values.name} 创建成功`);
-      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "", proxy: "", model_endpoint: true });
+      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "", proxy: "", model_endpoint: true, model_filter_enabled: false });
       fetchProviders();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -967,12 +1022,13 @@ export default function ProvidersPage() {
         config: config,
         console: values.console || "",
         proxy: values.proxy || "",
-        model_endpoint: values.model_endpoint
+        model_endpoint: values.model_endpoint,
+        model_filter_enabled: values.model_filter_enabled
       });
       setOpen(false);
       toast.success(`提供商 ${values.name} 更新成功`);
       setEditingProvider(null);
-      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "", proxy: "", model_endpoint: true });
+      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "", proxy: "", model_endpoint: true, model_filter_enabled: false });
       fetchProviders();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -1016,6 +1072,7 @@ export default function ProvidersPage() {
       custom_models: configFields.custom_models.join("\n"),
       proxy: provider.Proxy || "",
       model_endpoint: provider.ModelEndpoint ?? true,
+      model_filter_enabled: provider.ModelFilterEnabled ?? false,
     });
     setOpen(true);
   };
@@ -1023,7 +1080,7 @@ export default function ProvidersPage() {
   const openCreateDialog = () => {
     setEditingProvider(null);
     setShowApiKey(false);
-    form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "", proxy: "", model_endpoint: true });
+    form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "", proxy: "", model_endpoint: true, model_filter_enabled: false });
     setOpen(true);
   };
 
@@ -1163,7 +1220,21 @@ export default function ProvidersPage() {
                           />
                         </TableCell>
                         <TableCell>
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-wrap gap-2 items-center">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex items-center">
+                                    <Switch
+                                      checked={provider.ModelFilterEnabled ?? false}
+                                      onCheckedChange={(checked) => handleToggleModelFilter(provider, checked)}
+                                      disabled={updatingFilter[provider.ID]}
+                                    />
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>启用模型过滤</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                             <Button variant="outline" size="sm" onClick={() => openEditDialog(provider)}>
                               编辑
                             </Button>
@@ -1226,7 +1297,21 @@ export default function ProvidersPage() {
                           />
                         </div>
                       </div>
-                      <div className="flex flex-wrap justify-end gap-1.5">
+                      <div className="flex flex-wrap justify-end gap-1.5 items-center">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex items-center">
+                                <Switch
+                                  checked={provider.ModelFilterEnabled ?? false}
+                                  onCheckedChange={(checked) => handleToggleModelFilter(provider, checked)}
+                                  disabled={updatingFilter[provider.ID]}
+                                />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>启用模型过滤</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                         <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => openEditDialog(provider)}>
                           编辑
                         </Button>
@@ -1454,6 +1539,27 @@ export default function ProvidersPage() {
                       <FormLabel>模型端点</FormLabel>
                       <div className="text-sm text-muted-foreground">
                         是否支持从上游获取模型列表
+                      </div>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="model_filter_enabled"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-0.5">
+                      <FormLabel>启用模型过滤</FormLabel>
+                      <div className="text-sm text-muted-foreground">
+                        同步时只保留符合过滤规则的模型
                       </div>
                     </div>
                     <FormControl>

@@ -106,6 +106,8 @@ func (tm *TransformerManager) ProcessRequest(ctx context.Context, rawBody []byte
 	switch tm.clientType {
 	case "openai":
 		unified, err = TransformOpenAIToUnified(rawBody)
+	case "openai-res":
+		unified, err = TransformResponsesToUnified(rawBody)
 	case "anthropic":
 		unified, err = TransformAnthropicToUnified(rawBody)
 	default:
@@ -120,6 +122,8 @@ func (tm *TransformerManager) ProcessRequest(ctx context.Context, rawBody []byte
 	switch tm.providerType {
 	case "openai":
 		return TransformUnifiedToOpenAI(unified)
+	case "openai-res":
+		return TransformUnifiedToResponses(unified)
 	case "anthropic":
 		return TransformUnifiedToAnthropic(unified)
 	default:

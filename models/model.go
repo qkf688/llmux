@@ -9,12 +9,13 @@ import (
 
 type Provider struct {
 	gorm.Model
-	Name          string
-	Type          string
-	Config        string
-	Console       string // 控制台地址
-	Proxy         string // 代理地址
-	ModelEndpoint *bool  // 是否支持从上游获取模型列表，默认true
+	Name               string
+	Type               string
+	Config             string
+	Console            string // 控制台地址
+	Proxy              string // 代理地址
+	ModelEndpoint      *bool  // 是否支持从上游获取模型列表，默认true
+	ModelFilterEnabled *bool  // 是否启用模型过滤（按规则过滤上游模型）
 }
 
 type AnthropicConfig struct {
@@ -178,15 +179,21 @@ const (
 	SettingKeyEnableFormatConversion     = "enable_format_conversion"     // 允许格式转换（关闭则只能直连）
 
 	// 模型同步相关设置
-	SettingKeyModelSyncEnabled         = "model_sync_enabled"          // 自动同步模型开关
-	SettingKeyModelSyncInterval        = "model_sync_interval"         // 同步间隔（小时）
+	SettingKeyModelSyncEnabled           = "model_sync_enabled"             // 自动同步模型开关
+	SettingKeyModelSyncInterval          = "model_sync_interval"            // 同步间隔（小时）
 	SettingKeyModelSyncLogRetentionCount = "model_sync_log_retention_count" // 同步日志保留条数
 	SettingKeyModelSyncLogRetentionDays  = "model_sync_log_retention_days"  // 同步日志保留天数
+	SettingKeyModelSyncFilterRules       = "model_sync_filter_rules"        // 模型同步过滤规则（JSON 数组）
+
+	// 模板模糊匹配相关设置
+	SettingKeyTemplateFuzzyMatchEnabled    = "template_fuzzy_match_enabled"    // 模板模糊匹配开关
+	SettingKeyTemplateFuzzyMatchSeparators = "template_fuzzy_match_separators" // 模糊匹配分隔符（JSON 数组）
+	SettingKeyTemplateFuzzyMatchSuffixes   = "template_fuzzy_match_suffixes"   // 模糊匹配后缀关键词（JSON 数组）
 
 	// 模型关联相关设置
-	SettingKeyAutoAssociateOnAdd       = "auto_associate_on_add"        // 添加模型时自动关联
-	SettingKeyAutoCleanOnDelete        = "auto_clean_on_delete"         // 删除模型时自动清理关联
-	SettingKeyAutoSaveTemplateOnDelete = "auto_save_template_on_delete" // 删除关联时自动保存到模板
+	SettingKeyAutoAssociateOnAdd         = "auto_associate_on_add"          // 添加模型时自动关联
+	SettingKeyAutoCleanOnDelete          = "auto_clean_on_delete"           // 删除模型时自动清理关联
+	SettingKeyAutoSaveTemplateOnAssociate = "auto_save_template_on_associate" // 关联模型时自动保存到模板
 )
 
 // HealthCheckLog 模型健康检测日志
@@ -206,6 +213,7 @@ type HealthCheckLog struct {
 // ModelSyncLog 模型同步日志
 type ModelSyncLog struct {
 	gorm.Model
+	BatchID       *string   `gorm:"index" json:"BatchID,omitempty"`    // 批次ID
 	ProviderID    uint      `gorm:"index" json:"ProviderID"`
 	ProviderName  string    `gorm:"index" json:"ProviderName"`
 	Status        string    `gorm:"index" json:"Status"`           // 同步状态: success, error, unchanged

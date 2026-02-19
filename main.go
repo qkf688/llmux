@@ -131,6 +131,7 @@ func main() {
 	api.POST("/model-sync/all", handler.SyncAllProviders)
 	api.GET("/model-sync/stats", handler.GetModelSyncStats)
 	api.GET("/model-sync/logs", handler.GetModelSyncLogs)
+	api.GET("/model-sync/recent-added-models", handler.GetRecentAddedModels)
 	api.DELETE("/model-sync/logs", handler.DeleteModelSyncLogs)
 	api.DELETE("/model-sync/logs/clear", handler.ClearModelSyncLogs)
 

@@ -46,6 +46,8 @@ func Init(ctx context.Context, path string) {
 	initDefaultSettings(ctx)
 	// 初始化优先级字段
 	initPriorityField(ctx)
+	// 迁移旧设置键
+	migrateSettingKeys(ctx)
 }
 
 // initDefaultSettings 初始化默认设置
@@ -91,10 +93,15 @@ func initDefaultSettings(ctx context.Context) {
 		{Key: SettingKeyModelSyncInterval, Value: "12"},           // 默认12小时同步一次
 		{Key: SettingKeyModelSyncLogRetentionCount, Value: "100"}, // 默认保留100条
 		{Key: SettingKeyModelSyncLogRetentionDays, Value: "7"},    // 默认保留7天
+		{Key: SettingKeyModelSyncFilterRules, Value: `[]`},        // 默认无过滤规则
+		// 模板模糊匹配相关默认设置
+		{Key: SettingKeyTemplateFuzzyMatchEnabled, Value: "false"},    // 默认关闭模糊匹配
+		{Key: SettingKeyTemplateFuzzyMatchSeparators, Value: `[":", "-"]`}, // 默认分隔符
+		{Key: SettingKeyTemplateFuzzyMatchSuffixes, Value: `["free"]`},     // 默认后缀
 		// 模型关联相关默认设置
 		{Key: SettingKeyAutoAssociateOnAdd, Value: "false"},       // 默认关闭自动关联
 		{Key: SettingKeyAutoCleanOnDelete, Value: "false"},        // 默认关闭自动清理
-		{Key: SettingKeyAutoSaveTemplateOnDelete, Value: "false"}, // 默认关闭自动保存到模板
+		{Key: SettingKeyAutoSaveTemplateOnAssociate, Value: "false"}, // 默认关闭关联时自动保存到模板
 	}
 
 	for _, setting := range defaultSettings {
@@ -116,6 +123,39 @@ func initPriorityField(ctx context.Context) {
 	// 为 priority 为 0 的记录设置默认优先级 10
 	if _, err := gorm.G[ModelWithProvider](DB).Where("priority = 0 OR priority IS NULL").Update(ctx, "priority", 10); err != nil {
 		panic(err)
+	}
+}
+
+// migrateSettingKeys 迁移旧设置键到新设置键
+func migrateSettingKeys(ctx context.Context) {
+	// 迁移 auto_save_template_on_delete 到 auto_save_template_on_associate
+	oldKey := "auto_save_template_on_delete"
+	newKey := SettingKeyAutoSaveTemplateOnAssociate
+
+	// 检查旧键是否存在
+	oldSetting, err := gorm.G[Setting](DB).Where("key = ?", oldKey).First(ctx)
+	if err == nil {
+		// 检查新键是否已存在
+		count, err := gorm.G[Setting](DB).Where("key = ?", newKey).Count(ctx, "id")
+		if err != nil {
+			panic(err)
+		}
+
+		// 如果新键不存在，则创建新键并复制旧键的值
+		if count == 0 {
+			newSetting := Setting{
+				Key:   newKey,
+				Value: oldSetting.Value,
+			}
+			if err := gorm.G[Setting](DB).Create(ctx, &newSetting); err != nil {
+				panic(err)
+			}
+		}
+
+		// 删除旧键
+		if _, err := gorm.G[Setting](DB).Where("key = ?", oldKey).Delete(ctx); err != nil {
+			panic(err)
+		}
 	}
 }
 

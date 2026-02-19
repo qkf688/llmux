@@ -10,6 +10,7 @@ export interface Provider {
   Console: string;
   Proxy: string;
   ModelEndpoint?: boolean;
+  ModelFilterEnabled?: boolean;
 }
 
 export interface Model {
@@ -119,6 +120,7 @@ export async function createProvider(provider: {
   console: string;
   proxy: string;
   model_endpoint?: boolean;
+  model_filter_enabled?: boolean;
 }): Promise<Provider> {
   return apiRequest<Provider>('/providers', {
     method: 'POST',
@@ -133,6 +135,7 @@ export async function updateProvider(id: number, provider: {
   console?: string;
   proxy?: string;
   model_endpoint?: boolean;
+  model_filter_enabled?: boolean;
 }): Promise<Provider> {
   return apiRequest<Provider>(`/providers/${id}`, {
     method: 'PUT',
@@ -497,10 +500,15 @@ export interface Settings {
   model_sync_interval: number;
   model_sync_log_retention_count: number;
   model_sync_log_retention_days: number;
+  model_sync_filter_rules: string[];
+  // 模板模糊匹配相关设置
+  template_fuzzy_match_enabled: boolean;
+  template_fuzzy_match_separators: string[];
+  template_fuzzy_match_suffixes: string[];
   // 模型关联相关设置
   auto_associate_on_add: boolean;
   auto_clean_on_delete: boolean;
-  auto_save_template_on_delete: boolean;
+  auto_save_template_on_associate: boolean;
 }
 
 export async function getSettings(): Promise<Settings> {
@@ -821,6 +829,22 @@ export async function clearModelSyncLogs(): Promise<{ deleted: number }> {
   return apiRequest<{ deleted: number }>('/model-sync/logs/clear', {
     method: 'DELETE',
   });
+}
+
+export interface AddedModel {
+  model_name: string;
+  provider_name: string;
+  added_at: string;
+}
+
+export interface RecentAddedModelsResponse {
+  data: AddedModel[];
+  sync_time?: string;
+  total_count: number;
+}
+
+export async function getRecentAddedModels(): Promise<RecentAddedModelsResponse> {
+  return apiRequest<RecentAddedModelsResponse>('/model-sync/recent-added-models');
 }
 
 // Database Stats API functions

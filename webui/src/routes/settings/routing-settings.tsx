@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TagInput } from "@/components/ui/tag-input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { updateSettings } from "@/lib/api";
 import type { Settings } from "@/lib/api";
@@ -377,6 +378,70 @@ export function RoutingSettings({ settings, onSettingsChange }: RoutingSettingsP
               }}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>参数映射</CardTitle>
+          <CardDescription>
+            配置请求参数的自动映射与规范化
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 md:space-y-6">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="reasoning-effort-mapping-enabled" className="text-sm md:text-base font-medium">
+                reasoning_effort 参数映射
+              </Label>
+              <p className="text-xs md:text-sm text-muted-foreground">
+                自动将 'minimal' 映射为有效值，处理无效参数
+              </p>
+            </div>
+            <Switch
+              id="reasoning-effort-mapping-enabled"
+              checked={localSettings?.reasoning_effort_mapping_enabled ?? true}
+              onCheckedChange={(checked) => {
+                if (localSettings) {
+                  setLocalSettings({
+                    ...localSettings,
+                    reasoning_effort_mapping_enabled: checked
+                  });
+                  setHasChanges(true);
+                }
+              }}
+            />
+          </div>
+
+          {localSettings?.reasoning_effort_mapping_enabled && (
+            <div className="space-y-1.5">
+              <Label htmlFor="reasoning-effort-default-value" className="text-sm">默认值</Label>
+              <Select
+                value={localSettings.reasoning_effort_default_value}
+                onValueChange={(value) => {
+                  if (localSettings) {
+                    setLocalSettings({
+                      ...localSettings,
+                      reasoning_effort_default_value: value as Settings["reasoning_effort_default_value"]
+                    });
+                    setHasChanges(true);
+                  }
+                }}
+              >
+                <SelectTrigger id="reasoning-effort-default-value">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">low（低推理强度）</SelectItem>
+                  <SelectItem value="medium">medium（中等推理强度）</SelectItem>
+                  <SelectItem value="high">high（高推理强度）</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs md:text-sm text-muted-foreground">
+                无效参数将被映射为此默认值
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

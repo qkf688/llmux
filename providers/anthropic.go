@@ -19,6 +19,7 @@ type Anthropic struct {
 	Beta         string   `json:"beta"`
 	CustomModels []string `json:"custom_models"`
 	Proxy        string   `json:"proxy"`
+	AuthType     string   `json:"auth_type"` // x-api-key 或 bearer
 }
 
 func (a *Anthropic) BuildReq(ctx context.Context, header http.Header, model string, rawBody []byte) (*http.Request, error) {
@@ -34,7 +35,15 @@ func (a *Anthropic) BuildReq(ctx context.Context, header http.Header, model stri
 		req.Header = header
 	}
 	req.Header.Set("content-type", "application/json")
-	req.Header.Set("x-api-key", a.APIKey)
+
+	// 根据 AuthType 设置认证头
+	if a.AuthType == "bearer" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", a.APIKey))
+	} else {
+		// 默认使用 x-api-key（Anthropic 官方）
+		req.Header.Set("x-api-key", a.APIKey)
+	}
+
 	req.Header.Set("anthropic-version", a.Version)
 	req.Header.Set("anthropic-beta", a.Beta)
 	return req, nil
@@ -64,7 +73,15 @@ func (a *Anthropic) Models(ctx context.Context) ([]Model, error) {
 		return nil, err
 	}
 	req.Header.Set("content-type", "application/json")
-	req.Header.Set("x-api-key", a.APIKey)
+
+	// 根据 AuthType 设置认证头
+	if a.AuthType == "bearer" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", a.APIKey))
+	} else {
+		// 默认使用 x-api-key（Anthropic 官方）
+		req.Header.Set("x-api-key", a.APIKey)
+	}
+
 	req.Header.Set("anthropic-version", a.Version)
 	req.Header.Set("anthropic-beta", a.Beta)
 

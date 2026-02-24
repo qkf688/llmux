@@ -11,6 +11,7 @@ export interface Provider {
   Proxy: string;
   ModelEndpoint?: boolean;
   ModelFilterEnabled?: boolean;
+  AuthType?: string; // 认证方式：x-api-key 或 bearer，仅用于 Anthropic 类型
 }
 
 export interface Model {
@@ -121,6 +122,7 @@ export async function createProvider(provider: {
   proxy: string;
   model_endpoint?: boolean;
   model_filter_enabled?: boolean;
+  auth_type?: string; // 认证方式：x-api-key 或 bearer
 }): Promise<Provider> {
   return apiRequest<Provider>('/providers', {
     method: 'POST',
@@ -136,6 +138,7 @@ export async function updateProvider(id: number, provider: {
   proxy?: string;
   model_endpoint?: boolean;
   model_filter_enabled?: boolean;
+  auth_type?: string; // 认证方式：x-api-key 或 bearer
 }): Promise<Provider> {
   return apiRequest<Provider>(`/providers/${id}`, {
     method: 'PUT',
@@ -509,6 +512,9 @@ export interface Settings {
   auto_associate_on_add: boolean;
   auto_clean_on_delete: boolean;
   auto_save_template_on_associate: boolean;
+  // reasoning_effort 映射相关设置
+  reasoning_effort_mapping_enabled: boolean;
+  reasoning_effort_default_value: 'low' | 'medium' | 'high';
 }
 
 export async function getSettings(): Promise<Settings> {

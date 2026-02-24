@@ -29,6 +29,7 @@ type ProviderRequest struct {
 	Proxy              string `json:"proxy"`
 	ModelEndpoint      *bool  `json:"model_endpoint"`
 	ModelFilterEnabled *bool  `json:"model_filter_enabled"`
+	AuthType           string `json:"auth_type"` // 认证方式：x-api-key 或 bearer，仅用于 Anthropic 类型
 }
 
 // ModelRequest represents the request body for creating/updating a model
@@ -175,6 +176,12 @@ func CreateProvider(c *gin.Context) {
 		modelFilterEnabled = *req.ModelFilterEnabled
 	}
 
+	// 处理 AuthType（仅用于 Anthropic 类型）
+	var authType *string
+	if req.Type == "anthropic" && req.AuthType != "" {
+		authType = &req.AuthType
+	}
+
 	provider := models.Provider{
 		Name:               req.Name,
 		Type:               req.Type,
@@ -183,6 +190,7 @@ func CreateProvider(c *gin.Context) {
 		Proxy:              req.Proxy,
 		ModelEndpoint:      &modelEndpoint,
 		ModelFilterEnabled: &modelFilterEnabled,
+		AuthType:           authType,
 	}
 
 	if err := gorm.G[models.Provider](models.DB).Create(c.Request.Context(), &provider); err != nil {
@@ -222,6 +230,11 @@ func UpdateProvider(c *gin.Context) {
 	}
 
 	// Update fields
+	var authType *string
+	if req.Type == "anthropic" && req.AuthType != "" {
+		authType = &req.AuthType
+	}
+
 	updates := models.Provider{
 		Name:               req.Name,
 		Type:               req.Type,
@@ -230,6 +243,7 @@ func UpdateProvider(c *gin.Context) {
 		Proxy:              req.Proxy,
 		ModelEndpoint:      req.ModelEndpoint,
 		ModelFilterEnabled: req.ModelFilterEnabled,
+		AuthType:           authType,
 	}
 
 	if _, err := gorm.G[models.Provider](models.DB).Where("id = ?", id).Updates(c.Request.Context(), updates); err != nil {
@@ -757,7 +771,8 @@ var template = []ProviderTemplate{
 			"base_url": "https://api.anthropic.com/v1",
 			"api_key": "YOUR_API_KEY",
 			"beta": "",
-			"version": "2023-06-01"
+			"version": "2023-06-01",
+			"auth_type": "x-api-key"
 		}`,
 	},
 }
@@ -1393,6 +1408,9 @@ type SettingsResponse struct {
 	AutoAssociateOnAdd          bool `json:"auto_associate_on_add"`
 	AutoCleanOnDelete           bool `json:"auto_clean_on_delete"`
 	AutoSaveTemplateOnAssociate bool `json:"auto_save_template_on_associate"`
+	// reasoning_effort 映射相关设置
+	ReasoningEffortMappingEnabled bool   `json:"reasoning_effort_mapping_enabled"`
+	ReasoningEffortDefaultValue   string `json:"reasoning_effort_default_value"` // low/medium/high
 }
 
 // UpdateSettingsRequest 更新设置请求结构
@@ -1438,6 +1456,9 @@ type UpdateSettingsRequest struct {
 	AutoAssociateOnAdd          bool `json:"auto_associate_on_add"`
 	AutoCleanOnDelete           bool `json:"auto_clean_on_delete"`
 	AutoSaveTemplateOnAssociate bool `json:"auto_save_template_on_associate"`
+	// reasoning_effort 映射相关设置
+	ReasoningEffortMappingEnabled bool   `json:"reasoning_effort_mapping_enabled"`
+	ReasoningEffortDefaultValue   string `json:"reasoning_effort_default_value"`
 }
 
 // GetSettings 获取所有设置
@@ -1485,6 +1506,9 @@ func GetSettings(c *gin.Context) {
 		TemplateFuzzyMatchEnabled:    false,
 		TemplateFuzzyMatchSeparators: []string{":", "-"},
 		TemplateFuzzyMatchSuffixes:   []string{"free"},
+		// reasoning_effort 映射相关默认值
+		ReasoningEffortMappingEnabled: true,  // 默认启用
+		ReasoningEffortDefaultValue:   "low", // 默认值为 low
 	}
 
 	for _, setting := range settings {
@@ -1603,6 +1627,10 @@ func GetSettings(c *gin.Context) {
 			if err := json.Unmarshal([]byte(setting.Value), &suffs); err == nil {
 				response.TemplateFuzzyMatchSuffixes = suffs
 			}
+		case models.SettingKeyReasoningEffortMappingEnabled:
+			response.ReasoningEffortMappingEnabled = setting.Value == "true"
+		case models.SettingKeyReasoningEffortDefaultValue:
+			response.ReasoningEffortDefaultValue = setting.Value
 		}
 	}
 
@@ -2033,6 +2061,31 @@ func UpdateSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyTemplateFuzzyMatchSuffixes).
 		Update(ctx, "value", string(suffixesJSON)); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新 reasoning_effort 映射开关
+	reasoningEffortMappingEnabledValue := "false"
+	if req.ReasoningEffortMappingEnabled {
+		reasoningEffortMappingEnabledValue = "true"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyReasoningEffortMappingEnabled).
+		Update(ctx, "value", reasoningEffortMappingEnabledValue); err != nil {
+		common.InternalServerError(c, "Failed to update settings: "+err.Error())
+		return
+	}
+
+	// 更新 reasoning_effort 默认值（验证合法性）
+	if req.ReasoningEffortDefaultValue != "low" &&
+		req.ReasoningEffortDefaultValue != "medium" &&
+		req.ReasoningEffortDefaultValue != "high" {
+		req.ReasoningEffortDefaultValue = "low"
+	}
+	if _, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyReasoningEffortDefaultValue).
+		Update(ctx, "value", req.ReasoningEffortDefaultValue); err != nil {
 		common.InternalServerError(c, "Failed to update settings: "+err.Error())
 		return
 	}

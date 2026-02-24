@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -9,7 +10,7 @@ import (
 )
 
 // TransformResponsesToUnified 将 Responses API 格式转换为统一格式
-func TransformResponsesToUnified(rawBody []byte) (*UnifiedRequest, error) {
+func TransformResponsesToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequest, error) {
 	var req ResponsesRequest
 	if err := json.Unmarshal(rawBody, &req); err != nil {
 		return nil, fmt.Errorf("failed to parse responses request: %w", err)
@@ -46,6 +47,16 @@ func TransformResponsesToUnified(rawBody []byte) (*UnifiedRequest, error) {
 	// 转换 tools
 	if len(req.Tools) > 0 {
 		unified.Tools = convertResponsesToolsToUnified(req.Tools)
+	}
+
+	// 处理 reasoning_effort 参数
+	if effort, ok := req.Metadata["reasoning_effort"].(string); ok && effort != "" {
+		if getReasoningEffortMappingEnabled(ctx) {
+			normalized := normalizeReasoningEffort(ctx, effort)
+			unified.ReasoningEffort = &normalized
+		} else {
+			unified.ReasoningEffort = &effort
+		}
 	}
 
 	return unified, nil
@@ -210,6 +221,14 @@ func TransformUnifiedToResponses(unified *UnifiedRequest) ([]byte, error) {
 	// 转换 tools
 	if len(unified.Tools) > 0 {
 		req.Tools = convertUnifiedToolsToResponses(unified.Tools)
+	}
+
+	// 输出 reasoning_effort 参数
+	if unified.ReasoningEffort != nil {
+		if req.Metadata == nil {
+			req.Metadata = make(map[string]interface{})
+		}
+		req.Metadata["reasoning_effort"] = *unified.ReasoningEffort
 	}
 
 	return json.Marshal(req)

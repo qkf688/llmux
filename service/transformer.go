@@ -43,14 +43,15 @@ type UnifiedFunc struct {
 
 // UnifiedRequest 统一请求格式
 type UnifiedRequest struct {
-	Model       string           `json:"model"`
-	Messages    []UnifiedMessage `json:"messages"`
-	MaxTokens   int              `json:"max_tokens,omitempty"`
-	Temperature *float64         `json:"temperature,omitempty"`
-	TopP        *float64         `json:"top_p,omitempty"`
-	Stream      bool             `json:"stream,omitempty"`
-	Tools       []UnifiedTool    `json:"tools,omitempty"`
-	System      string           `json:"system,omitempty"`
+	Model           string           `json:"model"`
+	Messages        []UnifiedMessage `json:"messages"`
+	MaxTokens       int              `json:"max_tokens,omitempty"`
+	Temperature     *float64         `json:"temperature,omitempty"`
+	TopP            *float64         `json:"top_p,omitempty"`
+	Stream          bool             `json:"stream,omitempty"`
+	Tools           []UnifiedTool    `json:"tools,omitempty"`
+	System          string           `json:"system,omitempty"`
+	ReasoningEffort *string          `json:"reasoning_effort,omitempty"` // 推理强度参数
 }
 
 // UnifiedChoice 统一响应选择格式
@@ -105,13 +106,13 @@ func (tm *TransformerManager) ProcessRequest(ctx context.Context, rawBody []byte
 
 	switch tm.clientType {
 	case "openai":
-		unified, err = TransformOpenAIToUnified(rawBody)
+		unified, err = TransformOpenAIToUnified(ctx, rawBody)
 	case "openai-res":
-		unified, err = TransformResponsesToUnified(rawBody)
+		unified, err = TransformResponsesToUnified(ctx, rawBody)
 	case "anthropic":
 		unified, err = TransformAnthropicToUnified(rawBody)
 	default:
-		unified, err = TransformOpenAIToUnified(rawBody)
+		unified, err = TransformOpenAIToUnified(ctx, rawBody)
 	}
 
 	if err != nil {

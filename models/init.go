@@ -102,6 +102,9 @@ func initDefaultSettings(ctx context.Context) {
 		{Key: SettingKeyAutoAssociateOnAdd, Value: "false"},       // 默认关闭自动关联
 		{Key: SettingKeyAutoCleanOnDelete, Value: "false"},        // 默认关闭自动清理
 		{Key: SettingKeyAutoSaveTemplateOnAssociate, Value: "false"}, // 默认关闭关联时自动保存到模板
+		// reasoning_effort 参数映射相关默认设置
+		{Key: SettingKeyReasoningEffortMappingEnabled, Value: "true"}, // 默认启用映射
+		{Key: SettingKeyReasoningEffortDefaultValue, Value: "low"},    // 默认值为 low
 	}
 
 	for _, setting := range defaultSettings {

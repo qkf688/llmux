@@ -77,6 +77,7 @@ const formSchema = z.object({
   // Anthropic 特有字段
   beta: z.string().optional(),
   version: z.string().optional(),
+  auth_type: z.string().optional(), // 认证方式：x-api-key 或 bearer
   console: z.string().optional(),
   custom_models: z.string().optional(),
   proxy: z.string().optional(),
@@ -95,6 +96,7 @@ function buildConfigFromForm(values: z.infer<typeof formSchema>): string {
   if (values.type === "anthropic") {
     baseConfig.beta = values.beta || "";
     baseConfig.version = values.version || "2023-06-01";
+    baseConfig.auth_type = values.auth_type || "x-api-key";
   }
 
   if (customModels.length > 0) {
@@ -110,6 +112,7 @@ function parseConfigToForm(config: string, _type?: string): {
   api_key: string;
   beta?: string;
   version?: string;
+  auth_type?: string;
   custom_models: string[];
 } {
   try {
@@ -119,6 +122,7 @@ function parseConfigToForm(config: string, _type?: string): {
       api_key: parsed.api_key || "",
       beta: parsed.beta || "",
       version: parsed.version || "",
+      auth_type: parsed.auth_type || "x-api-key",
       custom_models: Array.isArray(parsed.custom_models)
         ? parsed.custom_models.filter((item: unknown) => typeof item === "string" && item.trim() !== "")
         : [],
@@ -129,6 +133,7 @@ function parseConfigToForm(config: string, _type?: string): {
       api_key: "",
       beta: "",
       version: "",
+      auth_type: "x-api-key",
       custom_models: [],
     };
   }
@@ -201,6 +206,7 @@ export default function ProvidersPage() {
       api_key: "",
       beta: "",
       version: "",
+      auth_type: "x-api-key", // 默认使用 x-api-key
       console: "",
       custom_models: "",
       proxy: "",
@@ -999,11 +1005,12 @@ export default function ProvidersPage() {
         console: values.console || "",
         proxy: values.proxy || "",
         model_endpoint: values.model_endpoint ?? true,
-        model_filter_enabled: values.model_filter_enabled ?? false
+        model_filter_enabled: values.model_filter_enabled ?? false,
+        auth_type: values.type === "anthropic" ? (values.auth_type || "x-api-key") : undefined,
       });
       setOpen(false);
       toast.success(`提供商 ${values.name} 创建成功`);
-      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "", proxy: "", model_endpoint: true, model_filter_enabled: false });
+      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", auth_type: "x-api-key", console: "", custom_models: "", proxy: "", model_endpoint: true, model_filter_enabled: false });
       fetchProviders();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -1023,12 +1030,13 @@ export default function ProvidersPage() {
         console: values.console || "",
         proxy: values.proxy || "",
         model_endpoint: values.model_endpoint,
-        model_filter_enabled: values.model_filter_enabled
+        model_filter_enabled: values.model_filter_enabled,
+        auth_type: values.type === "anthropic" ? (values.auth_type || "x-api-key") : undefined,
       });
       setOpen(false);
       toast.success(`提供商 ${values.name} 更新成功`);
       setEditingProvider(null);
-      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "", proxy: "", model_endpoint: true, model_filter_enabled: false });
+      form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", auth_type: "x-api-key", console: "", custom_models: "", proxy: "", model_endpoint: true, model_filter_enabled: false });
       fetchProviders();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -1068,6 +1076,7 @@ export default function ProvidersPage() {
       api_key: configFields.api_key,
       beta: configFields.beta || "",
       version: configFields.version || "",
+      auth_type: configFields.auth_type || "x-api-key",
       console: provider.Console || "",
       custom_models: configFields.custom_models.join("\n"),
       proxy: provider.Proxy || "",
@@ -1080,7 +1089,7 @@ export default function ProvidersPage() {
   const openCreateDialog = () => {
     setEditingProvider(null);
     setShowApiKey(false);
-    form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", console: "", custom_models: "", proxy: "", model_endpoint: true, model_filter_enabled: false });
+    form.reset({ name: "", type: "", base_url: "", api_key: "", beta: "", version: "", auth_type: "x-api-key", console: "", custom_models: "", proxy: "", model_endpoint: true, model_filter_enabled: false });
     setOpen(true);
   };
 
@@ -1348,8 +1357,8 @@ export default function ProvidersPage() {
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>
               {editingProvider ? "编辑提供商" : "添加提供商"}
             </DialogTitle>
@@ -1361,7 +1370,7 @@ export default function ProvidersPage() {
           </DialogHeader>
 
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(editingProvider ? handleUpdate : handleCreate)} className="space-y-4 min-w-0">
+            <form onSubmit={form.handleSubmit(editingProvider ? handleUpdate : handleCreate)} className="space-y-4 min-w-0 overflow-y-auto flex-1 min-h-0">
               <FormField
                 control={form.control}
                 name="name"
@@ -1392,7 +1401,11 @@ export default function ProvidersPage() {
                           const selectedTemplate = providerTemplates.find(t => t.type === e.target.value);
                           if (selectedTemplate) {
                             const parsed = parseConfigToForm(selectedTemplate.template, e.target.value);
-                            form.setValue("base_url", parsed.base_url);
+                            // Only set base_url if it's empty
+                            const currentBaseUrl = form.getValues("base_url");
+                            if (!currentBaseUrl || currentBaseUrl.trim() === "") {
+                              form.setValue("base_url", parsed.base_url);
+                            }
                             // Don't set api_key as it should be entered by user
                             if (e.target.value === "anthropic") {
                               form.setValue("version", parsed.version || "2023-06-01");
@@ -1495,6 +1508,28 @@ export default function ProvidersPage() {
                         <FormControl>
                           <Input {...field} placeholder="可选的 beta 标识" />
                         </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="auth_type"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>认证方式</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="选择认证方式" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="x-api-key">x-api-key（Anthropic 官方）</SelectItem>
+                            <SelectItem value="bearer">Authorization: Bearer（兼容第三方）</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}

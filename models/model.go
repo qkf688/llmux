@@ -12,10 +12,11 @@ type Provider struct {
 	Name               string
 	Type               string
 	Config             string
-	Console            string // 控制台地址
-	Proxy              string // 代理地址
-	ModelEndpoint      *bool  // 是否支持从上游获取模型列表，默认true
-	ModelFilterEnabled *bool  // 是否启用模型过滤（按规则过滤上游模型）
+	Console            string  // 控制台地址
+	Proxy              string  // 代理地址
+	ModelEndpoint      *bool   // 是否支持从上游获取模型列表，默认true
+	ModelFilterEnabled *bool   // 是否启用模型过滤（按规则过滤上游模型）
+	AuthType           *string // 认证方式：x-api-key（默认）或 bearer，仅用于 Anthropic 类型
 }
 
 type AnthropicConfig struct {
@@ -194,6 +195,10 @@ const (
 	SettingKeyAutoAssociateOnAdd         = "auto_associate_on_add"          // 添加模型时自动关联
 	SettingKeyAutoCleanOnDelete          = "auto_clean_on_delete"           // 删除模型时自动清理关联
 	SettingKeyAutoSaveTemplateOnAssociate = "auto_save_template_on_associate" // 关联模型时自动保存到模板
+
+	// reasoning_effort 参数映射相关设置
+	SettingKeyReasoningEffortMappingEnabled = "reasoning_effort_mapping_enabled" // 是否启用映射
+	SettingKeyReasoningEffortDefaultValue   = "reasoning_effort_default_value"   // 默认值（low/medium/high）
 )
 
 // HealthCheckLog 模型健康检测日志

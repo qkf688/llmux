@@ -2,6 +2,7 @@ package service
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,10 +12,11 @@ import (
 	"time"
 
 	"github.com/atopos31/llmio/models"
+	"gorm.io/gorm"
 )
 
 // TransformOpenAIToUnified 将 OpenAI 格式转换为统一格式
-func TransformOpenAIToUnified(rawBody []byte) (*UnifiedRequest, error) {
+func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequest, error) {
 	var req map[string]interface{}
 	if err := json.Unmarshal(rawBody, &req); err != nil {
 		return nil, err
@@ -100,6 +102,18 @@ func TransformOpenAIToUnified(rawBody []byte) (*UnifiedRequest, error) {
 		}
 	}
 
+	// 处理 reasoning_effort 参数
+	if effort, ok := req["reasoning_effort"].(string); ok && effort != "" {
+		// 检查是否启用映射
+		if getReasoningEffortMappingEnabled(ctx) {
+			normalized := normalizeReasoningEffort(ctx, effort)
+			unified.ReasoningEffort = &normalized
+		} else {
+			// 不启用映射时直接透传
+			unified.ReasoningEffort = &effort
+		}
+	}
+
 	return unified, nil
 }
 
@@ -181,6 +195,11 @@ func TransformUnifiedToOpenAI(unified *UnifiedRequest) ([]byte, error) {
 			})
 		}
 		req["tools"] = tools
+	}
+
+	// 输出 reasoning_effort 参数
+	if unified.ReasoningEffort != nil {
+		req["reasoning_effort"] = *unified.ReasoningEffort
 	}
 
 	if unified.Stream {
@@ -2309,4 +2328,46 @@ func marshalValue(value interface{}, key string) (string, error) {
 		data, err := json.Marshal(v)
 		return string(data), err
 	}
+}
+
+// normalizeReasoningEffort 规范化 reasoning_effort 参数
+// 有效值: low, medium, high
+// 映射: minimal -> low
+// 无效值 -> 使用配置的默认值（默认 low）
+func normalizeReasoningEffort(ctx context.Context, value string) string {
+	switch strings.ToLower(value) {
+	case "low", "medium", "high":
+		return strings.ToLower(value)
+	case "minimal":
+		return "low"
+	default:
+		// 获取配置的默认值
+		defaultValue := getReasoningEffortDefaultValue(ctx)
+		if defaultValue != "" {
+			return defaultValue
+		}
+		return "low"
+	}
+}
+
+// getReasoningEffortDefaultValue 获取默认值配置
+func getReasoningEffortDefaultValue(ctx context.Context) string {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyReasoningEffortDefaultValue).
+		First(ctx)
+	if err != nil {
+		return "low"
+	}
+	return setting.Value
+}
+
+// getReasoningEffortMappingEnabled 获取映射开关
+func getReasoningEffortMappingEnabled(ctx context.Context) bool {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyReasoningEffortMappingEnabled).
+		First(ctx)
+	if err != nil {
+		return true // 默认启用
+	}
+	return setting.Value == "true"
 }

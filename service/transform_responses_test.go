@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 )
@@ -13,7 +14,7 @@ func TestTransformResponsesToUnified_EmptyInput(t *testing.T) {
 		"input": null
 	}`
 
-	unified1, err := TransformResponsesToUnified([]byte(requestBody1))
+	unified1, err := TransformResponsesToUnified(context.Background(), []byte(requestBody1))
 	if err != nil {
 		t.Fatalf("转换失败: %v", err)
 	}
@@ -28,7 +29,7 @@ func TestTransformResponsesToUnified_EmptyInput(t *testing.T) {
 		"input": ""
 	}`
 
-	unified2, err := TransformResponsesToUnified([]byte(requestBody2))
+	unified2, err := TransformResponsesToUnified(context.Background(), []byte(requestBody2))
 	if err != nil {
 		t.Fatalf("转换失败: %v", err)
 	}
@@ -44,7 +45,7 @@ func TestTransformResponsesToUnified_EmptyInput(t *testing.T) {
 		"input": []
 	}`
 
-	unified3, err := TransformResponsesToUnified([]byte(requestBody3))
+	unified3, err := TransformResponsesToUnified(context.Background(), []byte(requestBody3))
 	if err != nil {
 		t.Fatalf("转换失败: %v", err)
 	}
@@ -62,7 +63,7 @@ func TestTransformResponsesToUnified_ValidInput(t *testing.T) {
 		"input": "Hello world"
 	}`
 
-	unified1, err := TransformResponsesToUnified([]byte(requestBody1))
+	unified1, err := TransformResponsesToUnified(context.Background(), []byte(requestBody1))
 	if err != nil {
 		t.Fatalf("转换失败: %v", err)
 	}
@@ -89,7 +90,7 @@ func TestTransformResponsesToUnified_ValidInput(t *testing.T) {
 		]
 	}`
 
-	unified2, err := TransformResponsesToUnified([]byte(requestBody2))
+	unified2, err := TransformResponsesToUnified(context.Background(), []byte(requestBody2))
 	if err != nil {
 		t.Fatalf("转换失败: %v", err)
 	}
@@ -142,7 +143,7 @@ func TestResponsesToOpenAI_Integration(t *testing.T) {
 		"stream": false
 	}`
 
-	unified, err := TransformResponsesToUnified([]byte(responsesRequest))
+	unified, err := TransformResponsesToUnified(context.Background(), []byte(responsesRequest))
 	if err != nil {
 		t.Fatalf("Responses → Unified 转换失败: %v", err)
 	}
@@ -184,7 +185,7 @@ func TestResponsesToOpenAI_EmptyInput(t *testing.T) {
 		"input": null
 	}`
 
-	unified, err := TransformResponsesToUnified([]byte(responsesRequest))
+	unified, err := TransformResponsesToUnified(context.Background(), []byte(responsesRequest))
 	if err != nil {
 		t.Fatalf("Responses → Unified 转换失败: %v", err)
 	}
@@ -226,7 +227,7 @@ func TestResponsesToOpenAI_CherryStudioFormat(t *testing.T) {
 		}
 	}`
 
-	unified, err := TransformResponsesToUnified([]byte(cherryRequest))
+	unified, err := TransformResponsesToUnified(context.Background(), []byte(cherryRequest))
 	if err != nil {
 		t.Fatalf("Cherry Studio 格式转换失败: %v", err)
 	}

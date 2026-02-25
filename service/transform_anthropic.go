@@ -53,6 +53,13 @@ func TransformAnthropicToUnified(rawBody []byte) (*UnifiedRequest, error) {
 				}
 			}
 
+			// 阶段 1: 解析消息级别的缓存控制
+			if cacheControl, ok := msgMap["cache_control"].(map[string]interface{}); ok {
+				unifiedMsg.CacheControl = &CacheControl{
+					Type: getString(cacheControl, "type"),
+				}
+			}
+
 			unified.Messages = append(unified.Messages, unifiedMsg)
 		}
 	}
@@ -61,14 +68,48 @@ func TransformAnthropicToUnified(rawBody []byte) (*UnifiedRequest, error) {
 	if tools, ok := req["tools"].([]interface{}); ok {
 		for _, tool := range tools {
 			toolMap := tool.(map[string]interface{})
-			unified.Tools = append(unified.Tools, UnifiedTool{
+			unifiedTool := UnifiedTool{
 				Type: "function",
 				Function: UnifiedFunc{
 					Name:        getString(toolMap, "name"),
 					Description: getString(toolMap, "description"),
 					Parameters:  toolMap["input_schema"],
 				},
-			})
+			}
+
+			// 阶段 1: 解析工具级别的缓存控制
+			if cacheControl, ok := toolMap["cache_control"].(map[string]interface{}); ok {
+				unifiedTool.CacheControl = &CacheControl{
+					Type: getString(cacheControl, "type"),
+				}
+			}
+
+			unified.Tools = append(unified.Tools, unifiedTool)
+		}
+	}
+
+	// 阶段 1: 解析 Anthropic 特有字段
+	if stopSeqs := getStringArray(req, "stop_sequences"); len(stopSeqs) > 0 {
+		unified.Stop = &UnifiedStop{Multiple: stopSeqs}
+	}
+
+	if metadata := getStringMap(req, "metadata"); len(metadata) > 0 {
+		unified.Metadata = metadata
+	}
+
+	// 阶段 2: 解析 thinking 配置
+	if thinking, ok := req["thinking"].(map[string]interface{}); ok {
+		thinkingType := getString(thinking, "type")
+		budgetTokens := getInt64(thinking, "budget_tokens")
+
+		if thinkingType == "enabled" && budgetTokens > 0 {
+			// 将 budget_tokens 转换为 reasoning_effort
+			effort := thinkingBudgetToReasoningEffort(budgetTokens)
+			if effort != "" {
+				unified.ReasoningEffort = &effort
+			}
+			// 同时保存原始的 budget_tokens
+			unified.ReasoningBudget = &budgetTokens
 		}
 	}
 
@@ -177,8 +218,72 @@ func TransformUnifiedToAnthropic(unified *UnifiedRequest) ([]byte, error) {
 		msgMap := map[string]interface{}{
 			"role": msg.Role,
 		}
+
+		// 阶段 1: 添加消息级别的缓存控制
+		if msg.CacheControl != nil {
+			msgMap["cache_control"] = map[string]interface{}{
+				"type": msg.CacheControl.Type,
+			}
+		}
 		if msg.Content != nil {
-			msgMap["content"] = msg.Content
+			// 阶段 3: 处理多模态内容
+			if parts, ok := msg.Content.([]UnifiedMessageContentPart); ok {
+				// 多模态内容 - Anthropic 格式
+				contentArray := make([]interface{}, 0, len(parts))
+				for _, part := range parts {
+					switch part.Type {
+					case "text":
+						if part.Text != nil {
+							textMap := map[string]interface{}{
+								"type": "text",
+								"text": *part.Text,
+							}
+							// 阶段 1: 添加内容部分级别的缓存控制
+							if part.CacheControl != nil {
+								textMap["cache_control"] = map[string]interface{}{
+									"type": part.CacheControl.Type,
+								}
+							}
+							contentArray = append(contentArray, textMap)
+						}
+					case "image_url":
+						if part.ImageURL != nil {
+							// Anthropic 使用 image 类型
+							imgMap := map[string]interface{}{
+								"type": "image",
+							}
+							// 判断是 URL 还是 base64
+							if strings.HasPrefix(part.ImageURL.URL, "data:") {
+								// Base64 格式
+								imgMap["source"] = map[string]interface{}{
+									"type": "base64",
+									"data": strings.TrimPrefix(part.ImageURL.URL, "data:image/jpeg;base64,"),
+								}
+							} else {
+								// URL 格式
+								imgMap["source"] = map[string]interface{}{
+									"type": "url",
+									"url":  part.ImageURL.URL,
+								}
+							}
+							// 阶段 1: 添加内容部分级别的缓存控制
+							if part.CacheControl != nil {
+								imgMap["cache_control"] = map[string]interface{}{
+									"type": part.CacheControl.Type,
+								}
+							}
+							contentArray = append(contentArray, imgMap)
+						}
+					// Anthropic 不支持 input_audio，跳过
+					}
+				}
+				if len(contentArray) > 0 {
+					msgMap["content"] = contentArray
+				}
+			} else {
+				// 纯文本
+				msgMap["content"] = msg.Content
+			}
 		}
 		if len(msg.ToolCalls) > 0 {
 			// 如果有工具调用，需要构建包含文本和工具调用的内容数组
@@ -221,14 +326,95 @@ func TransformUnifiedToAnthropic(unified *UnifiedRequest) ([]byte, error) {
 	if len(unified.Tools) > 0 {
 		tools := []interface{}{}
 		for _, tool := range unified.Tools {
-			tools = append(tools, map[string]interface{}{
+			toolMap := map[string]interface{}{
 				"name":         tool.Function.Name,
 				"description":  tool.Function.Description,
 				"input_schema": tool.Function.Parameters,
-			})
+			}
+
+			// 阶段 1: 添加工具级别的缓存控制
+			if tool.CacheControl != nil {
+				toolMap["cache_control"] = map[string]interface{}{
+					"type": tool.CacheControl.Type,
+				}
+			}
+
+			tools = append(tools, toolMap)
 		}
 		req["tools"] = tools
 	}
+
+	// 阶段 1: 映射兼容字段
+	// Anthropic 支持 stop_sequences (只支持数组)
+	if unified.Stop != nil {
+		if unified.Stop.Single != nil {
+			req["stop_sequences"] = []string{*unified.Stop.Single}
+		} else if len(unified.Stop.Multiple) > 0 {
+			req["stop_sequences"] = unified.Stop.Multiple
+		}
+	}
+
+	// Anthropic 支持 metadata
+	if unified.Metadata != nil && len(unified.Metadata) > 0 {
+		req["metadata"] = unified.Metadata
+	}
+
+	// 注意: Anthropic 不支持以下字段，静默忽略
+	// - frequency_penalty
+	// - presence_penalty
+	// - seed
+	// - logit_bias
+	// - user
+	// - logprobs
+	// - top_logprobs
+	// - max_completion_tokens
+	// - store
+
+	// 阶段 2: 映射兼容字段
+	// Anthropic 不支持 response_format (JSON Schema)，但支持部分功能
+	// 可以通过 system prompt 引导模型输出 JSON
+	// 这里静默忽略，不报错
+
+	// Anthropic 支持 tool_choice
+	if unified.ToolChoice != nil {
+		if unified.ToolChoice.StringValue != nil {
+			// "auto", "any", "none" 等
+			req["tool_choice"] = map[string]interface{}{
+				"type": *unified.ToolChoice.StringValue,
+			}
+		} else if unified.ToolChoice.ObjectValue != nil && unified.ToolChoice.ObjectValue.Function != nil {
+			// 指定特定工具
+			req["tool_choice"] = map[string]interface{}{
+				"type": "tool",
+				"name": unified.ToolChoice.ObjectValue.Function.Name,
+			}
+		}
+	}
+
+	// Anthropic 不支持 parallel_tool_calls，静默忽略
+	// Anthropic 不支持 stream_options，静默忽略
+
+	// 阶段 2: 映射 thinking 配置
+	if unified.ReasoningEffort != nil || unified.ReasoningBudget != nil {
+		thinking := map[string]interface{}{
+			"type": "enabled",
+		}
+
+		// 优先使用 ReasoningBudget，如果没有则从 ReasoningEffort 转换
+		if unified.ReasoningBudget != nil {
+			thinking["budget_tokens"] = *unified.ReasoningBudget
+		} else if unified.ReasoningEffort != nil {
+			thinking["budget_tokens"] = reasoningEffortToThinkingBudget(*unified.ReasoningEffort)
+		}
+
+		req["thinking"] = thinking
+	}
+
+	// 阶段 3: 多模态支持
+	// Anthropic 支持图像 (通过 content 数组中的 image 类型)
+	// Anthropic 不支持 modalities 字段，静默忽略
+	// Anthropic 不支持 audio 输出配置，静默忽略
+	// Anthropic 不支持 input_audio，静默忽略
 
 	return json.Marshal(req)
 }

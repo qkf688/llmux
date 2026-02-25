@@ -97,6 +97,15 @@ type ResponsesItem struct {
 	// Cherry Studio / octopus compatibility: role-based format
 	Role    string      `json:"role,omitempty"`
 	Content interface{} `json:"content,omitempty"`
+
+	// reasoning 字段
+	Summary []ResponsesReasoningSummary `json:"summary,omitempty"`
+}
+
+// ResponsesReasoningSummary reasoning 摘要
+type ResponsesReasoningSummary struct {
+	Type string `json:"type"` // "summary_text"
+	Text string `json:"text"`
 }
 
 // MarshalJSON 自定义序列化，确保 output_text 类型总是包含 annotations 字段

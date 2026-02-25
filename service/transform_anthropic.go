@@ -97,6 +97,22 @@ func TransformAnthropicToUnified(rawBody []byte) (*UnifiedRequest, error) {
 		unified.Metadata = metadata
 	}
 
+	// 阶段 2: 解析 thinking 配置
+	if thinking, ok := req["thinking"].(map[string]interface{}); ok {
+		thinkingType := getString(thinking, "type")
+		budgetTokens := getInt64(thinking, "budget_tokens")
+
+		if thinkingType == "enabled" && budgetTokens > 0 {
+			// 将 budget_tokens 转换为 reasoning_effort
+			effort := thinkingBudgetToReasoningEffort(budgetTokens)
+			if effort != "" {
+				unified.ReasoningEffort = &effort
+			}
+			// 同时保存原始的 budget_tokens
+			unified.ReasoningBudget = &budgetTokens
+		}
+	}
+
 	return unified, nil
 }
 
@@ -377,6 +393,22 @@ func TransformUnifiedToAnthropic(unified *UnifiedRequest) ([]byte, error) {
 
 	// Anthropic 不支持 parallel_tool_calls，静默忽略
 	// Anthropic 不支持 stream_options，静默忽略
+
+	// 阶段 2: 映射 thinking 配置
+	if unified.ReasoningEffort != nil || unified.ReasoningBudget != nil {
+		thinking := map[string]interface{}{
+			"type": "enabled",
+		}
+
+		// 优先使用 ReasoningBudget，如果没有则从 ReasoningEffort 转换
+		if unified.ReasoningBudget != nil {
+			thinking["budget_tokens"] = *unified.ReasoningBudget
+		} else if unified.ReasoningEffort != nil {
+			thinking["budget_tokens"] = reasoningEffortToThinkingBudget(*unified.ReasoningEffort)
+		}
+
+		req["thinking"] = thinking
+	}
 
 	// 阶段 3: 多模态支持
 	// Anthropic 支持图像 (通过 content 数组中的 image 类型)

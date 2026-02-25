@@ -297,6 +297,7 @@ type UnifiedRequest struct {
 	Tools           []UnifiedTool    `json:"tools,omitempty"`
 	System          string           `json:"system,omitempty"`
 	ReasoningEffort *string          `json:"reasoning_effort,omitempty"` // 推理强度参数
+	ReasoningBudget *int64           `json:"reasoning_budget,omitempty"` // 推理预算 token 数 (Anthropic thinking.budget_tokens)
 
 	// 阶段 1: 基础高级参数 (参考 Octopus InternalLLMRequest)
 	// Number between -2.0 and 2.0. Positive values penalize new tokens based on

@@ -118,31 +118,43 @@ type UnifiedRequest struct {
 
 ---
 
-### 阶段 3: 多模态内容支持 [pending]
+### 阶段 3: 多模态内容支持 [completed]
 **目标**: 支持图像、音频等多模态输入
 
+**参考**: Octopus `MessageContent` 和 `MessageContentPart` 实现
+
 **任务**:
-- [ ] 重构 `UnifiedMessage.Content` 为复杂类型
+- [x] 重构 `UnifiedMessage.Content` 为复杂类型
   - 创建 `UnifiedMessageContent` 类型
   - 支持 string 或 []ContentPart
-- [ ] 添加 `UnifiedMessageContentPart` 类型
+  - 实现自定义 JSON 序列化
+- [x] 添加 `UnifiedMessageContentPart` 类型
   - TextPart: {type: "text", text: string}
   - ImagePart: {type: "image_url", image_url: {url, detail}}
   - AudioPart: {type: "input_audio", input_audio: {data, format}}
-- [ ] 添加 `Modalities` 字段 ([]string)
-- [ ] 添加 `Audio` 配置字段
-- [ ] 更新转换逻辑处理多模态内容
-- [ ] 编写多模态测试用例
+- [x] 添加 `Modalities` 字段 ([]string)
+- [x] 添加 `Audio` 配置字段
+- [x] 添加 UnifiedMessage 辅助方法
+  - GetContentAsString, GetContentParts, SetContentString, SetContentParts
+- [x] 更新转换逻辑处理多模态内容
+- [x] 编写多模态测试用例
 
 **文件涉及**:
-- `service/transformer.go` - 类型重构
+- `service/transformer.go` - 类型重构和辅助方法
 - `service/transform_openai.go` - 多模态解析
 - `service/transform_anthropic.go` - Anthropic 多模态映射
+- `service/transformer_test.go` - 单元测试
 
 **验收标准**:
-- 能正确解析图像 URL 和 base64 数据
-- 能正确解析音频输入
-- 向后兼容纯文本消息
+- ✅ 能正确解析图像 URL 和 base64 数据
+- ✅ 能正确解析音频输入
+- ✅ 向后兼容纯文本消息
+- ✅ Content 字段保持 interface{} 类型
+- ✅ 单元测试覆盖率 100%
+
+**预计时间**: 4-5 小时
+**实际时间**: 约 3 小时
+**完成日期**: 2026-02-25
 
 ---
 

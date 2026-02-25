@@ -65,6 +65,9 @@ type UnifiedMessageContentPart struct {
 
 	// InputAudio 音频输入 (type="input_audio" 时使用)
 	InputAudio *UnifiedInputAudio `json:"input_audio,omitempty"`
+
+	// CacheControl 缓存控制 (Anthropic 特有)
+	CacheControl *CacheControl `json:"cache_control,omitempty"`
 }
 
 // UnifiedImageURL 图像 URL 配置
@@ -96,10 +99,11 @@ type UnifiedAudio struct {
 
 // UnifiedMessage 统一消息格式
 type UnifiedMessage struct {
-	Role    string      `json:"role"`
-	Content interface{} `json:"content,omitempty"` // 支持 string 或 []UnifiedMessageContentPart
-	ToolCalls  []UnifiedToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string            `json:"tool_call_id,omitempty"` // OpenAI tool 角色消息的 tool_call_id
+	Role         string         `json:"role"`
+	Content      interface{}    `json:"content,omitempty"` // 支持 string 或 []UnifiedMessageContentPart
+	ToolCalls    []UnifiedToolCall `json:"tool_calls,omitempty"`
+	ToolCallID   string         `json:"tool_call_id,omitempty"` // OpenAI tool 角色消息的 tool_call_id
+	CacheControl *CacheControl  `json:"cache_control,omitempty"` // Anthropic 缓存控制
 }
 
 // GetContentAsString 获取纯文本内容
@@ -165,8 +169,9 @@ type UnifiedToolCallFunction struct {
 
 // UnifiedTool 统一工具定义格式
 type UnifiedTool struct {
-	Type     string      `json:"type"`
-	Function UnifiedFunc `json:"function"`
+	Type         string        `json:"type"`
+	Function     UnifiedFunc   `json:"function"`
+	CacheControl *CacheControl `json:"cache_control,omitempty"` // Anthropic 缓存控制
 }
 
 // UnifiedFunc 统一函数定义格式

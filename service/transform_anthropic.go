@@ -53,6 +53,13 @@ func TransformAnthropicToUnified(rawBody []byte) (*UnifiedRequest, error) {
 				}
 			}
 
+			// 阶段 1: 解析消息级别的缓存控制
+			if cacheControl, ok := msgMap["cache_control"].(map[string]interface{}); ok {
+				unifiedMsg.CacheControl = &CacheControl{
+					Type: getString(cacheControl, "type"),
+				}
+			}
+
 			unified.Messages = append(unified.Messages, unifiedMsg)
 		}
 	}
@@ -61,14 +68,23 @@ func TransformAnthropicToUnified(rawBody []byte) (*UnifiedRequest, error) {
 	if tools, ok := req["tools"].([]interface{}); ok {
 		for _, tool := range tools {
 			toolMap := tool.(map[string]interface{})
-			unified.Tools = append(unified.Tools, UnifiedTool{
+			unifiedTool := UnifiedTool{
 				Type: "function",
 				Function: UnifiedFunc{
 					Name:        getString(toolMap, "name"),
 					Description: getString(toolMap, "description"),
 					Parameters:  toolMap["input_schema"],
 				},
-			})
+			}
+
+			// 阶段 1: 解析工具级别的缓存控制
+			if cacheControl, ok := toolMap["cache_control"].(map[string]interface{}); ok {
+				unifiedTool.CacheControl = &CacheControl{
+					Type: getString(cacheControl, "type"),
+				}
+			}
+
+			unified.Tools = append(unified.Tools, unifiedTool)
 		}
 	}
 
@@ -186,6 +202,13 @@ func TransformUnifiedToAnthropic(unified *UnifiedRequest) ([]byte, error) {
 		msgMap := map[string]interface{}{
 			"role": msg.Role,
 		}
+
+		// 阶段 1: 添加消息级别的缓存控制
+		if msg.CacheControl != nil {
+			msgMap["cache_control"] = map[string]interface{}{
+				"type": msg.CacheControl.Type,
+			}
+		}
 		if msg.Content != nil {
 			// 阶段 3: 处理多模态内容
 			if parts, ok := msg.Content.([]UnifiedMessageContentPart); ok {
@@ -195,10 +218,17 @@ func TransformUnifiedToAnthropic(unified *UnifiedRequest) ([]byte, error) {
 					switch part.Type {
 					case "text":
 						if part.Text != nil {
-							contentArray = append(contentArray, map[string]interface{}{
+							textMap := map[string]interface{}{
 								"type": "text",
 								"text": *part.Text,
-							})
+							}
+							// 阶段 1: 添加内容部分级别的缓存控制
+							if part.CacheControl != nil {
+								textMap["cache_control"] = map[string]interface{}{
+									"type": part.CacheControl.Type,
+								}
+							}
+							contentArray = append(contentArray, textMap)
 						}
 					case "image_url":
 						if part.ImageURL != nil {
@@ -218,6 +248,12 @@ func TransformUnifiedToAnthropic(unified *UnifiedRequest) ([]byte, error) {
 								imgMap["source"] = map[string]interface{}{
 									"type": "url",
 									"url":  part.ImageURL.URL,
+								}
+							}
+							// 阶段 1: 添加内容部分级别的缓存控制
+							if part.CacheControl != nil {
+								imgMap["cache_control"] = map[string]interface{}{
+									"type": part.CacheControl.Type,
 								}
 							}
 							contentArray = append(contentArray, imgMap)
@@ -274,11 +310,20 @@ func TransformUnifiedToAnthropic(unified *UnifiedRequest) ([]byte, error) {
 	if len(unified.Tools) > 0 {
 		tools := []interface{}{}
 		for _, tool := range unified.Tools {
-			tools = append(tools, map[string]interface{}{
+			toolMap := map[string]interface{}{
 				"name":         tool.Function.Name,
 				"description":  tool.Function.Description,
 				"input_schema": tool.Function.Parameters,
-			})
+			}
+
+			// 阶段 1: 添加工具级别的缓存控制
+			if tool.CacheControl != nil {
+				toolMap["cache_control"] = map[string]interface{}{
+					"type": tool.CacheControl.Type,
+				}
+			}
+
+			tools = append(tools, toolMap)
 		}
 		req["tools"] = tools
 	}

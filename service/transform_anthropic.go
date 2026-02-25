@@ -265,6 +265,30 @@ func TransformUnifiedToAnthropic(unified *UnifiedRequest) ([]byte, error) {
 	// - max_completion_tokens
 	// - store
 
+	// 阶段 2: 映射兼容字段
+	// Anthropic 不支持 response_format (JSON Schema)，但支持部分功能
+	// 可以通过 system prompt 引导模型输出 JSON
+	// 这里静默忽略，不报错
+
+	// Anthropic 支持 tool_choice
+	if unified.ToolChoice != nil {
+		if unified.ToolChoice.StringValue != nil {
+			// "auto", "any", "none" 等
+			req["tool_choice"] = map[string]interface{}{
+				"type": *unified.ToolChoice.StringValue,
+			}
+		} else if unified.ToolChoice.ObjectValue != nil && unified.ToolChoice.ObjectValue.Function != nil {
+			// 指定特定工具
+			req["tool_choice"] = map[string]interface{}{
+				"type": "tool",
+				"name": unified.ToolChoice.ObjectValue.Function.Name,
+			}
+		}
+	}
+
+	// Anthropic 不支持 parallel_tool_calls，静默忽略
+	// Anthropic 不支持 stream_options，静默忽略
+
 	return json.Marshal(req)
 }
 

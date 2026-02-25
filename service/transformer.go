@@ -82,6 +82,72 @@ func (s *UnifiedStop) UnmarshalJSON(data []byte) error {
 	return errors.New("invalid stop type: must be string or string array")
 }
 
+// UnifiedResponseFormat 响应格式控制
+// 参考 Octopus ResponseFormat 实现
+type UnifiedResponseFormat struct {
+	// Type 指定响应格式类型
+	// 可选值: "text", "json_object", "json_schema"
+	Type string `json:"type"`
+	// JSONSchema 用于 json_schema 类型的 schema 定义
+	JSONSchema json.RawMessage `json:"json_schema,omitempty"`
+}
+
+// UnifiedToolChoice 工具选择控制
+// 参考 Octopus ToolChoice 实现
+type UnifiedToolChoice struct {
+	StringValue *string
+	ObjectValue *UnifiedToolChoiceObject
+}
+
+// MarshalJSON 自定义 JSON 序列化
+func (t UnifiedToolChoice) MarshalJSON() ([]byte, error) {
+	if t.StringValue != nil {
+		return json.Marshal(t.StringValue)
+	}
+	if t.ObjectValue != nil {
+		return json.Marshal(t.ObjectValue)
+	}
+	return []byte("null"), nil
+}
+
+// UnmarshalJSON 自定义 JSON 反序列化
+func (t *UnifiedToolChoice) UnmarshalJSON(data []byte) error {
+	// 尝试解析为字符串
+	var str string
+	err := json.Unmarshal(data, &str)
+	if err == nil {
+		t.StringValue = &str
+		return nil
+	}
+
+	// 尝试解析为对象
+	var obj UnifiedToolChoiceObject
+	err = json.Unmarshal(data, &obj)
+	if err == nil {
+		t.ObjectValue = &obj
+		return nil
+	}
+
+	return errors.New("invalid tool_choice type: must be string or object")
+}
+
+// UnifiedToolChoiceObject 工具选择对象
+type UnifiedToolChoiceObject struct {
+	Type     string                     `json:"type"`
+	Function *UnifiedToolChoiceFunction `json:"function,omitempty"`
+}
+
+// UnifiedToolChoiceFunction 工具选择函数
+type UnifiedToolChoiceFunction struct {
+	Name string `json:"name"`
+}
+
+// UnifiedStreamOptions 流式选项
+type UnifiedStreamOptions struct {
+	// IncludeUsage 是否在流式响应中包含 usage 信息
+	IncludeUsage bool `json:"include_usage,omitempty"`
+}
+
 // UnifiedRequest 统一请求格式
 type UnifiedRequest struct {
 	Model           string           `json:"model"`
@@ -135,6 +201,20 @@ type UnifiedRequest struct {
 
 	// Whether or not to store the output of this chat completion request.
 	Store *bool `json:"store,omitempty"`
+
+	// 阶段 2: 响应格式和工具增强
+	// An object specifying the format that the model must output.
+	ResponseFormat *UnifiedResponseFormat `json:"response_format,omitempty"`
+
+	// Controls which (if any) tool is called by the model.
+	// Can be "none", "auto", "required", or an object specifying a particular tool.
+	ToolChoice *UnifiedToolChoice `json:"tool_choice,omitempty"`
+
+	// Whether to enable parallel function calling during tool use.
+	ParallelToolCalls *bool `json:"parallel_tool_calls,omitempty"`
+
+	// Options for streaming response. Only set this when you set stream: true.
+	StreamOptions *UnifiedStreamOptions `json:"stream_options,omitempty"`
 }
 
 // UnifiedChoice 统一响应选择格式

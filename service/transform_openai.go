@@ -137,6 +137,47 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 		}
 	}
 
+	// 阶段 2: 解析响应格式和工具增强参数
+	// 解析 response_format
+	if rfVal, ok := req["response_format"].(map[string]interface{}); ok {
+		unified.ResponseFormat = &UnifiedResponseFormat{
+			Type: getString(rfVal, "type"),
+		}
+		if schema, ok := rfVal["json_schema"]; ok {
+			if schemaBytes, err := json.Marshal(schema); err == nil {
+				unified.ResponseFormat.JSONSchema = schemaBytes
+			}
+		}
+	}
+
+	// 解析 tool_choice
+	if tcVal, ok := req["tool_choice"]; ok && tcVal != nil {
+		unified.ToolChoice = &UnifiedToolChoice{}
+		switch v := tcVal.(type) {
+		case string:
+			unified.ToolChoice.StringValue = &v
+		case map[string]interface{}:
+			obj := UnifiedToolChoiceObject{
+				Type: getString(v, "type"),
+			}
+			if funcMap, ok := v["function"].(map[string]interface{}); ok {
+				obj.Function = &UnifiedToolChoiceFunction{
+					Name: getString(funcMap, "name"),
+				}
+			}
+			unified.ToolChoice.ObjectValue = &obj
+		}
+	}
+
+	unified.ParallelToolCalls = getBoolPtr(req, "parallel_tool_calls")
+
+	// 解析 stream_options
+	if soVal, ok := req["stream_options"].(map[string]interface{}); ok {
+		unified.StreamOptions = &UnifiedStreamOptions{
+			IncludeUsage: getBool(soVal, "include_usage"),
+		}
+	}
+
 	return unified, nil
 }
 
@@ -264,7 +305,46 @@ func TransformUnifiedToOpenAI(unified *UnifiedRequest) ([]byte, error) {
 		req["store"] = *unified.Store
 	}
 
-	if unified.Stream {
+	// 阶段 2: 输出响应格式和工具增强参数
+	if unified.ResponseFormat != nil {
+		rfMap := map[string]interface{}{
+			"type": unified.ResponseFormat.Type,
+		}
+		if len(unified.ResponseFormat.JSONSchema) > 0 {
+			var schema interface{}
+			if err := json.Unmarshal(unified.ResponseFormat.JSONSchema, &schema); err == nil {
+				rfMap["json_schema"] = schema
+			}
+		}
+		req["response_format"] = rfMap
+	}
+
+	if unified.ToolChoice != nil {
+		if unified.ToolChoice.StringValue != nil {
+			req["tool_choice"] = *unified.ToolChoice.StringValue
+		} else if unified.ToolChoice.ObjectValue != nil {
+			tcMap := map[string]interface{}{
+				"type": unified.ToolChoice.ObjectValue.Type,
+			}
+			if unified.ToolChoice.ObjectValue.Function != nil {
+				tcMap["function"] = map[string]interface{}{
+					"name": unified.ToolChoice.ObjectValue.Function.Name,
+				}
+			}
+			req["tool_choice"] = tcMap
+		}
+	}
+
+	if unified.ParallelToolCalls != nil {
+		req["parallel_tool_calls"] = *unified.ParallelToolCalls
+	}
+
+	if unified.StreamOptions != nil {
+		req["stream_options"] = map[string]interface{}{
+			"include_usage": unified.StreamOptions.IncludeUsage,
+		}
+	} else if unified.Stream {
+		// 如果是流式但没有设置 StreamOptions，使用默认值
 		req["stream_options"] = map[string]interface{}{"include_usage": true}
 	}
 

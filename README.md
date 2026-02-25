@@ -8,9 +8,14 @@
 
 - 🔄 **多供应商支持** - 支持 OpenAI、Anthropic 等多个 LLM 供应商
 - ⚖️ **智能负载均衡** - 基于权重的请求分发策略
+- 🔀 **格式自动转换** - OpenAI ↔ Anthropic 格式无缝转换
+- 💾 **缓存控制** - Anthropic 缓存功能，降低 API 成本
+- 🧠 **深度推理** - 支持 Extended Thinking 功能
+- 🎨 **多模态支持** - 图像、音频输入输出
 - 📊 **实时监控** - 请求统计、使用量分析和日志记录
 - 🎛️ **管理界面** - 现代化的 Web 管理后台
 - 🔐 **安全认证** - Token 认证和访问控制
+- 🛡️ **参数验证** - 自动验证和修复无效参数
 - 🐳 **容器化部署** - 支持 Docker 和 Docker Compose
 
 ## 技术栈
@@ -117,6 +122,7 @@ docker-compose up -d
 ### OpenAI 兼容接口
 - `GET /v1/models` - 获取模型列表
 - `POST /v1/chat/completions` - 聊天补全
+- `POST /v1/responses` - OpenAI Responses API
 
 ### Anthropic 兼容接口
 - `POST /v1/messages` - 消息处理
@@ -126,6 +132,41 @@ docker-compose up -d
 - `GET /api/models` - 模型管理
 - `GET /api/logs` - 日志查询
 - `GET /api/metrics/*` - 统计数据
+
+### 支持的高级功能
+
+#### 基础参数
+- ✅ `temperature`, `top_p`, `max_tokens` - 生成控制
+- ✅ `frequency_penalty`, `presence_penalty` - 重复控制
+- ✅ `seed`, `logit_bias` - 确定性和偏置
+- ✅ `stop` - 停止序列
+- ✅ `logprobs`, `top_logprobs` - 对数概率
+
+#### Anthropic 特有功能
+- ✅ **缓存控制 (Cache Control)** - 三级缓存（消息/工具/内容部分）
+  - 降低 API 成本，缓存有效期 5 分钟
+- ✅ **思考配置 (Extended Thinking)** - 深度推理控制
+  - `reasoning_budget` - token 预算
+  - `reasoning_effort` - 推理强度 (low/medium/high)
+
+#### 多模态支持
+- ✅ 图像输入 (`image_url`)
+- ✅ 音频输入 (`input_audio`)
+- ✅ 音频输出 (`audio`, `modalities`)
+
+#### 工具和响应控制
+- ✅ `response_format` - 响应格式控制 (text/json_object/json_schema)
+- ✅ `tool_choice` - 工具选择控制
+- ✅ `parallel_tool_calls` - 并行工具调用
+
+#### 流式增强
+- ✅ `stream_options` - 流式使用统计
+
+#### 参数验证
+- ✅ 自动验证参数范围
+- ✅ 自动修复无效参数
+
+详细参数说明请查看 [API 参数文档](docs/API_PARAMETERS.md)
 
 ## 配置说明
 
@@ -149,6 +190,84 @@ docker-compose up -d
   "weight": 100
 }
 ```
+
+### 使用示例
+
+#### 基础聊天请求
+```bash
+curl http://localhost:7070/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "max_tokens": 100
+  }'
+```
+
+#### 使用缓存控制（降低成本）
+```bash
+curl http://localhost:7070/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "model": "claude-3-opus",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Long system context...",
+        "cache_control": {"type": "ephemeral"}
+      }
+    ],
+    "max_tokens": 100
+  }'
+```
+
+#### 使用深度推理
+```bash
+curl http://localhost:7070/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "model": "claude-3-opus",
+    "messages": [{"role": "user", "content": "Solve this complex problem"}],
+    "reasoning_effort": "high",
+    "max_tokens": 1000
+  }'
+```
+
+#### 多模态输入（图像）
+```bash
+curl http://localhost:7070/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "model": "gpt-4-vision",
+    "messages": [{
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "What is in this image?"},
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://example.com/image.jpg",
+            "detail": "high"
+          }
+        }
+      ]
+    }],
+    "max_tokens": 300
+  }'
+```
+
+### 格式自动转换
+
+llmio 支持客户端格式与供应商格式的自动转换：
+
+- **OpenAI 客户端 → Anthropic 供应商**: 自动转换请求和响应格式
+- **Anthropic 客户端 → OpenAI 供应商**: 自动转换请求和响应格式
+
+详细说明请查看 [格式转换文档](docs/FORMAT_CONVERSION.md)
 
 ## 截图展示
 
@@ -190,6 +309,9 @@ docker-compose up -d
 # 后端测试
 go test ./...
 
+# 运行特定测试
+go test ./service -v -run TestTransform
+
 # 前端测试
 cd webui
 pnpm run lint
@@ -206,6 +328,13 @@ pnpm run build
 # 构建后端
 go build -o llmux .
 ```
+
+### 文档
+
+- [格式转换文档](docs/FORMAT_CONVERSION.md) - 格式转换功能说明
+- [API 参数文档](docs/API_PARAMETERS.md) - 完整的 API 参数指南
+- [统一请求扩展文档](docs/UNIFIED_REQUEST_EXTENSION.md) - UnifiedRequest 结构说明
+- [项目规范](CLAUDE.md) - 代码规范和架构标准
 
 ## 部署
 

@@ -114,6 +114,29 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 		}
 	}
 
+	// 阶段 1: 解析基础高级参数
+	unified.FrequencyPenalty = getFloat64Ptr(req, "frequency_penalty")
+	unified.PresencePenalty = getFloat64Ptr(req, "presence_penalty")
+	unified.Seed = getInt64Ptr(req, "seed")
+	unified.LogitBias = getIntMap(req, "logit_bias")
+	unified.User = getStringPtr(req, "user")
+	unified.Metadata = getStringMap(req, "metadata")
+	unified.Logprobs = getBoolPtr(req, "logprobs")
+	unified.TopLogprobs = getInt64Ptr(req, "top_logprobs")
+	unified.MaxCompletionTokens = getInt64Ptr(req, "max_completion_tokens")
+	unified.Store = getBoolPtr(req, "store")
+
+	// 处理 stop (可能是 string 或 []string)
+	if stopVal, ok := req["stop"]; ok && stopVal != nil {
+		unified.Stop = &UnifiedStop{}
+		switch v := stopVal.(type) {
+		case string:
+			unified.Stop.Single = &v
+		case []interface{}:
+			unified.Stop.Multiple = getStringArray(req, "stop")
+		}
+	}
+
 	return unified, nil
 }
 
@@ -200,6 +223,45 @@ func TransformUnifiedToOpenAI(unified *UnifiedRequest) ([]byte, error) {
 	// 输出 reasoning_effort 参数
 	if unified.ReasoningEffort != nil {
 		req["reasoning_effort"] = *unified.ReasoningEffort
+	}
+
+	// 阶段 1: 输出基础高级参数
+	if unified.FrequencyPenalty != nil {
+		req["frequency_penalty"] = *unified.FrequencyPenalty
+	}
+	if unified.PresencePenalty != nil {
+		req["presence_penalty"] = *unified.PresencePenalty
+	}
+	if unified.Seed != nil {
+		req["seed"] = *unified.Seed
+	}
+	if unified.LogitBias != nil && len(unified.LogitBias) > 0 {
+		req["logit_bias"] = unified.LogitBias
+	}
+	if unified.Stop != nil {
+		if unified.Stop.Single != nil {
+			req["stop"] = *unified.Stop.Single
+		} else if len(unified.Stop.Multiple) > 0 {
+			req["stop"] = unified.Stop.Multiple
+		}
+	}
+	if unified.User != nil {
+		req["user"] = *unified.User
+	}
+	if unified.Metadata != nil && len(unified.Metadata) > 0 {
+		req["metadata"] = unified.Metadata
+	}
+	if unified.Logprobs != nil {
+		req["logprobs"] = *unified.Logprobs
+	}
+	if unified.TopLogprobs != nil {
+		req["top_logprobs"] = *unified.TopLogprobs
+	}
+	if unified.MaxCompletionTokens != nil {
+		req["max_completion_tokens"] = *unified.MaxCompletionTokens
+	}
+	if unified.Store != nil {
+		req["store"] = *unified.Store
 	}
 
 	if unified.Stream {
@@ -303,8 +365,12 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 		errorCount := 0
 		sequenceNumber := 0
 		accumulatedText := ""
+		accumulatedReasoning := ""
 		var responseID string
 		var itemID string
+		var reasoningItemID string
+		hasReasoningItem := false
+		reasoningOutputIndex := 0
 
 		for scanner.Scan() {
 			lineCount++
@@ -799,54 +865,125 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 				case "content_block_start":
 					// 发送 response.output_item.added 事件
 					if contentBlock, ok := chunk["content_block"].(map[string]interface{}); ok {
-						_ = getString(contentBlock, "type") // 忽略 blockType，统一使用 message 类型
-						itemAdded := map[string]interface{}{
-							"type":            "response.output_item.added",
-							"sequence_number": sequenceNumber,
-							"output_index":    int(getFloat(chunk, "index")),
-							"item": map[string]interface{}{
-								"id":      itemID,
-								"type":    "message",
-								"role":    "assistant",
-								"content": []interface{}{},
-								"status":  "in_progress",
-							},
-						}
-						sequenceNumber++
-						addedData, _ := marshalWithTypeFirst(itemAdded)
-						if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(addedData)); err != nil {
-							pw.CloseWithError(err)
-							return
-						}
+						blockType := getString(contentBlock, "type")
+						blockIndex := int(getFloat(chunk, "index"))
 
-						// 发送 response.content_part.added 事件
-						contentPartAdded := map[string]interface{}{
-							"type":            "response.content_part.added",
-							"sequence_number": sequenceNumber,
-							"output_index":    int(getFloat(chunk, "index")),
-							"item_id":         itemID,
-							"content_index":   0,
-							"part": map[string]interface{}{
-								"type": "output_text",
-								"text": "",
-							},
-						}
-						sequenceNumber++
-						partAddedData, _ := marshalWithTypeFirst(contentPartAdded)
-						if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(partAddedData)); err != nil {
-							pw.CloseWithError(err)
-							return
-						}
+						if blockType == "thinking" {
+							// 处理 thinking 类型的 content block（Extended Thinking）
+							if !hasReasoningItem {
+								hasReasoningItem = true
+								reasoningItemID = fmt.Sprintf("reasoning_%s", responseID)
+								reasoningOutputIndex = blockIndex
 
-						// 重置累积文本
-						accumulatedText = ""
+								// 发送 response.output_item.added 事件（reasoning 类型）
+								reasoningItemAdded := map[string]interface{}{
+									"type":            "response.output_item.added",
+									"sequence_number": sequenceNumber,
+									"output_index":    reasoningOutputIndex,
+									"item": map[string]interface{}{
+										"id":      reasoningItemID,
+										"type":    "reasoning",
+										"status":  "in_progress",
+										"summary": []interface{}{},
+									},
+								}
+								sequenceNumber++
+								addedData, _ := marshalWithTypeFirst(reasoningItemAdded)
+								if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(addedData)); err != nil {
+									pw.CloseWithError(err)
+									return
+								}
+
+								// 发送 response.reasoning_summary_part.added 事件
+								summaryPartAdded := map[string]interface{}{
+									"type":            "response.reasoning_summary_part.added",
+									"sequence_number": sequenceNumber,
+									"output_index":    reasoningOutputIndex,
+									"item_id":         reasoningItemID,
+									"summary_index":   0,
+									"part": map[string]interface{}{
+										"type": "summary_text",
+									},
+								}
+								sequenceNumber++
+								partAddedData, _ := marshalWithTypeFirst(summaryPartAdded)
+								if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(partAddedData)); err != nil {
+									pw.CloseWithError(err)
+									return
+								}
+
+								// 重置累积 reasoning 文本
+								accumulatedReasoning = ""
+							}
+						} else {
+							// 处理普通文本类型的 content block
+							itemAdded := map[string]interface{}{
+								"type":            "response.output_item.added",
+								"sequence_number": sequenceNumber,
+								"output_index":    blockIndex,
+								"item": map[string]interface{}{
+									"id":      itemID,
+									"type":    "message",
+									"role":    "assistant",
+									"content": []interface{}{},
+									"status":  "in_progress",
+								},
+							}
+							sequenceNumber++
+							addedData, _ := marshalWithTypeFirst(itemAdded)
+							if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(addedData)); err != nil {
+								pw.CloseWithError(err)
+								return
+							}
+
+							// 发送 response.content_part.added 事件
+							contentPartAdded := map[string]interface{}{
+								"type":            "response.content_part.added",
+								"sequence_number": sequenceNumber,
+								"output_index":    blockIndex,
+								"item_id":         itemID,
+								"content_index":   0,
+								"part": map[string]interface{}{
+									"type": "output_text",
+									"text": "",
+								},
+							}
+							sequenceNumber++
+							partAddedData, _ := marshalWithTypeFirst(contentPartAdded)
+							if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(partAddedData)); err != nil {
+								pw.CloseWithError(err)
+								return
+							}
+
+							// 重置累积文本
+							accumulatedText = ""
+						}
 					}
 
 				case "content_block_delta":
 					if delta, ok := chunk["delta"].(map[string]interface{}); ok {
 						deltaType := getString(delta, "type")
 
-						if deltaType == "text_delta" {
+						if deltaType == "thinking_delta" {
+							// 处理 thinking 类型的增量内容（Extended Thinking）
+							if text := getString(delta, "thinking"); text != "" {
+								accumulatedReasoning += text
+								reasoningDelta := map[string]interface{}{
+									"type":            "response.reasoning_summary_text.delta",
+									"sequence_number": sequenceNumber,
+									"output_index":    reasoningOutputIndex,
+									"item_id":         reasoningItemID,
+									"summary_index":   0,
+									"delta":           text,
+								}
+								sequenceNumber++
+								deltaData, _ := marshalWithTypeFirst(reasoningDelta)
+								if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(deltaData)); err != nil {
+									pw.CloseWithError(err)
+									return
+								}
+							}
+						} else if deltaType == "text_delta" {
 							// 发送 response.output_text.delta 事件
 							if text := getString(delta, "text"); text != "" {
 								accumulatedText += text
@@ -885,6 +1022,68 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 					}
 
 				case "message_delta":
+					// 如果有 reasoning 内容，先发送 reasoning 完成事件
+					if hasReasoningItem && accumulatedReasoning != "" {
+						// response.reasoning_summary_text.done 事件
+						reasoningTextDone := map[string]interface{}{
+							"type":            "response.reasoning_summary_text.done",
+							"sequence_number": sequenceNumber,
+							"output_index":    reasoningOutputIndex,
+							"item_id":         reasoningItemID,
+							"summary_index":   0,
+							"text":            accumulatedReasoning,
+						}
+						sequenceNumber++
+						textDoneData, _ := marshalWithTypeFirst(reasoningTextDone)
+						if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(textDoneData)); err != nil {
+							pw.CloseWithError(err)
+							return
+						}
+
+						// response.reasoning_summary_part.done 事件
+						reasoningPartDone := map[string]interface{}{
+							"type":            "response.reasoning_summary_part.done",
+							"sequence_number": sequenceNumber,
+							"output_index":    reasoningOutputIndex,
+							"item_id":         reasoningItemID,
+							"summary_index":   0,
+							"part": map[string]interface{}{
+								"type": "summary_text",
+								"text": accumulatedReasoning,
+							},
+						}
+						sequenceNumber++
+						partDoneData, _ := marshalWithTypeFirst(reasoningPartDone)
+						if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(partDoneData)); err != nil {
+							pw.CloseWithError(err)
+							return
+						}
+
+						// response.output_item.done 事件（reasoning item）
+						reasoningItemDone := map[string]interface{}{
+							"type":            "response.output_item.done",
+							"sequence_number": sequenceNumber,
+							"output_index":    reasoningOutputIndex,
+							"item": map[string]interface{}{
+								"id":   reasoningItemID,
+								"type": "reasoning",
+								"summary": []map[string]interface{}{
+									{
+										"type": "summary_text",
+										"text": accumulatedReasoning,
+									},
+								},
+								"status": "completed",
+							},
+						}
+						sequenceNumber++
+						itemDoneData, _ := marshalWithTypeFirst(reasoningItemDone)
+						if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(itemDoneData)); err != nil {
+							pw.CloseWithError(err)
+							return
+						}
+					}
+
 					// 发送 response.output_text.done 事件
 					outputTextDone := map[string]interface{}{
 						"type":            "response.output_text.done",
@@ -920,22 +1119,40 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 						return
 					}
 
+					// 构建 output_item.done 事件的 content 数组，包含 reasoning（如果有）
+					contentItems := []map[string]interface{}{
+						{
+							"type": "output_text",
+							"text": accumulatedText,
+						},
+					}
+					// 如果有 reasoning，添加到 content 数组前面
+					if hasReasoningItem && accumulatedReasoning != "" {
+						contentItems = append([]map[string]interface{}{
+							{
+								"type": "reasoning",
+								"id":   reasoningItemID,
+								"summary": []map[string]interface{}{
+									{
+										"type": "summary_text",
+										"text": accumulatedReasoning,
+									},
+								},
+							},
+						}, contentItems...)
+					}
+
 					// 发送 response.output_item.done 事件
 					outputItemDone := map[string]interface{}{
 						"type":            "response.output_item.done",
 						"sequence_number": sequenceNumber,
 						"output_index":    0,
 						"item": map[string]interface{}{
-							"id":   itemID,
-							"type": "message",
-							"role": "assistant",
-							"content": []map[string]interface{}{
-								{
-									"type": "output_text",
-									"text": accumulatedText,
-								},
-							},
-							"status": "completed",
+							"id":      itemID,
+							"type":    "message",
+							"role":    "assistant",
+							"content": contentItems,
+							"status":  "completed",
 						},
 					}
 					sequenceNumber++
@@ -1057,12 +1274,18 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 							"content_block": map[string]interface{}{},
 						}
 
-						// 映射 Responses function_call → Anthropic tool_use
+						// 映射 Responses 类型 → Anthropic 类型
 						if itemType == "function_call" {
+							// function_call → tool_use
 							blockStart["content_block"] = map[string]interface{}{
 								"type": "tool_use",
 								"id":   getString(item, "id"),
 								"name": getString(item, "name"),
+							}
+						} else if itemType == "reasoning" {
+							// reasoning → thinking (Extended Thinking)
+							blockStart["content_block"] = map[string]interface{}{
+								"type": "thinking",
 							}
 						} else if itemType == "output_text" || itemType == "text" {
 							blockStart["content_block"] = map[string]interface{}{
@@ -1091,6 +1314,24 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 							"delta": map[string]interface{}{
 								"type": "text_delta",
 								"text": delta,
+							},
+						}
+						deltaData, _ := json.Marshal(contentDelta)
+						if _, err := fmt.Fprintf(pw, "event: content_block_delta\ndata: %s\n\n", string(deltaData)); err != nil {
+							pw.CloseWithError(err)
+							return
+						}
+					}
+
+				case "response.reasoning_summary_text.delta":
+					// 发送 content_block_delta 事件（thinking）
+					if delta := getString(chunk, "delta"); delta != "" {
+						contentDelta := map[string]interface{}{
+							"type":  "content_block_delta",
+							"index": int(getFloat(chunk, "output_index")),
+							"delta": map[string]interface{}{
+								"type":     "thinking_delta",
+								"thinking": delta,
 							},
 						}
 						deltaData, _ := json.Marshal(contentDelta)
@@ -1289,6 +1530,72 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 							}
 						}
 
+						// 处理 reasoning_content（Extended Thinking）
+						if reasoningContent := getString(delta, "reasoning_content"); reasoningContent != "" {
+							// 如果还没有创建 reasoning item，先创建
+							if !hasReasoningItem {
+								hasReasoningItem = true
+								reasoningItemID = fmt.Sprintf("reasoning_%s", responseID)
+								reasoningOutputIndex = 0
+
+								// response.output_item.added 事件（reasoning 类型）
+								reasoningItemAdded := map[string]interface{}{
+									"type":            "response.output_item.added",
+									"sequence_number": sequenceNumber,
+									"output_index":    reasoningOutputIndex,
+									"item": map[string]interface{}{
+										"id":      reasoningItemID,
+										"type":    "reasoning",
+										"status":  "in_progress",
+										"summary": []interface{}{},
+									},
+								}
+								sequenceNumber++
+								addedData, _ := marshalWithTypeFirst(reasoningItemAdded)
+								if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(addedData)); err != nil {
+									pw.CloseWithError(err)
+									return
+								}
+
+								// response.reasoning_summary_part.added 事件
+								summaryPartAdded := map[string]interface{}{
+									"type":            "response.reasoning_summary_part.added",
+									"sequence_number": sequenceNumber,
+									"output_index":    reasoningOutputIndex,
+									"item_id":         reasoningItemID,
+									"summary_index":   0,
+									"part": map[string]interface{}{
+										"type": "summary_text",
+									},
+								}
+								sequenceNumber++
+								partAddedData, _ := marshalWithTypeFirst(summaryPartAdded)
+								if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(partAddedData)); err != nil {
+									pw.CloseWithError(err)
+									return
+								}
+							}
+
+							// 累积 reasoning 内容
+							accumulatedReasoning += reasoningContent
+
+							// response.reasoning_summary_text.delta 事件
+							reasoningDelta := map[string]interface{}{
+								"type":            "response.reasoning_summary_text.delta",
+								"sequence_number": sequenceNumber,
+								"output_index":    reasoningOutputIndex,
+								"item_id":         reasoningItemID,
+								"summary_index":   0,
+								"delta":           reasoningContent,
+							}
+							sequenceNumber++
+							deltaData, _ := marshalWithTypeFirst(reasoningDelta)
+							if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(deltaData)); err != nil {
+								pw.CloseWithError(err)
+								return
+							}
+						}
+
 						// 处理文本内容
 						if content := getString(delta, "content"); content != "" {
 							accumulatedText += content
@@ -1355,6 +1662,44 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 
 						// 处理结束
 						if finishReason := getString(choice, "finish_reason"); finishReason != "" {
+							// 如果有 reasoning 内容，发送 reasoning 完成事件
+							if hasReasoningItem && accumulatedReasoning != "" {
+								// response.reasoning_summary_text.done 事件
+								reasoningTextDone := map[string]interface{}{
+									"type":            "response.reasoning_summary_text.done",
+									"sequence_number": sequenceNumber,
+									"output_index":    reasoningOutputIndex,
+									"item_id":         reasoningItemID,
+									"summary_index":   0,
+									"text":            accumulatedReasoning,
+								}
+								sequenceNumber++
+								textDoneData, _ := marshalWithTypeFirst(reasoningTextDone)
+								if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(textDoneData)); err != nil {
+									pw.CloseWithError(err)
+									return
+								}
+
+								// response.reasoning_summary_part.done 事件
+								reasoningPartDone := map[string]interface{}{
+									"type":            "response.reasoning_summary_part.done",
+									"sequence_number": sequenceNumber,
+									"output_index":    reasoningOutputIndex,
+									"item_id":         reasoningItemID,
+									"summary_index":   0,
+									"part": map[string]interface{}{
+										"type": "summary_text",
+										"text": accumulatedReasoning,
+									},
+								}
+								sequenceNumber++
+								partDoneData, _ := marshalWithTypeFirst(reasoningPartDone)
+								if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(partDoneData)); err != nil {
+									pw.CloseWithError(err)
+									return
+								}
+							}
+
 							// response.output_text.done 事件
 							outputTextDone := map[string]interface{}{
 								"type":            "response.output_text.done",
@@ -1390,22 +1735,40 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 								return
 							}
 
+							// 构建 output_item.done 事件的 output 数组，包含 reasoning（如果有）
+							outputItems := []map[string]interface{}{
+								{
+									"type": "output_text",
+									"text": accumulatedText,
+								},
+							}
+							// 如果有 reasoning，添加到 output 数组
+							if hasReasoningItem && accumulatedReasoning != "" {
+								outputItems = append([]map[string]interface{}{
+									{
+										"type": "reasoning",
+										"id":   reasoningItemID,
+										"summary": []map[string]interface{}{
+											{
+												"type": "summary_text",
+												"text": accumulatedReasoning,
+											},
+										},
+									},
+								}, outputItems...)
+							}
+
 							// response.output_item.done 事件
 							outputItemDone := map[string]interface{}{
 								"type":            "response.output_item.done",
 								"sequence_number": sequenceNumber,
 								"output_index":    0,
 								"item": map[string]interface{}{
-									"id":   itemID,
-									"type": "message",
-									"role": "assistant",
-									"content": []map[string]interface{}{
-										{
-											"type": "output_text",
-											"text": accumulatedText,
-										},
-									},
-									"status": "completed",
+									"id":      itemID,
+									"type":    "message",
+									"role":    "assistant",
+									"content": outputItems,
+									"status":  "completed",
 								},
 							}
 							sequenceNumber++
@@ -1562,6 +1925,31 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 									"index": 0,
 									"delta": map[string]interface{}{
 										"content": delta,
+									},
+									"finish_reason": nil,
+								},
+							},
+						}
+						chunkData, _ := json.Marshal(openaiChunk)
+						if _, err := fmt.Fprintf(pw, "data: %s\n\n", string(chunkData)); err != nil {
+							pw.CloseWithError(err)
+							return
+						}
+					}
+
+				case "response.reasoning_summary_text.delta":
+					// 发送 reasoning 增量（Extended Thinking）
+					if delta := getString(chunk, "delta"); delta != "" {
+						openaiChunk := map[string]interface{}{
+							"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+							"object":  "chat.completion.chunk",
+							"created": time.Now().Unix(),
+							"model":   "responses-api",
+							"choices": []map[string]interface{}{
+								{
+									"index": 0,
+									"delta": map[string]interface{}{
+										"reasoning_content": delta,
 									},
 									"finish_reason": nil,
 								},
@@ -2178,28 +2566,128 @@ func getFloat(m map[string]interface{}, key string) float64 {
 	return 0
 }
 
+// 阶段 1: 新增辅助函数，支持新字段类型
+
+// getInt 安全获取 int 值
+func getInt(m map[string]interface{}, key string) int {
+	if v, ok := m[key].(float64); ok {
+		return int(v)
+	}
+	return 0
+}
+
+// getInt64 安全获取 int64 值
+func getInt64(m map[string]interface{}, key string) int64 {
+	if v, ok := m[key].(float64); ok {
+		return int64(v)
+	}
+	return 0
+}
+
+// getFloat64Ptr 安全获取 *float64 值
+func getFloat64Ptr(m map[string]interface{}, key string) *float64 {
+	if v, ok := m[key].(float64); ok {
+		return &v
+	}
+	return nil
+}
+
+// getStringPtr 安全获取 *string 值
+func getStringPtr(m map[string]interface{}, key string) *string {
+	if v, ok := m[key].(string); ok {
+		return &v
+	}
+	return nil
+}
+
+// getInt64Ptr 安全获取 *int64 值
+func getInt64Ptr(m map[string]interface{}, key string) *int64 {
+	if v, ok := m[key].(float64); ok {
+		val := int64(v)
+		return &val
+	}
+	return nil
+}
+
+// getBoolPtr 安全获取 *bool 值
+func getBoolPtr(m map[string]interface{}, key string) *bool {
+	if v, ok := m[key].(bool); ok {
+		return &v
+	}
+	return nil
+}
+
+// getStringArray 安全获取 []string 值
+func getStringArray(m map[string]interface{}, key string) []string {
+	if arr, ok := m[key].([]interface{}); ok {
+		result := make([]string, 0, len(arr))
+		for _, item := range arr {
+			if str, ok := item.(string); ok {
+				result = append(result, str)
+			}
+		}
+		return result
+	}
+	return nil
+}
+
+// getIntMap 安全获取 map[string]int64 值
+func getIntMap(m map[string]interface{}, key string) map[string]int64 {
+	if mapVal, ok := m[key].(map[string]interface{}); ok {
+		result := make(map[string]int64, len(mapVal))
+		for k, v := range mapVal {
+			if num, ok := v.(float64); ok {
+				result[k] = int64(num)
+			}
+		}
+		return result
+	}
+	return nil
+}
+
+// getStringMap 安全获取 map[string]string 值
+func getStringMap(m map[string]interface{}, key string) map[string]string {
+	if mapVal, ok := m[key].(map[string]interface{}); ok {
+		result := make(map[string]string, len(mapVal))
+		for k, v := range mapVal {
+			if str, ok := v.(string); ok {
+				result[k] = str
+			}
+		}
+		return result
+	}
+	return nil
+}
+
 // fieldOrder 定义各事件类型的字段顺序
 var fieldOrder = map[string][]string{
-	"response.created":           {"type", "sequence_number", "response"},
-	"response.in_progress":       {"type", "sequence_number", "response"},
-	"response.output_item.added": {"type", "sequence_number", "output_index", "item"},
-	"response.content_part.added": {"type", "sequence_number", "output_index", "item_id", "content_index", "part"},
-	"response.output_text.delta":  {"type", "sequence_number", "output_index", "item_id", "content_index", "delta"},
-	"response.output_text.done":   {"type", "sequence_number", "output_index", "item_id", "content_index", "text"},
-	"response.content_part.done":  {"type", "sequence_number", "output_index", "item_id", "content_index", "part"},
-	"response.output_item.done":   {"type", "sequence_number", "output_index", "item"},
-	"response.completed":          {"type", "sequence_number", "response"},
+	"response.created":                   {"type", "sequence_number", "response"},
+	"response.in_progress":               {"type", "sequence_number", "response"},
+	"response.output_item.added":         {"type", "sequence_number", "output_index", "item"},
+	"response.content_part.added":        {"type", "sequence_number", "output_index", "item_id", "content_index", "part"},
+	"response.output_text.delta":         {"type", "sequence_number", "output_index", "item_id", "content_index", "delta"},
+	"response.output_text.done":          {"type", "sequence_number", "output_index", "item_id", "content_index", "text"},
+	"response.content_part.done":         {"type", "sequence_number", "output_index", "item_id", "content_index", "part"},
+	"response.output_item.done":          {"type", "sequence_number", "output_index", "item"},
+	"response.completed":                 {"type", "sequence_number", "response"},
+	"response.reasoning_summary_part.added":   {"type", "sequence_number", "output_index", "item_id", "summary_index", "part"},
+	"response.reasoning_summary_text.delta":   {"type", "sequence_number", "output_index", "item_id", "summary_index", "delta"},
+	"response.reasoning_summary_text.done":    {"type", "sequence_number", "output_index", "item_id", "summary_index", "text"},
+	"response.reasoning_summary_part.done":    {"type", "sequence_number", "output_index", "item_id", "summary_index", "part"},
+	"response.function_call_arguments.delta":  {"type", "sequence_number", "output_index", "item_id", "call_id", "delta"},
+	"response.function_call_arguments.done":   {"type", "sequence_number", "output_index", "item_id", "call_id", "arguments"},
 }
 
 // nestedFieldOrder 定义嵌套对象的字段顺序
 var nestedFieldOrder = map[string][]string{
-	"response":               {"object", "id", "model", "created_at", "output", "status", "usage"},
-	"item":                   {"id", "type", "role", "content", "status"},
-	"part":                   {"type", "text"},
-	"usage":                  {"input_tokens", "input_tokens_details", "output_tokens", "output_tokens_details", "total_tokens"},
-	"input_tokens_details":   {"cached_tokens"},
-	"output_tokens_details":  {"reasoning_tokens"},
-	"content_item":           {"type", "text"},
+	"response":              {"object", "id", "model", "created_at", "output", "status", "usage"},
+	"item":                  {"id", "type", "role", "content", "status", "summary"},
+	"part":                  {"type", "text"},
+	"usage":                 {"input_tokens", "input_tokens_details", "output_tokens", "output_tokens_details", "total_tokens"},
+	"input_tokens_details":  {"cached_tokens"},
+	"output_tokens_details": {"reasoning_tokens"},
+	"content_item":          {"type", "text"},
+	"summary_item":          {"type", "text"},
 }
 
 // marshalWithTypeFirst 按照预定义顺序序列化 JSON

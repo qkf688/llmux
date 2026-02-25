@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/atopos31/llmio/models"
@@ -41,6 +43,45 @@ type UnifiedFunc struct {
 	Parameters  interface{} `json:"parameters,omitempty"`
 }
 
+// UnifiedStop 停止序列 (支持 string 或 []string)
+// 参考 Octopus InternalLLMRequest.Stop 实现
+type UnifiedStop struct {
+	Single   *string
+	Multiple []string
+}
+
+// MarshalJSON 自定义 JSON 序列化
+func (s UnifiedStop) MarshalJSON() ([]byte, error) {
+	if s.Single != nil {
+		return json.Marshal(s.Single)
+	}
+	if len(s.Multiple) > 0 {
+		return json.Marshal(s.Multiple)
+	}
+	return []byte("null"), nil
+}
+
+// UnmarshalJSON 自定义 JSON 反序列化
+func (s *UnifiedStop) UnmarshalJSON(data []byte) error {
+	// 尝试解析为字符串
+	var str string
+	err := json.Unmarshal(data, &str)
+	if err == nil {
+		s.Single = &str
+		return nil
+	}
+
+	// 尝试解析为字符串数组
+	var strs []string
+	err = json.Unmarshal(data, &strs)
+	if err == nil {
+		s.Multiple = strs
+		return nil
+	}
+
+	return errors.New("invalid stop type: must be string or string array")
+}
+
 // UnifiedRequest 统一请求格式
 type UnifiedRequest struct {
 	Model           string           `json:"model"`
@@ -52,6 +93,48 @@ type UnifiedRequest struct {
 	Tools           []UnifiedTool    `json:"tools,omitempty"`
 	System          string           `json:"system,omitempty"`
 	ReasoningEffort *string          `json:"reasoning_effort,omitempty"` // 推理强度参数
+
+	// 阶段 1: 基础高级参数 (参考 Octopus InternalLLMRequest)
+	// Number between -2.0 and 2.0. Positive values penalize new tokens based on
+	// their existing frequency in the text so far.
+	FrequencyPenalty *float64 `json:"frequency_penalty,omitempty"`
+
+	// Number between -2.0 and 2.0. Positive values penalize new tokens based on
+	// whether they appear in the text so far.
+	PresencePenalty *float64 `json:"presence_penalty,omitempty"`
+
+	// This feature is in Beta. If specified, our system will make a best effort to
+	// sample deterministically, such that repeated requests with the same seed and
+	// parameters should return the same result.
+	Seed *int64 `json:"seed,omitempty"`
+
+	// Modify the likelihood of specified tokens appearing in the completion.
+	// Accepts a JSON object that maps tokens (specified by their token ID) to an
+	// associated bias value from -100 to 100.
+	LogitBias map[string]int64 `json:"logit_bias,omitempty"`
+
+	// Up to 4 sequences where the API will stop generating further tokens.
+	Stop *UnifiedStop `json:"stop,omitempty"`
+
+	// A unique identifier representing your end-user, which can help OpenAI to
+	// monitor and detect abuse.
+	User *string `json:"user,omitempty"`
+
+	// Set of 16 key-value pairs that can be attached to an object.
+	Metadata map[string]string `json:"metadata,omitempty"`
+
+	// Whether to return log probabilities of the output tokens or not.
+	Logprobs *bool `json:"logprobs,omitempty"`
+
+	// An integer between 0 and 20 specifying the number of most likely tokens to
+	// return at each token position.
+	TopLogprobs *int64 `json:"top_logprobs,omitempty"`
+
+	// An upper bound for the number of tokens that can be generated for a completion.
+	MaxCompletionTokens *int64 `json:"max_completion_tokens,omitempty"`
+
+	// Whether or not to store the output of this chat completion request.
+	Store *bool `json:"store,omitempty"`
 }
 
 // UnifiedChoice 统一响应选择格式

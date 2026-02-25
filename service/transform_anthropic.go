@@ -72,6 +72,15 @@ func TransformAnthropicToUnified(rawBody []byte) (*UnifiedRequest, error) {
 		}
 	}
 
+	// 阶段 1: 解析 Anthropic 特有字段
+	if stopSeqs := getStringArray(req, "stop_sequences"); len(stopSeqs) > 0 {
+		unified.Stop = &UnifiedStop{Multiple: stopSeqs}
+	}
+
+	if metadata := getStringMap(req, "metadata"); len(metadata) > 0 {
+		unified.Metadata = metadata
+	}
+
 	return unified, nil
 }
 
@@ -229,6 +238,32 @@ func TransformUnifiedToAnthropic(unified *UnifiedRequest) ([]byte, error) {
 		}
 		req["tools"] = tools
 	}
+
+	// 阶段 1: 映射兼容字段
+	// Anthropic 支持 stop_sequences (只支持数组)
+	if unified.Stop != nil {
+		if unified.Stop.Single != nil {
+			req["stop_sequences"] = []string{*unified.Stop.Single}
+		} else if len(unified.Stop.Multiple) > 0 {
+			req["stop_sequences"] = unified.Stop.Multiple
+		}
+	}
+
+	// Anthropic 支持 metadata
+	if unified.Metadata != nil && len(unified.Metadata) > 0 {
+		req["metadata"] = unified.Metadata
+	}
+
+	// 注意: Anthropic 不支持以下字段，静默忽略
+	// - frequency_penalty
+	// - presence_penalty
+	// - seed
+	// - logit_bias
+	// - user
+	// - logprobs
+	// - top_logprobs
+	// - max_completion_tokens
+	// - store
 
 	return json.Marshal(req)
 }

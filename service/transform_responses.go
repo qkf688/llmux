@@ -332,9 +332,20 @@ func parseResponsesResponse(body []byte) (*UnifiedResponse, error) {
 
 		var textContent string
 		var toolCalls []UnifiedToolCall
+		var reasoningContent string
 
 		for _, item := range resp.Output {
 			switch item.Type {
+			case "reasoning":
+				// 处理 reasoning 类型（Extended Thinking）
+				if len(item.Summary) > 0 {
+					for _, summary := range item.Summary {
+						if summary.Type == "summary_text" {
+							reasoningContent += summary.Text
+						}
+					}
+				}
+
 			case "output_text":
 				if item.Text != nil {
 					textContent += *item.Text
@@ -356,6 +367,18 @@ func parseResponsesResponse(body []byte) (*UnifiedResponse, error) {
 					}
 					toolCalls = append(toolCalls, tc)
 				}
+			}
+		}
+
+		// 如果有 reasoning 内容，添加到 textContent 前面（或者可以选择忽略）
+		// 注意：这里选择将 reasoning 内容添加到响应中，但可以根据需求调整
+		if reasoningContent != "" {
+			// 可以选择：1) 添加到 textContent 前面  2) 忽略  3) 作为单独字段
+			// 这里选择添加到前面，用分隔符隔开
+			if textContent != "" {
+				textContent = reasoningContent + "\n\n---\n\n" + textContent
+			} else {
+				textContent = reasoningContent
 			}
 		}
 

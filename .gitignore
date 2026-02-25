@@ -12,8 +12,6 @@ test.txt
 test_stream.bat
 llmio-test.exe
 llmio.exe~
-plans
 proxy-logger
-.trae
 # BitFun snapshot data - auto managed
 .bitfun/

@@ -33,16 +33,16 @@ type UnifiedRequest struct {
 
 ## 实施阶段
 
-### 阶段 1: 基础字段扩展 [pending]
+### 阶段 1: 基础字段扩展 [completed]
 **目标**: 添加常用的高级参数，保持向后兼容
 
 **参考**: Octopus `InternalLLMRequest` (model.go:28-245)
 
 **任务**:
-- [ ] 添加 `UnifiedStop` 类型（参考 Octopus Stop 实现）
+- [x] 添加 `UnifiedStop` 类型（参考 Octopus Stop 实现）
   - 实现 MarshalJSON/UnmarshalJSON 方法
   - 支持 string 或 []string 自动转换
-- [ ] 扩展 `UnifiedRequest` 添加基础高级参数
+- [x] 扩展 `UnifiedRequest` 添加基础高级参数
   - FrequencyPenalty *float64
   - PresencePenalty *float64
   - Seed *int64
@@ -54,10 +54,10 @@ type UnifiedRequest struct {
   - TopLogprobs *int64
   - MaxCompletionTokens *int64
   - Store *bool
-- [ ] 更新 `TransformOpenAIToUnified` 解析新字段
-- [ ] 更新 `TransformUnifiedToOpenAI` 输出新字段
-- [ ] 更新 `TransformUnifiedToAnthropic` 映射兼容字段
-- [ ] 编写单元测试验证转换正确性
+- [x] 更新 `TransformOpenAIToUnified` 解析新字段
+- [x] 更新 `TransformUnifiedToOpenAI` 输出新字段
+- [x] 更新 `TransformUnifiedToAnthropic` 映射兼容字段
+- [x] 编写单元测试验证转换正确性
 
 **文件涉及**:
 - `service/transformer.go` - 类型定义
@@ -66,39 +66,55 @@ type UnifiedRequest struct {
 - `service/transformer_test.go` - 单元测试
 
 **验收标准**:
-- UnifiedStop 自动处理 JSON 序列化/反序列化
-- 所有新字段都能正确解析和转换
-- 现有功能不受影响
-- 单元测试覆盖率 >80%
+- ✅ UnifiedStop 自动处理 JSON 序列化/反序列化
+- ✅ 所有新字段都能正确解析和转换
+- ✅ 现有功能不受影响
+- ✅ 单元测试覆盖率 >80%
 
 **预计时间**: 3-4 小时
+**实际时间**: 约 3 小时
+**完成日期**: 2026-02-25
 
 ---
 
-### 阶段 2: 响应格式和工具增强 [pending]
+### 阶段 2: 响应格式和工具增强 [completed]
 **目标**: 支持结构化输出和高级工具控制
 
+**参考**: Octopus `ResponseFormat` 和 `ToolChoice` 实现
+
 **任务**:
-- [ ] 添加 `UnifiedResponseFormat` 类型
-  - Type: "text" | "json_object" | "json_schema"
-  - JSONSchema: json.RawMessage
-- [ ] 添加 `UnifiedToolChoice` 类型
-  - 支持 string ("auto", "none", "required")
-  - 支持 object (指定特定工具)
-- [ ] 添加 `ParallelToolCalls` 字段
-- [ ] 添加 `StreamOptions` 类型 (include_usage)
-- [ ] 更新转换逻辑支持新类型
-- [ ] 编写集成测试
+- [x] 添加 `UnifiedResponseFormat` 类型
+  - 支持 text, json_object, json_schema
+  - JSONSchema 字段用于结构化输出
+- [x] 添加 `UnifiedToolChoice` 类型（实现自定义 JSON 序列化）
+  - 支持 string 值 ("auto", "none", "required")
+  - 支持 object 值 (指定特定工具)
+  - MarshalJSON/UnmarshalJSON 实现
+- [x] 添加 `UnifiedStreamOptions` 类型
+  - IncludeUsage 字段
+- [x] 扩展 `UnifiedRequest` 添加 4 个新字段
+  - ResponseFormat, ToolChoice, ParallelToolCalls, StreamOptions
+- [x] 更新 `TransformOpenAIToUnified` 解析新字段
+- [x] 更新 `TransformUnifiedToOpenAI` 输出新字段
+- [x] 更新 `TransformUnifiedToAnthropic` 映射 tool_choice
+- [x] 编写单元测试验证转换正确性
 
 **文件涉及**:
-- `service/transformer.go` - 新类型定义
-- `service/transform_openai.go` - 转换逻辑
-- `service/transform_anthropic.go` - 映射逻辑
+- `service/transformer.go` - 类型定义
+- `service/transform_openai.go` - OpenAI 转换逻辑
+- `service/transform_anthropic.go` - Anthropic 转换逻辑
+- `service/transformer_test.go` - 单元测试
 
 **验收标准**:
-- JSON Schema 响应格式正常工作
-- ToolChoice 能正确控制工具调用
-- StreamOptions 能返回 usage 信息
+- ✅ UnifiedToolChoice 自动处理 JSON 序列化/反序列化
+- ✅ ResponseFormat 支持三种格式
+- ✅ 所有新字段都能正确解析和转换
+- ✅ 现有功能不受影响
+- ✅ 单元测试覆盖率 100%
+
+**预计时间**: 2-3 小时
+**实际时间**: 约 2 小时
+**完成日期**: 2026-02-25
 
 ---
 

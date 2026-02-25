@@ -5,16 +5,149 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/atopos31/llmio/models"
 )
 
+// 阶段 3: 多模态内容支持类型定义
+
+// UnifiedMessageContent 消息内容 (支持纯文本或多模态)
+// 参考 Octopus MessageContent 实现
+type UnifiedMessageContent struct {
+	Content         *string                     `json:"content,omitempty"`
+	MultipleContent []UnifiedMessageContentPart `json:"multiple_content,omitempty"`
+}
+
+// MarshalJSON 自定义 JSON 序列化
+func (c UnifiedMessageContent) MarshalJSON() ([]byte, error) {
+	if len(c.MultipleContent) > 0 {
+		// 优化: 单个 text 类型直接序列化为字符串
+		if len(c.MultipleContent) == 1 && c.MultipleContent[0].Type == "text" {
+			return json.Marshal(c.MultipleContent[0].Text)
+		}
+		return json.Marshal(c.MultipleContent)
+	}
+	return json.Marshal(c.Content)
+}
+
+// UnmarshalJSON 自定义 JSON 反序列化
+func (c *UnifiedMessageContent) UnmarshalJSON(data []byte) error {
+	// 尝试解析为字符串
+	var str string
+	err := json.Unmarshal(data, &str)
+	if err == nil {
+		c.Content = &str
+		return nil
+	}
+
+	// 尝试解析为内容部分数组
+	var parts []UnifiedMessageContentPart
+	err = json.Unmarshal(data, &parts)
+	if err == nil {
+		c.MultipleContent = parts
+		return nil
+	}
+
+	return errors.New("invalid content type: must be string or array of content parts")
+}
+
+// UnifiedMessageContentPart 消息内容部分 (支持多种类型)
+type UnifiedMessageContentPart struct {
+	// Type 内容类型: "text", "image_url", "input_audio"
+	Type string `json:"type"`
+
+	// Text 文本内容 (type="text" 时使用)
+	Text *string `json:"text,omitempty"`
+
+	// ImageURL 图像 URL (type="image_url" 时使用)
+	ImageURL *UnifiedImageURL `json:"image_url,omitempty"`
+
+	// InputAudio 音频输入 (type="input_audio" 时使用)
+	InputAudio *UnifiedInputAudio `json:"input_audio,omitempty"`
+}
+
+// UnifiedImageURL 图像 URL 配置
+type UnifiedImageURL struct {
+	// URL 图像的 URL (支持 http/https 或 data URI)
+	URL string `json:"url"`
+
+	// Detail 图像细节级别: "auto", "low", "high"
+	Detail *string `json:"detail,omitempty"`
+}
+
+// UnifiedInputAudio 音频输入配置
+type UnifiedInputAudio struct {
+	// Data Base64 编码的音频数据
+	Data string `json:"data"`
+
+	// Format 音频格式: "wav", "mp3"
+	Format string `json:"format"`
+}
+
+// UnifiedAudio 音频输出配置
+type UnifiedAudio struct {
+	// Voice 语音类型: "alloy", "echo", "fable", "onyx", "nova", "shimmer"
+	Voice string `json:"voice,omitempty"`
+
+	// Format 音频格式: "wav", "mp3", "pcm16"
+	Format string `json:"format,omitempty"`
+}
+
 // UnifiedMessage 统一消息格式
 type UnifiedMessage struct {
-	Role       string            `json:"role"`
-	Content    interface{}       `json:"content,omitempty"`
+	Role    string      `json:"role"`
+	Content interface{} `json:"content,omitempty"` // 支持 string 或 []UnifiedMessageContentPart
 	ToolCalls  []UnifiedToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string            `json:"tool_call_id,omitempty"` // OpenAI tool 角色消息的 tool_call_id
+}
+
+// GetContentAsString 获取纯文本内容
+func (m *UnifiedMessage) GetContentAsString() string {
+	if m.Content == nil {
+		return ""
+	}
+	if str, ok := m.Content.(string); ok {
+		return str
+	}
+	// 如果是多模态内容，提取文本部分
+	if parts, ok := m.Content.([]UnifiedMessageContentPart); ok {
+		var texts []string
+		for _, part := range parts {
+			if part.Type == "text" && part.Text != nil {
+				texts = append(texts, *part.Text)
+			}
+		}
+		return strings.Join(texts, "")
+	}
+	return ""
+}
+
+// GetContentParts 获取多模态内容部分
+func (m *UnifiedMessage) GetContentParts() []UnifiedMessageContentPart {
+	if m.Content == nil {
+		return nil
+	}
+	if parts, ok := m.Content.([]UnifiedMessageContentPart); ok {
+		return parts
+	}
+	// 如果是纯文本，转换为单个 text 部分
+	if str, ok := m.Content.(string); ok && str != "" {
+		return []UnifiedMessageContentPart{
+			{Type: "text", Text: &str},
+		}
+	}
+	return nil
+}
+
+// SetContentString 设置纯文本内容
+func (m *UnifiedMessage) SetContentString(content string) {
+	m.Content = content
+}
+
+// SetContentParts 设置多模态内容
+func (m *UnifiedMessage) SetContentParts(parts []UnifiedMessageContentPart) {
+	m.Content = parts
 }
 
 // UnifiedToolCall 统一工具调用格式
@@ -215,6 +348,16 @@ type UnifiedRequest struct {
 
 	// Options for streaming response. Only set this when you set stream: true.
 	StreamOptions *UnifiedStreamOptions `json:"stream_options,omitempty"`
+
+	// 阶段 3: 多模态支持
+	// Output types that you would like the model to generate.
+	// Most models are capable of generating text, which is the default: ["text"]
+	// To generate audio: ["text", "audio"]
+	// Any of "text", "audio", "image".
+	Modalities []string `json:"modalities,omitempty"`
+
+	// Parameters for audio output. Required when audio output is requested with modalities: ["audio"].
+	Audio *UnifiedAudio `json:"audio,omitempty"`
 }
 
 // UnifiedChoice 统一响应选择格式

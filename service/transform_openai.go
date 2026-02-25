@@ -74,6 +74,48 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 				ToolCalls: parseOpenAIToolCalls(msgMap),
 			}
 
+			// 阶段 3: 解析多模态内容
+			if content, ok := msgMap["content"]; ok && content != nil {
+				// 尝试解析为多模态内容数组
+				if contentArray, ok := content.([]interface{}); ok {
+					parts := make([]UnifiedMessageContentPart, 0, len(contentArray))
+					for _, item := range contentArray {
+						if itemMap, ok := item.(map[string]interface{}); ok {
+							part := UnifiedMessageContentPart{
+								Type: getString(itemMap, "type"),
+							}
+
+							switch part.Type {
+							case "text":
+								if text, ok := itemMap["text"].(string); ok {
+									part.Text = &text
+								}
+							case "image_url":
+								if imgMap, ok := itemMap["image_url"].(map[string]interface{}); ok {
+									part.ImageURL = &UnifiedImageURL{
+										URL:    getString(imgMap, "url"),
+										Detail: getStringPtr(imgMap, "detail"),
+									}
+								}
+							case "input_audio":
+								if audioMap, ok := itemMap["input_audio"].(map[string]interface{}); ok {
+									part.InputAudio = &UnifiedInputAudio{
+										Data:   getString(audioMap, "data"),
+										Format: getString(audioMap, "format"),
+									}
+								}
+							}
+
+							parts = append(parts, part)
+						}
+					}
+					if len(parts) > 0 {
+						msg.Content = parts
+					}
+				}
+				// 否则保持原样 (string 或其他类型)
+			}
+
 			// 处理 tool 角色消息的 tool_call_id
 			if role == "tool" {
 				if toolCallID, ok := msgMap["tool_call_id"].(string); ok {
@@ -178,6 +220,17 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 		}
 	}
 
+	// 阶段 3: 解析多模态参数
+	unified.Modalities = getStringArray(req, "modalities")
+
+	// 解析 audio 配置
+	if audioVal, ok := req["audio"].(map[string]interface{}); ok {
+		unified.Audio = &UnifiedAudio{
+			Voice:  getString(audioVal, "voice"),
+			Format: getString(audioVal, "format"),
+		}
+	}
+
 	return unified, nil
 }
 
@@ -215,7 +268,46 @@ func TransformUnifiedToOpenAI(unified *UnifiedRequest) ([]byte, error) {
 			"role": msg.Role,
 		}
 		if msg.Content != nil {
-			msgMap["content"] = msg.Content
+			// 阶段 3: 处理多模态内容
+			if parts, ok := msg.Content.([]UnifiedMessageContentPart); ok {
+				// 多模态内容
+				contentArray := make([]interface{}, 0, len(parts))
+				for _, part := range parts {
+					partMap := map[string]interface{}{
+						"type": part.Type,
+					}
+
+					switch part.Type {
+					case "text":
+						if part.Text != nil {
+							partMap["text"] = *part.Text
+						}
+					case "image_url":
+						if part.ImageURL != nil {
+							imgMap := map[string]interface{}{
+								"url": part.ImageURL.URL,
+							}
+							if part.ImageURL.Detail != nil {
+								imgMap["detail"] = *part.ImageURL.Detail
+							}
+							partMap["image_url"] = imgMap
+						}
+					case "input_audio":
+						if part.InputAudio != nil {
+							partMap["input_audio"] = map[string]interface{}{
+								"data":   part.InputAudio.Data,
+								"format": part.InputAudio.Format,
+							}
+						}
+					}
+
+					contentArray = append(contentArray, partMap)
+				}
+				msgMap["content"] = contentArray
+			} else {
+				// 纯文本或其他类型
+				msgMap["content"] = msg.Content
+			}
 		}
 		if len(msg.ToolCalls) > 0 {
 			toolCalls := []interface{}{}
@@ -346,6 +438,24 @@ func TransformUnifiedToOpenAI(unified *UnifiedRequest) ([]byte, error) {
 	} else if unified.Stream {
 		// 如果是流式但没有设置 StreamOptions，使用默认值
 		req["stream_options"] = map[string]interface{}{"include_usage": true}
+	}
+
+	// 阶段 3: 输出多模态参数
+	if len(unified.Modalities) > 0 {
+		req["modalities"] = unified.Modalities
+	}
+
+	if unified.Audio != nil {
+		audioMap := map[string]interface{}{}
+		if unified.Audio.Voice != "" {
+			audioMap["voice"] = unified.Audio.Voice
+		}
+		if unified.Audio.Format != "" {
+			audioMap["format"] = unified.Audio.Format
+		}
+		if len(audioMap) > 0 {
+			req["audio"] = audioMap
+		}
 	}
 
 	return json.Marshal(req)

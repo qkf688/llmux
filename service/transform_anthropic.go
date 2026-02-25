@@ -187,7 +187,51 @@ func TransformUnifiedToAnthropic(unified *UnifiedRequest) ([]byte, error) {
 			"role": msg.Role,
 		}
 		if msg.Content != nil {
-			msgMap["content"] = msg.Content
+			// 阶段 3: 处理多模态内容
+			if parts, ok := msg.Content.([]UnifiedMessageContentPart); ok {
+				// 多模态内容 - Anthropic 格式
+				contentArray := make([]interface{}, 0, len(parts))
+				for _, part := range parts {
+					switch part.Type {
+					case "text":
+						if part.Text != nil {
+							contentArray = append(contentArray, map[string]interface{}{
+								"type": "text",
+								"text": *part.Text,
+							})
+						}
+					case "image_url":
+						if part.ImageURL != nil {
+							// Anthropic 使用 image 类型
+							imgMap := map[string]interface{}{
+								"type": "image",
+							}
+							// 判断是 URL 还是 base64
+							if strings.HasPrefix(part.ImageURL.URL, "data:") {
+								// Base64 格式
+								imgMap["source"] = map[string]interface{}{
+									"type": "base64",
+									"data": strings.TrimPrefix(part.ImageURL.URL, "data:image/jpeg;base64,"),
+								}
+							} else {
+								// URL 格式
+								imgMap["source"] = map[string]interface{}{
+									"type": "url",
+									"url":  part.ImageURL.URL,
+								}
+							}
+							contentArray = append(contentArray, imgMap)
+						}
+					// Anthropic 不支持 input_audio，跳过
+					}
+				}
+				if len(contentArray) > 0 {
+					msgMap["content"] = contentArray
+				}
+			} else {
+				// 纯文本
+				msgMap["content"] = msg.Content
+			}
 		}
 		if len(msg.ToolCalls) > 0 {
 			// 如果有工具调用，需要构建包含文本和工具调用的内容数组
@@ -288,6 +332,12 @@ func TransformUnifiedToAnthropic(unified *UnifiedRequest) ([]byte, error) {
 
 	// Anthropic 不支持 parallel_tool_calls，静默忽略
 	// Anthropic 不支持 stream_options，静默忽略
+
+	// 阶段 3: 多模态支持
+	// Anthropic 支持图像 (通过 content 数组中的 image 类型)
+	// Anthropic 不支持 modalities 字段，静默忽略
+	// Anthropic 不支持 audio 输出配置，静默忽略
+	// Anthropic 不支持 input_audio，静默忽略
 
 	return json.Marshal(req)
 }

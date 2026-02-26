@@ -27,12 +27,13 @@ type AnthropicConfig struct {
 
 type Model struct {
 	gorm.Model
-	Name       string
-	Remark     string
-	MaxRetry   int   // 重试次数限制
-	TimeOut    int   // 超时时间 单位秒
-	IOLog      *bool // 是否记录IO
-	IsUpstream *bool // 是否是上游模型（true=上游，false=自定义）
+	Name          string
+	Remark        string
+	MaxRetry      int   // 重试次数限制
+	TimeOut       int   // 超时时间 单位秒
+	IOLog         *bool // 是否记录IO
+	IsUpstream    *bool // 是否是上游模型（true=上游，false=自定义）
+	AutoAssociate *bool `gorm:"default:true" json:"auto_associate"` // 是否允许自动关联触发
 }
 
 type ModelWithProvider struct {

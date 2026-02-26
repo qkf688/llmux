@@ -46,6 +46,8 @@ func Init(ctx context.Context, path string) {
 	initDefaultSettings(ctx)
 	// 初始化优先级字段
 	initPriorityField(ctx)
+	// 初始化自动关联字段
+	initAutoAssociateField(ctx)
 	// 迁移旧设置键
 	migrateSettingKeys(ctx)
 }
@@ -125,6 +127,14 @@ func initDefaultSettings(ctx context.Context) {
 func initPriorityField(ctx context.Context) {
 	// 为 priority 为 0 的记录设置默认优先级 10
 	if _, err := gorm.G[ModelWithProvider](DB).Where("priority = 0 OR priority IS NULL").Update(ctx, "priority", 10); err != nil {
+		panic(err)
+	}
+}
+
+// initAutoAssociateField 初始化自动关联字段，为现有模型设置默认值
+func initAutoAssociateField(ctx context.Context) {
+	// 为 auto_associate 为 NULL 的记录设置默认值 true
+	if _, err := gorm.G[Model](DB).Where("auto_associate IS NULL").Update(ctx, "auto_associate", true); err != nil {
 		panic(err)
 	}
 }

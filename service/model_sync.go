@@ -537,6 +537,19 @@ func (s *ModelSyncService) autoAssociateModels(ctx context.Context) {
 		for _, providerModel := range providerModels {
 			matchedModelIDs := templateIndex.Match(providerModel)
 			for _, modelID := range matchedModelIDs {
+				// 检查模型是否允许自动关联
+				model, err := gorm.G[models.Model](s.db).Where("id = ?", modelID).First(ctx)
+				if err != nil {
+					slog.Warn("failed to get model for auto-associate check", "model_id", modelID, "error", err)
+					continue
+				}
+				
+				// 如果模型设置了不允许自动关联，则跳过
+				if model.AutoAssociate != nil && !*model.AutoAssociate {
+					slog.Debug("skipping auto-associate for model", "model_id", modelID, "model_name", model.Name)
+					continue
+				}
+
 				key := fmt.Sprintf("%d_%d_%s", modelID, provider.ID, providerModel)
 				if existingMap[key] {
 					continue

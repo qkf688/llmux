@@ -21,6 +21,7 @@ export interface Model {
   MaxRetry: number;
   TimeOut: number;
   IOLog: boolean;
+  auto_associate?: boolean; // 是否允许自动关联触发
 }
 
 export interface ModelWithProvider {
@@ -176,6 +177,7 @@ export async function updateModel(id: number, model: {
   max_retry?: number;
   time_out?: number;
   io_log?: boolean;
+  auto_associate?: boolean;
 }): Promise<Model> {
   return apiRequest<Model>(`/models/${id}`, {
     method: 'PUT',

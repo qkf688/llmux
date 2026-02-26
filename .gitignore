@@ -15,3 +15,5 @@ llmio.exe~
 proxy-logger
 # BitFun snapshot data - auto managed
 .bitfun/
+local
+planning-simple

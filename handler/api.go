@@ -34,11 +34,12 @@ type ProviderRequest struct {
 
 // ModelRequest represents the request body for creating/updating a model
 type ModelRequest struct {
-	Name     string `json:"name"`
-	Remark   string `json:"remark"`
-	MaxRetry int    `json:"max_retry"`
-	TimeOut  int    `json:"time_out"`
-	IOLog    bool   `json:"io_log"`
+	Name          string `json:"name"`
+	Remark        string `json:"remark"`
+	MaxRetry      int    `json:"max_retry"`
+	TimeOut       int    `json:"time_out"`
+	IOLog         bool   `json:"io_log"`
+	AutoAssociate *bool  `json:"auto_associate,omitempty"` // 是否允许自动关联触发
 }
 
 // ModelWithProviderRequest represents the request body for creating/updating a model-provider association
@@ -332,11 +333,12 @@ func CreateModel(c *gin.Context) {
 	}
 
 	model := models.Model{
-		Name:     req.Name,
-		Remark:   req.Remark,
-		MaxRetry: req.MaxRetry,
-		TimeOut:  req.TimeOut,
-		IOLog:    &req.IOLog,
+		Name:          req.Name,
+		Remark:        req.Remark,
+		MaxRetry:      req.MaxRetry,
+		TimeOut:       req.TimeOut,
+		IOLog:         &req.IOLog,
+		AutoAssociate: req.AutoAssociate,
 	}
 
 	if err := gorm.G[models.Model](models.DB).Create(c.Request.Context(), &model); err != nil {
@@ -375,11 +377,12 @@ func UpdateModel(c *gin.Context) {
 
 	// Update fields
 	updates := models.Model{
-		Name:     req.Name,
-		Remark:   req.Remark,
-		MaxRetry: req.MaxRetry,
-		TimeOut:  req.TimeOut,
-		IOLog:    &req.IOLog,
+		Name:          req.Name,
+		Remark:        req.Remark,
+		MaxRetry:      req.MaxRetry,
+		TimeOut:       req.TimeOut,
+		IOLog:         &req.IOLog,
+		AutoAssociate: req.AutoAssociate,
 	}
 
 	if _, err := gorm.G[models.Model](models.DB).Where("id = ?", id).Updates(c.Request.Context(), updates); err != nil {
@@ -692,9 +695,10 @@ func BatchDeleteModels(c *gin.Context) {
 
 // BatchUpdateModelsRequest represents the request body for batch updating models
 type BatchUpdateModelsRequest struct {
-	IDs      []uint `json:"ids" binding:"required,min=1"`
-	MaxRetry *int   `json:"max_retry"` // 指针类型，nil 表示不更新
-	TimeOut  *int   `json:"time_out"`  // 指针类型，nil 表示不更新
+	IDs          []uint  `json:"ids" binding:"required,min=1"`
+	MaxRetry     *int    `json:"max_retry"`     // 指针类型，nil 表示不更新
+	TimeOut      *int    `json:"time_out"`      // 指针类型，nil 表示不更新
+	AutoAssociate *bool  `json:"auto_associate"` // 指针类型，nil 表示不更新
 }
 
 // BatchUpdateModels 批量更新模型参数
@@ -706,7 +710,7 @@ func BatchUpdateModels(c *gin.Context) {
 	}
 
 	// 验证至少有一个字段需要更新
-	if req.MaxRetry == nil && req.TimeOut == nil {
+	if req.MaxRetry == nil && req.TimeOut == nil && req.AutoAssociate == nil {
 		common.BadRequest(c, "至少需要更新一个字段")
 		return
 	}
@@ -728,6 +732,9 @@ func BatchUpdateModels(c *gin.Context) {
 	}
 	if req.TimeOut != nil {
 		updates["time_out"] = *req.TimeOut
+	}
+	if req.AutoAssociate != nil {
+		updates["auto_associate"] = req.AutoAssociate
 	}
 
 	// 执行批量更新
@@ -901,6 +908,17 @@ func CreateModelProvider(c *gin.Context) {
 		return
 	}
 
+	// 检查模型是否允许关联（无论是自动还是手动）
+	model, err := gorm.G[models.Model](models.DB).Where("id = ?", req.ModelID).First(c.Request.Context())
+	if err != nil {
+		common.InternalServerError(c, "Failed to get model: "+err.Error())
+		return
+	}
+	
+	// 如果模型设置了不允许自动关联，仍然允许手动关联（因为这是用户明确的操作）
+	// 但如果将来需要限制手动关联，可以在这里添加检查
+	_ = model // 显式忽略变量以避免未使用警告
+
 	customerHeaders := req.CustomerHeaders
 	if customerHeaders == nil {
 		customerHeaders = map[string]string{}
@@ -928,7 +946,7 @@ func CreateModelProvider(c *gin.Context) {
 	defaultStatus := true
 	modelProvider.Status = &defaultStatus
 
-	err := gorm.G[models.ModelWithProvider](models.DB).Create(c.Request.Context(), &modelProvider)
+	err = gorm.G[models.ModelWithProvider](models.DB).Create(c.Request.Context(), &modelProvider)
 	if err != nil {
 		common.InternalServerError(c, "Failed to create model-provider association: "+err.Error())
 		return

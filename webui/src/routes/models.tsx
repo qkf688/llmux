@@ -84,6 +84,7 @@ const formSchema = z.object({
   max_retry: z.number().min(0, { message: "重试次数限制不能为负数" }),
   time_out: z.number().min(0, { message: "超时时间不能为负数" }),
   io_log: z.boolean(),
+  auto_associate: z.boolean().optional(), // 自动关联开关，可选字段
 });
 
 // 批量设置表单验证模式
@@ -108,6 +109,7 @@ export default function ModelsPage() {
   const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [togglingIOLog, setTogglingIOLog] = useState<Record<number, boolean>>({});
+  const [togglingAutoAssociate, setTogglingAutoAssociate] = useState<Record<number, boolean>>({});
 
   // 批量设置状态
   const [batchSettingsDialogOpen, setBatchSettingsDialogOpen] = useState(false);
@@ -285,13 +287,14 @@ export default function ModelsPage() {
       max_retry: model.MaxRetry,
       time_out: model.TimeOut,
       io_log: model.IOLog,
+      auto_associate: model.auto_associate,
     });
     setOpen(true);
   };
 
   const openCreateDialog = () => {
     setEditingModel(null);
-    form.reset({ name: "", remark: "", max_retry: 10, time_out: 60, io_log: false });
+    form.reset({ name: "", remark: "", max_retry: 10, time_out: 60, io_log: false, auto_associate: true });
     setSelectedProviderId("all");
     setOpen(true);
   };
@@ -366,6 +369,43 @@ export default function ModelsPage() {
         const next = { ...prev };
         delete next[modelId];
         return next;
+      });
+    }
+  };
+
+  const handleToggleAutoAssociate = async (model: Model, checked: boolean) => {
+    const modelId = model.ID;
+
+    // 设置加载状态
+    setTogglingAutoAssociate(prev => ({ ...prev, [modelId]: true }));
+
+    try {
+      await updateModel(modelId, {
+        name: model.Name,
+        remark: model.Remark,
+        max_retry: model.MaxRetry,
+        time_out: model.TimeOut,
+        io_log: model.IOLog,
+        auto_associate: checked,
+      });
+
+      // 更新本地状态
+      setModels(prevModels =>
+        prevModels.map(m =>
+          m.ID === modelId ? { ...m, auto_associate: checked } : m
+        )
+      );
+
+      toast.success(`模型 "${model.Name}" 的自动关联设置已更新`);
+    } catch (error) {
+      console.error('更新自动关联设置失败:', error);
+      toast.error('更新自动关联设置失败');
+    } finally {
+      // 清除加载状态
+      setTogglingAutoAssociate(prev => {
+        const newToggling = { ...prev };
+        delete newToggling[modelId];
+        return newToggling;
       });
     }
   };
@@ -505,6 +545,7 @@ export default function ModelsPage() {
                     <TableHead>重试次数限制</TableHead>
                     <TableHead>超时时间(秒)</TableHead>
                     <TableHead>IO 记录</TableHead>
+                    <TableHead>自动关联</TableHead>
                     <TableHead className="w-[220px]">操作</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -530,6 +571,13 @@ export default function ModelsPage() {
                           checked={model.IOLog}
                           onCheckedChange={() => handleToggleIOLog(model)}
                           disabled={togglingIOLog[model.ID]}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={model.auto_associate !== false} // 默认为 true，只有明确设置为 false 才是关闭状态
+                          onCheckedChange={(checked) => handleToggleAutoAssociate(model, checked)}
+                          disabled={togglingAutoAssociate?.[model.ID]}
                         />
                       </TableCell>
                       <TableCell>
@@ -792,6 +840,27 @@ export default function ModelsPage() {
                       <Checkbox
                         checked={field.value}
                         onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="auto_associate"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">自动关联</FormLabel>
+                      <div className="text-sm text-muted-foreground">
+                        是否允许该模型被自动关联触发
+                      </div>
+                    </div>
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value !== false} // 默认为 true
+                        onCheckedChange={(checked) => field.onChange(checked)}
                       />
                     </FormControl>
                   </FormItem>

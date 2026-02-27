@@ -1029,3 +1029,125 @@ export async function importConfig(options: ImportOptions): Promise<ImportConfig
   
   return data.data as ImportConfigResponse;
 }
+
+// ==================== 虚拟模型相关 API ====================
+
+export interface VirtualModel {
+  ID: number;
+  Name: string;
+  Description: string;
+  Strategy: string; // priority, round_robin, random
+  MaxRetry: number;
+  TimeOut: number;
+  IOLog: boolean;
+  Enabled: boolean;
+  CreatedAt: string;
+  UpdatedAt: string;
+}
+
+export interface VirtualModelMapping {
+  ID: number;
+  VirtualModelID: number;
+  RealModelID: number;
+  Priority: number;
+  Weight: number;
+  Enabled: boolean;
+  CreatedAt: string;
+  UpdatedAt: string;
+}
+
+export interface VirtualModelStats {
+  virtual_model_id: number;
+  virtual_model_name: string;
+  strategy: string;
+  total_mappings: number;
+  enabled_mappings: number;
+  disabled_mappings: number;
+}
+
+// 获取虚拟模型列表
+export async function getVirtualModels(): Promise<VirtualModel[]> {
+  return apiRequest<VirtualModel[]>('/virtual-models');
+}
+
+// 创建虚拟模型
+export async function createVirtualModel(virtualModel: {
+  name: string;
+  description: string;
+  strategy: string;
+  max_retry: number;
+  time_out: number;
+  io_log: boolean;
+  enabled: boolean;
+}): Promise<VirtualModel> {
+  return apiRequest<VirtualModel>('/virtual-models', {
+    method: 'POST',
+    body: JSON.stringify(virtualModel),
+  });
+}
+
+// 更新虚拟模型
+export async function updateVirtualModel(id: number, virtualModel: {
+  name: string;
+  description: string;
+  strategy: string;
+  max_retry: number;
+  time_out: number;
+  io_log: boolean;
+  enabled: boolean;
+}): Promise<VirtualModel> {
+  return apiRequest<VirtualModel>(`/virtual-models/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(virtualModel),
+  });
+}
+
+// 删除虚拟模型
+export async function deleteVirtualModel(id: number): Promise<void> {
+  return apiRequest<void>(`/virtual-models/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+// 获取虚拟模型的映射关系
+export async function getVirtualModelMappings(id: number): Promise<VirtualModelMapping[]> {
+  return apiRequest<VirtualModelMapping[]>(`/virtual-models/${id}/mappings`);
+}
+
+// 创建虚拟模型映射
+export async function createVirtualModelMapping(id: number, mapping: {
+  real_model_id: number;
+  priority: number;
+  weight: number;
+  enabled: boolean;
+}): Promise<VirtualModelMapping> {
+  return apiRequest<VirtualModelMapping>(`/virtual-models/${id}/mappings`, {
+    method: 'POST',
+    body: JSON.stringify(mapping),
+  });
+}
+
+// 更新虚拟模型映射
+export async function updateVirtualModelMapping(id: number, mappingId: number, mapping: {
+  real_model_id: number;
+  priority: number;
+  weight: number;
+  enabled: boolean;
+}): Promise<VirtualModelMapping> {
+  return apiRequest<VirtualModelMapping>(`/virtual-models/${id}/mappings/${mappingId}`, {
+    method: 'PUT',
+    body: JSON.stringify(mapping),
+  });
+}
+
+// 删除虚拟模型映射
+export async function deleteVirtualModelMapping(id: number, mappingId: number): Promise<void> {
+  return apiRequest<void>(`/virtual-models/${id}/mappings/${mappingId}`, {
+    method: 'DELETE',
+  });
+}
+
+// 获取虚拟模型统计信息
+export async function getVirtualModelStats(id: number): Promise<VirtualModelStats> {
+  return apiRequest<VirtualModelStats>(`/virtual-models/${id}/stats`);
+}

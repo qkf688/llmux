@@ -18,15 +18,16 @@ import (
 
 // ModelsHandler 列出当前可用模型，直接从数据库读取基础信息并按 OpenAI 协议返回。
 func ModelsHandler(c *gin.Context) {
+	// 获取真实模型
 	llmModels, err := gorm.G[models.Model](models.DB).Find(c.Request.Context())
 	if err != nil {
 		common.InternalServerError(c, err.Error())
 		return
 	}
 
-	models := make([]providers.Model, 0)
+	modelsList := make([]providers.Model, 0)
 	for _, llmModel := range llmModels {
-		models = append(models, providers.Model{
+		modelsList = append(modelsList, providers.Model{
 			ID:      llmModel.Name,
 			Object:  "model",
 			Created: llmModel.CreatedAt.Unix(),
@@ -34,9 +35,26 @@ func ModelsHandler(c *gin.Context) {
 		})
 	}
 
+	// 获取虚拟模型
+	virtualModels, err := gorm.G[models.VirtualModel](models.DB).Find(c.Request.Context())
+	if err != nil {
+		common.InternalServerError(c, err.Error())
+		return
+	}
+
+	// 添加虚拟模型到列表
+	for _, virtualModel := range virtualModels {
+		modelsList = append(modelsList, providers.Model{
+			ID:      virtualModel.Name,
+			Object:  "model",
+			Created: virtualModel.CreatedAt.Unix(),
+			OwnedBy: "llmio-virtual",
+		})
+	}
+
 	common.SuccessRaw(c, providers.ModelList{
 		Object: "list",
-		Data:   models,
+		Data:   modelsList,
 	})
 }
 

@@ -25,6 +25,8 @@ func Init(ctx context.Context, path string) {
 		&Model{},
 		&ModelWithProvider{},
 		&ModelTemplateItem{},
+		&VirtualModel{},
+		&VirtualModelMapping{},
 		&ChatLog{},
 		&ChatIO{},
 		&Setting{},

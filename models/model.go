@@ -59,6 +59,28 @@ type ModelTemplateItem struct {
 	Name    string `gorm:"uniqueIndex:idx_model_template_item;not null"`
 }
 
+// VirtualModel 虚拟模型：将多个真实模型组合成一个虚拟模型
+type VirtualModel struct {
+	gorm.Model
+	Name        string `gorm:"type:varchar(255);uniqueIndex;not null"` // 虚拟模型名称
+	Description string `gorm:"type:text"`                              // 描述
+	Strategy    string `gorm:"type:varchar(50);default:'priority'"`    // 路由策略: priority, round_robin, random
+	MaxRetry    int    `gorm:"default:10"`                             // 重试次数限制
+	TimeOut     int    `gorm:"default:60"`                             // 超时时间 单位秒
+	IOLog       *bool  `gorm:"default:false"`                          // 是否记录IO
+	Enabled     *bool  `gorm:"default:true"`                           // 是否启用
+}
+
+// VirtualModelMapping 虚拟模型关联：虚拟模型与真实模型的映射关系
+type VirtualModelMapping struct {
+	gorm.Model
+	VirtualModelID uint  `gorm:"index:idx_virtual_model_mapping;not null"` // 虚拟模型ID
+	RealModelID    uint  `gorm:"index:idx_virtual_model_mapping;not null"` // 真实模型ID
+	Priority       int   `gorm:"default:10"`                                // 优先级，值越高越优先选择
+	Weight         int   `gorm:"default:5"`                                 // 权重，用于同优先级的随机选择
+	Enabled        *bool `gorm:"default:true"`                              // 是否启用
+}
+
 type ChatLog struct {
 	gorm.Model
 	Name          string `gorm:"index"`

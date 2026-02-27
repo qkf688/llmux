@@ -13,7 +13,8 @@ import {
   FaCog,
   FaHeartbeat,
   FaSync,
-  FaDatabase
+  FaDatabase,
+  FaLayerGroup
 } from "react-icons/fa";
 import { useTheme } from "@/components/theme-provider";
 
@@ -36,6 +37,7 @@ export default function Layout() {
     { to: "/", label: "首页", icon: <FaHome /> },
     { to: "/providers", label: "提供商管理", icon: <FaCloud /> },
     { to: "/models", label: "模型管理", icon: <FaRobot /> },
+    { to: "/virtual-models", label: "虚拟模型", icon: <FaLayerGroup /> },
     { to: "/model-providers", label: "模型提供商关联", icon: <FaLink /> },
     { to: "/logs", label: "请求日志", icon: <FaFileAlt /> },
     { to: "/health-check-logs", label: "健康检测日志", icon: <FaHeartbeat /> },

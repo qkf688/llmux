@@ -135,6 +135,17 @@ func main() {
 	api.DELETE("/model-sync/logs", handler.DeleteModelSyncLogs)
 	api.DELETE("/model-sync/logs/clear", handler.ClearModelSyncLogs)
 
+	// Virtual model management
+	api.GET("/virtual-models", handler.GetVirtualModels)
+	api.POST("/virtual-models", handler.CreateVirtualModel)
+	api.PUT("/virtual-models/:id", handler.UpdateVirtualModel)
+	api.DELETE("/virtual-models/:id", handler.DeleteVirtualModel)
+	api.GET("/virtual-models/:id/mappings", handler.GetVirtualModelMappings)
+	api.POST("/virtual-models/:id/mappings", handler.CreateVirtualModelMapping)
+	api.PUT("/virtual-models/:id/mappings/:mapping_id", handler.UpdateVirtualModelMapping)
+	api.DELETE("/virtual-models/:id/mappings/:mapping_id", handler.DeleteVirtualModelMapping)
+	api.GET("/virtual-models/:id/stats", handler.GetVirtualModelStats)
+
 	setwebui(router)
 	router.Run(":7070")
 }

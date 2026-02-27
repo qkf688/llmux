@@ -31,6 +31,25 @@ type VirtualModelMappingRequest struct {
 	Enabled     bool `json:"enabled"`
 }
 
+// BatchVirtualModelMappingRequest 批量创建虚拟模型映射请求结构
+type BatchVirtualModelMappingRequest struct {
+	Mappings []VirtualModelMappingRequest `json:"mappings"`
+}
+
+// BatchFailedItem 批量创建失败项
+type BatchFailedItem struct {
+	RealModelID uint   `json:"real_model_id"`
+	Reason      string `json:"reason"`
+}
+
+// BatchCreateResult 批量创建结果
+type BatchCreateResult struct {
+	SuccessCount int                       `json:"success_count"`
+	FailedCount  int                       `json:"failed_count"`
+	SuccessItems []models.VirtualModelMapping `json:"success_items"`
+	FailedItems  []BatchFailedItem         `json:"failed_items"`
+}
+
 // GetVirtualModels 获取虚拟模型列表
 func GetVirtualModels(c *gin.Context) {
 	virtualModels, err := gorm.G[models.VirtualModel](models.DB).Find(c.Request.Context())
@@ -353,3 +372,124 @@ func GetVirtualModelStats(c *gin.Context) {
 
 	common.Success(c, stats)
 }
+
+// BatchCreateVirtualModelMapping 批量创建虚拟模型映射
+func BatchCreateVirtualModelMapping(c *gin.Context) {
+	id := c.Param("id")
+	var req BatchVirtualModelMappingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
+
+	// 检查虚拟模型是否存在
+	virtualModel, err := gorm.G[models.VirtualModel](models.DB).Where("id = ?", id).First(c.Request.Context())
+	if err != nil {
+		common.NotFound(c, "Virtual model not found")
+		return
+	}
+
+	// 批量预校验：收集所有真实模型ID
+	realModelIDs := make([]uint, 0, len(req.Mappings))
+	for _, mapping := range req.Mappings {
+		realModelIDs = append(realModelIDs, mapping.RealModelID)
+	}
+
+	// 批量验证真实模型存在性
+	existingModels, err := gorm.G[models.Model](models.DB).
+		Where("id IN ?", realModelIDs).
+		Find(c.Request.Context())
+	if err != nil {
+		common.InternalServerError(c, "Database error: "+err.Error())
+		return
+	}
+
+	existingModelMap := make(map[uint]bool)
+	for _, model := range existingModels {
+		existingModelMap[model.ID] = true
+	}
+
+	// 批量获取已映射的模型集合
+	existingMappings, err := gorm.G[models.VirtualModelMapping](models.DB).
+		Where("virtual_model_id = ? AND real_model_id IN ?", id, realModelIDs).
+		Find(c.Request.Context())
+	if err != nil {
+		common.InternalServerError(c, "Database error: "+err.Error())
+		return
+	}
+
+	existingMappingMap := make(map[uint]bool)
+	for _, mapping := range existingMappings {
+		existingMappingMap[mapping.RealModelID] = true
+	}
+
+	// 初始化结果
+	result := BatchCreateResult{
+		SuccessItems: make([]models.VirtualModelMapping, 0),
+		FailedItems:  make([]BatchFailedItem, 0),
+	}
+
+	// 虚拟模型服务用于循环依赖检测
+	virtualModelService := service.NewVirtualModelService(models.DB)
+
+	// 逐个处理映射创建
+	for _, mappingReq := range req.Mappings {
+		// 验证真实模型是否存在
+		if !existingModelMap[mappingReq.RealModelID] {
+			result.FailedItems = append(result.FailedItems, BatchFailedItem{
+				RealModelID: mappingReq.RealModelID,
+				Reason:      "Real model not found",
+			})
+			result.FailedCount++
+			continue
+		}
+
+		// 检查是否已存在映射
+		if existingMappingMap[mappingReq.RealModelID] {
+			result.FailedItems = append(result.FailedItems, BatchFailedItem{
+				RealModelID: mappingReq.RealModelID,
+				Reason:      "Mapping already exists",
+			})
+			result.FailedCount++
+			continue
+		}
+
+		// 验证没有循环依赖
+		if err := virtualModelService.ValidateNoCircularDependency(c.Request.Context(), virtualModel.ID, mappingReq.RealModelID); err != nil {
+			result.FailedItems = append(result.FailedItems, BatchFailedItem{
+				RealModelID: mappingReq.RealModelID,
+				Reason:      err.Error(),
+			})
+			result.FailedCount++
+			continue
+		}
+
+		// 创建映射
+		enabled := mappingReq.Enabled
+		mapping := models.VirtualModelMapping{
+			VirtualModelID: virtualModel.ID,
+			RealModelID:    mappingReq.RealModelID,
+			Priority:       mappingReq.Priority,
+			Weight:         mappingReq.Weight,
+			Enabled:        &enabled,
+		}
+
+		if err := gorm.G[models.VirtualModelMapping](models.DB).Create(c.Request.Context(), &mapping); err != nil {
+			result.FailedItems = append(result.FailedItems, BatchFailedItem{
+				RealModelID: mappingReq.RealModelID,
+				Reason:      "Failed to create mapping: " + err.Error(),
+			})
+			result.FailedCount++
+			continue
+		}
+
+		// 成功创建，添加到成功列表并更新已映射集合
+		result.SuccessItems = append(result.SuccessItems, mapping)
+		result.SuccessCount++
+		existingMappingMap[mappingReq.RealModelID] = true
+	}
+
+	// 返回结果，HTTP 200 表示操作本身成功执行
+	common.Success(c, result)
+}
+

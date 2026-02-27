@@ -58,6 +58,7 @@ import {
   createVirtualModelMapping,
   updateVirtualModelMapping,
   deleteVirtualModelMapping,
+  batchCreateVirtualModelMapping,
   getModels,
   type VirtualModel,
   type VirtualModelMapping,
@@ -97,6 +98,14 @@ export default function VirtualModelsPage() {
   const [mappings, setMappings] = useState<VirtualModelMapping[]>([]);
   const [mappingDialogOpen, setMappingDialogOpen] = useState(false);
   const [editingMapping, setEditingMapping] = useState<VirtualModelMapping | null>(null);
+
+  // 批量添加状态
+  const [batchDialogOpen, setBatchDialogOpen] = useState(false);
+  const [selectedModelIds, setSelectedModelIds] = useState<number[]>([]);
+  const [batchPriority, setBatchPriority] = useState(10);
+  const [batchWeight, setBatchWeight] = useState(5);
+  const [batchEnabled, setBatchEnabled] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // 初始化表单
   const form = useForm<z.infer<typeof formSchema>>({
@@ -269,6 +278,95 @@ export default function VirtualModelsPage() {
       toast.error(`删除失败: ${message}`);
     }
   };
+
+  // 批量添加映射
+  const handleBatchAdd = () => {
+    setSelectedModelIds([]);
+    setBatchPriority(10);
+    setBatchWeight(5);
+    setBatchEnabled(true);
+    setSearchQuery("");
+    setBatchDialogOpen(true);
+  };
+
+  const handleBatchSubmit = async () => {
+    if (!currentVirtualModel) return;
+    if (selectedModelIds.length === 0) {
+      toast.error("请至少选择一个真实模型");
+      return;
+    }
+
+    try {
+      const mappingsToCreate = selectedModelIds.map(modelId => ({
+        real_model_id: modelId,
+        priority: batchPriority,
+        weight: batchWeight,
+        enabled: batchEnabled,
+      }));
+
+      const result = await batchCreateVirtualModelMapping(currentVirtualModel.ID, mappingsToCreate);
+
+      if (result.success_count > 0) {
+        toast.success(`成功添加 ${result.success_count} 个映射`);
+      }
+      if (result.failed_count > 0) {
+        toast.error(`${result.failed_count} 个映射添加失败`);
+        result.failed_items.forEach(item => {
+          const modelName = getRealModelName(item.real_model_id);
+          toast.error(`${modelName}: ${item.reason}`);
+        });
+      }
+
+      setBatchDialogOpen(false);
+      const data = await getVirtualModelMappings(currentVirtualModel.ID);
+      setMappings(data);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`批量添加失败: ${message}`);
+    }
+  };
+
+  const toggleModelSelection = (modelId: number) => {
+    setSelectedModelIds(prev =>
+      prev.includes(modelId)
+        ? prev.filter(id => id !== modelId)
+        : [...prev, modelId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    const filteredModels = getFilteredModels();
+    const unmappedModels = filteredModels.filter(
+      model => !mappedModelIds.has(model.ID)
+    );
+    setSelectedModelIds(unmappedModels.map(m => m.ID));
+  };
+
+  const handleInvertSelection = () => {
+    const filteredModels = getFilteredModels();
+    const unmappedModels = filteredModels.filter(
+      model => !mappedModelIds.has(model.ID)
+    );
+    setSelectedModelIds(prev => {
+      const currentSet = new Set(prev);
+      return unmappedModels
+        .filter(m => !currentSet.has(m.ID))
+        .map(m => m.ID);
+    });
+  };
+
+  const handleClearSelection = () => {
+    setSelectedModelIds([]);
+  };
+
+  const getFilteredModels = () => {
+    if (!searchQuery) return realModels;
+    return realModels.filter(model =>
+      model.Name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  };
+
+  const mappedModelIds = new Set(mappings.map(m => m.RealModelID));
 
   const getStrategyLabel = (strategy: string) => {
     const labels: Record<string, string> = {
@@ -503,7 +601,10 @@ export default function VirtualModelsPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <Button onClick={handleAddMapping}>添加映射</Button>
+            <div className="flex gap-2">
+              <Button onClick={handleAddMapping}>添加映射</Button>
+              <Button variant="outline" onClick={handleBatchAdd}>批量添加</Button>
+            </div>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -633,6 +734,118 @@ export default function VirtualModelsPage() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* 批量添加映射对话框 */}
+      <Dialog open={batchDialogOpen} onOpenChange={setBatchDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>批量添加映射</DialogTitle>
+            <DialogDescription>
+              选择多个真实模型并设置统一参数
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* 搜索框 */}
+            <div>
+              <Input
+                placeholder="搜索模型名称..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+
+            {/* 快捷操作按钮 */}
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleSelectAll}>
+                全选
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleInvertSelection}>
+                反选
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleClearSelection}>
+                清空
+              </Button>
+              <span className="text-sm text-muted-foreground ml-auto self-center">
+                已选择 {selectedModelIds.length} 个模型
+              </span>
+            </div>
+
+            {/* 模型列表 */}
+            <div className="border rounded-lg max-h-60 overflow-y-auto">
+              <div className="divide-y">
+                {getFilteredModels().map((model) => {
+                  const isMapped = mappedModelIds.has(model.ID);
+                  const isSelected = selectedModelIds.includes(model.ID);
+                  return (
+                    <div
+                      key={model.ID}
+                      className={`flex items-center gap-3 p-3 hover:bg-gray-50 ${
+                        isMapped ? "bg-gray-100" : ""
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleModelSelection(model.ID)}
+                        disabled={isMapped}
+                        className="w-4 h-4"
+                      />
+                      <div className="flex-1">
+                        <div className={`font-medium ${isMapped ? "text-gray-500 line-through" : ""}`}>
+                          {model.Name}
+                        </div>
+                        {model.Remark && (
+                          <div className="text-sm text-muted-foreground">{model.Remark}</div>
+                        )}
+                      </div>
+                      {isMapped && (
+                        <span className="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">
+                          已映射
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 统一参数设置 */}
+            <div className="space-y-3 border-t pt-4">
+              <h4 className="font-medium">统一参数</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium">优先级</label>
+                  <Input
+                    type="number"
+                    value={batchPriority}
+                    onChange={(e) => setBatchPriority(parseInt(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">权重</label>
+                  <Input
+                    type="number"
+                    value={batchWeight}
+                    onChange={(e) => setBatchWeight(parseInt(e.target.value))}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">启用</label>
+                <Switch checked={batchEnabled} onCheckedChange={setBatchEnabled} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setBatchDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleBatchSubmit}>
+              添加 ({selectedModelIds.length})
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

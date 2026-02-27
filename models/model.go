@@ -74,11 +74,11 @@ type VirtualModel struct {
 // VirtualModelMapping 虚拟模型关联：虚拟模型与真实模型的映射关系
 type VirtualModelMapping struct {
 	gorm.Model
-	VirtualModelID uint  `gorm:"index:idx_virtual_model_mapping;not null"` // 虚拟模型ID
-	RealModelID    uint  `gorm:"index:idx_virtual_model_mapping;not null"` // 真实模型ID
-	Priority       int   `gorm:"default:10"`                                // 优先级，值越高越优先选择
-	Weight         int   `gorm:"default:5"`                                 // 权重，用于同优先级的随机选择
-	Enabled        *bool `gorm:"default:true"`                              // 是否启用
+	VirtualModelID uint  `gorm:"uniqueIndex:idx_virtual_model_mapping;not null"` // 虚拟模型ID
+	RealModelID    uint  `gorm:"uniqueIndex:idx_virtual_model_mapping;not null"` // 真实模型ID
+	Priority       int   `gorm:"default:10"`                                      // 优先级，值越高越优先选择
+	Weight         int   `gorm:"default:5"`                                       // 权重，用于同优先级的随机选择
+	Enabled        *bool `gorm:"default:true"`                                    // 是否启用
 }
 
 type ChatLog struct {

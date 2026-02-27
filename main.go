@@ -142,6 +142,7 @@ func main() {
 	api.DELETE("/virtual-models/:id", handler.DeleteVirtualModel)
 	api.GET("/virtual-models/:id/mappings", handler.GetVirtualModelMappings)
 	api.POST("/virtual-models/:id/mappings", handler.CreateVirtualModelMapping)
+	api.POST("/virtual-models/:id/mappings/batch", handler.BatchCreateVirtualModelMapping)
 	api.PUT("/virtual-models/:id/mappings/:mapping_id", handler.UpdateVirtualModelMapping)
 	api.DELETE("/virtual-models/:id/mappings/:mapping_id", handler.DeleteVirtualModelMapping)
 	api.GET("/virtual-models/:id/stats", handler.GetVirtualModelStats)

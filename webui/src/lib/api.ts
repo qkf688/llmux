@@ -1151,3 +1151,32 @@ export async function deleteVirtualModelMapping(id: number, mappingId: number): 
 export async function getVirtualModelStats(id: number): Promise<VirtualModelStats> {
   return apiRequest<VirtualModelStats>(`/virtual-models/${id}/stats`);
 }
+
+// 批量创建虚拟模型映射结果
+export interface BatchCreateResult {
+  success_count: number;
+  failed_count: number;
+  success_items: VirtualModelMapping[];
+  failed_items: BatchFailedItem[];
+}
+
+export interface BatchFailedItem {
+  real_model_id: number;
+  reason: string;
+}
+
+// 批量创建虚拟模型映射
+export async function batchCreateVirtualModelMapping(
+  id: number,
+  mappings: Array<{
+    real_model_id: number;
+    priority: number;
+    weight: number;
+    enabled: boolean;
+  }>
+): Promise<BatchCreateResult> {
+  return apiRequest<BatchCreateResult>(`/virtual-models/${id}/mappings/batch`, {
+    method: 'POST',
+    body: JSON.stringify({ mappings }),
+  });
+}

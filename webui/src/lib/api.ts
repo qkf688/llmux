@@ -659,6 +659,13 @@ export async function clearAllLogs(): Promise<{ deleted: number }> {
   });
 }
 
+// Provider association management API functions
+export async function clearProviderAssociations(providerId: number): Promise<{ provider_id: number; provider_name: string; deleted_count: number }> {
+  return apiRequest<{ provider_id: number; provider_name: string; deleted_count: number }>(`/providers/${providerId}/associations`, {
+    method: 'DELETE',
+  });
+}
+
 // Maintenance API functions
 export async function vacuumDatabase(): Promise<{ message: string }> {
   return apiRequest<{ message: string }>('/maintenance/vacuum', {

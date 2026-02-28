@@ -3481,6 +3481,44 @@ func CleanInvalidAssociations(c *gin.Context) {
 	})
 }
 
+// ClearProviderAssociations 清除指定提供商的所有模型关联
+func ClearProviderAssociations(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		common.BadRequest(c, "Invalid provider ID format")
+		return
+	}
+
+	ctx := c.Request.Context()
+	
+	// 首先检查提供商是否存在
+	provider, err := gorm.G[models.Provider](models.DB).Where("id = ?", id).First(ctx)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			common.NotFound(c, "Provider not found")
+		} else {
+			common.InternalServerError(c, "Failed to get provider: "+err.Error())
+		}
+		return
+	}
+
+	// 删除该提供商的所有模型关联
+	result, err := gorm.G[models.ModelWithProvider](models.DB).
+		Where("provider_id = ?", id).
+		Delete(ctx)
+	if err != nil {
+		common.InternalServerError(c, "Failed to clear associations: "+err.Error())
+		return
+	}
+
+	common.Success(c, map[string]interface{}{
+		"provider_id":   id,
+		"provider_name": provider.Name,
+		"deleted_count": result,
+	})
+}
+
 // getSettingBool 获取布尔类型设置
 func getSettingBool(ctx context.Context, key string) bool {
 	setting, err := gorm.G[models.Setting](models.DB).Where("key = ?", key).First(ctx)

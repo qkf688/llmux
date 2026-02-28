@@ -62,6 +62,7 @@ func main() {
 	api.POST("/providers", handler.CreateProvider)
 	api.PUT("/providers/:id", handler.UpdateProvider)
 	api.DELETE("/providers/:id", handler.DeleteProvider)
+	api.DELETE("/providers/:id/associations", handler.ClearProviderAssociations)
 
 	// Model management
 	api.GET("/models", handler.GetModels)

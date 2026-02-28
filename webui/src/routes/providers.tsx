@@ -61,7 +61,8 @@ import {
   getProviderModels,
   syncProviderModels,
   syncAllProviderModels,
-  testProviderModel
+  testProviderModel,
+  clearProviderAssociations
 } from "@/lib/api";
 import type { Provider, ProviderTemplate, ProviderModel } from "@/lib/api";
 import { buildConfigWithModels, parseAllModelsFromConfig, parseUpstreamModelsFromConfig, parseCustomModelsFromConfig } from "@/lib/provider-models";
@@ -158,6 +159,8 @@ export default function ProvidersPage() {
   const [open, setOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [clearAssociationId, setClearAssociationId] = useState<number | null>(null);
+  const [clearingAssociation, setClearingAssociation] = useState(false);
   const [modelsOpen, setModelsOpen] = useState(false);
   const [modelsOpenId, setModelsOpenId] = useState<number | null>(null);
   const [providerModels, setProviderModels] = useState<ProviderModel[]>([]);
@@ -1065,6 +1068,30 @@ export default function ProvidersPage() {
     }
   };
 
+  const handleClearAssociations = async () => {
+    if (!clearAssociationId) return;
+    try {
+      setClearingAssociation(true);
+      const targetProvider = providers.find((provider) => provider.ID === clearAssociationId);
+      const result = await clearProviderAssociations(clearAssociationId);
+      setClearAssociationId(null);
+      toast.success(`提供商 ${targetProvider?.Name ?? clearAssociationId} 的关联已清除`, {
+        description: `共清除了 ${result.deleted_count} 个模型关联`
+      });
+      // 可以选择刷新相关数据
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`清除关联失败: ${message}`);
+      console.error(err);
+    } finally {
+      setClearingAssociation(false);
+    }
+  };
+
+  const openClearAssociationsDialog = (id: number) => {
+    setClearAssociationId(id);
+  };
+
   const openEditDialog = (provider: Provider) => {
     setEditingProvider(provider);
     setShowApiKey(false);
@@ -1198,7 +1225,7 @@ export default function ProvidersPage() {
                     <TableHead>类型</TableHead>
                     <TableHead>全部模型</TableHead>
                     <TableHead>模型端点</TableHead>
-                    <TableHead className="w-[260px]">操作</TableHead>
+                    <TableHead className="w-[360px]">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1250,6 +1277,31 @@ export default function ProvidersPage() {
                             <Button variant="secondary" size="sm" onClick={() => openModelsDialog(provider.ID)}>
                               获取模型
                             </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="outline" size="sm" onClick={() => openClearAssociationsDialog(provider.ID)}>
+                                  清除关联
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>确定要清除这个提供商的所有关联吗？</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    此操作将删除该提供商下所有的模型关联关系，但不会删除提供商本身。此操作无法撤销。
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel onClick={() => setClearAssociationId(null)}>取消</AlertDialogCancel>
+                                  <AlertDialogAction 
+                                    onClick={handleClearAssociations} 
+                                    disabled={clearingAssociation}
+                                    className="bg-destructive hover:bg-destructive/90"
+                                  >
+                                    {clearingAssociation ? "清除中..." : "确认清除"}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button variant="destructive" size="sm" onClick={() => openDeleteDialog(provider.ID)}>
@@ -1327,6 +1379,31 @@ export default function ProvidersPage() {
                         <Button variant="secondary" size="sm" className="h-7 px-2 text-xs" onClick={() => openModelsDialog(provider.ID)}>
                           模型
                         </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => openClearAssociationsDialog(provider.ID)}>
+                              清除关联
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>确定要清除这个提供商的所有关联吗？</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                此操作将删除该提供商下所有的模型关联关系，但不会删除提供商本身。此操作无法撤销。
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel onClick={() => setClearAssociationId(null)}>取消</AlertDialogCancel>
+                              <AlertDialogAction 
+                                onClick={handleClearAssociations} 
+                                disabled={clearingAssociation}
+                                className="bg-destructive hover:bg-destructive/90"
+                              >
+                                {clearingAssociation ? "清除中..." : "确认清除"}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button variant="destructive" size="sm" className="h-7 px-2 text-xs" onClick={() => openDeleteDialog(provider.ID)}>

@@ -24,6 +24,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import Loading from "@/components/loading";
 import { getLogs, getProviders, getModels, getUserAgents, deleteLog, batchDeleteLogs, type ChatLog, type Provider, type Model, getProviderTemplates, clearAllLogs, vacuumDatabase } from "@/lib/api";
 import { ChevronLeft, ChevronRight, RefreshCw, Trash2, Download, HardDrive } from "lucide-react";
@@ -493,7 +494,7 @@ export default function LogsPage() {
           <div className="h-full flex flex-col">
             <div className="flex-1 overflow-y-auto">
               <div className="hidden sm:block w-full">
-                <Table className="min-w-[1150px]">
+                <Table className="min-w-[850px]">
                   <TableHeader className="z-10 sticky top-0 bg-secondary/90 backdrop-blur text-secondary-foreground">
                     <TableRow className="hover:bg-secondary/90">
                       <TableHead className="w-[40px]">
@@ -511,12 +512,10 @@ export default function LogsPage() {
                       <TableHead>时间</TableHead>
                       <TableHead>模型名称</TableHead>
                       <TableHead>状态</TableHead>
-                      <TableHead>Tokens</TableHead>
                       <TableHead>耗时</TableHead>
                       <TableHead>提供商模型</TableHead>
-                      <TableHead>类型</TableHead>
+                      <TableHead>格式转换</TableHead>
                       <TableHead>提供商</TableHead>
-                      <TableHead>UA</TableHead>
                       <TableHead className="w-[180px]">操作</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -533,21 +532,34 @@ export default function LogsPage() {
                         <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                           {new Date(log.CreatedAt).toLocaleString()}
                         </TableCell>
-                        <TableCell className="font-medium">{log.Name}</TableCell>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            <span>{log.Name}</span>
+                            {log.is_virtual_model && (
+                              <Badge variant="secondary" className="text-xs">
+                                虚拟
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>
                           <span className={`inline-flex items-center px-2 py-1 ${log.Status === 'success' ? 'text-green-500' : 'text-red-500 '
                             }`}>
                             {log.Status}
                           </span>
                         </TableCell>
-                        <TableCell>{log.total_tokens}</TableCell>
                         <TableCell>{formatTime(log.ChunkTime)}</TableCell>
                         <TableCell className="max-w-[120px] truncate text-xs" title={log.ProviderModel}>{log.ProviderModel}</TableCell>
-                        <TableCell className="text-xs">{log.Style}</TableCell>
-                        <TableCell className="text-xs">{log.ProviderName}</TableCell>
-                        <TableCell className="max-w-[100px] truncate text-xs" title={log.UserAgent}>
-                          {log.UserAgent || '-'}
+                        <TableCell className="text-xs">
+                          {log.has_format_conversion ? (
+                            <Badge variant="outline" className="text-xs">
+                              {log.source_format} → {log.target_format}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">-</span>
+                          )}
                         </TableCell>
+                        <TableCell className="text-xs">{log.ProviderName}</TableCell>
                         <TableCell>
                           <div className="flex gap-1">
                             <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => openDetailDialog(log)}>
@@ -589,7 +601,14 @@ export default function LogsPage() {
                           className="mt-1"
                         />
                         <div className="min-w-0 flex-1">
-                          <h3 className="font-semibold text-sm truncate">{log.Name}</h3>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-sm truncate">{log.Name}</h3>
+                            {log.is_virtual_model && (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">
+                                虚拟
+                              </Badge>
+                            )}
+                          </div>
                           <p className="text-[11px] text-muted-foreground">{new Date(log.CreatedAt).toLocaleString()}</p>
                         </div>
                       </div>
@@ -626,10 +645,6 @@ export default function LogsPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-3 text-xs ml-6">
                       <div className="space-y-1">
-                        <p className="text-muted-foreground text-[10px] uppercase tracking-wide">Tokens</p>
-                        <p className="font-medium">{log.total_tokens}</p>
-                      </div>
-                      <div className="space-y-1">
                         <p className="text-muted-foreground text-[10px] uppercase tracking-wide">耗时</p>
                         <p className="font-medium">{formatTime(log.ChunkTime)}</p>
                       </div>
@@ -638,8 +653,16 @@ export default function LogsPage() {
                         <p className="truncate">{log.ProviderName}</p>
                       </div>
                       <div className="space-y-1">
-                        <p className="text-muted-foreground text-[10px] uppercase tracking-wide">类型</p>
-                        <p>{log.Style || '-'}</p>
+                        <p className="text-muted-foreground text-[10px] uppercase tracking-wide">格式转换</p>
+                        <p>
+                          {log.has_format_conversion ? (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
+                              {log.source_format} → {log.target_format}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </p>
                       </div>
                     </div>
                     {/* 显示请求响应内容大小提示 */}
@@ -740,9 +763,16 @@ export default function LogsPage() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">基本信息</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <DetailCard label="模型名称" value={selectedLog.Name} />
+                    <DetailCard label="模型类型" value={selectedLog.is_virtual_model ? '虚拟模型' : '真实模型'} />
                     <DetailCard label="提供商" value={selectedLog.ProviderName || '-'} />
                     <DetailCard label="提供商模型" value={selectedLog.ProviderModel || '-'} mono />
-                    <DetailCard label="类型" value={selectedLog.Style || '-'} />
+                    <DetailCard label="客户端类型" value={selectedLog.Style || '-'} />
+                    <DetailCard 
+                      label="格式转换" 
+                      value={selectedLog.has_format_conversion ? 
+                        `${selectedLog.source_format} → ${selectedLog.target_format}` : 
+                        '未发生转换'} 
+                    />
                     <DetailCard label="用户代理" value={selectedLog.UserAgent || '-'} mono />
                     <DetailCard label="远端 IP" value={selectedLog.RemoteIP || '-'} mono />
                     <DetailCard label="记录 IO" value={selectedLog.ChatIO ? '是' : '否'} />

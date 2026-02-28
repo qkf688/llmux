@@ -533,6 +533,10 @@ func (s *ModelSyncService) autoAssociateModels(ctx context.Context) {
 
 	addedCount := 0
 	for _, provider := range allProviders {
+		// 跳过被拉黑的供应商
+		if provider.Blacklisted != nil && *provider.Blacklisted {
+			continue
+		}
 		providerModels := extractAllModels(provider.Config)
 		for _, providerModel := range providerModels {
 			matchedModelIDs := templateIndex.Match(providerModel)

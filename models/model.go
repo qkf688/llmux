@@ -17,6 +17,7 @@ type Provider struct {
 	ModelEndpoint      *bool   // 是否支持从上游获取模型列表，默认true
 	ModelFilterEnabled *bool   // 是否启用模型过滤（按规则过滤上游模型）
 	AuthType           *string // 认证方式：x-api-key（默认）或 bearer，仅用于 Anthropic 类型
+	Blacklisted        *bool   `gorm:"default:false" json:"blacklisted"` // 是否拉黑（拉黑后不参与自动关联）
 }
 
 type AnthropicConfig struct {

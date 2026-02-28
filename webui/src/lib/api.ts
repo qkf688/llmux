@@ -12,6 +12,7 @@ export interface Provider {
   ModelEndpoint?: boolean;
   ModelFilterEnabled?: boolean;
   AuthType?: string; // 认证方式：x-api-key 或 bearer，仅用于 Anthropic 类型
+  blacklisted?: boolean;
 }
 
 export interface Model {
@@ -398,12 +399,17 @@ export interface ChatLog {
   completion_tokens: number;
   total_tokens: number;
   prompt_tokens_details: PromptTokensDetails;
-  // 新增字段：原始请求和响应内容
+  // 原始请求和响应内容
   RequestHeaders?: string;
   RequestBody?: string;
   ResponseHeaders?: string;
   ResponseBody?: string;
   RawResponseBody?: string; // 原始响应体（转换前）
+  // 虚拟模型和格式转换信息
+  is_virtual_model: boolean;
+  has_format_conversion: boolean;
+  source_format?: string;
+  target_format?: string;
 }
 
 export interface PromptTokensDetails {
@@ -609,6 +615,17 @@ export async function previewAutoAssociate(): Promise<AssociationPreview[]> {
 export async function autoAssociateModels(): Promise<{ added: number }> {
   return apiRequest<{ added: number }>('/model-providers/auto-associate', {
     method: 'POST',
+  });
+}
+
+export async function getProviderBlacklist(): Promise<{ blacklisted_ids: number[] }> {
+  return apiRequest<{ blacklisted_ids: number[] }>('/providers/blacklist');
+}
+
+export async function updateProviderBlacklist(providerIds: number[]): Promise<{ updated: number }> {
+  return apiRequest<{ updated: number }>('/providers/blacklist', {
+    method: 'PUT',
+    body: JSON.stringify({ provider_ids: providerIds }),
   });
 }
 

@@ -86,6 +86,8 @@ func main() {
 	api.DELETE("/model-providers/:id", handler.DeleteModelProvider)
 	api.GET("/model-providers/auto-associate/preview", handler.PreviewAutoAssociate)
 	api.POST("/model-providers/auto-associate", handler.AutoAssociateModels)
+	api.GET("/providers/blacklist", handler.GetProviderBlacklist)
+	api.PUT("/providers/blacklist", handler.UpdateProviderBlacklist)
 	api.GET("/model-providers/clean-invalid/preview", handler.PreviewCleanInvalid)
 	api.POST("/model-providers/clean-invalid", handler.CleanInvalidAssociations)
 

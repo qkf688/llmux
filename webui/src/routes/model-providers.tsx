@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { useState, useEffect, useRef, useMemo, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
@@ -68,7 +68,9 @@ import {
   deleteModelTemplateItem,
   resetModelWeights,
   resetModelPriorities,
-  enableAllAssociations
+  enableAllAssociations,
+  getProviderBlacklist,
+  updateProviderBlacklist
 } from "@/lib/api";
 import type {
   ModelWithProvider,
@@ -231,6 +233,36 @@ export default function ModelProvidersPage() {
     error?: string
   }>>({});
 
+  const [blacklistDialogOpen, setBlacklistDialogOpen] = useState(false);
+  const [blacklistedIds, setBlacklistedIds] = useState<number[]>([]);
+  const [blacklistLoading, setBlacklistLoading] = useState(false);
+  const [blacklistSaving, setBlacklistSaving] = useState(false);
+  const [blacklistSearchTerm, setBlacklistSearchTerm] = useState("");
+  const [blacklistFilter, setBlacklistFilter] = useState<'all' | 'blacklisted' | 'not-blacklisted'>('all');
+
+  // 拉黑管理过滤逻辑
+  const filteredProviders = useMemo(() => {
+    let result = providers;
+    
+    // 应用拉黑状态筛选
+    if (blacklistFilter === 'blacklisted') {
+      result = result.filter(provider => blacklistedIds.includes(provider.ID));
+    } else if (blacklistFilter === 'not-blacklisted') {
+      result = result.filter(provider => !blacklistedIds.includes(provider.ID));
+    }
+    
+    // 应用搜索过滤
+    if (blacklistSearchTerm.trim()) {
+      const term = blacklistSearchTerm.toLowerCase().trim();
+      result = result.filter(provider => 
+        provider.Name.toLowerCase().includes(term) || 
+        provider.Type.toLowerCase().includes(term)
+      );
+    }
+    
+    return result;
+  }, [providers, blacklistedIds, blacklistFilter, blacklistSearchTerm]);
+
   const dialogClose = () => {
     setTestDialogOpen(false)
   };
@@ -311,6 +343,35 @@ export default function ModelProvidersPage() {
       })
       .finally(() => setTemplateLoading(false));
   }, [templateEditorOpen, selectedModelId]);
+
+  useEffect(() => {
+    if (!blacklistDialogOpen) return;
+    setBlacklistLoading(true);
+    getProviderBlacklist()
+      .then((data) => setBlacklistedIds(data.blacklisted_ids))
+      .catch((err) => toast.error(`加载黑名单失败: ${err instanceof Error ? err.message : String(err)}`))
+      .finally(() => setBlacklistLoading(false));
+  }, [blacklistDialogOpen]);
+
+  const handleSaveBlacklist = async () => {
+    setBlacklistSaving(true);
+    try {
+      await updateProviderBlacklist(blacklistedIds);
+      toast.success("黑名单已保存");
+      setBlacklistDialogOpen(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`保存黑名单失败: ${message}`);
+    } finally {
+      setBlacklistSaving(false);
+    }
+  };
+
+  const handleToggleBlacklist = (providerId: number, checked: boolean) => {
+    setBlacklistedIds((prev) =>
+      checked ? [...prev, providerId] : prev.filter((id) => id !== providerId)
+    );
+  };
 
   const buildPayload = (
     values: FormValues,
@@ -1577,6 +1638,13 @@ export default function ModelProvidersPage() {
               模板编辑
             </Button>
             <Button
+              onClick={() => setBlacklistDialogOpen(true)}
+              variant="outline"
+              className="h-8 text-xs flex-1 sm:flex-initial"
+            >
+              拉黑管理
+            </Button>
+            <Button
               onClick={handleAutoAssociate}
               variant="outline"
               className="h-8 text-xs flex-1 sm:flex-initial"
@@ -1692,6 +1760,120 @@ export default function ModelProvidersPage() {
           {statusError}
         </div>
       )}
+
+      {/* 拉黑管理对话框 */}
+      <Dialog open={blacklistDialogOpen} onOpenChange={setBlacklistDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>拉黑管理</DialogTitle>
+            <DialogDescription>
+              被拉黑的供应商在一键关联和自动关联时会被跳过，不会关联其模型。
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* 搜索和筛选区域 */}
+          <div className="space-y-3 pt-2">
+            <div className="flex gap-2">
+              <Input
+                placeholder="搜索供应商名称或类型..."
+                value={blacklistSearchTerm}
+                onChange={(e) => setBlacklistSearchTerm(e.target.value)}
+                className="flex-1 h-8 text-sm"
+              />
+              <Select value={blacklistFilter} onValueChange={(value: string) => setBlacklistFilter(value as 'all' | 'blacklisted' | 'not-blacklisted')}>
+                <SelectTrigger className="w-24 h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部</SelectItem>
+                  <SelectItem value="blacklisted">已拉黑</SelectItem>
+                  <SelectItem value="not-blacklisted">未拉黑</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {blacklistLoading ? (
+            <div className="flex items-center justify-center py-8 gap-2 text-sm text-muted-foreground">
+              <Spinner className="h-4 w-4" />
+              加载中...
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredProviders.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-4 text-center h-80 flex items-center justify-center">
+                  {blacklistSearchTerm || blacklistFilter !== 'all' 
+                    ? '未找到匹配的供应商' 
+                    : '暂无供应商'}
+                </div>
+              ) : (
+                <div className="max-h-80 overflow-auto rounded-md border divide-y h-80">
+                  {filteredProviders.map((provider) => {
+                    const isBlacklisted = blacklistedIds.includes(provider.ID);
+                    return (
+                      <div
+                        key={provider.ID}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors"
+                      >
+                        <Checkbox
+                          id={`blacklist-provider-${provider.ID}`}
+                          checked={isBlacklisted}
+                          onCheckedChange={(checked) =>
+                            handleToggleBlacklist(provider.ID, checked === true)
+                          }
+                          disabled={blacklistSaving}
+                        />
+                        <label
+                          htmlFor={`blacklist-provider-${provider.ID}`}
+                          className="flex-1 cursor-pointer select-none"
+                        >
+                          <span className="text-sm font-medium">{provider.Name}</span>
+                          <span className="text-xs text-muted-foreground ml-2">({provider.Type})</span>
+                        </label>
+                        {isBlacklisted && (
+                          <span className="text-xs text-destructive font-medium">已拉黑</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="text-xs text-muted-foreground">
+                {blacklistSearchTerm || blacklistFilter !== 'all'
+                  ? `筛选到 ${filteredProviders.length} 个供应商，已选 ${blacklistedIds.length} 个加入黑名单`
+                  : `已选 ${blacklistedIds.length} 个供应商加入黑名单`
+                }
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setBlacklistDialogOpen(false);
+                // 关闭对话框时重置搜索和筛选条件
+                setBlacklistSearchTerm("");
+                setBlacklistFilter("all");
+              }}
+              disabled={blacklistSaving}
+            >
+              取消
+            </Button>
+            <Button onClick={handleSaveBlacklist} disabled={blacklistLoading || blacklistSaving}>
+              {blacklistSaving ? (
+                <>
+                  <Spinner className="h-4 w-4 mr-2" />
+                  保存中...
+                </>
+              ) : (
+                "保存"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={templateEditorOpen} onOpenChange={setTemplateEditorOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>

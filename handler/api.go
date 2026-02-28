@@ -1310,8 +1310,61 @@ func GetRequestLogs(c *gin.Context) {
 		return
 	}
 
+	// 丰富日志数据，添加虚拟模型和格式转换信息
+	enrichedLogs := make([]map[string]any, len(logs))
+	for i, log := range logs {
+		enrichedLog := map[string]any{
+			"ID":              log.ID,
+			"CreatedAt":        log.CreatedAt,
+			"Name":            log.Name,
+			"ProviderModel":   log.ProviderModel,
+			"ProviderName":    log.ProviderName,
+			"Status":          log.Status,
+			"Style":           log.Style,
+			"UserAgent":       log.UserAgent,
+			"RemoteIP":        log.RemoteIP,
+			"Error":           log.Error,
+			"Retry":           log.Retry,
+			"ProxyTime":       log.ProxyTime,
+			"FirstChunkTime":  log.FirstChunkTime,
+			"ChunkTime":       log.ChunkTime,
+			"Tps":             log.Tps,
+			"ChatIO":          log.ChatIO,
+			"prompt_tokens":   log.PromptTokens,
+			"completion_tokens": log.CompletionTokens,
+			"total_tokens":    log.TotalTokens,
+			"prompt_tokens_details": log.PromptTokensDetails,
+			"RequestHeaders":  log.RequestHeaders,
+			"RequestBody":     log.RequestBody,
+			"ResponseHeaders": log.ResponseHeaders,
+			"ResponseBody":    log.ResponseBody,
+			"RawResponseBody": log.RawResponseBody,
+		}
+
+		// 检测是否为虚拟模型
+		_, err := gorm.G[models.VirtualModel](models.DB).
+			Where("name = ? AND enabled = ?", log.Name, true).
+			First(c.Request.Context())
+		enrichedLog["is_virtual_model"] = err == nil
+
+		// 检测是否发生格式转换（通过对比客户端格式与提供商格式判断）
+		provider, providerErr := gorm.G[models.Provider](models.DB).
+			Where("name = ?", log.ProviderName).
+			First(c.Request.Context())
+
+		hasFormatConversion := providerErr == nil && log.Style != "" && log.Style != provider.Type
+		enrichedLog["has_format_conversion"] = hasFormatConversion
+
+		if hasFormatConversion {
+			enrichedLog["source_format"] = log.Style
+			enrichedLog["target_format"] = provider.Type
+		}
+
+		enrichedLogs[i] = enrichedLog
+	}
+
 	result := map[string]any{
-		"data":      logs,
+		"data":      enrichedLogs,
 		"total":     total,
 		"page":      page,
 		"page_size": pageSize,
@@ -3143,6 +3196,10 @@ func PreviewAutoAssociate(c *gin.Context) {
 
 	previews := make([]AssociationPreview, 0)
 	for _, provider := range allProviders {
+		// 跳过被拉黑的供应商
+		if provider.Blacklisted != nil && *provider.Blacklisted {
+			continue
+		}
 		providerModels, err := service.GetProviderModels(ctx, provider)
 		if err != nil {
 			continue
@@ -3303,6 +3360,10 @@ func AutoAssociateModels(c *gin.Context) {
 	defaultPriority := getAutoPriorityDecayDefault(ctx)
 
 	for _, provider := range allProviders {
+		// 跳过被拉黑的供应商
+		if provider.Blacklisted != nil && *provider.Blacklisted {
+			continue
+		}
 		// 解析提供商配置中的模型列表
 		providerModels, err := service.GetProviderModels(ctx, provider)
 		if err != nil {
@@ -3469,6 +3530,10 @@ func triggerAutoAssociate(ctx context.Context) {
 	addedCount := 0
 
 	for _, provider := range allProviders {
+		// 跳过被拉黑的供应商
+		if provider.Blacklisted != nil && *provider.Blacklisted {
+			continue
+		}
 		providerModels, err := service.GetProviderModels(ctx, provider)
 		if err != nil {
 			continue
@@ -4377,3 +4442,53 @@ func importSettings(tx *gorm.DB, settings []models.Setting, mode string) ImportR
 	return result
 }
 
+
+// GetProviderBlacklist 获取拉黑的供应商ID列表
+func GetProviderBlacklist(c *gin.Context) {
+	ctx := c.Request.Context()
+	var providers []models.Provider
+	if err := models.DB.WithContext(ctx).Where("blacklisted = ?", true).Select("id").Find(&providers).Error; err != nil {
+		common.InternalServerError(c, "Failed to get blacklist: "+err.Error())
+		return
+	}
+	ids := make([]uint, 0, len(providers))
+	for _, p := range providers {
+		ids = append(ids, p.ID)
+	}
+	common.Success(c, map[string]interface{}{"blacklisted_ids": ids})
+}
+
+// UpdateProviderBlacklist 更新供应商黑名单（整体替换）
+func UpdateProviderBlacklist(c *gin.Context) {
+	ctx := c.Request.Context()
+	var req struct {
+		ProviderIDs []uint `json:"provider_ids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
+
+	var rowsAffected int64
+	err := models.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		falseVal := false
+		if err := tx.Model(&models.Provider{}).Where("blacklisted = ?", true).Update("blacklisted", &falseVal).Error; err != nil {
+			return err
+		}
+		if len(req.ProviderIDs) > 0 {
+			trueVal := true
+			result := tx.Model(&models.Provider{}).Where("id IN ?", req.ProviderIDs).Update("blacklisted", &trueVal)
+			if result.Error != nil {
+				return result.Error
+			}
+			rowsAffected = result.RowsAffected
+		}
+		return nil
+	})
+	if err != nil {
+		common.InternalServerError(c, "Failed to update blacklist: "+err.Error())
+		return
+	}
+
+	common.Success(c, map[string]interface{}{"updated": rowsAffected})
+}

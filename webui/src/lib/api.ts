@@ -124,6 +124,7 @@ export async function createProvider(provider: {
   proxy: string;
   model_endpoint?: boolean;
   model_filter_enabled?: boolean;
+  blacklisted?: boolean;
   auth_type?: string; // 认证方式：x-api-key 或 bearer
 }): Promise<Provider> {
   return apiRequest<Provider>('/providers', {
@@ -140,6 +141,7 @@ export async function updateProvider(id: number, provider: {
   proxy?: string;
   model_endpoint?: boolean;
   model_filter_enabled?: boolean;
+  blacklisted?: boolean;
   auth_type?: string; // 认证方式：x-api-key 或 bearer
 }): Promise<Provider> {
   return apiRequest<Provider>(`/providers/${id}`, {

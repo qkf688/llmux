@@ -29,7 +29,8 @@ type ProviderRequest struct {
 	Proxy              string `json:"proxy"`
 	ModelEndpoint      *bool  `json:"model_endpoint"`
 	ModelFilterEnabled *bool  `json:"model_filter_enabled"`
-	AuthType           string `json:"auth_type"` // 认证方式：x-api-key 或 bearer，仅用于 Anthropic 类型
+	Blacklisted        *bool  `json:"blacklisted"` // 是否拉黑（拉黑后跳过自动关联/一键关联）
+	AuthType           string `json:"auth_type"`   // 认证方式：x-api-key 或 bearer，仅用于 Anthropic 类型
 }
 
 // ModelRequest represents the request body for creating/updating a model
@@ -244,6 +245,7 @@ func UpdateProvider(c *gin.Context) {
 		Proxy:              req.Proxy,
 		ModelEndpoint:      req.ModelEndpoint,
 		ModelFilterEnabled: req.ModelFilterEnabled,
+		Blacklisted:        req.Blacklisted,
 		AuthType:           authType,
 	}
 

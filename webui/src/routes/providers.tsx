@@ -186,6 +186,7 @@ export default function ProvidersPage() {
   const [upstreamStatus, setUpstreamStatus] = useState<'loading' | 'success' | 'empty' | 'error' | 'disabled'>('disabled');
   const [autoAssociateOnAddEnabled, setAutoAssociateOnAddEnabled] = useState(false);
   const [updatingFilter, setUpdatingFilter] = useState<Record<number, boolean>>({});
+  const [updatingAssociationTrigger, setUpdatingAssociationTrigger] = useState<Record<number, boolean>>({});
   const [autoCleanOnDeleteEnabled, setAutoCleanOnDeleteEnabled] = useState(false);
 
   // 上游模型测试相关状态
@@ -508,6 +509,23 @@ export default function ProvidersPage() {
       console.error(err);
     } finally {
       setUpdatingFilter(prev => ({ ...prev, [provider.ID]: false }));
+    }
+  };
+
+  const handleToggleAssociationTrigger = async (provider: Provider, enabled: boolean) => {
+    setUpdatingAssociationTrigger((prev) => ({ ...prev, [provider.ID]: true }));
+    try {
+      await updateProvider(provider.ID, { blacklisted: !enabled });
+      setProviders((prev) =>
+        prev.map((item) => item.ID === provider.ID ? { ...item, blacklisted: !enabled } : item)
+      );
+      toast.success(`已${enabled ? "开启" : "关闭"}该提供商的自动关联/一键关联触发`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`更新关联触发设置失败: ${message}`);
+      console.error(err);
+    } finally {
+      setUpdatingAssociationTrigger((prev) => ({ ...prev, [provider.ID]: false }));
     }
   };
 
@@ -1217,7 +1235,7 @@ export default function ProvidersPage() {
         ) : (
           <div className="h-full flex flex-col">
             <div className="hidden sm:block w-full overflow-x-auto">
-              <Table className="min-w-[1100px]">
+              <Table className="min-w-[1200px]">
                 <TableHeader className="z-10 sticky top-0 bg-secondary/80 text-secondary-foreground">
                   <TableRow>
                     <TableHead>ID</TableHead>
@@ -1225,6 +1243,7 @@ export default function ProvidersPage() {
                     <TableHead>类型</TableHead>
                     <TableHead>全部模型</TableHead>
                     <TableHead>模型端点</TableHead>
+                    <TableHead>关联触发</TableHead>
                     <TableHead className="w-[360px]">操作</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1253,6 +1272,13 @@ export default function ProvidersPage() {
                           <Switch
                             checked={provider.ModelEndpoint ?? true}
                             onCheckedChange={() => handleToggleModelEndpoint(provider)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Switch
+                            checked={!(provider.blacklisted ?? false)}
+                            onCheckedChange={(checked) => handleToggleAssociationTrigger(provider, checked)}
+                            disabled={updatingAssociationTrigger[provider.ID]}
                           />
                         </TableCell>
                         <TableCell>
@@ -1355,6 +1381,14 @@ export default function ProvidersPage() {
                           <Switch
                             checked={provider.ModelEndpoint ?? true}
                             onCheckedChange={() => handleToggleModelEndpoint(provider)}
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[11px] text-muted-foreground">关联触发:</span>
+                          <Switch
+                            checked={!(provider.blacklisted ?? false)}
+                            onCheckedChange={(checked) => handleToggleAssociationTrigger(provider, checked)}
+                            disabled={updatingAssociationTrigger[provider.ID]}
                           />
                         </div>
                       </div>

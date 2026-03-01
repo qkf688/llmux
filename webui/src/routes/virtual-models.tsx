@@ -60,6 +60,8 @@ import {
   deleteVirtualModelMapping,
   batchCreateVirtualModelMapping,
   getModels,
+  getProviders,
+  updateProvider,
   type VirtualModel,
   type VirtualModelMapping,
   type Model,
@@ -99,6 +101,14 @@ export default function VirtualModelsPage() {
   const [mappingDialogOpen, setMappingDialogOpen] = useState(false);
   const [editingMapping, setEditingMapping] = useState<VirtualModelMapping | null>(null);
 
+  // 拉黑管理状态
+  const [blacklistDialogOpen, setBlacklistDialogOpen] = useState(false);
+  const [blacklistedProviders, setBlacklistedProviders] = useState<any[]>([]);
+  const [providers, setProviders] = useState<any[]>([]);
+  const [selectProviderDialogOpen, setSelectProviderDialogOpen] = useState(false);
+  const [selectedProviders, setSelectedProviders] = useState<number[]>([]);
+  const [providerSearchQuery, setProviderSearchQuery] = useState("");
+
   // 批量添加状态
   const [batchDialogOpen, setBatchDialogOpen] = useState(false);
   const [selectedModelIds, setSelectedModelIds] = useState<number[]>([]);
@@ -136,15 +146,24 @@ export default function VirtualModelsPage() {
     fetchData();
   }, []);
 
+  const refreshProvidersState = async () => {
+    const latestProviders = await getProviders();
+    setProviders(latestProviders);
+    setBlacklistedProviders(latestProviders.filter(p => p.blacklisted));
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [vModels, rModels] = await Promise.all([
+      const [vModels, rModels, pProviders] = await Promise.all([
         getVirtualModels(),
         getModels(),
+        getProviders(),
       ]);
       setVirtualModels(vModels);
       setRealModels(rModels);
+      setProviders(pProviders);
+      setBlacklistedProviders(pProviders.filter(p => p.blacklisted));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast.error(`获取数据失败: ${message}`);
@@ -382,6 +401,71 @@ export default function VirtualModelsPage() {
     return model ? model.Name : `ID: ${modelId}`;
   };
 
+  // 拉黑管理
+  const handleManageBlacklist = async (model: VirtualModel) => {
+    setCurrentVirtualModel(model);
+    try {
+      await refreshProvidersState();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`获取提供商数据失败: ${message}`);
+      const blacklisted = providers.filter(p => p.blacklisted);
+      setBlacklistedProviders(blacklisted);
+    }
+    setBlacklistDialogOpen(true);
+  };
+
+  const handleAddBlacklistedProvider = () => {
+    setSelectedProviders([]);
+    setProviderSearchQuery("");
+    setSelectProviderDialogOpen(true);
+  };
+
+  const handleToggleProviderSelection = (providerId: number) => {
+    setSelectedProviders(prev =>
+      prev.includes(providerId)
+        ? prev.filter(id => id !== providerId)
+        : [...prev, providerId]
+    );
+  };
+
+  const handleConfirmAddBlacklistedProviders = async () => {
+    if (selectedProviders.length === 0) {
+      toast.error("请至少选择一个提供商");
+      return;
+    }
+
+    try {
+      for (const providerId of selectedProviders) {
+        await updateProvider(providerId, { blacklisted: true });
+      }
+      toast.success(`成功拉黑 ${selectedProviders.length} 个提供商`);
+      setSelectProviderDialogOpen(false);
+      await refreshProvidersState();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`操作失败: ${message}`);
+    }
+  };
+
+  const handleRemoveBlacklistedProvider = async (providerId: number) => {
+    try {
+      await updateProvider(providerId, { blacklisted: false });
+      toast.success("提供商已解除拉黑");
+      await refreshProvidersState();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`操作失败: ${message}`);
+    }
+  };
+
+  const getFilteredProviders = () => {
+    if (!providerSearchQuery) return providers;
+    return providers.filter(provider =>
+      provider.Name.toLowerCase().includes(providerSearchQuery.toLowerCase())
+    );
+  };
+
   if (loading) {
     return <Loading />;
   }
@@ -433,6 +517,9 @@ export default function VirtualModelsPage() {
                     <div className="flex gap-2">
                       <Button variant="outline" size="sm" onClick={() => handleManageMappings(model)}>
                         管理映射
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handleManageBlacklist(model)}>
+                        拉黑管理
                       </Button>
                       <Button variant="outline" size="sm" onClick={() => handleEdit(model)}>
                         编辑
@@ -593,61 +680,63 @@ export default function VirtualModelsPage() {
 
       {/* 映射管理对话框 */}
       <Dialog open={mappingsDialogOpen} onOpenChange={setMappingsDialogOpen}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-3xl w-[88vw] h-[82vh] max-h-[92vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>管理映射 - {currentVirtualModel?.Name}</DialogTitle>
             <DialogDescription>
               配置虚拟模型关联的真实模型
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="flex flex-col gap-2 flex-1 min-h-0">
             <div className="flex gap-2">
-              <Button onClick={handleAddMapping}>添加映射</Button>
-              <Button variant="outline" onClick={handleBatchAdd}>批量添加</Button>
+              <Button size="sm" className="h-8 px-3" onClick={handleAddMapping}>添加映射</Button>
+              <Button size="sm" className="h-8 px-3" variant="outline" onClick={handleBatchAdd}>批量添加</Button>
             </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>真实模型</TableHead>
-                  <TableHead>优先级</TableHead>
-                  <TableHead>权重</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead>操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {mappings.length === 0 ? (
+            <div className="border rounded-md flex-1 min-h-0 overflow-y-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground">
-                      暂无映射
-                    </TableCell>
+                    <TableHead className="py-2 text-xs">真实模型</TableHead>
+                    <TableHead className="py-2 text-xs">优先级</TableHead>
+                    <TableHead className="py-2 text-xs">权重</TableHead>
+                    <TableHead className="py-2 text-xs">状态</TableHead>
+                    <TableHead className="py-2 text-xs">操作</TableHead>
                   </TableRow>
-                ) : (
-                  mappings.map((mapping) => (
-                    <TableRow key={mapping.ID}>
-                      <TableCell>{getRealModelName(mapping.RealModelID)}</TableCell>
-                      <TableCell>{mapping.Priority}</TableCell>
-                      <TableCell>{mapping.Weight}</TableCell>
-                      <TableCell>
-                        <span className={`px-2 py-1 rounded text-xs ${mapping.Enabled ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}>
-                          {mapping.Enabled ? "启用" : "禁用"}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button variant="outline" size="sm" onClick={() => handleEditMapping(mapping)}>
-                            编辑
-                          </Button>
-                          <Button variant="destructive" size="sm" onClick={() => handleDeleteMapping(mapping.ID)}>
-                            删除
-                          </Button>
-                        </div>
+                </TableHeader>
+                <TableBody>
+                  {mappings.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-3 text-center text-muted-foreground text-sm">
+                        暂无映射
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    mappings.map((mapping) => (
+                      <TableRow key={mapping.ID}>
+                        <TableCell className="py-2 text-sm">{getRealModelName(mapping.RealModelID)}</TableCell>
+                        <TableCell className="py-2 text-sm">{mapping.Priority}</TableCell>
+                        <TableCell className="py-2 text-sm">{mapping.Weight}</TableCell>
+                        <TableCell className="py-2">
+                          <span className={`px-2 py-0.5 rounded text-xs ${mapping.Enabled ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}>
+                            {mapping.Enabled ? "启用" : "禁用"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="py-2">
+                          <div className="flex gap-1.5">
+                            <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => handleEditMapping(mapping)}>
+                              编辑
+                            </Button>
+                            <Button variant="destructive" size="sm" className="h-7 px-2" onClick={() => handleDeleteMapping(mapping.ID)}>
+                              删除
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -844,6 +933,128 @@ export default function VirtualModelsPage() {
             </Button>
             <Button onClick={handleBatchSubmit}>
               添加 ({selectedModelIds.length})
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 拉黑管理对话框 */}
+      <Dialog open={blacklistDialogOpen} onOpenChange={setBlacklistDialogOpen}>
+        <DialogContent className="max-w-3xl h-[560px] max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>拉黑管理</DialogTitle>
+            <DialogDescription>
+              管理已拉黑的提供商，拉黑后虚拟模型不会请求该提供商的模型
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 flex-1 min-h-0">
+            <div className="flex justify-between items-center">
+              <h4 className="font-medium">已拉黑提供商</h4>
+              <Button onClick={handleAddBlacklistedProvider}>添加</Button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto border rounded-md">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>名称</TableHead>
+                    <TableHead>类型</TableHead>
+                    <TableHead>操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {blacklistedProviders.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center text-muted-foreground">
+                        暂无拉黑提供商
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    blacklistedProviders.map((provider) => (
+                      <TableRow key={provider.ID}>
+                        <TableCell>{provider.Name}</TableCell>
+                        <TableCell>{provider.Type}</TableCell>
+                        <TableCell>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleRemoveBlacklistedProvider(provider.ID)}
+                          >
+                            解除拉黑
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 选择提供商对话框 */}
+      <Dialog open={selectProviderDialogOpen} onOpenChange={setSelectProviderDialogOpen}>
+        <DialogContent className="max-w-2xl w-[90vw] h-[78vh] max-h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>选择提供商</DialogTitle>
+            <DialogDescription>
+              选择要拉黑的提供商
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 flex-1 min-h-0">
+            {/* 搜索框 */}
+            <div>
+              <Input
+                className="h-9"
+                placeholder="搜索提供商名称..."
+                value={providerSearchQuery}
+                onChange={(e) => setProviderSearchQuery(e.target.value)}
+              />
+            </div>
+
+            {/* 提供商列表 */}
+            <div className="border rounded-md flex-1 min-h-0 overflow-y-auto">
+              <div className="divide-y">
+                {getFilteredProviders().map((provider) => {
+                  const isSelected = selectedProviders.includes(provider.ID);
+                  const isBlacklisted = provider.blacklisted;
+                  return (
+                    <div
+                      key={provider.ID}
+                      className={`flex items-center gap-2 p-2 hover:bg-gray-50 ${
+                        isBlacklisted ? "bg-gray-100" : ""
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleToggleProviderSelection(provider.ID)}
+                        disabled={isBlacklisted}
+                        className="w-3.5 h-3.5"
+                      />
+                      <div className="flex-1">
+                        <div className={`text-sm font-medium ${isBlacklisted ? "text-gray-500 line-through" : ""}`}>
+                          {provider.Name}
+                        </div>
+                        <div className="text-xs text-muted-foreground">{provider.Type}</div>
+                      </div>
+                      {isBlacklisted && (
+                        <span className="text-xs text-gray-500 bg-gray-200 px-1.5 py-0.5 rounded">
+                          已拉黑
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setSelectProviderDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleConfirmAddBlacklistedProviders}>
+              添加 ({selectedProviders.length})
             </Button>
           </DialogFooter>
         </DialogContent>

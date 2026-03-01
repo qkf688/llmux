@@ -178,7 +178,10 @@ export default function Home() {
               </div>
               <div>
                 <div className="text-2xl font-bold">
-                  {dbStats.table_stats.reduce((sum, t) => sum + t.count, 0).toLocaleString()}
+                  {dbStats.table_stats && Array.isArray(dbStats.table_stats)
+                    ? dbStats.table_stats.reduce((sum, t) => sum + t.count, 0).toLocaleString()
+                    : "0"
+                  }
                 </div>
                 <p className="text-xs text-muted-foreground">总记录数</p>
               </div>

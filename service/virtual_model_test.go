@@ -2,22 +2,56 @@ package service
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/atopos31/llmio/models"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
+func resetVirtualModelServiceSingleton() {
+	virtualModelServiceInstance = nil
+	virtualModelServiceOnce = sync.Once{}
+}
+
+func configureSQLiteForSingleConn(t *testing.T, db *gorm.DB) *sql.DB {
+	t.Helper()
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("failed to get sql.DB: %v", err)
+	}
+	// sqlite 内存库在多连接下会出现表不可见问题，测试强制单连接。
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+	return sqlDB
+}
+
 // setupTestDB 创建测试数据库
 func setupTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	resetVirtualModelServiceSingleton()
+
+	dsn := fmt.Sprintf("file:virtual_model_test_%d?mode=memory&cache=shared", time.Now().UnixNano())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("failed to connect database: %v", err)
 	}
+	sqlDB := configureSQLiteForSingleConn(t, db)
+	t.Cleanup(func() {
+		_ = sqlDB.Close()
+	})
 
 	// 自动迁移表结构
-	err = db.AutoMigrate(&models.VirtualModel{}, &models.VirtualModelMapping{}, &models.Model{})
+	err = db.AutoMigrate(
+		&models.VirtualModel{},
+		&models.VirtualModelMapping{},
+		&models.Model{},
+		&models.Provider{},
+		&models.ModelWithProvider{},
+	)
 	if err != nil {
 		t.Fatalf("failed to migrate database: %v", err)
 	}

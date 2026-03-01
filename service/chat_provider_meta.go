@@ -81,27 +81,7 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 		}
 
 		// 获取第一个真实模型的提供商
-		modelWithProviderChain := gorm.G[models.ModelWithProvider](models.DB).
-			Where("model_id = ? AND status = ?", firstModel.ID, true)
-
-		// 检查是否启用严格能力匹配
-		strictCapabilityMatch := getStrictCapabilityMatch(ctx)
-
-		if strictCapabilityMatch {
-			if before.toolCall {
-				modelWithProviderChain = modelWithProviderChain.Where("tool_call = ?", true)
-			}
-
-			if before.structuredOutput {
-				modelWithProviderChain = modelWithProviderChain.Where("structured_output = ?", true)
-			}
-
-			if before.image {
-				modelWithProviderChain = modelWithProviderChain.Where("image = ?", true)
-			}
-		}
-
-		modelWithProviders, err := modelWithProviderChain.Find(ctx)
+		modelWithProviders, err := queryEnabledModelProviders(ctx, firstModel.ID, before)
 		if err != nil {
 			return nil, err
 		}
@@ -112,24 +92,12 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 
 		modelWithProviderMap := lo.KeyBy(modelWithProviders, func(mp models.ModelWithProvider) uint { return mp.ID })
 
-		providers, err := gorm.G[models.Provider](models.DB).
-			Where("id IN ?", lo.Map(modelWithProviders, func(mp models.ModelWithProvider, _ int) uint { return mp.ProviderID })).
-			Find(ctx)
+		providerMap, err := buildProviderMapByModelProviders(ctx, modelWithProviders)
 		if err != nil {
 			return nil, err
 		}
 
-		providerMap := lo.KeyBy(providers, func(p models.Provider) uint { return p.ID })
-
-		weightItems := make(map[uint]int)
-		priorityItems := make(map[uint]int)
-		for _, mp := range modelWithProviders {
-			if _, ok := providerMap[mp.ProviderID]; !ok {
-				continue
-			}
-			weightItems[mp.ID] = mp.Weight
-			priorityItems[mp.ID] = mp.Priority
-		}
+		weightItems, priorityItems := buildSelectionItemsByModelProviders(modelWithProviders, providerMap)
 
 		if firstModel.IOLog == nil {
 			firstModel.IOLog = new(bool)
@@ -182,26 +150,7 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 		return nil, err
 	}
 
-	modelWithProviderChain := gorm.G[models.ModelWithProvider](models.DB).Where("model_id = ?", model.ID).Where("status = ?", true)
-
-	// 检查是否启用严格能力匹配
-	strictCapabilityMatch := getStrictCapabilityMatch(ctx)
-
-	if strictCapabilityMatch {
-		if before.toolCall {
-			modelWithProviderChain = modelWithProviderChain.Where("tool_call = ?", true)
-		}
-
-		if before.structuredOutput {
-			modelWithProviderChain = modelWithProviderChain.Where("structured_output = ?", true)
-		}
-
-		if before.image {
-			modelWithProviderChain = modelWithProviderChain.Where("image = ?", true)
-		}
-	}
-
-	modelWithProviders, err := modelWithProviderChain.Find(ctx)
+	modelWithProviders, err := queryEnabledModelProviders(ctx, model.ID, before)
 	if err != nil {
 		return nil, err
 	}
@@ -214,24 +163,12 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 
 	// 不再按 style 过滤供应商，因为现在支持格式转换
 	// 客户端可以使用任意格式请求任意类型的供应商
-	providers, err := gorm.G[models.Provider](models.DB).
-		Where("id IN ?", lo.Map(modelWithProviders, func(mp models.ModelWithProvider, _ int) uint { return mp.ProviderID })).
-		Find(ctx)
+	providerMap, err := buildProviderMapByModelProviders(ctx, modelWithProviders)
 	if err != nil {
 		return nil, err
 	}
 
-	providerMap := lo.KeyBy(providers, func(p models.Provider) uint { return p.ID })
-
-	weightItems := make(map[uint]int)
-	priorityItems := make(map[uint]int)
-	for _, mp := range modelWithProviders {
-		if _, ok := providerMap[mp.ProviderID]; !ok {
-			continue
-		}
-		weightItems[mp.ID] = mp.Weight
-		priorityItems[mp.ID] = mp.Priority
-	}
+	weightItems, priorityItems := buildSelectionItemsByModelProviders(modelWithProviders, providerMap)
 
 	// 按优先级排序供应商（用于日志输出）
 	type providerPriority struct {

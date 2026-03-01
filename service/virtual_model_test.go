@@ -120,12 +120,12 @@ func boolPtr(b bool) *bool {
 func TestVirtualModelService_RoundRobin(t *testing.T) {
 	db := setupTestDB(t)
 	realModels, virtualModels, _ := createTestModels(t, db)
-	
+
 	service := NewVirtualModelService(db)
 	ctx := context.Background()
 
 	virtualModel := &virtualModels[0] // smart-chat 使用 round_robin 策略
-	
+
 	// 测试多次调用应该按顺序返回不同模型
 	expectedOrder := []uint{
 		realModels[0].ID, // 第一次调用
@@ -134,24 +134,24 @@ func TestVirtualModelService_RoundRobin(t *testing.T) {
 		realModels[0].ID, // 第四次调用（回到开始）
 		realModels[1].ID, // 第五次调用
 	}
-	
+
 	selectedModels := make([]uint, 0, len(expectedOrder))
-	
+
 	for i := 0; i < len(expectedOrder); i++ {
 		selectedModel, err := service.SelectRealModel(ctx, virtualModel)
 		if err != nil {
 			t.Fatalf("SelectRealModel failed on iteration %d: %v", i, err)
 		}
-		
+
 		selectedModels = append(selectedModels, selectedModel.ID)
-		
+
 		// 验证选择的模型是否符合预期
 		if selectedModel.ID != expectedOrder[i] {
-			t.Errorf("Round robin selection failed at iteration %d: expected model ID %d, got %d", 
+			t.Errorf("Round robin selection failed at iteration %d: expected model ID %d, got %d",
 				i, expectedOrder[i], selectedModel.ID)
 		}
 	}
-	
+
 	// 验证完整的选择序列
 	t.Logf("Round robin selection sequence: %v", selectedModels)
 }
@@ -160,12 +160,12 @@ func TestVirtualModelService_RoundRobin(t *testing.T) {
 func TestVirtualModelService_Priority(t *testing.T) {
 	db := setupTestDB(t)
 	realModels, virtualModels, _ := createTestModels(t, db)
-	
+
 	service := NewVirtualModelService(db)
 	ctx := context.Background()
 
 	virtualModel := &virtualModels[1] // backup-chat 使用 priority 策略
-	
+
 	// 测试多次调用应该总是返回最高优先级的模型
 	// claude-3 (priority 15) 应该总是被选中
 	for i := 0; i < 5; i++ {
@@ -173,9 +173,9 @@ func TestVirtualModelService_Priority(t *testing.T) {
 		if err != nil {
 			t.Fatalf("SelectRealModel failed on iteration %d: %v", i, err)
 		}
-		
+
 		if selectedModel.ID != realModels[1].ID {
-			t.Errorf("Priority selection failed at iteration %d: expected model ID %d (claude-3), got %d (%s)", 
+			t.Errorf("Priority selection failed at iteration %d: expected model ID %d (claude-3), got %d (%s)",
 				i, realModels[1].ID, selectedModel.ID, selectedModel.Name)
 		}
 	}
@@ -185,7 +185,7 @@ func TestVirtualModelService_Priority(t *testing.T) {
 func TestVirtualModelService_Random(t *testing.T) {
 	db := setupTestDB(t)
 	realModels, _, _ := createTestDBForRandom(t, db)
-	
+
 	service := NewVirtualModelService(db)
 	ctx := context.Background()
 
@@ -224,7 +224,7 @@ func TestVirtualModelService_Random(t *testing.T) {
 
 	// 测试多次调用应该返回不同的模型（随机性）
 	selectedCounts := make(map[uint]int)
-	
+
 	for i := 0; i < 20; i++ {
 		selectedModel, err := service.SelectRealModel(ctx, &randomVM)
 		if err != nil {
@@ -232,12 +232,12 @@ func TestVirtualModelService_Random(t *testing.T) {
 		}
 		selectedCounts[selectedModel.ID]++
 	}
-	
+
 	// 验证所有模型都被选中过（随机性测试）
 	if len(selectedCounts) < 2 {
 		t.Errorf("Random selection should have selected at least 2 different models, got %d", len(selectedCounts))
 	}
-	
+
 	t.Logf("Random selection distribution: %v", selectedCounts)
 }
 
@@ -262,7 +262,7 @@ func createTestDBForRandom(t *testing.T, db *gorm.DB) ([]models.Model, []models.
 func TestVirtualModelService_DisabledMappings(t *testing.T) {
 	db := setupTestDB(t)
 	realModels, _, _ := createTestModels(t, db)
-	
+
 	service := NewVirtualModelService(db)
 	ctx := context.Background()
 
@@ -317,7 +317,7 @@ func TestVirtualModelService_DisabledMappings(t *testing.T) {
 		if err != nil {
 			t.Fatalf("SelectRealModel failed on iteration %d: %v", i, err)
 		}
-		
+
 		if !validModelIDs[selectedModel.ID] {
 			t.Errorf("Selected disabled model ID %d on iteration %d", selectedModel.ID, i)
 		}
@@ -327,7 +327,7 @@ func TestVirtualModelService_DisabledMappings(t *testing.T) {
 // TestVirtualModelService_EmptyMappings 测试空映射处理
 func TestVirtualModelService_EmptyMappings(t *testing.T) {
 	db := setupTestDB(t)
-	
+
 	service := NewVirtualModelService(db)
 	ctx := context.Background()
 
@@ -350,7 +350,7 @@ func TestVirtualModelService_EmptyMappings(t *testing.T) {
 // TestVirtualModelService_NonExistentModel 测试不存在的虚拟模型
 func TestVirtualModelService_NonExistentModel(t *testing.T) {
 	db := setupTestDB(t)
-	
+
 	service := NewVirtualModelService(db)
 	ctx := context.Background()
 

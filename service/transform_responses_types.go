@@ -87,12 +87,12 @@ type ResponsesItem struct {
 	Annotations []ResponsesAnnotation `json:"annotations,omitempty"`
 
 	// function_call
-	Name      *string                `json:"name,omitempty"`
-	Arguments *string                `json:"arguments,omitempty"`
-	CallID    *string                `json:"call_id,omitempty"`
-	Status    *string                `json:"status,omitempty"`
-	Output    *string                `json:"output,omitempty"`
-	Options   *ResponsesTextOptions  `json:"options,omitempty"`
+	Name      *string               `json:"name,omitempty"`
+	Arguments *string               `json:"arguments,omitempty"`
+	CallID    *string               `json:"call_id,omitempty"`
+	Status    *string               `json:"status,omitempty"`
+	Output    *string               `json:"output,omitempty"`
+	Options   *ResponsesTextOptions `json:"options,omitempty"`
 
 	// Cherry Studio / octopus compatibility: role-based format
 	Role    string      `json:"role,omitempty"`
@@ -169,8 +169,8 @@ type ResponsesToolChoice struct {
 
 // ResponsesToolChoiceObject 对象格式的工具选择
 type ResponsesToolChoiceObject struct {
-	Type     string                        `json:"type"` // "function"
-	Function *ResponsesToolChoiceFunction  `json:"function,omitempty"`
+	Type     string                       `json:"type"` // "function"
+	Function *ResponsesToolChoiceFunction `json:"function,omitempty"`
 }
 
 // ResponsesToolChoiceFunction 指定具体函数
@@ -217,23 +217,23 @@ type ResponsesReasoning struct {
 
 // ResponsesResponse 表示 OpenAI Responses API 的响应格式
 type ResponsesResponse struct {
-	Object    string           `json:"object"` // "response"
-	ID        string           `json:"id"`
-	Model     string           `json:"model"`
-	CreatedAt int64            `json:"created_at"`
-	Output    []ResponsesItem  `json:"output"`
-	Status    *string          `json:"status,omitempty"` // "completed", "incomplete", "failed"
-	Usage     *ResponsesUsage  `json:"usage,omitempty"`
+	Object    string                 `json:"object"` // "response"
+	ID        string                 `json:"id"`
+	Model     string                 `json:"model"`
+	CreatedAt int64                  `json:"created_at"`
+	Output    []ResponsesItem        `json:"output"`
+	Status    *string                `json:"status,omitempty"` // "completed", "incomplete", "failed"
+	Usage     *ResponsesUsage        `json:"usage,omitempty"`
 	Metadata  map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // ResponsesUsage token 使用统计
 type ResponsesUsage struct {
-	InputTokens        int64                       `json:"input_tokens"`
-	InputTokenDetails  *ResponsesInputTokenDetails `json:"input_token_details,omitempty"`
-	OutputTokens       int64                       `json:"output_tokens"`
+	InputTokens        int64                        `json:"input_tokens"`
+	InputTokenDetails  *ResponsesInputTokenDetails  `json:"input_token_details,omitempty"`
+	OutputTokens       int64                        `json:"output_tokens"`
 	OutputTokenDetails *ResponsesOutputTokenDetails `json:"output_token_details,omitempty"`
-	TotalTokens        int64                       `json:"total_tokens"`
+	TotalTokens        int64                        `json:"total_tokens"`
 }
 
 // ResponsesInputTokenDetails 输入 token 详情

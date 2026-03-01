@@ -37,4 +37,3 @@ func TestTemplateIndexMatch_UnionAndCaseSensitive(t *testing.T) {
 		t.Fatalf("expected case-sensitive no match, got %v", got)
 	}
 }
-

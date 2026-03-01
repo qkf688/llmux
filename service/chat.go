@@ -200,13 +200,13 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				if err != nil {
 					slog.Error("read body error", "error", err)
 				}
-				
+
 				// 准备错误日志更新数据
 				errorUpdate := models.ChatLog{
 					Status: "error",
 					Error:  fmt.Sprintf("status: %d, body: %s", res.StatusCode, string(byteBody)),
 				}
-				
+
 				// 如果启用了日志记录，也记录请求和响应信息
 				if logRawOptions.RequestHeaders || logRawOptions.RequestBody || logRawOptions.ResponseHeaders || logRawOptions.RawResponseBody {
 					if logRawOptions.ResponseHeaders {
@@ -228,7 +228,7 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 						errorUpdate.RawResponseBody = string(byteBody)
 					}
 				}
-				
+
 				// 更新日志状态为错误
 				if _, updateErr := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, errorUpdate); updateErr != nil {
 					slog.Error("failed to update log status", "error", updateErr)
@@ -1044,11 +1044,11 @@ type ProvidersWithMeta struct {
 	IOLog                bool
 
 	// 虚拟模型相关字段
-	IsVirtualModel     bool                  // 是否是虚拟模型
-	VirtualModelID     uint                  // 虚拟模型ID
-	VirtualModelName   string                // 虚拟模型名称
-	VirtualStrategy    string                // 虚拟模型策略
-	OrderedRealModels  []OrderedRealModel    // 有序的真实模型列表
+	IsVirtualModel    bool               // 是否是虚拟模型
+	VirtualModelID    uint               // 虚拟模型ID
+	VirtualModelName  string             // 虚拟模型名称
+	VirtualStrategy   string             // 虚拟模型策略
+	OrderedRealModels []OrderedRealModel // 有序的真实模型列表
 }
 
 // OrderedRealModel 有序的真实模型（用于虚拟模型故障转移）

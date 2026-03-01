@@ -13,10 +13,10 @@ import (
 // TemplateIndex 提供按名称匹配到 ModelID 列表的索引。
 // 规则：任一 providerModel 命中 Model.Name / 既有关联 ProviderModel / 手动模板项 Name，即视为匹配。
 type TemplateIndex struct {
-	byName          map[string]map[uint]struct{}
-	fuzzyMatch      bool
-	separators      []string
-	fuzzySuffixes   []string
+	byName        map[string]map[uint]struct{}
+	fuzzyMatch    bool
+	separators    []string
+	fuzzySuffixes []string
 }
 
 func BuildTemplateIndexFromData(
@@ -168,4 +168,3 @@ func loadTemplateFuzzySettings(ctx context.Context) (bool, []string, []string) {
 
 	return fuzzyEnabled, separators, suffixes
 }
-

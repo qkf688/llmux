@@ -274,7 +274,7 @@ func TransformUnifiedToAnthropic(unified *UnifiedRequest) ([]byte, error) {
 							}
 							contentArray = append(contentArray, imgMap)
 						}
-					// Anthropic 不支持 input_audio，跳过
+						// Anthropic 不支持 input_audio，跳过
 					}
 				}
 				if len(contentArray) > 0 {

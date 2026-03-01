@@ -15,7 +15,7 @@ import (
 // UnifiedMessageContent 消息内容 (支持纯文本或多模态)
 // 参考 Octopus MessageContent 实现
 type UnifiedMessageContent struct {
-	Content         *string                     `json:"content,omitempty"`
+	Content         *string                            `json:"content,omitempty"`
 	MultipleContent []models.UnifiedMessageContentPart `json:"multiple_content,omitempty"`
 }
 

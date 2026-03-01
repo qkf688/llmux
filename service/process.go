@@ -16,10 +16,10 @@ import (
 )
 
 const (
-	InitScannerBufferSize    = 1024 * 8         // 8KB
-	MaxScannerBufferSize     = 1024 * 1024 * 15 // 15MB
-	MaxErrorCheckChunks      = 5                // 只检查前5个chunk的错误，优化性能
-	DefaultChunkArrayCapacity = 128             // 预分配chunk数组容量，减少扩容
+	InitScannerBufferSize     = 1024 * 8         // 8KB
+	MaxScannerBufferSize      = 1024 * 1024 * 15 // 15MB
+	MaxErrorCheckChunks       = 5                // 只检查前5个chunk的错误，优化性能
+	DefaultChunkArrayCapacity = 128              // 预分配chunk数组容量，减少扩容
 )
 
 type Processer func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error)

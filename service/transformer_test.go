@@ -1605,8 +1605,8 @@ func TestThinking_AnthropicToUnified(t *testing.T) {
 
 func TestThinking_BudgetMapping(t *testing.T) {
 	tests := []struct {
-		name          string
-		budgetTokens  int64
+		name           string
+		budgetTokens   int64
 		expectedEffort string
 	}{
 		{"high effort", 50000, "high"},

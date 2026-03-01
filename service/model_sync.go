@@ -39,15 +39,15 @@ func (s *ModelSyncService) SyncProviderModels(ctx context.Context, providerID ui
 	if provider.ModelEndpoint != nil && !*provider.ModelEndpoint {
 		// 不支持模型端点，创建一条 error 日志并返回
 		syncLog := &models.ModelSyncLog{
-			ProviderID:   providerID,
-			ProviderName: provider.Name,
-			Status:       "error",
-			Error:        "model_endpoint disabled",
-			AddedCount:   0,
-			RemovedCount: 0,
-			AddedModels:  []string{},
+			ProviderID:    providerID,
+			ProviderName:  provider.Name,
+			Status:        "error",
+			Error:         "model_endpoint disabled",
+			AddedCount:    0,
+			RemovedCount:  0,
+			AddedModels:   []string{},
 			RemovedModels: []string{},
-			SyncedAt:     time.Now(),
+			SyncedAt:      time.Now(),
 		}
 		if createErr := gorm.G[models.ModelSyncLog](s.db).Create(ctx, syncLog); createErr != nil {
 			slog.Error("failed to create sync log", "error", createErr)
@@ -69,15 +69,15 @@ func (s *ModelSyncService) SyncProviderModels(ctx context.Context, providerID ui
 		slog.Error("failed to create provider client", "provider_id", providerID, "error", err)
 		// 创建 error 日志
 		syncLog := &models.ModelSyncLog{
-			ProviderID:   providerID,
-			ProviderName: provider.Name,
-			Status:       "error",
-			Error:        err.Error(),
-			AddedCount:   0,
-			RemovedCount: 0,
-			AddedModels:  []string{},
+			ProviderID:    providerID,
+			ProviderName:  provider.Name,
+			Status:        "error",
+			Error:         err.Error(),
+			AddedCount:    0,
+			RemovedCount:  0,
+			AddedModels:   []string{},
 			RemovedModels: []string{},
-			SyncedAt:     time.Now(),
+			SyncedAt:      time.Now(),
 		}
 		if createErr := gorm.G[models.ModelSyncLog](s.db).Create(ctx, syncLog); createErr != nil {
 			slog.Error("failed to create sync log", "error", createErr)
@@ -90,15 +90,15 @@ func (s *ModelSyncService) SyncProviderModels(ctx context.Context, providerID ui
 		slog.Error("failed to fetch upstream models", "provider_id", providerID, "error", err)
 		// 创建 error 日志
 		syncLog := &models.ModelSyncLog{
-			ProviderID:   providerID,
-			ProviderName: provider.Name,
-			Status:       "error",
-			Error:        err.Error(),
-			AddedCount:   0,
-			RemovedCount: 0,
-			AddedModels:  []string{},
+			ProviderID:    providerID,
+			ProviderName:  provider.Name,
+			Status:        "error",
+			Error:         err.Error(),
+			AddedCount:    0,
+			RemovedCount:  0,
+			AddedModels:   []string{},
 			RemovedModels: []string{},
-			SyncedAt:     time.Now(),
+			SyncedAt:      time.Now(),
 		}
 		if createErr := gorm.G[models.ModelSyncLog](s.db).Create(ctx, syncLog); createErr != nil {
 			slog.Error("failed to create sync log", "error", createErr)
@@ -547,7 +547,7 @@ func (s *ModelSyncService) autoAssociateModels(ctx context.Context) {
 					slog.Warn("failed to get model for auto-associate check", "model_id", modelID, "error", err)
 					continue
 				}
-				
+
 				// 如果模型设置了不允许自动关联，则跳过
 				if model.AutoAssociate != nil && !*model.AutoAssociate {
 					slog.Debug("skipping auto-associate for model", "model_id", modelID, "model_name", model.Name)

@@ -2,6 +2,8 @@ package settings
 
 import (
 	"context"
+	"errors"
+	"io"
 	"log/slog"
 	"strconv"
 	"time"
@@ -11,6 +13,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+type modelScopeRequest struct {
+	ModelID *uint `json:"model_id"`
+}
 
 // GetStrictCapabilityMatch 获取严格能力匹配设置
 func GetStrictCapabilityMatch(ctx context.Context) bool {
@@ -107,54 +113,101 @@ func batchImportExistingAssociations(ctx context.Context) {
 // ResetModelWeights 重置所有模型权重
 func ResetModelWeights(c *gin.Context) {
 	ctx := c.Request.Context()
-	
+
+	var req modelScopeRequest
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		common.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
+
+	const defaultWeight = 5
+	db := models.DB.WithContext(ctx).Model(&models.ModelWithProvider{})
+	if req.ModelID != nil {
+		db = db.Where("model_id = ?", *req.ModelID)
+	} else {
+		db = db.Session(&gorm.Session{AllowGlobalUpdate: true})
+	}
+
 	// 重置所有模型权重为默认值
-	if err := models.DB.WithContext(ctx).Model(&models.ModelWithProvider{}).Update("weight", 5).Error; err != nil {
-		slog.Error("重置模型权重失败", "error", err)
-		common.InternalServerError(c, "重置模型权重失败: "+err.Error())
+	result := db.Update("weight", defaultWeight)
+	if result.Error != nil {
+		slog.Error("重置模型权重失败", "error", result.Error)
+		common.InternalServerError(c, "重置模型权重失败: "+result.Error.Error())
 		return
 	}
 
 	common.Success(c, map[string]interface{}{
-		"message": "模型权重已重置为默认值",
-		"timestamp": time.Now(),
+		"message":        "模型权重已重置为默认值",
+		"timestamp":      time.Now(),
+		"updated":        result.RowsAffected,
+		"default_weight": defaultWeight,
 	})
 }
 
 // ResetModelPriorities 重置所有模型优先级
 func ResetModelPriorities(c *gin.Context) {
 	ctx := c.Request.Context()
-	
+
+	var req modelScopeRequest
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		common.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
+
 	// 获取默认优先级值
 	defaultPriority := GetAutoPriorityDecayDefault(ctx)
-	
+
+	db := models.DB.WithContext(ctx).Model(&models.ModelWithProvider{})
+	if req.ModelID != nil {
+		db = db.Where("model_id = ?", *req.ModelID)
+	} else {
+		db = db.Session(&gorm.Session{AllowGlobalUpdate: true})
+	}
+
 	// 重置所有模型优先级为默认值
-	if err := models.DB.WithContext(ctx).Model(&models.ModelWithProvider{}).Update("priority", defaultPriority).Error; err != nil {
-		slog.Error("重置模型优先级失败", "error", err)
-		common.InternalServerError(c, "重置模型优先级失败: "+err.Error())
+	result := db.Update("priority", defaultPriority)
+	if result.Error != nil {
+		slog.Error("重置模型优先级失败", "error", result.Error)
+		common.InternalServerError(c, "重置模型优先级失败: "+result.Error.Error())
 		return
 	}
 
 	common.Success(c, map[string]interface{}{
-		"message": "模型优先级已重置为默认值",
-		"timestamp": time.Now(),
+		"message":          "模型优先级已重置为默认值",
+		"timestamp":        time.Now(),
+		"updated":          result.RowsAffected,
+		"default_priority": defaultPriority,
 	})
 }
 
 // EnableAllAssociations 启用所有模型关联
 func EnableAllAssociations(c *gin.Context) {
 	ctx := c.Request.Context()
-	
+
+	var req modelScopeRequest
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		common.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
+
+	db := models.DB.WithContext(ctx).Model(&models.ModelWithProvider{})
+	if req.ModelID != nil {
+		db = db.Where("model_id = ?", *req.ModelID)
+	} else {
+		db = db.Session(&gorm.Session{AllowGlobalUpdate: true})
+	}
+
 	// 启用所有模型关联
-	trueVal := true
-	if err := models.DB.WithContext(ctx).Model(&models.ModelWithProvider{}).Update("status", &trueVal).Error; err != nil {
-		slog.Error("启用所有模型关联失败", "error", err)
-		common.InternalServerError(c, "启用所有模型关联失败: "+err.Error())
+	result := db.Update("status", true)
+	if result.Error != nil {
+		slog.Error("启用所有模型关联失败", "error", result.Error)
+		common.InternalServerError(c, "启用所有模型关联失败: "+result.Error.Error())
 		return
 	}
 
 	common.Success(c, map[string]interface{}{
-		"message": "所有模型关联已启用",
+		"message":   "所有模型关联已启用",
 		"timestamp": time.Now(),
+		"updated":   result.RowsAffected,
 	})
 }

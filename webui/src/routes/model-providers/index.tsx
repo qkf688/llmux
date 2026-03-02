@@ -813,7 +813,11 @@ export default function ModelProvidersPage() {
     try {
       setResettingWeights(true);
       const result = await resetModelWeights(isGlobalScope ? undefined : (selectedModelId ?? undefined));
-      toast.success(`已重置 ${result.updated} 个模型关联的权重到 ${result.default_weight}`);
+      toast.success(
+        result.updated > 0
+          ? `已重置 ${result.updated} 个模型关联的权重到 ${result.default_weight}`
+          : `所有模型关联已处于默认权重 ${result.default_weight}`
+      );
       if (selectedModelId) {
         fetchModelProviders(selectedModelId);
       }
@@ -830,7 +834,11 @@ export default function ModelProvidersPage() {
     try {
       setResettingPriorities(true);
       const result = await resetModelPriorities(isGlobalScope ? undefined : (selectedModelId ?? undefined));
-      toast.success(`已重置 ${result.updated} 个模型关联的优先级到 ${result.default_priority}`);
+      toast.success(
+        result.updated > 0
+          ? `已重置 ${result.updated} 个模型关联的优先级到 ${result.default_priority}`
+          : `所有模型关联已处于默认优先级 ${result.default_priority}`
+      );
       if (selectedModelId) {
         fetchModelProviders(selectedModelId);
       }
@@ -847,7 +855,7 @@ export default function ModelProvidersPage() {
     try {
       setEnablingAssociations(true);
       const result = await enableAllAssociations(isGlobalScope ? undefined : (selectedModelId ?? undefined));
-      toast.success(`已启用 ${result.updated} 个模型关联`);
+      toast.success(result.updated > 0 ? `已启用 ${result.updated} 个模型关联` : "所有模型关联已处于启用状态");
       if (selectedModelId) {
         fetchModelProviders(selectedModelId);
       }

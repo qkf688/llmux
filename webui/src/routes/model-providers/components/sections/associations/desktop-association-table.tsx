@@ -117,7 +117,7 @@ export function DesktopAssociationTable({
         <TableBody>
           {associations.map((association) => {
             const provider = providers.find((item) => item.ID === association.ProviderID);
-            const isAssociationEnabled = association.Status ?? false;
+            const isAssociationEnabled = association.Status ?? true;
             const statusBars = providerStatus[association.ID];
             const healthBars = healthStatus[association.ID];
             const currentResult = associationTestResults[association.ID];

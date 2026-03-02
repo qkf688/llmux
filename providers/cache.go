@@ -8,13 +8,18 @@ import (
 	"time"
 )
 
+type clientKey struct {
+	responseHeaderTimeout time.Duration
+	proxyURL              string
+}
+
 type clientCache struct {
 	mu      sync.RWMutex
-	clients map[time.Duration]*http.Client
+	clients map[clientKey]*http.Client
 }
 
 var cache = &clientCache{
-	clients: make(map[time.Duration]*http.Client),
+	clients: make(map[clientKey]*http.Client),
 }
 
 var dialer = &net.Dialer{
@@ -22,12 +27,22 @@ var dialer = &net.Dialer{
 	KeepAlive: 30 * time.Second,
 }
 
-// GetClient returns an http.Client with the specified responseHeaderTimeout.
-// If a client with the same timeout already exists, it returns the cached one.
-// Otherwise, it creates a new client and caches it.
-func GetClient(responseHeaderTimeout time.Duration) *http.Client {
+func normalizeProxy(proxyURL string) (string, func(*http.Request) (*url.URL, error)) {
+	if proxyURL == "" {
+		return "", http.ProxyFromEnvironment
+	}
+	parsedURL, err := url.Parse(proxyURL)
+	if err != nil {
+		return "", http.ProxyFromEnvironment
+	}
+	return proxyURL, http.ProxyURL(parsedURL)
+}
+
+func getClient(responseHeaderTimeout time.Duration, proxyKey string, proxy func(*http.Request) (*url.URL, error)) *http.Client {
+	key := clientKey{responseHeaderTimeout: responseHeaderTimeout, proxyURL: proxyKey}
+
 	cache.mu.RLock()
-	if client, exists := cache.clients[responseHeaderTimeout]; exists {
+	if client, exists := cache.clients[key]; exists {
 		cache.mu.RUnlock()
 		return client
 	}
@@ -36,37 +51,12 @@ func GetClient(responseHeaderTimeout time.Duration) *http.Client {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 
-	// Double-check after acquiring write lock
-	if client, exists := cache.clients[responseHeaderTimeout]; exists {
+	if client, exists := cache.clients[key]; exists {
 		return client
 	}
 
 	transport := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           dialer.DialContext,
-		ForceAttemptHTTP2:     false, // 禁用强制HTTP/2，让系统自动协商
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		ResponseHeaderTimeout: responseHeaderTimeout,
-		DisableKeepAlives:     false,
-		MaxIdleConnsPerHost:   10,
-	}
-
-	client := &http.Client{
-		Transport: transport,
-		Timeout:   0, // No overall timeout, let ResponseHeaderTimeout control header timing
-	}
-
-	cache.clients[responseHeaderTimeout] = client
-	return client
-}
-
-// GetClientWithProxy returns an http.Client with the specified responseHeaderTimeout and proxy.
-// This creates a new client each time and does not use caching.
-func GetClientWithProxy(responseHeaderTimeout time.Duration, proxyURL string) *http.Client {
-	transport := &http.Transport{
+		Proxy:                 proxy,
 		DialContext:           dialer.DialContext,
 		ForceAttemptHTTP2:     false, // 禁用强制HTTP/2，让系统自动协商，避免HTTP/2超时问题
 		MaxIdleConns:          100,
@@ -78,20 +68,25 @@ func GetClientWithProxy(responseHeaderTimeout time.Duration, proxyURL string) *h
 		MaxIdleConnsPerHost:   10,    // 限制每个主机的空闲连接数
 	}
 
-	// 如果提供了代理URL，使用它；否则使用环境变量
-	if proxyURL != "" {
-		if parsedURL, err := url.Parse(proxyURL); err == nil {
-			transport.Proxy = http.ProxyURL(parsedURL)
-		} else {
-			// 解析失败，回退到环境变量
-			transport.Proxy = http.ProxyFromEnvironment
-		}
-	} else {
-		transport.Proxy = http.ProxyFromEnvironment
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   0, // No overall timeout, let ResponseHeaderTimeout control header timing
 	}
 
-	return &http.Client{
-		Transport: transport,
-		Timeout:   0,
-	}
+	cache.clients[key] = client
+	return client
+}
+
+// GetClient returns a cached http.Client with the specified responseHeaderTimeout.
+// It reuses the underlying Transport so connections can be kept alive and pooled.
+func GetClient(responseHeaderTimeout time.Duration) *http.Client {
+	proxyKey, proxy := normalizeProxy("")
+	return getClient(responseHeaderTimeout, proxyKey, proxy)
+}
+
+// GetClientWithProxy returns a cached http.Client with the specified responseHeaderTimeout and proxy.
+// If proxyURL is empty or invalid, it falls back to environment proxy settings.
+func GetClientWithProxy(responseHeaderTimeout time.Duration, proxyURL string) *http.Client {
+	proxyKey, proxy := normalizeProxy(proxyURL)
+	return getClient(responseHeaderTimeout, proxyKey, proxy)
 }

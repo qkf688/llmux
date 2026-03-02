@@ -1,0 +1,53 @@
+package modelsync
+
+import (
+	"context"
+	"log/slog"
+	"time"
+
+	"github.com/atopos31/llmio/models"
+	"gorm.io/gorm"
+)
+
+// StartAutoSync 启动自动同步定时任务。
+func (s *Service) StartAutoSync(ctx context.Context) {
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				s.checkAndSync(ctx)
+			}
+		}
+	}()
+}
+
+func (s *Service) checkAndSync(ctx context.Context) {
+	enabled, err := s.getSettingBool(ctx, models.SettingKeyModelSyncEnabled)
+	if err != nil || !enabled {
+		return
+	}
+
+	interval, err := s.getSettingInt(ctx, models.SettingKeyModelSyncInterval)
+	if err != nil {
+		interval = 12
+	}
+
+	var lastLog models.ModelSyncLog
+	if err := s.db.WithContext(ctx).Order("synced_at DESC").First(&lastLog).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			slog.Error("failed to get last sync log", "error", err)
+			return
+		}
+		_, _ = s.SyncAllProviders(ctx)
+		return
+	}
+
+	if time.Since(lastLog.SyncedAt) >= time.Duration(interval)*time.Hour {
+		_, _ = s.SyncAllProviders(ctx)
+	}
+}

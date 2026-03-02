@@ -4,18 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/service/virtualmodel"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func resetVirtualModelServiceSingleton() {
-	virtualModelServiceInstance = nil
-	virtualModelServiceOnce = sync.Once{}
+	virtualmodel.ResetSingletonForTest()
 }
 
 func configureSQLiteForSingleConn(t *testing.T, db *gorm.DB) *sql.DB {

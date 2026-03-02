@@ -29,13 +29,6 @@ type ProvidersWithMeta struct {
 	OrderedRealModels []OrderedRealModel // 有序的真实模型列表
 }
 
-// OrderedRealModel 有序的真实模型（用于虚拟模型故障转移）
-type OrderedRealModel struct {
-	Model    models.Model
-	Priority int
-	Weight   int
-}
-
 func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Before) (*ProvidersWithMeta, error) {
 	// 首先检查是否是虚拟模型
 	virtualModel, err := gorm.G[models.VirtualModel](models.DB).Where("name = ? AND enabled = ?", before.Model, true).First(ctx)

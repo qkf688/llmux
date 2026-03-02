@@ -6,16 +6,6 @@ import (
 	"github.com/atopos31/llmio/service/healthcheck"
 )
 
-func init() {
-	healthcheck.SetAdjustmentHooks(healthcheck.AdjustmentHooks{
-		ShouldCountHealthCheckSuccess: shouldCountHealthCheckSuccess,
-		ShouldCountHealthCheckFailure: shouldCountHealthCheckFailure,
-		ApplySuccessAdjustments:       applySuccessAdjustments,
-		ApplyWeightDecay:              applyWeightDecayByModelProviderID,
-		ApplyPriorityDecay:            applyPriorityDecayByModelProviderID,
-	})
-}
-
 // HealthChecker 健康检测服务（兼容层）。
 type HealthChecker = healthcheck.HealthChecker
 

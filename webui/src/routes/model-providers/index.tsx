@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
@@ -203,12 +203,6 @@ export default function ModelProvidersPage() {
   });
 
   useEffect(() => {
-    Promise.all([fetchModels(), fetchProviders(), fetchSettings()]).finally(() => {
-      setLoading(false);
-    });
-  }, []);
-
-  useEffect(() => {
     if (models.length === 0) {
       if (selectedModelId !== null) {
         setSelectedModelId(null);
@@ -238,13 +232,7 @@ export default function ModelProvidersPage() {
       nextParams.set("modelId", fallbackId.toString());
       setSearchParams(nextParams, { replace: true });
     }
-  }, [models, searchParams, form, setSearchParams]);
-
-  useEffect(() => {
-    if (selectedModelId) {
-      fetchModelProviders(selectedModelId);
-    }
-  }, [selectedModelId]);
+  }, [models, searchParams, form, setSearchParams, selectedModelId]);
 
   useEffect(() => {
     if (!templateEditorOpen || !selectedModelId) return;
@@ -289,7 +277,7 @@ export default function ModelProvidersPage() {
 
   const buildPayload = buildAssociationPayload;
 
-  const fetchModels = async () => {
+  const fetchModels = useCallback(async () => {
     try {
       const data = await getModels();
       setModels(data);
@@ -298,9 +286,9 @@ export default function ModelProvidersPage() {
       toast.error(`获取模型列表失败: ${message}`);
       console.error(err);
     }
-  };
+  }, []);
 
-  const rebuildProviderModels = (providerList: Provider[]) => {
+  const rebuildProviderModels = useCallback((providerList: Provider[]) => {
     setLoadingProviderModels(true);
     const groups = providerList.map((provider) => {
       const models = toProviderModelList(parseAllModelsFromConfig(provider.Config)).map((model) => ({
@@ -320,9 +308,9 @@ export default function ModelProvidersPage() {
       return next;
     });
     setLoadingProviderModels(false);
-  };
+  }, []);
 
-  const fetchProviders = async () => {
+  const fetchProviders = useCallback(async () => {
     try {
       const data = await getProviders();
       setProviders(data);
@@ -332,37 +320,18 @@ export default function ModelProvidersPage() {
       toast.error(`获取提供商列表失败: ${message}`);
       console.error(err);
     }
-  };
+  }, [rebuildProviderModels]);
 
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     try {
       const data = await getSettings();
       setSettings(data);
     } catch (err) {
       console.error("获取系统设置失败", err);
     }
-  };
+  }, []);
 
-  const fetchModelProviders = async (modelId: number) => {
-    try {
-      setLoading(true);
-      const data = await getModelProviders(modelId);
-      setModelProviders(data.map(item => ({
-        ...item,
-        CustomerHeaders: item.CustomerHeaders || {}
-      })));
-      // 异步加载状态数据
-      loadProviderStatus(data, modelId);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`获取模型提供商关联列表失败: ${message}`);
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadProviderStatus = async (providers: ModelWithProvider[], modelId: number) => {
+  const loadProviderStatus = useCallback(async (providers: ModelWithProvider[], modelId: number) => {
     const selectedModel = models.find(m => m.ID === modelId);
     if (!selectedModel) return;
     setProviderStatus({});
@@ -395,7 +364,38 @@ export default function ModelProvidersPage() {
 
     setProviderStatus(newStatus);
     setHealthStatus(newHealthStatus);
-  };
+  }, [models]);
+
+  const fetchModelProviders = useCallback(async (modelId: number) => {
+    try {
+      setLoading(true);
+      const data = await getModelProviders(modelId);
+      setModelProviders(data.map(item => ({
+        ...item,
+        CustomerHeaders: item.CustomerHeaders || {}
+      })));
+      // 异步加载状态数据
+      void loadProviderStatus(data, modelId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`获取模型提供商关联列表失败: ${message}`);
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [loadProviderStatus]);
+
+  useEffect(() => {
+    Promise.all([fetchModels(), fetchProviders(), fetchSettings()]).finally(() => {
+      setLoading(false);
+    });
+  }, [fetchModels, fetchProviders, fetchSettings]);
+
+  useEffect(() => {
+    if (selectedModelId) {
+      void fetchModelProviders(selectedModelId);
+    }
+  }, [selectedModelId, fetchModelProviders]);
 
   const handleCreate = async (values: FormValues) => {
     if (isSubmitting) return;

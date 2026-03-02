@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -118,7 +118,7 @@ export default function LogsPage() {
       console.error("Error fetching user agents:", error);
     }
   };
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
       const result = await getLogs(page, pageSize, {
@@ -136,13 +136,13 @@ export default function LogsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, providerNameFilter, modelFilter, statusFilter, styleFilter, userAgentFilter]);
   useEffect(() => {
     fetchProviders();
     fetchModels();
     fetchUserAgents();
     fetchLogs();
-  }, [page, pageSize, providerNameFilter, modelFilter, statusFilter, styleFilter, userAgentFilter]);
+  }, [fetchLogs]);
   const handleFilterChange = () => {
     setPage(1);
   };

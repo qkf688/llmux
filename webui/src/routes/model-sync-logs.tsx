@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -31,20 +31,7 @@ export default function ModelSyncLogsPage() {
   const [recentLoading, setRecentLoading] = useState(false);
   const [syncTime, setSyncTime] = useState<string>('');
 
-  useEffect(() => {
-    fetchStats();
-    if (activeTab === 'logs') {
-      fetchLogs();
-    }
-  }, [page, showUnchanged, activeTab]);
-
-  useEffect(() => {
-    if (activeTab === 'recent') {
-      fetchRecentModels();
-    }
-  }, [activeTab]);
-
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       setStatsLoading(true);
       const data = await getModelSyncStats();
@@ -54,9 +41,9 @@ export default function ModelSyncLogsPage() {
     } finally {
       setStatsLoading(false);
     }
-  };
+  }, []);
 
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getModelSyncLogs({ page, page_size: 20, show_unchanged: showUnchanged });
@@ -67,9 +54,9 @@ export default function ModelSyncLogsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, showUnchanged]);
 
-  const fetchRecentModels = async () => {
+  const fetchRecentModels = useCallback(async () => {
     try {
       setRecentLoading(true);
       const data = await getRecentAddedModels();
@@ -80,7 +67,20 @@ export default function ModelSyncLogsPage() {
     } finally {
       setRecentLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchStats();
+    if (activeTab === 'logs') {
+      fetchLogs();
+    }
+  }, [activeTab, fetchLogs, fetchStats]);
+
+  useEffect(() => {
+    if (activeTab === 'recent') {
+      fetchRecentModels();
+    }
+  }, [activeTab, fetchRecentModels]);
 
   const handleSyncNow = async () => {
     try {

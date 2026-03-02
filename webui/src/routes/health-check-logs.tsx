@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -65,6 +65,8 @@ export default function HealthCheckLogsPage() {
   const [backgroundBatchId, setBackgroundBatchId] = useState<string | null>(null);
   const [backgroundCheckComplete, setBackgroundCheckComplete] = useState(false);
   const backgroundIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const fetchLogsRef = useRef<(pageToFetch?: number, pageSizeToUse?: number) => Promise<void>>(async () => {});
+  const resultDialogOpenRef = useRef(resultDialogOpen);
 
   // 获取数据
   const fetchProviders = async () => {
@@ -85,7 +87,7 @@ export default function HealthCheckLogsPage() {
     }
   };
 
-  const fetchLogs = async (pageToFetch = page, pageSizeToUse = pageSize) => {
+  const fetchLogs = useCallback(async (pageToFetch = page, pageSizeToUse = pageSize) => {
     setLoading(true);
     try {
       const result = await getHealthCheckLogs(pageToFetch, pageSizeToUse, {
@@ -101,7 +103,7 @@ export default function HealthCheckLogsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, providerNameFilter, modelFilter, statusFilter]);
 
   useEffect(() => {
     fetchProviders();
@@ -110,7 +112,15 @@ export default function HealthCheckLogsPage() {
 
   useEffect(() => {
     fetchLogs();
-  }, [page, pageSize, providerNameFilter, modelFilter, statusFilter]);
+  }, [fetchLogs]);
+
+  useEffect(() => {
+    fetchLogsRef.current = fetchLogs;
+  }, [fetchLogs]);
+
+  useEffect(() => {
+    resultDialogOpenRef.current = resultDialogOpen;
+  }, [resultDialogOpen]);
 
   const handleFilterChange = () => {
     setPage(1);
@@ -203,7 +213,14 @@ export default function HealthCheckLogsPage() {
   };
 
   // 后台轮询检测状态
-  const startBackgroundPolling = (batchId: string) => {
+  const stopBackgroundPolling = useCallback(() => {
+    if (backgroundIntervalRef.current) {
+      clearInterval(backgroundIntervalRef.current);
+      backgroundIntervalRef.current = null;
+    }
+  }, []);
+
+  const startBackgroundPolling = useCallback((batchId: string) => {
     // 清理旧的定时器
     if (backgroundIntervalRef.current) {
       clearInterval(backgroundIntervalRef.current);
@@ -219,22 +236,15 @@ export default function HealthCheckLogsPage() {
           localStorage.setItem('healthCheckCompleted', 'true');
           stopBackgroundPolling();
           // 如果对话框是关闭状态，刷新日志列表
-          if (!resultDialogOpen) {
-            fetchLogs();
+          if (!resultDialogOpenRef.current) {
+            void fetchLogsRef.current();
           }
         }
       } catch (error) {
         console.error("Failed to fetch background batch status:", error);
       }
     }, 3000); // 每3秒检查一次
-  };
-
-  const stopBackgroundPolling = () => {
-    if (backgroundIntervalRef.current) {
-      clearInterval(backgroundIntervalRef.current);
-      backgroundIntervalRef.current = null;
-    }
-  };
+  }, [stopBackgroundPolling]);
 
   // 组件挂载时恢复状态
   useEffect(() => {
@@ -251,14 +261,14 @@ export default function HealthCheckLogsPage() {
         startBackgroundPolling(savedBatchId);
       }
     }
-  }, []);
+  }, [startBackgroundPolling]);
 
   // 组件卸载时清理定时器
   useEffect(() => {
     return () => {
       stopBackgroundPolling();
     };
-  }, []);
+  }, [stopBackgroundPolling]);
 
   // 布局开始
   return (

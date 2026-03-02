@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +36,25 @@ export function HealthCheckResultDialog({
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const navigate = useNavigate();
 
+  const fetchStatus = useCallback(async () => {
+    if (!batchId) return;
+
+    try {
+      const data = await getBatchHealthCheckStatus(batchId);
+      setStatus(data);
+      setLoading(false);
+
+      // 如果完成，停止轮询
+      if (data.completed && intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    } catch (error) {
+      console.error("Failed to fetch batch status:", error);
+      setLoading(false);
+    }
+  }, [batchId]);
+
   useEffect(() => {
     if (!open || !batchId) {
       // 清理定时器
@@ -62,26 +81,7 @@ export function HealthCheckResultDialog({
         intervalRef.current = null;
       }
     };
-  }, [open, batchId]);
-
-  const fetchStatus = async () => {
-    if (!batchId) return;
-
-    try {
-      const data = await getBatchHealthCheckStatus(batchId);
-      setStatus(data);
-      setLoading(false);
-
-      // 如果完成，停止轮询
-      if (data.completed && intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    } catch (error) {
-      console.error("Failed to fetch batch status:", error);
-      setLoading(false);
-    }
-  };
+  }, [open, batchId, fetchStatus]);
 
   const handleViewLogs = () => {
     navigate("/health-check-logs");

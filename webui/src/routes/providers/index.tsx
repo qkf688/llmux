@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
@@ -138,17 +138,6 @@ export default function ProvidersPage() {
   const watchedType = form.watch("type");
 
   useEffect(() => {
-    fetchProviders();
-    fetchProviderTemplates();
-    fetchSettings();
-  }, []);
-
-  // 监听筛选条件变化
-  useEffect(() => {
-    fetchProviders();
-  }, [nameFilter, typeFilter]);
-
-  useEffect(() => {
     if (!modelsOpen) {
       setSelectedUpstreamModels([]);
       setUpstreamTestResults({});
@@ -162,7 +151,7 @@ export default function ProvidersPage() {
     }
   }, [allModelsOpen]);
 
-  const fetchProviders = async () => {
+  const fetchProviders = useCallback(async () => {
     try {
       setLoading(true);
       // 处理筛选条件，"all"表示不过滤，空字符串表示不过滤
@@ -178,9 +167,9 @@ export default function ProvidersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [nameFilter, typeFilter]);
 
-  const fetchProviderTemplates = async () => {
+  const fetchProviderTemplates = useCallback(async () => {
     try {
       const data = await getProviderTemplates();
       setProviderTemplates(data);
@@ -190,9 +179,9 @@ export default function ProvidersPage() {
     } catch (err) {
       console.error("获取提供商模板失败", err);
     }
-  };
+  }, []);
 
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     try {
       const data = await getSettings();
       setAutoAssociateOnAddEnabled(data.auto_associate_on_add ?? false);
@@ -202,7 +191,17 @@ export default function ProvidersPage() {
       setAutoAssociateOnAddEnabled(false);
       setAutoCleanOnDeleteEnabled(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void fetchProviderTemplates();
+    void fetchSettings();
+  }, [fetchProviderTemplates, fetchSettings]);
+
+  // 监听筛选条件变化
+  useEffect(() => {
+    void fetchProviders();
+  }, [fetchProviders]);
 
   const buildAutoActionsDescription = (options: { associate?: boolean; clean?: boolean }) => {
     const actions: string[] = [];

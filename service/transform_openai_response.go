@@ -109,9 +109,30 @@ func parseOpenAIToolCalls(msgMap map[string]interface{}) []UnifiedToolCall {
 				continue
 			}
 
-			argsStr := getString(funcMap, "arguments")
-			if argsStr == "" {
-				argsStr = "{}"
+			argsStr := "{}"
+			if rawArgs, ok := funcMap["arguments"]; ok && rawArgs != nil {
+				switch v := rawArgs.(type) {
+				case string:
+					if v != "" {
+						argsStr = v
+					}
+				case map[string]interface{}:
+					if b, err := json.Marshal(v); err == nil && len(b) > 0 && string(b) != "null" {
+						argsStr = string(b)
+					}
+				case []interface{}:
+					if b, err := json.Marshal(v); err == nil && len(b) > 0 && string(b) != "null" {
+						argsStr = string(b)
+					}
+				case json.RawMessage:
+					if len(v) > 0 && string(v) != "null" {
+						argsStr = string(v)
+					}
+				case []byte:
+					if len(v) > 0 && string(v) != "null" {
+						argsStr = string(v)
+					}
+				}
 			}
 
 			toolCalls = append(toolCalls, UnifiedToolCall{

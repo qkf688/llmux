@@ -1,0 +1,266 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  clearModelSyncLogs,
+  deleteModelSyncLogs,
+  getModelSyncLogs,
+  getModelSyncStats,
+  getRecentAddedModels,
+  syncAllProviderModels,
+  type AddedModel,
+  type ModelSyncLog,
+  type ModelSyncStats,
+} from "@/lib/api";
+import { toast } from "sonner";
+import type { ModelSyncTab } from "../types";
+
+const LOG_PAGE_SIZE = 20;
+
+const toErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+export function useModelSyncLogsPage() {
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [activeTab, setActiveTab] = useState<ModelSyncTab>("logs");
+  const [logs, setLogs] = useState<ModelSyncLog[]>([]);
+  const [recentModels, setRecentModels] = useState<AddedModel[]>([]);
+  const [syncTime, setSyncTime] = useState("");
+  const [stats, setStats] = useState<ModelSyncStats | null>(null);
+
+  const [loading, setLoading] = useState(true);
+  const [recentLoading, setRecentLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  const [selectedLogs, setSelectedLogs] = useState<Set<number>>(new Set());
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [showUnchanged, setShowUnchanged] = useState(false);
+
+  const [detailLog, setDetailLog] = useState<ModelSyncLog | null>(null);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      setStatsLoading(true);
+      const data = await getModelSyncStats();
+      setStats(data);
+    } catch (error) {
+      console.error("加载统计信息失败:", error);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
+
+  const fetchLogs = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await getModelSyncLogs({
+        page,
+        page_size: LOG_PAGE_SIZE,
+        show_unchanged: showUnchanged,
+      });
+      setLogs(data.data ?? []);
+      setTotalPages(data.pagination?.total_pages ?? 1);
+    } catch (error) {
+      toast.error(`加载日志失败: ${toErrorMessage(error)}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, showUnchanged]);
+
+  const fetchRecentModels = useCallback(async () => {
+    try {
+      setRecentLoading(true);
+      const data = await getRecentAddedModels();
+      setRecentModels(data.data ?? []);
+      setSyncTime(data.sync_time || "");
+    } catch (error) {
+      toast.error(`加载最近新增模型失败: ${toErrorMessage(error)}`);
+    } finally {
+      setRecentLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchStats();
+  }, [fetchStats]);
+
+  useEffect(() => {
+    if (activeTab === "logs") {
+      void fetchLogs();
+    }
+  }, [activeTab, fetchLogs]);
+
+  useEffect(() => {
+    if (activeTab === "recent") {
+      void fetchRecentModels();
+    }
+  }, [activeTab, fetchRecentModels]);
+
+  useEffect(
+    () => () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    setSelectedLogs(new Set());
+  }, [activeTab, page, showUnchanged]);
+
+  const selectedCount = selectedLogs.size;
+  const allSelected = logs.length > 0 && logs.every((log) => selectedLogs.has(log.ID));
+  const canDeleteSelected = selectedCount > 0;
+
+  const handleSyncNow = async () => {
+    try {
+      setSyncing(true);
+      await syncAllProviderModels();
+      toast.success("同步已开始，请稍后刷新查看结果");
+
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+
+      refreshTimerRef.current = setTimeout(() => {
+        void fetchStats();
+        void fetchLogs();
+        if (activeTab === "recent") {
+          void fetchRecentModels();
+        }
+      }, 2000);
+    } catch (error) {
+      toast.error(`同步失败: ${toErrorMessage(error)}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedLogs.size === 0) {
+      return;
+    }
+
+    const ids = Array.from(selectedLogs);
+    try {
+      await deleteModelSyncLogs(ids);
+      toast.success(`已删除 ${ids.length} 条日志`);
+      setSelectedLogs(new Set());
+      await fetchLogs();
+    } catch (error) {
+      toast.error(`删除失败: ${toErrorMessage(error)}`);
+    }
+  };
+
+  const handleClearAll = async () => {
+    try {
+      await clearModelSyncLogs();
+      toast.success("已清空所有日志");
+      setClearDialogOpen(false);
+      setSelectedLogs(new Set());
+
+      if (page !== 1) {
+        setPage(1);
+      } else {
+        await fetchLogs();
+      }
+    } catch (error) {
+      toast.error(`清空失败: ${toErrorMessage(error)}`);
+    }
+  };
+
+  const handleToggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedLogs(new Set());
+      return;
+    }
+
+    setSelectedLogs(new Set(logs.map((log) => log.ID)));
+  };
+
+  const handleToggleSelectLog = (logId: number, checked: boolean) => {
+    setSelectedLogs((previous) => {
+      const next = new Set(previous);
+      if (checked) {
+        next.add(logId);
+      } else {
+        next.delete(logId);
+      }
+      return next;
+    });
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages || newPage === page) {
+      return;
+    }
+    setPage(newPage);
+  };
+
+  const handleShowUnchangedChange = (checked: boolean) => {
+    setShowUnchanged(checked);
+    setPage(1);
+  };
+
+  const openDetailLog = (log: ModelSyncLog) => {
+    setDetailLog(log);
+  };
+
+  const closeDetailLog = () => {
+    setDetailLog(null);
+  };
+
+  const switchToTab = (tab: ModelSyncTab) => {
+    setActiveTab(tab);
+  };
+
+  const refreshCurrentTab = useCallback(() => {
+    if (activeTab === "logs") {
+      void fetchLogs();
+      return;
+    }
+    void fetchRecentModels();
+  }, [activeTab, fetchLogs, fetchRecentModels]);
+
+  const isLogSelected = useCallback((logId: number) => selectedLogs.has(logId), [selectedLogs]);
+
+  const paginationText = useMemo(() => `第 ${page} / ${totalPages} 页`, [page, totalPages]);
+
+  return {
+    activeTab,
+    logs,
+    recentModels,
+    syncTime,
+    stats,
+    loading,
+    recentLoading,
+    syncing,
+    statsLoading,
+    selectedCount,
+    allSelected,
+    canDeleteSelected,
+    page,
+    totalPages,
+    showUnchanged,
+    detailLog,
+    clearDialogOpen,
+    paginationText,
+    switchToTab,
+    fetchStats,
+    refreshCurrentTab,
+    handleSyncNow,
+    handleDeleteSelected,
+    handleClearAll,
+    handleToggleSelectAll,
+    handleToggleSelectLog,
+    handlePageChange,
+    handleShowUnchangedChange,
+    isLogSelected,
+    openDetailLog,
+    closeDetailLog,
+    setClearDialogOpen,
+  };
+}

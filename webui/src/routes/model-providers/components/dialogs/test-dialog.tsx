@@ -21,6 +21,7 @@ type TestDialogProps = {
   onTestTypeChange: (value: TestType) => void;
   selectedTestId: number | null;
   testResults: Record<number, { loading: boolean; result: ModelProviderTestResult | null }>;
+  structuredTestResults: Record<number, { loading: boolean; result: ModelProviderTestResult | null }>;
   reactTestResult: {
     loading: boolean;
     messages: string;
@@ -38,16 +39,19 @@ export function TestDialog({
   onTestTypeChange,
   selectedTestId,
   testResults,
+  structuredTestResults,
   reactTestResult,
   onClose,
   onExecute,
 }: TestDialogProps) {
   const connectivityLoading = selectedTestId ? testResults[selectedTestId]?.loading : false;
-  const executeDisabled = testType === "connectivity" ? connectivityLoading : reactTestResult.loading;
+  const structuredLoading = selectedTestId ? structuredTestResults[selectedTestId]?.loading : false;
+  const executeDisabled =
+    testType === "connectivity" ? connectivityLoading : testType === "react" ? reactTestResult.loading : structuredLoading;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>模型测试</DialogTitle>
           <DialogDescription>选择要执行的测试类型</DialogDescription>
@@ -69,6 +73,12 @@ export function TestDialog({
             <Label htmlFor="react">React Agent 能力测试</Label>
           </div>
           <p className="text-sm text-gray-500 ml-6">测试模型的工具调用和反应能力</p>
+
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="structured_output" id="structured_output" />
+            <Label htmlFor="structured_output">结构化输出能力测试</Label>
+          </div>
+          <p className="text-sm text-gray-500 ml-6">测试模型是否支持结构化输出（JSON Schema / Tool Output）</p>
         </RadioGroup>
 
         {testType === "connectivity" && (
@@ -129,6 +139,67 @@ export function TestDialog({
                   value={reactTestResult.messages}
                 />
               </div>
+            )}
+          </div>
+        )}
+
+        {testType === "structured_output" && (
+          <div className="mt-4 min-w-0 pb-4">
+            {selectedTestId && structuredTestResults[selectedTestId]?.loading ? (
+              <div className="flex items-center justify-center py-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+                <span className="ml-2">测试中...</span>
+              </div>
+            ) : selectedTestId && structuredTestResults[selectedTestId]?.result ? (
+              (() => {
+                const result = structuredTestResults[selectedTestId]?.result as Record<string, unknown> | null;
+                const passed = result?.passed === true;
+                const errorMessage =
+                  (typeof result?.error === "string" && result.error) ||
+                  (typeof result?.message === "string" && result.message) ||
+                  (passed ? "结构化输出能力测试通过" : "结构化输出能力测试失败");
+                const rawOutput = typeof result?.raw_output === "string" ? result.raw_output : "";
+                const parsed = result?.parsed;
+
+                return (
+                  <div className="space-y-6">
+                    <ExpandableError
+                      error={{
+                        message: errorMessage,
+                        summary: passed ? "测试成功" : "测试失败",
+                      }}
+                      isSuccess={passed}
+                      defaultExpanded={!passed}
+                    />
+
+                    {rawOutput && (
+                      <div>
+                        <p className="text-xs font-medium text-gray-600 mb-1">原始输出</p>
+                        <Textarea
+                          name="raw_output"
+                          className="max-h-48 resize-none whitespace-pre overflow-x-auto font-mono text-xs bg-white/50"
+                          readOnly
+                          value={rawOutput}
+                        />
+                      </div>
+                    )}
+
+                    {parsed != null && (
+                      <div>
+                        <p className="text-xs font-medium text-gray-600 mb-1">解析结果</p>
+                        <Textarea
+                          name="parsed"
+                          className="max-h-48 resize-none whitespace-pre overflow-x-auto font-mono text-xs bg-white/50"
+                          readOnly
+                          value={JSON.stringify(parsed, null, 2)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })()
+            ) : (
+              <p className="text-gray-500">点击"执行测试"开始测试</p>
             )}
           </div>
         )}

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, AlertCircle, CheckCircle, Info, Lightbulb } from "lucide-react";
+import { ChevronDown, ChevronRight, AlertCircle, CheckCircle, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface ErrorDetail {
@@ -121,56 +121,6 @@ function inferErrorType(message: string): ErrorDetail["type"] {
   return "unknown";
 }
 
-/** 生成通用解决建议 */
-function generateSuggestions(type: ErrorDetail["type"], message: string): string[] {
-  const lowerMessage = message.toLowerCase();
-  const suggestions: string[] = [];
-
-  switch (type) {
-    case "network":
-      suggestions.push("检查提供商 URL 是否正确");
-      suggestions.push("确认网络连接正常");
-      if (lowerMessage.includes("timeout")) {
-        suggestions.push("尝试增加超时时间设置");
-      }
-      suggestions.push("检查防火墙或代理设置");
-      break;
-      
-    case "auth":
-      suggestions.push("验证 API Key 是否正确");
-      suggestions.push("检查 API Key 是否有足够的权限");
-      suggestions.push("确认 API Key 未过期");
-      suggestions.push("检查提供商的控制台页面");
-      break;
-      
-    case "provider":
-      suggestions.push("检查提供商的配置信息");
-      suggestions.push("确认 Base URL 格式正确");
-      suggestions.push("验证提供商类型是否匹配");
-      suggestions.push("查看提供商文档确认支持的模型");
-      break;
-      
-    case "timeout":
-      suggestions.push("网络连接较慢，耐心等待或重试");
-      suggestions.push("检查网络连接稳定性");
-      suggestions.push("尝试减少请求数据量");
-      break;
-      
-    case "validation":
-      suggestions.push("检查请求参数格式是否正确");
-      suggestions.push("确认模型名称拼写无误");
-      suggestions.push("查看 API 文档确认必需参数");
-      break;
-      
-    default:
-      suggestions.push("检查配置信息是否正确");
-      suggestions.push("查看服务器日志获取更多详情");
-      suggestions.push("尝试重新操作");
-  }
-
-  return suggestions;
-}
-
 export function ExpandableError({ 
   error, 
   defaultExpanded = false, 
@@ -202,7 +152,6 @@ export function ExpandableError({
   const detectedType = error.type || inferErrorType(error.message);
   const typeConfig = getErrorTypeConfig(detectedType);
   const Icon = typeConfig.icon;
-  const suggestions = error.suggestions || generateSuggestions(detectedType, error.message);
   
   // 构建概要文本
   const summaryText = error.summary || error.message.split('\n')[0];
@@ -266,23 +215,6 @@ export function ExpandableError({
             </pre>
           </div>
 
-          {/* 解决建议 */}
-          {suggestions.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-1.5">
-                <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
-                <span className="text-xs font-medium text-gray-600">解决建议</span>
-              </div>
-              <ul className="text-xs text-gray-700 space-y-1">
-                {suggestions.map((suggestion, index) => (
-                  <li key={index} className="flex items-start gap-2">
-                    <span className="text-gray-400 mt-0.5">•</span>
-                    <span>{suggestion}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
       )}
     </div>

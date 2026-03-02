@@ -29,6 +29,11 @@ func TestReactHandler(c *gin.Context) {
 	testapi.TestReactHandler(c)
 }
 
+// TestStructuredOutputHandler 结构化输出能力测试接口（兼容层）。
+func TestStructuredOutputHandler(c *gin.Context) {
+	testapi.TestStructuredOutputHandler(c)
+}
+
 // GetWeather React 测试工具函数（兼容层）。
 func GetWeather(ctx context.Context, call openai.ChatCompletionChunkChoiceDeltaToolCallFunction) (*openai.ChatCompletionToolMessageParamContentUnion, error) {
 	return testapi.GetWeather(ctx, call)

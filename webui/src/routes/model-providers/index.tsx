@@ -27,6 +27,7 @@ import {
   resetModelPriorities,
   resetModelWeights,
   testModelProvider,
+  testModelProviderStructuredOutput,
   updateModelProvider,
   updateModelProviderStatus,
   updateProviderBlacklist,
@@ -78,6 +79,9 @@ export default function ModelProvidersPage() {
   const [selectedModelId, setSelectedModelId] = useState<number | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [testResults, setTestResults] = useState<
+    Record<number, { loading: boolean; result: ModelProviderTestResult | null }>
+  >({});
+  const [structuredTestResults, setStructuredTestResults] = useState<
     Record<number, { loading: boolean; result: ModelProviderTestResult | null }>
   >({});
   const [testDialogOpen, setTestDialogOpen] = useState(false);
@@ -575,6 +579,29 @@ export default function ModelProvidersPage() {
     }
   };
 
+  const handleStructuredOutputTest = async (id: number): Promise<ModelProviderTestResult> => {
+    try {
+      setStructuredTestResults(prev => ({
+        ...prev,
+        [id]: { loading: true, result: null }
+      }));
+
+      const result = await testModelProviderStructuredOutput(id);
+      setStructuredTestResults(prev => ({
+        ...prev,
+        [id]: { loading: false, result }
+      }));
+      return result;
+    } catch (err) {
+      setStructuredTestResults(prev => ({
+        ...prev,
+        [id]: { loading: false, result: { passed: false, error: "测试失败" + err } }
+      }));
+      console.error(err);
+      return { passed: false, error: "测试失败" + err };
+    }
+  };
+
 
   const currentControllerRef = useRef<AbortController | null>(null);
   const handleReactTest = async (id: number) => {
@@ -670,8 +697,10 @@ export default function ModelProvidersPage() {
 
     if (testType === "connectivity") {
       await handleConnectivityTest(selectedTestId);
-    } else {
+    } else if (testType === "react") {
       await handleReactTest(selectedTestId);
+    } else {
+      await handleStructuredOutputTest(selectedTestId);
     }
   };
 
@@ -1388,6 +1417,7 @@ export default function ModelProvidersPage() {
         onTestTypeChange={setTestType}
         selectedTestId={selectedTestId}
         testResults={testResults}
+        structuredTestResults={structuredTestResults}
         reactTestResult={reactTestResult}
         onClose={dialogClose}
         onExecute={() => {

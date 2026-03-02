@@ -18,7 +18,7 @@ export type ProviderModelGroup = {
 
 export type BlacklistFilter = "all" | "blacklisted" | "not-blacklisted";
 
-export type TestType = "connectivity" | "react";
+export type TestType = "connectivity" | "react" | "structured_output";
 
 export type BatchTestProgress = {
   total: number;
@@ -33,4 +33,3 @@ export type AssociationBatchTestResult = {
   success: boolean | null;
   error?: string;
 };
-

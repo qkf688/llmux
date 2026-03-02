@@ -130,6 +130,10 @@ export async function testModelProvider(id: number): Promise<ModelProviderTestRe
   return apiRequest<ModelProviderTestResult>(`/test/${id}`);
 }
 
+export async function testModelProviderStructuredOutput(id: number): Promise<ModelProviderTestResult> {
+  return apiRequest<ModelProviderTestResult>(`/test/structured-output/${id}`);
+}
+
 export async function previewAutoAssociate(): Promise<AssociationPreview[]> {
   return apiRequest<AssociationPreview[]>("/model-providers/auto-associate/preview");
 }

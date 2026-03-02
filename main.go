@@ -128,6 +128,7 @@ func main() {
 	// Provider connectivity test
 	api.GET("/test/:id", handler.ProviderTestHandler)
 	api.GET("/test/react/:id", handler.TestReactHandler)
+	api.GET("/test/structured-output/:id", handler.TestStructuredOutputHandler)
 
 	// Model sync management
 	api.POST("/model-sync/:id", handler.SyncProviderModels)

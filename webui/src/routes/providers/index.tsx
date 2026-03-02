@@ -75,7 +75,7 @@ import {
   type UpstreamStatus
 } from "./types";
 import { runConcurrentBatch } from "./utils/batch-test";
-import { copyText } from "./utils/clipboard";
+import { copyTextDetailed } from "./utils/clipboard";
 import { buildConfigFromForm, extractAllModels, parseConfigToForm, parseCustomModelsInput } from "./utils/config";
 
 export default function ProvidersPage() {
@@ -450,11 +450,17 @@ export default function ProvidersPage() {
   };
 
   const copyModelName = async (modelName: string) => {
-    const copied = await copyText(modelName);
-    if (copied) {
+    const result = await copyTextDetailed(modelName, { showManualPrompt: true });
+    if (result.ok) {
       toast.success(`已复制模型名称: ${modelName}`);
+      return;
+    }
+
+    if (result.method === "manual_prompt") {
+      toast.info("浏览器限制：通过 IP + HTTP 访问时通常无法自动复制，已弹出手动复制窗口；建议改用 HTTPS/域名访问。");
+      return;
     } else {
-      toast.error("复制失败：当前环境不支持自动复制，请手动复制");
+      toast.error("复制失败：当前环境不支持自动复制，请手动复制（建议使用 HTTPS/域名访问）。");
     }
   };
 

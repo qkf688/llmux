@@ -52,6 +52,15 @@ func TestTransformToUnified(t *testing.T) {
 	if unified.System != "rule-1\nrule-2" {
 		t.Fatalf("unexpected system: %q", unified.System)
 	}
+	if len(unified.SystemParts) != 2 {
+		t.Fatalf("expected 2 system parts, got %d", len(unified.SystemParts))
+	}
+	if unified.SystemParts[0].Type != "text" || unified.SystemParts[0].Text == nil || *unified.SystemParts[0].Text != "rule-1" {
+		t.Fatalf("unexpected system part[0]: %+v", unified.SystemParts[0])
+	}
+	if unified.SystemParts[1].Type != "text" || unified.SystemParts[1].Text == nil || *unified.SystemParts[1].Text != "rule-2" {
+		t.Fatalf("unexpected system part[1]: %+v", unified.SystemParts[1])
+	}
 	if len(unified.Messages) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(unified.Messages))
 	}
@@ -81,6 +90,49 @@ func TestTransformToUnified(t *testing.T) {
 	}
 	if unified.ToolChoice == nil || unified.ToolChoice.ObjectValue == nil || unified.ToolChoice.ObjectValue.Function == nil || unified.ToolChoice.ObjectValue.Function.Name != "calc" {
 		t.Fatalf("unexpected tool_choice: %+v", unified.ToolChoice)
+	}
+}
+
+func TestTransformRoundTripPreservesSystemArray(t *testing.T) {
+	raw := []byte(`{
+		"model":"claude-3-5-sonnet",
+		"system":[
+			{"type":"text","text":"rule-1"},
+			{"type":"text","content":"rule-2"}
+		],
+		"messages":[{"role":"user","content":"hi"}]
+	}`)
+
+	unified, err := TransformToUnified(raw)
+	if err != nil {
+		t.Fatalf("TransformToUnified returned error: %v", err)
+	}
+
+	body, err := TransformFromUnified(unified)
+	if err != nil {
+		t.Fatalf("TransformFromUnified returned error: %v", err)
+	}
+
+	var req map[string]interface{}
+	if err := json.Unmarshal(body, &req); err != nil {
+		t.Fatalf("unmarshal result failed: %v", err)
+	}
+
+	system, ok := req["system"].([]interface{})
+	if !ok {
+		t.Fatalf("expected system to be array, got %T", req["system"])
+	}
+	if len(system) != 2 {
+		t.Fatalf("expected 2 system blocks, got %d", len(system))
+	}
+
+	block0 := system[0].(map[string]interface{})
+	if block0["type"] != "text" || block0["text"] != "rule-1" {
+		t.Fatalf("unexpected system[0]: %+v", block0)
+	}
+	block1 := system[1].(map[string]interface{})
+	if block1["type"] != "text" || block1["text"] != "rule-2" {
+		t.Fatalf("unexpected system[1]: %+v", block1)
 	}
 }
 

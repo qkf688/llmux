@@ -1,7 +1,5 @@
 package anthropic
 
-import "strings"
-
 func getString(m map[string]interface{}, key string) string {
 	if v, ok := m[key].(string); ok {
 		return v
@@ -79,33 +77,6 @@ func asMap(value interface{}) (map[string]interface{}, bool) {
 func asSlice(value interface{}) ([]interface{}, bool) {
 	result, ok := value.([]interface{})
 	return result, ok
-}
-
-// extractSystem 支持 Anthropic system 为字符串或数组的情况，确保 system 不被静默丢失。
-func extractSystem(value interface{}) string {
-	switch v := value.(type) {
-	case string:
-		return v
-	case []interface{}:
-		parts := make([]string, 0, len(v))
-		for _, item := range v {
-			itemMap, ok := asMap(item)
-			if !ok {
-				continue
-			}
-
-			if text, ok := itemMap["text"].(string); ok && text != "" {
-				parts = append(parts, text)
-				continue
-			}
-			if content, ok := itemMap["content"].(string); ok && content != "" {
-				parts = append(parts, content)
-			}
-		}
-		return strings.Join(parts, "\n")
-	default:
-		return ""
-	}
 }
 
 func thinkingBudgetToReasoningEffort(budgetTokens int64) string {

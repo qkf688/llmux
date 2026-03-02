@@ -31,8 +31,8 @@ func TransformFromUnified(unified *UnifiedRequest) ([]byte, error) {
 	if unified.TopP != nil {
 		req["top_p"] = *unified.TopP
 	}
-	if unified.System != "" {
-		req["system"] = unified.System
+	if system := buildSystemValue(unified); system != nil {
+		req["system"] = system
 	}
 
 	req["messages"] = buildMessages(unified, req)
@@ -96,13 +96,10 @@ func buildMessages(unified *UnifiedRequest, req map[string]interface{}) []interf
 
 	for _, msg := range unified.Messages {
 		if msg.Role == "system" && shouldExtractSystem {
-			content, ok := msg.Content.(string)
-			if ok && content != "" {
-				if existing, ok := req["system"].(string); ok && existing != "" {
-					req["system"] = existing + "\n\n" + content
-				} else {
-					req["system"] = content
-				}
+			if parts, ok := msg.Content.([]UnifiedMessageContentPart); ok {
+				appendSystemParts(req, parts)
+			} else if content, ok := msg.Content.(string); ok {
+				appendSystemText(req, content)
 			}
 			continue
 		}

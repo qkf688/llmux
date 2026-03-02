@@ -46,6 +46,10 @@ type UnifiedRequest struct {
 
 	// 系统消息 (特殊处理)
 	System string `json:"system,omitempty"`
+	// SystemParts 保存结构化 system 内容（例如 Anthropic 支持的 system 数组格式）。
+	// 当该字段存在时，转换到支持结构化 system 的供应商时应优先使用该字段，
+	// 以避免丢失原始格式与附带信息（如 cache_control）。
+	SystemParts []UnifiedMessageContentPart `json:"-"`
 
 	// Extended Thinking 支持
 	ReasoningEffort *string `json:"reasoning_effort,omitempty"`
@@ -83,6 +87,9 @@ func (r *UnifiedRequest) SanitizedForProvider() *UnifiedRequest {
 	}
 
 	copied := *r
+	if len(r.SystemParts) > 0 {
+		copied.SystemParts = append([]UnifiedMessageContentPart(nil), r.SystemParts...)
+	}
 	if len(r.Messages) > 0 {
 		copied.Messages = make([]UnifiedMessage, len(r.Messages))
 		copy(copied.Messages, r.Messages)
@@ -114,7 +121,7 @@ func (r *UnifiedRequest) Validate() error {
 		return errors.New("cannot specify both messages and input")
 	}
 
-	if !isEmbeddingRequest && !isChatRequest && r.System == "" {
+	if !isEmbeddingRequest && !isChatRequest && r.System == "" && len(r.SystemParts) == 0 {
 		return errors.New("either messages, input, or system prompt is required")
 	}
 
@@ -151,7 +158,7 @@ func (r *UnifiedRequest) IsEmbeddingRequest() bool {
 
 // IsChatRequest 判断是否为聊天请求。
 func (r *UnifiedRequest) IsChatRequest() bool {
-	return len(r.Messages) > 0 || r.System != ""
+	return len(r.Messages) > 0 || r.System != "" || len(r.SystemParts) > 0
 }
 
 // IsImageGenerationRequest 判断是否为图像生成请求。

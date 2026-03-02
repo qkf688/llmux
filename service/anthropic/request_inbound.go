@@ -12,8 +12,8 @@ func TransformToUnified(rawBody []byte) (*UnifiedRequest, error) {
 	unified := &UnifiedRequest{
 		Model:  getString(req, "model"),
 		Stream: getBool(req, "stream"),
-		System: extractSystem(req["system"]),
 	}
+	unified.System, unified.SystemParts = parseSystem(req["system"])
 
 	if maxTokens, ok := req["max_tokens"].(float64); ok {
 		unified.MaxTokens = int(maxTokens)

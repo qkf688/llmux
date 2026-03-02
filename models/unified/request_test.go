@@ -55,6 +55,15 @@ func TestUnifiedRequestValidate(t *testing.T) {
 			},
 		},
 		{
+			name: "valid system parts only request",
+			req: UnifiedRequest{
+				Model: "m",
+				SystemParts: []UnifiedMessageContentPart{
+					{Type: "text", Text: ptrString("you are helpful")},
+				},
+			},
+		},
+		{
 			name: "valid embedding request",
 			req: UnifiedRequest{
 				Model:          "m",
@@ -93,6 +102,9 @@ func TestUnifiedRequestClearHelpFields(t *testing.T) {
 		Include:             []string{"x"},
 		TransformerMetadata: map[string]string{"a": "b"},
 		Query:               map[string][]string{"k": {"v"}},
+		SystemParts: []UnifiedMessageContentPart{
+			{Type: "text", Text: ptrString("sys")},
+		},
 		Messages: []UnifiedMessage{
 			{
 				Role:               "assistant",
@@ -128,6 +140,9 @@ func TestUnifiedRequestSanitizedForProvider(t *testing.T) {
 		Include:             []string{"x"},
 		TransformerMetadata: map[string]string{"a": "b"},
 		Query:               map[string][]string{"k": {"v"}},
+		SystemParts: []UnifiedMessageContentPart{
+			{Type: "text", Text: ptrString("sys")},
+		},
 		Messages: []UnifiedMessage{
 			{
 				Role:               "assistant",
@@ -159,6 +174,9 @@ func TestUnifiedRequestSanitizedForProvider(t *testing.T) {
 	if sanitized.RawRequest != nil || sanitized.ExtraBody != nil || sanitized.Include != nil || sanitized.TransformerMetadata != nil || sanitized.Query != nil {
 		t.Fatalf("sanitized request helper fields should be cleared")
 	}
+	if len(sanitized.SystemParts) != 1 || sanitized.SystemParts[0].Text == nil || *sanitized.SystemParts[0].Text != "sys" {
+		t.Fatalf("sanitized system parts should be preserved")
+	}
 	msg := sanitized.Messages[0]
 	if msg.Reasoning != nil || msg.ReasoningContent != nil || msg.ReasoningSignature != nil || msg.MessageIndex != nil || msg.ToolCallName != nil || msg.ToolCallIsError != nil {
 		t.Fatalf("sanitized message helper fields should be cleared")
@@ -168,6 +186,10 @@ func TestUnifiedRequestSanitizedForProvider(t *testing.T) {
 	sanitized.Messages[0].Role = "user"
 	if req.Messages[0].Role != "assistant" {
 		t.Fatalf("original request messages should not share backing array with sanitized copy")
+	}
+	sanitized.SystemParts[0].Type = "changed"
+	if req.SystemParts[0].Type != "text" {
+		t.Fatalf("original request system parts should not share backing array with sanitized copy")
 	}
 }
 
@@ -198,6 +220,12 @@ func TestUnifiedRequestPredicates(t *testing.T) {
 	req.System = "system prompt"
 	if !req.IsChatRequest() {
 		t.Fatalf("IsChatRequest() should be true for system message")
+	}
+
+	req.System = ""
+	req.SystemParts = []UnifiedMessageContentPart{{Type: "text", Text: ptrString("x")}}
+	if !req.IsChatRequest() {
+		t.Fatalf("IsChatRequest() should be true for structured system")
 	}
 
 	req.Modalities = []string{"text", "image"}

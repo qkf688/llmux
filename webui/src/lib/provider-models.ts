@@ -1,39 +1,52 @@
 import type { ProviderModel } from "./api";
 
 const normalize = (name: string) => name.trim();
+type ProviderConfigObject = {
+  upstream_models?: unknown;
+  custom_models?: unknown;
+};
+
+const parseProviderConfig = (config: string): ProviderConfigObject | null => {
+  try {
+    const parsed: unknown = JSON.parse(config ?? "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed as ProviderConfigObject;
+  } catch {
+    return null;
+  }
+};
 
 export function parseAllModelsFromConfig(config: string): string[] {
-  try {
-    const parsed = JSON.parse(config ?? "{}");
-    const upstream = Array.isArray((parsed as any).upstream_models) ? (parsed as any).upstream_models : [];
-    const custom = Array.isArray((parsed as any).custom_models) ? (parsed as any).custom_models : [];
-    const all = [...upstream, ...custom]
-      .map((item: unknown) => (typeof item === "string" ? normalize(item) : ""))
-      .filter(Boolean);
-    return Array.from(new Set(all));
-  } catch {
+  const parsed = parseProviderConfig(config);
+  if (!parsed) {
     return [];
   }
+  const upstream = Array.isArray(parsed.upstream_models) ? parsed.upstream_models : [];
+  const custom = Array.isArray(parsed.custom_models) ? parsed.custom_models : [];
+  const all = [...upstream, ...custom]
+    .map((item: unknown) => (typeof item === "string" ? normalize(item) : ""))
+    .filter(Boolean);
+  return Array.from(new Set(all));
 }
 
 export function parseUpstreamModelsFromConfig(config: string): string[] {
-  try {
-    const parsed = JSON.parse(config ?? "{}");
-    const raw = Array.isArray((parsed as any).upstream_models) ? (parsed as any).upstream_models : [];
-    return raw.map((item: unknown) => (typeof item === "string" ? normalize(item) : "")).filter(Boolean);
-  } catch {
+  const parsed = parseProviderConfig(config);
+  if (!parsed) {
     return [];
   }
+  const raw = Array.isArray(parsed.upstream_models) ? parsed.upstream_models : [];
+  return raw.map((item: unknown) => (typeof item === "string" ? normalize(item) : "")).filter(Boolean);
 }
 
 export function parseCustomModelsFromConfig(config: string): string[] {
-  try {
-    const parsed = JSON.parse(config ?? "{}");
-    const raw = Array.isArray((parsed as any).custom_models) ? (parsed as any).custom_models : [];
-    return raw.map((item: unknown) => (typeof item === "string" ? normalize(item) : "")).filter(Boolean);
-  } catch {
+  const parsed = parseProviderConfig(config);
+  if (!parsed) {
     return [];
   }
+  const raw = Array.isArray(parsed.custom_models) ? parsed.custom_models : [];
+  return raw.map((item: unknown) => (typeof item === "string" ? normalize(item) : "")).filter(Boolean);
 }
 
 export function buildConfigWithModels(config: string, upstreamModels: string[], customModels: string[]): string {

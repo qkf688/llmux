@@ -1,4 +1,5 @@
 import type { TestType } from "../../types";
+import type { ModelProviderTestResult } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,7 +20,7 @@ type TestDialogProps = {
   testType: TestType;
   onTestTypeChange: (value: TestType) => void;
   selectedTestId: number | null;
-  testResults: Record<number, { loading: boolean; result: any }>;
+  testResults: Record<number, { loading: boolean; result: ModelProviderTestResult | null }>;
   reactTestResult: {
     loading: boolean;
     messages: string;
@@ -144,4 +145,3 @@ export function TestDialog({
     </Dialog>
   );
 }
-

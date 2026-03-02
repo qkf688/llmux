@@ -34,6 +34,7 @@ import {
 import type {
   AssociationPreview,
   Model,
+  ModelProviderTestResult,
   ModelTemplate,
   ModelWithProvider,
   Provider,
@@ -76,7 +77,9 @@ export default function ModelProvidersPage() {
   const [editingAssociation, setEditingAssociation] = useState<ModelWithProvider | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<number | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [testResults, setTestResults] = useState<Record<number, { loading: boolean; result: any }>>({});
+  const [testResults, setTestResults] = useState<
+    Record<number, { loading: boolean; result: ModelProviderTestResult | null }>
+  >({});
   const [testDialogOpen, setTestDialogOpen] = useState(false);
   const [selectedTestId, setSelectedTestId] = useState<number | null>(null);
   const [testType, setTestType] = useState<TestType>("connectivity");
@@ -549,7 +552,7 @@ export default function ModelProvidersPage() {
     });
   };
 
-  const handleConnectivityTest = async (id: number) => {
+  const handleConnectivityTest = async (id: number): Promise<ModelProviderTestResult> => {
     try {
       setTestResults(prev => ({
         ...prev,

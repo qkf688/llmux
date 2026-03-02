@@ -485,7 +485,7 @@ export default function ProvidersPage() {
   // 选择所有测试成功的模型
   const selectAllSuccessful = () => {
     const successfulModels = Object.entries(allModelsTestResults)
-      .filter(([_, result]) => result.success === true)
+      .filter(([, result]) => result.success === true)
       .map(([modelName]) => modelName);
     
     if (successfulModels.length === 0) {
@@ -500,7 +500,7 @@ export default function ProvidersPage() {
   // 选择所有测试失败的模型
   const selectAllFailed = () => {
     const failedModels = Object.entries(allModelsTestResults)
-      .filter(([_, result]) => result.success === false)
+      .filter(([, result]) => result.success === false)
       .map(([modelName]) => modelName);
     
     if (failedModels.length === 0) {
@@ -693,7 +693,7 @@ export default function ProvidersPage() {
 
   const selectUpstreamSuccessful = () => {
     const successfulModels = Object.entries(upstreamTestResults)
-      .filter(([_, result]) => result.success === true)
+      .filter(([, result]) => result.success === true)
       .map(([modelName]) => modelName);
     
     if (successfulModels.length === 0) {
@@ -707,7 +707,7 @@ export default function ProvidersPage() {
 
   const selectUpstreamFailed = () => {
     const failedModels = Object.entries(upstreamTestResults)
-      .filter(([_, result]) => result.success === false)
+      .filter(([, result]) => result.success === false)
       .map(([modelName]) => modelName);
     
     if (failedModels.length === 0) {
@@ -806,18 +806,17 @@ export default function ProvidersPage() {
     try {
       setSyncingAll(true);
       const result = await syncAllProviderModels();
-      const addedTotal = typeof (result as any).added_total === "number" ? (result as any).added_total : 0;
-      const removedTotal = typeof (result as any).removed_total === "number" ? (result as any).removed_total : 0;
-      const syncedProviders = typeof (result as any).synced_providers === "number"
-        ? (result as any).synced_providers
-        : Array.isArray((result as any).logs) ? (result as any).logs.length : 0;
+      const logs = Array.isArray(result.logs) ? result.logs : [];
+      const addedTotal = typeof result.added_total === "number" ? result.added_total : 0;
+      const removedTotal = typeof result.removed_total === "number" ? result.removed_total : 0;
+      const syncedProviders = typeof result.synced_providers === "number" ? result.synced_providers : logs.length;
 
-      if (Array.isArray((result as any).logs) && (result as any).logs.length > 0) {
+      if (logs.length > 0) {
         toast.success(`同步完成：新增 ${addedTotal} 个，删除 ${removedTotal} 个模型`, {
           description: syncedProviders > 0 ? `涉及 ${syncedProviders} 个提供商` : undefined,
         });
       } else {
-        toast.info((result as any).message ?? "没有检测到模型变化");
+        toast.info(result.message ?? "没有检测到模型变化");
       }
 
       await fetchProviders();

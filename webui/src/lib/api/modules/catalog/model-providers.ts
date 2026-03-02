@@ -23,6 +23,12 @@ export interface AssociationPreview {
   provider_model: string;
 }
 
+export interface ModelProviderTestResult {
+  error?: string;
+  message?: string;
+  [key: string]: unknown;
+}
+
 export async function getModelProviders(modelId: number): Promise<ModelWithProvider[]> {
   return apiRequest<ModelWithProvider[]>(`/model-providers?model_id=${modelId}`);
 }
@@ -120,8 +126,8 @@ export async function batchUpdateModelProvidersStatus(
   });
 }
 
-export async function testModelProvider(id: number): Promise<any> {
-  return apiRequest<any>(`/test/${id}`);
+export async function testModelProvider(id: number): Promise<ModelProviderTestResult> {
+  return apiRequest<ModelProviderTestResult>(`/test/${id}`);
 }
 
 export async function previewAutoAssociate(): Promise<AssociationPreview[]> {

@@ -25,6 +25,12 @@ export interface ProviderModel {
   owned_by: string;
 }
 
+export interface ProviderModelTestResult {
+  error?: string;
+  message?: string;
+  [key: string]: unknown;
+}
+
 export async function getProviders(filters: { name?: string; type?: string } = {}): Promise<Provider[]> {
   const params = new URLSearchParams();
   if (filters.name) {
@@ -102,8 +108,8 @@ export async function getProviderModels(
   return apiRequest<ProviderModel[]>(endpoint);
 }
 
-export async function testProviderModel(providerId: number, model: string): Promise<any> {
-  return apiRequest<any>(`/providers/${providerId}/test`, {
+export async function testProviderModel(providerId: number, model: string): Promise<ProviderModelTestResult> {
+  return apiRequest<ProviderModelTestResult>(`/providers/${providerId}/test`, {
     method: "POST",
     body: JSON.stringify({ model }),
   });

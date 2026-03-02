@@ -23,7 +23,7 @@ func writeRealtimeEventJSONData(state *realtimeStreamState, event string, payloa
 }
 
 func writeRealtimeOrderedData(state *realtimeStreamState, payload map[string]interface{}) error {
-	data, err := marshalWithTypeFirst(payload)
+	data, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}

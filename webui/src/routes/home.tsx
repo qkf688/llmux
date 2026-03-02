@@ -107,6 +107,15 @@ export default function Home() {
 
   return (
     <div className="space-y-4 sm:space-y-6 overflow-auto h-full">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-2xl font-bold">系统概览</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            快速查看今日/本月调用、模型统计与数据库状态
+          </p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
         <Card className="py-4 gap-3 sm:py-6 sm:gap-6">
           <CardHeader className="px-3 sm:px-6">

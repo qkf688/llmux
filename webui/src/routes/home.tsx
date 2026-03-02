@@ -40,7 +40,7 @@ const AnimatedCounter = ({ value, duration = 1000 }: { value: number; duration?:
     requestAnimationFrame(animateCount);
   }, [value, duration]);
 
-  return <div className="text-3xl font-bold">{count.toLocaleString()}</div>;
+  return <div className="text-xl sm:text-3xl font-bold tabular-nums">{count.toLocaleString()}</div>;
 };
 
 export default function Home() {
@@ -106,70 +106,70 @@ export default function Home() {
   if (loading) return <Loading message="加载系统概览" />;
 
   return (
-    <div className="space-y-6 overflow-auto h-full">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>今日请求</CardTitle>
-            <CardDescription>今日处理的请求总数</CardDescription>
+    <div className="space-y-4 sm:space-y-6 overflow-auto h-full">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+        <Card className="py-4 gap-3 sm:py-6 sm:gap-6">
+          <CardHeader className="px-3 sm:px-6">
+            <CardTitle className="text-sm font-medium sm:text-base">今日请求</CardTitle>
+            <CardDescription className="hidden sm:block">今日处理的请求总数</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-3 sm:px-6">
             <AnimatedCounter value={todayMetrics.reqs} />
           </CardContent>
         </Card>
         
-        <Card>
-          <CardHeader>
-            <CardTitle>今日Tokens</CardTitle>
-            <CardDescription>今日处理的Tokens总数</CardDescription>
+        <Card className="py-4 gap-3 sm:py-6 sm:gap-6">
+          <CardHeader className="px-3 sm:px-6">
+            <CardTitle className="text-sm font-medium sm:text-base">今日Tokens</CardTitle>
+            <CardDescription className="hidden sm:block">今日处理的Tokens总数</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-3 sm:px-6">
             <AnimatedCounter value={todayMetrics.tokens} />
           </CardContent>
         </Card>
         
-        <Card>
-          <CardHeader>
-            <CardTitle>本月请求</CardTitle>
-            <CardDescription>最近30天处理的请求总数</CardDescription>
+        <Card className="py-4 gap-3 sm:py-6 sm:gap-6">
+          <CardHeader className="px-3 sm:px-6">
+            <CardTitle className="text-sm font-medium sm:text-base">本月请求</CardTitle>
+            <CardDescription className="hidden sm:block">最近30天处理的请求总数</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-3 sm:px-6">
             <AnimatedCounter value={totalMetrics.reqs} />
           </CardContent>
         </Card>
         
-        <Card>
-          <CardHeader>
-            <CardTitle>本月Tokens</CardTitle>
-            <CardDescription>最近30天处理的Tokens总数</CardDescription>
+        <Card className="py-4 gap-3 sm:py-6 sm:gap-6">
+          <CardHeader className="px-3 sm:px-6">
+            <CardTitle className="text-sm font-medium sm:text-base">本月Tokens</CardTitle>
+            <CardDescription className="hidden sm:block">最近30天处理的Tokens总数</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-3 sm:px-6">
             <AnimatedCounter value={totalMetrics.tokens} />
           </CardContent>
         </Card>
        </div>
 
       {/* 数据库概览卡片 */}
-      {dbStats && (
-        <Card
-          className="cursor-pointer hover:bg-accent/50 transition-colors"
+       {dbStats && (
+         <Card
+          className="cursor-pointer hover:bg-accent/50 transition-colors py-4 gap-3 sm:py-6 sm:gap-6"
           onClick={() => navigate("/database")}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+         >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2 px-3 sm:px-6">
             <div>
-              <CardTitle className="text-base">数据库状态</CardTitle>
-              <CardDescription>点击查看详情</CardDescription>
+              <CardTitle className="text-sm sm:text-base">数据库状态</CardTitle>
+              <CardDescription className="hidden sm:block">点击查看详情</CardDescription>
             </div>
-            <Database className="h-5 w-5 text-muted-foreground" />
+            <Database className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <CardContent className="px-3 sm:px-6">
+            <div className="grid grid-cols-3 md:grid-cols-3 gap-2 sm:gap-4">
               <div>
-                <div className="text-2xl font-bold">{dbStats.file_size_human}</div>
+                <div className="text-lg sm:text-2xl font-bold">{dbStats.file_size_human}</div>
                 <p className="text-xs text-muted-foreground">文件大小</p>
               </div>
               <div>
-                <div className="text-2xl font-bold">
+                <div className="text-lg sm:text-2xl font-bold">
                   {dbStats.page_count > 0
                     ? ((dbStats.page_count - dbStats.free_pages) / dbStats.page_count * 100).toFixed(1)
                     : "0"}%
@@ -177,7 +177,7 @@ export default function Home() {
                 <p className="text-xs text-muted-foreground">使用率</p>
               </div>
               <div>
-                <div className="text-2xl font-bold">
+                <div className="text-lg sm:text-2xl font-bold">
                   {dbStats.table_stats && Array.isArray(dbStats.table_stats)
                     ? dbStats.table_stats.reduce((sum, t) => sum + t.count, 0).toLocaleString()
                     : "0"
@@ -188,30 +188,34 @@ export default function Home() {
             </div>
           </CardContent>
         </Card>
-      )}
-       
-      <Card>
-        <CardHeader>
-          <CardTitle>模型数据分析</CardTitle>
-          <CardDescription>模型调用统计分析</CardDescription>
+       )}
+        
+      <Card className="py-4 gap-3 sm:py-6 sm:gap-6">
+        <CardHeader className="px-3 sm:px-6">
+          <CardTitle className="text-sm font-medium sm:text-base">模型数据分析</CardTitle>
+          <CardDescription className="hidden sm:block">模型调用统计分析</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="flex gap-2 mb-4">
+        <CardContent className="px-3 sm:px-6">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-2 mb-3 sm:mb-4">
             <Button 
               variant={activeChart === "distribution" ? "default" : "outline"} 
               onClick={() => setActiveChart("distribution")}
+              size="sm"
+              className="w-full sm:w-auto"
             >
               调用次数分布
             </Button>
             <Button 
               variant={activeChart === "ranking" ? "default" : "outline"} 
               onClick={() => setActiveChart("ranking")}
+              size="sm"
+              className="w-full sm:w-auto"
             >
               调用次数排行
             </Button>
           </div>
-          <div className="mt-4">
-            <Suspense fallback={<div className="h-64 flex items-center justify-center">
+          <div className="mt-3 sm:mt-4">
+            <Suspense fallback={<div className="h-56 sm:h-64 flex items-center justify-center">
               <Loading message="加载图表..." />
             </div>}>
               {activeChart === "distribution" ? <ChartPieDonutText data={modelCounts} /> : <ModelRankingChart data={modelCounts} />}

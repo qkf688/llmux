@@ -70,6 +70,8 @@ func ValidateUnifiedRequest(req *UnifiedRequest) error {
 		return errors.New("request cannot be nil")
 	}
 
+	req.NormalizeToolCallIDs()
+
 	// 验证必需字段
 	if req.Model == "" {
 		return errors.New("model is required")

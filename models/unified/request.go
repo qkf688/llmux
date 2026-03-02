@@ -84,8 +84,19 @@ func (r *UnifiedRequest) SanitizedForProvider() *UnifiedRequest {
 
 	copied := *r
 	if len(r.Messages) > 0 {
-		copied.Messages = append([]UnifiedMessage(nil), r.Messages...)
+		copied.Messages = make([]UnifiedMessage, len(r.Messages))
+		copy(copied.Messages, r.Messages)
+		for i := range copied.Messages {
+			if len(r.Messages[i].ToolCalls) > 0 {
+				copied.Messages[i].ToolCalls = append([]UnifiedToolCall(nil), r.Messages[i].ToolCalls...)
+			}
+			if parts, ok := r.Messages[i].Content.([]UnifiedMessageContentPart); ok && len(parts) > 0 {
+				copiedParts := append([]UnifiedMessageContentPart(nil), parts...)
+				copied.Messages[i].Content = copiedParts
+			}
+		}
 	}
+	copied.NormalizeToolCallIDs()
 	copied.ClearHelpFields()
 	return &copied
 }

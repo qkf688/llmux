@@ -3,6 +3,7 @@ package chat
 import (
 	"errors"
 
+	preprocessopenai "github.com/atopos31/llmio/service/chat/preprocess/openai"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
@@ -59,6 +60,10 @@ func BeforerOpenAI(data []byte) (*Before, error) {
 		}
 		return true
 	})
+
+	if patched, changed, err := preprocessopenai.FillMissingToolCallIDs(data); err == nil && changed {
+		data = patched
+	}
 	return &Before{
 		Model:            model,
 		Stream:           stream,

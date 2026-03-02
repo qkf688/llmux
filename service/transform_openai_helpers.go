@@ -362,6 +362,9 @@ func normalizeReasoningEffort(ctx context.Context, value string) string {
 
 // getReasoningEffortDefaultValue 获取默认值配置
 func getReasoningEffortDefaultValue(ctx context.Context) string {
+	if models.DB == nil {
+		return "low"
+	}
 	setting, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyReasoningEffortDefaultValue).
 		First(ctx)
@@ -373,6 +376,9 @@ func getReasoningEffortDefaultValue(ctx context.Context) string {
 
 // getReasoningEffortMappingEnabled 获取映射开关
 func getReasoningEffortMappingEnabled(ctx context.Context) bool {
+	if models.DB == nil {
+		return true // 默认启用
+	}
 	setting, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyReasoningEffortMappingEnabled).
 		First(ctx)

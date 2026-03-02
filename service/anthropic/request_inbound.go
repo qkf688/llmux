@@ -48,6 +48,37 @@ func TransformToUnified(rawBody []byte) (*UnifiedRequest, error) {
 		}
 	}
 
+	// tool_choice (best-effort): keep unified semantics as OpenAI-style tool_choice.
+	if rawToolChoice, exists := req["tool_choice"]; exists && rawToolChoice != nil {
+		unified.ToolChoice = &UnifiedToolChoice{}
+
+		if v, ok := rawToolChoice.(string); ok && v != "" {
+			unified.ToolChoice.StringValue = &v
+		} else if tcMap, ok := asMap(rawToolChoice); ok {
+			tcType := getString(tcMap, "type")
+			switch tcType {
+			case "tool":
+				name := getString(tcMap, "name")
+				if name != "" {
+					unified.ToolChoice.ObjectValue = &UnifiedToolChoiceObject{
+						Type: "function",
+						Function: &UnifiedToolChoiceFunction{
+							Name: name,
+						},
+					}
+				}
+			default:
+				if tcType != "" {
+					unified.ToolChoice.StringValue = &tcType
+				}
+			}
+		}
+
+		if unified.ToolChoice.StringValue == nil && unified.ToolChoice.ObjectValue == nil {
+			unified.ToolChoice = nil
+		}
+	}
+
 	return unified, nil
 }
 

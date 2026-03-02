@@ -232,6 +232,10 @@ func TestResponsesToOpenAI_CherryStudioFormat(t *testing.T) {
 		t.Fatalf("Cherry Studio 格式转换失败: %v", err)
 	}
 
+	if unified.ReasoningEffort == nil || *unified.ReasoningEffort != "low" {
+		t.Fatalf("reasoning.effort 应映射到 unified.reasoning_effort=low，实际: %v", unified.ReasoningEffort)
+	}
+
 	// developer 角色应该被转换为 system
 	if unified.System == "" {
 		// 或者作为 messages 的一部分
@@ -265,6 +269,189 @@ func TestResponsesToOpenAI_CherryStudioFormat(t *testing.T) {
 	}
 
 	t.Logf("OpenAI messages count: %d", len(messages))
+}
+
+func TestTransformResponsesToUnified_MapsToolChoiceTextFormatAndMetadata(t *testing.T) {
+	body := `{
+		"model": "gpt-4.1",
+		"instructions": "base system",
+		"text": {
+			"format": {
+				"type": "json_schema",
+				"json_schema": {"name":"test_schema","schema":{"type":"object"}}
+			}
+		},
+		"tool_choice": {"type":"function","function":{"name":"get_weather"}},
+		"reasoning": {"effort":"low"},
+		"metadata": {"trace_id":"abc"},
+		"input": [
+			{"type":"message","role":"developer","content":"dev sys"},
+			{"type":"message","role":"user","content":[
+				{"type":"input_text","text":"hi"},
+				{"type":"input_image","image_url":"https://example.com/a.png","detail":"high"}
+			]}
+		]
+	}`
+
+	unified, err := TransformResponsesToUnified(context.Background(), []byte(body))
+	if err != nil {
+		t.Fatalf("转换失败: %v", err)
+	}
+
+	if unified.System == "" {
+		t.Fatal("system 不能为空")
+	}
+	if unified.ToolChoice == nil || unified.ToolChoice.ObjectValue == nil || unified.ToolChoice.ObjectValue.Function == nil || unified.ToolChoice.ObjectValue.Function.Name != "get_weather" {
+		t.Fatalf("tool_choice 映射错误: %+v", unified.ToolChoice)
+	}
+	if unified.ResponseFormat == nil || unified.ResponseFormat.Type != "json_schema" || len(unified.ResponseFormat.JSONSchema) == 0 {
+		t.Fatalf("text.format -> response_format 映射错误: %+v", unified.ResponseFormat)
+	}
+	if unified.ReasoningEffort == nil || *unified.ReasoningEffort != "low" {
+		t.Fatalf("reasoning.effort -> reasoning_effort 映射错误: %v", unified.ReasoningEffort)
+	}
+	if unified.Metadata == nil || unified.Metadata["trace_id"] != "abc" {
+		t.Fatalf("metadata 映射错误: %+v", unified.Metadata)
+	}
+
+	if len(unified.Messages) != 1 {
+		t.Fatalf("messages 数量应为 1（developer 被提取为 system），实际: %d", len(unified.Messages))
+	}
+	parts, ok := unified.Messages[0].Content.([]UnifiedMessageContentPart)
+	if !ok {
+		t.Fatalf("用户消息 content 应转换为多模态 parts，实际: %#v", unified.Messages[0].Content)
+	}
+	foundImage := false
+	for _, p := range parts {
+		if p.Type == "image_url" && p.ImageURL != nil && p.ImageURL.URL == "https://example.com/a.png" {
+			foundImage = true
+		}
+	}
+	if !foundImage {
+		t.Fatalf("未找到 input_image -> image_url 的转换结果: %#v", parts)
+	}
+
+	// Integration: Responses -> Unified -> OpenAI should keep image_url part.
+	openaiBytes, err := TransformUnifiedToOpenAI(unified)
+	if err != nil {
+		t.Fatalf("Unified → OpenAI 转换失败: %v", err)
+	}
+	var openaiReq map[string]interface{}
+	if err := json.Unmarshal(openaiBytes, &openaiReq); err != nil {
+		t.Fatalf("解析 OpenAI 请求失败: %v", err)
+	}
+	openaiMessages, ok := openaiReq["messages"].([]interface{})
+	if !ok || len(openaiMessages) == 0 {
+		t.Fatalf("OpenAI messages 缺失: %#v", openaiReq["messages"])
+	}
+	var userMsg map[string]interface{}
+	for _, m := range openaiMessages {
+		mm, _ := m.(map[string]interface{})
+		if mm != nil && mm["role"] == "user" {
+			userMsg = mm
+			break
+		}
+	}
+	if userMsg == nil {
+		t.Fatalf("OpenAI messages 未找到 user role: %#v", openaiMessages)
+	}
+
+	contentArr, ok := userMsg["content"].([]interface{})
+	if !ok {
+		t.Fatalf("OpenAI content 应为数组（多模态），实际: %#v", userMsg["content"])
+	}
+	foundOpenAIImage := false
+	for _, item := range contentArr {
+		m, _ := item.(map[string]interface{})
+		if m == nil || m["type"] != "image_url" {
+			continue
+		}
+		img, _ := m["image_url"].(map[string]interface{})
+		if img != nil && img["url"] == "https://example.com/a.png" {
+			foundOpenAIImage = true
+		}
+	}
+	if !foundOpenAIImage {
+		t.Fatalf("OpenAI content 未包含 image_url: %#v", contentArr)
+	}
+}
+
+func TestTransformUnifiedToResponses_MapsTextToolChoiceReasoningAndMetadata(t *testing.T) {
+	effort := "medium"
+
+	unified := &UnifiedRequest{
+		Model:  "gpt-4.1",
+		System: "sys",
+		Messages: []UnifiedMessage{
+			{
+				Role: "user",
+				Content: []UnifiedMessageContentPart{
+					{Type: "text", Text: ptr("hi")},
+					{Type: "image_url", ImageURL: &UnifiedImageURL{URL: "https://example.com/a.png"}},
+				},
+			},
+		},
+		ReasoningEffort: &effort,
+		Metadata:        map[string]string{"trace_id": "abc"},
+		ResponseFormat: &UnifiedResponseFormat{
+			Type:       "json_schema",
+			JSONSchema: []byte(`{"name":"test","schema":{"type":"object"}}`),
+		},
+		ToolChoice: &UnifiedToolChoice{
+			ObjectValue: &UnifiedToolChoiceObject{
+				Type: "function",
+				Function: &UnifiedToolChoiceFunction{
+					Name: "get_weather",
+				},
+			},
+		},
+	}
+
+	b, err := TransformUnifiedToResponses(unified)
+	if err != nil {
+		t.Fatalf("Unified → Responses 转换失败: %v", err)
+	}
+
+	var req map[string]interface{}
+	if err := json.Unmarshal(b, &req); err != nil {
+		t.Fatalf("Responses 请求解析失败: %v", err)
+	}
+
+	if _, ok := req["text"].(map[string]interface{}); !ok {
+		t.Fatalf("responses.text 缺失: %#v", req["text"])
+	}
+	if _, ok := req["tool_choice"]; !ok {
+		t.Fatalf("responses.tool_choice 缺失: %#v", req)
+	}
+	if reasoning, ok := req["reasoning"].(map[string]interface{}); !ok || reasoning["effort"] != "medium" {
+		t.Fatalf("responses.reasoning.effort 映射错误: %#v", req["reasoning"])
+	}
+	if metadata, ok := req["metadata"].(map[string]interface{}); !ok || metadata["trace_id"] != "abc" {
+		t.Fatalf("responses.metadata 映射错误: %#v", req["metadata"])
+	}
+
+	input, ok := req["input"].([]interface{})
+	if !ok || len(input) == 0 {
+		t.Fatalf("responses.input 应为数组: %#v", req["input"])
+	}
+	first, _ := input[0].(map[string]interface{})
+	if first["role"] != "user" {
+		t.Fatalf("responses.input[0].role 应为 user: %#v", first["role"])
+	}
+	content, ok := first["content"].([]interface{})
+	if !ok || len(content) < 2 {
+		t.Fatalf("responses.input[0].content 应为数组且包含多模态: %#v", first["content"])
+	}
+	foundInputImage := false
+	for _, c := range content {
+		m, _ := c.(map[string]interface{})
+		if m != nil && m["type"] == "input_image" && m["image_url"] == "https://example.com/a.png" {
+			foundInputImage = true
+		}
+	}
+	if !foundInputImage {
+		t.Fatalf("responses.content 未包含 input_image: %#v", content)
+	}
 }
 
 // TestResponsesResponse_OutputTextAnnotationsAlwaysArray 测试 output_text 的 annotations 字段始终为数组
@@ -350,4 +537,8 @@ func findSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func ptr(s string) *string {
+	return &s
 }

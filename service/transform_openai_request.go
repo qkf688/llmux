@@ -32,7 +32,10 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 		// 先统计非 system 消息的数量
 		nonSystemCount := 0
 		for _, msg := range messages {
-			msgMap := msg.(map[string]interface{})
+			msgMap, ok := msg.(map[string]interface{})
+			if !ok {
+				continue
+			}
 			if getString(msgMap, "role") != "system" {
 				nonSystemCount++
 			}
@@ -43,7 +46,10 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 		extractSystem := nonSystemCount > 0
 
 		for _, msg := range messages {
-			msgMap := msg.(map[string]interface{})
+			msgMap, ok := msg.(map[string]interface{})
+			if !ok {
+				continue
+			}
 			role := getString(msgMap, "role")
 
 			// 只在有其他消息时才提取 system 消息
@@ -120,7 +126,10 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 	// 转换工具
 	if tools, ok := req["tools"].([]interface{}); ok {
 		for _, tool := range tools {
-			toolMap := tool.(map[string]interface{})
+			toolMap, ok := tool.(map[string]interface{})
+			if !ok {
+				continue
+			}
 			if funcMap, ok := toolMap["function"].(map[string]interface{}); ok {
 				unified.Tools = append(unified.Tools, UnifiedTool{
 					Type: "function",

@@ -38,12 +38,62 @@ func TransformRequest(rawBody []byte, options RequestTransformOptions) (*models.
 		unified.TopP = req.TopP
 	}
 
-	unified.Messages = convertInputToMessages(req.Input)
+	var extractedSystem string
+	unified.Messages, extractedSystem = convertInputToMessages(req.Input)
+	if extractedSystem != "" {
+		if unified.System != "" {
+			unified.System = unified.System + "\n\n" + extractedSystem
+		} else {
+			unified.System = extractedSystem
+		}
+	}
 	if len(req.Tools) > 0 {
 		unified.Tools = convertToolsToUnified(req.Tools)
 	}
 
-	if effort, ok := req.Metadata["reasoning_effort"].(string); ok && effort != "" {
+	if req.ToolChoice != nil {
+		unified.ToolChoice = &models.UnifiedToolChoice{}
+		if req.ToolChoice.StringValue != nil {
+			unified.ToolChoice.StringValue = req.ToolChoice.StringValue
+		} else if req.ToolChoice.ObjectValue != nil && req.ToolChoice.ObjectValue.Function != nil {
+			unified.ToolChoice.ObjectValue = &models.UnifiedToolChoiceObject{
+				Type: req.ToolChoice.ObjectValue.Type,
+				Function: &models.UnifiedToolChoiceFunction{
+					Name: req.ToolChoice.ObjectValue.Function.Name,
+				},
+			}
+		}
+	}
+
+	if req.Text != nil && req.Text.Format != nil && req.Text.Format.Type != "" {
+		unified.ResponseFormat = &models.UnifiedResponseFormat{
+			Type:       req.Text.Format.Type,
+			JSONSchema: req.Text.Format.JSONSchema,
+		}
+	}
+
+	if req.Metadata != nil {
+		metadata := make(map[string]string, 0)
+		for k, v := range req.Metadata {
+			if s, ok := v.(string); ok && s != "" {
+				metadata[k] = s
+			}
+		}
+		if len(metadata) > 0 {
+			unified.Metadata = metadata
+		}
+	}
+
+	// reasoning_effort: prefer official field, fallback to metadata for compatibility.
+	effort := ""
+	if req.Reasoning != nil && req.Reasoning.Effort != nil {
+		effort = *req.Reasoning.Effort
+	} else if req.Metadata != nil {
+		if v, ok := req.Metadata["reasoning_effort"].(string); ok {
+			effort = v
+		}
+	}
+	if effort != "" {
 		if options.MapReasoningEffort != nil {
 			mapped := options.MapReasoningEffort(effort)
 			unified.ReasoningEffort = &mapped
@@ -55,44 +105,70 @@ func TransformRequest(rawBody []byte, options RequestTransformOptions) (*models.
 	return unified, nil
 }
 
-func convertInputToMessages(input ResponsesInput) []models.UnifiedMessage {
+func convertInputToMessages(input ResponsesInput) ([]models.UnifiedMessage, string) {
 	var messages []models.UnifiedMessage
+	var systemParts []string
 
 	if input.Text != nil {
 		messages = append(messages, models.UnifiedMessage{
 			Role:    "user",
 			Content: *input.Text,
 		})
-		return messages
+		return messages, ""
 	}
+
+	nonSystemCount := 0
+	for _, item := range input.Items {
+		if item.Role == "" {
+			continue
+		}
+		if item.Role != "system" && item.Role != "developer" {
+			nonSystemCount++
+		}
+	}
+	shouldExtractSystem := nonSystemCount > 0
 
 	for _, item := range input.Items {
 		switch item.Type {
 		case "message", "input_text", "":
 			if item.Role != "" {
+				if (item.Role == "system" || item.Role == "developer") && shouldExtractSystem {
+					systemContent := ""
+					if item.Content != nil {
+						if s, ok := item.Content.(string); ok {
+							systemContent = s
+						} else if parts, ok := item.Content.([]interface{}); ok {
+							systemContent = extractTextFromParts(parts)
+						}
+					} else if item.Text != nil {
+						systemContent = *item.Text
+					}
+					if systemContent != "" {
+						systemParts = append(systemParts, systemContent)
+					}
+					continue
+				}
+
 				msg := models.UnifiedMessage{Role: item.Role}
 				if item.Content != nil {
 					switch v := item.Content.(type) {
 					case string:
 						msg.Content = v
 					case []interface{}:
-						var textParts []string
-						for _, part := range v {
-							if partMap, ok := part.(map[string]interface{}); ok {
-								if partType, _ := partMap["type"].(string); partType == "input_text" || partType == "text" {
-									if text, ok := partMap["text"].(string); ok {
-										textParts = append(textParts, text)
-									}
-								}
-							}
+						if content, ok := parsePartsToUnifiedContent(v); ok {
+							msg.Content = content
 						}
-						if len(textParts) > 0 {
-							msg.Content = strings.Join(textParts, "")
-						}
+					default:
+						msg.Content = item.Content
 					}
 				} else if item.Text != nil {
 					msg.Content = *item.Text
 				}
+
+				if item.Role == "tool" && item.CallID != nil {
+					msg.ToolCallID = *item.CallID
+				}
+
 				messages = append(messages, msg)
 			} else if item.Text != nil {
 				messages = append(messages, models.UnifiedMessage{
@@ -143,7 +219,7 @@ func convertInputToMessages(input ResponsesInput) []models.UnifiedMessage {
 		}
 	}
 
-	return messages
+	return messages, strings.Join(systemParts, "\n\n")
 }
 
 func convertToolsToUnified(tools []ResponsesTool) []models.UnifiedTool {
@@ -161,4 +237,105 @@ func convertToolsToUnified(tools []ResponsesTool) []models.UnifiedTool {
 		}
 	}
 	return unified
+}
+
+func extractTextFromParts(parts []interface{}) string {
+	var textParts []string
+	for _, part := range parts {
+		partMap, ok := part.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		partType, _ := partMap["type"].(string)
+		if partType != "input_text" && partType != "output_text" && partType != "text" {
+			continue
+		}
+		if text, ok := partMap["text"].(string); ok {
+			textParts = append(textParts, text)
+		}
+	}
+	return strings.Join(textParts, "")
+}
+
+func parsePartsToUnifiedContent(parts []interface{}) (any, bool) {
+	textOnly := true
+	textParts := make([]string, 0, len(parts))
+	unifiedParts := make([]models.UnifiedMessageContentPart, 0, len(parts))
+
+	for _, raw := range parts {
+		partMap, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		partType, _ := partMap["type"].(string)
+		switch partType {
+		case "input_text", "output_text", "text":
+			if text, ok := partMap["text"].(string); ok {
+				textParts = append(textParts, text)
+				txt := text
+				unifiedParts = append(unifiedParts, models.UnifiedMessageContentPart{
+					Type: "text",
+					Text: &txt,
+				})
+			}
+
+		case "input_image", "image_url":
+			textOnly = false
+
+			url := ""
+			detail := (*string)(nil)
+
+			if v, ok := partMap["image_url"]; ok && v != nil {
+				switch vv := v.(type) {
+				case string:
+					url = vv
+				case map[string]interface{}:
+					if s, ok := vv["url"].(string); ok {
+						url = s
+					}
+					if s, ok := vv["detail"].(string); ok {
+						detail = &s
+					}
+				}
+			}
+			if url == "" {
+				if s, ok := partMap["url"].(string); ok {
+					url = s
+				}
+			}
+			if detail == nil {
+				if s, ok := partMap["detail"].(string); ok {
+					detail = &s
+				}
+			}
+
+			if url != "" {
+				unifiedParts = append(unifiedParts, models.UnifiedMessageContentPart{
+					Type: "image_url",
+					ImageURL: &models.UnifiedImageURL{
+						URL:    url,
+						Detail: detail,
+					},
+				})
+			}
+
+		default:
+			// Unknown part types should keep array form to avoid dropping non-text inputs.
+			if partType != "" {
+				textOnly = false
+				unifiedParts = append(unifiedParts, models.UnifiedMessageContentPart{Type: partType})
+			}
+		}
+	}
+
+	if len(unifiedParts) == 0 {
+		return nil, false
+	}
+
+	if textOnly {
+		return strings.Join(textParts, ""), true
+	}
+
+	return unifiedParts, true
 }

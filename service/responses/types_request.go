@@ -10,6 +10,7 @@ type ResponsesRequest struct {
 	Model           string                 `json:"model"`
 	Instructions    string                 `json:"instructions,omitempty"`
 	Input           ResponsesInput         `json:"input"`
+	Text            *ResponsesText         `json:"text,omitempty"`
 	Tools           []ResponsesTool        `json:"tools,omitempty"`
 	ToolChoice      *ResponsesToolChoice   `json:"tool_choice,omitempty"`
 	Stream          *bool                  `json:"stream,omitempty"`
@@ -18,6 +19,11 @@ type ResponsesRequest struct {
 	TopP            *float64               `json:"top_p,omitempty"`
 	Reasoning       *ResponsesReasoning    `json:"reasoning,omitempty"`
 	Metadata        map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// ResponsesText 文本输出配置（用于结构化输出等）。
+type ResponsesText struct {
+	Format *ResponsesTextFormat `json:"format,omitempty"`
 }
 
 // ResponsesInput 支持 string 或 array 两种格式。
@@ -135,7 +141,8 @@ type ResponsesTextOptions struct {
 
 // ResponsesTextFormat 文本格式。
 type ResponsesTextFormat struct {
-	Type string `json:"type"` // "text" or "json_object"
+	Type       string          `json:"type"`                  // "text", "json_object", or "json_schema"
+	JSONSchema json.RawMessage `json:"json_schema,omitempty"` // only for "json_schema"
 }
 
 // ResponsesTool 工具定义。

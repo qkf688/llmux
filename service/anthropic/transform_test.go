@@ -32,6 +32,7 @@ func TestTransformToUnified(t *testing.T) {
 				"cache_control":{"type":"ephemeral"}
 			}
 		],
+		"tool_choice":{"type":"tool","name":"calc"},
 		"stop_sequences":["a","b"],
 		"metadata":{"trace_id":"abc"},
 		"thinking":{"type":"enabled","budget_tokens":30000}
@@ -77,6 +78,9 @@ func TestTransformToUnified(t *testing.T) {
 	}
 	if unified.ReasoningBudget == nil || *unified.ReasoningBudget != 30000 {
 		t.Fatalf("unexpected reasoning_budget: %v", unified.ReasoningBudget)
+	}
+	if unified.ToolChoice == nil || unified.ToolChoice.ObjectValue == nil || unified.ToolChoice.ObjectValue.Function == nil || unified.ToolChoice.ObjectValue.Function.Name != "calc" {
+		t.Fatalf("unexpected tool_choice: %+v", unified.ToolChoice)
 	}
 }
 

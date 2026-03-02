@@ -117,6 +117,60 @@ func TestUnifiedRequestClearHelpFields(t *testing.T) {
 	}
 }
 
+func TestUnifiedRequestSanitizedForProvider(t *testing.T) {
+	index := 1
+	callName := "tool"
+	isErr := true
+	req := UnifiedRequest{
+		Model:               "m",
+		RawRequest:          []byte(`{}`),
+		ExtraBody:           []byte(`{}`),
+		Include:             []string{"x"},
+		TransformerMetadata: map[string]string{"a": "b"},
+		Query:               map[string][]string{"k": {"v"}},
+		Messages: []UnifiedMessage{
+			{
+				Role:               "assistant",
+				Reasoning:          ptrString("r"),
+				ReasoningContent:   ptrString("rc"),
+				ReasoningSignature: ptrString("rs"),
+				MessageIndex:       &index,
+				ToolCallName:       &callName,
+				ToolCallIsError:    &isErr,
+			},
+		},
+	}
+
+	sanitized := req.SanitizedForProvider()
+	if sanitized == nil {
+		t.Fatalf("SanitizedForProvider() returned nil")
+	}
+
+	// Original request should remain intact.
+	if req.RawRequest == nil || req.ExtraBody == nil || req.Include == nil || req.TransformerMetadata == nil || req.Query == nil {
+		t.Fatalf("original request should not be modified")
+	}
+	origMsg := req.Messages[0]
+	if origMsg.Reasoning == nil || origMsg.ReasoningContent == nil || origMsg.ReasoningSignature == nil || origMsg.MessageIndex == nil || origMsg.ToolCallName == nil || origMsg.ToolCallIsError == nil {
+		t.Fatalf("original message should not be modified")
+	}
+
+	// Sanitized copy should have helper fields cleared.
+	if sanitized.RawRequest != nil || sanitized.ExtraBody != nil || sanitized.Include != nil || sanitized.TransformerMetadata != nil || sanitized.Query != nil {
+		t.Fatalf("sanitized request helper fields should be cleared")
+	}
+	msg := sanitized.Messages[0]
+	if msg.Reasoning != nil || msg.ReasoningContent != nil || msg.ReasoningSignature != nil || msg.MessageIndex != nil || msg.ToolCallName != nil || msg.ToolCallIsError != nil {
+		t.Fatalf("sanitized message helper fields should be cleared")
+	}
+
+	// Ensure messages are deep-copied (no shared backing array).
+	sanitized.Messages[0].Role = "user"
+	if req.Messages[0].Role != "assistant" {
+		t.Fatalf("original request messages should not share backing array with sanitized copy")
+	}
+}
+
 func TestUnifiedRequestPredicates(t *testing.T) {
 	req := UnifiedRequest{Model: "m"}
 	if req.IsEmbeddingRequest() {

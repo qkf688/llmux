@@ -235,6 +235,12 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 
 // TransformUnifiedToOpenAI 将统一格式转换为 OpenAI 格式
 func TransformUnifiedToOpenAI(unified *UnifiedRequest) ([]byte, error) {
+	if unified == nil {
+		return nil, fmt.Errorf("unified request cannot be nil")
+	}
+
+	unified = unified.SanitizedForProvider()
+
 	req := map[string]interface{}{
 		"model":    unified.Model,
 		"messages": []interface{}{},

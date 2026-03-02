@@ -2,12 +2,19 @@ package responses
 
 import (
 	"encoding/json"
+	"errors"
 
 	"github.com/atopos31/llmio/models"
 )
 
 // TransformFromUnified 将统一格式转换为 Responses API 请求格式。
 func TransformFromUnified(unified *models.UnifiedRequest) ([]byte, error) {
+	if unified == nil {
+		return nil, errors.New("unified request cannot be nil")
+	}
+
+	unified = unified.SanitizedForProvider()
+
 	req := ResponsesRequest{
 		Model:        unified.Model,
 		Instructions: unified.System,

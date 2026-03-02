@@ -12,6 +12,8 @@ func TransformFromUnified(unified *UnifiedRequest) ([]byte, error) {
 		return nil, errors.New("unified request cannot be nil")
 	}
 
+	unified = unified.SanitizedForProvider()
+
 	req := map[string]interface{}{
 		"model":    unified.Model,
 		"messages": []interface{}{},

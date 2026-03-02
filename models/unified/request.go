@@ -74,6 +74,22 @@ type UnifiedRequest struct {
 	Query               map[string][]string `json:"-"`
 }
 
+// SanitizedForProvider returns a copy of the request with helper fields cleared.
+// It is intended to be used right before building outbound provider requests,
+// to avoid leaking internal-only fields while keeping the original request intact.
+func (r *UnifiedRequest) SanitizedForProvider() *UnifiedRequest {
+	if r == nil {
+		return nil
+	}
+
+	copied := *r
+	if len(r.Messages) > 0 {
+		copied.Messages = append([]UnifiedMessage(nil), r.Messages...)
+	}
+	copied.ClearHelpFields()
+	return &copied
+}
+
 // Validate 验证请求参数。
 func (r *UnifiedRequest) Validate() error {
 	if r.Model == "" {

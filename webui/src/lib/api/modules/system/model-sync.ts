@@ -113,6 +113,13 @@ export async function clearModelSyncLogs(): Promise<{ deleted: number }> {
   });
 }
 
+export async function clearModelSyncErrorLogs(params?: { provider_ids?: number[] }): Promise<{ deleted: number }> {
+  return apiRequest<{ deleted: number }>("/model-sync/logs/clear-errors", {
+    method: "DELETE",
+    body: params ? JSON.stringify(params) : undefined,
+  });
+}
+
 export async function getRecentAddedModels(): Promise<RecentAddedModelsResponse> {
   return apiRequest<RecentAddedModelsResponse>("/model-sync/recent-added-models");
 }

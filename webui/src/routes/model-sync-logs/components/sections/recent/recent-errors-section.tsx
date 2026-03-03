@@ -1,10 +1,11 @@
 import Loading from "@/components/loading";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ModelSyncLog, Provider } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, CheckSquare2, Trash2 } from "lucide-react";
 import { useMemo } from "react";
 import { formatSyncDate } from "../../../utils/formatters";
 
@@ -13,7 +14,15 @@ type RecentErrorsSectionProps = {
   logs: ModelSyncLog[];
   providersById: Record<number, Provider | undefined>;
   togglingProviderIds: Set<number>;
+  selectedCount: number;
+  allSelected: boolean;
+  clearing: boolean;
   onToggleModelEndpoint: (providerId: number, enabled: boolean) => void;
+  onToggleSelectAll: () => void;
+  isProviderSelected: (providerId: number) => boolean;
+  onToggleSelectProvider: (providerId: number, checked: boolean) => void;
+  onClearSelected: () => void;
+  onClearAll: () => void;
   onOpenDetail: (log: ModelSyncLog) => void;
 };
 
@@ -33,7 +42,15 @@ export function RecentErrorsSection({
   logs,
   providersById,
   togglingProviderIds,
+  selectedCount,
+  allSelected,
+  clearing,
   onToggleModelEndpoint,
+  onToggleSelectAll,
+  isProviderSelected,
+  onToggleSelectProvider,
+  onClearSelected,
+  onClearAll,
   onOpenDetail,
 }: RecentErrorsSectionProps) {
   const summaries = useMemo(() => {
@@ -56,6 +73,9 @@ export function RecentErrorsSection({
     );
   }, [logs]);
 
+  const providerCount = summaries.length;
+  const isSomeSelected = selectedCount > 0 && !allSelected;
+
   return (
     <div className="flex-1 min-h-0 border rounded-md bg-background shadow-sm flex flex-col">
       {loading ? (
@@ -68,11 +88,82 @@ export function RecentErrorsSection({
         </div>
       ) : (
         <>
-          <div className="p-3 border-b bg-muted/30 flex items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">已按提供商聚合显示最近 {logs.length} 条错误日志</p>
-            <div className="text-xs text-muted-foreground flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4" />
-              <span>关闭模型端点后将跳过自动同步</span>
+          <div className="p-3 border-b bg-muted/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+              <p className="text-sm text-muted-foreground">已按提供商聚合显示最近 {logs.length} 条错误日志</p>
+              <div className="text-xs text-muted-foreground flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" />
+                <span>关闭模型端点后将跳过自动同步</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                className="sm:h-9 h-7 sm:px-4 px-2 sm:text-sm text-xs"
+                onClick={onToggleSelectAll}
+                disabled={providerCount === 0 || clearing}
+              >
+                <CheckSquare2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
+                <span className="hidden sm:inline">{allSelected && providerCount > 0 ? "取消全选" : "全选"}</span>
+                <span className="sm:hidden">{allSelected && providerCount > 0 ? "取消" : "全选"}</span>
+              </Button>
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="sm:h-9 h-7 sm:px-4 px-2 sm:text-sm text-xs"
+                    disabled={selectedCount === 0 || clearing}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
+                    <span className="hidden sm:inline">清除所选 ({selectedCount})</span>
+                    <span className="sm:hidden">清除({selectedCount})</span>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>清除所选错误日志？</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      将删除所选提供商的全部错误同步日志（Status=error），无法撤销。
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={clearing}>取消</AlertDialogCancel>
+                    <AlertDialogAction onClick={onClearSelected} disabled={clearing}>
+                      {clearing ? "清除中..." : "确认清除"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="sm:h-9 h-7 sm:px-4 px-2 sm:text-sm text-xs"
+                    disabled={logs.length === 0 || clearing}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
+                    <span className="hidden sm:inline">清空错误</span>
+                    <span className="sm:hidden">清空</span>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>清空全部错误日志？</AlertDialogTitle>
+                    <AlertDialogDescription>将删除数据库内所有错误同步日志（Status=error），无法撤销。</AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={clearing}>取消</AlertDialogCancel>
+                    <AlertDialogAction onClick={onClearAll} disabled={clearing}>
+                      {clearing ? "清空中..." : "确认清空"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </div>
           <div className="flex-1 min-h-0 overflow-auto">
@@ -80,6 +171,14 @@ export function RecentErrorsSection({
               <Table>
                 <TableHeader className="sticky top-0 bg-secondary/80">
                   <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={isSomeSelected ? "indeterminate" : allSelected}
+                        onCheckedChange={() => onToggleSelectAll()}
+                        disabled={clearing}
+                        aria-label="全选"
+                      />
+                    </TableHead>
                     <TableHead>提供商</TableHead>
                     <TableHead>最近错误</TableHead>
                     <TableHead>最近时间</TableHead>
@@ -93,8 +192,17 @@ export function RecentErrorsSection({
                     const enabled = isModelEndpointEnabled(provider);
                     const isToggling = togglingProviderIds.has(item.providerId);
 
+                    const selected = isProviderSelected(item.providerId);
+
                     return (
-                      <TableRow key={item.providerId}>
+                      <TableRow key={item.providerId} className={selected ? "bg-muted/40" : ""}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selected}
+                            onCheckedChange={(checked) => onToggleSelectProvider(item.providerId, checked === true)}
+                            disabled={clearing}
+                          />
+                        </TableCell>
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
                             <span>{item.providerName}</span>
@@ -185,14 +293,22 @@ export function RecentErrorsSection({
                 const provider = providersById[item.providerId];
                 const enabled = isModelEndpointEnabled(provider);
                 const isToggling = togglingProviderIds.has(item.providerId);
+                const selected = isProviderSelected(item.providerId);
 
                 return (
                   <div
                     key={item.providerId}
-                    className="py-3 space-y-2"
+                    className={`py-3 space-y-2 my-1 px-1 ${selected ? "bg-muted/50 rounded" : ""}`}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <div className="font-medium">{item.providerName}</div>
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <Checkbox
+                          checked={selected}
+                          onCheckedChange={(checked) => onToggleSelectProvider(item.providerId, checked === true)}
+                          disabled={clearing}
+                        />
+                        <div className="font-medium truncate">{item.providerName}</div>
+                      </div>
                       <span
                         className={cn(
                           "text-xs px-2 py-0.5 rounded border",

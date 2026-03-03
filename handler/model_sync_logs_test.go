@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -125,6 +126,150 @@ func TestGetModelSyncLogs_InvalidStatus(t *testing.T) {
 	}
 	if payload.Code != 400 {
 		t.Fatalf("payload code = %d, want 400, body=%s", payload.Code, w.Body.String())
+	}
+}
+
+func TestClearModelSyncErrorLogs_All(t *testing.T) {
+	initHandlerTestDB(t)
+
+	provider := models.Provider{Name: "p1", Type: "openai"}
+	if err := models.DB.Create(&provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+
+	now := time.Now()
+	logs := []models.ModelSyncLog{
+		{
+			ProviderID:   provider.ID,
+			ProviderName: provider.Name,
+			Status:       "success",
+			SyncedAt:     now.Add(-3 * time.Hour),
+		},
+		{
+			ProviderID:   provider.ID,
+			ProviderName: provider.Name,
+			Status:       "error",
+			Error:        "status code: 401 response: unauthorized",
+			SyncedAt:     now.Add(-2 * time.Hour),
+		},
+		{
+			ProviderID:   provider.ID,
+			ProviderName: provider.Name,
+			Status:       "error",
+			Error:        "status code: 429 response: rate limited",
+			SyncedAt:     now.Add(-1 * time.Hour),
+		},
+	}
+	for i := range logs {
+		if err := models.DB.Create(&logs[i]).Error; err != nil {
+			t.Fatalf("create sync log %d: %v", i, err)
+		}
+	}
+
+	c, w := newHandlerTestContext("DELETE", "/model-sync/logs/clear-errors")
+	ClearModelSyncErrorLogs(c)
+	if w.Code != 200 {
+		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+
+	var payload apiEnvelope[struct {
+		Deleted int64 `json:"deleted"`
+	}]
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
+	}
+	if payload.Code != 200 {
+		t.Fatalf("payload code = %d, want 200, body=%s", payload.Code, w.Body.String())
+	}
+	if payload.Data.Deleted != 2 {
+		t.Fatalf("deleted = %d, want 2", payload.Data.Deleted)
+	}
+
+	var remainingErrors int64
+	if err := models.DB.Model(&models.ModelSyncLog{}).Where("status = ?", "error").Count(&remainingErrors).Error; err != nil {
+		t.Fatalf("count remaining errors: %v", err)
+	}
+	if remainingErrors != 0 {
+		t.Fatalf("remaining errors = %d, want 0", remainingErrors)
+	}
+
+	var remainingSuccess int64
+	if err := models.DB.Model(&models.ModelSyncLog{}).Where("status = ?", "success").Count(&remainingSuccess).Error; err != nil {
+		t.Fatalf("count remaining success: %v", err)
+	}
+	if remainingSuccess != 1 {
+		t.Fatalf("remaining success = %d, want 1", remainingSuccess)
+	}
+}
+
+func TestClearModelSyncErrorLogs_ByProvider(t *testing.T) {
+	initHandlerTestDB(t)
+
+	p1 := models.Provider{Name: "p1", Type: "openai"}
+	p2 := models.Provider{Name: "p2", Type: "openai"}
+	if err := models.DB.Create(&p1).Error; err != nil {
+		t.Fatalf("create provider p1: %v", err)
+	}
+	if err := models.DB.Create(&p2).Error; err != nil {
+		t.Fatalf("create provider p2: %v", err)
+	}
+
+	now := time.Now()
+	logs := []models.ModelSyncLog{
+		{ProviderID: p1.ID, ProviderName: p1.Name, Status: "error", Error: "p1 error", SyncedAt: now.Add(-2 * time.Hour)},
+		{ProviderID: p1.ID, ProviderName: p1.Name, Status: "error", Error: "p1 error 2", SyncedAt: now.Add(-1 * time.Hour)},
+		{ProviderID: p2.ID, ProviderName: p2.Name, Status: "error", Error: "p2 error", SyncedAt: now.Add(-3 * time.Hour)},
+	}
+	for i := range logs {
+		if err := models.DB.Create(&logs[i]).Error; err != nil {
+			t.Fatalf("create sync log %d: %v", i, err)
+		}
+	}
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("DELETE", "/model-sync/logs/clear-errors", strings.NewReader(`{"provider_ids":[`+strconv.FormatUint(uint64(p1.ID), 10)+`]}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	ClearModelSyncErrorLogs(c)
+	if w.Code != 200 {
+		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+
+	var payload apiEnvelope[struct {
+		Deleted int64 `json:"deleted"`
+	}]
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
+	}
+	if payload.Code != 200 {
+		t.Fatalf("payload code = %d, want 200, body=%s", payload.Code, w.Body.String())
+	}
+	if payload.Data.Deleted != 2 {
+		t.Fatalf("deleted = %d, want 2", payload.Data.Deleted)
+	}
+
+	var remainingP1 int64
+	if err := models.DB.Model(&models.ModelSyncLog{}).
+		Where("status = ?", "error").
+		Where("provider_id = ?", p1.ID).
+		Count(&remainingP1).Error; err != nil {
+		t.Fatalf("count remaining p1 errors: %v", err)
+	}
+	if remainingP1 != 0 {
+		t.Fatalf("remaining p1 errors = %d, want 0", remainingP1)
+	}
+
+	var remainingP2 int64
+	if err := models.DB.Model(&models.ModelSyncLog{}).
+		Where("status = ?", "error").
+		Where("provider_id = ?", p2.ID).
+		Count(&remainingP2).Error; err != nil {
+		t.Fatalf("count remaining p2 errors: %v", err)
+	}
+	if remainingP2 != 1 {
+		t.Fatalf("remaining p2 errors = %d, want 1", remainingP2)
 	}
 }
 

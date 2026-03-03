@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"errors"
+	"io"
 	"log/slog"
 	"strconv"
 
@@ -458,6 +460,33 @@ func ClearModelSyncLogs(c *gin.Context) {
 	result := models.DB.Unscoped().Where("1 = 1").Delete(&models.ModelSyncLog{})
 	if result.Error != nil {
 		common.InternalServerError(c, "Failed to clear logs: "+result.Error.Error())
+		return
+	}
+
+	common.Success(c, map[string]interface{}{
+		"deleted": result.RowsAffected,
+	})
+}
+
+// ClearModelSyncErrorLogs 清空所有错误模型同步日志
+func ClearModelSyncErrorLogs(c *gin.Context) {
+	var req struct {
+		ProviderIDs []uint `json:"provider_ids"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		common.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
+
+	query := models.DB.Unscoped().Model(&models.ModelSyncLog{}).Where("status = ?", "error")
+	if len(req.ProviderIDs) > 0 {
+		query = query.Where("provider_id IN ?", req.ProviderIDs)
+	}
+
+	result := query.Delete(&models.ModelSyncLog{})
+	if result.Error != nil {
+		common.InternalServerError(c, "Failed to clear error logs: "+result.Error.Error())
 		return
 	}
 

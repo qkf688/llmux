@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   clearModelSyncLogs,
+  clearModelSyncErrorLogs,
   deleteModelSyncLogs,
   getModelSyncLogs,
   getModelSyncStats,
@@ -38,6 +39,7 @@ export function useModelSyncLogsPage() {
   const [statsLoading, setStatsLoading] = useState(true);
 
   const [selectedLogs, setSelectedLogs] = useState<Set<number>>(new Set());
+  const [selectedErrorProviders, setSelectedErrorProviders] = useState<Set<number>>(new Set());
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [showUnchanged, setShowUnchanged] = useState(false);
@@ -45,6 +47,7 @@ export function useModelSyncLogsPage() {
 
   const [detailLog, setDetailLog] = useState<ModelSyncLog | null>(null);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearingErrors, setClearingErrors] = useState(false);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -141,9 +144,45 @@ export function useModelSyncLogsPage() {
     setSelectedLogs(new Set());
   }, [activeTab, page, showUnchanged]);
 
+  useEffect(() => {
+    if (activeTab !== "errors") {
+      setSelectedErrorProviders(new Set());
+    }
+  }, [activeTab]);
+
   const selectedCount = selectedLogs.size;
   const allSelected = logs.length > 0 && logs.every((log) => selectedLogs.has(log.ID));
   const canDeleteSelected = selectedCount > 0;
+
+  const recentErrorProviderIds = useMemo(
+    () => Array.from(new Set(recentErrors.map((log) => log.ProviderID))),
+    [recentErrors]
+  );
+  const selectedErrorProvidersCount = selectedErrorProviders.size;
+  const allErrorProvidersSelected =
+    recentErrorProviderIds.length > 0 && recentErrorProviderIds.every((id) => selectedErrorProviders.has(id));
+
+  useEffect(() => {
+    if (selectedErrorProviders.size === 0) {
+      return;
+    }
+
+    const allowed = new Set(recentErrorProviderIds);
+    setSelectedErrorProviders((previous) => {
+      if (previous.size === 0) {
+        return previous;
+      }
+
+      const next = new Set<number>();
+      for (const providerId of previous) {
+        if (allowed.has(providerId)) {
+          next.add(providerId);
+        }
+      }
+
+      return next.size === previous.size ? previous : next;
+    });
+  }, [recentErrorProviderIds, selectedErrorProviders.size]);
 
   const handleSyncNow = async () => {
     try {
@@ -201,6 +240,61 @@ export function useModelSyncLogsPage() {
       }
     } catch (error) {
       toast.error(`清空失败: ${toErrorMessage(error)}`);
+    }
+  };
+
+  const handleToggleSelectAllErrorProviders = () => {
+    if (allErrorProvidersSelected) {
+      setSelectedErrorProviders(new Set());
+      return;
+    }
+    setSelectedErrorProviders(new Set(recentErrorProviderIds));
+  };
+
+  const handleToggleSelectErrorProvider = (providerId: number, checked: boolean) => {
+    setSelectedErrorProviders((previous) => {
+      const next = new Set(previous);
+      if (checked) {
+        next.add(providerId);
+      } else {
+        next.delete(providerId);
+      }
+      return next;
+    });
+  };
+
+  const handleClearSelectedErrors = async () => {
+    if (selectedErrorProviders.size === 0) {
+      return;
+    }
+
+    const providerIds = Array.from(selectedErrorProviders);
+    try {
+      setClearingErrors(true);
+      const result = await clearModelSyncErrorLogs({ provider_ids: providerIds });
+      toast.success(`已清除 ${providerIds.length} 个提供商的错误日志（共 ${result.deleted} 条）`);
+      setSelectedErrorProviders(new Set());
+      await fetchRecentErrors();
+      void fetchStats();
+    } catch (error) {
+      toast.error(`清除失败: ${toErrorMessage(error)}`);
+    } finally {
+      setClearingErrors(false);
+    }
+  };
+
+  const handleClearAllErrors = async () => {
+    try {
+      setClearingErrors(true);
+      const result = await clearModelSyncErrorLogs();
+      toast.success(`已清空全部错误日志（共 ${result.deleted} 条）`);
+      setSelectedErrorProviders(new Set());
+      await fetchRecentErrors();
+      void fetchStats();
+    } catch (error) {
+      toast.error(`清空失败: ${toErrorMessage(error)}`);
+    } finally {
+      setClearingErrors(false);
     }
   };
 
@@ -283,6 +377,10 @@ export function useModelSyncLogsPage() {
   );
 
   const isLogSelected = useCallback((logId: number) => selectedLogs.has(logId), [selectedLogs]);
+  const isErrorProviderSelected = useCallback(
+    (providerId: number) => selectedErrorProviders.has(providerId),
+    [selectedErrorProviders]
+  );
 
   const paginationText = useMemo(() => `第 ${page} / ${totalPages} 页`, [page, totalPages]);
 
@@ -303,6 +401,9 @@ export function useModelSyncLogsPage() {
     selectedCount,
     allSelected,
     canDeleteSelected,
+    selectedErrorProvidersCount,
+    allErrorProvidersSelected,
+    clearingErrors,
     page,
     totalPages,
     showUnchanged,
@@ -316,11 +417,16 @@ export function useModelSyncLogsPage() {
     handleToggleProviderModelEndpoint,
     handleDeleteSelected,
     handleClearAll,
+    handleClearSelectedErrors,
+    handleClearAllErrors,
     handleToggleSelectAll,
+    handleToggleSelectAllErrorProviders,
     handleToggleSelectLog,
+    handleToggleSelectErrorProvider,
     handlePageChange,
     handleShowUnchangedChange,
     isLogSelected,
+    isErrorProviderSelected,
     openDetailLog,
     closeDetailLog,
     setClearDialogOpen,

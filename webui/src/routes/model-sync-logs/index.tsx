@@ -64,7 +64,19 @@ export default function ModelSyncLogsPage() {
           logs={page.recentErrors}
           providersById={page.providersById}
           togglingProviderIds={page.togglingProviderIds}
+          selectedCount={page.selectedErrorProvidersCount}
+          allSelected={page.allErrorProvidersSelected}
+          clearing={page.clearingErrors}
           onToggleModelEndpoint={page.handleToggleProviderModelEndpoint}
+          onToggleSelectAll={page.handleToggleSelectAllErrorProviders}
+          isProviderSelected={page.isErrorProviderSelected}
+          onToggleSelectProvider={page.handleToggleSelectErrorProvider}
+          onClearSelected={() => {
+            void page.handleClearSelectedErrors();
+          }}
+          onClearAll={() => {
+            void page.handleClearAllErrors();
+          }}
           onOpenDetail={page.openDetailLog}
         />
       ) : (

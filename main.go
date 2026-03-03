@@ -138,6 +138,7 @@ func main() {
 	api.GET("/model-sync/recent-added-models", handler.GetRecentAddedModels)
 	api.DELETE("/model-sync/logs", handler.DeleteModelSyncLogs)
 	api.DELETE("/model-sync/logs/clear", handler.ClearModelSyncLogs)
+	api.DELETE("/model-sync/logs/clear-errors", handler.ClearModelSyncErrorLogs)
 
 	// Virtual model management
 	api.GET("/virtual-models", handler.GetVirtualModels)

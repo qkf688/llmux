@@ -1377,7 +1377,12 @@ export default function ProvidersPage() {
                   <FormItem>
                     <FormLabel>Base URL</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="https://api.openai.com/v1" />
+                      <Input
+                        {...field}
+                        autoComplete="url"
+                        inputMode="url"
+                        placeholder="https://api.openai.com/v1"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

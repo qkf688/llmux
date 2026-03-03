@@ -125,6 +125,7 @@ export default function ProvidersPage() {
 
   // 筛选条件
   const [nameFilter, setNameFilter] = useState<string>("");
+  const [debouncedNameFilter, setDebouncedNameFilter] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [availableTypes, setAvailableTypes] = useState<string[]>([]);
 
@@ -151,11 +152,18 @@ export default function ProvidersPage() {
     }
   }, [allModelsOpen]);
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedNameFilter(nameFilter);
+    }, 250);
+    return () => window.clearTimeout(timeoutId);
+  }, [nameFilter]);
+
   const fetchProviders = useCallback(async () => {
     try {
       setLoading(true);
       // 处理筛选条件，"all"表示不过滤，空字符串表示不过滤
-      const name = nameFilter.trim() || undefined;
+      const name = debouncedNameFilter.trim() || undefined;
       const type = typeFilter === "all" ? undefined : typeFilter;
 
       const data = await getProviders({ name, type });
@@ -167,7 +175,7 @@ export default function ProvidersPage() {
     } finally {
       setLoading(false);
     }
-  }, [nameFilter, typeFilter]);
+  }, [debouncedNameFilter, typeFilter]);
 
   const fetchProviderTemplates = useCallback(async () => {
     try {
@@ -1020,7 +1028,13 @@ export default function ProvidersPage() {
           </div>
           <div className="flex flex-col gap-1 text-xs col-span-2 sm:col-span-1">
             <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">类型</Label>
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <Select
+              value={typeFilter}
+              onValueChange={(value) => {
+                setTypeFilter(value);
+                setDebouncedNameFilter(nameFilter);
+              }}
+            >
               <SelectTrigger className="h-8 w-full text-xs px-2">
                 <SelectValue placeholder="选择类型" />
               </SelectTrigger>
@@ -1381,6 +1395,7 @@ export default function ProvidersPage() {
                         <Input
                           {...field}
                           type={showApiKey ? "text" : "password"}
+                          autoComplete="new-password"
                           placeholder="sk-..."
                           className="pr-10"
                         />

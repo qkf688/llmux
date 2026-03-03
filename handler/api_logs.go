@@ -84,31 +84,31 @@ func GetRequestLogs(c *gin.Context) {
 	enrichedLogs := make([]map[string]any, len(logs))
 	for i, log := range logs {
 		enrichedLog := map[string]any{
-			"ID":              log.ID,
-			"CreatedAt":        log.CreatedAt,
-			"Name":            log.Name,
-			"ProviderModel":   log.ProviderModel,
-			"ProviderName":    log.ProviderName,
-			"Status":          log.Status,
-			"Style":           log.Style,
-			"UserAgent":       log.UserAgent,
-			"RemoteIP":        log.RemoteIP,
-			"Error":           log.Error,
-			"Retry":           log.Retry,
-			"ProxyTime":       log.ProxyTime,
-			"FirstChunkTime":  log.FirstChunkTime,
-			"ChunkTime":       log.ChunkTime,
-			"Tps":             log.Tps,
-			"ChatIO":          log.ChatIO,
-			"prompt_tokens":   log.PromptTokens,
-			"completion_tokens": log.CompletionTokens,
-			"total_tokens":    log.TotalTokens,
+			"ID":                    log.ID,
+			"CreatedAt":             log.CreatedAt,
+			"Name":                  log.Name,
+			"ProviderModel":         log.ProviderModel,
+			"ProviderName":          log.ProviderName,
+			"Status":                log.Status,
+			"Style":                 log.Style,
+			"UserAgent":             log.UserAgent,
+			"RemoteIP":              log.RemoteIP,
+			"Error":                 log.Error,
+			"Retry":                 log.Retry,
+			"ProxyTime":             log.ProxyTime,
+			"FirstChunkTime":        log.FirstChunkTime,
+			"ChunkTime":             log.ChunkTime,
+			"Tps":                   log.Tps,
+			"ChatIO":                log.ChatIO,
+			"prompt_tokens":         log.PromptTokens,
+			"completion_tokens":     log.CompletionTokens,
+			"total_tokens":          log.TotalTokens,
 			"prompt_tokens_details": log.PromptTokensDetails,
-			"RequestHeaders":  log.RequestHeaders,
-			"RequestBody":     log.RequestBody,
-			"ResponseHeaders": log.ResponseHeaders,
-			"ResponseBody":    log.ResponseBody,
-			"RawResponseBody": log.RawResponseBody,
+			"RequestHeaders":        log.RequestHeaders,
+			"RequestBody":           log.RequestBody,
+			"ResponseHeaders":       log.ResponseHeaders,
+			"ResponseBody":          log.ResponseBody,
+			"RawResponseBody":       log.RawResponseBody,
 		}
 
 		// 检测是否为虚拟模型
@@ -376,6 +376,7 @@ func GetModelSyncLogs(c *gin.Context) {
 
 	// 筛选参数
 	providerID := c.Query("provider_id")
+	status := c.Query("status")
 	showUnchanged := c.Query("show_unchanged") == "true"
 
 	// 构建查询
@@ -384,9 +385,19 @@ func GetModelSyncLogs(c *gin.Context) {
 		query = query.Where("provider_id = ?", providerID)
 	}
 
-	// 默认只显示有更新的记录（除非明确要求显示全部）
-	if !showUnchanged {
-		query = query.Where("status = ?", "success")
+	if status != "" {
+		switch status {
+		case "success", "error", "unchanged":
+			query = query.Where("status = ?", status)
+		default:
+			common.BadRequest(c, "Invalid status parameter (must be success, error, or unchanged)")
+			return
+		}
+	} else {
+		// 默认只显示有更新的记录（除非明确要求显示全部）
+		if !showUnchanged {
+			query = query.Where("status = ?", "success")
+		}
 	}
 
 	// 计算总数

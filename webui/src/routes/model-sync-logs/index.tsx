@@ -6,6 +6,7 @@ import { LogsPagination } from "./components/sections/logs/logs-pagination";
 import { ModelSyncHeader } from "./components/sections/model-sync-header";
 import { ModelSyncStatsStrip } from "./components/sections/model-sync-stats-strip";
 import { ModelSyncTabs } from "./components/sections/model-sync-tabs";
+import { RecentErrorsSection } from "./components/sections/recent/recent-errors-section";
 import { RecentModelsSection } from "./components/sections/recent/recent-models-section";
 import { useModelSyncLogsPage } from "./hooks/use-model-sync-logs-page";
 
@@ -57,6 +58,15 @@ export default function ModelSyncLogsPage() {
             onPageChange={page.handlePageChange}
           />
         </>
+      ) : page.activeTab === "errors" ? (
+        <RecentErrorsSection
+          loading={page.errorsLoading}
+          logs={page.recentErrors}
+          providersById={page.providersById}
+          togglingProviderIds={page.togglingProviderIds}
+          onToggleModelEndpoint={page.handleToggleProviderModelEndpoint}
+          onOpenDetail={page.openDetailLog}
+        />
       ) : (
         <RecentModelsSection loading={page.recentLoading} syncTime={page.syncTime} models={page.recentModels} />
       )}

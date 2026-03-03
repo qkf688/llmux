@@ -5,10 +5,13 @@ import {
   getModelSyncLogs,
   getModelSyncStats,
   getRecentAddedModels,
+  getProviders,
   syncAllProviderModels,
+  updateProvider,
   type AddedModel,
   type ModelSyncLog,
   type ModelSyncStats,
+  type Provider,
 } from "@/lib/api";
 import { toast } from "sonner";
 import type { ModelSyncTab } from "../types";
@@ -23,11 +26,14 @@ export function useModelSyncLogsPage() {
   const [activeTab, setActiveTab] = useState<ModelSyncTab>("logs");
   const [logs, setLogs] = useState<ModelSyncLog[]>([]);
   const [recentModels, setRecentModels] = useState<AddedModel[]>([]);
+  const [recentErrors, setRecentErrors] = useState<ModelSyncLog[]>([]);
   const [syncTime, setSyncTime] = useState("");
   const [stats, setStats] = useState<ModelSyncStats | null>(null);
+  const [providersById, setProvidersById] = useState<Record<number, Provider | undefined>>({});
 
   const [loading, setLoading] = useState(true);
   const [recentLoading, setRecentLoading] = useState(false);
+  const [errorsLoading, setErrorsLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [statsLoading, setStatsLoading] = useState(true);
 
@@ -35,6 +41,7 @@ export function useModelSyncLogsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [showUnchanged, setShowUnchanged] = useState(false);
+  const [togglingProviderIds, setTogglingProviderIds] = useState<Set<number>>(new Set());
 
   const [detailLog, setDetailLog] = useState<ModelSyncLog | null>(null);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
@@ -81,6 +88,23 @@ export function useModelSyncLogsPage() {
     }
   }, []);
 
+  const fetchRecentErrors = useCallback(async () => {
+    try {
+      setErrorsLoading(true);
+      const [logsData, providers] = await Promise.all([
+        getModelSyncLogs({ page: 1, page_size: 100, status: "error" }),
+        getProviders(),
+      ]);
+
+      setRecentErrors(logsData.data ?? []);
+      setProvidersById(Object.fromEntries((providers ?? []).map((provider) => [provider.ID, provider])));
+    } catch (error) {
+      toast.error(`加载最近错误失败: ${toErrorMessage(error)}`);
+    } finally {
+      setErrorsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void fetchStats();
   }, [fetchStats]);
@@ -96,6 +120,12 @@ export function useModelSyncLogsPage() {
       void fetchRecentModels();
     }
   }, [activeTab, fetchRecentModels]);
+
+  useEffect(() => {
+    if (activeTab === "errors") {
+      void fetchRecentErrors();
+    }
+  }, [activeTab, fetchRecentErrors]);
 
   useEffect(
     () => () => {
@@ -130,6 +160,8 @@ export function useModelSyncLogsPage() {
         void fetchLogs();
         if (activeTab === "recent") {
           void fetchRecentModels();
+        } else if (activeTab === "errors") {
+          void fetchRecentErrors();
         }
       }, 2000);
     } catch (error) {
@@ -222,8 +254,33 @@ export function useModelSyncLogsPage() {
       void fetchLogs();
       return;
     }
-    void fetchRecentModels();
-  }, [activeTab, fetchLogs, fetchRecentModels]);
+    if (activeTab === "recent") {
+      void fetchRecentModels();
+      return;
+    }
+    void fetchRecentErrors();
+  }, [activeTab, fetchLogs, fetchRecentErrors, fetchRecentModels]);
+
+  const handleToggleProviderModelEndpoint = useCallback(
+    async (providerId: number, enabled: boolean) => {
+      setTogglingProviderIds((previous) => new Set(previous).add(providerId));
+      try {
+        const updated = await updateProvider(providerId, { model_endpoint: enabled });
+        setProvidersById((previous) => ({ ...previous, [providerId]: updated }));
+        toast.success(`${updated.Name} 模型端点已${enabled ? "开启" : "关闭"}`);
+        void fetchStats();
+      } catch (error) {
+        toast.error(`更新提供商失败: ${toErrorMessage(error)}`);
+      } finally {
+        setTogglingProviderIds((previous) => {
+          const next = new Set(previous);
+          next.delete(providerId);
+          return next;
+        });
+      }
+    },
+    [fetchStats]
+  );
 
   const isLogSelected = useCallback((logId: number) => selectedLogs.has(logId), [selectedLogs]);
 
@@ -233,12 +290,16 @@ export function useModelSyncLogsPage() {
     activeTab,
     logs,
     recentModels,
+    recentErrors,
     syncTime,
     stats,
     loading,
     recentLoading,
+    errorsLoading,
     syncing,
     statsLoading,
+    providersById,
+    togglingProviderIds,
     selectedCount,
     allSelected,
     canDeleteSelected,
@@ -252,6 +313,7 @@ export function useModelSyncLogsPage() {
     fetchStats,
     refreshCurrentTab,
     handleSyncNow,
+    handleToggleProviderModelEndpoint,
     handleDeleteSelected,
     handleClearAll,
     handleToggleSelectAll,

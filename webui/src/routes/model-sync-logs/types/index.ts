@@ -1,6 +1,6 @@
 import type { ModelSyncLog } from "@/lib/api";
 
-export type ModelSyncTab = "logs" | "recent";
+export type ModelSyncTab = "logs" | "recent" | "errors";
 
 export interface ParsedModelSyncError {
   statusCode: string | null;

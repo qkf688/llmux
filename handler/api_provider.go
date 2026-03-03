@@ -92,6 +92,11 @@ func GetProviderModels(c *gin.Context) {
 		return
 	}
 
+	if provider.ModelEndpoint != nil && !*provider.ModelEndpoint {
+		common.BadRequest(c, "model_endpoint disabled")
+		return
+	}
+
 	config := provider.Config
 	if source == "upstream" {
 		if cleanedConfig, err := dropCustomModels(config); err == nil {
@@ -356,7 +361,7 @@ func ClearProviderAssociations(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	
+
 	// 首先检查提供商是否存在
 	provider, err := gorm.G[models.Provider](models.DB).Where("id = ?", id).First(ctx)
 	if err != nil {

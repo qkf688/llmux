@@ -23,6 +23,17 @@ export function ModelSyncTabs({ activeTab, onChange }: ModelSyncTabsProps) {
       <button
         className={cn(
           "px-4 py-2 font-medium transition-colors",
+          activeTab === "errors"
+            ? "border-b-2 border-primary text-primary"
+            : "text-muted-foreground hover:text-foreground"
+        )}
+        onClick={() => onChange("errors")}
+      >
+        最近错误
+      </button>
+      <button
+        className={cn(
+          "px-4 py-2 font-medium transition-colors",
           activeTab === "recent"
             ? "border-b-2 border-primary text-primary"
             : "text-muted-foreground hover:text-foreground"

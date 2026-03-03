@@ -74,6 +74,7 @@ export async function getModelSyncLogs(
     page?: number;
     page_size?: number;
     provider_id?: number;
+    status?: "success" | "error" | "unchanged";
     show_unchanged?: boolean;
   } = {}
 ): Promise<ModelSyncLogsResponse> {
@@ -86,6 +87,9 @@ export async function getModelSyncLogs(
   }
   if (params.provider_id) {
     queryParams.append("provider_id", params.provider_id.toString());
+  }
+  if (params.status) {
+    queryParams.append("status", params.status);
   }
   if (params.show_unchanged) {
     queryParams.append("show_unchanged", "true");

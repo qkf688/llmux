@@ -1660,30 +1660,28 @@ export default function ProvidersPage() {
                 )}
 
                 <div className="flex items-center gap-1 flex-wrap">
-                  {(allModelsProvider?.ModelEndpoint ?? true) && (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="secondary"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={handleSyncUpstreamModels}
-                            disabled={syncingModels || batchTesting}
-                          >
-                            {syncingModels ? (
-                              <Spinner className="h-4 w-4" />
-                            ) : (
-                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                              </svg>
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>{syncingModels ? "同步中..." : "同步上游模型"}</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  )}
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={handleSyncUpstreamModels}
+                          disabled={syncingModels || batchTesting || !allModelsProvider}
+                        >
+                          {syncingModels ? (
+                            <Spinner className="h-4 w-4" />
+                          ) : (
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{syncingModels ? "同步中..." : "同步上游模型"}</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                   
                   {/* 批量测试按钮 */}
                   <TooltipProvider>

@@ -92,11 +92,6 @@ func GetProviderModels(c *gin.Context) {
 		return
 	}
 
-	if provider.ModelEndpoint != nil && !*provider.ModelEndpoint {
-		common.BadRequest(c, "model_endpoint disabled")
-		return
-	}
-
 	config := provider.Config
 	if source == "upstream" {
 		if cleanedConfig, err := dropCustomModels(config); err == nil {

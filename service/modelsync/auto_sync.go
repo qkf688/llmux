@@ -38,7 +38,15 @@ func (s *Service) checkAndSync(ctx context.Context) {
 	}
 
 	var lastLog models.ModelSyncLog
-	if err := s.db.WithContext(ctx).Order("synced_at DESC").First(&lastLog).Error; err != nil {
+	enabledProviderIDs := s.db.WithContext(ctx).
+		Model(&models.Provider{}).
+		Select("id").
+		Where("model_endpoint IS NULL OR model_endpoint = ?", true)
+
+	if err := s.db.WithContext(ctx).
+		Where("provider_id IN (?)", enabledProviderIDs).
+		Order("synced_at DESC").
+		First(&lastLog).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			slog.Error("failed to get last sync log", "error", err)
 			return

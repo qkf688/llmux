@@ -19,11 +19,6 @@ func (s *Service) SyncProviderModels(ctx context.Context, providerID uint) (*mod
 		return nil, err
 	}
 
-	// nil 视为开启。
-	if provider.ModelEndpoint != nil && !*provider.ModelEndpoint {
-		return s.createAndSaveErrorLog(ctx, provider, "model_endpoint disabled"), nil
-	}
-
 	currentModels := extractUpstreamModels(provider.Config)
 	config := provider.Config
 	if cleanedConfig, err := dropCustomModels(config); err == nil {

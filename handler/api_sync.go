@@ -90,6 +90,11 @@ func GetModelSyncStats(c *gin.Context) {
 
 	// 获取所有提供商数量（启用模型端点的）
 	var totalProviders int64
+	enabledProviderIDs := models.DB.WithContext(ctx).
+		Model(&models.Provider{}).
+		Select("id").
+		Where("model_endpoint IS NULL OR model_endpoint = ?", true)
+
 	if err := models.DB.WithContext(ctx).
 		Model(&models.Provider{}).
 		Where("model_endpoint IS NULL OR model_endpoint = ?", true).
@@ -116,8 +121,11 @@ func GetModelSyncStats(c *gin.Context) {
 
 	// 获取最近一次同步记录
 	var lastLog models.ModelSyncLog
-	err = models.DB.WithContext(ctx).Order("synced_at DESC").First(&lastLog).Error
-	
+	err = models.DB.WithContext(ctx).
+		Where("provider_id IN (?)", enabledProviderIDs).
+		Order("synced_at DESC").
+		First(&lastLog).Error
+
 	// 处理零值时间：如果没有同步记录或时间为零值，返回 nil
 	var lastSyncAt *time.Time
 	if err == nil && !lastLog.SyncedAt.IsZero() {
@@ -135,6 +143,7 @@ func GetModelSyncStats(c *gin.Context) {
 	// 获取所有提供商的最近一次同步状态
 	var logs []models.ModelSyncLog
 	if err := models.DB.WithContext(ctx).
+		Where("provider_id IN (?)", enabledProviderIDs).
 		Order("synced_at DESC").
 		Find(&logs).Error; err != nil {
 		common.InternalServerError(c, "Failed to get sync logs: "+err.Error())
@@ -150,9 +159,9 @@ func GetModelSyncStats(c *gin.Context) {
 	}
 
 	// 使用 Status 字段进行统计
-	providersWithUpdates := 0  // status = "success"
-	providersUnchanged := 0    // status = "unchanged"
-	providersWithErrors := 0   // status = "error"
+	providersWithUpdates := 0 // status = "success"
+	providersUnchanged := 0   // status = "unchanged"
+	providersWithErrors := 0  // status = "error"
 
 	for _, log := range providerStats {
 		// 使用 Status 字段（新逻辑）

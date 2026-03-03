@@ -3,7 +3,11 @@ package modelsync
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 
@@ -49,16 +53,26 @@ func configureModelSyncSQLite(t *testing.T, db *gorm.DB) *sql.DB {
 	return sqlDB
 }
 
-func TestSyncProviderModels_ModelEndpointDisabled(t *testing.T) {
+func TestSyncProviderModels_ModelEndpointDisabledStillSyncs(t *testing.T) {
 	db := setupModelSyncTestDB(t)
 	svc := NewService(db, ActionHooks{})
 	ctx := context.Background()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/models" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"m1","object":"model","created":0,"owned_by":"o"},{"id":"m2","object":"model","created":0,"owned_by":"o"}]}`))
+	}))
+	t.Cleanup(server.Close)
 
 	disabled := false
 	provider := models.Provider{
 		Name:          "test-provider",
 		Type:          "openai",
-		Config:        `{"api_key":"k","base_url":"https://example.com"}`,
+		Config:        fmt.Sprintf(`{"api_key":"k","base_url":"%s"}`, server.URL),
 		ModelEndpoint: &disabled,
 	}
 	if err := db.Create(&provider).Error; err != nil {
@@ -72,11 +86,14 @@ func TestSyncProviderModels_ModelEndpointDisabled(t *testing.T) {
 	if syncLog == nil {
 		t.Fatal("SyncProviderModels() returned nil log")
 	}
-	if syncLog.Status != "error" {
-		t.Fatalf("log status = %q, want %q", syncLog.Status, "error")
+	if syncLog.Status != "success" {
+		t.Fatalf("log status = %q, want %q (error=%q)", syncLog.Status, "success", syncLog.Error)
 	}
-	if syncLog.Error != "model_endpoint disabled" {
-		t.Fatalf("log error = %q, want %q", syncLog.Error, "model_endpoint disabled")
+	if syncLog.AddedCount != 2 {
+		t.Fatalf("added count = %d, want 2", syncLog.AddedCount)
+	}
+	if !reflect.DeepEqual(syncLog.AddedModels, []string{"m1", "m2"}) {
+		t.Fatalf("added models = %v, want %v", syncLog.AddedModels, []string{"m1", "m2"})
 	}
 
 	var count int64
@@ -85,6 +102,30 @@ func TestSyncProviderModels_ModelEndpointDisabled(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("sync log count = %d, want 1", count)
+	}
+
+	var updated models.Provider
+	if err := db.First(&updated, provider.ID).Error; err != nil {
+		t.Fatalf("failed to fetch updated provider: %v", err)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(updated.Config), &parsed); err != nil {
+		t.Fatalf("failed to parse updated provider config: %v", err)
+	}
+	upstreamAny, ok := parsed["upstream_models"].([]any)
+	if !ok {
+		t.Fatalf("upstream_models missing or invalid type: %T", parsed["upstream_models"])
+	}
+	got := make([]string, 0, len(upstreamAny))
+	for _, item := range upstreamAny {
+		s, ok := item.(string)
+		if !ok {
+			t.Fatalf("unexpected upstream_models item type: %T", item)
+		}
+		got = append(got, s)
+	}
+	if !reflect.DeepEqual(got, []string{"m1", "m2"}) {
+		t.Fatalf("provider upstream_models = %v, want %v", got, []string{"m1", "m2"})
 	}
 }
 
@@ -114,6 +155,35 @@ func TestSyncProviderModels_UnsupportedProviderType(t *testing.T) {
 	}
 	if syncLog.Error == "" {
 		t.Fatal("expected non-empty error message for unsupported provider type")
+	}
+}
+
+func TestSyncAllProviders_SkipsDisabledModelEndpoint(t *testing.T) {
+	db := setupModelSyncTestDB(t)
+	svc := NewService(db, ActionHooks{})
+	ctx := context.Background()
+
+	disabled := false
+	enabled := true
+	providers := []models.Provider{
+		{Name: "p-disabled", Type: "unsupported", Config: `{"api_key":"k1"}`, ModelEndpoint: &disabled},
+		{Name: "p-enabled", Type: "unsupported", Config: `{"api_key":"k2"}`, ModelEndpoint: &enabled},
+	}
+	for i := range providers {
+		if err := db.Create(&providers[i]).Error; err != nil {
+			t.Fatalf("failed to create provider %d: %v", i, err)
+		}
+	}
+
+	logs, err := svc.SyncAllProviders(ctx)
+	if err != nil {
+		t.Fatalf("SyncAllProviders() error = %v", err)
+	}
+	if len(logs) != 1 {
+		t.Fatalf("logs length = %d, want 1", len(logs))
+	}
+	if logs[0].ProviderName != "p-enabled" {
+		t.Fatalf("synced provider = %q, want %q", logs[0].ProviderName, "p-enabled")
 	}
 }
 

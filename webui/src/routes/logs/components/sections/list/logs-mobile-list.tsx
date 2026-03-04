@@ -77,17 +77,19 @@ export function LogsMobileList({
               <p className="truncate">{log.ProviderName}</p>
             </div>
             <div className="space-y-0.5">
-              <p className="text-muted-foreground text-[10px] uppercase tracking-wide">格式转换</p>
-              <p>
-                {log.has_format_conversion ? (
+              <p className="text-muted-foreground text-[10px] uppercase tracking-wide">格式</p>
+               <p>
+                 {log.has_format_conversion ? (
+                   <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
+                     {log.source_format} → {log.target_format}
+                   </Badge>
+                 ) : (
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
-                    {log.source_format} → {log.target_format}
+                    {log.Style || "-"}
                   </Badge>
-                ) : (
-                  <span className="text-muted-foreground">-</span>
-                )}
-              </p>
-            </div>
+                 )}
+               </p>
+             </div>
             <div className="space-y-0.5">
               <p className="text-muted-foreground text-[10px] uppercase tracking-wide">请求头</p>
               <p className="font-medium">{formatByteLength(log.RequestHeaders)}</p>

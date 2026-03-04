@@ -61,14 +61,14 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportRequestRespon
                 <DetailCard label="提供商" value={log.ProviderName || "-"} />
                 <DetailCard label="提供商模型" value={log.ProviderModel || "-"} mono />
                 <DetailCard label="客户端类型" value={log.Style || "-"} />
-                <DetailCard
-                  label="格式转换"
-                  value={
-                    log.has_format_conversion
-                      ? `${log.source_format} → ${log.target_format}`
-                      : "未发生转换"
-                  }
-                />
+                  <DetailCard
+                   label="格式"
+                   value={
+                     log.has_format_conversion
+                       ? `${log.source_format} → ${log.target_format}`
+                       : "未发生转换"
+                   }
+                 />
                 <DetailCard label="用户代理" value={log.UserAgent || "-"} mono />
                 <DetailCard label="远端 IP" value={log.RemoteIP || "-"} mono />
                 <DetailCard label="记录 IO" value={log.ChatIO ? "是" : "否"} />

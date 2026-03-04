@@ -57,7 +57,7 @@ export function LogsDesktopTable({
             <TableHead>状态</TableHead>
             <TableHead>耗时</TableHead>
             <TableHead>提供商模型</TableHead>
-            <TableHead>格式转换</TableHead>
+            <TableHead>格式</TableHead>
             <TableHead>提供商</TableHead>
             <TableHead className="w-[180px]">操作</TableHead>
           </TableRow>
@@ -98,15 +98,17 @@ export function LogsDesktopTable({
               <TableCell className="max-w-[120px] truncate text-xs" title={log.ProviderModel}>
                 {log.ProviderModel}
               </TableCell>
-              <TableCell className="text-xs">
-                {log.has_format_conversion ? (
+               <TableCell className="text-xs">
+                 {log.has_format_conversion ? (
+                   <Badge variant="outline" className="text-xs">
+                     {log.source_format} → {log.target_format}
+                   </Badge>
+                 ) : (
                   <Badge variant="outline" className="text-xs">
-                    {log.source_format} → {log.target_format}
+                    {log.Style || "-"}
                   </Badge>
-                ) : (
-                  <span className="text-muted-foreground text-xs">-</span>
-                )}
-              </TableCell>
+                 )}
+               </TableCell>
               <TableCell className="text-xs">{log.ProviderName}</TableCell>
               <TableCell>
                 <div className="flex gap-1">

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -54,6 +55,7 @@ export function MappingFormDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{editingMapping ? "编辑映射" : "添加映射"}</DialogTitle>
+          <DialogDescription>选择真实模型，并配置优先级、权重与启用状态</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form

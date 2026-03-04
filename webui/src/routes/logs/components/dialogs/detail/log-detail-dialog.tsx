@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { ChatLog } from "@/lib/api";
 import {
   formatDateTime,
@@ -27,6 +27,7 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportRequestRespon
         <div className="p-3 border-b flex-shrink-0 sm:p-4">
           <DialogHeader className="p-0">
             <DialogTitle>日志详情: {log.ID}</DialogTitle>
+            <DialogDescription>查看请求/响应内容、性能指标与错误信息</DialogDescription>
           </DialogHeader>
         </div>
 

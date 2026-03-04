@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -61,6 +62,9 @@ export function BatchActionSheet({
                 <X className="h-4 w-4" />
               </Button>
             </div>
+            <DialogDescription className="text-xs">
+              对选中的关联执行批量启用/停用、测试、选择与删除操作
+            </DialogDescription>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4">

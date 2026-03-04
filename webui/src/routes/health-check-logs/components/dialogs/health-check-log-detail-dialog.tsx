@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { HealthCheckLog } from "@/lib/api";
 import { formatDateTime, formatResponseTime, isHealthCheckSuccess } from "../../utils/formatters";
 import { DetailCard } from "../shared/detail-card";
@@ -26,6 +26,7 @@ export function HealthCheckLogDetailDialog({
         <div className="p-4 border-b flex-shrink-0">
           <DialogHeader className="p-0">
             <DialogTitle>检测详情: {log.ID}</DialogTitle>
+            <DialogDescription>查看本次健康检测的状态、响应时间与错误信息</DialogDescription>
           </DialogHeader>
         </div>
 

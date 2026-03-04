@@ -40,7 +40,6 @@ type MobileAssociationListProps = {
   deleteId: number | null;
   onSelectAll: (checked: boolean) => void;
   onSelectOne: (id: number, checked: boolean) => void;
-  onOpenBatchActionSheet: () => void;
   onToggleStatus: (association: ModelWithProvider, nextStatus: boolean) => void;
   onEdit: (association: ModelWithProvider) => void;
   onOpenDelete: (id: number) => void;
@@ -62,7 +61,6 @@ export function MobileAssociationList({
   deleteId,
   onSelectAll,
   onSelectOne,
-  onOpenBatchActionSheet,
   onToggleStatus,
   onEdit,
   onOpenDelete,
@@ -78,7 +76,7 @@ export function MobileAssociationList({
 
   return (
     <div className="sm:hidden flex-1 min-h-0 overflow-y-auto px-1 py-2 divide-y divide-border">
-      <div className="py-1 space-y-1 border-b">
+      <div className="py-1 border-b">
         <div className="flex items-center gap-2">
           <Checkbox
             checked={isAllSelected}
@@ -94,10 +92,6 @@ export function MobileAssociationList({
             {selectedAssociationIds.length > 0 ? `已选择 ${selectedAssociationIds.length} 项` : "全选"}
           </span>
         </div>
-        <Button variant="outline" size="sm" onClick={onOpenBatchActionSheet} className="h-7 text-xs w-full">
-          批量操作
-          {selectedAssociationIds.length > 0 && ` (${selectedAssociationIds.length})`}
-        </Button>
       </div>
 
       {associations.map((association) => {

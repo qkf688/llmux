@@ -20,7 +20,6 @@ type AssociationListSectionProps = {
   deleteId: number | null;
   onSelectAll: (checked: boolean) => void;
   onSelectOne: (id: number, checked: boolean) => void;
-  onOpenBatchActionSheet: () => void;
   onRefreshStatus: () => void;
   onToggleStatus: (association: ModelWithProvider, nextStatus: boolean) => void;
   onEdit: (association: ModelWithProvider) => void;
@@ -46,7 +45,6 @@ export function AssociationListSection({
   deleteId,
   onSelectAll,
   onSelectOne,
-  onOpenBatchActionSheet,
   onRefreshStatus,
   onToggleStatus,
   onEdit,
@@ -105,7 +103,6 @@ export function AssociationListSection({
             deleteId={deleteId}
             onSelectAll={onSelectAll}
             onSelectOne={onSelectOne}
-            onOpenBatchActionSheet={onOpenBatchActionSheet}
             onToggleStatus={onToggleStatus}
             onEdit={onEdit}
             onOpenDelete={onOpenDelete}

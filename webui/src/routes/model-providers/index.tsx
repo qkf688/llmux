@@ -55,7 +55,6 @@ import type {
 } from "./types";
 import { buildAssociationPayload } from "./utils/payload";
 import { buildSelectionKey } from "./utils/selection";
-import { BatchActionSheet } from "./components/dialogs/batch-action-sheet";
 import { BlacklistDialog } from "./components/dialogs/blacklist-dialog";
 import { ModelListDialog } from "./components/dialogs/model-list-dialog";
 import { PreviewDialog } from "./components/dialogs/preview-dialog";
@@ -129,7 +128,6 @@ export default function ModelProvidersPage() {
   const [resettingPriorities, setResettingPriorities] = useState(false);
   const [enablingAssociations, setEnablingAssociations] = useState(false);
   const [operationScope, setOperationScope] = useState<"current" | "all">("current");
-  const [batchActionSheetOpen, setBatchActionSheetOpen] = useState(false);
   
   // 筛选面板折叠状态（移动端默认收起，桌面端默认展开）
   const [filterPanelOpen, setFilterPanelOpen] = useState(() => {
@@ -1324,7 +1322,6 @@ export default function ModelProvidersPage() {
         deleteId={deleteId}
         onSelectAll={handleSelectAllAssociations}
         onSelectOne={handleSelectOneAssociation}
-        onOpenBatchActionSheet={() => setBatchActionSheetOpen(true)}
         onRefreshStatus={() => {
           if (selectedModelId) {
             void loadProviderStatus(modelProviders, selectedModelId);
@@ -1483,26 +1480,6 @@ export default function ModelProvidersPage() {
         onConfirm={() => {
           void executePreviewAction();
         }}
-      />
-
-      <BatchActionSheet
-        open={batchActionSheetOpen}
-        onOpenChange={setBatchActionSheetOpen}
-        selectedAssociationCount={selectedAssociationIds.length}
-        filteredAssociationCount={filteredModelProviders.length}
-        batchUpdatingStatus={batchUpdatingStatus}
-        batchTesting={batchTesting}
-        associationTestResults={associationTestResults}
-        onBatchUpdateStatus={handleBatchUpdateStatus}
-        onBatchTestSelected={() => {
-          void handleBatchTestSelected();
-        }}
-        onBatchTestAll={() => {
-          void handleBatchTestAll();
-        }}
-        onSelectAllSuccessful={selectAllSuccessful}
-        onSelectAllFailed={selectAllFailed}
-        onOpenBatchDeleteDialog={() => setBatchDeleteDialogOpen(true)}
       />
     </div>
   );

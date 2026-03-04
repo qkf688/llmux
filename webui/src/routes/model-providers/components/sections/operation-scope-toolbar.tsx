@@ -1,6 +1,14 @@
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { CheckCircle, ChevronDown, RotateCcw } from "lucide-react";
 
 type OperationScopeToolbarProps = {
   operationScope: "current" | "all";
@@ -47,37 +55,52 @@ export function OperationScopeToolbar({
       <span>
         模型：<span className="text-foreground">{selectedModelName}</span>
       </span>
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-6 px-2 text-xs"
-        onClick={onResetWeights}
-        disabled={disableGlobalActions || resettingWeights}
-      >
-        {resettingWeights ? <Spinner className="w-3 h-3 mr-1.5" /> : null}
-        重置权重
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-6 px-2 text-xs"
-        onClick={onResetPriorities}
-        disabled={disableGlobalActions || resettingPriorities}
-      >
-        {resettingPriorities ? <Spinner className="w-3 h-3 mr-1.5" /> : null}
-        重置优先级
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-6 px-2 text-xs"
-        onClick={onEnableAssociations}
-        disabled={disableGlobalActions || enablingAssociations}
-      >
-        {enablingAssociations ? <Spinner className="w-3 h-3 mr-1.5" /> : null}
-        启用所有关联
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            disabled={disableGlobalActions}
+          >
+            启用与重置
+            <ChevronDown className="ml-1.5 h-3.5 w-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44">
+          <DropdownMenuItem
+            disabled={disableGlobalActions || enablingAssociations}
+            onClick={onEnableAssociations}
+            className="cursor-pointer"
+          >
+            {enablingAssociations ? (
+              <Spinner className="mr-2 h-4 w-4" />
+            ) : (
+              <CheckCircle className="mr-2 h-4 w-4 text-green-600" />
+            )}
+            启用所有关联
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+
+          <DropdownMenuItem
+            disabled={disableGlobalActions || resettingWeights}
+            onClick={onResetWeights}
+            className="cursor-pointer"
+          >
+            {resettingWeights ? <Spinner className="mr-2 h-4 w-4" /> : <RotateCcw className="mr-2 h-4 w-4" />}
+            重置权重
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={disableGlobalActions || resettingPriorities}
+            onClick={onResetPriorities}
+            className="cursor-pointer"
+          >
+            {resettingPriorities ? <Spinner className="mr-2 h-4 w-4" /> : <RotateCcw className="mr-2 h-4 w-4" />}
+            重置优先级
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
-

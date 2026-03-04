@@ -107,12 +107,20 @@ func convertMessagesToInput(messages []models.UnifiedMessage) ResponsesInput {
 		case "assistant":
 			if len(msg.ToolCalls) > 0 {
 				for _, tc := range msg.ToolCalls {
+					// Responses API separates `id` (fc_*) and `call_id` (call_*).
+					// UnifiedToolCall.ID is the call_id in our unified representation.
+					callID := tc.ID
+					var callIDPtr *string
+					if callID != "" {
+						callIDPtr = &callID
+					}
+					name := tc.Function.Name
+					arguments := tc.Function.Arguments
 					items = append(items, ResponsesItem{
 						Type:      "function_call",
-						ID:        tc.ID,
-						CallID:    &tc.ID,
-						Name:      &tc.Function.Name,
-						Arguments: &tc.Function.Arguments,
+						CallID:    callIDPtr,
+						Name:      &name,
+						Arguments: &arguments,
 					})
 				}
 			} else {
@@ -131,9 +139,14 @@ func convertMessagesToInput(messages []models.UnifiedMessage) ResponsesInput {
 			}
 		case "tool":
 			if content, ok := msg.Content.(string); ok {
+				callID := msg.ToolCallID
+				var callIDPtr *string
+				if callID != "" {
+					callIDPtr = &callID
+				}
 				items = append(items, ResponsesItem{
 					Type:   "function_call_output",
-					CallID: &msg.ToolCallID,
+					CallID: callIDPtr,
 					Output: &content,
 				})
 			}

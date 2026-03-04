@@ -126,12 +126,25 @@ func FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
 
 		if choice.Message != nil {
 			for _, tc := range choice.Message.ToolCalls {
+				callID := tc.ID
+				var callIDPtr *string
+				if callID != "" {
+					callIDPtr = &callID
+				}
+				// Provide an `id` with the expected prefix for better client compatibility.
+				// `call_id` remains the stable identifier used to correlate tool outputs.
+				fcID := ""
+				if callID != "" {
+					fcID = "fc_" + callID
+				}
+				name := tc.Function.Name
+				arguments := tc.Function.Arguments
 				output = append(output, ResponsesItem{
 					Type:      "function_call",
-					ID:        tc.ID,
-					CallID:    &tc.ID,
-					Name:      &tc.Function.Name,
-					Arguments: &tc.Function.Arguments,
+					ID:        fcID,
+					CallID:    callIDPtr,
+					Name:      &name,
+					Arguments: &arguments,
 				})
 			}
 

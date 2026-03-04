@@ -1235,28 +1235,24 @@ export default function ModelProvidersPage() {
 
   if (loading && models.length === 0 && providers.length === 0) return <Loading message="加载模型和提供商" />;
   return (
-    <div className="h-full min-h-0 flex flex-col gap-4 p-1">
+    <div className="h-full min-h-0 flex flex-col gap-3 p-1">
       <div className="flex flex-col gap-2 flex-shrink-0">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h2 className="text-2xl font-bold tracking-tight">模型提供商关联</h2>
-          </div>
-          <div className="flex w-full sm:w-auto items-center justify-end gap-2" />
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-xl font-semibold tracking-tight">模型提供商关联</h2>
+          <OperationScopeToolbar
+            operationScope={operationScope}
+            onOperationScopeChange={setOperationScope}
+            selectedModelName={isGlobalScope ? "全部" : (selectedModel?.Name ?? "未选择")}
+            selectedModelId={selectedModelId}
+            resettingWeights={resettingWeights}
+            resettingPriorities={resettingPriorities}
+            enablingAssociations={enablingAssociations}
+            onResetWeights={handleResetWeights}
+            onResetPriorities={handleResetPriorities}
+            onEnableAssociations={handleEnableAssociations}
+          />
         </div>
       </div>
-
-      <OperationScopeToolbar
-        operationScope={operationScope}
-        onOperationScopeChange={setOperationScope}
-        selectedModelName={isGlobalScope ? "全部" : (selectedModel?.Name ?? "未选择")}
-        selectedModelId={selectedModelId}
-        resettingWeights={resettingWeights}
-        resettingPriorities={resettingPriorities}
-        enablingAssociations={enablingAssociations}
-        onResetWeights={handleResetWeights}
-        onResetPriorities={handleResetPriorities}
-        onEnableAssociations={handleEnableAssociations}
-      />
 
       <AssociationFilterPanel
         filterPanelOpen={filterPanelOpen}

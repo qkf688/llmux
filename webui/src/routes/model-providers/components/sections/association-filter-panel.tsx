@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
-import { CheckCircle, ChevronDown, ChevronUp, Filter, TestTube, TestTubes, Trash2, XCircle } from "lucide-react";
+import { CheckCircle, ChevronDown, ChevronUp, Filter, MoreHorizontal, TestTube, TestTubes, Trash2, XCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -102,7 +102,7 @@ export function AssociationFilterPanel({
           variant="outline"
           size="sm"
           onClick={() => onFilterPanelOpenChange(!filterPanelOpen)}
-          className="w-full justify-between h-9"
+          className="w-full justify-between h-8 text-xs"
         >
           <span className="flex items-center gap-2">
             <Filter className="h-4 w-4" />
@@ -124,7 +124,7 @@ export function AssociationFilterPanel({
           filterPanelOpen ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0"
         )}
       >
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 lg:gap-2">
           <div className="flex flex-col gap-1 text-xs">
             <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">关联模型</Label>
             <Select value={selectedModelId?.toString() || ""} onValueChange={onModelChange}>
@@ -287,23 +287,29 @@ export function AssociationFilterPanel({
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Button
-              onClick={onToggleTemplateEditor}
-              variant="outline"
-              disabled={!selectedModelId}
-              className="h-8 text-xs flex-1 sm:flex-initial"
-            >
-              模板编辑
-            </Button>
-            <Button onClick={onOpenBlacklistDialog} variant="outline" className="h-8 text-xs flex-1 sm:flex-initial">
-              拉黑管理
-            </Button>
-            <Button onClick={onAutoAssociate} variant="outline" className="h-8 text-xs flex-1 sm:flex-initial">
-              一键关联
-            </Button>
-            <Button onClick={onCleanInvalid} variant="outline" className="h-8 text-xs flex-1 sm:flex-initial">
-              清除无效
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="h-8 text-xs flex-1 sm:flex-initial">
+                  更多
+                  <MoreHorizontal className="ml-2 h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-48">
+                <DropdownMenuItem disabled={!selectedModelId} onClick={onToggleTemplateEditor} className="cursor-pointer">
+                  模板编辑
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onOpenBlacklistDialog} className="cursor-pointer">
+                  拉黑管理
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onAutoAssociate} className="cursor-pointer">
+                  一键关联
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onCleanInvalid} className="cursor-pointer">
+                  清除无效
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button onClick={onOpenCreateDialog} disabled={!selectedModelId} className="h-8 text-xs flex-1 sm:flex-initial">
               添加关联
             </Button>

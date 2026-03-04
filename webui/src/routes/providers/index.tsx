@@ -1326,7 +1326,10 @@ export default function ProvidersPage() {
           </DialogHeader>
 
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(editingProvider ? handleUpdate : handleCreate)} className="space-y-4 min-w-0 overflow-y-auto flex-1 min-h-0">
+            <form
+              onSubmit={form.handleSubmit(editingProvider ? handleUpdate : handleCreate)}
+              className="space-y-4 min-w-0 overflow-y-auto flex-1 min-h-0 -mx-1 px-1"
+            >
               <FormField
                 control={form.control}
                 name="name"

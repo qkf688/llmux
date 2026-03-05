@@ -23,6 +23,11 @@ type realtimeStreamState struct {
 	accumulatedText      string
 	accumulatedReasoning string
 
+	// OpenAI Chat streaming meta (used when the output format is OpenAI Chat).
+	openAIID      string
+	openAIModel   string
+	openAICreated int64
+
 	responseID string
 	itemID     string
 

@@ -13,7 +13,7 @@ func TransformProviderResponse(response *http.Response, providerType, clientType
 
 	// 检查是否是流式响应
 	contentType := response.Header.Get("Content-Type")
-	isStream := strings.Contains(contentType, "text/event-stream")
+	isStream := strings.Contains(strings.ToLower(contentType), "text/event-stream")
 
 	if isStream {
 		// 流式响应：直接从 Body 读取器进行实时转换

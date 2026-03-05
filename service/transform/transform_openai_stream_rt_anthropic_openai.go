@@ -23,9 +23,11 @@ func handleRealtimeAnthropicToOpenAI(state *realtimeStreamState, data string) er
 		eventType = getString(chunk, "type")
 	}
 
+	ensureOpenAIStreamMetaFromAnthropic(state, chunk)
+
 	switch eventType {
 	case "message_start", "ping":
-		// 忽略这些事件
+		// message_start 用于补全 meta（已在 ensureOpenAIStreamMetaFromAnthropic 处理）；其它忽略。
 		return nil
 
 	case "content_block_start":
@@ -39,10 +41,10 @@ func handleRealtimeAnthropicToOpenAI(state *realtimeStreamState, data string) er
 		}
 
 		openAIChunk := map[string]interface{}{
-			"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+			"id":      state.openAIID,
 			"object":  "chat.completion.chunk",
-			"created": time.Now().Unix(),
-			"model":   "claude",
+			"created": state.openAICreated,
+			"model":   state.openAIModel,
 			"choices": []map[string]interface{}{
 				{
 					"index": 0,
@@ -79,10 +81,10 @@ func handleRealtimeAnthropicToOpenAI(state *realtimeStreamState, data string) er
 				return nil
 			}
 			openAIChunk := map[string]interface{}{
-				"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+				"id":      state.openAIID,
 				"object":  "chat.completion.chunk",
-				"created": time.Now().Unix(),
-				"model":   "claude",
+				"created": state.openAICreated,
+				"model":   state.openAIModel,
 				"choices": []map[string]interface{}{
 					{
 						"index": 0,
@@ -101,10 +103,10 @@ func handleRealtimeAnthropicToOpenAI(state *realtimeStreamState, data string) er
 				return nil
 			}
 			openAIChunk := map[string]interface{}{
-				"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+				"id":      state.openAIID,
 				"object":  "chat.completion.chunk",
-				"created": time.Now().Unix(),
-				"model":   "claude",
+				"created": state.openAICreated,
+				"model":   state.openAIModel,
 				"choices": []map[string]interface{}{
 					{
 						"index": 0,
@@ -144,10 +146,10 @@ func handleRealtimeAnthropicToOpenAI(state *realtimeStreamState, data string) er
 		}
 
 		finalChunk := map[string]interface{}{
-			"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+			"id":      state.openAIID,
 			"object":  "chat.completion.chunk",
-			"created": time.Now().Unix(),
-			"model":   "claude",
+			"created": state.openAICreated,
+			"model":   state.openAIModel,
 			"choices": []map[string]interface{}{
 				{
 					"index":         0,
@@ -173,4 +175,33 @@ func handleRealtimeAnthropicToOpenAI(state *realtimeStreamState, data string) er
 	}
 
 	return nil
+}
+
+func ensureOpenAIStreamMetaFromAnthropic(state *realtimeStreamState, chunk map[string]interface{}) {
+	if state.openAICreated == 0 {
+		state.openAICreated = time.Now().Unix()
+	}
+	if state.openAIModel == "" {
+		state.openAIModel = "claude"
+	}
+
+	if state.openAIID != "" {
+		return
+	}
+
+	if msg, ok := chunk["message"].(map[string]interface{}); ok {
+		if id := getString(msg, "id"); id != "" {
+			state.openAIID = "chatcmpl-" + id
+		}
+		if model := getString(msg, "model"); model != "" {
+			state.openAIModel = model
+		}
+		if createdAt := int64(getFloat(msg, "created_at")); createdAt > 0 {
+			state.openAICreated = createdAt
+		}
+	}
+
+	if state.openAIID == "" {
+		state.openAIID = fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano())
+	}
 }

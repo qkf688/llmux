@@ -25,11 +25,12 @@ func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) er
 
 	switch eventType {
 	case "response.created":
+		ensureOpenAIStreamMetaFromResponses(state, chunk)
 		openAIChunk := map[string]interface{}{
-			"id":      getNestedString(chunk, "response.id"),
+			"id":      state.openAIID,
 			"object":  "chat.completion.chunk",
-			"created": time.Now().Unix(),
-			"model":   "responses-api",
+			"created": state.openAICreated,
+			"model":   state.openAIModel,
 			"choices": []map[string]interface{}{
 				{
 					"index": 0,
@@ -43,6 +44,7 @@ func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) er
 		return writeRealtimeJSONData(state, openAIChunk)
 
 	case "response.output_item.added":
+		ensureOpenAIStreamMetaFromResponses(state, chunk)
 		// 处理工具调用开始（发送 id/type/name）
 		item, ok := chunk["item"].(map[string]interface{})
 		if !ok {
@@ -53,10 +55,10 @@ func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) er
 		}
 
 		openAIChunk := map[string]interface{}{
-			"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+			"id":      state.openAIID,
 			"object":  "chat.completion.chunk",
-			"created": time.Now().Unix(),
-			"model":   "responses-api",
+			"created": state.openAICreated,
+			"model":   state.openAIModel,
 			"choices": []map[string]interface{}{
 				{
 					"index": 0,
@@ -80,6 +82,7 @@ func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) er
 		return writeRealtimeJSONData(state, openAIChunk)
 
 	case "response.output_text.delta":
+		ensureOpenAIStreamMetaFromResponses(state, chunk)
 		// 发送文本增量
 		delta := getString(chunk, "delta")
 		if delta == "" {
@@ -87,10 +90,10 @@ func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) er
 		}
 
 		openAIChunk := map[string]interface{}{
-			"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+			"id":      state.openAIID,
 			"object":  "chat.completion.chunk",
-			"created": time.Now().Unix(),
-			"model":   "responses-api",
+			"created": state.openAICreated,
+			"model":   state.openAIModel,
 			"choices": []map[string]interface{}{
 				{
 					"index": 0,
@@ -104,6 +107,7 @@ func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) er
 		return writeRealtimeJSONData(state, openAIChunk)
 
 	case "response.reasoning_summary_text.delta":
+		ensureOpenAIStreamMetaFromResponses(state, chunk)
 		// 发送 reasoning 增量（Extended Thinking）
 		delta := getString(chunk, "delta")
 		if delta == "" {
@@ -111,10 +115,10 @@ func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) er
 		}
 
 		openAIChunk := map[string]interface{}{
-			"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+			"id":      state.openAIID,
 			"object":  "chat.completion.chunk",
-			"created": time.Now().Unix(),
-			"model":   "responses-api",
+			"created": state.openAICreated,
+			"model":   state.openAIModel,
 			"choices": []map[string]interface{}{
 				{
 					"index": 0,
@@ -128,6 +132,7 @@ func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) er
 		return writeRealtimeJSONData(state, openAIChunk)
 
 	case "response.function_call_arguments.delta":
+		ensureOpenAIStreamMetaFromResponses(state, chunk)
 		// 发送工具调用参数增量
 		delta := getString(chunk, "delta")
 		if delta == "" {
@@ -135,10 +140,10 @@ func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) er
 		}
 
 		openAIChunk := map[string]interface{}{
-			"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+			"id":      state.openAIID,
 			"object":  "chat.completion.chunk",
-			"created": time.Now().Unix(),
-			"model":   "responses-api",
+			"created": state.openAICreated,
+			"model":   state.openAIModel,
 			"choices": []map[string]interface{}{
 				{
 					"index": 0,
@@ -166,6 +171,8 @@ func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) er
 }
 
 func handleResponsesToOpenAICompleted(state *realtimeStreamState, chunk map[string]interface{}) error {
+	ensureOpenAIStreamMetaFromResponses(state, chunk)
+
 	// 发送结束块
 	finishReason := "stop"
 	if response, ok := chunk["response"].(map[string]interface{}); ok {
@@ -190,10 +197,10 @@ func handleResponsesToOpenAICompleted(state *realtimeStreamState, chunk map[stri
 	}
 
 	finalChunk := map[string]interface{}{
-		"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+		"id":      state.openAIID,
 		"object":  "chat.completion.chunk",
-		"created": time.Now().Unix(),
-		"model":   "responses-api",
+		"created": state.openAICreated,
+		"model":   state.openAIModel,
 		"choices": []map[string]interface{}{
 			{
 				"index":         0,
@@ -220,4 +227,40 @@ func handleResponsesToOpenAICompleted(state *realtimeStreamState, chunk map[stri
 
 	// 发送 [DONE]
 	return writeRealtimeData(state, "[DONE]")
+}
+
+func ensureOpenAIStreamMetaFromResponses(state *realtimeStreamState, chunk map[string]interface{}) {
+	if state.openAICreated == 0 {
+		state.openAICreated = time.Now().Unix()
+	}
+	if state.openAIModel == "" {
+		state.openAIModel = "responses-api"
+	}
+	if state.openAIID != "" {
+		return
+	}
+
+	if resp, ok := chunk["response"].(map[string]interface{}); ok {
+		if id := getString(resp, "id"); id != "" {
+			state.openAIID = "chatcmpl-" + id
+		}
+		if model := getString(resp, "model"); model != "" {
+			state.openAIModel = model
+		}
+		if createdAt := int64(getFloat(resp, "created_at")); createdAt > 0 {
+			state.openAICreated = createdAt
+		}
+	}
+
+	if state.openAIID == "" {
+		if responseID := getString(chunk, "response_id"); responseID != "" {
+			state.openAIID = "chatcmpl-" + responseID
+		} else if responseID := getNestedString(chunk, "response.id"); responseID != "" {
+			state.openAIID = "chatcmpl-" + responseID
+		}
+	}
+
+	if state.openAIID == "" {
+		state.openAIID = fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano())
+	}
 }

@@ -262,7 +262,9 @@ export function AssociationFilterPanel({
             <DropdownMenuContent align="start" className="w-56">
               <DropdownMenuItem
                 disabled={selectedAssociationCount === 0}
-                onClick={() => onBatchDeleteDialogOpenChange(true)}
+                onSelect={() => {
+                  window.setTimeout(() => onBatchDeleteDialogOpenChange(true), 0);
+                }}
                 className="cursor-pointer"
               >
                 <Trash2 className="mr-2 h-4 w-4 text-destructive" />

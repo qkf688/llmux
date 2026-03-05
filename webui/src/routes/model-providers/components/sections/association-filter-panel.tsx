@@ -349,10 +349,15 @@ export function AssociationFilterPanel({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-48">
-              <DropdownMenuItem disabled={!selectedModelId} onClick={onToggleTemplateEditor} className="cursor-pointer">
-                模板编辑
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onOpenBlacklistDialog} className="cursor-pointer">
+               <DropdownMenuItem disabled={!selectedModelId} onClick={onToggleTemplateEditor} className="cursor-pointer">
+                 模板编辑
+               </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  window.setTimeout(() => onOpenBlacklistDialog(), 0);
+                }}
+                className="cursor-pointer"
+              >
                 拉黑管理
               </DropdownMenuItem>
               <DropdownMenuSeparator />

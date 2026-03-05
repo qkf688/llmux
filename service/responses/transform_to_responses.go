@@ -43,7 +43,7 @@ func TransformFromUnified(unified *models.UnifiedRequest) ([]byte, error) {
 		}
 	}
 
-	req.Input = convertMessagesToInput(unified.Messages)
+	req.Input = convertMessagesToInput(unified.Messages, unified.TransformOptions.ArrayInputs)
 	if len(unified.Tools) > 0 {
 		req.Tools = convertUnifiedTools(unified.Tools)
 	}
@@ -62,8 +62,11 @@ func TransformFromUnified(unified *models.UnifiedRequest) ([]byte, error) {
 		}
 	}
 
-	if unified.ReasoningEffort != nil {
-		req.Reasoning = &ResponsesReasoning{Effort: unified.ReasoningEffort}
+	if unified.ReasoningEffort != nil || unified.ReasoningBudget != nil {
+		req.Reasoning = &ResponsesReasoning{
+			Effort:    unified.ReasoningEffort,
+			MaxTokens: unified.ReasoningBudget,
+		}
 	}
 
 	if len(unified.Metadata) > 0 {
@@ -86,7 +89,7 @@ func TransformFromUnified(unified *models.UnifiedRequest) ([]byte, error) {
 	return json.Marshal(req)
 }
 
-func convertMessagesToInput(messages []models.UnifiedMessage) ResponsesInput {
+func convertMessagesToInput(messages []models.UnifiedMessage, arrayInputs *bool) ResponsesInput {
 	var items []ResponsesItem
 
 	for _, msg := range messages {
@@ -161,7 +164,39 @@ func convertMessagesToInput(messages []models.UnifiedMessage) ResponsesInput {
 		}
 	}
 
+	if arrayInputs != nil && !*arrayInputs {
+		if text := responsesTextInput(items); text != nil {
+			return ResponsesInput{Text: text}
+		}
+	}
+
 	return ResponsesInput{Items: items}
+}
+
+func responsesTextInput(items []ResponsesItem) *string {
+	if len(items) != 1 {
+		return nil
+	}
+	first := items[0]
+	if first.Type != "message" || first.Role != "user" {
+		return nil
+	}
+
+	content, ok := first.Content.([]map[string]interface{})
+	if !ok || len(content) != 1 {
+		return nil
+	}
+	if content[0]["type"] != "input_text" {
+		return nil
+	}
+	text, ok := content[0]["text"].(string)
+	if !ok {
+		return nil
+	}
+	if text == "" {
+		return nil
+	}
+	return &text
 }
 
 func convertUnifiedTools(tools []models.UnifiedTool) []ResponsesTool {

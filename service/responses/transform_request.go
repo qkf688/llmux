@@ -24,6 +24,13 @@ func TransformRequest(rawBody []byte, options RequestTransformOptions) (*models.
 		Model:  req.Model,
 		System: req.Instructions,
 	}
+	if req.Input.Text != nil {
+		wasArray := false
+		unified.TransformOptions.ArrayInputs = &wasArray
+	} else if req.Input.Items != nil {
+		wasArray := true
+		unified.TransformOptions.ArrayInputs = &wasArray
+	}
 
 	if req.Stream != nil {
 		unified.Stream = *req.Stream
@@ -100,6 +107,9 @@ func TransformRequest(rawBody []byte, options RequestTransformOptions) (*models.
 		} else {
 			unified.ReasoningEffort = &effort
 		}
+	}
+	if req.Reasoning != nil && req.Reasoning.MaxTokens != nil {
+		unified.ReasoningBudget = req.Reasoning.MaxTokens
 	}
 
 	return unified, nil

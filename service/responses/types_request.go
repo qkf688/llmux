@@ -210,5 +210,6 @@ func (tc *ResponsesToolChoice) UnmarshalJSON(data []byte) error {
 
 // ResponsesReasoning 推理配置。
 type ResponsesReasoning struct {
-	Effort *string `json:"effort,omitempty"` // "low", "medium", "high"
+	Effort    *string `json:"effort,omitempty"`     // "low", "medium", "high"
+	MaxTokens *int64  `json:"max_tokens,omitempty"` // reasoning token budget
 }

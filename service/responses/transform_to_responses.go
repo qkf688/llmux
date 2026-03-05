@@ -94,7 +94,12 @@ func convertMessagesToInput(messages []models.UnifiedMessage) ResponsesInput {
 		case "user":
 			switch content := msg.Content.(type) {
 			case string:
-				items = append(items, ResponsesItem{Type: "input_text", Text: &content})
+				text := content
+				items = append(items, ResponsesItem{
+					Type:    "message",
+					Role:    "user",
+					Content: []map[string]interface{}{{"type": "input_text", "text": text}},
+				})
 			case []models.UnifiedMessageContentPart:
 				if converted := unifiedPartsToResponsesContent("user", content); converted != nil {
 					items = append(items, ResponsesItem{
@@ -107,8 +112,6 @@ func convertMessagesToInput(messages []models.UnifiedMessage) ResponsesInput {
 		case "assistant":
 			if len(msg.ToolCalls) > 0 {
 				for _, tc := range msg.ToolCalls {
-					// Responses API separates `id` (fc_*) and `call_id` (call_*).
-					// UnifiedToolCall.ID is the call_id in our unified representation.
 					callID := tc.ID
 					var callIDPtr *string
 					if callID != "" {
@@ -126,7 +129,12 @@ func convertMessagesToInput(messages []models.UnifiedMessage) ResponsesInput {
 			} else {
 				switch content := msg.Content.(type) {
 				case string:
-					items = append(items, ResponsesItem{Type: "output_text", Text: &content})
+					text := content
+					items = append(items, ResponsesItem{
+						Type:    "message",
+						Role:    "assistant",
+						Content: []map[string]interface{}{{"type": "output_text", "text": text}},
+					})
 				case []models.UnifiedMessageContentPart:
 					if converted := unifiedPartsToResponsesContent("assistant", content); converted != nil {
 						items = append(items, ResponsesItem{
@@ -162,12 +170,10 @@ func convertUnifiedTools(tools []models.UnifiedTool) []ResponsesTool {
 		if tool.Type == "function" {
 			params, _ := tool.Function.Parameters.(map[string]interface{})
 			responses = append(responses, ResponsesTool{
-				Type: "function",
-				Function: &ResponsesToolFunction{
-					Name:        tool.Function.Name,
-					Description: tool.Function.Description,
-					Parameters:  params,
-				},
+				Type:        "function",
+				Name:        tool.Function.Name,
+				Description: tool.Function.Description,
+				Parameters:  params,
 			})
 		}
 	}

@@ -225,13 +225,13 @@ func convertInputToMessages(input ResponsesInput) ([]models.UnifiedMessage, stri
 func convertToolsToUnified(tools []ResponsesTool) []models.UnifiedTool {
 	var unified []models.UnifiedTool
 	for _, tool := range tools {
-		if tool.Type == "function" && tool.Function != nil {
+		if tool.Type == "function" && tool.Name != "" {
 			unified = append(unified, models.UnifiedTool{
 				Type: "function",
 				Function: models.UnifiedFunc{
-					Name:        tool.Function.Name,
-					Description: tool.Function.Description,
-					Parameters:  tool.Function.Parameters,
+					Name:        tool.Name,
+					Description: tool.Description,
+					Parameters:  tool.Parameters,
 				},
 			})
 		}

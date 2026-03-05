@@ -52,12 +52,24 @@ func TestTransformFromUnified_FunctionCallsUseCallID_NotID(t *testing.T) {
 		t.Fatalf("expected 5 input items, got %d", len(req.Input.Items))
 	}
 
-	// user input_text
-	if req.Input.Items[0].Type != "input_text" || req.Input.Items[0].Text == nil || *req.Input.Items[0].Text != "hi" {
+	// user message
+	if req.Input.Items[0].Type != "message" || req.Input.Items[0].Role != "user" {
 		t.Fatalf("unexpected first item: %+v", req.Input.Items[0])
 	}
 	if req.Input.Items[0].ID != "" {
-		t.Fatalf("input_text should not include id, got %q", req.Input.Items[0].ID)
+		t.Fatalf("message should not include id, got %q", req.Input.Items[0].ID)
+	}
+	// Check content contains input_text
+	contentArr, ok := req.Input.Items[0].Content.([]interface{})
+	if !ok || len(contentArr) != 1 {
+		t.Fatalf("unexpected content: %+v", req.Input.Items[0].Content)
+	}
+	contentMap, ok := contentArr[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("unexpected content item type: %T", contentArr[0])
+	}
+	if contentMap["type"] != "input_text" || contentMap["text"] != "hi" {
+		t.Fatalf("unexpected content item: %+v", contentMap)
 	}
 
 	// assistant tool calls -> function_call items
@@ -96,4 +108,3 @@ func TestTransformFromUnified_FunctionCallsUseCallID_NotID(t *testing.T) {
 		t.Fatalf("function_call_output[1] should not include id, got %q", req.Input.Items[4].ID)
 	}
 }
-

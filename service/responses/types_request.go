@@ -146,9 +146,12 @@ type ResponsesTextFormat struct {
 }
 
 // ResponsesTool 工具定义。
+// Responses API 中 name/description/parameters 直接在顶层，而非嵌套在 function 中。
 type ResponsesTool struct {
-	Type     string                 `json:"type"` // "function"
-	Function *ResponsesToolFunction `json:"function,omitempty"`
+	Type        string                 `json:"type"` // "function"
+	Name        string                 `json:"name,omitempty"`
+	Description string                 `json:"description,omitempty"`
+	Parameters  map[string]interface{} `json:"parameters,omitempty"`
 }
 
 // ResponsesToolFunction 函数工具定义。

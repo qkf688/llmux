@@ -95,6 +95,11 @@ func BeforerOpenAIRes(data []byte) (*Before, error) {
 					"role": role,
 				}
 
+				// 处理 name 字段：只有当 name 存在且非空时才添加
+				if name := msg.Get("name").String(); name != "" {
+					item["name"] = name
+				}
+
 				// 处理 content（可能是 string 或 array）
 				if content.IsArray() {
 					// content 是数组，保持原样
@@ -124,6 +129,12 @@ func BeforerOpenAIRes(data []byte) (*Before, error) {
 				return nil, err
 			}
 		}
+	}
+
+	if patched, changed, err := preprocessopenai.StripEmptyResponsesInputNames(data); err != nil {
+		return nil, err
+	} else if changed {
+		data = patched
 	}
 
 	stream := gjson.GetBytes(data, "stream").Bool()

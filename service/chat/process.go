@@ -24,6 +24,61 @@ const (
 
 type Processer func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error)
 
+type SSEEvent struct {
+	Event string
+	Data  string
+}
+
+func ScanSSEEvents(reader *bufio.Scanner) iter.Seq[SSEEvent] {
+	return func(yield func(SSEEvent) bool) {
+		var eventName string
+		dataLines := make([]string, 0, 4)
+
+		flush := func() bool {
+			if len(dataLines) == 0 {
+				eventName = ""
+				return true
+			}
+
+			data := strings.Join(dataLines, "\n")
+			dataLines = dataLines[:0]
+
+			ev := SSEEvent{Event: eventName, Data: data}
+			eventName = ""
+
+			return yield(ev)
+		}
+
+		for reader.Scan() {
+			line := strings.TrimRight(reader.Text(), "\r")
+			if line == "" {
+				if !flush() {
+					return
+				}
+				continue
+			}
+
+			if after, ok := strings.CutPrefix(line, "event:"); ok {
+				eventName = strings.TrimSpace(after)
+				continue
+			}
+			if strings.HasPrefix(line, ":") {
+				continue
+			}
+			if after, ok := strings.CutPrefix(line, "data:"); ok {
+				data := strings.TrimSpace(after)
+				if data == "" {
+					continue
+				}
+				dataLines = append(dataLines, data)
+				continue
+			}
+		}
+
+		_ = flush()
+	}
+}
+
 func ProcesserOpenAI(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
 	// 首字时延
 	var firstChunkTime time.Duration
@@ -41,49 +96,51 @@ func ProcesserOpenAI(ctx context.Context, pr io.Reader, stream bool, start time.
 		output.OfStringArray = make([]string, 0, DefaultChunkArrayCapacity)
 	}
 
-	for chunk := range ScannerToken(scanner) {
-		if !disablePerformanceTracking {
-			once.Do(func() {
-				firstChunkTime = time.Since(start)
-			})
-		}
-		if !stream {
+	if !stream {
+		for chunk := range ScannerToken(scanner) {
+			if !disablePerformanceTracking {
+				once.Do(func() {
+					firstChunkTime = time.Since(start)
+				})
+			}
+
 			output.OfString = chunk
 			if !disableTokenCounting {
 				usageStr = gjson.Get(chunk, "usage").String()
 			}
 			break
 		}
-
-		// 优化2: 容错解析 SSE data 行（兼容 data: 和 data: ）
-		var ok bool
-		chunk, ok = strings.CutPrefix(chunk, "data:")
-		if !ok {
-			continue
-		}
-		chunk = strings.TrimSpace(chunk)
-
-		if chunk == "[DONE]" {
-			break
-		}
-
-		// 性能优化：只检查前几个chunk的错误
-		// 大多数错误（认证、限流、参数错误）都在开始阶段返回
-		chunkCount++
-		if chunkCount <= MaxErrorCheckChunks {
-			errStr := gjson.Get(chunk, "error")
-			if errStr.Exists() {
-				return nil, nil, errors.New(errStr.String())
+	} else {
+		for ev := range ScanSSEEvents(scanner) {
+			if !disablePerformanceTracking {
+				once.Do(func() {
+					firstChunkTime = time.Since(start)
+				})
 			}
-		}
 
-		output.OfStringArray = append(output.OfStringArray, chunk)
+			chunk := ev.Data
+			if chunk == "[DONE]" {
+				break
+			}
 
-		// 优化1: 只在还没找到usage时才查询，避免重复查询
-		if !disableTokenCounting && usageStr == "" {
-			usage := gjson.Get(chunk, "usage")
-			if usage.Exists() && usage.Get("total_tokens").Int() != 0 {
-				usageStr = usage.String()
+			// 性能优化：只检查前几个chunk的错误
+			// 大多数错误（认证、限流、参数错误）都在开始阶段返回
+			chunkCount++
+			if chunkCount <= MaxErrorCheckChunks {
+				errStr := gjson.Get(chunk, "error")
+				if errStr.Exists() {
+					return nil, nil, errors.New(errStr.String())
+				}
+			}
+
+			output.OfStringArray = append(output.OfStringArray, chunk)
+
+			// 优化1: 只在还没找到usage时才查询，避免重复查询
+			if !disableTokenCounting && usageStr == "" {
+				usage := gjson.Get(chunk, "usage")
+				if usage.Exists() && usage.Get("total_tokens").Int() != 0 {
+					usageStr = usage.String()
+				}
 			}
 		}
 	}
@@ -154,47 +211,45 @@ func ProcesserOpenAiRes(ctx context.Context, pr io.Reader, stream bool, start ti
 
 	scanner := bufio.NewScanner(pr)
 	scanner.Buffer(make([]byte, 0, InitScannerBufferSize), MaxScannerBufferSize)
-	var event string
 
 	// 优化: 预分配切片容量，减少扩容开销
 	if stream {
 		output.OfStringArray = make([]string, 0, DefaultChunkArrayCapacity)
 	}
 
-	for chunk := range ScannerToken(scanner) {
-		if !disablePerformanceTracking {
-			once.Do(func() {
-				firstChunkTime = time.Since(start)
-			})
-		}
-		if !stream {
+	if !stream {
+		for chunk := range ScannerToken(scanner) {
+			if !disablePerformanceTracking {
+				once.Do(func() {
+					firstChunkTime = time.Since(start)
+				})
+			}
+
 			output.OfString = chunk
 			if !disableTokenCounting {
 				usageStr = gjson.Get(chunk, "usage").String()
 			}
 			break
 		}
+	} else {
+		for ev := range ScanSSEEvents(scanner) {
+			if !disablePerformanceTracking {
+				once.Do(func() {
+					firstChunkTime = time.Since(start)
+				})
+			}
 
-		if after, ok := strings.CutPrefix(chunk, "event:"); ok {
-			event = strings.TrimSpace(after)
-			continue
-		}
+			content := ev.Data
+			if content == "" {
+				continue
+			}
 
-		// 优化: 使用 CutPrefix 替代 TrimPrefix
-		content, ok := strings.CutPrefix(chunk, "data:")
-		if !ok {
-			continue
-		}
-		content = strings.TrimSpace(content)
-		if content == "" {
-			continue
-		}
+			output.OfStringArray = append(output.OfStringArray, content)
 
-		output.OfStringArray = append(output.OfStringArray, content)
-
-		// 优化: 只在特定事件时查询usage，避免重复查询
-		if !disableTokenCounting && usageStr == "" && event == "response.completed" {
-			usageStr = gjson.Get(content, "response.usage").String()
+			// 优化: 只在特定事件时查询usage，避免重复查询
+			if !disableTokenCounting && usageStr == "" && ev.Event == "response.completed" {
+				usageStr = gjson.Get(content, "response.usage").String()
+			}
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -247,43 +302,45 @@ func ProcesserAnthropic(ctx context.Context, pr io.Reader, stream bool, start ti
 
 	scanner := bufio.NewScanner(pr)
 	scanner.Buffer(make([]byte, 0, InitScannerBufferSize), MaxScannerBufferSize)
-	var event string
 
 	// 优化: 预分配切片容量，减少扩容开销
 	if stream {
 		output.OfStringArray = make([]string, 0, DefaultChunkArrayCapacity)
 	}
 
-	for chunk := range ScannerToken(scanner) {
-		if !disablePerformanceTracking {
-			once.Do(func() {
-				firstChunkTime = time.Since(start)
-			})
-		}
-		if !stream {
+	if !stream {
+		for chunk := range ScannerToken(scanner) {
+			if !disablePerformanceTracking {
+				once.Do(func() {
+					firstChunkTime = time.Since(start)
+				})
+			}
+
 			output.OfString = chunk
 			if !disableTokenCounting {
 				usageStr = gjson.Get(chunk, "usage").String()
 			}
 			break
 		}
+	} else {
+		for ev := range ScanSSEEvents(scanner) {
+			if !disablePerformanceTracking {
+				once.Do(func() {
+					firstChunkTime = time.Since(start)
+				})
+			}
 
-		if after, ok := strings.CutPrefix(chunk, "event:"); ok {
-			event = strings.TrimSpace(after)
-			continue
-		}
+			content := ev.Data
+			if content == "" {
+				continue
+			}
 
-		after, ok := strings.CutPrefix(chunk, "data:")
-		if !ok {
-			continue
-		}
-		after = strings.TrimSpace(after)
+			output.OfStringArray = append(output.OfStringArray, content)
 
-		output.OfStringArray = append(output.OfStringArray, after)
-
-		// 优化: 只在特定事件时查询usage，避免重复查询
-		if !disableTokenCounting && usageStr == "" && event == "message_delta" {
-			usageStr = gjson.Get(after, "usage").String()
+			// 优化: 只在特定事件时查询usage，避免重复查询
+			if !disableTokenCounting && usageStr == "" && ev.Event == "message_delta" {
+				usageStr = gjson.Get(content, "usage").String()
+			}
 		}
 	}
 	if err := scanner.Err(); err != nil {

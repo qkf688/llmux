@@ -242,3 +242,41 @@ data: {"type":"message_stop"}
 		t.Fatalf("输出 created 应为 111，实际: %d", createds[0])
 	}
 }
+
+func TestTransformStreamResponseRealtime_OpenAIToAnthropic_EmitsMessageStart(t *testing.T) {
+	openaiStream := `data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4","choices":[{"index":0,"delta":{"role":"assistant","content":"Hi"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}}
+
+data: [DONE]
+
+`
+
+	response := &http.Response{
+		StatusCode: 200,
+		Header: http.Header{
+			"Content-Type": []string{"text/event-stream"},
+		},
+		Body: io.NopCloser(strings.NewReader(openaiStream)),
+	}
+
+	result, err := transformStreamResponseRealtime(response, "openai", "anthropic")
+	if err != nil {
+		t.Fatalf("转换失败: %v", err)
+	}
+	defer result.Body.Close()
+
+	scanner := bufio.NewScanner(result.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 2*1024*1024)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event:") && strings.Contains(line, "message_start") {
+			return
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("扫描流时出错: %v", err)
+	}
+	t.Fatal("未找到 event: message_start（期望 OpenAI->Anthropic 流式走 canonical pipeline）")
+}

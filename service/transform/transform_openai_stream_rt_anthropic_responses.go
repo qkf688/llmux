@@ -43,6 +43,7 @@ func handleAnthropicToResponsesMessageStart(state *realtimeStreamState, chunk ma
 	// 获取 message ID 并生成 item ID
 	state.responseID = getNestedString(chunk, "message.id")
 	state.itemID = fmt.Sprintf("msg_%s", state.responseID)
+	createdAt := int(getNestedFloat(chunk, "message.created_at"))
 
 	// 发送 response.created 事件
 	responseCreated := map[string]interface{}{
@@ -52,7 +53,7 @@ func handleAnthropicToResponsesMessageStart(state *realtimeStreamState, chunk ma
 			"object":     "response",
 			"id":         state.responseID,
 			"model":      getNestedString(chunk, "message.model"),
-			"created_at": 0,
+			"created_at": createdAt,
 			"output":     []interface{}{},
 			"status":     "in_progress",
 		},
@@ -69,7 +70,7 @@ func handleAnthropicToResponsesMessageStart(state *realtimeStreamState, chunk ma
 			"object":     "response",
 			"id":         state.responseID,
 			"model":      getNestedString(chunk, "message.model"),
-			"created_at": 0,
+			"created_at": createdAt,
 			"output":     []interface{}{},
 			"status":     "in_progress",
 		},

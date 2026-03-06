@@ -29,6 +29,8 @@ type realtimeStreamState struct {
 	openAIModel   string
 	openAICreated int64
 
+	unknownRouteCount int
+
 	responseID string
 	itemID     string
 
@@ -39,123 +41,24 @@ type realtimeStreamState struct {
 
 // transformStreamResponseRealtime 实时流式响应转换（直接从 Body 读取器转换）
 func transformStreamResponseRealtime(response *http.Response, providerType, clientType string) (*http.Response, error) {
+	// Reduce N×N streaming conversions to N+N by routing through OpenAI Responses
+	// streaming format when neither side is already using it.
+	//
+	// provider -> openai-res (canonical) -> client
+	if providerType != "openai-res" && clientType != "openai-res" {
+		return transformStreamResponseRealtimeViaResponses(response, providerType, clientType)
+	}
+
 	pr, pw := io.Pipe()
 
 	go func() {
-		defer pw.Close()
 		defer response.Body.Close()
-
-		scanner := bufio.NewScanner(response.Body)
-		// 增加初始缓冲区大小到 64KB，最大使用 maxSSEEventSize（避免大事件导致 token too long）
-		scanner.Buffer(make([]byte, 0, 64*1024), maxSSEEventSize)
-
-		state := &realtimeStreamState{
-			writer:       pw,
-			providerType: providerType,
-			clientType:   clientType,
-		}
-
-		var eventName string
-		var dataLines []string
-		eventSize := 0
-
-		flushEvent := func() error {
-			if len(dataLines) == 0 {
-				eventName = ""
-				eventSize = 0
-				return nil
-			}
-
-			state.currentEvent = eventName
-			data := strings.Join(dataLines, "\n")
-
-			eventName = ""
-			dataLines = dataLines[:0]
-			eventSize = 0
-
-			if data == "" {
-				state.currentEvent = ""
-				return nil
-			}
-
-			if err := dispatchRealtimeStreamChunk(state, data); err != nil {
-				return err
-			}
-			state.currentEvent = ""
-			return nil
-		}
-
-		for scanner.Scan() {
-			state.lineCount++
-			line := strings.TrimRight(scanner.Text(), "\r")
-			if line == "" {
-				// 空行是 SSE 消息分隔符：此时 event + data 组成一个完整事件
-				if err := flushEvent(); err != nil {
-					logRealtimeWriteError(state, err)
-					pw.CloseWithError(err)
-					return
-				}
-				continue
-			}
-
-			// 处理 event 行（记录事件类型）- 兼容带空格和不带空格两种格式
-			if strings.HasPrefix(line, "event:") {
-				eventName = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
-				continue
-			}
-
-			// 忽略注释行等
-			if strings.HasPrefix(line, ":") {
-				continue
-			}
-
-			// 处理 data 行 - 兼容带空格和不带空格两种格式
-			if strings.HasPrefix(line, "data:") {
-				data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-				if data == "" {
-					continue
-				}
-				eventSize += len(data)
-				if eventSize > maxSSEEventSize {
-					err := fmt.Errorf("sse event too large: %d > %d", eventSize, maxSSEEventSize)
-					logRealtimeWriteError(state, err)
-					pw.CloseWithError(err)
-					return
-				}
-				dataLines = append(dataLines, data)
-				continue
-			}
-
-			// 其它字段（id/retry等）不参与转换
-		}
-
-		if err := scanner.Err(); err != nil {
-			slog.Error("scanner error in stream transformation",
-				"provider_type", state.providerType,
-				"client_type", state.clientType,
-				"lines_processed", state.lineCount,
-				"errors_encountered", state.errorCount,
-				"error", err)
+		err := transformStreamBodyRealtime(response.Body, pw, providerType, clientType)
+		if err != nil {
 			pw.CloseWithError(err)
 			return
 		}
-
-		// EOF 但没有 trailing blank line：补一次 flush
-		if err := flushEvent(); err != nil {
-			slog.Error("failed to flush last SSE event in stream transformation",
-				"provider_type", state.providerType,
-				"client_type", state.clientType,
-				"lines_processed", state.lineCount,
-				"errors_encountered", state.errorCount,
-				"error", err)
-			pw.CloseWithError(err)
-		} else {
-			slog.Debug("stream transformation completed",
-				"provider_type", state.providerType,
-				"client_type", state.clientType,
-				"lines_processed", state.lineCount,
-				"errors_encountered", state.errorCount)
-		}
+		pw.Close()
 	}()
 
 	newResponse := &http.Response{
@@ -172,12 +75,150 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 	return newResponse, nil
 }
 
+func transformStreamResponseRealtimeViaResponses(response *http.Response, providerType, clientType string) (*http.Response, error) {
+	midReader, midWriter := io.Pipe()
+	outReader, outWriter := io.Pipe()
+
+	go func() {
+		defer response.Body.Close()
+
+		err := transformStreamBodyRealtime(response.Body, midWriter, providerType, "openai-res")
+		if err != nil {
+			midWriter.CloseWithError(err)
+			return
+		}
+		midWriter.Close()
+	}()
+
+	go func() {
+		defer midReader.Close()
+
+		err := transformStreamBodyRealtime(midReader, outWriter, "openai-res", clientType)
+		if err != nil {
+			outWriter.CloseWithError(err)
+			return
+		}
+		outWriter.Close()
+	}()
+
+	newResponse := &http.Response{
+		Status:        response.Status,
+		StatusCode:    response.StatusCode,
+		Proto:         response.Proto,
+		ProtoMajor:    response.ProtoMajor,
+		ProtoMinor:    response.ProtoMinor,
+		Header:        response.Header.Clone(),
+		Body:          outReader,
+		ContentLength: -1,
+	}
+
+	return newResponse, nil
+}
+
+func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, providerType, clientType string) error {
+	scanner := bufio.NewScanner(src)
+	// Increase initial buffer to 64KB, and cap at maxSSEEventSize (avoid "token too long").
+	scanner.Buffer(make([]byte, 0, 64*1024), maxSSEEventSize)
+
+	state := &realtimeStreamState{
+		writer:       dst,
+		providerType: providerType,
+		clientType:   clientType,
+	}
+
+	var eventName string
+	var dataLines []string
+	eventSize := 0
+
+	flushEvent := func() error {
+		if len(dataLines) == 0 {
+			eventName = ""
+			eventSize = 0
+			return nil
+		}
+
+		state.currentEvent = eventName
+		data := strings.Join(dataLines, "\n")
+
+		eventName = ""
+		dataLines = dataLines[:0]
+		eventSize = 0
+
+		if data == "" {
+			state.currentEvent = ""
+			return nil
+		}
+
+		if err := dispatchRealtimeStreamChunk(state, data); err != nil {
+			return err
+		}
+		state.currentEvent = ""
+		return nil
+	}
+
+	for scanner.Scan() {
+		state.lineCount++
+		line := strings.TrimRight(scanner.Text(), "\r")
+		if line == "" {
+			// blank line indicates end of a SSE event.
+			if err := flushEvent(); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if strings.HasPrefix(line, "event:") {
+			eventName = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+			continue
+		}
+		if strings.HasPrefix(line, ":") {
+			continue
+		}
+		if strings.HasPrefix(line, "data:") {
+			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+			if data == "" {
+				continue
+			}
+			eventSize += len(data)
+			if eventSize > maxSSEEventSize {
+				return fmt.Errorf("sse event too large: %d > %d", eventSize, maxSSEEventSize)
+			}
+			dataLines = append(dataLines, data)
+			continue
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		slog.Error("scanner error in stream transformation",
+			"provider_type", state.providerType,
+			"client_type", state.clientType,
+			"lines_processed", state.lineCount,
+			"errors_encountered", state.errorCount,
+			"error", err)
+		return err
+	}
+
+	// EOF but without trailing blank line: flush last event once.
+	if err := flushEvent(); err != nil {
+		slog.Error("failed to flush last SSE event in stream transformation",
+			"provider_type", state.providerType,
+			"client_type", state.clientType,
+			"lines_processed", state.lineCount,
+			"errors_encountered", state.errorCount,
+			"error", err)
+		return err
+	}
+
+	slog.Debug("stream transformation completed",
+		"provider_type", state.providerType,
+		"client_type", state.clientType,
+		"lines_processed", state.lineCount,
+		"errors_encountered", state.errorCount)
+	return nil
+}
+
 func dispatchRealtimeStreamChunk(state *realtimeStreamState, data string) error {
 	switch {
-	case state.providerType == "anthropic" && state.clientType == "openai":
-		return handleRealtimeAnthropicToOpenAI(state, data)
-	case state.providerType == "openai" && state.clientType == "anthropic":
-		return handleRealtimeOpenAIToAnthropic(state, data)
 	case state.providerType == "anthropic" && state.clientType == "openai-res":
 		return handleRealtimeAnthropicToResponses(state, data)
 	case state.providerType == "openai-res" && state.clientType == "anthropic":
@@ -187,6 +228,23 @@ func dispatchRealtimeStreamChunk(state *realtimeStreamState, data string) error 
 	case state.providerType == "openai-res" && state.clientType == "openai":
 		return handleRealtimeResponsesToOpenAI(state, data)
 	default:
+		// Keep behavior: passthrough. Add observability for unexpected routes.
+		if state.unknownRouteCount < 3 {
+			state.unknownRouteCount++
+			slog.Warn("unknown stream transform route, passthrough",
+				"provider_type", state.providerType,
+				"client_type", state.clientType,
+				"event", state.currentEvent,
+				"line", state.lineCount,
+				"data_length", len(data),
+				"data_preview", func() string {
+					if len(data) > 120 {
+						return data[:120]
+					}
+					return data
+				}(),
+			)
+		}
 		return writeRealtimeData(state, data)
 	}
 }

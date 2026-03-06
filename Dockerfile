@@ -11,7 +11,10 @@ RUN pnpm run build
 FROM golang:latest AS backend-build
 WORKDIR /app
 COPY go.mod go.sum ./
-RUN GOPROXY=https://goproxy.io,direct go mod download
+ARG GOPROXY=https://goproxy.io|https://goproxy.cn|https://proxy.golang.org|direct
+ARG GOSUMDB=sum.golang.org
+ENV GOPROXY=${GOPROXY} GOSUMDB=${GOSUMDB}
+RUN go mod download
 COPY . .
 # Copy the built frontend from frontend build stage
 COPY --from=frontend-build /app/dist ./webui/dist

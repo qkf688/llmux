@@ -8,19 +8,16 @@ require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/glebarez/sqlite v1.11.0
 	github.com/openai/openai-go/v2 v2.0.2
-	github.com/stretchr/testify v1.10.0
 	github.com/tidwall/gjson v1.18.0
 	github.com/tidwall/sjson v1.2.5
 	golang.org/x/crypto/x509roots/fallback v0.0.0-20250803194717-c247dead11de
+	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.30.0
 )
 
 require (
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/mattn/go-sqlite3 v1.14.22 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
-	gorm.io/driver/sqlite v1.6.0 // indirect
 )
 
 require (

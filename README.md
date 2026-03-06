@@ -23,6 +23,31 @@ LLMux 是一个多供应商 LLM API 网关/代理：对外提供 **OpenAI / Anth
 - **使用指标** 📊：按天统计用量与调用次数，直观展示使用情况。
 - **配置导入导出/维护** 🛠️：支持配置与数据库的导入导出，以及数据库维护操作。
 
+## Docker Compose 部署 🐳
+
+`docker-compose.yml` 已包含示例配置（注意替换 `TOKEN` / `TZ`）：
+
+```bash
+docker compose up -d
+```
+
+```
+services:
+  llmux:
+    image: qkf688/llmux:latest
+    ports:
+      - 7070:7070
+    volumes:
+      - ./db:/app/db
+    environment:
+      - GIN_MODE=release
+      - TOKEN=<YOUR_TOKEN>
+      - TZ=Asia/Shanghai
+
+```
+
+
+
 ## 快速开始（本地）🚀
 
 ### 环境要求 📋
@@ -83,29 +108,6 @@ go run .
 ![Logs](docs/screenshots/logs.png)
 ![Settings](docs/screenshots/settings.png)
 
-## Docker Compose 部署 🐳
-
-`docker-compose.yml` 已包含示例配置（注意替换 `TOKEN` / `TZ`）：
-
-```bash
-docker compose up -d
-```
-
-```
-services:
-  llmux:
-    image: qkf688/llmux:latest
-    ports:
-      - 7070:7070
-    volumes:
-      - ./db:/app/db
-    environment:
-      - GIN_MODE=release
-      - TOKEN=<YOUR_TOKEN>
-      - TZ=Asia/Shanghai
-
-```
-
 
 
 ## 许可证 📄
@@ -115,3 +117,4 @@ MIT License，见 [LICENSE](LICENSE)。
 ## 致谢 🙏
 
 - 原项目：[atopos31/llmio](https://github.com/atopos31/llmio)
+- 前端风格参考：[bestruirui/octopus](https://github.com/bestruirui/octopus)

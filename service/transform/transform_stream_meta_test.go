@@ -98,6 +98,62 @@ data: {"type":"response.completed","response":{"id":"resp_123","object":"respons
 	}
 }
 
+func TestTransformStreamResponseRealtime_ResponsesToOpenAI_MultiLineEventData(t *testing.T) {
+	responsesStream := `event: response.created
+data: {"type":"response.created","response":{"id":"resp_123","object":"response",
+data: "model":"gpt-4","created_at":1234567890,"status":"in_progress","output":[]}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","response_id":"resp_123","delta":"Hello"}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_123","object":"response","model":"gpt-4","created_at":1234567890,"status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}}
+`
+
+	response := &http.Response{
+		StatusCode: 200,
+		Header: http.Header{
+			"Content-Type": []string{"text/event-stream"},
+		},
+		Body: io.NopCloser(strings.NewReader(responsesStream)),
+	}
+
+	result, err := transformStreamResponseRealtime(response, "openai-res", "openai")
+	if err != nil {
+		t.Fatalf("转换失败: %v", err)
+	}
+	defer result.Body.Close()
+
+	scanner := bufio.NewScanner(result.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 2*1024*1024)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "" || data == "[DONE]" {
+			continue
+		}
+
+		var ev map[string]interface{}
+		if err := json.Unmarshal([]byte(data), &ev); err != nil {
+			continue
+		}
+		if id, _ := ev["id"].(string); id != "" {
+			if id != "chatcmpl-resp_123" {
+				t.Fatalf("输出 id 应为 chatcmpl-resp_123，实际: %q", id)
+			}
+			return
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("扫描流时出错: %v", err)
+	}
+	t.Fatal("未找到包含 id 的 OpenAI chunk")
+}
+
 func TestTransformStreamResponseRealtime_AnthropicToOpenAI_StableMeta(t *testing.T) {
 	anthropicStream := `event: message_start
 data: {"type":"message_start","message":{"id":"msg_123","type":"message","role":"assistant","model":"claude-3-5-sonnet","created_at":111,"usage":{"input_tokens":0,"output_tokens":0}}}
@@ -186,4 +242,3 @@ data: {"type":"message_stop"}
 		t.Fatalf("输出 created 应为 111，实际: %d", createds[0])
 	}
 }
-

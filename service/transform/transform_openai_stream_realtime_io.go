@@ -27,5 +27,9 @@ func writeRealtimeOrderedData(state *realtimeStreamState, payload map[string]int
 	if err != nil {
 		return err
 	}
+	if event, ok := payload["type"].(string); ok && event != "" {
+		_, err = fmt.Fprintf(state.writer, "event: %s\ndata: %s\n\n", event, string(data))
+		return err
+	}
 	return writeRealtimeData(state, string(data))
 }

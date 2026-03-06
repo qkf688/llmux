@@ -55,12 +55,13 @@ func ProcesserOpenAI(ctx context.Context, pr io.Reader, stream bool, start time.
 			break
 		}
 
-		// 优化2: 使用 CutPrefix 避免不必要的字符串分配
+		// 优化2: 容错解析 SSE data 行（兼容 data: 和 data: ）
 		var ok bool
-		chunk, ok = strings.CutPrefix(chunk, "data: ")
+		chunk, ok = strings.CutPrefix(chunk, "data:")
 		if !ok {
 			continue
 		}
+		chunk = strings.TrimSpace(chunk)
 
 		if chunk == "[DONE]" {
 			break
@@ -174,14 +175,18 @@ func ProcesserOpenAiRes(ctx context.Context, pr io.Reader, stream bool, start ti
 			break
 		}
 
-		if after, ok := strings.CutPrefix(chunk, "event: "); ok {
-			event = after
+		if after, ok := strings.CutPrefix(chunk, "event:"); ok {
+			event = strings.TrimSpace(after)
 			continue
 		}
 
 		// 优化: 使用 CutPrefix 替代 TrimPrefix
-		content, ok := strings.CutPrefix(chunk, "data: ")
-		if !ok || content == "" {
+		content, ok := strings.CutPrefix(chunk, "data:")
+		if !ok {
+			continue
+		}
+		content = strings.TrimSpace(content)
+		if content == "" {
 			continue
 		}
 
@@ -263,15 +268,16 @@ func ProcesserAnthropic(ctx context.Context, pr io.Reader, stream bool, start ti
 			break
 		}
 
-		if after, ok := strings.CutPrefix(chunk, "event: "); ok {
-			event = after
+		if after, ok := strings.CutPrefix(chunk, "event:"); ok {
+			event = strings.TrimSpace(after)
 			continue
 		}
 
-		after, ok := strings.CutPrefix(chunk, "data: ")
+		after, ok := strings.CutPrefix(chunk, "data:")
 		if !ok {
 			continue
 		}
+		after = strings.TrimSpace(after)
 
 		output.OfStringArray = append(output.OfStringArray, after)
 

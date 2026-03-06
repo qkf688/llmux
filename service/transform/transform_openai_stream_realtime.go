@@ -2,6 +2,7 @@ package transform
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -45,8 +46,8 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 		defer response.Body.Close()
 
 		scanner := bufio.NewScanner(response.Body)
-		// 增加初始缓冲区大小到 64KB，最大 15MB（与 process.go 一致）
-		scanner.Buffer(make([]byte, 0, 64*1024), 15*1024*1024)
+		// 增加初始缓冲区大小到 64KB，最大使用 maxSSEEventSize（避免大事件导致 token too long）
+		scanner.Buffer(make([]byte, 0, 64*1024), maxSSEEventSize)
 
 		state := &realtimeStreamState{
 			writer:       pw,
@@ -54,40 +55,94 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 			clientType:   clientType,
 		}
 
+		var eventName string
+		var dataLines []string
+		eventSize := 0
+
+		flushEvent := func() error {
+			if len(dataLines) == 0 {
+				eventName = ""
+				eventSize = 0
+				return nil
+			}
+
+			state.currentEvent = eventName
+			data := strings.Join(dataLines, "\n")
+
+			eventName = ""
+			dataLines = dataLines[:0]
+			eventSize = 0
+
+			if data == "" {
+				state.currentEvent = ""
+				return nil
+			}
+
+			if err := dispatchRealtimeStreamChunk(state, data); err != nil {
+				return err
+			}
+			state.currentEvent = ""
+			return nil
+		}
+
 		for scanner.Scan() {
 			state.lineCount++
-			line := scanner.Text()
+			line := strings.TrimRight(scanner.Text(), "\r")
 			if line == "" {
-				// 空行是 SSE 消息分隔符
-				state.currentEvent = ""
+				// 空行是 SSE 消息分隔符：此时 event + data 组成一个完整事件
+				if err := flushEvent(); err != nil {
+					logRealtimeWriteError(state, err)
+					pw.CloseWithError(err)
+					return
+				}
 				continue
 			}
 
 			// 处理 event 行（记录事件类型）- 兼容带空格和不带空格两种格式
 			if strings.HasPrefix(line, "event:") {
-				state.currentEvent = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+				eventName = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+				continue
+			}
+
+			// 忽略注释行等
+			if strings.HasPrefix(line, ":") {
 				continue
 			}
 
 			// 处理 data 行 - 兼容带空格和不带空格两种格式
-			if !strings.HasPrefix(line, "data:") {
+			if strings.HasPrefix(line, "data:") {
+				data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+				if data == "" {
+					continue
+				}
+				eventSize += len(data)
+				if eventSize > maxSSEEventSize {
+					err := fmt.Errorf("sse event too large: %d > %d", eventSize, maxSSEEventSize)
+					logRealtimeWriteError(state, err)
+					pw.CloseWithError(err)
+					return
+				}
+				dataLines = append(dataLines, data)
 				continue
 			}
 
-			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-			if data == "" {
-				continue
-			}
-
-			if err := dispatchRealtimeStreamChunk(state, data); err != nil {
-				logRealtimeWriteError(state, err)
-				pw.CloseWithError(err)
-				return
-			}
+			// 其它字段（id/retry等）不参与转换
 		}
 
 		if err := scanner.Err(); err != nil {
 			slog.Error("scanner error in stream transformation",
+				"provider_type", state.providerType,
+				"client_type", state.clientType,
+				"lines_processed", state.lineCount,
+				"errors_encountered", state.errorCount,
+				"error", err)
+			pw.CloseWithError(err)
+			return
+		}
+
+		// EOF 但没有 trailing blank line：补一次 flush
+		if err := flushEvent(); err != nil {
+			slog.Error("failed to flush last SSE event in stream transformation",
 				"provider_type", state.providerType,
 				"client_type", state.clientType,
 				"lines_processed", state.lineCount,

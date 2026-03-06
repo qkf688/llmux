@@ -8,6 +8,7 @@ db
 .spec-workflow
 CLAUDE.md
 .gocache
+.gopath
 test.txt
 test_stream.bat
 llmio-test.exe

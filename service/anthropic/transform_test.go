@@ -67,8 +67,14 @@ func TestTransformToUnified(t *testing.T) {
 	if len(unified.Messages[0].ToolCalls) != 1 {
 		t.Fatalf("expected tool call parsed from content, got %d", len(unified.Messages[0].ToolCalls))
 	}
+	if unified.Messages[1].Role != "tool" {
+		t.Fatalf("expected tool_result to be mapped to role=tool, got %q", unified.Messages[1].Role)
+	}
 	if unified.Messages[1].ToolCallID != "tool_1" {
 		t.Fatalf("expected tool_call_id=tool_1, got %q", unified.Messages[1].ToolCallID)
+	}
+	if content, ok := unified.Messages[1].Content.(string); !ok || content != "done" {
+		t.Fatalf("expected tool message content 'done', got %#v", unified.Messages[1].Content)
 	}
 	if unified.Messages[0].CacheControl == nil || unified.Messages[0].CacheControl.Type != "ephemeral" {
 		t.Fatal("expected message cache_control to be parsed")
@@ -90,6 +96,87 @@ func TestTransformToUnified(t *testing.T) {
 	}
 	if unified.ToolChoice == nil || unified.ToolChoice.ObjectValue == nil || unified.ToolChoice.ObjectValue.Function == nil || unified.ToolChoice.ObjectValue.Function.Name != "calc" {
 		t.Fatalf("unexpected tool_choice: %+v", unified.ToolChoice)
+	}
+}
+
+func TestTransformToUnified_MapsAnthropicBase64ImageToOpenAIDataURL(t *testing.T) {
+	raw := []byte(`{
+		"model":"claude-3-5-sonnet",
+		"messages":[
+			{
+				"role":"user",
+				"content":[
+					{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AAA"}}
+				]
+			}
+		]
+	}`)
+
+	unified, err := TransformToUnified(raw)
+	if err != nil {
+		t.Fatalf("TransformToUnified returned error: %v", err)
+	}
+	if len(unified.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(unified.Messages))
+	}
+
+	parts, ok := unified.Messages[0].Content.([]UnifiedMessageContentPart)
+	if !ok || len(parts) != 1 {
+		t.Fatalf("expected 1 content part, got %#v", unified.Messages[0].Content)
+	}
+	if parts[0].Type != "image_url" || parts[0].ImageURL == nil {
+		t.Fatalf("expected image_url part, got %#v", parts[0])
+	}
+	if parts[0].ImageURL.URL != "data:image/png;base64,AAA" {
+		t.Fatalf("unexpected image url: %q", parts[0].ImageURL.URL)
+	}
+}
+
+func TestTransformFromUnified_MapsOpenAIDataURLToAnthropicBase64Image(t *testing.T) {
+	unified := &UnifiedRequest{
+		Model: "claude-3-5-sonnet",
+		Messages: []UnifiedMessage{
+			{
+				Role: "user",
+				Content: []UnifiedMessageContentPart{
+					{Type: "image_url", ImageURL: &UnifiedImageURL{URL: "data:image/png;base64,AAA"}},
+				},
+			},
+		},
+	}
+
+	body, err := TransformFromUnified(unified)
+	if err != nil {
+		t.Fatalf("TransformFromUnified returned error: %v", err)
+	}
+
+	var req map[string]interface{}
+	if err := json.Unmarshal(body, &req); err != nil {
+		t.Fatalf("unmarshal result failed: %v", err)
+	}
+
+	msgs, ok := req["messages"].([]interface{})
+	if !ok || len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %#v", req["messages"])
+	}
+	msg, _ := msgs[0].(map[string]interface{})
+	content, ok := msg["content"].([]interface{})
+	if !ok || len(content) != 1 {
+		t.Fatalf("expected 1 content block, got %#v", msg["content"])
+	}
+	block, _ := content[0].(map[string]interface{})
+	if block["type"] != "image" {
+		t.Fatalf("expected type=image, got %#v", block["type"])
+	}
+	source, _ := block["source"].(map[string]interface{})
+	if source["type"] != "base64" {
+		t.Fatalf("expected source.type=base64, got %#v", source["type"])
+	}
+	if source["media_type"] != "image/png" {
+		t.Fatalf("expected media_type=image/png, got %#v", source["media_type"])
+	}
+	if source["data"] != "AAA" {
+		t.Fatalf("expected data=AAA, got %#v", source["data"])
 	}
 }
 
@@ -291,5 +378,152 @@ func TestFormatResponse(t *testing.T) {
 	}
 	if usage["input_tokens"].(float64) != 10 || usage["output_tokens"].(float64) != 20 {
 		t.Fatalf("unexpected usage values: %+v", usage)
+	}
+}
+
+func TestParseResponse_MapsThinkingAndMultimodalContent(t *testing.T) {
+	raw := []byte(`{
+		"id":"msg_1",
+		"model":"claude-3-5-sonnet",
+		"stop_reason":"end_turn",
+		"content":[
+			{"type":"thinking","thinking":"plan","signature":"sig"},
+			{"type":"text","text":"hello"},
+			{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AAA"}},
+			{"type":"tool_use","id":"tool_1","name":"calc","input":{"x":1}}
+		],
+		"usage":{"input_tokens":10,"output_tokens":20}
+	}`)
+
+	unified, err := ParseResponse(raw)
+	if err != nil {
+		t.Fatalf("ParseResponse returned error: %v", err)
+	}
+
+	if len(unified.Choices) != 1 || unified.Choices[0].Message == nil {
+		t.Fatalf("expected one choice with message, got %+v", unified.Choices)
+	}
+
+	msg := unified.Choices[0].Message
+	if msg.ReasoningContent == nil || *msg.ReasoningContent != "plan" {
+		t.Fatalf("expected reasoning_content=plan, got %+v", msg.ReasoningContent)
+	}
+	if msg.ReasoningSignature == nil || *msg.ReasoningSignature != "sig" {
+		t.Fatalf("expected reasoning_signature=sig, got %+v", msg.ReasoningSignature)
+	}
+
+	parts, ok := msg.Content.([]UnifiedMessageContentPart)
+	if !ok || len(parts) < 2 {
+		t.Fatalf("expected multimodal content parts, got %#v", msg.Content)
+	}
+	if parts[0].Type != "text" || parts[0].Text == nil || *parts[0].Text != "plan\n\n---\n\n" {
+		t.Fatalf("unexpected first part: %#v", parts[0])
+	}
+	if parts[1].Type != "text" || parts[1].Text == nil || *parts[1].Text != "hello" {
+		t.Fatalf("unexpected second part: %#v", parts[1])
+	}
+	foundImage := false
+	for _, p := range parts {
+		if p.Type == "image_url" && p.ImageURL != nil && p.ImageURL.URL == "data:image/png;base64,AAA" {
+			foundImage = true
+		}
+	}
+	if !foundImage {
+		t.Fatalf("expected image_url data URL part, got %#v", parts)
+	}
+
+	if len(msg.ToolCalls) != 1 || msg.ToolCalls[0].ID != "tool_1" {
+		t.Fatalf("expected tool_calls with id tool_1, got %#v", msg.ToolCalls)
+	}
+	if unified.Choices[0].FinishReason != "stop" {
+		t.Fatalf("expected finish_reason=stop, got %s", unified.Choices[0].FinishReason)
+	}
+}
+
+func TestFormatResponse_MapsContentPartsAndThinking(t *testing.T) {
+	reasoning := "plan"
+	signature := "sig"
+	text := "hello"
+	unified := &UnifiedResponse{
+		ID:    "msg_1",
+		Model: "claude-3-5-sonnet",
+		Choices: []UnifiedChoice{
+			{
+				Index: 0,
+				Message: &UnifiedMessage{
+					Role:             "assistant",
+					ReasoningContent: &reasoning,
+					ReasoningSignature: func() *string {
+						return &signature
+					}(),
+					Content: []UnifiedMessageContentPart{
+						{Type: "text", Text: &text},
+						{Type: "image_url", ImageURL: &UnifiedImageURL{URL: "data:image/png;base64,AAA"}},
+					},
+					ToolCalls: []UnifiedToolCall{
+						{
+							ID:   "tool_1",
+							Type: "function",
+							Function: UnifiedToolCallFunction{
+								Name:      "calc",
+								Arguments: `{"x":1}`,
+							},
+						},
+					},
+				},
+				FinishReason: "tool_calls",
+			},
+		},
+	}
+
+	body, err := FormatResponse(unified)
+	if err != nil {
+		t.Fatalf("FormatResponse returned error: %v", err)
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("unmarshal result failed: %v", err)
+	}
+
+	if resp["stop_reason"] != "tool_use" {
+		t.Fatalf("expected stop_reason=tool_use, got %v", resp["stop_reason"])
+	}
+
+	content, ok := resp["content"].([]interface{})
+	if !ok || len(content) < 3 {
+		t.Fatalf("expected at least 3 content blocks (thinking/text/image/tool_use), got %#v", resp["content"])
+	}
+
+	// thinking block should be first
+	first, ok := content[0].(map[string]interface{})
+	if !ok || first["type"] != "thinking" || first["thinking"] != "plan" || first["signature"] != "sig" {
+		t.Fatalf("unexpected first content block: %#v", content[0])
+	}
+
+	foundImage := false
+	foundToolUse := false
+	for _, item := range content {
+		itemMap, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		switch itemMap["type"] {
+		case "image":
+			source, ok := itemMap["source"].(map[string]interface{})
+			if ok && source["type"] == "base64" && source["media_type"] == "image/png" && source["data"] == "AAA" {
+				foundImage = true
+			}
+		case "tool_use":
+			if itemMap["id"] == "tool_1" && itemMap["name"] == "calc" {
+				foundToolUse = true
+			}
+		}
+	}
+	if !foundImage {
+		t.Fatal("expected image base64 block in content")
+	}
+	if !foundToolUse {
+		t.Fatal("expected tool_use block in content")
 	}
 }

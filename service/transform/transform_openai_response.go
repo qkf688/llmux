@@ -1,43 +1,67 @@
 package transform
 
 import (
+	"bytes"
 	"encoding/json"
 	"github.com/atopos31/llmio/models"
 )
 
 func parseOpenAIResponse(body []byte) (*UnifiedResponse, error) {
-	var resp map[string]interface{}
+	var resp openAIChatCompletionResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, err
 	}
 
 	unified := &UnifiedResponse{
-		ID:      getString(resp, "id"),
-		Object:  getString(resp, "object"),
-		Created: int64(getFloat(resp, "created")),
-		Model:   getString(resp, "model"),
+		ID:                resp.ID,
+		Object:            resp.Object,
+		Created:           resp.Created,
+		Model:             resp.Model,
+		SystemFingerprint: resp.SystemFingerprint,
+		ServiceTier:       resp.ServiceTier,
 	}
 
-	if choices, ok := resp["choices"].([]interface{}); ok && len(choices) > 0 {
-		choice := choices[0].(map[string]interface{})
-		msg := choice["message"].(map[string]interface{})
-
-		unified.Choices = []UnifiedChoice{{
-			Index: 0,
-			Message: &UnifiedMessage{
-				Role:      getString(msg, "role"),
-				Content:   msg["content"],
-				ToolCalls: parseOpenAIToolCalls(msg),
+	if resp.Error != nil {
+		unified.Error = &models.ResponseError{
+			Detail: models.ErrorDetail{
+				Code:      resp.Error.Code,
+				Message:   resp.Error.Message,
+				Type:      resp.Error.Type,
+				Param:     resp.Error.Param,
+				RequestID: resp.Error.RequestID,
 			},
-			FinishReason: getString(choice, "finish_reason"),
-		}}
+		}
 	}
 
-	if usage, ok := resp["usage"].(map[string]interface{}); ok {
+	if len(resp.Choices) > 0 {
+		unified.Choices = make([]UnifiedChoice, 0, len(resp.Choices))
+		for _, choice := range resp.Choices {
+			content := parseOpenAIMessageContent(choice.Message.Content)
+			unified.Choices = append(unified.Choices, UnifiedChoice{
+				Index: choice.Index,
+				Message: &UnifiedMessage{
+					Role:      choice.Message.Role,
+					Content:   content,
+					ToolCalls: parseOpenAIResponseToolCalls(choice.Message.ToolCalls),
+				},
+				FinishReason: choice.FinishReason,
+			})
+		}
+	}
+
+	if resp.Usage != nil {
 		unified.Usage = &models.Usage{
-			PromptTokens:     int64(getFloat(usage, "prompt_tokens")),
-			CompletionTokens: int64(getFloat(usage, "completion_tokens")),
-			TotalTokens:      int64(getFloat(usage, "total_tokens")),
+			PromptTokens:     resp.Usage.PromptTokens,
+			CompletionTokens: resp.Usage.CompletionTokens,
+			TotalTokens:      resp.Usage.TotalTokens,
+		}
+		if resp.Usage.PromptTokensDetails != nil {
+			unified.Usage.PromptTokensDetails.CachedTokens = resp.Usage.PromptTokensDetails.CachedTokens
+			unified.Usage.PromptTokensDetails.AudioTokens = resp.Usage.PromptTokensDetails.AudioTokens
+		}
+		if resp.Usage.CompletionTokensDetails != nil {
+			unified.Usage.CompletionTokensDetails.ReasoningTokens = resp.Usage.CompletionTokensDetails.ReasoningTokens
+			unified.Usage.CompletionTokensDetails.AudioTokens = resp.Usage.CompletionTokensDetails.AudioTokens
 		}
 	}
 
@@ -45,57 +69,110 @@ func parseOpenAIResponse(body []byte) (*UnifiedResponse, error) {
 }
 
 func formatOpenAIResponse(unified *UnifiedResponse) ([]byte, error) {
-	resp := map[string]interface{}{
-		"id":      unified.ID,
-		"object":  unified.Object,
-		"created": unified.Created,
-		"model":   unified.Model,
-		"choices": []interface{}{},
+	if unified.Error != nil && len(unified.Choices) == 0 {
+		return json.Marshal(struct {
+			Error *openAIResponseErrorEnvelope `json:"error"`
+		}{
+			Error: &openAIResponseErrorEnvelope{
+				Message:   unified.Error.Detail.Message,
+				Type:      unified.Error.Detail.Type,
+				Code:      unified.Error.Detail.Code,
+				Param:     unified.Error.Detail.Param,
+				RequestID: unified.Error.Detail.RequestID,
+			},
+		})
+	}
+
+	resp := openAIChatCompletionResponseOut{
+		ID:                unified.ID,
+		Object:            unified.Object,
+		Created:           unified.Created,
+		Model:             unified.Model,
+		Choices:           []openAIChatCompletionChoiceOut{},
+		SystemFingerprint: unified.SystemFingerprint,
+		ServiceTier:       unified.ServiceTier,
 	}
 
 	if len(unified.Choices) > 0 {
-		choice := unified.Choices[0]
-		msg := map[string]interface{}{
-			"role": choice.Message.Role,
-		}
-		if choice.Message.Content != nil {
-			msg["content"] = choice.Message.Content
-		}
-		if len(choice.Message.ToolCalls) > 0 {
-			toolCalls := []interface{}{}
-			for _, tc := range choice.Message.ToolCalls {
-				toolCalls = append(toolCalls, map[string]interface{}{
-					"id":   tc.ID,
-					"type": tc.Type,
-					"function": map[string]interface{}{
-						"name":      tc.Function.Name,
-						"arguments": tc.Function.Arguments,
-					},
-				})
+		resp.Choices = make([]openAIChatCompletionChoiceOut, 0, len(unified.Choices))
+		for _, choice := range unified.Choices {
+			if choice.Message == nil {
+				continue
 			}
-			msg["tool_calls"] = toolCalls
-		}
+			msg := openAIChatCompletionMessageOut{
+				Role:    choice.Message.Role,
+				Content: choice.Message.Content,
+			}
+			if len(choice.Message.ToolCalls) > 0 {
+				msg.ToolCalls = make([]openAIToolCallOut, 0, len(choice.Message.ToolCalls))
+				for _, tc := range choice.Message.ToolCalls {
+					msg.ToolCalls = append(msg.ToolCalls, openAIToolCallOut{
+						ID:   tc.ID,
+						Type: tc.Type,
+						Function: openAIToolCallFunctionOut{
+							Name:      tc.Function.Name,
+							Arguments: tc.Function.Arguments,
+						},
+					})
+				}
+			}
 
-		resp["choices"] = []interface{}{
-			map[string]interface{}{
-				"index":         choice.Index,
-				"message":       msg,
-				"finish_reason": choice.FinishReason,
-			},
+			resp.Choices = append(resp.Choices, openAIChatCompletionChoiceOut{
+				Index: choice.Index,
+				Message: openAIChatCompletionMessageOut{
+					Role:      msg.Role,
+					Content:   msg.Content,
+					ToolCalls: msg.ToolCalls,
+				},
+				FinishReason: choice.FinishReason,
+			})
 		}
 	}
 
 	if unified.Usage != nil {
-		resp["usage"] = map[string]interface{}{
-			"prompt_tokens":     unified.Usage.PromptTokens,
-			"completion_tokens": unified.Usage.CompletionTokens,
-			"total_tokens":      unified.Usage.TotalTokens,
+		resp.Usage = &openAIUsageOut{
+			PromptTokens:     unified.Usage.PromptTokens,
+			CompletionTokens: unified.Usage.CompletionTokens,
+			TotalTokens:      unified.Usage.TotalTokens,
+		}
+		if unified.Usage.PromptTokensDetails.CachedTokens > 0 || unified.Usage.PromptTokensDetails.AudioTokens > 0 {
+			resp.Usage.PromptTokensDetails = &openAITokenDetailsOut{
+				CachedTokens: unified.Usage.PromptTokensDetails.CachedTokens,
+				AudioTokens:  unified.Usage.PromptTokensDetails.AudioTokens,
+			}
+		}
+		if unified.Usage.CompletionTokensDetails.ReasoningTokens > 0 || unified.Usage.CompletionTokensDetails.AudioTokens > 0 {
+			resp.Usage.CompletionTokensDetails = &openAICompletionTokenDetailsOut{
+				ReasoningTokens: unified.Usage.CompletionTokensDetails.ReasoningTokens,
+				AudioTokens:     unified.Usage.CompletionTokensDetails.AudioTokens,
+			}
 		}
 	}
 
 	return json.Marshal(resp)
 }
 
+func parseOpenAIResponseToolCalls(tcs []openAIToolCall) []UnifiedToolCall {
+	if len(tcs) == 0 {
+		return nil
+	}
+
+	toolCalls := make([]UnifiedToolCall, 0, len(tcs))
+	for _, tc := range tcs {
+		toolCalls = append(toolCalls, UnifiedToolCall{
+			ID:   tc.ID,
+			Type: tc.Type,
+			Function: UnifiedToolCallFunction{
+				Name:      tc.Function.Name,
+				Arguments: normalizeOpenAIToolCallArguments(tc.Function.Arguments),
+			},
+		})
+	}
+	return toolCalls
+}
+
+// parseOpenAIToolCalls parses tool_calls from an OpenAI Chat Completions request message.
+// This is used by request-side transformers and intentionally keeps the permissive `map[string]interface{}` parsing.
 func parseOpenAIToolCalls(msgMap map[string]interface{}) []UnifiedToolCall {
 	var toolCalls []UnifiedToolCall
 	if tcs, ok := msgMap["tool_calls"].([]interface{}); ok {
@@ -146,4 +223,167 @@ func parseOpenAIToolCalls(msgMap map[string]interface{}) []UnifiedToolCall {
 		}
 	}
 	return toolCalls
+}
+
+func normalizeOpenAIToolCallArguments(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return "{}"
+	}
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return "{}"
+	}
+
+	var argsStr string
+	if err := json.Unmarshal(trimmed, &argsStr); err == nil {
+		if argsStr == "" {
+			return "{}"
+		}
+		return argsStr
+	}
+
+	return string(trimmed)
+}
+
+func parseOpenAIMessageContent(raw json.RawMessage) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil
+	}
+
+	var str string
+	if err := json.Unmarshal(trimmed, &str); err == nil {
+		return str
+	}
+
+	var parts []UnifiedMessageContentPart
+	if err := json.Unmarshal(trimmed, &parts); err == nil {
+		return parts
+	}
+
+	// Best-effort: preserve unknown shapes as raw JSON (without converting into maps).
+	return rawJSON(trimmed)
+}
+
+type rawJSON json.RawMessage
+
+func (r rawJSON) MarshalJSON() ([]byte, error) {
+	return []byte(r), nil
+}
+
+type openAIChatCompletionResponse struct {
+	ID                string                       `json:"id"`
+	Object            string                       `json:"object"`
+	Created           int64                        `json:"created"`
+	Model             string                       `json:"model"`
+	Choices           []openAIChatCompletionChoice `json:"choices"`
+	Usage             *openAIUsage                 `json:"usage,omitempty"`
+	Error             *openAIResponseErrorEnvelope `json:"error,omitempty"`
+	SystemFingerprint string                       `json:"system_fingerprint,omitempty"`
+	ServiceTier       string                       `json:"service_tier,omitempty"`
+}
+
+type openAIChatCompletionChoice struct {
+	Index        int                         `json:"index"`
+	Message      openAIChatCompletionMessage `json:"message"`
+	FinishReason string                      `json:"finish_reason"`
+}
+
+type openAIChatCompletionMessage struct {
+	Role      string           `json:"role"`
+	Content   json.RawMessage  `json:"content,omitempty"`
+	ToolCalls []openAIToolCall `json:"tool_calls,omitempty"`
+}
+
+type openAIToolCall struct {
+	ID       string                 `json:"id,omitempty"`
+	Type     string                 `json:"type,omitempty"`
+	Function openAIToolCallFunction `json:"function,omitempty"`
+}
+
+type openAIToolCallFunction struct {
+	Name      string          `json:"name,omitempty"`
+	Arguments json.RawMessage `json:"arguments,omitempty"`
+}
+
+type openAIUsage struct {
+	PromptTokens            int64                         `json:"prompt_tokens"`
+	CompletionTokens        int64                         `json:"completion_tokens"`
+	TotalTokens             int64                         `json:"total_tokens"`
+	PromptTokensDetails     *openAITokenDetails           `json:"prompt_tokens_details,omitempty"`
+	CompletionTokensDetails *openAICompletionTokenDetails `json:"completion_tokens_details,omitempty"`
+}
+
+type openAITokenDetails struct {
+	CachedTokens int64 `json:"cached_tokens,omitempty"`
+	AudioTokens  int64 `json:"audio_tokens,omitempty"`
+}
+
+type openAICompletionTokenDetails struct {
+	ReasoningTokens int64 `json:"reasoning_tokens,omitempty"`
+	AudioTokens     int64 `json:"audio_tokens,omitempty"`
+}
+
+type openAIResponseErrorEnvelope struct {
+	Message   string `json:"message"`
+	Type      string `json:"type,omitempty"`
+	Code      string `json:"code,omitempty"`
+	Param     string `json:"param,omitempty"`
+	RequestID string `json:"request_id,omitempty"`
+}
+
+type openAIChatCompletionResponseOut struct {
+	ID                string                          `json:"id"`
+	Object            string                          `json:"object"`
+	Created           int64                           `json:"created"`
+	Model             string                          `json:"model"`
+	Choices           []openAIChatCompletionChoiceOut `json:"choices"`
+	Usage             *openAIUsageOut                 `json:"usage,omitempty"`
+	Error             *openAIResponseErrorEnvelope    `json:"error,omitempty"`
+	SystemFingerprint string                          `json:"system_fingerprint,omitempty"`
+	ServiceTier       string                          `json:"service_tier,omitempty"`
+}
+
+type openAIChatCompletionChoiceOut struct {
+	Index        int                            `json:"index"`
+	Message      openAIChatCompletionMessageOut `json:"message"`
+	FinishReason string                         `json:"finish_reason,omitempty"`
+}
+
+type openAIChatCompletionMessageOut struct {
+	Role      string              `json:"role"`
+	Content   any                 `json:"content,omitempty"`
+	ToolCalls []openAIToolCallOut `json:"tool_calls,omitempty"`
+}
+
+type openAIToolCallOut struct {
+	ID       string                    `json:"id,omitempty"`
+	Type     string                    `json:"type,omitempty"`
+	Function openAIToolCallFunctionOut `json:"function,omitempty"`
+}
+
+type openAIToolCallFunctionOut struct {
+	Name      string `json:"name,omitempty"`
+	Arguments string `json:"arguments,omitempty"`
+}
+
+type openAIUsageOut struct {
+	PromptTokens            int64                            `json:"prompt_tokens"`
+	CompletionTokens        int64                            `json:"completion_tokens"`
+	TotalTokens             int64                            `json:"total_tokens"`
+	PromptTokensDetails     *openAITokenDetailsOut           `json:"prompt_tokens_details,omitempty"`
+	CompletionTokensDetails *openAICompletionTokenDetailsOut `json:"completion_tokens_details,omitempty"`
+}
+
+type openAITokenDetailsOut struct {
+	CachedTokens int64 `json:"cached_tokens,omitempty"`
+	AudioTokens  int64 `json:"audio_tokens,omitempty"`
+}
+
+type openAICompletionTokenDetailsOut struct {
+	ReasoningTokens int64 `json:"reasoning_tokens,omitempty"`
+	AudioTokens     int64 `json:"audio_tokens,omitempty"`
 }

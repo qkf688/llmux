@@ -1,0 +1,45 @@
+{
+  "object": "response",
+  "id": "resp_123",
+  "model": "test-model",
+  "created_at": 111,
+  "status": "completed",
+  "output": [
+    {
+      "type": "reasoning",
+      "summary": [
+        {
+          "type": "summary_text",
+          "text": "Reasoning summary."
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "Hello"
+        },
+        {
+          "type": "output_text",
+          "text": " world"
+        }
+      ]
+    },
+    {
+      "type": "function_call",
+      "id": "fc_call_abc",
+      "call_id": "call_abc",
+      "name": "get_weather",
+      "arguments": "{\"location\":\"Beijing\"}"
+    }
+  ],
+  "usage": {
+    "input_tokens": 10,
+    "output_tokens": 5,
+    "total_tokens": 15
+  }
+}
+

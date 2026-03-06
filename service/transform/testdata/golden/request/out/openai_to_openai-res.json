@@ -1,0 +1,55 @@
+{
+  "input": [
+    {
+      "content": [
+        {
+          "text": "Describe this image.",
+          "type": "input_text"
+        },
+        {
+          "detail": "low",
+          "image_url": "data:image/png;base64,AAAA",
+          "type": "input_image"
+        }
+      ],
+      "role": "user",
+      "type": "message"
+    }
+  ],
+  "instructions": "You are helpful.",
+  "max_output_tokens": 123,
+  "metadata": {
+    "reasoning_effort": "medium",
+    "trace_id": "abc"
+  },
+  "model": "test-model",
+  "reasoning": {
+    "effort": "medium"
+  },
+  "temperature": 0.2,
+  "text": {
+    "format": {
+      "type": "json_object"
+    }
+  },
+  "tool_choice": "auto",
+  "tools": [
+    {
+      "description": "Get weather for a location.",
+      "name": "get_weather",
+      "parameters": {
+        "properties": {
+          "location": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "location"
+        ],
+        "type": "object"
+      },
+      "type": "function"
+    }
+  ],
+  "top_p": 0.9
+}

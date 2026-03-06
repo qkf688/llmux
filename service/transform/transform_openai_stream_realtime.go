@@ -25,9 +25,11 @@ type realtimeStreamState struct {
 	accumulatedReasoning string
 
 	// OpenAI Chat streaming meta (used when the output format is OpenAI Chat).
-	openAIID      string
-	openAIModel   string
-	openAICreated int64
+	openAIID                                  string
+	openAIModel                               string
+	openAICreated                             int64
+	openAIToolCallNextIndex                   int
+	responsesOutputIndexToOpenAIToolCallIndex map[int]int
 
 	unknownRouteCount int
 
@@ -37,6 +39,11 @@ type realtimeStreamState struct {
 	reasoningItemID      string
 	hasReasoningItem     bool
 	reasoningOutputIndex int
+
+	// Responses -> Anthropic: map output_index to Anthropic content_block index.
+	anthropicActiveBlockIndex                 int
+	anthropicNextBlockIndex                   int
+	responsesOutputIndexToAnthropicBlockIndex map[int]int
 }
 
 // transformStreamResponseRealtime 实时流式响应转换（直接从 Body 读取器转换）
@@ -121,9 +128,10 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, provider
 	scanner.Buffer(make([]byte, 0, 64*1024), maxSSEEventSize)
 
 	state := &realtimeStreamState{
-		writer:       dst,
-		providerType: providerType,
-		clientType:   clientType,
+		writer:                    dst,
+		providerType:              providerType,
+		clientType:                clientType,
+		anthropicActiveBlockIndex: -1,
 	}
 
 	var eventName string

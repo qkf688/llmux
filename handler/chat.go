@@ -81,7 +81,7 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 	// 预处理、提取模型参数
 	before, err := preProcessor(reqBody)
 	if err != nil {
-		common.InternalServerError(c, err.Error())
+		common.ErrorWithHttpStatus(c, http.StatusBadRequest, http.StatusBadRequest, err.Error())
 		return
 	}
 	// 按模型获取可用 provider

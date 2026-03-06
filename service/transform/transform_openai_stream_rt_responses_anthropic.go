@@ -1,6 +1,11 @@
 package transform
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/service/responses"
+)
 
 func handleRealtimeResponsesToAnthropic(state *realtimeStreamState, data string) error {
 	// [DONE] 被忽略，因为 response.completed 已发送 message_stop
@@ -8,40 +13,50 @@ func handleRealtimeResponsesToAnthropic(state *realtimeStreamState, data string)
 		return nil
 	}
 
-	var chunk map[string]interface{}
-	if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+	var ev responses.ResponsesStreamEvent
+	if err := json.Unmarshal([]byte(data), &ev); err != nil {
 		logRealtimeChunkParseError(state, data, err)
 		return nil
 	}
 
 	eventType := state.currentEvent
 	if eventType == "" {
-		eventType = getString(chunk, "type")
+		eventType = ev.Type
 	}
 
 	switch eventType {
 	case "response.created":
-		return handleResponsesToAnthropicCreated(state, chunk)
+		return handleResponsesToAnthropicCreatedEvent(state, &ev)
 	case "response.output_item.added":
-		return handleResponsesToAnthropicOutputItemAdded(state, chunk)
+		return handleResponsesToAnthropicOutputItemAddedEvent(state, &ev)
 	case "response.output_text.delta":
-		return handleResponsesToAnthropicOutputTextDelta(state, chunk)
+		return handleResponsesToAnthropicOutputTextDeltaEvent(state, &ev)
 	case "response.reasoning_summary_text.delta":
-		return handleResponsesToAnthropicReasoningDelta(state, chunk)
+		return handleResponsesToAnthropicReasoningDeltaEvent(state, &ev)
 	case "response.function_call_arguments.delta":
-		return handleResponsesToAnthropicFunctionArgsDelta(state, chunk)
+		return handleResponsesToAnthropicFunctionArgsDeltaEvent(state, &ev)
+	case "response.content_part.added":
+		return handleResponsesToAnthropicContentPartAddedEvent(state, &ev)
 	case "response.completed":
-		return handleResponsesToAnthropicCompleted(state, chunk)
+		return handleResponsesToAnthropicCompletedEvent(state, &ev)
 	default:
 		return nil
 	}
 }
 
-func handleResponsesToAnthropicCreated(state *realtimeStreamState, chunk map[string]interface{}) error {
+func handleResponsesToAnthropicCreatedEvent(state *realtimeStreamState, ev *responses.ResponsesStreamEvent) error {
+	responseID := ""
+	if ev.Response != nil {
+		responseID = ev.Response.ID
+	}
+	if responseID == "" {
+		responseID = ev.ResponseID
+	}
+
 	messageStart := map[string]interface{}{
 		"type": "message_start",
 		"message": map[string]interface{}{
-			"id":      getNestedString(chunk, "response.id"),
+			"id":      responseID,
 			"type":    "message",
 			"role":    "assistant",
 			"content": []interface{}{},
@@ -55,16 +70,20 @@ func handleResponsesToAnthropicCreated(state *realtimeStreamState, chunk map[str
 	return writeRealtimeEventJSONData(state, "message_start", messageStart)
 }
 
-func handleResponsesToAnthropicOutputItemAdded(state *realtimeStreamState, chunk map[string]interface{}) error {
-	item, ok := chunk["item"].(map[string]interface{})
-	if !ok {
+func handleResponsesToAnthropicOutputItemAddedEvent(state *realtimeStreamState, ev *responses.ResponsesStreamEvent) error {
+	if ev.Item == nil {
 		return nil
 	}
-	itemType := getString(item, "type")
+	itemType := ev.Item.Type
+
+	blockIndex := getOrAllocAnthropicBlockIndex(state, ev.OutputIndex)
+	if err := closeAnthropicActiveBlockIfNeeded(state, blockIndex); err != nil {
+		return err
+	}
 
 	blockStart := map[string]interface{}{
 		"type":  "content_block_start",
-		"index": int(getFloat(chunk, "output_index")),
+		"index": blockIndex,
 		"content_block": map[string]interface{}{
 			"type": itemType,
 		},
@@ -74,8 +93,8 @@ func handleResponsesToAnthropicOutputItemAdded(state *realtimeStreamState, chunk
 	if itemType == "function_call" {
 		blockStart["content_block"] = map[string]interface{}{
 			"type": "tool_use",
-			"id":   getString(item, "id"),
-			"name": getString(item, "name"),
+			"id":   ev.Item.ID,
+			"name": derefString(ev.Item.Name),
 		}
 	} else if itemType == "reasoning" {
 		blockStart["content_block"] = map[string]interface{}{
@@ -88,18 +107,22 @@ func handleResponsesToAnthropicOutputItemAdded(state *realtimeStreamState, chunk
 		}
 	}
 
-	return writeRealtimeEventJSONData(state, "content_block_start", blockStart)
+	if err := writeRealtimeEventJSONData(state, "content_block_start", blockStart); err != nil {
+		return err
+	}
+	state.anthropicActiveBlockIndex = blockIndex
+	return nil
 }
 
-func handleResponsesToAnthropicOutputTextDelta(state *realtimeStreamState, chunk map[string]interface{}) error {
-	delta := getString(chunk, "delta")
+func handleResponsesToAnthropicOutputTextDeltaEvent(state *realtimeStreamState, ev *responses.ResponsesStreamEvent) error {
+	delta := ev.Delta
 	if delta == "" {
 		return nil
 	}
 
 	contentDelta := map[string]interface{}{
 		"type":  "content_block_delta",
-		"index": int(getFloat(chunk, "output_index")),
+		"index": getAnthropicBlockIndex(state, ev.OutputIndex),
 		"delta": map[string]interface{}{
 			"type": "text_delta",
 			"text": delta,
@@ -108,15 +131,15 @@ func handleResponsesToAnthropicOutputTextDelta(state *realtimeStreamState, chunk
 	return writeRealtimeEventJSONData(state, "content_block_delta", contentDelta)
 }
 
-func handleResponsesToAnthropicReasoningDelta(state *realtimeStreamState, chunk map[string]interface{}) error {
-	delta := getString(chunk, "delta")
+func handleResponsesToAnthropicReasoningDeltaEvent(state *realtimeStreamState, ev *responses.ResponsesStreamEvent) error {
+	delta := ev.Delta
 	if delta == "" {
 		return nil
 	}
 
 	contentDelta := map[string]interface{}{
 		"type":  "content_block_delta",
-		"index": int(getFloat(chunk, "output_index")),
+		"index": getAnthropicBlockIndex(state, ev.OutputIndex),
 		"delta": map[string]interface{}{
 			"type":     "thinking_delta",
 			"thinking": delta,
@@ -125,15 +148,15 @@ func handleResponsesToAnthropicReasoningDelta(state *realtimeStreamState, chunk 
 	return writeRealtimeEventJSONData(state, "content_block_delta", contentDelta)
 }
 
-func handleResponsesToAnthropicFunctionArgsDelta(state *realtimeStreamState, chunk map[string]interface{}) error {
-	delta := getString(chunk, "delta")
+func handleResponsesToAnthropicFunctionArgsDeltaEvent(state *realtimeStreamState, ev *responses.ResponsesStreamEvent) error {
+	delta := ev.Delta
 	if delta == "" {
 		return nil
 	}
 
 	contentDelta := map[string]interface{}{
 		"type":  "content_block_delta",
-		"index": int(getFloat(chunk, "output_index")),
+		"index": getAnthropicBlockIndex(state, ev.OutputIndex),
 		"delta": map[string]interface{}{
 			"type":         "input_json_delta",
 			"partial_json": delta,
@@ -142,36 +165,29 @@ func handleResponsesToAnthropicFunctionArgsDelta(state *realtimeStreamState, chu
 	return writeRealtimeEventJSONData(state, "content_block_delta", contentDelta)
 }
 
-func handleResponsesToAnthropicCompleted(state *realtimeStreamState, chunk map[string]interface{}) error {
+func handleResponsesToAnthropicCompletedEvent(state *realtimeStreamState, ev *responses.ResponsesStreamEvent) error {
 	stopReason := "end_turn"
-	blockStopIndex := 0
-
-	if response, ok := chunk["response"].(map[string]interface{}); ok {
-		if getString(response, "status") == "incomplete" {
-			stopReason = "max_tokens"
-		}
-		// 检查是否有工具调用（通过 output 判断）
-		if output, ok := response["output"].([]interface{}); ok && len(output) > 0 {
-			blockStopIndex = len(output) - 1
-			for _, rawItem := range output {
-				itemMap, ok := rawItem.(map[string]interface{})
-				if !ok {
-					continue
-				}
-				if getString(itemMap, "type") == "function_call" {
-					stopReason = "tool_use"
-					break
-				}
+	if ev.Response != nil && ev.Response.Status != nil && *ev.Response.Status == "incomplete" {
+		stopReason = "max_tokens"
+	}
+	if ev.Response != nil {
+		for _, item := range ev.Response.Output {
+			if item.Type == "function_call" {
+				stopReason = "tool_use"
+				break
 			}
 		}
 	}
 
-	blockStop := map[string]interface{}{
-		"type":  "content_block_stop",
-		"index": blockStopIndex,
-	}
-	if err := writeRealtimeEventJSONData(state, "content_block_stop", blockStop); err != nil {
-		return err
+	if state.anthropicActiveBlockIndex >= 0 {
+		blockStop := map[string]interface{}{
+			"type":  "content_block_stop",
+			"index": state.anthropicActiveBlockIndex,
+		}
+		if err := writeRealtimeEventJSONData(state, "content_block_stop", blockStop); err != nil {
+			return err
+		}
+		state.anthropicActiveBlockIndex = -1
 	}
 
 	messageDelta := map[string]interface{}{
@@ -182,12 +198,10 @@ func handleResponsesToAnthropicCompleted(state *realtimeStreamState, chunk map[s
 	}
 
 	// 添加 usage 信息
-	if response, ok := chunk["response"].(map[string]interface{}); ok {
-		if usage, ok := response["usage"].(map[string]interface{}); ok {
-			messageDelta["usage"] = map[string]interface{}{
-				"input_tokens":  int(getFloat(usage, "input_tokens")),
-				"output_tokens": int(getFloat(usage, "output_tokens")),
-			}
+	if ev.Response != nil && ev.Response.Usage != nil {
+		messageDelta["usage"] = map[string]interface{}{
+			"input_tokens":  int(ev.Response.Usage.InputTokens),
+			"output_tokens": int(ev.Response.Usage.OutputTokens),
 		}
 	}
 
@@ -197,4 +211,134 @@ func handleResponsesToAnthropicCompleted(state *realtimeStreamState, chunk map[s
 
 	messageStop := map[string]interface{}{"type": "message_stop"}
 	return writeRealtimeEventJSONData(state, "message_stop", messageStop)
+}
+
+func handleResponsesToAnthropicContentPartAddedEvent(state *realtimeStreamState, ev *responses.ResponsesStreamEvent) error {
+	if ev.Part == nil {
+		return nil
+	}
+	if ev.Part.Type != "image_url" && ev.Part.Type != "output_image" && ev.Part.Type != "input_image" && ev.Part.Type != "image" {
+		return nil
+	}
+
+	imageURL, detail := extractResponsesContentPartImageURL(ev.Part)
+	if imageURL == "" {
+		return nil
+	}
+
+	blockIndex := allocAnthropicBlockIndex(state)
+	if err := closeAnthropicActiveBlockIfNeeded(state, blockIndex); err != nil {
+		return err
+	}
+
+	block := map[string]interface{}{
+		"type": "image",
+	}
+	if mediaType, data, ok := common.ParseBase64DataURL(imageURL); ok {
+		block["source"] = map[string]interface{}{
+			"type":       "base64",
+			"media_type": mediaType,
+			"data":       data,
+		}
+	} else {
+		block["source"] = map[string]interface{}{
+			"type": "url",
+			"url":  imageURL,
+		}
+	}
+	if detail != nil && *detail != "" {
+		block["detail"] = *detail
+	}
+
+	blockStart := map[string]interface{}{
+		"type":          "content_block_start",
+		"index":         blockIndex,
+		"content_block": block,
+	}
+	if err := writeRealtimeEventJSONData(state, "content_block_start", blockStart); err != nil {
+		return err
+	}
+
+	blockStop := map[string]interface{}{
+		"type":  "content_block_stop",
+		"index": blockIndex,
+	}
+	if err := writeRealtimeEventJSONData(state, "content_block_stop", blockStop); err != nil {
+		return err
+	}
+
+	state.anthropicActiveBlockIndex = -1
+	return nil
+}
+
+func closeAnthropicActiveBlockIfNeeded(state *realtimeStreamState, nextIndex int) error {
+	if state.anthropicActiveBlockIndex < 0 || state.anthropicActiveBlockIndex == nextIndex {
+		return nil
+	}
+	blockStop := map[string]interface{}{
+		"type":  "content_block_stop",
+		"index": state.anthropicActiveBlockIndex,
+	}
+	if err := writeRealtimeEventJSONData(state, "content_block_stop", blockStop); err != nil {
+		return err
+	}
+	state.anthropicActiveBlockIndex = -1
+	return nil
+}
+
+func getOrAllocAnthropicBlockIndex(state *realtimeStreamState, outputIndex int) int {
+	if state.responsesOutputIndexToAnthropicBlockIndex == nil {
+		state.responsesOutputIndexToAnthropicBlockIndex = map[int]int{}
+	}
+	if idx, ok := state.responsesOutputIndexToAnthropicBlockIndex[outputIndex]; ok {
+		return idx
+	}
+	idx := allocAnthropicBlockIndex(state)
+	state.responsesOutputIndexToAnthropicBlockIndex[outputIndex] = idx
+	return idx
+}
+
+func getAnthropicBlockIndex(state *realtimeStreamState, outputIndex int) int {
+	if state.responsesOutputIndexToAnthropicBlockIndex == nil {
+		return outputIndex
+	}
+	if idx, ok := state.responsesOutputIndexToAnthropicBlockIndex[outputIndex]; ok {
+		return idx
+	}
+	return outputIndex
+}
+
+func allocAnthropicBlockIndex(state *realtimeStreamState) int {
+	if state.anthropicNextBlockIndex < 0 {
+		state.anthropicNextBlockIndex = 0
+	}
+	idx := state.anthropicNextBlockIndex
+	state.anthropicNextBlockIndex++
+	return idx
+}
+
+func extractResponsesContentPartImageURL(part *responses.ResponsesContentPart) (string, *string) {
+	if part == nil {
+		return "", nil
+	}
+	if part.ImageURL != nil && len(*part.ImageURL) > 0 {
+		var urlStr string
+		if err := json.Unmarshal(*part.ImageURL, &urlStr); err == nil && urlStr != "" {
+			return urlStr, part.Detail
+		}
+		var obj struct {
+			URL    string  `json:"url"`
+			Detail *string `json:"detail,omitempty"`
+		}
+		if err := json.Unmarshal(*part.ImageURL, &obj); err == nil && obj.URL != "" {
+			if obj.Detail != nil && *obj.Detail != "" {
+				return obj.URL, obj.Detail
+			}
+			return obj.URL, part.Detail
+		}
+	}
+	if part.URL != nil && *part.URL != "" {
+		return *part.URL, part.Detail
+	}
+	return "", part.Detail
 }

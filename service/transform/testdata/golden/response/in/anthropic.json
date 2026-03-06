@@ -1,0 +1,39 @@
+{
+  "id": "msg_123",
+  "type": "message",
+  "role": "assistant",
+  "model": "test-model",
+  "content": [
+    {
+      "type": "thinking",
+      "thinking": "Reasoning summary.",
+      "signature": "sig_123"
+    },
+    {
+      "type": "text",
+      "text": "Hello world"
+    },
+    {
+      "type": "image",
+      "source": {
+        "type": "base64",
+        "media_type": "image/png",
+        "data": "AAAA"
+      }
+    },
+    {
+      "type": "tool_use",
+      "id": "call_abc",
+      "name": "get_weather",
+      "input": {
+        "location": "Beijing"
+      }
+    }
+  ],
+  "stop_reason": "tool_use",
+  "usage": {
+    "input_tokens": 10,
+    "output_tokens": 5
+  }
+}
+

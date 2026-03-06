@@ -1,6 +1,10 @@
 package anthropic
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
 
 // TransformToUnified 将 Anthropic 请求格式转换为统一格式。
 func TransformToUnified(rawBody []byte) (*UnifiedRequest, error) {
@@ -95,14 +99,24 @@ func parseMessages(raw interface{}) []UnifiedMessage {
 			continue
 		}
 
+		content, toolResultMessages := parseMessageContentAndToolResults(msgMap["content"])
 		msg := UnifiedMessage{
 			Role:      getString(msgMap, "role"),
-			Content:   msgMap["content"],
-			ToolCalls: parseToolCalls(msgMap),
+			Content:   content,
+			ToolCalls: parseToolCalls(msgMap["content"]),
+		}
+		msg.CacheControl = parseCacheControl(msgMap["cache_control"])
+
+		// tool_result blocks are mapped to OpenAI-style tool messages to enable cross-format conversion.
+		if len(toolResultMessages) > 0 {
+			messages = append(messages, toolResultMessages...)
 		}
 
-		msg.ToolCallID = extractToolResultID(msgMap["content"])
-		msg.CacheControl = parseCacheControl(msgMap["cache_control"])
+		// If a user message only contains tool_result blocks, skip the original message.
+		if msg.Role == "user" && content == nil && len(toolResultMessages) > 0 {
+			continue
+		}
+
 		messages = append(messages, msg)
 	}
 	return messages
@@ -135,26 +149,8 @@ func parseTools(raw interface{}) []UnifiedTool {
 	return tools
 }
 
-func extractToolResultID(rawContent interface{}) string {
-	items, ok := asSlice(rawContent)
-	if !ok {
-		return ""
-	}
-
-	for _, item := range items {
-		itemMap, ok := asMap(item)
-		if !ok {
-			continue
-		}
-		if getString(itemMap, "type") == "tool_result" {
-			return getString(itemMap, "tool_use_id")
-		}
-	}
-	return ""
-}
-
-func parseToolCalls(msgMap map[string]interface{}) []UnifiedToolCall {
-	content, ok := asSlice(msgMap["content"])
+func parseToolCalls(rawContent interface{}) []UnifiedToolCall {
+	content, ok := asSlice(rawContent)
 	if !ok {
 		return nil
 	}
@@ -173,15 +169,149 @@ func parseToolCalls(msgMap map[string]interface{}) []UnifiedToolCall {
 			}
 		}
 
+		index := len(toolCalls)
 		toolCalls = append(toolCalls, UnifiedToolCall{
-			ID:   getString(itemMap, "id"),
-			Type: "function",
+			ID:    getString(itemMap, "id"),
+			Type:  "function",
+			Index: index,
 			Function: UnifiedToolCallFunction{
 				Name:      getString(itemMap, "name"),
 				Arguments: argsStr,
 			},
+			CacheControl: parseCacheControl(itemMap["cache_control"]),
 		})
 	}
 
 	return toolCalls
+}
+
+func parseMessageContentAndToolResults(raw interface{}) (content interface{}, toolResultMessages []UnifiedMessage) {
+	if raw == nil {
+		return nil, nil
+	}
+
+	if str, ok := raw.(string); ok {
+		return str, nil
+	}
+
+	items, ok := asSlice(raw)
+	if !ok {
+		// Keep behavior: passthrough unknown payloads (but this may reduce conversion quality).
+		return raw, nil
+	}
+
+	parts := make([]UnifiedMessageContentPart, 0, len(items))
+
+	for _, item := range items {
+		itemMap, ok := asMap(item)
+		if !ok {
+			continue
+		}
+
+		switch getString(itemMap, "type") {
+		case "text":
+			text := getString(itemMap, "text")
+			if text == "" {
+				// Some callers use "content" for text blocks.
+				text = getString(itemMap, "content")
+			}
+			if text == "" {
+				continue
+			}
+
+			part := UnifiedMessageContentPart{
+				Type: "text",
+				Text: &text,
+			}
+			part.CacheControl = parseCacheControl(itemMap["cache_control"])
+			parts = append(parts, part)
+
+		case "image":
+			source, ok := asMap(itemMap["source"])
+			if !ok {
+				continue
+			}
+
+			var url string
+			switch getString(source, "type") {
+			case "base64":
+				mediaType := getString(source, "media_type")
+				data := getString(source, "data")
+				if mediaType == "" || data == "" {
+					continue
+				}
+				url = fmt.Sprintf("data:%s;base64,%s", mediaType, data)
+			case "url":
+				url = getString(source, "url")
+			}
+			if url == "" {
+				continue
+			}
+
+			part := UnifiedMessageContentPart{
+				Type: "image_url",
+				ImageURL: &UnifiedImageURL{
+					URL: url,
+				},
+			}
+			part.CacheControl = parseCacheControl(itemMap["cache_control"])
+			parts = append(parts, part)
+
+		case "tool_result":
+			toolUseID := getString(itemMap, "tool_use_id")
+			if toolUseID == "" {
+				continue
+			}
+
+			toolContent := ""
+			switch v := itemMap["content"].(type) {
+			case string:
+				toolContent = v
+			case []interface{}:
+				toolContent = extractTextFromContentBlocks(v)
+			}
+
+			toolMsg := UnifiedMessage{
+				Role:         "tool",
+				ToolCallID:   toolUseID,
+				Content:      toolContent,
+				CacheControl: parseCacheControl(itemMap["cache_control"]),
+			}
+			if isErr, ok := itemMap["is_error"].(bool); ok {
+				toolMsg.ToolCallIsError = &isErr
+			}
+
+			toolResultMessages = append(toolResultMessages, toolMsg)
+		}
+	}
+
+	if len(parts) == 0 {
+		return nil, toolResultMessages
+	}
+
+	if len(parts) == 1 && parts[0].Type == "text" && parts[0].Text != nil && parts[0].CacheControl == nil {
+		return *parts[0].Text, toolResultMessages
+	}
+
+	return parts, toolResultMessages
+}
+
+func extractTextFromContentBlocks(items []interface{}) string {
+	var b strings.Builder
+	for _, item := range items {
+		itemMap, ok := asMap(item)
+		if !ok || getString(itemMap, "type") != "text" {
+			continue
+		}
+
+		text := getString(itemMap, "text")
+		if text == "" {
+			text = getString(itemMap, "content")
+		}
+		if text == "" {
+			continue
+		}
+		b.WriteString(text)
+	}
+	return b.String()
 }

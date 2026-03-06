@@ -1,8 +1,10 @@
 package transform
 
 import (
+	"bytes"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -68,14 +70,21 @@ func transformNonStreamResponse(response *http.Response, body []byte, providerTy
 	}
 
 	// 创建新响应
+	newHeader := response.Header.Clone()
+	newHeader.Del("Content-Length")
+	newHeader.Del("Content-Encoding")
+	newHeader.Del("Transfer-Encoding")
+	newHeader.Set("Content-Type", "application/json")
+	newHeader.Set("Content-Length", strconv.Itoa(len(newBody)))
+
 	newResponse := &http.Response{
 		Status:        response.Status,
 		StatusCode:    response.StatusCode,
 		Proto:         response.Proto,
 		ProtoMajor:    response.ProtoMajor,
 		ProtoMinor:    response.ProtoMinor,
-		Header:        response.Header.Clone(),
-		Body:          io.NopCloser(strings.NewReader(string(newBody))),
+		Header:        newHeader,
+		Body:          io.NopCloser(bytes.NewReader(newBody)),
 		ContentLength: int64(len(newBody)),
 	}
 

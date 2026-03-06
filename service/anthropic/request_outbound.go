@@ -3,7 +3,8 @@ package anthropic
 import (
 	"encoding/json"
 	"errors"
-	"strings"
+
+	"github.com/atopos31/llmio/common"
 )
 
 // TransformFromUnified 将统一请求格式转换为 Anthropic 请求格式。
@@ -181,10 +182,11 @@ func buildContentParts(parts []UnifiedMessageContentPart) []interface{} {
 			imgMap := map[string]interface{}{
 				"type": "image",
 			}
-			if strings.HasPrefix(part.ImageURL.URL, "data:") {
+			if mediaType, data, ok := common.ParseBase64DataURL(part.ImageURL.URL); ok {
 				imgMap["source"] = map[string]interface{}{
-					"type": "base64",
-					"data": strings.TrimPrefix(part.ImageURL.URL, "data:image/jpeg;base64,"),
+					"type":       "base64",
+					"media_type": mediaType,
+					"data":       data,
 				}
 			} else {
 				imgMap["source"] = map[string]interface{}{

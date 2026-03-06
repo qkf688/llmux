@@ -1,0 +1,55 @@
+{
+  "model": "test-model",
+  "system": "You are helpful.",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Describe this image."
+        },
+        {
+          "type": "image",
+          "source": {
+            "type": "base64",
+            "media_type": "image/png",
+            "data": "AAAA"
+          }
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "name": "get_weather",
+      "description": "Get weather for a location.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "location"
+        ]
+      }
+    }
+  ],
+  "tool_choice": {
+    "type": "auto"
+  },
+  "thinking": {
+    "type": "enabled",
+    "budget_tokens": 20000
+  },
+  "metadata": {
+    "trace_id": "abc"
+  },
+  "stream": false,
+  "max_tokens": 123,
+  "temperature": 0.2,
+  "top_p": 0.9
+}
+

@@ -2,8 +2,8 @@ package transform
 
 import (
 	"encoding/json"
-	"fmt"
-	"time"
+
+	"github.com/atopos31/llmio/service/responses"
 )
 
 func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) error {
@@ -12,20 +12,20 @@ func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) er
 		return nil
 	}
 
-	var chunk map[string]interface{}
-	if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+	var ev responses.ResponsesStreamEvent
+	if err := json.Unmarshal([]byte(data), &ev); err != nil {
 		logRealtimeChunkParseError(state, data, err)
 		return nil
 	}
 
 	eventType := state.currentEvent
 	if eventType == "" {
-		eventType = getString(chunk, "type")
+		eventType = ev.Type
 	}
 
 	switch eventType {
 	case "response.created":
-		ensureOpenAIStreamMetaFromResponses(state, chunk)
+		ensureOpenAIStreamMetaFromResponsesEvent(state, &ev)
 		openAIChunk := map[string]interface{}{
 			"id":      state.openAIID,
 			"object":  "chat.completion.chunk",
@@ -44,16 +44,16 @@ func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) er
 		return writeRealtimeJSONData(state, openAIChunk)
 
 	case "response.output_item.added":
-		ensureOpenAIStreamMetaFromResponses(state, chunk)
+		ensureOpenAIStreamMetaFromResponsesEvent(state, &ev)
 		// 处理工具调用开始（发送 id/type/name）
-		item, ok := chunk["item"].(map[string]interface{})
-		if !ok {
+		if ev.Item == nil {
 			return nil
 		}
-		if getString(item, "type") != "function_call" {
+		if ev.Item.Type != "function_call" {
 			return nil
 		}
 
+		toolCallIndex := getOrAllocOpenAIToolCallIndex(state, ev.OutputIndex)
 		openAIChunk := map[string]interface{}{
 			"id":      state.openAIID,
 			"object":  "chat.completion.chunk",
@@ -65,11 +65,11 @@ func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) er
 					"delta": map[string]interface{}{
 						"tool_calls": []map[string]interface{}{
 							{
-								"index": int(getFloat(chunk, "output_index")),
-								"id":    getString(item, "id"),
+								"index": toolCallIndex,
+								"id":    ev.Item.ID,
 								"type":  "function",
 								"function": map[string]interface{}{
-									"name":      getString(item, "name"),
+									"name":      derefString(ev.Item.Name),
 									"arguments": "",
 								},
 							},
@@ -82,9 +82,9 @@ func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) er
 		return writeRealtimeJSONData(state, openAIChunk)
 
 	case "response.output_text.delta":
-		ensureOpenAIStreamMetaFromResponses(state, chunk)
+		ensureOpenAIStreamMetaFromResponsesEvent(state, &ev)
 		// 发送文本增量
-		delta := getString(chunk, "delta")
+		delta := ev.Delta
 		if delta == "" {
 			return nil
 		}
@@ -107,9 +107,9 @@ func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) er
 		return writeRealtimeJSONData(state, openAIChunk)
 
 	case "response.reasoning_summary_text.delta":
-		ensureOpenAIStreamMetaFromResponses(state, chunk)
+		ensureOpenAIStreamMetaFromResponsesEvent(state, &ev)
 		// 发送 reasoning 增量（Extended Thinking）
-		delta := getString(chunk, "delta")
+		delta := ev.Delta
 		if delta == "" {
 			return nil
 		}
@@ -132,13 +132,14 @@ func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) er
 		return writeRealtimeJSONData(state, openAIChunk)
 
 	case "response.function_call_arguments.delta":
-		ensureOpenAIStreamMetaFromResponses(state, chunk)
+		ensureOpenAIStreamMetaFromResponsesEvent(state, &ev)
 		// 发送工具调用参数增量
-		delta := getString(chunk, "delta")
+		delta := ev.Delta
 		if delta == "" {
 			return nil
 		}
 
+		toolCallIndex := getOpenAIToolCallIndex(state, ev.OutputIndex)
 		openAIChunk := map[string]interface{}{
 			"id":      state.openAIID,
 			"object":  "chat.completion.chunk",
@@ -150,7 +151,7 @@ func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) er
 					"delta": map[string]interface{}{
 						"tool_calls": []map[string]interface{}{
 							{
-								"index": int(getFloat(chunk, "output_index")),
+								"index": toolCallIndex,
 								"function": map[string]interface{}{
 									"arguments": delta,
 								},
@@ -163,35 +164,37 @@ func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) er
 		}
 		return writeRealtimeJSONData(state, openAIChunk)
 
+	case "response.content_part.added":
+		// OpenAI Chat Completions streaming does not support multimodal parts.
+		// Best-effort: ignore non-text parts.
+		return nil
+
 	case "response.completed":
-		return handleResponsesToOpenAICompleted(state, chunk)
+		return handleResponsesToOpenAICompletedEvent(state, &ev)
 	default:
 		return nil
 	}
 }
 
-func handleResponsesToOpenAICompleted(state *realtimeStreamState, chunk map[string]interface{}) error {
-	ensureOpenAIStreamMetaFromResponses(state, chunk)
+func handleResponsesToOpenAICompletedEvent(state *realtimeStreamState, ev *responses.ResponsesStreamEvent) error {
+	ensureOpenAIStreamMetaFromResponsesEvent(state, ev)
 
 	// 发送结束块
 	finishReason := "stop"
-	if response, ok := chunk["response"].(map[string]interface{}); ok {
-		status := getString(response, "status")
-		if status == "incomplete" {
-			finishReason = "length"
-		} else if status == "failed" {
-			finishReason = "stop"
+	if ev.Response != nil {
+		if ev.Response.Status != nil {
+			switch *ev.Response.Status {
+			case "incomplete":
+				finishReason = "length"
+			case "failed":
+				finishReason = "stop"
+			}
 		}
 
-		// 检查是否有工具调用（通过 output 判断）
-		if output, ok := response["output"].([]interface{}); ok && len(output) > 0 {
-			for _, item := range output {
-				if itemMap, ok := item.(map[string]interface{}); ok {
-					if getString(itemMap, "type") == "function_call" {
-						finishReason = "tool_calls"
-						break
-					}
-				}
+		for _, item := range ev.Response.Output {
+			if item.Type == "function_call" {
+				finishReason = "tool_calls"
+				break
 			}
 		}
 	}
@@ -211,13 +214,11 @@ func handleResponsesToOpenAICompleted(state *realtimeStreamState, chunk map[stri
 	}
 
 	// 添加 usage 信息
-	if response, ok := chunk["response"].(map[string]interface{}); ok {
-		if usage, ok := response["usage"].(map[string]interface{}); ok {
-			finalChunk["usage"] = map[string]interface{}{
-				"prompt_tokens":     int(getFloat(usage, "input_tokens")),
-				"completion_tokens": int(getFloat(usage, "output_tokens")),
-				"total_tokens":      int(getFloat(usage, "total_tokens")),
-			}
+	if ev.Response != nil && ev.Response.Usage != nil {
+		finalChunk["usage"] = map[string]interface{}{
+			"prompt_tokens":     int(ev.Response.Usage.InputTokens),
+			"completion_tokens": int(ev.Response.Usage.OutputTokens),
+			"total_tokens":      int(ev.Response.Usage.TotalTokens),
 		}
 	}
 
@@ -229,10 +230,7 @@ func handleResponsesToOpenAICompleted(state *realtimeStreamState, chunk map[stri
 	return writeRealtimeData(state, "[DONE]")
 }
 
-func ensureOpenAIStreamMetaFromResponses(state *realtimeStreamState, chunk map[string]interface{}) {
-	if state.openAICreated == 0 {
-		state.openAICreated = time.Now().Unix()
-	}
+func ensureOpenAIStreamMetaFromResponsesEvent(state *realtimeStreamState, ev *responses.ResponsesStreamEvent) {
 	if state.openAIModel == "" {
 		state.openAIModel = "responses-api"
 	}
@@ -240,27 +238,55 @@ func ensureOpenAIStreamMetaFromResponses(state *realtimeStreamState, chunk map[s
 		return
 	}
 
-	if resp, ok := chunk["response"].(map[string]interface{}); ok {
-		if id := getString(resp, "id"); id != "" {
-			state.openAIID = "chatcmpl-" + id
+	if ev != nil && ev.Response != nil {
+		if ev.Response.ID != "" {
+			state.openAIID = "chatcmpl-" + ev.Response.ID
 		}
-		if model := getString(resp, "model"); model != "" {
-			state.openAIModel = model
+		if ev.Response.Model != "" {
+			state.openAIModel = ev.Response.Model
 		}
-		if createdAt := int64(getFloat(resp, "created_at")); createdAt > 0 {
-			state.openAICreated = createdAt
-		}
-	}
-
-	if state.openAIID == "" {
-		if responseID := getString(chunk, "response_id"); responseID != "" {
-			state.openAIID = "chatcmpl-" + responseID
-		} else if responseID := getNestedString(chunk, "response.id"); responseID != "" {
-			state.openAIID = "chatcmpl-" + responseID
+		if ev.Response.CreatedAt > 0 {
+			state.openAICreated = ev.Response.CreatedAt
 		}
 	}
 
 	if state.openAIID == "" {
-		state.openAIID = fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano())
+		if ev != nil && ev.ResponseID != "" {
+			state.openAIID = "chatcmpl-" + ev.ResponseID
+		}
 	}
+
+	if state.openAIID == "" {
+		state.openAIID = "chatcmpl-unknown"
+	}
+}
+
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func getOrAllocOpenAIToolCallIndex(state *realtimeStreamState, outputIndex int) int {
+	if state.responsesOutputIndexToOpenAIToolCallIndex == nil {
+		state.responsesOutputIndexToOpenAIToolCallIndex = map[int]int{}
+	}
+	if idx, ok := state.responsesOutputIndexToOpenAIToolCallIndex[outputIndex]; ok {
+		return idx
+	}
+	idx := state.openAIToolCallNextIndex
+	state.openAIToolCallNextIndex++
+	state.responsesOutputIndexToOpenAIToolCallIndex[outputIndex] = idx
+	return idx
+}
+
+func getOpenAIToolCallIndex(state *realtimeStreamState, outputIndex int) int {
+	if state.responsesOutputIndexToOpenAIToolCallIndex == nil {
+		return outputIndex
+	}
+	if idx, ok := state.responsesOutputIndexToOpenAIToolCallIndex[outputIndex]; ok {
+		return idx
+	}
+	return outputIndex
 }

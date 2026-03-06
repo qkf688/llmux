@@ -1,0 +1,29 @@
+{
+  "content": [
+    {
+      "thinking": "Reasoning summary.",
+      "type": "thinking"
+    },
+    {
+      "text": "Hello world",
+      "type": "text"
+    },
+    {
+      "id": "call_abc",
+      "input": {
+        "location": "Beijing"
+      },
+      "name": "get_weather",
+      "type": "tool_use"
+    }
+  ],
+  "id": "resp_123",
+  "model": "test-model",
+  "role": "assistant",
+  "stop_reason": "tool_use",
+  "type": "message",
+  "usage": {
+    "input_tokens": 10,
+    "output_tokens": 5
+  }
+}

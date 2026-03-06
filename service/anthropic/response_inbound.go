@@ -2,7 +2,7 @@ package anthropic
 
 import (
 	"encoding/json"
-	"time"
+	"fmt"
 )
 
 // ParseResponse 将 Anthropic 响应格式转换为统一格式。
@@ -15,51 +15,64 @@ func ParseResponse(body []byte) (*UnifiedResponse, error) {
 	unified := &UnifiedResponse{
 		ID:      getString(resp, "id"),
 		Object:  "chat.completion",
-		Created: time.Now().Unix(),
+		Created: 0,
 		Model:   getString(resp, "model"),
 	}
 
-	textContent := ""
-	toolCalls := make([]UnifiedToolCall, 0)
+	finishReason := getString(resp, "stop_reason")
+	switch finishReason {
+	case "end_turn", "stop_sequence":
+		finishReason = "stop"
+	case "tool_use":
+		finishReason = "tool_calls"
+	case "max_tokens":
+		finishReason = "length"
+	}
 
-	if content, ok := asSlice(resp["content"]); ok {
-		for _, item := range content {
-			itemMap, ok := asMap(item)
-			if !ok {
-				continue
-			}
+	content, _ := parseMessageContentAndToolResults(resp["content"])
+	toolCalls := parseToolCalls(resp["content"])
 
-			switch getString(itemMap, "type") {
-			case "text":
-				textContent += getString(itemMap, "text")
-			case "tool_use":
-				args, _ := json.Marshal(itemMap["input"])
-				toolCalls = append(toolCalls, UnifiedToolCall{
-					ID:   getString(itemMap, "id"),
-					Type: "function",
-					Function: UnifiedToolCallFunction{
-						Name:      getString(itemMap, "name"),
-						Arguments: string(args),
-					},
-				})
+	reasoningText, reasoningSig := extractThinking(resp["content"])
+	if reasoningText != "" {
+		switch v := content.(type) {
+		case string:
+			if v != "" {
+				content = reasoningText + "\n\n---\n\n" + v
+			} else {
+				content = reasoningText
 			}
+		case []UnifiedMessageContentPart:
+			prefix := reasoningText
+			if len(v) > 0 {
+				prefix += "\n\n---\n\n"
+			}
+			v2 := make([]UnifiedMessageContentPart, 0, len(v)+1)
+			v2 = append(v2, UnifiedMessageContentPart{Type: "text", Text: &prefix})
+			v2 = append(v2, v...)
+			content = v2
+		case nil:
+			content = reasoningText
+		default:
+			// Keep behavior: best-effort stringify unknown content shapes.
+			content = fmt.Sprintf("%v", v)
 		}
 	}
 
-	finishReason := getString(resp, "stop_reason")
-	if finishReason == "end_turn" {
-		finishReason = "stop"
-	} else if finishReason == "tool_use" {
-		finishReason = "tool_calls"
+	message := &UnifiedMessage{
+		Role:      "assistant",
+		Content:   content,
+		ToolCalls: toolCalls,
+	}
+	if reasoningText != "" {
+		message.ReasoningContent = &reasoningText
+	}
+	if reasoningSig != "" {
+		message.ReasoningSignature = &reasoningSig
 	}
 
 	unified.Choices = []UnifiedChoice{{
-		Index: 0,
-		Message: &UnifiedMessage{
-			Role:      "assistant",
-			Content:   textContent,
-			ToolCalls: toolCalls,
-		},
+		Index:        0,
+		Message:      message,
 		FinishReason: finishReason,
 	}}
 
@@ -72,4 +85,28 @@ func ParseResponse(body []byte) (*UnifiedResponse, error) {
 	}
 
 	return unified, nil
+}
+
+func extractThinking(raw interface{}) (thinking string, signature string) {
+	items, ok := asSlice(raw)
+	if !ok {
+		return "", ""
+	}
+
+	for _, item := range items {
+		itemMap, ok := asMap(item)
+		if !ok {
+			continue
+		}
+		if getString(itemMap, "type") != "thinking" {
+			continue
+		}
+		thinking = getString(itemMap, "thinking")
+		signature = getString(itemMap, "signature")
+		if thinking != "" || signature != "" {
+			return thinking, signature
+		}
+	}
+
+	return "", ""
 }

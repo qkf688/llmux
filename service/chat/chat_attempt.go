@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptrace"
+	"strings"
 	"time"
 
 	"github.com/atopos31/llmio/models"
@@ -244,6 +245,11 @@ func handleNonOKProviderResponse(
 
 func captureRawResponseBody(options models.RawLogOptions, res *http.Response) string {
 	if !options.RawResponseBody {
+		return ""
+	}
+
+	// For SSE streams, avoid reading the entire body here (it would block streaming and buffer unbounded data).
+	if strings.Contains(strings.ToLower(res.Header.Get("Content-Type")), "text/event-stream") {
 		return ""
 	}
 

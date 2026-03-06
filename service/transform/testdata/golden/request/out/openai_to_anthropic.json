@@ -1,0 +1,54 @@
+{
+  "max_tokens": 123,
+  "messages": [
+    {
+      "content": [
+        {
+          "text": "Describe this image.",
+          "type": "text"
+        },
+        {
+          "source": {
+            "data": "AAAA",
+            "media_type": "image/png",
+            "type": "base64"
+          },
+          "type": "image"
+        }
+      ],
+      "role": "user"
+    }
+  ],
+  "metadata": {
+    "trace_id": "abc"
+  },
+  "model": "test-model",
+  "stream": false,
+  "system": "You are helpful.",
+  "temperature": 0.2,
+  "thinking": {
+    "budget_tokens": 20000,
+    "type": "enabled"
+  },
+  "tool_choice": {
+    "type": "auto"
+  },
+  "tools": [
+    {
+      "description": "Get weather for a location.",
+      "input_schema": {
+        "properties": {
+          "location": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "location"
+        ],
+        "type": "object"
+      },
+      "name": "get_weather"
+    }
+  ],
+  "top_p": 0.9
+}

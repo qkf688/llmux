@@ -1,0 +1,33 @@
+{
+  "content": [
+    {
+      "text": "Here is an image.",
+      "type": "text"
+    },
+    {
+      "source": {
+        "data": "AAAA",
+        "media_type": "image/png",
+        "type": "base64"
+      },
+      "type": "image"
+    },
+    {
+      "id": "call_abc",
+      "input": {
+        "location": "Beijing"
+      },
+      "name": "get_weather",
+      "type": "tool_use"
+    }
+  ],
+  "id": "chatcmpl_123",
+  "model": "test-model",
+  "role": "assistant",
+  "stop_reason": "tool_use",
+  "type": "message",
+  "usage": {
+    "input_tokens": 10,
+    "output_tokens": 5
+  }
+}

@@ -61,6 +61,9 @@ func BeforerOpenAI(data []byte) (*Before, error) {
 		return true
 	})
 
+	if err := preprocessopenai.ValidateToolCallFunctionNames(data); err != nil {
+		return nil, err
+	}
 	if patched, changed, err := preprocessopenai.FillMissingToolCallIDs(data); err == nil && changed {
 		data = patched
 	}

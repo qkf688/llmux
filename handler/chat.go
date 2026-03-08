@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"sync"
@@ -100,6 +101,12 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 		UserAgent: c.Request.UserAgent(),
 	})
 	if err != nil {
+		var statusCoder interface{ StatusCode() int }
+		if errors.As(err, &statusCoder) {
+			status := statusCoder.StatusCode()
+			common.ErrorWithHttpStatus(c, status, status, err.Error())
+			return
+		}
 		common.InternalServerError(c, err.Error())
 		return
 	}

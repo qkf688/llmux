@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,8 +13,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/atopos31/llmio/consts"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/providers"
+	preprocessopenai "github.com/atopos31/llmio/service/chat/preprocess/openai"
 	"github.com/atopos31/llmio/service/chatcore"
 	"github.com/atopos31/llmio/service/transform"
 	"gorm.io/gorm"
@@ -75,6 +78,10 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		return singleProviderAttemptResult{RemoveWeight: true, RemovePriority: true}
 	}
 	if bodyErr != nil {
+		var statusCoder interface{ StatusCode() int }
+		if errors.As(bodyErr, &statusCoder) {
+			return singleProviderAttemptResult{FatalErr: bodyErr}
+		}
 		retryLog <- logEntry.WithError(fmt.Errorf("transform request error: %v", bodyErr))
 		return singleProviderAttemptResult{RemoveWeight: true}
 	}
@@ -155,7 +162,8 @@ func withOptionalRequestTrace(ctx context.Context) context.Context {
 func buildRequestBodyForProvider(ctx context.Context, style, providerType string, raw []byte) ([]byte, bool, error) {
 	if style == providerType {
 		slog.Debug("passthrough mode", "client_type", style, "provider_type", providerType)
-		return raw, false, nil
+		validated, err := validateAndPatchOutgoingOpenAIRequest(providerType, raw)
+		return validated, false, err
 	}
 
 	if !getEnableFormatConversion(ctx) {
@@ -169,7 +177,24 @@ func buildRequestBodyForProvider(ctx context.Context, style, providerType string
 	if err != nil {
 		return nil, false, err
 	}
-	return convertedBody, false, nil
+	validated, err := validateAndPatchOutgoingOpenAIRequest(providerType, convertedBody)
+	return validated, false, err
+}
+
+func validateAndPatchOutgoingOpenAIRequest(providerType string, body []byte) ([]byte, error) {
+	if providerType != consts.StyleOpenAI {
+		return body, nil
+	}
+
+	if err := preprocessopenai.ValidateToolCallFunctionNames(body); err != nil {
+		return nil, newClientRequestError(http.StatusBadRequest, err.Error())
+	}
+
+	if patched, changed, err := preprocessopenai.FillMissingToolCallIDs(body); err == nil && changed {
+		body = patched
+	}
+
+	return body, nil
 }
 
 func captureRequestLogSnapshot(options models.RawLogOptions, requestHeader http.Header, requestBody []byte) requestLogSnapshot {

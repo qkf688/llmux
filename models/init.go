@@ -74,7 +74,8 @@ func initDefaultSettings(ctx context.Context) {
 		{Key: SettingKeyConsecutiveFailureDisableEnabled, Value: "true"}, // 默认启用连续失败自动禁用
 		{Key: SettingKeyLogRetentionCount, Value: "100"},                 // 默认保留100条日志，0表示不限制
 		{Key: SettingKeyLogRawRequestResponse, Value: `{"request_headers":false,"request_body":false,"response_headers":false,"response_body":false,"raw_response_body":false}`}, // 默认关闭所有原始日志记录
-		{Key: SettingKeyDisableAllLogs, Value: "false"}, // 默认不关闭所有日志记录
+		{Key: SettingKeyLogRawRequestResponseErrorsOnly, Value: "false"}, // 默认不启用“仅保留错误日志原始请求响应”
+		{Key: SettingKeyDisableAllLogs, Value: "false"},                  // 默认不关闭所有日志记录
 		// 健康检测相关默认设置
 		{Key: SettingKeyHealthCheckEnabled, Value: "false"},              // 默认关闭健康检测
 		{Key: SettingKeyHealthCheckInterval, Value: "60"},                // 默认检测间隔60分钟
@@ -99,12 +100,12 @@ func initDefaultSettings(ctx context.Context) {
 		{Key: SettingKeyModelSyncLogRetentionDays, Value: "7"},    // 默认保留7天
 		{Key: SettingKeyModelSyncFilterRules, Value: `[]`},        // 默认无过滤规则
 		// 模板模糊匹配相关默认设置
-		{Key: SettingKeyTemplateFuzzyMatchEnabled, Value: "false"},    // 默认关闭模糊匹配
+		{Key: SettingKeyTemplateFuzzyMatchEnabled, Value: "false"},         // 默认关闭模糊匹配
 		{Key: SettingKeyTemplateFuzzyMatchSeparators, Value: `[":", "-"]`}, // 默认分隔符
 		{Key: SettingKeyTemplateFuzzyMatchSuffixes, Value: `["free"]`},     // 默认后缀
 		// 模型关联相关默认设置
-		{Key: SettingKeyAutoAssociateOnAdd, Value: "false"},       // 默认关闭自动关联
-		{Key: SettingKeyAutoCleanOnDelete, Value: "false"},        // 默认关闭自动清理
+		{Key: SettingKeyAutoAssociateOnAdd, Value: "false"},          // 默认关闭自动关联
+		{Key: SettingKeyAutoCleanOnDelete, Value: "false"},           // 默认关闭自动清理
 		{Key: SettingKeyAutoSaveTemplateOnAssociate, Value: "false"}, // 默认关闭关联时自动保存到模板
 		// reasoning_effort 参数映射相关默认设置
 		{Key: SettingKeyReasoningEffortMappingEnabled, Value: "true"}, // 默认启用映射

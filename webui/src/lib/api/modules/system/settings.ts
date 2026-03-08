@@ -27,6 +27,7 @@ export interface Settings {
   consecutive_failure_disable_enabled: boolean;
   log_retention_count: number;
   log_raw_request_response: RawLogOptions;
+  log_raw_request_response_errors_only: boolean;
   disable_all_logs: boolean;
   count_health_check_as_success: boolean;
   count_health_check_as_failure: boolean;

@@ -41,6 +41,7 @@ func defaultSettingsResponse() SettingsResponse {
 		AutoPriorityDecayThreshold:       90,
 		AutoPriorityDecayDisableEnabled:  true, // 默认启用自动禁用功能
 		LogRetentionCount:                100,  // 默认保留100条
+		LogRawRequestResponseErrorsOnly:  false,
 		AutoPriorityIncreaseStep:         1,
 		AutoPriorityIncreaseMax:          100,
 		ConsecutiveFailureThreshold:      3,
@@ -132,6 +133,8 @@ func applySettingToResponse(response *SettingsResponse, setting models.Setting) 
 		if err := json.Unmarshal([]byte(setting.Value), &options); err == nil {
 			response.LogRawRequestResponse = options
 		}
+	case models.SettingKeyLogRawRequestResponseErrorsOnly:
+		response.LogRawRequestResponseErrorsOnly = setting.Value == "true"
 	case models.SettingKeyDisableAllLogs:
 		response.DisableAllLogs = setting.Value == "true"
 	case models.SettingKeyHealthCheckCountAsSuccess:

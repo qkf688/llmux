@@ -37,6 +37,8 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 
 		// 检查是否启用原始请求响应记录
 		logRawOptions := getLogRawRequestResponse(ctx)
+		logRawErrorsOnly := getLogRawRequestResponseErrorsOnly(ctx)
+		rawLogEnabled := logRawOptions.RequestHeaders || logRawOptions.RequestBody || logRawOptions.ResponseHeaders || logRawOptions.ResponseBody || logRawOptions.RawResponseBody
 		if logRawOptions.ResponseBody {
 			// 记录完整的响应体内容
 			var responseBodyStr string
@@ -70,9 +72,36 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 				return err
 			}
 		}
+
+		// 若开启“仅保留错误日志原始请求响应”，则在成功日志写入完成后清空原始字段，避免成功日志长期占用存储。
+		if logRawErrorsOnly && rawLogEnabled {
+			var current models.ChatLog
+			if err := models.DB.WithContext(ctx).
+				Model(&models.ChatLog{}).
+				Select("status").
+				Where("id = ?", logId).
+				Take(&current).Error; err == nil && current.Status != "error" {
+				if err := clearChatLogRawRequestResponseFields(ctx, logId); err != nil {
+					slog.Error("failed to clear raw request/response fields", "log_id", logId, "error", err)
+				}
+			}
+		}
 		return nil
 	}
 	if err := recordFunc(); err != nil {
 		slog.Error("record log error", "log_id", logId, "error", err)
 	}
+}
+
+func clearChatLogRawRequestResponseFields(ctx context.Context, logID uint) error {
+	return models.DB.WithContext(ctx).
+		Model(&models.ChatLog{}).
+		Where("id = ?", logID).
+		Updates(map[string]interface{}{
+			"request_headers":   "",
+			"request_body":      "",
+			"response_headers":  "",
+			"response_body":     "",
+			"raw_response_body": "",
+		}).Error
 }

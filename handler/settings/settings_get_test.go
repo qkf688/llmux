@@ -21,6 +21,9 @@ func TestDefaultSettingsResponse(t *testing.T) {
 	if response.ReasoningEffortDefaultValue != "low" {
 		t.Fatalf("expected ReasoningEffortDefaultValue default to be low, got %s", response.ReasoningEffortDefaultValue)
 	}
+	if response.LogRawRequestResponseErrorsOnly {
+		t.Fatalf("expected LogRawRequestResponseErrorsOnly default to be false")
+	}
 }
 
 func TestApplySettingToResponse(t *testing.T) {
@@ -29,6 +32,7 @@ func TestApplySettingToResponse(t *testing.T) {
 	settings := []models.Setting{
 		{Key: models.SettingKeyAutoWeightDecay, Value: "true"},
 		{Key: models.SettingKeyAutoWeightDecayDefault, Value: "88"},
+		{Key: models.SettingKeyLogRawRequestResponseErrorsOnly, Value: "true"},
 		{Key: models.SettingKeyModelSyncFilterRules, Value: `["gpt","claude"]`},
 		{Key: models.SettingKeyReasoningEffortDefaultValue, Value: "high"},
 	}
@@ -51,6 +55,9 @@ func TestApplySettingToResponse(t *testing.T) {
 	}
 	if response.ReasoningEffortDefaultValue != "high" {
 		t.Fatalf("expected ReasoningEffortDefaultValue to be high, got %s", response.ReasoningEffortDefaultValue)
+	}
+	if !response.LogRawRequestResponseErrorsOnly {
+		t.Fatalf("expected LogRawRequestResponseErrorsOnly to be true")
 	}
 }
 

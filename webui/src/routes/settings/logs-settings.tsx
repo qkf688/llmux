@@ -120,6 +120,22 @@ export function LogsSettings({ settings, onSettingsChange }: LogsSettingsProps) 
               </p>
             </div>
 
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="log-raw-errors-only" className="text-xs md:text-sm font-medium">
+                  仅保留错误日志
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  开启后，仅在请求失败时保留下方选择的原始请求/响应内容；成功请求会自动清空这些字段。
+                </p>
+              </div>
+              <Switch
+                id="log-raw-errors-only"
+                checked={localSettings?.log_raw_request_response_errors_only ?? false}
+                onCheckedChange={(checked) => updateLocalSettings({ log_raw_request_response_errors_only: checked })}
+              />
+            </div>
+
             <div className="space-y-2.5 md:space-y-3 pl-3 md:pl-4 border-l-2 border-muted">
               <div className="flex items-center justify-between gap-4">
                 <div className="space-y-0.5">

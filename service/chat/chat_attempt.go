@@ -103,10 +103,17 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 
 	res, err := input.Client.Do(req)
 	if err != nil {
-		updateChatLogByID(input.Ctx, logID, models.ChatLog{
+		errorUpdate := models.ChatLog{
 			Status: "error",
 			Error:  err.Error(),
-		}, "failed to update log status")
+		}
+		if logRawOptions.RequestHeaders {
+			errorUpdate.RequestHeaders = string(logSnapshot.RequestHeadersJSON)
+		}
+		if logRawOptions.RequestBody {
+			errorUpdate.RequestBody = logSnapshot.RequestBodyStr
+		}
+		updateChatLogByID(input.Ctx, logID, errorUpdate, "failed to update log status")
 		applyProviderFailureAdjustments(input.Ctx, input.ModelWithProvider.ID, input.Provider.Name, input.ModelWithProvider.ProviderModel)
 		return singleProviderAttemptResult{RemoveWeight: true, RemovePriority: true}
 	}
@@ -121,10 +128,28 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		tm := transform.NewTransformerManager(input.Style, input.Provider.Type)
 		convertedRes, err := tm.ProcessResponse(res)
 		if err != nil {
-			updateChatLogByID(input.Ctx, logID, models.ChatLog{
+			errorUpdate := models.ChatLog{
 				Status: "error",
 				Error:  fmt.Sprintf("transform response error: %v", err),
-			}, "failed to update log status")
+			}
+			if logRawOptions.ResponseHeaders {
+				responseHeadersJSON, marshalErr := json.Marshal(res.Header)
+				if marshalErr != nil {
+					slog.Error("failed to marshal response headers", "error", marshalErr)
+					responseHeadersJSON = []byte("{}")
+				}
+				errorUpdate.ResponseHeaders = string(responseHeadersJSON)
+			}
+			if logRawOptions.RequestHeaders {
+				errorUpdate.RequestHeaders = string(logSnapshot.RequestHeadersJSON)
+			}
+			if logRawOptions.RequestBody {
+				errorUpdate.RequestBody = logSnapshot.RequestBodyStr
+			}
+			if logRawOptions.RawResponseBody && rawResponseBodyStr != "" {
+				errorUpdate.RawResponseBody = rawResponseBodyStr
+			}
+			updateChatLogByID(input.Ctx, logID, errorUpdate, "failed to update log status")
 			applyProviderFailureAdjustments(input.Ctx, input.ModelWithProvider.ID, input.Provider.Name, input.ModelWithProvider.ProviderModel)
 			res.Body.Close()
 			return singleProviderAttemptResult{RemoveWeight: true}

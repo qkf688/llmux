@@ -33,6 +33,7 @@ type SettingsResponse struct {
 	ConsecutiveFailureDisableEnabled bool                 `json:"consecutive_failure_disable_enabled"`
 	LogRetentionCount                int                  `json:"log_retention_count"`
 	LogRawRequestResponse            models.RawLogOptions `json:"log_raw_request_response"`
+	LogRawRequestResponseErrorsOnly  bool                 `json:"log_raw_request_response_errors_only"`
 	DisableAllLogs                   bool                 `json:"disable_all_logs"`
 	CountHealthCheckAsSuccess        bool                 `json:"count_health_check_as_success"`
 	CountHealthCheckAsFailure        bool                 `json:"count_health_check_as_failure"`
@@ -81,6 +82,7 @@ type UpdateSettingsRequest struct {
 	ConsecutiveFailureDisableEnabled bool                 `json:"consecutive_failure_disable_enabled"`
 	LogRetentionCount                int                  `json:"log_retention_count"`
 	LogRawRequestResponse            models.RawLogOptions `json:"log_raw_request_response"`
+	LogRawRequestResponseErrorsOnly  bool                 `json:"log_raw_request_response_errors_only"`
 	DisableAllLogs                   bool                 `json:"disable_all_logs"`
 	CountHealthCheckAsSuccess        bool                 `json:"count_health_check_as_success"`
 	CountHealthCheckAsFailure        bool                 `json:"count_health_check_as_failure"`

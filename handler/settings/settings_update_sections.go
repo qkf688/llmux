@@ -108,6 +108,10 @@ func updateLogSettings(ctx context.Context, req UpdateSettingsRequest) error {
 		return err
 	}
 
+	if err := updateBoolSetting(ctx, models.SettingKeyLogRawRequestResponseErrorsOnly, req.LogRawRequestResponseErrorsOnly); err != nil {
+		return err
+	}
+
 	if err := updateBoolSetting(ctx, models.SettingKeyDisableAllLogs, req.DisableAllLogs); err != nil {
 		return err
 	}

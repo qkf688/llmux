@@ -187,9 +187,10 @@ const (
 	SettingKeyConsecutiveFailureThreshold      = "consecutive_failure_threshold"       // 连续失败次数阈值（达到阈值自动禁用）
 	SettingKeyConsecutiveFailureDisableEnabled = "consecutive_failure_disable_enabled" // 是否启用连续失败自动禁用
 
-	SettingKeyLogRetentionCount     = "log_retention_count"      // 日志保留条数，0表示不限制
-	SettingKeyLogRawRequestResponse = "log_raw_request_response" // 原始请求响应记录选项（JSON格式的RawLogOptions）
-	SettingKeyDisableAllLogs        = "disable_all_logs"         // 是否完全关闭所有日志记录
+	SettingKeyLogRetentionCount               = "log_retention_count"                  // 日志保留条数，0表示不限制
+	SettingKeyLogRawRequestResponse           = "log_raw_request_response"             // 原始请求响应记录选项（JSON格式的RawLogOptions）
+	SettingKeyLogRawRequestResponseErrorsOnly = "log_raw_request_response_errors_only" // 是否仅保留错误日志的原始请求响应（成功调用会自动清空）
+	SettingKeyDisableAllLogs                  = "disable_all_logs"                     // 是否完全关闭所有日志记录
 
 	// 模型健康检测相关设置
 	SettingKeyHealthCheckEnabled               = "health_check_enabled"                 // 健康检测总开关

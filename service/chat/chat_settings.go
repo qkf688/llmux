@@ -34,6 +34,16 @@ func getLogRawRequestResponse(ctx context.Context) models.RawLogOptions {
 	return options
 }
 
+func getLogRawRequestResponseErrorsOnly(ctx context.Context) bool {
+	setting, err := gorm.G[models.Setting](models.DB).
+		Where("key = ?", models.SettingKeyLogRawRequestResponseErrorsOnly).
+		First(ctx)
+	if err != nil {
+		return false // 默认关闭
+	}
+	return setting.Value == "true"
+}
+
 // getDisableAllLogs 获取是否完全关闭日志记录
 func getDisableAllLogs(ctx context.Context) bool {
 	setting, err := gorm.G[models.Setting](models.DB).

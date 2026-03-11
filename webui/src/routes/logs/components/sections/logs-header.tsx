@@ -5,10 +5,13 @@ type LogsHeaderProps = {
   selectedCount: number;
   deleting: boolean;
   clearingAll: boolean;
+  clearingFiltered: boolean;
+  canClearFiltered: boolean;
   vacuuming: boolean;
   onRefresh: () => void;
   onOpenBatchDelete: () => void;
   onOpenClearAll: () => void;
+  onOpenClearFiltered: () => void;
   onOpenVacuum: () => void;
 };
 
@@ -16,10 +19,13 @@ export function LogsHeader({
   selectedCount,
   deleting,
   clearingAll,
+  clearingFiltered,
+  canClearFiltered,
   vacuuming,
   onRefresh,
   onOpenBatchDelete,
   onOpenClearAll,
+  onOpenClearFiltered,
   onOpenVacuum,
 }: LogsHeaderProps) {
   return (
@@ -49,6 +55,18 @@ export function LogsHeader({
           >
             <Trash2 className="size-4 mr-1" />
             {clearingAll ? "清空中..." : "清空所有日志"}
+          </Button>
+
+          <Button
+            variant="destructive"
+            size="sm"
+            className="shrink-0"
+            disabled={!canClearFiltered || clearingFiltered}
+            onClick={onOpenClearFiltered}
+            title={!canClearFiltered ? "请先设置筛选条件" : undefined}
+          >
+            <Trash2 className="size-4 mr-1" />
+            {clearingFiltered ? "清空中..." : "清空筛选结果"}
           </Button>
 
           {selectedCount > 0 && (

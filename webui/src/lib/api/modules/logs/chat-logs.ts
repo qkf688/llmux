@@ -119,3 +119,34 @@ export async function clearAllLogs(): Promise<{ deleted: number }> {
     method: "DELETE",
   });
 }
+
+export async function clearFilteredLogs(filters: {
+  name?: string;
+  providerName?: string;
+  status?: string;
+  style?: string;
+  userAgent?: string;
+}): Promise<{ deleted: number }> {
+  const params = new URLSearchParams();
+  if (filters.name) {
+    params.append("name", filters.name);
+  }
+  if (filters.providerName) {
+    params.append("provider_name", filters.providerName);
+  }
+  if (filters.status) {
+    params.append("status", filters.status);
+  }
+  if (filters.style) {
+    params.append("style", filters.style);
+  }
+  if (filters.userAgent) {
+    params.append("user_agent", filters.userAgent);
+  }
+
+  const queryString = params.toString();
+  const endpoint = queryString ? `/logs/clear-filtered?${queryString}` : "/logs/clear-filtered";
+  return apiRequest<{ deleted: number }>(endpoint, {
+    method: "DELETE",
+  });
+}

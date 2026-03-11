@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   batchDeleteLogs,
   clearAllLogs,
+  clearFilteredLogs,
   deleteLog,
   getLogs,
   getModels,
@@ -51,11 +52,13 @@ export function useLogsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false);
   const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false);
+  const [clearFilteredDialogOpen, setClearFilteredDialogOpen] = useState(false);
   const [vacuumDialogOpen, setVacuumDialogOpen] = useState(false);
 
   const [logToDelete, setLogToDelete] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isClearingAll, setIsClearingAll] = useState(false);
+  const [isClearingFiltered, setIsClearingFiltered] = useState(false);
   const [isVacuuming, setIsVacuuming] = useState(false);
 
   const fetchFilterOptions = useCallback(async () => {
@@ -282,6 +285,51 @@ export function useLogsPage() {
     }
   };
 
+  const canClearFiltered = Object.values(filters).some((value) => value !== "all");
+
+  const filtersSummary = useMemo(() => {
+    const parts: string[] = [];
+    if (filters.status !== "all") {
+      const label = filters.status === "success" ? "成功" : filters.status === "error" ? "错误" : filters.status;
+      parts.push(`状态=${label}`);
+    }
+    if (filters.style !== "all") {
+      parts.push(`类型=${filters.style}`);
+    }
+    if (filters.model !== "all") {
+      parts.push(`模型=${filters.model}`);
+    }
+    if (filters.providerName !== "all") {
+      parts.push(`提供商=${filters.providerName}`);
+    }
+    if (filters.userAgent !== "all") {
+      const ua = filters.userAgent.length > 60 ? `${filters.userAgent.slice(0, 60)}...` : filters.userAgent;
+      parts.push(`UA=${ua}`);
+    }
+    return parts.join("，");
+  }, [filters.model, filters.providerName, filters.status, filters.style, filters.userAgent]);
+
+  const confirmClearFilteredLogs = async () => {
+    try {
+      setIsClearingFiltered(true);
+      const result = await clearFilteredLogs(toApiFilters(filters));
+      toast.success(`已清空筛选结果 ${result.deleted} 条日志`);
+      setSelectedIds(new Set());
+
+      if (page !== 1) {
+        setPage(1);
+        return;
+      }
+      await fetchLogs();
+    } catch (error) {
+      const message = toErrorMessage(error);
+      toast.error(`清空筛选结果失败: ${message}`);
+    } finally {
+      setIsClearingFiltered(false);
+      setClearFilteredDialogOpen(false);
+    }
+  };
+
   const confirmVacuum = async () => {
     try {
       setIsVacuuming(true);
@@ -311,6 +359,7 @@ export function useLogsPage() {
     userAgents,
     availableStyles,
     filters,
+    filtersSummary,
     page,
     pageSize,
     total,
@@ -324,10 +373,13 @@ export function useLogsPage() {
     deleteDialogOpen,
     batchDeleteDialogOpen,
     clearAllDialogOpen,
+    clearFilteredDialogOpen,
     vacuumDialogOpen,
     isDeleting,
     isClearingAll,
+    isClearingFiltered,
     isVacuuming,
+    canClearFiltered,
     handleFilterChange,
     handlePageChange,
     handlePageSizeChange,
@@ -345,9 +397,11 @@ export function useLogsPage() {
     openBatchDeleteDialog,
     confirmBatchDelete,
     confirmClearAllLogs,
+    confirmClearFilteredLogs,
     confirmVacuum,
     setBatchDeleteDialogOpen,
     setClearAllDialogOpen,
+    setClearFilteredDialogOpen,
     setVacuumDialogOpen,
   };
 }

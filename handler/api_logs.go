@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"strconv"
+	"strings"
 
 	"github.com/atopos31/llmio/common"
 	"github.com/atopos31/llmio/models"
@@ -354,6 +355,77 @@ func ClearAllLogs(c *gin.Context) {
 		Delete(&models.ChatLog{})
 	if result.Error != nil {
 		common.InternalServerError(c, "Failed to clear logs: "+result.Error.Error())
+		return
+	}
+
+	common.Success(c, map[string]interface{}{
+		"deleted": result.RowsAffected,
+	})
+}
+
+// ClearFilteredLogs 清空满足筛选条件的请求日志（跨分页）
+func ClearFilteredLogs(c *gin.Context) {
+	// 筛选参数（与 GetRequestLogs 保持一致）
+	providerName := strings.TrimSpace(c.Query("provider_name"))
+	name := strings.TrimSpace(c.Query("name"))
+	status := strings.TrimSpace(c.Query("status"))
+	style := strings.TrimSpace(c.Query("style"))
+	userAgent := strings.TrimSpace(c.Query("user_agent"))
+
+	if providerName == "" && name == "" && status == "" && style == "" && userAgent == "" {
+		common.BadRequest(c, "At least one filter parameter is required")
+		return
+	}
+
+	tx := models.DB.Begin()
+	if tx.Error != nil {
+		common.InternalServerError(c, "Failed to start transaction: "+tx.Error.Error())
+		return
+	}
+
+	rollback := func() {
+		_ = tx.Rollback().Error
+	}
+
+	subQuery := tx.Model(&models.ChatLog{}).Select("id")
+	if providerName != "" {
+		subQuery = subQuery.Where("provider_name = ?", providerName)
+	}
+	if name != "" {
+		subQuery = subQuery.Where("name = ?", name)
+	}
+	if status != "" {
+		subQuery = subQuery.Where("status = ?", status)
+	}
+	if style != "" {
+		subQuery = subQuery.Where("style = ?", style)
+	}
+	if userAgent != "" {
+		subQuery = subQuery.Where("user_agent = ?", userAgent)
+	}
+
+	// 先删除 ChatIO（硬删）
+	if err := tx.Unscoped().
+		Where("log_id IN (?)", subQuery).
+		Delete(&models.ChatIO{}).Error; err != nil {
+		rollback()
+		common.InternalServerError(c, "Failed to delete chat io records: "+err.Error())
+		return
+	}
+
+	// 再删除 ChatLog（硬删）
+	result := tx.Unscoped().
+		Where("id IN (?)", subQuery).
+		Delete(&models.ChatLog{})
+	if result.Error != nil {
+		rollback()
+		common.InternalServerError(c, "Failed to clear logs: "+result.Error.Error())
+		return
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		rollback()
+		common.InternalServerError(c, "Failed to commit transaction: "+err.Error())
 		return
 	}
 

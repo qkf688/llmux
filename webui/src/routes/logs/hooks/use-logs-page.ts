@@ -10,7 +10,6 @@ import {
   getProviderTemplates,
   getProviders,
   getUserAgents,
-  vacuumDatabase,
   type ChatLog,
   type Model,
   type Provider,
@@ -53,13 +52,11 @@ export function useLogsPage() {
   const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false);
   const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false);
   const [clearFilteredDialogOpen, setClearFilteredDialogOpen] = useState(false);
-  const [vacuumDialogOpen, setVacuumDialogOpen] = useState(false);
 
   const [logToDelete, setLogToDelete] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isClearingAll, setIsClearingAll] = useState(false);
   const [isClearingFiltered, setIsClearingFiltered] = useState(false);
-  const [isVacuuming, setIsVacuuming] = useState(false);
 
   const fetchFilterOptions = useCallback(async () => {
     const [providerResult, modelResult, userAgentResult, templateResult] = await Promise.allSettled([
@@ -330,20 +327,6 @@ export function useLogsPage() {
     }
   };
 
-  const confirmVacuum = async () => {
-    try {
-      setIsVacuuming(true);
-      const result = await vacuumDatabase();
-      toast.success(result.message || "VACUUM 完成（执行期间数据库会短暂锁定）");
-    } catch (error) {
-      const message = toErrorMessage(error);
-      toast.error(`VACUUM 失败: ${message}`);
-    } finally {
-      setIsVacuuming(false);
-      setVacuumDialogOpen(false);
-    }
-  };
-
   const selectedCount = selectedIds.size;
   const isAllSelected = logs.length > 0 && selectedCount === logs.length;
   const isSomeSelected = selectedCount > 0 && selectedCount < logs.length;
@@ -374,11 +357,9 @@ export function useLogsPage() {
     batchDeleteDialogOpen,
     clearAllDialogOpen,
     clearFilteredDialogOpen,
-    vacuumDialogOpen,
     isDeleting,
     isClearingAll,
     isClearingFiltered,
-    isVacuuming,
     canClearFiltered,
     handleFilterChange,
     handlePageChange,
@@ -398,10 +379,8 @@ export function useLogsPage() {
     confirmBatchDelete,
     confirmClearAllLogs,
     confirmClearFilteredLogs,
-    confirmVacuum,
     setBatchDeleteDialogOpen,
     setClearAllDialogOpen,
     setClearFilteredDialogOpen,
-    setVacuumDialogOpen,
   };
 }

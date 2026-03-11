@@ -2,7 +2,6 @@ import { BatchDeleteLogsDialog } from "./components/dialogs/confirmations/batch-
 import { ClearAllLogsDialog } from "./components/dialogs/confirmations/clear-all-logs-dialog";
 import { ClearFilteredLogsDialog } from "./components/dialogs/confirmations/clear-filtered-logs-dialog";
 import { DeleteLogDialog } from "./components/dialogs/confirmations/delete-log-dialog";
-import { VacuumDialog } from "./components/dialogs/confirmations/vacuum-dialog";
 import { LogDetailDialog } from "./components/dialogs/detail/log-detail-dialog";
 import { LogsFiltersSection } from "./components/sections/logs-filters";
 import { LogsHeader } from "./components/sections/logs-header";
@@ -21,12 +20,10 @@ export default function LogsPage() {
         clearingAll={page.isClearingAll}
         clearingFiltered={page.isClearingFiltered}
         canClearFiltered={page.canClearFiltered}
-        vacuuming={page.isVacuuming}
         onRefresh={page.refreshLogs}
         onOpenBatchDelete={page.openBatchDeleteDialog}
         onOpenClearAll={() => page.setClearAllDialogOpen(true)}
         onOpenClearFiltered={() => page.setClearFilteredDialogOpen(true)}
-        onOpenVacuum={() => page.setVacuumDialogOpen(true)}
       />
 
       <LogsFiltersSection
@@ -105,15 +102,6 @@ export default function LogsPage() {
         onOpenChange={page.setClearFilteredDialogOpen}
         onConfirm={() => {
           void page.confirmClearFilteredLogs();
-        }}
-      />
-
-      <VacuumDialog
-        open={page.vacuumDialogOpen}
-        vacuuming={page.isVacuuming}
-        onOpenChange={page.setVacuumDialogOpen}
-        onConfirm={() => {
-          void page.confirmVacuum();
         }}
       />
     </div>

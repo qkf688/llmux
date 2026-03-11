@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { HardDrive, RefreshCw, Trash2 } from "lucide-react";
+import { RefreshCw, Trash2 } from "lucide-react";
 
 type LogsHeaderProps = {
   selectedCount: number;
@@ -7,12 +7,10 @@ type LogsHeaderProps = {
   clearingAll: boolean;
   clearingFiltered: boolean;
   canClearFiltered: boolean;
-  vacuuming: boolean;
   onRefresh: () => void;
   onOpenBatchDelete: () => void;
   onOpenClearAll: () => void;
   onOpenClearFiltered: () => void;
-  onOpenVacuum: () => void;
 };
 
 export function LogsHeader({
@@ -21,12 +19,10 @@ export function LogsHeader({
   clearingAll,
   clearingFiltered,
   canClearFiltered,
-  vacuuming,
   onRefresh,
   onOpenBatchDelete,
   onOpenClearAll,
   onOpenClearFiltered,
-  onOpenVacuum,
 }: LogsHeaderProps) {
   return (
     <div className="flex flex-col gap-2 flex-shrink-0">
@@ -35,17 +31,6 @@ export function LogsHeader({
           <h2 className="text-2xl font-bold tracking-tight">请求日志</h2>
         </div>
         <div className="flex gap-2 ml-auto">
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            disabled={vacuuming}
-            onClick={onOpenVacuum}
-          >
-            <HardDrive className="size-4 mr-1" />
-            {vacuuming ? "VACUUM..." : "VACUUM"}
-          </Button>
-
           <Button
             variant="destructive"
             size="sm"

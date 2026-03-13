@@ -5,7 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ModelSyncLog, Provider } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, CheckSquare2, Trash2 } from "lucide-react";
+import { CheckSquare2, Trash2 } from "lucide-react";
 import { useMemo } from "react";
 import { formatSyncDate } from "../../../utils/formatters";
 
@@ -88,14 +88,7 @@ export function RecentErrorsSection({
         </div>
       ) : (
         <>
-          <div className="p-3 border-b bg-muted/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-              <p className="text-sm text-muted-foreground">已按提供商聚合显示最近 {logs.length} 条错误日志</p>
-              <div className="text-xs text-muted-foreground flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4" />
-                <span>关闭模型端点后将跳过自动同步</span>
-              </div>
-            </div>
+          <div className="p-3 border-b bg-muted/30 flex items-center justify-end">
             <div className="flex items-center justify-end gap-2 flex-wrap">
               <Button
                 variant="outline"
@@ -334,7 +327,7 @@ export function RecentErrorsSection({
                       {formatSyncDate(item.lastLog.SyncedAt)} · 次数 <span className="font-mono">{item.count}</span>
                     </div>
                     <div
-                      className="flex gap-2"
+                      className="flex gap-1.5"
                       onClick={(event) => {
                         event.stopPropagation();
                       }}
@@ -342,13 +335,13 @@ export function RecentErrorsSection({
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-8 px-3 text-xs"
+                        className="h-7 px-2 text-[11px]"
                         onClick={() => onOpenDetail(item.lastLog)}
                       >
-                        查看错误
+                        查看
                       </Button>
                       {providerMissing ? (
-                        <Button variant="outline" size="sm" className="h-8 px-3 text-xs flex-1" disabled>
+                        <Button variant="outline" size="sm" className="h-7 px-2 text-[11px]" disabled>
                           已删除
                         </Button>
                       ) : enabled ? (
@@ -357,10 +350,10 @@ export function RecentErrorsSection({
                             <Button
                               variant="destructive"
                               size="sm"
-                              className="h-8 px-3 text-xs flex-1"
+                              className="h-7 px-2 text-[11px]"
                               disabled={isToggling}
                             >
-                              {isToggling ? "关闭中..." : "关闭模型端点"}
+                              {isToggling ? "关闭中" : "关闭"}
                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
@@ -385,11 +378,11 @@ export function RecentErrorsSection({
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-8 px-3 text-xs flex-1"
+                          className="h-7 px-2 text-[11px]"
                           disabled={isToggling}
                           onClick={() => onToggleModelEndpoint(item.providerId, true)}
                         >
-                          {isToggling ? "开启中..." : "重新开启"}
+                          {isToggling ? "开启中" : "开启"}
                         </Button>
                       )}
                     </div>

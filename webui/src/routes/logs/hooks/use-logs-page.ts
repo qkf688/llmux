@@ -5,6 +5,7 @@ import {
   clearAllLogs,
   clearFilteredLogs,
   deleteLog,
+  getLogDetail,
   getLogs,
   getModels,
   getProviderTemplates,
@@ -19,6 +20,13 @@ import { DEFAULT_LOGS_FILTERS, type LogsFilters } from "../types";
 import { exportRequestResponse } from "../utils/export-log";
 
 const toErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+const needsLogDetail = (log: ChatLog) =>
+  log.RequestHeaders === undefined &&
+  log.RequestBody === undefined &&
+  log.ResponseHeaders === undefined &&
+  log.ResponseBody === undefined &&
+  log.RawResponseBody === undefined;
 
 const toApiFilters = (filters: LogsFilters) => ({
   providerName: filters.providerName === "all" ? undefined : filters.providerName,
@@ -191,13 +199,16 @@ export function useLogsPage() {
   };
 
   const handleExportRequestResponse = (log: ChatLog) => {
-    try {
-      exportRequestResponse(log);
-      toast.success("导出成功");
-    } catch (error) {
-      const message = toErrorMessage(error);
-      toast.error(`导出失败: ${message}`);
-    }
+    void (async () => {
+      try {
+        const exportLog = needsLogDetail(log) ? await getLogDetail(log.ID) : log;
+        exportRequestResponse(exportLog);
+        toast.success("导出成功");
+      } catch (error) {
+        const message = toErrorMessage(error);
+        toast.error(`导出失败: ${message}`);
+      }
+    })();
   };
 
   const openDeleteDialog = (id: number) => {

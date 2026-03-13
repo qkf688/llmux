@@ -97,6 +97,10 @@ export async function getLogs(
   return apiRequest<LogsResponse>(`/logs?${params.toString()}`);
 }
 
+export async function getLogDetail(logId: number): Promise<ChatLog> {
+  return apiRequest<ChatLog>(`/logs/${logId}`);
+}
+
 export async function getChatIO(logId: number): Promise<ChatIO> {
   return apiRequest<ChatIO>(`/logs/${logId}/chat-io`);
 }

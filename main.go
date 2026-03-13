@@ -94,6 +94,7 @@ func main() {
 
 	// System status and monitoring
 	api.GET("/logs", handler.GetRequestLogs)
+	api.GET("/logs/:id", handler.GetRequestLogDetail)
 	api.GET("/logs/:id/chat-io", handler.GetChatIO)
 	api.DELETE("/logs/batch", handler.BatchDeleteLogs)
 	api.DELETE("/logs/clear", handler.ClearAllLogs)

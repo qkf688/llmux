@@ -1,3 +1,4 @@
+import Loading from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import type { ChatLog } from "@/lib/api";
 import { Download } from "lucide-react";
@@ -5,10 +6,23 @@ import { formatByteLength } from "../../../utils/formatters";
 
 type RequestResponseSectionProps = {
   log: ChatLog;
-  onExportRequestResponse: (log: ChatLog) => void;
+  loading?: boolean;
+  onExportRequestResponse: (log: ChatLog) => void | Promise<void>;
 };
 
-export function RequestResponseSection({ log, onExportRequestResponse }: RequestResponseSectionProps) {
+export function RequestResponseSection({
+  log,
+  loading,
+  onExportRequestResponse,
+}: RequestResponseSectionProps) {
+  if (loading) {
+    return (
+      <div className="rounded-md border bg-muted/20 p-3">
+        <Loading message="加载请求响应内容" />
+      </div>
+    );
+  }
+
   const hasRequestResponseContent = Boolean(
     log.RequestHeaders || log.RequestBody || log.ResponseHeaders || log.RawResponseBody || log.ResponseBody
   );
@@ -21,7 +35,7 @@ export function RequestResponseSection({ log, onExportRequestResponse }: Request
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">请求响应内容</p>
-        <Button variant="outline" size="sm" onClick={() => onExportRequestResponse(log)}>
+        <Button variant="outline" size="sm" onClick={() => void onExportRequestResponse(log)}>
           <Download className="size-4 mr-1" />
           导出请求响应
         </Button>

@@ -189,7 +189,8 @@ export function RecentErrorsSection({
                 <TableBody>
                   {summaries.map((item) => {
                     const provider = providersById[item.providerId];
-                    const enabled = isModelEndpointEnabled(provider);
+                    const providerMissing = provider == null;
+                    const enabled = providerMissing ? false : isModelEndpointEnabled(provider);
                     const isToggling = togglingProviderIds.has(item.providerId);
 
                     const selected = isProviderSelected(item.providerId);
@@ -209,12 +210,14 @@ export function RecentErrorsSection({
                             <span
                               className={cn(
                                 "text-xs px-2 py-0.5 rounded border",
-                                enabled
-                                  ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-400"
-                                  : "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900 text-amber-700 dark:text-amber-400"
+                                providerMissing
+                                  ? "bg-muted border-border text-muted-foreground"
+                                  : enabled
+                                    ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-400"
+                                    : "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900 text-amber-700 dark:text-amber-400"
                               )}
                             >
-                              模型端点: {enabled ? "开启" : "关闭"}
+                              模型端点: {providerMissing ? "不可用" : enabled ? "开启" : "关闭"}
                             </span>
                           </div>
                         </TableCell>
@@ -239,7 +242,11 @@ export function RecentErrorsSection({
                               event.stopPropagation();
                             }}
                           >
-                            {enabled ? (
+                            {providerMissing ? (
+                              <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled>
+                                已删除
+                              </Button>
+                            ) : enabled ? (
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                   <Button
@@ -291,7 +298,8 @@ export function RecentErrorsSection({
             <div className="sm:hidden px-2 py-3 divide-y divide-border">
               {summaries.map((item) => {
                 const provider = providersById[item.providerId];
-                const enabled = isModelEndpointEnabled(provider);
+                const providerMissing = provider == null;
+                const enabled = providerMissing ? false : isModelEndpointEnabled(provider);
                 const isToggling = togglingProviderIds.has(item.providerId);
                 const selected = isProviderSelected(item.providerId);
 
@@ -312,12 +320,14 @@ export function RecentErrorsSection({
                       <span
                         className={cn(
                           "text-xs px-2 py-0.5 rounded border",
-                          enabled
-                            ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-400"
-                            : "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900 text-amber-700 dark:text-amber-400"
+                          providerMissing
+                            ? "bg-muted border-border text-muted-foreground"
+                            : enabled
+                              ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-400"
+                              : "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900 text-amber-700 dark:text-amber-400"
                         )}
                       >
-                        模型端点: {enabled ? "开启" : "关闭"}
+                        模型端点: {providerMissing ? "不可用" : enabled ? "开启" : "关闭"}
                       </span>
                     </div>
                     <div className="text-xs text-muted-foreground">
@@ -337,7 +347,11 @@ export function RecentErrorsSection({
                       >
                         查看错误
                       </Button>
-                      {enabled ? (
+                      {providerMissing ? (
+                        <Button variant="outline" size="sm" className="h-8 px-3 text-xs flex-1" disabled>
+                          已删除
+                        </Button>
+                      ) : enabled ? (
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button

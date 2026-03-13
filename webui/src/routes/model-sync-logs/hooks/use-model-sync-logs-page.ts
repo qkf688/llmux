@@ -364,7 +364,20 @@ export function useModelSyncLogsPage() {
         toast.success(`${updated.Name} 模型端点已${enabled ? "开启" : "关闭"}`);
         void fetchStats();
       } catch (error) {
-        toast.error(`更新提供商失败: ${toErrorMessage(error)}`);
+        const message = toErrorMessage(error);
+        if (message.includes("Provider not found")) {
+          setProvidersById((previous) => {
+            if (!(providerId in previous)) {
+              return previous;
+            }
+            const next = { ...previous };
+            delete next[providerId];
+            return next;
+          });
+          toast.info("提供商已删除，模型端点无需操作");
+          return;
+        }
+        toast.error(`更新提供商失败: ${message}`);
       } finally {
         setTogglingProviderIds((previous) => {
           const next = new Set(previous);

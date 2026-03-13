@@ -1016,38 +1016,38 @@ export default function ProvidersPage() {
         </div>
       </div>
       <div className="flex flex-col gap-2 flex-shrink-0">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:gap-4">
-          <div className="flex flex-col gap-1 text-xs col-span-2 sm:col-span-1">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">提供商名称</Label>
-            <Input
-              placeholder="输入名称"
-              value={nameFilter}
-              onChange={(e) => setNameFilter(e.target.value)}
-              className="h-8 w-full text-xs px-2"
-            />
-          </div>
-          <div className="flex flex-col gap-1 text-xs col-span-2 sm:col-span-1">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">类型</Label>
-            <Select
-              value={typeFilter}
-              onValueChange={(value) => {
-                setTypeFilter(value);
-                setDebouncedNameFilter(nameFilter);
-              }}
-            >
-              <SelectTrigger className="h-8 w-full text-xs px-2">
-                <SelectValue placeholder="选择类型" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部</SelectItem>
-                {availableTypes.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:gap-4">
+           <div className="flex flex-col gap-1 text-xs col-span-1">
+             <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">提供商名称</Label>
+             <Input
+               placeholder="输入名称"
+               value={nameFilter}
+               onChange={(e) => setNameFilter(e.target.value)}
+               className="h-8 w-full text-xs px-2"
+             />
+           </div>
+           <div className="flex flex-col gap-1 text-xs col-span-1">
+             <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">类型</Label>
+             <Select
+               value={typeFilter}
+               onValueChange={(value) => {
+                 setTypeFilter(value);
+                 setDebouncedNameFilter(nameFilter);
+               }}
+             >
+               <SelectTrigger className="h-8 w-full text-xs px-2">
+                 <SelectValue placeholder="选择类型" />
+               </SelectTrigger>
+               <SelectContent>
+                 <SelectItem value="all">全部</SelectItem>
+                 {availableTypes.map((type) => (
+                   <SelectItem key={type} value={type}>
+                     {type}
+                   </SelectItem>
+                 ))}
+               </SelectContent>
+             </Select>
+           </div>
           <div className="flex items-end col-span-2 sm:col-span-1 sm:justify-end">
             <Button onClick={openCreateDialog} className="h-8 w-full text-xs sm:w-auto sm:ml-auto">
               添加提供商

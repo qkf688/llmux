@@ -34,23 +34,23 @@ export function LogsHeader({
           <Button
             variant="destructive"
             size="sm"
-            className="shrink-0"
+            className="shrink-0 h-7 px-2 text-xs gap-1 sm:h-8 sm:px-3 sm:text-sm sm:gap-1.5"
             disabled={clearingAll}
             onClick={onOpenClearAll}
           >
-            <Trash2 className="size-4 mr-1" />
+            <Trash2 className="size-3.5 mr-0.5 sm:size-4 sm:mr-1" />
             {clearingAll ? "清空中..." : "清空所有日志"}
           </Button>
 
           <Button
             variant="destructive"
             size="sm"
-            className="shrink-0"
+            className="shrink-0 h-7 px-2 text-xs gap-1 sm:h-8 sm:px-3 sm:text-sm sm:gap-1.5"
             disabled={!canClearFiltered || clearingFiltered}
             onClick={onOpenClearFiltered}
             title={!canClearFiltered ? "请先设置筛选条件" : undefined}
           >
-            <Trash2 className="size-4 mr-1" />
+            <Trash2 className="size-3.5 mr-0.5 sm:size-4 sm:mr-1" />
             {clearingFiltered ? "清空中..." : "清空筛选结果"}
           </Button>
 

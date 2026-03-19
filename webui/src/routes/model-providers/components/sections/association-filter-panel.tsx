@@ -351,9 +351,15 @@ export function AssociationFilterPanel({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-48">
-               <DropdownMenuItem disabled={!selectedModelId} onClick={onToggleTemplateEditor} className="cursor-pointer">
-                 模板编辑
-               </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!selectedModelId}
+                onSelect={() => {
+                  window.setTimeout(() => onToggleTemplateEditor(), 0);
+                }}
+                className="cursor-pointer"
+              >
+                模板编辑
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => {
                   window.setTimeout(() => onOpenBlacklistDialog(), 0);

@@ -22,7 +22,6 @@ interface MappingManagementDialogProps {
   virtualModelName?: string;
   mappings: VirtualModelMapping[];
   getRealModelName: (modelId: number) => string;
-  onAddMapping: () => void;
   onOpenBatchDialog: () => void;
   onEditMapping: (mapping: VirtualModelMapping) => void;
   onDeleteMapping: (mappingId: number) => void;
@@ -34,7 +33,6 @@ export function MappingManagementDialog({
   virtualModelName,
   mappings,
   getRealModelName,
-  onAddMapping,
   onOpenBatchDialog,
   onEditMapping,
   onDeleteMapping,
@@ -48,11 +46,8 @@ export function MappingManagementDialog({
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col gap-2">
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" className="h-8 px-3" onClick={onAddMapping}>
+            <Button size="sm" className="h-8 px-3" onClick={onOpenBatchDialog}>
               添加映射
-            </Button>
-            <Button size="sm" variant="outline" className="h-8 px-3" onClick={onOpenBatchDialog}>
-              批量添加
             </Button>
           </div>
 

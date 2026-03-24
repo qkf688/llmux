@@ -59,11 +59,11 @@ export function MappingBatchDialog({
 }: MappingBatchDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[80vh] max-w-3xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>批量添加映射</DialogTitle>
-          <DialogDescription>选择多个真实模型并设置统一参数</DialogDescription>
-        </DialogHeader>
+        <DialogContent className="max-h-[80vh] max-w-3xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>添加映射</DialogTitle>
+            <DialogDescription>选择一个或多个真实模型并设置统一参数</DialogDescription>
+          </DialogHeader>
 
         <div className="space-y-4">
           <div>
@@ -155,7 +155,7 @@ export function MappingBatchDialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             取消
           </Button>
-          <Button onClick={onSubmit}>添加 ({selectedModelIds.length})</Button>
+          <Button onClick={onSubmit}>添加映射 ({selectedModelIds.length})</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

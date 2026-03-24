@@ -63,7 +63,6 @@ export default function VirtualModelsPage() {
         virtualModelName={page.currentVirtualModel?.Name}
         mappings={page.mappings}
         getRealModelName={page.getRealModelName}
-        onAddMapping={page.openAddMappingDialog}
         onOpenBatchDialog={page.openBatchMappingDialog}
         onEditMapping={page.openEditMappingDialog}
         onDeleteMapping={(mappingId) => {

@@ -35,6 +35,7 @@ func Init(ctx context.Context, path string) {
 	); err != nil {
 		panic(err)
 	}
+	cleanupVirtualModelMappingSoftDeletes(ctx)
 	// 兼容性考虑
 	if _, err := gorm.G[ModelWithProvider](DB).Where("status IS NULL").Update(ctx, "status", true); err != nil {
 		panic(err)
@@ -52,6 +53,15 @@ func Init(ctx context.Context, path string) {
 	initAutoAssociateField(ctx)
 	// 迁移旧设置键
 	migrateSettingKeys(ctx)
+}
+
+func cleanupVirtualModelMappingSoftDeletes(ctx context.Context) {
+	if err := DB.WithContext(ctx).
+		Unscoped().
+		Where("deleted_at IS NOT NULL").
+		Delete(&VirtualModelMapping{}).Error; err != nil {
+		panic(err)
+	}
 }
 
 // initDefaultSettings 初始化默认设置

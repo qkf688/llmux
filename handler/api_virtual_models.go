@@ -44,10 +44,10 @@ type BatchFailedItem struct {
 
 // BatchCreateResult 批量创建结果
 type BatchCreateResult struct {
-	SuccessCount int                       `json:"success_count"`
-	FailedCount  int                       `json:"failed_count"`
+	SuccessCount int                          `json:"success_count"`
+	FailedCount  int                          `json:"failed_count"`
 	SuccessItems []models.VirtualModelMapping `json:"success_items"`
-	FailedItems  []BatchFailedItem         `json:"failed_items"`
+	FailedItems  []BatchFailedItem            `json:"failed_items"`
 }
 
 // GetVirtualModels 获取虚拟模型列表
@@ -181,7 +181,10 @@ func DeleteVirtualModel(c *gin.Context) {
 	}
 
 	// 删除所有关联的映射
-	if _, err := gorm.G[models.VirtualModelMapping](models.DB).Where("virtual_model_id = ?", id).Delete(c.Request.Context()); err != nil {
+	if err := models.DB.WithContext(c.Request.Context()).
+		Unscoped().
+		Where("virtual_model_id = ?", id).
+		Delete(&models.VirtualModelMapping{}).Error; err != nil {
 		common.InternalServerError(c, "Failed to delete virtual model mappings: "+err.Error())
 		return
 	}
@@ -341,9 +344,10 @@ func DeleteVirtualModelMapping(c *gin.Context) {
 	}
 
 	// 删除映射
-	if _, err := gorm.G[models.VirtualModelMapping](models.DB).
-		Where("id = ?", mappingID).
-		Delete(c.Request.Context()); err != nil {
+	if err := models.DB.WithContext(c.Request.Context()).
+		Unscoped().
+		Where("id = ? AND virtual_model_id = ?", mappingID, id).
+		Delete(&models.VirtualModelMapping{}).Error; err != nil {
 		common.InternalServerError(c, "Failed to delete mapping: "+err.Error())
 		return
 	}
@@ -492,4 +496,3 @@ func BatchCreateVirtualModelMapping(c *gin.Context) {
 	// 返回结果，HTTP 200 表示操作本身成功执行
 	common.Success(c, result)
 }
-

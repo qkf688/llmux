@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { AnimatedOutlet } from "@/components/animated-outlet";
 import {
   FaHome,
   FaCloud,
@@ -191,7 +192,7 @@ export default function Layout() {
         {/* 右侧主内容区域 */}
         <main className="flex-1 min-w-0 bg-muted/20 p-2 md:p-4 transition-all duration-300">
           <div className="mx-auto max-w-full h-full min-w-0 overflow-x-hidden">
-             <Outlet />
+             <AnimatedOutlet />
           </div>
         </main>
       </div>

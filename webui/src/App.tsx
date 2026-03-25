@@ -30,24 +30,36 @@ function App() {
   return (
     <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
       <Router>
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/" element={<Layout />}>
-              <Route index element={<Home />} />
-              <Route path="providers" element={<ProvidersPage />} />
-              <Route path="models" element={<ModelsPage />} />
-              <Route path="model-providers" element={<ModelProvidersPage />} />
-              <Route path="virtual-models" element={<VirtualModelsPage />} />
-              <Route path="logs" element={<LogsPage />} />
-              <Route path="logs/:logId/chat-io" element={<LogChatPage />} />
-              <Route path="health-check-logs" element={<HealthCheckLogsPage />} />
-              <Route path="model-sync-logs" element={<ModelSyncLogsPage />} />
-              <Route path="database" element={<DatabasePage />} />
-              <Route path="settings" element={<SettingsPage />} />
-            </Route>
-          </Routes>
-        </Suspense>
+        <Routes>
+          <Route
+            path="/login"
+            element={
+              <Suspense fallback={<PageLoader />}>
+                <LoginPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/"
+            element={
+              <Suspense fallback={<PageLoader />}>
+                <Layout />
+              </Suspense>
+            }
+          >
+            <Route index element={<Home />} />
+            <Route path="providers" element={<ProvidersPage />} />
+            <Route path="models" element={<ModelsPage />} />
+            <Route path="model-providers" element={<ModelProvidersPage />} />
+            <Route path="virtual-models" element={<VirtualModelsPage />} />
+            <Route path="logs" element={<LogsPage />} />
+            <Route path="logs/:logId/chat-io" element={<LogChatPage />} />
+            <Route path="health-check-logs" element={<HealthCheckLogsPage />} />
+            <Route path="model-sync-logs" element={<ModelSyncLogsPage />} />
+            <Route path="database" element={<DatabasePage />} />
+            <Route path="settings" element={<SettingsPage />} />
+          </Route>
+        </Routes>
       </Router>
       <Toaster richColors position='top-center' />
     </ThemeProvider>

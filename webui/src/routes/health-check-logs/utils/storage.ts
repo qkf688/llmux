@@ -1,4 +1,4 @@
-import { HEALTH_CHECK_STORAGE_KEYS } from "../types";
+import { healthCheckBatchStore } from "@/stores/health-check-logs";
 
 export interface StoredHealthCheckBatchState {
   batchId: string | null;
@@ -6,22 +6,18 @@ export interface StoredHealthCheckBatchState {
 }
 
 export function readStoredHealthCheckBatchState(): StoredHealthCheckBatchState {
-  const batchId = localStorage.getItem(HEALTH_CHECK_STORAGE_KEYS.batchId);
-  const completed = localStorage.getItem(HEALTH_CHECK_STORAGE_KEYS.completed) === "true";
-
-  return { batchId, completed };
+  const state = healthCheckBatchStore.getState();
+  return { batchId: state.batchId, completed: state.completed };
 }
 
 export function writeStoredHealthCheckBatchState(batchId: string, completed: boolean): void {
-  localStorage.setItem(HEALTH_CHECK_STORAGE_KEYS.batchId, batchId);
-  localStorage.setItem(HEALTH_CHECK_STORAGE_KEYS.completed, String(completed));
+  healthCheckBatchStore.getState().setBatchState(batchId, completed);
 }
 
 export function markStoredHealthCheckBatchCompleted(): void {
-  localStorage.setItem(HEALTH_CHECK_STORAGE_KEYS.completed, "true");
+  healthCheckBatchStore.getState().markCompleted();
 }
 
 export function clearStoredHealthCheckBatchState(): void {
-  localStorage.removeItem(HEALTH_CHECK_STORAGE_KEYS.batchId);
-  localStorage.removeItem(HEALTH_CHECK_STORAGE_KEYS.completed);
+  healthCheckBatchStore.getState().clearBatchState();
 }

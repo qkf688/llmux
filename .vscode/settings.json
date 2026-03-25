@@ -1,0 +1,5 @@
+{
+  "typescript.tsdk": "webui/node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true
+}
+

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { selectSidebarOpen, selectToggleSidebarOpen, useLayoutStore } from "@/stores/ui";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { AnimatedOutlet } from "@/components/animated-outlet";
@@ -18,19 +18,18 @@ import {
   FaLayerGroup
 } from "react-icons/fa";
 import { useTheme } from "@/components/theme-provider";
+import { selectClearToken, useAuthStore } from "@/stores/auth";
 
 export default function Layout() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const sidebarOpen = useLayoutStore(selectSidebarOpen);
+  const toggleSidebar = useLayoutStore(selectToggleSidebarOpen);
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation(); // 用于高亮当前选中的菜单
-
-  const toggleSidebar = () => {
-    setSidebarOpen(!sidebarOpen);
-  };
+  const clearAuthToken = useAuthStore(selectClearToken);
 
   const handleLogout = () => {
-    localStorage.removeItem("authToken");
+    clearAuthToken();
     navigate("/login");
   };
 

@@ -4,15 +4,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { selectSetToken, useAuthStore } from "@/stores/auth";
 
 export default function LoginPage() {
   const [token, setToken] = useState("");
   const navigate = useNavigate();
+  const setAuthToken = useAuthStore(selectSetToken);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (token.trim()) {
-      localStorage.setItem("authToken", token);
+      setAuthToken(token);
       // Redirect to home page after login
       navigate("/");
     }

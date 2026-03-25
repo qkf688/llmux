@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import Loading from "@/components/loading";
+import { getAuthToken } from "@/stores/auth";
 import {
   addModelTemplateItem,
   autoAssociateModels,
@@ -609,7 +610,11 @@ export default function ModelProvidersPage() {
       loading: true,
     }));
     try {
-      const token = localStorage.getItem("authToken");
+      const token = getAuthToken();
+      if (!token) {
+        window.location.href = "/login";
+        return;
+      }
       const controller = new AbortController();
       currentControllerRef.current = controller;
       await fetchEventSource(`/api/test/react/${id}`, {

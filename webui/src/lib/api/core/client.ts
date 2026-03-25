@@ -1,3 +1,5 @@
+import { getAuthToken } from "@/stores/auth";
+
 export const API_BASE = "/api";
 
 type ApiResponseEnvelope<T> = {
@@ -5,10 +7,6 @@ type ApiResponseEnvelope<T> = {
   message: string;
   data: T;
 };
-
-function getAuthToken(): string | null {
-  return localStorage.getItem("authToken");
-}
 
 function buildAuthHeaders(headers: HeadersInit = {}): HeadersInit {
   const token = getAuthToken();

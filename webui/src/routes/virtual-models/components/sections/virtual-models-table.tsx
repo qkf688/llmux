@@ -22,7 +22,9 @@ function VirtualModelStatusPill({ enabled }: { enabled: boolean }) {
   return (
     <span
       className={`rounded px-2 py-1 text-xs ${
-        enabled ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
+        enabled
+          ? "bg-primary/10 border border-primary/30 text-primary"
+          : "bg-gray-100 text-gray-800"
       }`}
     >
       {enabled ? "启用" : "禁用"}

@@ -80,7 +80,9 @@ export function MappingManagementDialog({
                         <TableCell className="py-2">
                           <span
                             className={`rounded px-2 py-0.5 text-xs ${
-                              mapping.Enabled ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
+                              mapping.Enabled
+                                ? "bg-primary/10 border border-primary/30 text-primary"
+                                : "bg-gray-100 text-gray-800"
                             }`}
                           >
                             {mapping.Enabled ? "启用" : "禁用"}
@@ -134,7 +136,9 @@ export function MappingManagementDialog({
                         </div>
                         <span
                           className={`shrink-0 rounded px-2 py-0.5 text-xs ${
-                            enabled ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
+                            enabled
+                              ? "bg-primary/10 border border-primary/30 text-primary"
+                              : "bg-gray-100 text-gray-800"
                           }`}
                         >
                           {enabled ? "启用" : "禁用"}

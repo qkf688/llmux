@@ -1,22 +1,8 @@
 import type { ExportType } from "@/lib/api";
+import type { ImportPreviewData } from "@/stores/database/types";
 
-export type ImportMode = "merge" | "replace";
-
-export interface ImportPreviewData {
-  providers: number;
-  models: number;
-  associations: number;
-  templates: number;
-  settings: number;
-}
-
-export const ALL_EXPORT_TYPES: ExportType[] = [
-  "providers",
-  "models",
-  "associations",
-  "templates",
-  "settings",
-];
+export { ALL_EXPORT_TYPES } from "@/stores/database/types";
+export type { ImportMode, ImportPreviewData } from "@/stores/database/types";
 
 export const EXPORT_TYPE_OPTIONS: Array<{ type: ExportType; label: string }> = [
   { type: "providers", label: "提供商配置" },

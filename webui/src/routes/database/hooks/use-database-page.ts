@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   exportConfig,
@@ -6,14 +6,12 @@ import {
   getDatabaseStats,
   importConfig,
   vacuumDatabase,
-  type DatabaseStats,
-  type ExportType,
   type ImportConfigResponse,
 } from "@/lib/api";
 import { toast } from "sonner";
-import { ALL_EXPORT_TYPES, type ImportMode, type ImportPreviewData } from "../types";
 import { buildImportPreview } from "../utils/import-preview";
 import { buildImportResultMessage } from "../utils/import-result";
+import { useDatabasePageStore } from "@/stores/database";
 
 const toErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
@@ -22,28 +20,45 @@ export function useDatabasePage() {
   const navigate = useNavigate();
   const previewRequestRef = useRef(0);
 
-  const [stats, setStats] = useState<DatabaseStats | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const [vacuumDialogOpen, setVacuumDialogOpen] = useState(false);
-  const [vacuuming, setVacuuming] = useState(false);
-
-  const [exportConfigDialogOpen, setExportConfigDialogOpen] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [exportTypes, setExportTypes] = useState<ExportType[]>([...ALL_EXPORT_TYPES]);
-
-  const [exportDatabaseDialogOpen, setExportDatabaseDialogOpen] = useState(false);
-  const [exportingDatabase, setExportingDatabase] = useState(false);
-
-  const [importDialogOpen, setImportDialogOpen] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [importMode, setImportMode] = useState<ImportMode>("merge");
-  const [importTypes, setImportTypes] = useState<ExportType[]>([...ALL_EXPORT_TYPES]);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewData, setPreviewData] = useState<ImportPreviewData | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [importFileInputKey, setImportFileInputKey] = useState(0);
+  const {
+    stats,
+    loading,
+    vacuumDialogOpen,
+    vacuuming,
+    exportConfigDialogOpen,
+    exporting,
+    exportTypes,
+    exportDatabaseDialogOpen,
+    exportingDatabase,
+    importDialogOpen,
+    importing,
+    importMode,
+    importTypes,
+    selectedFile,
+    previewData,
+    previewLoading,
+    previewError,
+    importFileInputKey,
+    setStats,
+    setLoading,
+    setVacuumDialogOpen,
+    setVacuuming,
+    setExportConfigDialogOpen,
+    setExporting,
+    toggleExportType,
+    setExportDatabaseDialogOpen,
+    setExportingDatabase,
+    setImportDialogOpen,
+    setImporting,
+    setImportMode,
+    toggleImportType,
+    setSelectedFile,
+    setPreviewData,
+    setPreviewLoading,
+    setPreviewError,
+    bumpImportFileInputKey,
+    resetTransient,
+  } = useDatabasePageStore((state) => state);
 
   const clearImportFileSelection = useCallback(() => {
     previewRequestRef.current += 1;
@@ -51,8 +66,8 @@ export function useDatabasePage() {
     setPreviewData(null);
     setPreviewError(null);
     setPreviewLoading(false);
-    setImportFileInputKey((previous) => previous + 1);
-  }, []);
+    bumpImportFileInputKey();
+  }, [bumpImportFileInputKey, setPreviewData, setPreviewError, setPreviewLoading, setSelectedFile]);
 
   const fetchStats = useCallback(async () => {
     setLoading(true);
@@ -65,11 +80,15 @@ export function useDatabasePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setLoading, setStats]);
 
   useEffect(() => {
     void fetchStats();
-  }, [fetchStats]);
+    return () => {
+      previewRequestRef.current += 1;
+      resetTransient();
+    };
+  }, [fetchStats, resetTransient]);
 
   const usageRate =
     stats?.page_count && stats.page_count > 0
@@ -82,23 +101,6 @@ export function useDatabasePage() {
 
   const refreshStats = () => {
     void fetchStats();
-  };
-
-  const toggleTypeSelection = (
-    updater: React.Dispatch<React.SetStateAction<ExportType[]>>,
-    type: ExportType
-  ) => {
-    updater((previous) =>
-      previous.includes(type) ? previous.filter((item) => item !== type) : [...previous, type]
-    );
-  };
-
-  const toggleExportType = (type: ExportType) => {
-    toggleTypeSelection(setExportTypes, type);
-  };
-
-  const toggleImportType = (type: ExportType) => {
-    toggleTypeSelection(setImportTypes, type);
   };
 
   const handleVacuum = async () => {

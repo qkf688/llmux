@@ -1,29 +1,38 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import { updateSettings, type Settings } from "@/lib/api";
 import type { RoutingSettingsProps } from "../types";
 import { sanitizeRoutingSettings } from "../utils/sanitize-routing-settings";
+import { routingSettingsEditorStore, useSettingsStore } from "@/stores/settings";
 
 export function useRoutingSettingsForm({ settings, onSettingsChange }: RoutingSettingsProps) {
-  const [saving, setSaving] = useState(false);
-  const [localSettings, setLocalSettings] = useState(settings);
-  const [hasChanges, setHasChanges] = useState(false);
+  const {
+    saving,
+    localSettings,
+    hasChanges,
+    setSaving,
+    syncFromServerSettings,
+    updateLocalSettings: updateLocalSettingsInternal,
+    markSaved,
+    resetTransient,
+  } = useSettingsStore(routingSettingsEditorStore, (state) => state);
 
   useEffect(() => {
     if (!hasChanges) {
-      setLocalSettings(settings);
+      syncFromServerSettings(settings);
     }
-  }, [settings, hasChanges]);
+  }, [hasChanges, settings, syncFromServerSettings]);
 
-  const updateLocalSettings = useCallback((updates: Partial<Settings>) => {
-    setLocalSettings((previous) => {
-      if (!previous) {
-        return previous;
-      }
-      return { ...previous, ...updates };
-    });
-    setHasChanges(true);
-  }, []);
+  useEffect(() => () => {
+    resetTransient();
+  }, [resetTransient]);
+
+  const updateLocalSettings = useCallback(
+    (updates: Partial<Settings>) => {
+      updateLocalSettingsInternal(updates);
+    },
+    [updateLocalSettingsInternal]
+  );
 
   const handleSave = useCallback(async () => {
     if (!localSettings) {
@@ -34,21 +43,19 @@ export function useRoutingSettingsForm({ settings, onSettingsChange }: RoutingSe
       setSaving(true);
       const cleanedSettings = sanitizeRoutingSettings(localSettings);
       const updated = await updateSettings(cleanedSettings);
-      setLocalSettings(updated);
+      markSaved(updated);
       onSettingsChange(updated);
-      setHasChanges(false);
       toast.success("通用设置保存成功");
     } catch (error) {
       toast.error("保存设置失败: " + (error as Error).message);
     } finally {
       setSaving(false);
     }
-  }, [localSettings, onSettingsChange]);
+  }, [localSettings, markSaved, onSettingsChange, setSaving]);
 
   const handleReset = useCallback(() => {
-    setLocalSettings(settings);
-    setHasChanges(false);
-  }, [settings]);
+    syncFromServerSettings(settings);
+  }, [settings, syncFromServerSettings]);
 
   return {
     saving,

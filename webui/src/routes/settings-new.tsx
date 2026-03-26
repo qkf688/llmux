@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
@@ -9,18 +9,20 @@ import { RoutingSettings } from "./settings/routing-settings";
 import { BalancerSettings } from "./settings/balancer-settings";
 import { LogsSettings } from "./settings/logs-settings";
 import { HealthCheckSettingsTab } from "./settings/health-check-settings";
+import { settingsPageStore, useSettingsStore } from "@/stores/settings";
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<Settings | null>(null);
-  const [healthCheckSettings, setHealthCheckSettings] = useState<HealthCheckSettings | null>(null);
-  const [loading, setLoading] = useState(true);
+  const {
+    settings,
+    healthCheckSettings,
+    loading,
+    setLoading,
+    setSettings,
+    setHealthCheckSettings,
+    resetTransient,
+  } = useSettingsStore(settingsPageStore, (state) => state);
 
-  useEffect(() => {
-    loadSettings();
-    loadHealthCheckSettings();
-  }, []);
-
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getSettings();
@@ -30,24 +32,32 @@ export default function SettingsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [setLoading, setSettings]);
 
-  const loadHealthCheckSettings = async () => {
+  const loadHealthCheckSettings = useCallback(async () => {
     try {
       const data = await getHealthCheckSettings();
       setHealthCheckSettings(data);
     } catch (error) {
       toast.error("加载健康检测设置失败: " + (error as Error).message);
     }
-  };
+  }, [setHealthCheckSettings]);
 
-  const handleSettingsChange = (newSettings: Settings) => {
+  useEffect(() => {
+    void loadSettings();
+    void loadHealthCheckSettings();
+    return () => {
+      resetTransient();
+    };
+  }, [loadHealthCheckSettings, loadSettings, resetTransient]);
+
+  const handleSettingsChange = useCallback((newSettings: Settings) => {
     setSettings(newSettings);
-  };
+  }, [setSettings]);
 
-  const handleHealthCheckSettingsChange = (newSettings: HealthCheckSettings) => {
+  const handleHealthCheckSettingsChange = useCallback((newSettings: HealthCheckSettings) => {
     setHealthCheckSettings(newSettings);
-  };
+  }, [setHealthCheckSettings]);
 
   if (loading) {
     return (

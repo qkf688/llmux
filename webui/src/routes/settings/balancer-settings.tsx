@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { updateSettings } from "@/lib/api";
 import type { Settings } from "@/lib/api";
 import { Spinner } from "@/components/ui/spinner";
+import { balancerSettingsEditorStore, useSettingsStore } from "@/stores/settings";
 
 interface BalancerSettingsProps {
   settings: Settings | null;
@@ -15,17 +16,23 @@ interface BalancerSettingsProps {
 }
 
 export function BalancerSettings({ settings, onSettingsChange }: BalancerSettingsProps) {
-  const [saving, setSaving] = useState(false);
-  const [localSettings, setLocalSettings] = useState(settings);
-  const [hasChanges, setHasChanges] = useState(false);
+  const {
+    saving,
+    localSettings,
+    hasChanges,
+    setSaving,
+    syncFromServerSettings,
+    updateLocalSettings,
+    markSaved,
+    resetTransient,
+  } = useSettingsStore(balancerSettingsEditorStore, (state) => state);
 
-  const updateLocalSettings = (updates: Partial<Settings>) => {
-    if (localSettings) {
-      const newSettings = { ...localSettings, ...updates };
-      setLocalSettings(newSettings);
-      setHasChanges(true);
-    }
-  };
+  useEffect(() => {
+    syncFromServerSettings(settings);
+    return () => {
+      resetTransient();
+    };
+  }, [resetTransient, settings, syncFromServerSettings]);
 
   const handleSave = async () => {
     if (!localSettings) return;
@@ -33,9 +40,8 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
     try {
       setSaving(true);
       const updated = await updateSettings(localSettings);
-      setLocalSettings(updated);
+      markSaved(updated);
       onSettingsChange(updated);
-      setHasChanges(false);
       toast.success("负载均衡设置保存成功");
     } catch (error) {
       toast.error("保存设置失败: " + (error as Error).message);
@@ -45,8 +51,7 @@ export function BalancerSettings({ settings, onSettingsChange }: BalancerSetting
   };
 
   const handleReset = () => {
-    setLocalSettings(settings);
-    setHasChanges(false);
+    syncFromServerSettings(settings);
   };
 
 

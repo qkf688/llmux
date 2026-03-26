@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { updateHealthCheckSettings } from "@/lib/api";
 import type { HealthCheckSettings } from "@/lib/api";
 import { Spinner } from "@/components/ui/spinner";
+import { healthCheckSettingsEditorStore, useSettingsStore } from "@/stores/settings";
 
 interface HealthCheckSettingsProps {
   healthCheckSettings: HealthCheckSettings | null;
@@ -15,17 +16,23 @@ interface HealthCheckSettingsProps {
 }
 
 export function HealthCheckSettingsTab({ healthCheckSettings, onHealthCheckSettingsChange }: HealthCheckSettingsProps) {
-  const [saving, setSaving] = useState(false);
-  const [localSettings, setLocalSettings] = useState(healthCheckSettings);
-  const [hasChanges, setHasChanges] = useState(false);
+  const {
+    saving,
+    localSettings,
+    hasChanges,
+    setSaving,
+    syncFromServerSettings,
+    updateLocalSettings,
+    markSaved,
+    resetTransient,
+  } = useSettingsStore(healthCheckSettingsEditorStore, (state) => state);
 
-  const updateLocalSettings = (updates: Partial<HealthCheckSettings>) => {
-    if (localSettings) {
-      const newSettings = { ...localSettings, ...updates };
-      setLocalSettings(newSettings);
-      setHasChanges(true);
-    }
-  };
+  useEffect(() => {
+    syncFromServerSettings(healthCheckSettings);
+    return () => {
+      resetTransient();
+    };
+  }, [healthCheckSettings, resetTransient, syncFromServerSettings]);
 
   const handleSave = async () => {
     if (!localSettings) return;
@@ -33,9 +40,8 @@ export function HealthCheckSettingsTab({ healthCheckSettings, onHealthCheckSetti
     try {
       setSaving(true);
       const updated = await updateHealthCheckSettings(localSettings);
-      setLocalSettings(updated);
+      markSaved(updated);
       onHealthCheckSettingsChange(updated);
-      setHasChanges(false);
       toast.success("健康检测设置保存成功");
     } catch (error) {
       toast.error("保存健康检测设置失败: " + (error as Error).message);
@@ -45,8 +51,7 @@ export function HealthCheckSettingsTab({ healthCheckSettings, onHealthCheckSetti
   };
 
   const handleReset = () => {
-    setLocalSettings(healthCheckSettings);
-    setHasChanges(false);
+    syncFromServerSettings(healthCheckSettings);
   };
 
   return (

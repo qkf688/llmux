@@ -70,64 +70,168 @@ import { Spinner } from "@/components/ui/spinner";
 import { defaultProviderFormValues, providerFormSchema, type ProviderFormValues } from "./form-schema";
 import {
   DEFAULT_BATCH_TEST_PROGRESS,
-  type BatchTestProgress,
-  type ModelTestResult,
   type UpstreamStatus
 } from "./types";
 import { runConcurrentBatch } from "./utils/batch-test";
 import { copyTextDetailed } from "./utils/clipboard";
 import { buildConfigFromForm, extractAllModels, parseConfigToForm, parseCustomModelsInput } from "./utils/config";
+import { useProvidersPageStore } from "@/stores/providers";
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [providerTemplates, setProviderTemplates] = useState<ProviderTemplate[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [open, setOpen] = useState(false);
-  const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [clearAssociationId, setClearAssociationId] = useState<number | null>(null);
-  const [clearingAssociation, setClearingAssociation] = useState(false);
-  const [modelsOpen, setModelsOpen] = useState(false);
-  const [modelsOpenId, setModelsOpenId] = useState<number | null>(null);
   const [providerModels, setProviderModels] = useState<ProviderModel[]>([]);
   const [filteredProviderModels, setFilteredProviderModels] = useState<ProviderModel[]>([]);
-  const [modelsLoading, setModelsLoading] = useState(false);
-  const [selectedUpstreamModels, setSelectedUpstreamModels] = useState<string[]>([]);
   const [upstreamModelsCache, setUpstreamModelsCache] = useState<Record<number, ProviderModel[]>>({});
-  const [allModelsOpen, setAllModelsOpen] = useState(false);
-  const [allModelsProvider, setAllModelsProvider] = useState<Provider | null>(null);
   const [allModelsList, setAllModelsList] = useState<string[]>([]);
-  const [selectedAllModels, setSelectedAllModels] = useState<string[]>([]);
-  const [customModelInput, setCustomModelInput] = useState("");
-  const [allModelsSearchQuery, setAllModelsSearchQuery] = useState("");
-  const [allModelsTestResults, setAllModelsTestResults] = useState<Record<string, ModelTestResult>>({});
-  const [addingModels, setAddingModels] = useState(false);
-  const [batchTesting, setBatchTesting] = useState(false);
-  const [batchTestProgress, setBatchTestProgress] = useState<BatchTestProgress>({ ...DEFAULT_BATCH_TEST_PROGRESS });
   const [testAbortController, setTestAbortController] = useState<AbortController | null>(null);
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [syncingModels, setSyncingModels] = useState(false);
-  const [syncingAll, setSyncingAll] = useState(false);
   const [upstreamModelsList, setUpstreamModelsList] = useState<string[]>([]);
   const [upstreamStatus, setUpstreamStatus] = useState<UpstreamStatus>("disabled");
-  const [autoAssociateOnAddEnabled, setAutoAssociateOnAddEnabled] = useState(false);
   const [updatingFilter, setUpdatingFilter] = useState<Record<number, boolean>>({});
   const [updatingAssociationTrigger, setUpdatingAssociationTrigger] = useState<Record<number, boolean>>({});
-  const [autoCleanOnDeleteEnabled, setAutoCleanOnDeleteEnabled] = useState(false);
 
   // 上游模型测试相关状态
-  const [upstreamTestResults, setUpstreamTestResults] = useState<Record<string, ModelTestResult>>({});
-  const [upstreamBatchTesting, setUpstreamBatchTesting] = useState(false);
-  const [upstreamBatchTestProgress, setUpstreamBatchTestProgress] = useState<BatchTestProgress>({
-    ...DEFAULT_BATCH_TEST_PROGRESS,
-  });
+  const {
+    loading,
+    setLoading,
+    clearingAssociation,
+    setClearingAssociation,
+    modelsLoading,
+    setModelsLoading,
+    addingModels,
+    setAddingModels,
+    syncingModels,
+    setSyncingModels,
+    syncingAll,
+    setSyncingAll,
+    autoAssociateOnAddEnabled,
+    setAutoAssociateOnAddEnabled,
+    autoCleanOnDeleteEnabled,
+    setAutoCleanOnDeleteEnabled,
+    open,
+    setOpen,
+    editingProvider,
+    setEditingProvider,
+    deleteId,
+    setDeleteId,
+    clearAssociationId,
+    setClearAssociationId,
+    modelsOpen,
+    setModelsOpen,
+    modelsOpenId,
+    setModelsOpenId,
+    selectedUpstreamModels,
+    setSelectedUpstreamModels,
+    allModelsOpen,
+    setAllModelsOpen,
+    allModelsProvider,
+    setAllModelsProvider,
+    selectedAllModels,
+    setSelectedAllModels,
+    customModelInput,
+    setCustomModelInput,
+    allModelsSearchQuery,
+    setAllModelsSearchQuery,
+    allModelsTestResults,
+    setAllModelsTestResults,
+    batchTesting,
+    setBatchTesting,
+    batchTestProgress,
+    setBatchTestProgress,
+    upstreamTestResults,
+    setUpstreamTestResults,
+    upstreamBatchTesting,
+    setUpstreamBatchTesting,
+    upstreamBatchTestProgress,
+    setUpstreamBatchTestProgress,
+    showApiKey,
+    setShowApiKey,
+    toggleShowApiKey,
+    nameFilter,
+    setNameFilter,
+    debouncedNameFilter,
+    setDebouncedNameFilter,
+    typeFilter,
+    setTypeFilter,
+    availableTypes,
+    setAvailableTypes,
+    flushNameFilter,
+    resetTransient,
+  } = useProvidersPageStore((state) => ({
+    loading: state.loading,
+    setLoading: state.setLoading,
+    clearingAssociation: state.clearingAssociation,
+    setClearingAssociation: state.setClearingAssociation,
+    modelsLoading: state.modelsLoading,
+    setModelsLoading: state.setModelsLoading,
+    addingModels: state.addingModels,
+    setAddingModels: state.setAddingModels,
+    syncingModels: state.syncingModels,
+    setSyncingModels: state.setSyncingModels,
+    syncingAll: state.syncingAll,
+    setSyncingAll: state.setSyncingAll,
+    autoAssociateOnAddEnabled: state.autoAssociateOnAddEnabled,
+    setAutoAssociateOnAddEnabled: state.setAutoAssociateOnAddEnabled,
+    autoCleanOnDeleteEnabled: state.autoCleanOnDeleteEnabled,
+    setAutoCleanOnDeleteEnabled: state.setAutoCleanOnDeleteEnabled,
+    open: state.providerDialogOpen,
+    setOpen: state.setProviderDialogOpen,
+    editingProvider: state.editingProvider,
+    setEditingProvider: state.setEditingProvider,
+    deleteId: state.deleteId,
+    setDeleteId: state.setDeleteId,
+    clearAssociationId: state.clearAssociationId,
+    setClearAssociationId: state.setClearAssociationId,
+    modelsOpen: state.modelsOpen,
+    setModelsOpen: state.setModelsOpen,
+    modelsOpenId: state.modelsOpenId,
+    setModelsOpenId: state.setModelsOpenId,
+    selectedUpstreamModels: state.selectedUpstreamModels,
+    setSelectedUpstreamModels: state.setSelectedUpstreamModels,
+    allModelsOpen: state.allModelsOpen,
+    setAllModelsOpen: state.setAllModelsOpen,
+    allModelsProvider: state.allModelsProvider,
+    setAllModelsProvider: state.setAllModelsProvider,
+    selectedAllModels: state.selectedAllModels,
+    setSelectedAllModels: state.setSelectedAllModels,
+    customModelInput: state.customModelInput,
+    setCustomModelInput: state.setCustomModelInput,
+    allModelsSearchQuery: state.allModelsSearchQuery,
+    setAllModelsSearchQuery: state.setAllModelsSearchQuery,
+    allModelsTestResults: state.allModelsTestResults,
+    setAllModelsTestResults: state.setAllModelsTestResults,
+    batchTesting: state.batchTesting,
+    setBatchTesting: state.setBatchTesting,
+    batchTestProgress: state.batchTestProgress,
+    setBatchTestProgress: state.setBatchTestProgress,
+    upstreamTestResults: state.upstreamTestResults,
+    setUpstreamTestResults: state.setUpstreamTestResults,
+    upstreamBatchTesting: state.upstreamBatchTesting,
+    setUpstreamBatchTesting: state.setUpstreamBatchTesting,
+    upstreamBatchTestProgress: state.upstreamBatchTestProgress,
+    setUpstreamBatchTestProgress: state.setUpstreamBatchTestProgress,
+    showApiKey: state.showApiKey,
+    setShowApiKey: state.setShowApiKey,
+    toggleShowApiKey: state.toggleShowApiKey,
+    nameFilter: state.nameFilter,
+    setNameFilter: state.setNameFilter,
+    debouncedNameFilter: state.debouncedNameFilter,
+    setDebouncedNameFilter: state.setDebouncedNameFilter,
+    typeFilter: state.typeFilter,
+    setTypeFilter: state.setTypeFilter,
+    availableTypes: state.availableTypes,
+    setAvailableTypes: state.setAvailableTypes,
+    flushNameFilter: state.flushNameFilter,
+    resetTransient: state.resetTransient,
+  }));
   const [upstreamTestAbortController, setUpstreamTestAbortController] = useState<AbortController | null>(null);
 
   // 筛选条件
-  const [nameFilter, setNameFilter] = useState<string>("");
-  const [debouncedNameFilter, setDebouncedNameFilter] = useState<string>("");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [availableTypes, setAvailableTypes] = useState<string[]>([]);
+  useEffect(() => {
+    return () => {
+      resetTransient();
+    };
+  }, [resetTransient]);
 
   // 初始化表单
   const form = useForm<ProviderFormValues>({
@@ -139,25 +243,11 @@ export default function ProvidersPage() {
   const watchedType = form.watch("type");
 
   useEffect(() => {
-    if (!modelsOpen) {
-      setSelectedUpstreamModels([]);
-      setUpstreamTestResults({});
-    }
-  }, [modelsOpen]);
-
-  useEffect(() => {
-    if (!allModelsOpen) {
-      setSelectedAllModels([]);
-      setAllModelsTestResults({});
-    }
-  }, [allModelsOpen]);
-
-  useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       setDebouncedNameFilter(nameFilter);
     }, 250);
     return () => window.clearTimeout(timeoutId);
-  }, [nameFilter]);
+  }, [nameFilter, setDebouncedNameFilter]);
 
   const fetchProviders = useCallback(async () => {
     try {
@@ -175,7 +265,7 @@ export default function ProvidersPage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedNameFilter, typeFilter]);
+  }, [debouncedNameFilter, setLoading, typeFilter]);
 
   const fetchProviderTemplates = useCallback(async () => {
     try {
@@ -187,7 +277,7 @@ export default function ProvidersPage() {
     } catch (err) {
       console.error("获取提供商模板失败", err);
     }
-  }, []);
+  }, [setAvailableTypes]);
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -199,7 +289,7 @@ export default function ProvidersPage() {
       setAutoAssociateOnAddEnabled(false);
       setAutoCleanOnDeleteEnabled(false);
     }
-  }, []);
+  }, [setAutoAssociateOnAddEnabled, setAutoCleanOnDeleteEnabled]);
 
   useEffect(() => {
     void fetchProviderTemplates();
@@ -1030,11 +1120,11 @@ export default function ProvidersPage() {
              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">类型</Label>
              <Select
                value={typeFilter}
-               onValueChange={(value) => {
-                 setTypeFilter(value);
-                 setDebouncedNameFilter(nameFilter);
-               }}
-             >
+                onValueChange={(value) => {
+                  setTypeFilter(value);
+                  flushNameFilter();
+                }}
+              >
                <SelectTrigger className="h-8 w-full text-xs px-2">
                  <SelectValue placeholder="选择类型" />
                </SelectTrigger>
@@ -1425,7 +1515,7 @@ export default function ProvidersPage() {
                           variant="ghost"
                           size="icon"
                           className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8"
-                          onClick={() => setShowApiKey((prev) => !prev)}
+                          onClick={toggleShowApiKey}
                           aria-label={showApiKey ? "隐藏 API Key" : "显示 API Key"}
                         >
                           {showApiKey ? (

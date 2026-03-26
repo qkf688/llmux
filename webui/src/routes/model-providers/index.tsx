@@ -5,6 +5,7 @@ import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import Loading from "@/components/loading";
 import { getAuthToken } from "@/stores/auth";
+import { useModelProvidersPageStore } from "@/stores/model-providers";
 import {
   addModelTemplateItem,
   autoAssociateModels,
@@ -45,15 +46,7 @@ import type {
 import { parseAllModelsFromConfig, toProviderModelList } from "@/lib/provider-models";
 import { toast } from "sonner";
 import { formSchema, type FormValues } from "./form-schema";
-import type {
-  AssociationBatchTestResult,
-  BatchTestProgress,
-  BlacklistFilter,
-  ProviderModelGroup,
-  ProviderModelSelection,
-  ProviderModelWithOwner,
-  TestType,
-} from "./types";
+import type { ProviderModelGroup, ProviderModelWithOwner } from "./types";
 import { buildAssociationPayload } from "./utils/payload";
 import { buildSelectionKey } from "./utils/selection";
 import { BlacklistDialog } from "./components/dialogs/blacklist-dialog";
@@ -73,89 +66,196 @@ export default function ModelProvidersPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [providerStatus, setProviderStatus] = useState<Record<number, boolean[]>>({});
   const [healthStatus, setHealthStatus] = useState<Record<number, boolean[]>>({});
-  const [loading, setLoading] = useState(true);
-  const [open, setOpen] = useState(false);
-  const [editingAssociation, setEditingAssociation] = useState<ModelWithProvider | null>(null);
+
+  const {
+    loading,
+    setLoading,
+    open,
+    setOpen,
+    editingAssociation,
+    setEditingAssociation,
+    deleteId,
+    setDeleteId,
+    testDialogOpen,
+    setTestDialogOpen,
+    selectedTestId,
+    setSelectedTestId,
+    testType,
+    setTestType,
+    selectedProviderType,
+    setSelectedProviderType,
+    selectedProviderFilter,
+    setSelectedProviderFilter,
+    selectedStatusFilter,
+    setSelectedStatusFilter,
+    reactTestResult,
+    setReactTestResult,
+    isSubmitting,
+    setIsSubmitting,
+    loadingProviderModels,
+    setLoadingProviderModels,
+    modelListDialogOpen,
+    setModelListDialogOpen,
+    modelSearchKeyword,
+    setModelSearchKeyword,
+    selectedProviderModels,
+    setSelectedProviderModels,
+    selectedAssociationIds,
+    setSelectedAssociationIds,
+    collapsedProviders,
+    setCollapsedProviders,
+    batchDeleteDialogOpen,
+    setBatchDeleteDialogOpen,
+    batchDeleting,
+    setBatchDeleting,
+    batchUpdatingStatus,
+    setBatchUpdatingStatus,
+    searchKeyword,
+    setSearchKeyword,
+    previewDialogOpen,
+    setPreviewDialogOpen,
+    previewType,
+    setPreviewType,
+    executing,
+    setExecuting,
+    templateEditorOpen,
+    setTemplateEditorOpen,
+    templateLoading,
+    setTemplateLoading,
+    templateNewItem,
+    setTemplateNewItem,
+    resettingWeights,
+    setResettingWeights,
+    resettingPriorities,
+    setResettingPriorities,
+    enablingAssociations,
+    setEnablingAssociations,
+    operationScope,
+    setOperationScope,
+    filterPanelOpen,
+    setFilterPanelOpen,
+    batchTesting,
+    setBatchTesting,
+    batchTestProgress,
+    setBatchTestProgress,
+    associationTestResults,
+    setAssociationTestResults,
+    blacklistDialogOpen,
+    setBlacklistDialogOpen,
+    blacklistedIds,
+    setBlacklistedIds,
+    blacklistLoading,
+    setBlacklistLoading,
+    blacklistSaving,
+    setBlacklistSaving,
+    blacklistSearchTerm,
+    setBlacklistSearchTerm,
+    blacklistFilter,
+    setBlacklistFilter,
+    resetTransient,
+  } = useModelProvidersPageStore((state) => ({
+    loading: state.loading,
+    setLoading: state.setLoading,
+    open: state.open,
+    setOpen: state.setOpen,
+    editingAssociation: state.editingAssociation,
+    setEditingAssociation: state.setEditingAssociation,
+    deleteId: state.deleteId,
+    setDeleteId: state.setDeleteId,
+    testDialogOpen: state.testDialogOpen,
+    setTestDialogOpen: state.setTestDialogOpen,
+    selectedTestId: state.selectedTestId,
+    setSelectedTestId: state.setSelectedTestId,
+    testType: state.testType,
+    setTestType: state.setTestType,
+    selectedProviderType: state.selectedProviderType,
+    setSelectedProviderType: state.setSelectedProviderType,
+    selectedProviderFilter: state.selectedProviderFilter,
+    setSelectedProviderFilter: state.setSelectedProviderFilter,
+    selectedStatusFilter: state.selectedStatusFilter,
+    setSelectedStatusFilter: state.setSelectedStatusFilter,
+    reactTestResult: state.reactTestResult,
+    setReactTestResult: state.setReactTestResult,
+    isSubmitting: state.isSubmitting,
+    setIsSubmitting: state.setIsSubmitting,
+    loadingProviderModels: state.loadingProviderModels,
+    setLoadingProviderModels: state.setLoadingProviderModels,
+    modelListDialogOpen: state.modelListDialogOpen,
+    setModelListDialogOpen: state.setModelListDialogOpen,
+    modelSearchKeyword: state.modelSearchKeyword,
+    setModelSearchKeyword: state.setModelSearchKeyword,
+    selectedProviderModels: state.selectedProviderModels,
+    setSelectedProviderModels: state.setSelectedProviderModels,
+    selectedAssociationIds: state.selectedAssociationIds,
+    setSelectedAssociationIds: state.setSelectedAssociationIds,
+    collapsedProviders: state.collapsedProviders,
+    setCollapsedProviders: state.setCollapsedProviders,
+    batchDeleteDialogOpen: state.batchDeleteDialogOpen,
+    setBatchDeleteDialogOpen: state.setBatchDeleteDialogOpen,
+    batchDeleting: state.batchDeleting,
+    setBatchDeleting: state.setBatchDeleting,
+    batchUpdatingStatus: state.batchUpdatingStatus,
+    setBatchUpdatingStatus: state.setBatchUpdatingStatus,
+    searchKeyword: state.searchKeyword,
+    setSearchKeyword: state.setSearchKeyword,
+    previewDialogOpen: state.previewDialogOpen,
+    setPreviewDialogOpen: state.setPreviewDialogOpen,
+    previewType: state.previewType,
+    setPreviewType: state.setPreviewType,
+    executing: state.executing,
+    setExecuting: state.setExecuting,
+    templateEditorOpen: state.templateEditorOpen,
+    setTemplateEditorOpen: state.setTemplateEditorOpen,
+    templateLoading: state.templateLoading,
+    setTemplateLoading: state.setTemplateLoading,
+    templateNewItem: state.templateNewItem,
+    setTemplateNewItem: state.setTemplateNewItem,
+    resettingWeights: state.resettingWeights,
+    setResettingWeights: state.setResettingWeights,
+    resettingPriorities: state.resettingPriorities,
+    setResettingPriorities: state.setResettingPriorities,
+    enablingAssociations: state.enablingAssociations,
+    setEnablingAssociations: state.setEnablingAssociations,
+    operationScope: state.operationScope,
+    setOperationScope: state.setOperationScope,
+    filterPanelOpen: state.filterPanelOpen,
+    setFilterPanelOpen: state.setFilterPanelOpen,
+    batchTesting: state.batchTesting,
+    setBatchTesting: state.setBatchTesting,
+    batchTestProgress: state.batchTestProgress,
+    setBatchTestProgress: state.setBatchTestProgress,
+    associationTestResults: state.associationTestResults,
+    setAssociationTestResults: state.setAssociationTestResults,
+    blacklistDialogOpen: state.blacklistDialogOpen,
+    setBlacklistDialogOpen: state.setBlacklistDialogOpen,
+    blacklistedIds: state.blacklistedIds,
+    setBlacklistedIds: state.setBlacklistedIds,
+    blacklistLoading: state.blacklistLoading,
+    setBlacklistLoading: state.setBlacklistLoading,
+    blacklistSaving: state.blacklistSaving,
+    setBlacklistSaving: state.setBlacklistSaving,
+    blacklistSearchTerm: state.blacklistSearchTerm,
+    setBlacklistSearchTerm: state.setBlacklistSearchTerm,
+    blacklistFilter: state.blacklistFilter,
+    setBlacklistFilter: state.setBlacklistFilter,
+    resetTransient: state.resetTransient,
+  }));
+
   const [selectedModelId, setSelectedModelId] = useState<number | null>(null);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
   const [testResults, setTestResults] = useState<
     Record<number, { loading: boolean; result: ModelProviderTestResult | null }>
   >({});
   const [structuredTestResults, setStructuredTestResults] = useState<
     Record<number, { loading: boolean; result: ModelProviderTestResult | null }>
   >({});
-  const [testDialogOpen, setTestDialogOpen] = useState(false);
-  const [selectedTestId, setSelectedTestId] = useState<number | null>(null);
-  const [testType, setTestType] = useState<TestType>("connectivity");
-  const [selectedProviderType, setSelectedProviderType] = useState<string>("all");
-  const [selectedProviderFilter, setSelectedProviderFilter] = useState<string>("all");
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("all");
-  const [reactTestResult, setReactTestResult] = useState<{
-    loading: boolean;
-    messages: string;
-    success: boolean | null;
-    error: string | null;
-  }>({
-    loading: false,
-    messages: "",
-    success: null,
-    error: null
-  });
   const [statusUpdating, setStatusUpdating] = useState<Record<number, boolean>>({});
   const [statusError, setStatusError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [providerModelGroups, setProviderModelGroups] = useState<ProviderModelGroup[]>([]);
   const [providerModels, setProviderModels] = useState<ProviderModelWithOwner[]>([]);
-  const [loadingProviderModels, setLoadingProviderModels] = useState(false);
-  const [selectedProviderModels, setSelectedProviderModels] = useState<ProviderModelSelection[]>([]);
-  const [modelListDialogOpen, setModelListDialogOpen] = useState(false);
-  const [modelSearchKeyword, setModelSearchKeyword] = useState("");
-  const [selectedAssociationIds, setSelectedAssociationIds] = useState<number[]>([]);
-  const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false);
-  const [batchDeleting, setBatchDeleting] = useState(false);
-  const [batchUpdatingStatus, setBatchUpdatingStatus] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [collapsedProviders, setCollapsedProviders] = useState<Record<number, boolean>>({});
-  const [searchKeyword, setSearchKeyword] = useState("");
-  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [previewData, setPreviewData] = useState<AssociationPreview[]>([]);
-  const [previewType, setPreviewType] = useState<"associate" | "clean">("associate");
-  const [executing, setExecuting] = useState(false);
-  const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
-  const [templateLoading, setTemplateLoading] = useState(false);
   const [templateData, setTemplateData] = useState<ModelTemplate | null>(null);
-  const [templateNewItem, setTemplateNewItem] = useState("");
-  const [resettingWeights, setResettingWeights] = useState(false);
-  const [resettingPriorities, setResettingPriorities] = useState(false);
-  const [enablingAssociations, setEnablingAssociations] = useState(false);
-  const [operationScope, setOperationScope] = useState<"current" | "all">("current");
-  
-  // 筛选面板折叠状态（移动端默认收起，桌面端默认展开）
-  const [filterPanelOpen, setFilterPanelOpen] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return window.innerWidth >= 640; // sm 断点
-    }
-    return true;
-  });
-  
-  // 批量测试相关状态
-  const [batchTesting, setBatchTesting] = useState(false);
-  const [batchTestProgress, setBatchTestProgress] = useState<BatchTestProgress>({
-    total: 0,
-    completed: 0,
-    success: 0,
-    failed: 0,
-    testing: 0
-  });
   const [testAbortController, setTestAbortController] = useState<AbortController | null>(null);
-  const [associationTestResults, setAssociationTestResults] = useState<Record<number, AssociationBatchTestResult>>({});
-
-  const [blacklistDialogOpen, setBlacklistDialogOpen] = useState(false);
-  const [blacklistedIds, setBlacklistedIds] = useState<number[]>([]);
-  const [blacklistLoading, setBlacklistLoading] = useState(false);
-  const [blacklistSaving, setBlacklistSaving] = useState(false);
-  const [blacklistSearchTerm, setBlacklistSearchTerm] = useState("");
-  const [blacklistFilter, setBlacklistFilter] = useState<BlacklistFilter>("all");
 
   // 拉黑管理过滤逻辑
   const filteredProviders = useMemo(() => {
@@ -206,6 +306,12 @@ export default function ModelProvidersPage() {
   });
 
   useEffect(() => {
+    return () => {
+      resetTransient();
+    };
+  }, [resetTransient]);
+
+  useEffect(() => {
     if (models.length === 0) {
       if (selectedModelId !== null) {
         setSelectedModelId(null);
@@ -247,7 +353,7 @@ export default function ModelProvidersPage() {
         toast.error(`加载模板失败: ${message}`);
       })
       .finally(() => setTemplateLoading(false));
-  }, [templateEditorOpen, selectedModelId]);
+  }, [templateEditorOpen, selectedModelId, setTemplateLoading]);
 
   useEffect(() => {
     if (!blacklistDialogOpen) return;
@@ -256,7 +362,7 @@ export default function ModelProvidersPage() {
       .then((data) => setBlacklistedIds(data.blacklisted_ids))
       .catch((err) => toast.error(`加载黑名单失败: ${err instanceof Error ? err.message : String(err)}`))
       .finally(() => setBlacklistLoading(false));
-  }, [blacklistDialogOpen]);
+  }, [blacklistDialogOpen, setBlacklistLoading, setBlacklistedIds]);
 
   const handleSaveBlacklist = async () => {
     setBlacklistSaving(true);
@@ -311,7 +417,7 @@ export default function ModelProvidersPage() {
       return next;
     });
     setLoadingProviderModels(false);
-  }, []);
+  }, [setCollapsedProviders, setLoadingProviderModels]);
 
   const fetchProviders = useCallback(async () => {
     try {
@@ -386,13 +492,13 @@ export default function ModelProvidersPage() {
     } finally {
       setLoading(false);
     }
-  }, [loadProviderStatus]);
+  }, [loadProviderStatus, setLoading]);
 
   useEffect(() => {
     Promise.all([fetchModels(), fetchProviders(), fetchSettings()]).finally(() => {
       setLoading(false);
     });
-  }, [fetchModels, fetchProviders, fetchSettings]);
+  }, [fetchModels, fetchProviders, fetchSettings, setLoading]);
 
   useEffect(() => {
     if (selectedModelId) {
@@ -922,7 +1028,7 @@ export default function ModelProvidersPage() {
   };
 
   const handleToggleTemplateEditor = () => {
-    setTemplateEditorOpen((prev) => !prev);
+    setTemplateEditorOpen(!templateEditorOpen);
   };
 
   const handleAddTemplateItem = async () => {

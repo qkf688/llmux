@@ -57,12 +57,11 @@ import {
   updateProvider,
   deleteProvider,
   getProviderTemplates,
-  getProviderModels,
   syncAllProviderModels,
   clearProviderAssociations
 } from "@/lib/api";
-import type { Provider, ProviderTemplate, ProviderModel } from "@/lib/api";
-import { parseUpstreamModelsFromConfig, parseCustomModelsFromConfig } from "@/lib/provider-models";
+import type { Provider, ProviderTemplate } from "@/lib/api";
+import { parseUpstreamModelsFromConfig } from "@/lib/provider-models";
 import { toast } from "sonner";
 import { Spinner } from "@/components/ui/spinner";
 import { defaultProviderFormValues, providerFormSchema, type ProviderFormValues } from "./form-schema";
@@ -70,13 +69,11 @@ import { buildConfigFromForm, extractAllModels, parseConfigToForm } from "./util
 import { useProvidersPageStore } from "@/stores/providers";
 import { useProviderModelTesting } from "./hooks/use-provider-model-testing";
 import { useAllModelsDialog } from "./hooks/use-all-models-dialog";
+import { useUpstreamModelsDialog } from "./hooks/use-upstream-models-dialog";
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [providerTemplates, setProviderTemplates] = useState<ProviderTemplate[]>([]);
-  const [providerModels, setProviderModels] = useState<ProviderModel[]>([]);
-  const [filteredProviderModels, setFilteredProviderModels] = useState<ProviderModel[]>([]);
-  const [upstreamModelsCache, setUpstreamModelsCache] = useState<Record<number, ProviderModel[]>>({});
   const [updatingFilter, setUpdatingFilter] = useState<Record<number, boolean>>({});
   const [updatingAssociationTrigger, setUpdatingAssociationTrigger] = useState<Record<number, boolean>>({});
 
@@ -302,40 +299,6 @@ export default function ProvidersPage() {
     return `已触发${actions.join("、")}（后台异步）`;
   };
 
-  const fetchProviderModels = async (providerId: number, source: "upstream" | "all" = "upstream") => {
-    try {
-      setModelsLoading(true);
-      const data = await getProviderModels(providerId, { source });
-      // 确保 data 是数组，防止后端返回 null 导致白屏
-      const models = Array.isArray(data) ? data : [];
-      setProviderModels(models);
-      setFilteredProviderModels(models);
-      if (source === "upstream") {
-        setUpstreamModelsCache((prev) => ({ ...prev, [providerId]: models }));
-      }
-    } catch (err) {
-      console.error("获取提供商模型失败", err);
-      setProviderModels([]);
-      setFilteredProviderModels([]);
-    } finally {
-      setModelsLoading(false);
-    }
-  };
-
-  const openModelsDialog = async (providerId: number) => {
-    setModelsOpen(true);
-    setModelsOpenId(providerId);
-    setSelectedUpstreamModels([]);
-
-    const cached = upstreamModelsCache[providerId];
-    if (cached && cached.length > 0) {
-      setProviderModels(cached);
-      setFilteredProviderModels(cached);
-      return;
-    }
-    await fetchProviderModels(providerId, "upstream");
-  };
-
   const getAllModelsForProvider = (providerId: number): string[] => {
     const provider = providers.find((item) => item.ID === providerId);
     if (!provider) return [];
@@ -372,6 +335,31 @@ export default function ProvidersPage() {
     buildAutoActionsDescription,
   });
 
+  const {
+    providerModels,
+    filteredProviderModels,
+    openModelsDialog,
+    refreshUpstreamModels,
+    handleUpstreamSearchChange,
+    handleAddUpstreamToAll,
+  } = useUpstreamModelsDialog({
+    providers,
+    modelsOpenId,
+    setModelsOpen,
+    setModelsOpenId,
+    modelsLoading,
+    setModelsLoading,
+    addingModels,
+    setAddingModels,
+    selectedUpstreamModels,
+    setSelectedUpstreamModels,
+    allModelsProvider,
+    setAllModelsProvider,
+    setAllModelsList,
+    persistModels,
+    buildAutoActionsDescription,
+  });
+
   const toggleSelectAllModels = () => {
     if (filteredAllModels.length === 0) return;
     if (selectedAllModels.length >= filteredAllModels.length && filteredAllModels.every(m => selectedAllModels.includes(m))) {
@@ -383,38 +371,6 @@ export default function ProvidersPage() {
     }
   };
 
-  const handleAddUpstreamToAll = async () => {
-    if (!modelsOpenId) return;
-    const provider = providers.find((item) => item.ID === modelsOpenId);
-    if (!provider) return;
-
-    const upstream = parseUpstreamModelsFromConfig(provider.Config);
-    const custom = parseCustomModelsFromConfig(provider.Config);
-    const merged = Array.from(new Set([...upstream, ...selectedUpstreamModels]));
-    if (merged.length === upstream.length) {
-      toast.info("没有新的模型需要添加");
-      return;
-    }
-
-    try {
-      setAddingModels(true);
-      const nextConfig = await persistModels(provider, merged, custom);
-      if (allModelsProvider && allModelsProvider.ID === provider.ID) {
-        setAllModelsProvider({ ...provider, Config: nextConfig });
-        setAllModelsList([...merged, ...custom]);
-      }
-      setSelectedUpstreamModels([]);
-      toast.success(`已添加 ${merged.length - upstream.length} 个模型到上游模型`, {
-        description: buildAutoActionsDescription({ associate: true }),
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`添加模型失败: ${message}`);
-      console.error(err);
-    } finally {
-      setAddingModels(false);
-    }
-  };
 
   const handleToggleModelEndpoint = async (provider: Provider) => {
     const newValue = !(provider.ModelEndpoint ?? true);
@@ -472,11 +428,6 @@ export default function ProvidersPage() {
     }
   };
 
-  const refreshUpstreamModels = async () => {
-    if (!modelsOpenId) return;
-    setSelectedUpstreamModels([]);
-    await fetchProviderModels(modelsOpenId, "upstream");
-  };
 
   const {
     copyModelName,
@@ -1860,17 +1811,7 @@ export default function ProvidersPage() {
             <div className="mb-3">
               <Input
                 placeholder="搜索模型 ID"
-                onChange={(e) => {
-                  const searchTerm = e.target.value.toLowerCase();
-                  if (searchTerm === '') {
-                    setFilteredProviderModels(providerModels);
-                  } else {
-                    const filteredModels = providerModels.filter(model =>
-                      model.id.toLowerCase().includes(searchTerm)
-                    );
-                    setFilteredProviderModels(filteredModels);
-                  }
-                }}
+                onChange={(e) => handleUpstreamSearchChange(e.target.value)}
                 className="w-full"
               />
             </div>

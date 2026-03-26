@@ -35,7 +35,7 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportRequestRespon
     setDetailLog(log);
     setDetailError(null);
     setDetailLoading(false);
-  }, [log?.ID]);
+  }, [log]);
 
   useEffect(() => {
     if (!open || !log) {
@@ -67,7 +67,7 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportRequestRespon
     return () => {
       cancelled = true;
     };
-  }, [open, log?.ID]);
+  }, [open, log]);
 
   if (!log || !detailLog) {
     return null;

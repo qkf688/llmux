@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   batchDeleteLogs,
@@ -16,8 +16,38 @@ import {
   type Provider,
 } from "@/lib/api";
 import { toast } from "sonner";
-import { DEFAULT_LOGS_FILTERS, type LogsFilters } from "../types";
+import type { LogsFilters } from "../types";
 import { exportRequestResponse } from "../utils/export-log";
+import {
+  buildLogsFiltersSummary,
+  hasActiveLogsFilters,
+  selectBatchDeleteDialogOpen,
+  selectClearAllDialogOpen,
+  selectClearFilteredDialogOpen,
+  selectClearSelection,
+  selectDeleteDialogOpen,
+  selectDetailDialogOpen,
+  selectLogToDelete,
+  selectLogsFilters,
+  selectLogsPage,
+  selectLogsPageSize,
+  selectOpenDeleteDialog,
+  selectOpenDetailDialog,
+  selectResetLogsTransient,
+  selectSelectedIds,
+  selectSelectedLog,
+  selectSetBatchDeleteDialogOpen,
+  selectSetClearAllDialogOpen,
+  selectSetClearFilteredDialogOpen,
+  selectSetDeleteDialogOpen,
+  selectSetDetailDialogOpen,
+  selectSetFilter,
+  selectSetPage,
+  selectSetPageSize,
+  selectSetSelectedIds,
+  toApiLogsFilters,
+  useLogsPageStore,
+} from "@/stores/logs";
 
 const toErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -27,14 +57,6 @@ const needsLogDetail = (log: ChatLog) =>
   log.ResponseHeaders === undefined &&
   log.ResponseBody === undefined &&
   log.RawResponseBody === undefined;
-
-const toApiFilters = (filters: LogsFilters) => ({
-  providerName: filters.providerName === "all" ? undefined : filters.providerName,
-  name: filters.model === "all" ? undefined : filters.model,
-  status: filters.status === "all" ? undefined : filters.status,
-  style: filters.style === "all" ? undefined : filters.style,
-  userAgent: filters.userAgent === "all" ? undefined : filters.userAgent,
-});
 
 export function useLogsPage() {
   const navigate = useNavigate();
@@ -46,25 +68,47 @@ export function useLogsPage() {
   const [userAgents, setUserAgents] = useState<string[]>([]);
   const [availableStyles, setAvailableStyles] = useState<string[]>([]);
 
-  const [filters, setFilters] = useState<LogsFilters>({ ...DEFAULT_LOGS_FILTERS });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const filters = useLogsPageStore(selectLogsFilters);
+  const page = useLogsPageStore(selectLogsPage);
+  const pageSize = useLogsPageStore(selectLogsPageSize);
+  const setFilter = useLogsPageStore(selectSetFilter);
+  const setPage = useLogsPageStore(selectSetPage);
+  const setPageSize = useLogsPageStore(selectSetPageSize);
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(0);
 
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [selectedLog, setSelectedLog] = useState<ChatLog | null>(null);
+  const selectedIds = useLogsPageStore(selectSelectedIds);
+  const setSelectedIds = useLogsPageStore(selectSetSelectedIds);
+  const clearSelection = useLogsPageStore(selectClearSelection);
 
-  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false);
-  const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false);
-  const [clearFilteredDialogOpen, setClearFilteredDialogOpen] = useState(false);
+  const selectedLog = useLogsPageStore(selectSelectedLog);
+  const detailDialogOpen = useLogsPageStore(selectDetailDialogOpen);
+  const deleteDialogOpen = useLogsPageStore(selectDeleteDialogOpen);
+  const batchDeleteDialogOpen = useLogsPageStore(selectBatchDeleteDialogOpen);
+  const clearAllDialogOpen = useLogsPageStore(selectClearAllDialogOpen);
+  const clearFilteredDialogOpen = useLogsPageStore(selectClearFilteredDialogOpen);
 
-  const [logToDelete, setLogToDelete] = useState<number | null>(null);
+  const openDetailDialog = useLogsPageStore(selectOpenDetailDialog);
+  const setDetailDialogOpen = useLogsPageStore(selectSetDetailDialogOpen);
+
+  const openDeleteDialog = useLogsPageStore(selectOpenDeleteDialog);
+  const setDeleteDialogOpen = useLogsPageStore(selectSetDeleteDialogOpen);
+
+  const setBatchDeleteDialogOpen = useLogsPageStore(selectSetBatchDeleteDialogOpen);
+  const setClearAllDialogOpen = useLogsPageStore(selectSetClearAllDialogOpen);
+  const setClearFilteredDialogOpen = useLogsPageStore(selectSetClearFilteredDialogOpen);
+
+  const logToDelete = useLogsPageStore(selectLogToDelete);
+  const resetTransient = useLogsPageStore(selectResetLogsTransient);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isClearingAll, setIsClearingAll] = useState(false);
   const [isClearingFiltered, setIsClearingFiltered] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      resetTransient();
+    };
+  }, [resetTransient]);
 
   const fetchFilterOptions = useCallback(async () => {
     const [providerResult, modelResult, userAgentResult, templateResult] = await Promise.allSettled([
@@ -105,7 +149,7 @@ export function useLogsPage() {
   const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await getLogs(page, pageSize, toApiFilters(filters));
+      const result = await getLogs(page, pageSize, toApiLogsFilters(filters));
       setLogs(result.data);
       setTotal(result.total);
       setPages(result.pages);
@@ -126,17 +170,8 @@ export function useLogsPage() {
     void fetchLogs();
   }, [fetchLogs]);
 
-  useEffect(() => {
-    setSelectedIds(new Set());
-  }, [page, pageSize, filters]);
-
   const handleFilterChange = (key: keyof LogsFilters, value: string) => {
-    if (filters[key] === value) {
-      return;
-    }
-
-    setFilters((previous) => ({ ...previous, [key]: value }));
-    setPage(1);
+    setFilter(key, value);
   };
 
   const handlePageChange = (newPage: number) => {
@@ -146,10 +181,6 @@ export function useLogsPage() {
   };
 
   const handlePageSizeChange = (size: number) => {
-    if (size === pageSize) {
-      return;
-    }
-    setPage(1);
     setPageSize(size);
   };
 
@@ -162,31 +193,21 @@ export function useLogsPage() {
       setSelectedIds(new Set(logs.map((log) => log.ID)));
       return;
     }
-    setSelectedIds(new Set());
+    clearSelection();
   };
 
   const handleSelectOne = (id: number, checked: boolean) => {
-    setSelectedIds((previous) => {
-      const next = new Set(previous);
-      if (checked) {
-        next.add(id);
-      } else {
-        next.delete(id);
-      }
-      return next;
-    });
-  };
-
-  const openDetailDialog = (log: ChatLog) => {
-    setSelectedLog(log);
-    setDetailDialogOpen(true);
+    const next = new Set(selectedIds);
+    if (checked) {
+      next.add(id);
+    } else {
+      next.delete(id);
+    }
+    setSelectedIds(next);
   };
 
   const handleDetailDialogOpenChange = (open: boolean) => {
     setDetailDialogOpen(open);
-    if (!open) {
-      setSelectedLog(null);
-    }
   };
 
   const canViewChatIO = (log: ChatLog) => log.Status === "success" && Boolean(log.ChatIO);
@@ -211,16 +232,8 @@ export function useLogsPage() {
     })();
   };
 
-  const openDeleteDialog = (id: number) => {
-    setLogToDelete(id);
-    setDeleteDialogOpen(true);
-  };
-
   const handleDeleteDialogOpenChange = (open: boolean) => {
     setDeleteDialogOpen(open);
-    if (!open) {
-      setLogToDelete(null);
-    }
   };
 
   const confirmDeleteLog = async () => {
@@ -233,11 +246,9 @@ export function useLogsPage() {
       await deleteLog(logToDelete);
       toast.success("日志已删除");
 
-      setSelectedIds((previous) => {
-        const next = new Set(previous);
-        next.delete(logToDelete);
-        return next;
-      });
+      const nextSelected = new Set(selectedIds);
+      nextSelected.delete(logToDelete);
+      setSelectedIds(nextSelected);
 
       await fetchLogs();
     } catch (error) {
@@ -246,7 +257,6 @@ export function useLogsPage() {
     } finally {
       setIsDeleting(false);
       setDeleteDialogOpen(false);
-      setLogToDelete(null);
     }
   };
 
@@ -266,7 +276,7 @@ export function useLogsPage() {
       setIsDeleting(true);
       const result = await batchDeleteLogs(Array.from(selectedIds));
       toast.success(`已删除 ${result.deleted} 条日志`);
-      setSelectedIds(new Set());
+      clearSelection();
       await fetchLogs();
     } catch (error) {
       const message = toErrorMessage(error);
@@ -282,7 +292,7 @@ export function useLogsPage() {
       setIsClearingAll(true);
       const result = await clearAllLogs();
       toast.success(`已清空 ${result.deleted} 条日志`);
-      setSelectedIds(new Set());
+      clearSelection();
       await fetchLogs();
     } catch (error) {
       const message = toErrorMessage(error);
@@ -293,36 +303,16 @@ export function useLogsPage() {
     }
   };
 
-  const canClearFiltered = Object.values(filters).some((value) => value !== "all");
+  const canClearFiltered = hasActiveLogsFilters(filters);
 
-  const filtersSummary = useMemo(() => {
-    const parts: string[] = [];
-    if (filters.status !== "all") {
-      const label = filters.status === "success" ? "成功" : filters.status === "error" ? "错误" : filters.status;
-      parts.push(`状态=${label}`);
-    }
-    if (filters.style !== "all") {
-      parts.push(`类型=${filters.style}`);
-    }
-    if (filters.model !== "all") {
-      parts.push(`模型=${filters.model}`);
-    }
-    if (filters.providerName !== "all") {
-      parts.push(`提供商=${filters.providerName}`);
-    }
-    if (filters.userAgent !== "all") {
-      const ua = filters.userAgent.length > 60 ? `${filters.userAgent.slice(0, 60)}...` : filters.userAgent;
-      parts.push(`UA=${ua}`);
-    }
-    return parts.join("，");
-  }, [filters.model, filters.providerName, filters.status, filters.style, filters.userAgent]);
+  const filtersSummary = buildLogsFiltersSummary(filters);
 
   const confirmClearFilteredLogs = async () => {
     try {
       setIsClearingFiltered(true);
-      const result = await clearFilteredLogs(toApiFilters(filters));
+      const result = await clearFilteredLogs(toApiLogsFilters(filters));
       toast.success(`已清空筛选结果 ${result.deleted} 条日志`);
-      setSelectedIds(new Set());
+      clearSelection();
 
       if (page !== 1) {
         setPage(1);

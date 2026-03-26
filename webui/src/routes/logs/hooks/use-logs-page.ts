@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   batchDeleteLogs,
@@ -12,8 +12,6 @@ import {
   getProviders,
   getUserAgents,
   type ChatLog,
-  type Model,
-  type Provider,
 } from "@/lib/api";
 import { toast } from "sonner";
 import type { LogsFilters } from "../types";
@@ -28,9 +26,20 @@ import {
   selectDeleteDialogOpen,
   selectDetailDialogOpen,
   selectLogToDelete,
+  selectLogs,
+  selectLogsAvailableStyles,
   selectLogsFilters,
+  selectLogsIsClearingAll,
+  selectLogsIsClearingFiltered,
+  selectLogsIsDeleting,
+  selectLogsLoading,
   selectLogsPage,
+  selectLogsPages,
   selectLogsPageSize,
+  selectLogsProviders,
+  selectLogsModels,
+  selectLogsTotal,
+  selectLogsUserAgents,
   selectOpenDeleteDialog,
   selectOpenDetailDialog,
   selectResetLogsTransient,
@@ -42,6 +51,17 @@ import {
   selectSetDeleteDialogOpen,
   selectSetDetailDialogOpen,
   selectSetFilter,
+  selectSetLogs,
+  selectSetLogsAvailableStyles,
+  selectSetLogsIsClearingAll,
+  selectSetLogsIsClearingFiltered,
+  selectSetLogsIsDeleting,
+  selectSetLogsLoading,
+  selectSetLogsModels,
+  selectSetLogsPages,
+  selectSetLogsProviders,
+  selectSetLogsTotal,
+  selectSetLogsUserAgents,
   selectSetPage,
   selectSetPageSize,
   selectSetSelectedIds,
@@ -61,21 +81,29 @@ const needsLogDetail = (log: ChatLog) =>
 export function useLogsPage() {
   const navigate = useNavigate();
 
-  const [loading, setLoading] = useState(true);
-  const [logs, setLogs] = useState<ChatLog[]>([]);
-  const [providers, setProviders] = useState<Provider[]>([]);
-  const [models, setModels] = useState<Model[]>([]);
-  const [userAgents, setUserAgents] = useState<string[]>([]);
-  const [availableStyles, setAvailableStyles] = useState<string[]>([]);
+  const loading = useLogsPageStore(selectLogsLoading);
+  const logs = useLogsPageStore(selectLogs);
+  const providers = useLogsPageStore(selectLogsProviders);
+  const models = useLogsPageStore(selectLogsModels);
+  const userAgents = useLogsPageStore(selectLogsUserAgents);
+  const availableStyles = useLogsPageStore(selectLogsAvailableStyles);
+  const total = useLogsPageStore(selectLogsTotal);
+  const pages = useLogsPageStore(selectLogsPages);
 
   const filters = useLogsPageStore(selectLogsFilters);
   const page = useLogsPageStore(selectLogsPage);
   const pageSize = useLogsPageStore(selectLogsPageSize);
+  const setLoading = useLogsPageStore(selectSetLogsLoading);
+  const setLogs = useLogsPageStore(selectSetLogs);
+  const setProviders = useLogsPageStore(selectSetLogsProviders);
+  const setModels = useLogsPageStore(selectSetLogsModels);
+  const setUserAgents = useLogsPageStore(selectSetLogsUserAgents);
+  const setAvailableStyles = useLogsPageStore(selectSetLogsAvailableStyles);
   const setFilter = useLogsPageStore(selectSetFilter);
   const setPage = useLogsPageStore(selectSetPage);
   const setPageSize = useLogsPageStore(selectSetPageSize);
-  const [total, setTotal] = useState(0);
-  const [pages, setPages] = useState(0);
+  const setTotal = useLogsPageStore(selectSetLogsTotal);
+  const setPages = useLogsPageStore(selectSetLogsPages);
 
   const selectedIds = useLogsPageStore(selectSelectedIds);
   const setSelectedIds = useLogsPageStore(selectSetSelectedIds);
@@ -100,9 +128,12 @@ export function useLogsPage() {
 
   const logToDelete = useLogsPageStore(selectLogToDelete);
   const resetTransient = useLogsPageStore(selectResetLogsTransient);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [isClearingAll, setIsClearingAll] = useState(false);
-  const [isClearingFiltered, setIsClearingFiltered] = useState(false);
+  const isDeleting = useLogsPageStore(selectLogsIsDeleting);
+  const isClearingAll = useLogsPageStore(selectLogsIsClearingAll);
+  const isClearingFiltered = useLogsPageStore(selectLogsIsClearingFiltered);
+  const setIsDeleting = useLogsPageStore(selectSetLogsIsDeleting);
+  const setIsClearingAll = useLogsPageStore(selectSetLogsIsClearingAll);
+  const setIsClearingFiltered = useLogsPageStore(selectSetLogsIsClearingFiltered);
 
   useEffect(() => {
     return () => {
@@ -144,7 +175,7 @@ export function useLogsPage() {
     } else {
       console.error("Error fetching provider templates:", templateResult.reason);
     }
-  }, []);
+  }, [setAvailableStyles, setModels, setProviders, setUserAgents]);
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
@@ -160,7 +191,7 @@ export function useLogsPage() {
     } finally {
       setLoading(false);
     }
-  }, [filters, page, pageSize]);
+  }, [filters, page, pageSize, setLoading, setLogs, setPages, setTotal]);
 
   useEffect(() => {
     void fetchFilterOptions();

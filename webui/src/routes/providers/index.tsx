@@ -58,21 +58,18 @@ import {
   deleteProvider,
   getProviderTemplates,
   getProviderModels,
-  syncProviderModels,
   syncAllProviderModels,
   clearProviderAssociations
 } from "@/lib/api";
 import type { Provider, ProviderTemplate, ProviderModel } from "@/lib/api";
-import { buildConfigWithModels, parseUpstreamModelsFromConfig, parseCustomModelsFromConfig } from "@/lib/provider-models";
+import { parseUpstreamModelsFromConfig, parseCustomModelsFromConfig } from "@/lib/provider-models";
 import { toast } from "sonner";
 import { Spinner } from "@/components/ui/spinner";
 import { defaultProviderFormValues, providerFormSchema, type ProviderFormValues } from "./form-schema";
-import {
-  type UpstreamStatus
-} from "./types";
-import { buildConfigFromForm, extractAllModels, parseConfigToForm, parseCustomModelsInput } from "./utils/config";
+import { buildConfigFromForm, extractAllModels, parseConfigToForm } from "./utils/config";
 import { useProvidersPageStore } from "@/stores/providers";
 import { useProviderModelTesting } from "./hooks/use-provider-model-testing";
+import { useAllModelsDialog } from "./hooks/use-all-models-dialog";
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -80,9 +77,6 @@ export default function ProvidersPage() {
   const [providerModels, setProviderModels] = useState<ProviderModel[]>([]);
   const [filteredProviderModels, setFilteredProviderModels] = useState<ProviderModel[]>([]);
   const [upstreamModelsCache, setUpstreamModelsCache] = useState<Record<number, ProviderModel[]>>({});
-  const [allModelsList, setAllModelsList] = useState<string[]>([]);
-  const [upstreamModelsList, setUpstreamModelsList] = useState<string[]>([]);
-  const [upstreamStatus, setUpstreamStatus] = useState<UpstreamStatus>("disabled");
   const [updatingFilter, setUpdatingFilter] = useState<Record<number, boolean>>({});
   const [updatingAssociationTrigger, setUpdatingAssociationTrigger] = useState<Record<number, boolean>>({});
 
@@ -348,6 +342,36 @@ export default function ProvidersPage() {
     return extractAllModels(provider.Config);
   };
 
+  const {
+    allModelsList,
+    filteredAllModels,
+    setAllModelsList,
+    upstreamModelsList,
+    upstreamStatus,
+    openAllModelsDialog,
+    persistModels,
+    handleAddCustomModels,
+    handleRemoveModelFromAll,
+    handleRemoveSelectedModels,
+    handleSyncUpstreamModels,
+  } = useAllModelsDialog({
+    setProviders,
+    fetchProviders,
+    allModelsProvider,
+    setAllModelsProvider,
+    setAllModelsOpen,
+    selectedAllModels,
+    setSelectedAllModels,
+    customModelInput,
+    setCustomModelInput,
+    allModelsSearchQuery,
+    setAllModelsSearchQuery,
+    setAllModelsTestResults,
+    setAddingModels,
+    setSyncingModels,
+    buildAutoActionsDescription,
+  });
+
   const toggleSelectAllModels = () => {
     if (filteredAllModels.length === 0) return;
     if (selectedAllModels.length >= filteredAllModels.length && filteredAllModels.every(m => selectedAllModels.includes(m))) {
@@ -357,21 +381,6 @@ export default function ProvidersPage() {
       // 否则选中所有过滤后的模型
       setSelectedAllModels(Array.from(new Set([...selectedAllModels, ...filteredAllModels])));
     }
-  };
-
-  const persistModels = async (provider: Provider, upstreamModels: string[], customModels: string[]) => {
-    const nextConfig = buildConfigWithModels(provider.Config, upstreamModels, customModels);
-    await updateProvider(provider.ID, {
-      name: provider.Name,
-      type: provider.Type,
-      config: nextConfig,
-      console: provider.Console || "",
-      proxy: provider.Proxy || ""
-    });
-    setProviders((prev) =>
-      prev.map((item) => item.ID === provider.ID ? { ...item, Config: nextConfig } : item)
-    );
-    return nextConfig;
   };
 
   const handleAddUpstreamToAll = async () => {
@@ -405,79 +414,6 @@ export default function ProvidersPage() {
     } finally {
       setAddingModels(false);
     }
-  };
-
-  const handleAddCustomModels = async () => {
-    if (!allModelsProvider) return;
-    const additions = parseCustomModelsInput(customModelInput);
-    if (additions.length === 0) {
-      toast.error("请先输入要添加的模型名称");
-      return;
-    }
-    const upstream = parseUpstreamModelsFromConfig(allModelsProvider.Config);
-    const custom = parseCustomModelsFromConfig(allModelsProvider.Config);
-    const merged = Array.from(new Set([...custom, ...additions]));
-    if (merged.length === custom.length) {
-      toast.info("没有新的模型需要添加");
-      return;
-    }
-    try {
-      setAddingModels(true);
-      const nextConfig = await persistModels(allModelsProvider, upstream, merged);
-      const updatedProvider = { ...allModelsProvider, Config: nextConfig };
-      setAllModelsProvider(updatedProvider);
-      setAllModelsList([...upstream, ...merged]);
-      setCustomModelInput("");
-      toast.success(`已添加 ${merged.length - custom.length} 个自定义模型`, {
-        description: buildAutoActionsDescription({ associate: true }),
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`添加自定义模型失败: ${message}`);
-      console.error(err);
-    } finally {
-      setAddingModels(false);
-    }
-  };
-
-  const removeModelsFromAll = async (modelsToRemove: string[]) => {
-    if (!allModelsProvider || modelsToRemove.length === 0) return;
-    const upstream = parseUpstreamModelsFromConfig(allModelsProvider.Config);
-    const custom = parseCustomModelsFromConfig(allModelsProvider.Config);
-    const removalSet = new Set(modelsToRemove.map((item) => item.toLowerCase()));
-    const nextUpstream = upstream.filter((item) => !removalSet.has(item.toLowerCase()));
-    const nextCustom = custom.filter((item) => !removalSet.has(item.toLowerCase()));
-    const removedCount = (upstream.length - nextUpstream.length) + (custom.length - nextCustom.length);
-    if (removedCount === 0) {
-      toast.info("没有可删除的模型");
-      return;
-    }
-
-    try {
-      setAddingModels(true);
-      const nextConfig = await persistModels(allModelsProvider, nextUpstream, nextCustom);
-      const updatedProvider = { ...allModelsProvider, Config: nextConfig };
-      setAllModelsProvider(updatedProvider);
-      setAllModelsList([...nextUpstream, ...nextCustom]);
-      setSelectedAllModels([]);
-      toast.success(`已移除 ${removedCount} 个模型`, {
-        description: buildAutoActionsDescription({ clean: true }),
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`移除模型失败: ${message}`);
-      console.error(err);
-    } finally {
-      setAddingModels(false);
-    }
-  };
-
-  const handleRemoveModelFromAll = async (modelId: string) => {
-    await removeModelsFromAll([modelId]);
-  };
-
-  const handleRemoveSelectedModels = async () => {
-    await removeModelsFromAll(selectedAllModels);
   };
 
   const handleToggleModelEndpoint = async (provider: Provider) => {
@@ -542,10 +478,6 @@ export default function ProvidersPage() {
     await fetchProviderModels(modelsOpenId, "upstream");
   };
 
-  const filteredAllModels = allModelsSearchQuery.trim() === ""
-    ? allModelsList
-    : allModelsList.filter((model) => model.toLowerCase().includes(allModelsSearchQuery.toLowerCase()));
-
   const {
     copyModelName,
     handleTestAllModel,
@@ -578,89 +510,6 @@ export default function ProvidersPage() {
     setUpstreamBatchTesting,
     setUpstreamBatchTestProgress,
   });
-
-  const openAllModelsDialog = async (provider: Provider) => {
-    const allModels = extractAllModels(provider.Config);
-    setAllModelsProvider(provider);
-    setAllModelsList(allModels);
-    setSelectedAllModels([]);
-    setCustomModelInput("");
-    setAllModelsSearchQuery("");
-    setAllModelsTestResults({});
-    setAllModelsOpen(true);
-    setUpstreamModelsList([]);
-    setUpstreamStatus('disabled');
-  };
-
-  const handleSyncUpstreamModels = async () => {
-    if (!allModelsProvider) return;
-
-    try {
-      setSyncingModels(true);
-      setUpstreamStatus('loading');
-      const result = await syncProviderModels(allModelsProvider.ID);
-
-      if ('message' in result) {
-        toast.info(result.message);
-        // 重新获取上游模型状态
-        try {
-          const upstreamModels = await getProviderModels(allModelsProvider.ID, { source: "upstream" });
-          const modelIds = upstreamModels.map(m => m.id);
-          setUpstreamModelsList(modelIds);
-          setUpstreamStatus(modelIds.length > 0 ? 'success' : 'empty');
-        } catch (err) {
-          console.error("获取上游模型失败", err);
-          setUpstreamModelsList([]);
-          setUpstreamStatus('error');
-        }
-        return;
-      }
-
-      const { AddedCount, RemovedCount } = result;
-
-      if (AddedCount > 0 || RemovedCount > 0) {
-        toast.success(`同步完成：新增 ${AddedCount} 个，删除 ${RemovedCount} 个模型`, {
-          description: buildAutoActionsDescription({
-            associate: AddedCount > 0,
-            clean: RemovedCount > 0,
-          }),
-        });
-      } else {
-        toast.info("没有检测到模型变化");
-      }
-
-      // 刷新提供商列表
-      await fetchProviders();
-
-      // 更新当前弹窗的模型列表
-      const updatedProviders = await getProviders({});
-      const updatedProvider = updatedProviders.find(p => p.ID === allModelsProvider.ID);
-      if (updatedProvider) {
-        const updatedModels = extractAllModels(updatedProvider.Config);
-        setAllModelsList(updatedModels);
-        setAllModelsProvider(updatedProvider);
-
-        // 重新获取上游模型列表
-        try {
-          const upstreamModels = await getProviderModels(updatedProvider.ID, { source: "upstream" });
-          const modelIds = upstreamModels.map(m => m.id);
-          setUpstreamModelsList(modelIds);
-          setUpstreamStatus(modelIds.length > 0 ? 'success' : 'empty');
-        } catch (err) {
-          console.error("获取上游模型失败", err);
-          setUpstreamModelsList([]);
-          setUpstreamStatus('error');
-        }
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`同步失败: ${message}`);
-      console.error(err);
-      setUpstreamStatus('error');
-    } finally {
-      setSyncingModels(false);
-    }
-  };
 
   const handleSyncAllProviders = async () => {
     try {

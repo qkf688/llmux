@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import {
@@ -16,7 +16,7 @@ import {
   updateVirtualModel,
   updateVirtualModelMapping,
 } from "@/lib/api";
-import type { Model, Provider, VirtualModel, VirtualModelMapping } from "@/lib/api";
+import type { VirtualModel, VirtualModelMapping } from "@/lib/api";
 import {
   defaultMappingFormValues,
   defaultVirtualModelFormValues,
@@ -26,6 +26,7 @@ import {
   type VirtualModelFormValues,
 } from "../schemas/forms";
 import type { VirtualModelStrategy } from "../types";
+import { DEFAULT_VIRTUAL_MODELS_BATCH, useVirtualModelsPageStore } from "@/stores/virtual-models";
 
 const extractErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -37,33 +38,55 @@ const toVirtualModelStrategy = (strategy: string): VirtualModelStrategy => {
 };
 
 export function useVirtualModelsPage() {
-  const [loading, setLoading] = useState(true);
-  const [virtualModels, setVirtualModels] = useState<VirtualModel[]>([]);
-  const [realModels, setRealModels] = useState<Model[]>([]);
-  const [providers, setProviders] = useState<Provider[]>([]);
-  const [blacklistedProviders, setBlacklistedProviders] = useState<Provider[]>([]);
-
-  const [modelDialogOpen, setModelDialogOpen] = useState(false);
-  const [editingModel, setEditingModel] = useState<VirtualModel | null>(null);
-  const [modelToDeleteId, setModelToDeleteId] = useState<number | null>(null);
-
-  const [mappingsDialogOpen, setMappingsDialogOpen] = useState(false);
-  const [currentVirtualModel, setCurrentVirtualModel] = useState<VirtualModel | null>(null);
-  const [mappings, setMappings] = useState<VirtualModelMapping[]>([]);
-  const [mappingFormDialogOpen, setMappingFormDialogOpen] = useState(false);
-  const [editingMapping, setEditingMapping] = useState<VirtualModelMapping | null>(null);
-
-  const [mappingBatchDialogOpen, setMappingBatchDialogOpen] = useState(false);
-  const [selectedModelIds, setSelectedModelIds] = useState<number[]>([]);
-  const [batchPriority, setBatchPriority] = useState(defaultMappingFormValues.priority);
-  const [batchWeight, setBatchWeight] = useState(defaultMappingFormValues.weight);
-  const [batchEnabled, setBatchEnabled] = useState(defaultMappingFormValues.enabled);
-  const [modelSearchQuery, setModelSearchQuery] = useState("");
-
-  const [blacklistDialogOpen, setBlacklistDialogOpen] = useState(false);
-  const [providerSelectorDialogOpen, setProviderSelectorDialogOpen] = useState(false);
-  const [selectedProviderIds, setSelectedProviderIds] = useState<number[]>([]);
-  const [providerSearchQuery, setProviderSearchQuery] = useState("");
+  const {
+    loading,
+    virtualModels,
+    realModels,
+    providers,
+    blacklistedProviders,
+    modelDialogOpen,
+    editingModel,
+    modelToDeleteId,
+    mappingsDialogOpen,
+    currentVirtualModel,
+    mappings,
+    mappingFormDialogOpen,
+    editingMapping,
+    mappingBatchDialogOpen,
+    selectedModelIds,
+    batchPriority,
+    batchWeight,
+    batchEnabled,
+    modelSearchQuery,
+    blacklistDialogOpen,
+    providerSelectorDialogOpen,
+    selectedProviderIds,
+    providerSearchQuery,
+    setLoading,
+    setVirtualModels,
+    setRealModels,
+    setProviders,
+    setBlacklistedProviders,
+    setMappings,
+    setModelDialogOpen,
+    setEditingModel,
+    setModelToDeleteId,
+    setMappingsDialogOpen,
+    setCurrentVirtualModel,
+    setMappingFormDialogOpen,
+    setEditingMapping,
+    setMappingBatchDialogOpen,
+    setSelectedModelIds,
+    setBatchPriority,
+    setBatchWeight,
+    setBatchEnabled,
+    setModelSearchQuery,
+    setBlacklistDialogOpen,
+    setProviderSelectorDialogOpen,
+    setSelectedProviderIds,
+    setProviderSearchQuery,
+    resetTransient,
+  } = useVirtualModelsPageStore((state) => state);
 
   const virtualModelForm = useForm<VirtualModelFormValues>({
     resolver: zodResolver(virtualModelFormSchema),
@@ -75,17 +98,7 @@ export function useVirtualModelsPage() {
     defaultValues: { ...defaultMappingFormValues },
   });
 
-  useEffect(() => {
-    void fetchInitialData();
-  }, []);
-
-  const refreshProvidersState = async () => {
-    const latestProviders = await getProviders();
-    setProviders(latestProviders);
-    setBlacklistedProviders(latestProviders.filter((provider) => provider.blacklisted));
-  };
-
-  const fetchInitialData = async () => {
+  const fetchInitialData = useCallback(async () => {
     try {
       setLoading(true);
       const [virtualModelData, realModelData, providerData] = await Promise.all([
@@ -104,6 +117,19 @@ export function useVirtualModelsPage() {
     } finally {
       setLoading(false);
     }
+  }, [setBlacklistedProviders, setLoading, setProviders, setRealModels, setVirtualModels]);
+
+  useEffect(() => {
+    void fetchInitialData();
+    return () => {
+      resetTransient();
+    };
+  }, [fetchInitialData, resetTransient]);
+
+  const refreshProvidersState = async () => {
+    const latestProviders = await getProviders();
+    setProviders(latestProviders);
+    setBlacklistedProviders(latestProviders.filter((provider) => provider.blacklisted));
   };
 
   const refreshMappings = async (virtualModelId: number) => {
@@ -277,9 +303,9 @@ export function useVirtualModelsPage() {
 
   const openBatchMappingDialog = () => {
     setSelectedModelIds([]);
-    setBatchPriority(defaultMappingFormValues.priority);
-    setBatchWeight(defaultMappingFormValues.weight);
-    setBatchEnabled(defaultMappingFormValues.enabled);
+    setBatchPriority(DEFAULT_VIRTUAL_MODELS_BATCH.priority);
+    setBatchWeight(DEFAULT_VIRTUAL_MODELS_BATCH.weight);
+    setBatchEnabled(DEFAULT_VIRTUAL_MODELS_BATCH.enabled);
     setModelSearchQuery("");
     setMappingBatchDialogOpen(true);
   };

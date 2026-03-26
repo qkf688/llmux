@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   clearModelSyncLogs,
   clearModelSyncErrorLogs,
@@ -9,13 +9,11 @@ import {
   getProviders,
   syncAllProviderModels,
   updateProvider,
-  type AddedModel,
   type ModelSyncLog,
-  type ModelSyncStats,
-  type Provider,
 } from "@/lib/api";
 import { toast } from "sonner";
 import type { ModelSyncTab } from "../types";
+import { useModelSyncLogsPageStore } from "@/stores/model-sync-logs";
 
 const LOG_PAGE_SIZE = 20;
 
@@ -24,30 +22,51 @@ const toErrorMessage = (error: unknown) => (error instanceof Error ? error.messa
 export function useModelSyncLogsPage() {
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [activeTab, setActiveTab] = useState<ModelSyncTab>("logs");
-  const [logs, setLogs] = useState<ModelSyncLog[]>([]);
-  const [recentModels, setRecentModels] = useState<AddedModel[]>([]);
-  const [recentErrors, setRecentErrors] = useState<ModelSyncLog[]>([]);
-  const [syncTime, setSyncTime] = useState("");
-  const [stats, setStats] = useState<ModelSyncStats | null>(null);
-  const [providersById, setProvidersById] = useState<Record<number, Provider | undefined>>({});
-
-  const [loading, setLoading] = useState(true);
-  const [recentLoading, setRecentLoading] = useState(false);
-  const [errorsLoading, setErrorsLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [statsLoading, setStatsLoading] = useState(true);
-
-  const [selectedLogs, setSelectedLogs] = useState<Set<number>>(new Set());
-  const [selectedErrorProviders, setSelectedErrorProviders] = useState<Set<number>>(new Set());
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [showUnchanged, setShowUnchanged] = useState(false);
-  const [togglingProviderIds, setTogglingProviderIds] = useState<Set<number>>(new Set());
-
-  const [detailLog, setDetailLog] = useState<ModelSyncLog | null>(null);
-  const [clearDialogOpen, setClearDialogOpen] = useState(false);
-  const [clearingErrors, setClearingErrors] = useState(false);
+  const {
+    activeTab,
+    logs,
+    recentModels,
+    recentErrors,
+    syncTime,
+    stats,
+    providersById,
+    loading,
+    recentLoading,
+    errorsLoading,
+    syncing,
+    statsLoading,
+    selectedLogs,
+    selectedErrorProviders,
+    page,
+    totalPages,
+    showUnchanged,
+    togglingProviderIds,
+    detailLog,
+    clearDialogOpen,
+    clearingErrors,
+    setActiveTab,
+    setLogs,
+    setRecentModels,
+    setRecentErrors,
+    setSyncTime,
+    setStats,
+    setProvidersById,
+    setLoading,
+    setRecentLoading,
+    setErrorsLoading,
+    setSyncing,
+    setStatsLoading,
+    setSelectedLogs,
+    setSelectedErrorProviders,
+    setPage,
+    setTotalPages,
+    setShowUnchanged,
+    setTogglingProviderIds,
+    setDetailLog,
+    setClearDialogOpen,
+    setClearingErrors,
+    resetTransient,
+  } = useModelSyncLogsPageStore((state) => state);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -59,7 +78,7 @@ export function useModelSyncLogsPage() {
     } finally {
       setStatsLoading(false);
     }
-  }, []);
+  }, [setStats, setStatsLoading]);
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -76,7 +95,7 @@ export function useModelSyncLogsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, showUnchanged]);
+  }, [page, setLoading, setLogs, setTotalPages, showUnchanged]);
 
   const fetchRecentModels = useCallback(async () => {
     try {
@@ -89,7 +108,7 @@ export function useModelSyncLogsPage() {
     } finally {
       setRecentLoading(false);
     }
-  }, []);
+  }, [setRecentLoading, setRecentModels, setSyncTime]);
 
   const fetchRecentErrors = useCallback(async () => {
     try {
@@ -106,7 +125,7 @@ export function useModelSyncLogsPage() {
     } finally {
       setErrorsLoading(false);
     }
-  }, []);
+  }, [setErrorsLoading, setProvidersById, setRecentErrors]);
 
   useEffect(() => {
     void fetchStats();
@@ -136,19 +155,20 @@ export function useModelSyncLogsPage() {
         clearTimeout(refreshTimerRef.current);
         refreshTimerRef.current = null;
       }
+      resetTransient();
     },
-    []
+    [resetTransient]
   );
 
   useEffect(() => {
     setSelectedLogs(new Set());
-  }, [activeTab, page, showUnchanged]);
+  }, [activeTab, page, setSelectedLogs, showUnchanged]);
 
   useEffect(() => {
     if (activeTab !== "errors") {
       setSelectedErrorProviders(new Set());
     }
-  }, [activeTab]);
+  }, [activeTab, setSelectedErrorProviders]);
 
   const selectedCount = selectedLogs.size;
   const allSelected = logs.length > 0 && logs.every((log) => selectedLogs.has(log.ID));
@@ -182,7 +202,7 @@ export function useModelSyncLogsPage() {
 
       return next.size === previous.size ? previous : next;
     });
-  }, [recentErrorProviderIds, selectedErrorProviders.size]);
+  }, [recentErrorProviderIds, selectedErrorProviders.size, setSelectedErrorProviders]);
 
   const handleSyncNow = async () => {
     try {
@@ -328,7 +348,6 @@ export function useModelSyncLogsPage() {
 
   const handleShowUnchangedChange = (checked: boolean) => {
     setShowUnchanged(checked);
-    setPage(1);
   };
 
   const openDetailLog = (log: ModelSyncLog) => {
@@ -386,7 +405,7 @@ export function useModelSyncLogsPage() {
         });
       }
     },
-    [fetchStats]
+    [fetchStats, setProvidersById, setTogglingProviderIds]
   );
 
   const isLogSelected = useCallback((logId: number) => selectedLogs.has(logId), [selectedLogs]);

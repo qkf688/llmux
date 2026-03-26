@@ -70,6 +70,7 @@ import { useProvidersPageStore } from "@/stores/providers";
 import { useProviderModelTesting } from "./hooks/use-provider-model-testing";
 import { useAllModelsDialog } from "./hooks/use-all-models-dialog";
 import { useUpstreamModelsDialog } from "./hooks/use-upstream-models-dialog";
+import { useProviderDialog } from "./hooks/use-provider-dialog";
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -583,33 +584,12 @@ export default function ProvidersPage() {
     setClearAssociationId(id);
   };
 
-  const openEditDialog = (provider: Provider) => {
-    setEditingProvider(provider);
-    setShowApiKey(false);
-    const configFields = parseConfigToForm(provider.Config);
-    form.reset({
-      name: provider.Name,
-      type: provider.Type,
-      base_url: configFields.base_url,
-      api_key: configFields.api_key,
-      beta: configFields.beta || "",
-      version: configFields.version || "",
-      auth_type: configFields.auth_type || "x-api-key",
-      console: provider.Console || "",
-      custom_models: configFields.custom_models.join("\n"),
-      proxy: provider.Proxy || "",
-      model_endpoint: provider.ModelEndpoint ?? true,
-      model_filter_enabled: provider.ModelFilterEnabled ?? false,
-    });
-    setOpen(true);
-  };
-
-  const openCreateDialog = () => {
-    setEditingProvider(null);
-    setShowApiKey(false);
-    form.reset({ ...defaultProviderFormValues });
-    setOpen(true);
-  };
+  const { openEditDialog, openCreateDialog } = useProviderDialog({
+    form,
+    setOpen,
+    setEditingProvider,
+    setShowApiKey,
+  });
 
   const openDeleteDialog = (id: number) => {
     setDeleteId(id);

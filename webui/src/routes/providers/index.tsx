@@ -55,10 +55,8 @@ import {
   getSettings,
   createProvider,
   updateProvider,
-  deleteProvider,
   getProviderTemplates,
   syncAllProviderModels,
-  clearProviderAssociations
 } from "@/lib/api";
 import type { Provider, ProviderTemplate } from "@/lib/api";
 import { parseUpstreamModelsFromConfig } from "@/lib/provider-models";
@@ -71,6 +69,7 @@ import { useProviderModelTesting } from "./hooks/use-provider-model-testing";
 import { useAllModelsDialog } from "./hooks/use-all-models-dialog";
 import { useUpstreamModelsDialog } from "./hooks/use-upstream-models-dialog";
 import { useProviderDialog } from "./hooks/use-provider-dialog";
+import { useProviderDangerActions } from "./hooks/use-provider-danger-actions";
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -540,50 +539,6 @@ export default function ProvidersPage() {
     }
   };
 
-  const handleDelete = async () => {
-    if (!deleteId) return;
-    try {
-      const targetProvider = providers.find((provider) => provider.ID === deleteId);
-      await deleteProvider(deleteId);
-      setDeleteId(null);
-      fetchProviders();
-      const message = `提供商 ${targetProvider?.Name ?? deleteId} 删除成功`;
-      if (autoCleanOnDeleteEnabled) {
-        toast.success(message, { description: "已触发自动清理无效关联（后台异步）" });
-      } else {
-        toast.success(message);
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`删除提供商失败: ${message}`);
-      console.error(err);
-    }
-  };
-
-  const handleClearAssociations = async () => {
-    if (!clearAssociationId) return;
-    try {
-      setClearingAssociation(true);
-      const targetProvider = providers.find((provider) => provider.ID === clearAssociationId);
-      const result = await clearProviderAssociations(clearAssociationId);
-      setClearAssociationId(null);
-      toast.success(`提供商 ${targetProvider?.Name ?? clearAssociationId} 的关联已清除`, {
-        description: `共清除了 ${result.deleted_count} 个模型关联`
-      });
-      // 可以选择刷新相关数据
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`清除关联失败: ${message}`);
-      console.error(err);
-    } finally {
-      setClearingAssociation(false);
-    }
-  };
-
-  const openClearAssociationsDialog = (id: number) => {
-    setClearAssociationId(id);
-  };
-
   const { openEditDialog, openCreateDialog } = useProviderDialog({
     form,
     setOpen,
@@ -591,9 +546,24 @@ export default function ProvidersPage() {
     setShowApiKey,
   });
 
-  const openDeleteDialog = (id: number) => {
-    setDeleteId(id);
-  };
+  const {
+    openDeleteDialog,
+    cancelDeleteDialog,
+    handleDelete,
+    openClearAssociationsDialog,
+    cancelClearAssociationsDialog,
+    handleClearAssociations,
+  } = useProviderDangerActions({
+    providers,
+    fetchProviders,
+    deleteId,
+    setDeleteId,
+    clearAssociationId,
+    setClearAssociationId,
+    clearingAssociation,
+    setClearingAssociation,
+    autoCleanOnDeleteEnabled,
+  });
 
   const hasFilter = nameFilter.trim() !== "" || typeFilter !== "all";
 
@@ -771,7 +741,7 @@ export default function ProvidersPage() {
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
-                                  <AlertDialogCancel onClick={() => setClearAssociationId(null)}>取消</AlertDialogCancel>
+                                  <AlertDialogCancel onClick={cancelClearAssociationsDialog}>取消</AlertDialogCancel>
                                   <AlertDialogAction 
                                     onClick={handleClearAssociations} 
                                     disabled={clearingAssociation}
@@ -796,7 +766,7 @@ export default function ProvidersPage() {
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
-                                  <AlertDialogCancel onClick={() => setDeleteId(null)}>取消</AlertDialogCancel>
+                                  <AlertDialogCancel onClick={cancelDeleteDialog}>取消</AlertDialogCancel>
                                   <AlertDialogAction onClick={handleDelete}>确认删除</AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
@@ -895,7 +865,7 @@ export default function ProvidersPage() {
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                              <AlertDialogCancel onClick={() => setClearAssociationId(null)}>取消</AlertDialogCancel>
+                              <AlertDialogCancel onClick={cancelClearAssociationsDialog}>取消</AlertDialogCancel>
                               <AlertDialogAction 
                                 onClick={handleClearAssociations} 
                                 disabled={clearingAssociation}
@@ -920,7 +890,7 @@ export default function ProvidersPage() {
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                              <AlertDialogCancel onClick={() => setDeleteId(null)}>取消</AlertDialogCancel>
+                              <AlertDialogCancel onClick={cancelDeleteDialog}>取消</AlertDialogCancel>
                               <AlertDialogAction onClick={handleDelete}>确认删除</AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>

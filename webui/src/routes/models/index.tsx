@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import {
   updateModel,
 } from "@/lib/api";
 import type { Model, Provider } from "@/lib/api";
+import { useModelsPageStore } from "@/stores/models";
 import { BatchSettingsDialog } from "./components/dialogs/batch-settings-dialog";
 import { ModelDeleteDialog } from "./components/dialogs/model-delete-dialog";
 import { ModelFormDialog } from "./components/dialogs/model-form-dialog";
@@ -42,27 +43,77 @@ import { calculateSelectedRanges, collectSelectedModels, filterModelsByName } fr
 export default function ModelsPage() {
   const navigate = useNavigate();
   const [models, setModels] = useState<Model[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [formDialogOpen, setFormDialogOpen] = useState(false);
-  const [editingModel, setEditingModel] = useState<Model | null>(null);
-  const [deletingModel, setDeletingModel] = useState<Model | null>(null);
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false);
-  const [batchDeleting, setBatchDeleting] = useState(false);
-  const [batchSettingsDialogOpen, setBatchSettingsDialogOpen] = useState(false);
-  const [batchUpdating, setBatchUpdating] = useState(false);
   const [togglingIOLog, setTogglingIOLog] = useState<Record<number, boolean>>({});
   const [togglingAutoAssociate, setTogglingAutoAssociate] = useState<Record<number, boolean>>({});
 
   const [providers, setProviders] = useState<Provider[]>([]);
-  const [selectedProviderId, setSelectedProviderId] = useState("all");
   const [providerModels, setProviderModels] = useState<ProviderModelWithOwner[]>([]);
   const [providerModelGroups, setProviderModelGroups] = useState<ProviderModelGroup[]>([]);
-  const [loadingProviderModels, setLoadingProviderModels] = useState(false);
-  const [collapsedProviders, setCollapsedProviders] = useState<Record<number, boolean>>({});
-  const [modelPickerOpen, setModelPickerOpen] = useState(false);
-  const [modelSearchQuery, setModelSearchQuery] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const {
+    loading,
+    setLoading,
+    batchDeleting,
+    setBatchDeleting,
+    batchUpdating,
+    setBatchUpdating,
+    loadingProviderModels,
+    setLoadingProviderModels,
+    formDialogOpen,
+    setFormDialogOpen,
+    editingModel,
+    setEditingModel,
+    deletingModel,
+    setDeletingModel,
+    selectedIds,
+    setSelectedIds,
+    batchDeleteDialogOpen,
+    setBatchDeleteDialogOpen,
+    batchSettingsDialogOpen,
+    setBatchSettingsDialogOpen,
+    selectedProviderId,
+    setSelectedProviderId,
+    collapsedProviders,
+    setCollapsedProviders,
+    modelPickerOpen,
+    setModelPickerOpen,
+    modelSearchQuery,
+    setModelSearchQuery,
+    searchQuery,
+    setSearchQuery,
+    resetTransient,
+  } = useModelsPageStore((state) => ({
+    loading: state.loading,
+    setLoading: state.setLoading,
+    batchDeleting: state.batchDeleting,
+    setBatchDeleting: state.setBatchDeleting,
+    batchUpdating: state.batchUpdating,
+    setBatchUpdating: state.setBatchUpdating,
+    loadingProviderModels: state.loadingProviderModels,
+    setLoadingProviderModels: state.setLoadingProviderModels,
+    formDialogOpen: state.formDialogOpen,
+    setFormDialogOpen: state.setFormDialogOpen,
+    editingModel: state.editingModel,
+    setEditingModel: state.setEditingModel,
+    deletingModel: state.deletingModel,
+    setDeletingModel: state.setDeletingModel,
+    selectedIds: state.selectedIds,
+    setSelectedIds: state.setSelectedIds,
+    batchDeleteDialogOpen: state.batchDeleteDialogOpen,
+    setBatchDeleteDialogOpen: state.setBatchDeleteDialogOpen,
+    batchSettingsDialogOpen: state.batchSettingsDialogOpen,
+    setBatchSettingsDialogOpen: state.setBatchSettingsDialogOpen,
+    selectedProviderId: state.selectedProviderId,
+    setSelectedProviderId: state.setSelectedProviderId,
+    collapsedProviders: state.collapsedProviders,
+    setCollapsedProviders: state.setCollapsedProviders,
+    modelPickerOpen: state.modelPickerOpen,
+    setModelPickerOpen: state.setModelPickerOpen,
+    modelSearchQuery: state.modelSearchQuery,
+    setModelSearchQuery: state.setModelSearchQuery,
+    searchQuery: state.searchQuery,
+    setSearchQuery: state.setSearchQuery,
+    resetTransient: state.resetTransient,
+  }));
 
   const form = useForm<ModelFormValues>({
     resolver: zodResolver(modelFormSchema),
@@ -75,23 +126,12 @@ export default function ModelsPage() {
   });
 
   useEffect(() => {
-    void fetchModels();
-    void fetchProviders();
-  }, []);
+    return () => {
+      resetTransient();
+    };
+  }, [resetTransient]);
 
-  useEffect(() => {
-    setSelectedIds((previous) => {
-      if (previous.length === 0) {
-        return previous;
-      }
-
-      const validIdSet = new Set(models.map((model) => model.ID));
-      const next = previous.filter((id) => validIdSet.has(id));
-      return next.length === previous.length ? previous : next;
-    });
-  }, [models]);
-
-  const fetchModels = async () => {
+  const fetchModels = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getModels();
@@ -103,9 +143,9 @@ export default function ModelsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [setLoading]);
 
-  const fetchProviders = async () => {
+  const fetchProviders = useCallback(async () => {
     try {
       setLoadingProviderModels(true);
       const data = await getProviders();
@@ -120,7 +160,24 @@ export default function ModelsPage() {
     } finally {
       setLoadingProviderModels(false);
     }
-  };
+  }, [setCollapsedProviders, setLoadingProviderModels]);
+
+  useEffect(() => {
+    void fetchModels();
+    void fetchProviders();
+  }, [fetchModels, fetchProviders]);
+
+  useEffect(() => {
+    setSelectedIds((previous) => {
+      if (previous.length === 0) {
+        return previous;
+      }
+
+      const validIdSet = new Set(models.map((model) => model.ID));
+      const next = previous.filter((id) => validIdSet.has(id));
+      return next.length === previous.length ? previous : next;
+    });
+  }, [models, setSelectedIds]);
 
   const filteredProviderGroups = useMemo(
     () => filterProviderGroups(providerModelGroups, selectedProviderId, modelSearchQuery),

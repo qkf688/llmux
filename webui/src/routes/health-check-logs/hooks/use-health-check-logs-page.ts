@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   clearHealthCheckLogs,
   getBatchHealthCheckStatus,
@@ -6,12 +6,9 @@ import {
   getModels,
   getProviders,
   runHealthCheckAll,
-  type HealthCheckLog,
-  type Model,
-  type Provider,
 } from "@/lib/api";
 import { toast } from "sonner";
-import { DEFAULT_HEALTH_CHECK_LOGS_FILTERS, type HealthCheckLogsFilters } from "../types";
+import type { HealthCheckLogsFilters } from "../types";
 import { toHealthCheckLogsApiFilters } from "../utils/filters";
 import {
   clearStoredHealthCheckBatchState,
@@ -19,38 +16,61 @@ import {
   readStoredHealthCheckBatchState,
   writeStoredHealthCheckBatchState,
 } from "../utils/storage";
+import { useHealthCheckLogsPageStore } from "@/stores/health-check-logs";
 
 const toErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export function useHealthCheckLogsPage() {
-  const [loading, setLoading] = useState(true);
-  const [logs, setLogs] = useState<HealthCheckLog[]>([]);
-  const [providers, setProviders] = useState<Provider[]>([]);
-  const [models, setModels] = useState<Model[]>([]);
-
-  const [filters, setFilters] = useState<HealthCheckLogsFilters>({
-    ...DEFAULT_HEALTH_CHECK_LOGS_FILTERS,
-  });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
-  const [total, setTotal] = useState(0);
-  const [pages, setPages] = useState(0);
-
-  const [detailLog, setDetailLog] = useState<HealthCheckLog | null>(null);
-  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
-  const [clearDialogOpen, setClearDialogOpen] = useState(false);
-  const [clearingLogs, setClearingLogs] = useState(false);
-
-  const [resultDialogOpen, setResultDialogOpen] = useState(false);
-  const [currentBatchId, setCurrentBatchId] = useState<string | null>(null);
-  const [backgroundBatchId, setBackgroundBatchId] = useState<string | null>(null);
-  const [backgroundCheckComplete, setBackgroundCheckComplete] = useState(false);
+  const {
+    loading,
+    logs,
+    providers,
+    models,
+    filters,
+    page,
+    pageSize,
+    total,
+    pages,
+    detailLog,
+    detailDialogOpen,
+    clearDialogOpen,
+    clearingLogs,
+    resultDialogOpen,
+    currentBatchId,
+    backgroundBatchId,
+    backgroundCheckComplete,
+    setLoading,
+    setLogs,
+    setProviders,
+    setModels,
+    setFilter,
+    setPage,
+    setPageSize,
+    setTotal,
+    setPages,
+    openDetailDialog,
+    setDetailDialogOpen,
+    setClearDialogOpen,
+    setClearingLogs,
+    setResultDialogOpen,
+    setCurrentBatchId,
+    setBackgroundBatchId,
+    setBackgroundCheckComplete,
+    resetTransient,
+  } = useHealthCheckLogsPageStore((state) => state);
 
   const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fetchLogsRef = useRef<(pageToFetch?: number, pageSizeToUse?: number) => Promise<void>>(
     async () => {}
   );
   const resultDialogOpenRef = useRef(resultDialogOpen);
+
+  const stopBackgroundPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+  }, []);
 
   const fetchFilterOptions = useCallback(async () => {
     const [providerResult, modelResult] = await Promise.allSettled([getProviders(), getModels()]);
@@ -66,10 +86,10 @@ export function useHealthCheckLogsPage() {
     } else {
       console.error("Error fetching models:", modelResult.reason);
     }
-  }, []);
+  }, [setModels, setProviders]);
 
   const fetchLogs = useCallback(
-    async (pageToFetch = page, pageSizeToUse = pageSize) => {
+    async (pageToFetch = page, pageSizeToUse: number = pageSize) => {
       setLoading(true);
       try {
         const result = await getHealthCheckLogs(
@@ -86,7 +106,7 @@ export function useHealthCheckLogsPage() {
         setLoading(false);
       }
     },
-    [filters, page, pageSize]
+    [filters, page, pageSize, setLoading, setLogs, setPages, setTotal]
   );
 
   useEffect(() => {
@@ -97,6 +117,14 @@ export function useHealthCheckLogsPage() {
     void fetchLogs();
   }, [fetchLogs]);
 
+  useEffect(
+    () => () => {
+      stopBackgroundPolling();
+      resetTransient();
+    },
+    [resetTransient, stopBackgroundPolling]
+  );
+
   useEffect(() => {
     fetchLogsRef.current = fetchLogs;
   }, [fetchLogs]);
@@ -106,12 +134,7 @@ export function useHealthCheckLogsPage() {
   }, [resultDialogOpen]);
 
   const handleFilterChange = (key: keyof HealthCheckLogsFilters, value: string) => {
-    if (filters[key] === value) {
-      return;
-    }
-
-    setFilters((previous) => ({ ...previous, [key]: value }));
-    setPage(1);
+    setFilter(key, value);
   };
 
   const handlePageChange = (newPage: number) => {
@@ -121,10 +144,6 @@ export function useHealthCheckLogsPage() {
   };
 
   const handlePageSizeChange = (size: number) => {
-    if (size === pageSize) {
-      return;
-    }
-    setPage(1);
     setPageSize(size);
   };
 
@@ -132,16 +151,8 @@ export function useHealthCheckLogsPage() {
     void fetchLogs();
   };
 
-  const openDetailDialog = (log: HealthCheckLog) => {
-    setDetailLog(log);
-    setDetailDialogOpen(true);
-  };
-
   const handleDetailDialogOpenChange = (open: boolean) => {
     setDetailDialogOpen(open);
-    if (!open) {
-      setDetailLog(null);
-    }
   };
 
   const confirmClearLogs = async () => {
@@ -158,13 +169,6 @@ export function useHealthCheckLogsPage() {
       setClearingLogs(false);
     }
   };
-
-  const stopBackgroundPolling = useCallback(() => {
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
-  }, []);
 
   const startBackgroundPolling = useCallback(
     (batchId: string) => {
@@ -189,7 +193,7 @@ export function useHealthCheckLogsPage() {
         }
       }, 3000);
     },
-    [stopBackgroundPolling]
+    [setBackgroundCheckComplete, stopBackgroundPolling]
   );
 
   const handleRunHealthCheck = async () => {
@@ -243,14 +247,7 @@ export function useHealthCheckLogsPage() {
     if (!storedState.completed) {
       startBackgroundPolling(storedState.batchId);
     }
-  }, [startBackgroundPolling]);
-
-  useEffect(
-    () => () => {
-      stopBackgroundPolling();
-    },
-    [stopBackgroundPolling]
-  );
+  }, [setBackgroundBatchId, setBackgroundCheckComplete, setCurrentBatchId, startBackgroundPolling]);
 
   return {
     loading,

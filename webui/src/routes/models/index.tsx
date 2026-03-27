@@ -13,7 +13,40 @@ import {
   updateModel,
 } from "@/lib/api";
 import type { Model, Provider } from "@/lib/api";
-import { useModelsPageStore } from "@/stores/models";
+import {
+  selectModelsBatchDeleteDialogOpen,
+  selectModelsBatchDeleting,
+  selectModelsBatchSettingsDialogOpen,
+  selectModelsBatchUpdating,
+  selectModelsCollapsedProviders,
+  selectModelsDeletingModel,
+  selectModelsEditingModel,
+  selectModelsFormDialogOpen,
+  selectModelsLoading,
+  selectModelsLoadingProviderModels,
+  selectModelsModelPickerOpen,
+  selectModelsModelSearchQuery,
+  selectModelsSearchQuery,
+  selectModelsSelectedIds,
+  selectModelsSelectedProviderId,
+  selectResetModelsTransient,
+  selectSetModelsBatchDeleteDialogOpen,
+  selectSetModelsBatchDeleting,
+  selectSetModelsBatchSettingsDialogOpen,
+  selectSetModelsBatchUpdating,
+  selectSetModelsCollapsedProviders,
+  selectSetModelsDeletingModel,
+  selectSetModelsEditingModel,
+  selectSetModelsFormDialogOpen,
+  selectSetModelsLoading,
+  selectSetModelsLoadingProviderModels,
+  selectSetModelsModelPickerOpen,
+  selectSetModelsModelSearchQuery,
+  selectSetModelsSearchQuery,
+  selectSetModelsSelectedIds,
+  selectSetModelsSelectedProviderId,
+  useModelsPageStore,
+} from "@/stores/models";
 import { BatchSettingsDialog } from "./components/dialogs/batch-settings-dialog";
 import { ModelDeleteDialog } from "./components/dialogs/model-delete-dialog";
 import { ModelFormDialog } from "./components/dialogs/model-form-dialog";
@@ -49,71 +82,41 @@ export default function ModelsPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [providerModels, setProviderModels] = useState<ProviderModelWithOwner[]>([]);
   const [providerModelGroups, setProviderModelGroups] = useState<ProviderModelGroup[]>([]);
-  const {
-    loading,
-    setLoading,
-    batchDeleting,
-    setBatchDeleting,
-    batchUpdating,
-    setBatchUpdating,
-    loadingProviderModels,
-    setLoadingProviderModels,
-    formDialogOpen,
-    setFormDialogOpen,
-    editingModel,
-    setEditingModel,
-    deletingModel,
-    setDeletingModel,
-    selectedIds,
-    setSelectedIds,
-    batchDeleteDialogOpen,
-    setBatchDeleteDialogOpen,
-    batchSettingsDialogOpen,
-    setBatchSettingsDialogOpen,
-    selectedProviderId,
-    setSelectedProviderId,
-    collapsedProviders,
-    setCollapsedProviders,
-    modelPickerOpen,
-    setModelPickerOpen,
-    modelSearchQuery,
-    setModelSearchQuery,
-    searchQuery,
-    setSearchQuery,
-    resetTransient,
-  } = useModelsPageStore((state) => ({
-    loading: state.loading,
-    setLoading: state.setLoading,
-    batchDeleting: state.batchDeleting,
-    setBatchDeleting: state.setBatchDeleting,
-    batchUpdating: state.batchUpdating,
-    setBatchUpdating: state.setBatchUpdating,
-    loadingProviderModels: state.loadingProviderModels,
-    setLoadingProviderModels: state.setLoadingProviderModels,
-    formDialogOpen: state.formDialogOpen,
-    setFormDialogOpen: state.setFormDialogOpen,
-    editingModel: state.editingModel,
-    setEditingModel: state.setEditingModel,
-    deletingModel: state.deletingModel,
-    setDeletingModel: state.setDeletingModel,
-    selectedIds: state.selectedIds,
-    setSelectedIds: state.setSelectedIds,
-    batchDeleteDialogOpen: state.batchDeleteDialogOpen,
-    setBatchDeleteDialogOpen: state.setBatchDeleteDialogOpen,
-    batchSettingsDialogOpen: state.batchSettingsDialogOpen,
-    setBatchSettingsDialogOpen: state.setBatchSettingsDialogOpen,
-    selectedProviderId: state.selectedProviderId,
-    setSelectedProviderId: state.setSelectedProviderId,
-    collapsedProviders: state.collapsedProviders,
-    setCollapsedProviders: state.setCollapsedProviders,
-    modelPickerOpen: state.modelPickerOpen,
-    setModelPickerOpen: state.setModelPickerOpen,
-    modelSearchQuery: state.modelSearchQuery,
-    setModelSearchQuery: state.setModelSearchQuery,
-    searchQuery: state.searchQuery,
-    setSearchQuery: state.setSearchQuery,
-    resetTransient: state.resetTransient,
-  }));
+
+  const loading = useModelsPageStore(selectModelsLoading);
+  const setLoading = useModelsPageStore(selectSetModelsLoading);
+  const batchDeleting = useModelsPageStore(selectModelsBatchDeleting);
+  const setBatchDeleting = useModelsPageStore(selectSetModelsBatchDeleting);
+  const batchUpdating = useModelsPageStore(selectModelsBatchUpdating);
+  const setBatchUpdating = useModelsPageStore(selectSetModelsBatchUpdating);
+  const loadingProviderModels = useModelsPageStore(selectModelsLoadingProviderModels);
+  const setLoadingProviderModels = useModelsPageStore(selectSetModelsLoadingProviderModels);
+
+  const formDialogOpen = useModelsPageStore(selectModelsFormDialogOpen);
+  const setFormDialogOpen = useModelsPageStore(selectSetModelsFormDialogOpen);
+  const editingModel = useModelsPageStore(selectModelsEditingModel);
+  const setEditingModel = useModelsPageStore(selectSetModelsEditingModel);
+  const deletingModel = useModelsPageStore(selectModelsDeletingModel);
+  const setDeletingModel = useModelsPageStore(selectSetModelsDeletingModel);
+  const selectedIds = useModelsPageStore(selectModelsSelectedIds);
+  const setSelectedIds = useModelsPageStore(selectSetModelsSelectedIds);
+
+  const batchDeleteDialogOpen = useModelsPageStore(selectModelsBatchDeleteDialogOpen);
+  const setBatchDeleteDialogOpen = useModelsPageStore(selectSetModelsBatchDeleteDialogOpen);
+  const batchSettingsDialogOpen = useModelsPageStore(selectModelsBatchSettingsDialogOpen);
+  const setBatchSettingsDialogOpen = useModelsPageStore(selectSetModelsBatchSettingsDialogOpen);
+  const selectedProviderId = useModelsPageStore(selectModelsSelectedProviderId);
+  const setSelectedProviderId = useModelsPageStore(selectSetModelsSelectedProviderId);
+  const collapsedProviders = useModelsPageStore(selectModelsCollapsedProviders);
+  const setCollapsedProviders = useModelsPageStore(selectSetModelsCollapsedProviders);
+  const modelPickerOpen = useModelsPageStore(selectModelsModelPickerOpen);
+  const setModelPickerOpen = useModelsPageStore(selectSetModelsModelPickerOpen);
+  const modelSearchQuery = useModelsPageStore(selectModelsModelSearchQuery);
+  const setModelSearchQuery = useModelsPageStore(selectSetModelsModelSearchQuery);
+  const searchQuery = useModelsPageStore(selectModelsSearchQuery);
+  const setSearchQuery = useModelsPageStore(selectSetModelsSearchQuery);
+
+  const resetTransient = useModelsPageStore(selectResetModelsTransient);
 
   const form = useForm<ModelFormValues>({
     resolver: zodResolver(modelFormSchema),
@@ -422,6 +425,60 @@ export default function ModelsPage() {
     }
   };
 
+  const modelFormDialogProps = {
+    open: formDialogOpen,
+    onOpenChange: setFormDialogOpen,
+    editingModel,
+    form,
+    providers,
+    selectedProviderId,
+    onSelectedProviderIdChange: setSelectedProviderId,
+    loadingProviderModels,
+    hasProviderModels: providerModels.length > 0,
+    onOpenModelPicker: openModelPicker,
+    onCreate: handleCreate,
+    onUpdate: handleUpdate,
+  };
+
+  const modelPickerDialogProps = {
+    open: modelPickerOpen,
+    onOpenChange: setModelPickerOpen,
+    selectedProviderId,
+    providers,
+    loadingProviderModels,
+    providerModels,
+    filteredProviderGroups,
+    collapsedProviders,
+    searchQuery: modelSearchQuery,
+    onSearchQueryChange: setModelSearchQuery,
+    onToggleProviderCollapse: toggleProviderCollapse,
+    onSelectModel: handleSelectProviderModel,
+  };
+
+  const batchSettingsDialogProps = {
+    open: batchSettingsDialogOpen,
+    onOpenChange: setBatchSettingsDialogOpen,
+    selectedCount: selectedIds.length,
+    maxRetryRange,
+    timeOutRange,
+    form: batchUpdateForm,
+    updating: batchUpdating,
+    onSubmit: handleBatchUpdate,
+  };
+
+  const modelDeleteDialogProps = {
+    open: deletingModel !== null,
+    modelLabel: deletingModel?.Name ?? deletingModel?.ID ?? "",
+    onOpenChange: (open: boolean) => {
+      if (!open) {
+        setDeletingModel(null);
+      }
+    },
+    onConfirm: () => {
+      void handleDelete();
+    },
+  };
+
   return (
     <div className="h-full min-h-0 flex flex-col gap-4 p-1">
       <ModelsToolbar
@@ -460,59 +517,13 @@ export default function ModelsPage() {
         onDelete={openDeleteDialog}
       />
 
-      <ModelFormDialog
-        open={formDialogOpen}
-        onOpenChange={setFormDialogOpen}
-        editingModel={editingModel}
-        form={form}
-        providers={providers}
-        selectedProviderId={selectedProviderId}
-        onSelectedProviderIdChange={setSelectedProviderId}
-        loadingProviderModels={loadingProviderModels}
-        hasProviderModels={providerModels.length > 0}
-        onOpenModelPicker={openModelPicker}
-        onCreate={handleCreate}
-        onUpdate={handleUpdate}
-      />
+      <ModelFormDialog {...modelFormDialogProps} />
 
-      <ModelPickerDialog
-        open={modelPickerOpen}
-        onOpenChange={setModelPickerOpen}
-        selectedProviderId={selectedProviderId}
-        providers={providers}
-        loadingProviderModels={loadingProviderModels}
-        providerModels={providerModels}
-        filteredProviderGroups={filteredProviderGroups}
-        collapsedProviders={collapsedProviders}
-        searchQuery={modelSearchQuery}
-        onSearchQueryChange={setModelSearchQuery}
-        onToggleProviderCollapse={toggleProviderCollapse}
-        onSelectModel={handleSelectProviderModel}
-      />
+      <ModelPickerDialog {...modelPickerDialogProps} />
 
-      <BatchSettingsDialog
-        open={batchSettingsDialogOpen}
-        onOpenChange={setBatchSettingsDialogOpen}
-        selectedCount={selectedIds.length}
-        maxRetryRange={maxRetryRange}
-        timeOutRange={timeOutRange}
-        form={batchUpdateForm}
-        updating={batchUpdating}
-        onSubmit={handleBatchUpdate}
-      />
+      <BatchSettingsDialog {...batchSettingsDialogProps} />
 
-      <ModelDeleteDialog
-        open={deletingModel !== null}
-        modelLabel={deletingModel?.Name ?? deletingModel?.ID ?? ""}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDeletingModel(null);
-          }
-        }}
-        onConfirm={() => {
-          void handleDelete();
-        }}
-      />
+      <ModelDeleteDialog {...modelDeleteDialogProps} />
     </div>
   );
 }

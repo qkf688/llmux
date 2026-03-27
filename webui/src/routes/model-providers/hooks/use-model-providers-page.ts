@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
@@ -93,7 +93,6 @@ import {
 import {
   createModelProvider,
   deleteModelProvider,
-  getModelProviders,
   updateModelProvider,
   updateModelProviderStatus,
 } from "@/lib/api";
@@ -108,6 +107,7 @@ import { formSchema, type FormValues } from "../form-schema";
 import type { ProviderModelGroup, ProviderModelWithOwner } from "../types";
 import { buildAssociationPayload } from "../utils/payload";
 import { buildSelectionKey } from "../utils/selection";
+import { useModelProvidersAssociationsData } from "./use-model-providers-associations-data";
 import { useModelProvidersBatch } from "./use-model-providers-batch";
 import { useModelProvidersBlacklist } from "./use-model-providers-blacklist";
 import { useModelProvidersBootstrap } from "./use-model-providers-bootstrap";
@@ -119,7 +119,6 @@ import { useModelProvidersTemplateEditor } from "./use-model-providers-template-
 import { useModelProvidersTesting } from "./use-model-providers-testing";
 
 export function useModelProvidersPage() {
-  const [modelProviders, setModelProviders] = useState<ModelWithProvider[]>([]);
   const [models, setModels] = useState<Model[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -294,30 +293,11 @@ export function useModelProvidersPage() {
 
   const buildPayload = buildAssociationPayload;
 
-  const fetchModelProviders = useCallback(async (modelId: number) => {
-    try {
-      setLoading(true);
-      const data = await getModelProviders(modelId);
-      setModelProviders(data.map(item => ({
-        ...item,
-        CustomerHeaders: item.CustomerHeaders || {}
-      })));
-      // 异步加载状态数据
-      void loadProviderStatus(data, modelId);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`获取模型提供商关联列表失败: ${message}`);
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [loadProviderStatus, setLoading]);
-
-  useEffect(() => {
-    if (selectedModelId) {
-      void fetchModelProviders(selectedModelId);
-    }
-  }, [selectedModelId, fetchModelProviders]);
+  const { modelProviders, setModelProviders, fetchModelProviders } = useModelProvidersAssociationsData({
+    selectedModelId,
+    setLoading,
+    loadProviderStatus,
+  });
 
   const handleCreate = async (values: FormValues) => {
     if (isSubmitting) return;

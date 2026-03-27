@@ -26,7 +26,57 @@ import {
   type VirtualModelFormValues,
 } from "../schemas/forms";
 import type { VirtualModelStrategy } from "../types";
-import { DEFAULT_VIRTUAL_MODELS_BATCH, useVirtualModelsPageStore } from "@/stores/virtual-models";
+import {
+  DEFAULT_VIRTUAL_MODELS_BATCH,
+  selectResetVirtualModelsTransient,
+  selectSetVirtualModelsBatchEnabled,
+  selectSetVirtualModelsBatchPriority,
+  selectSetVirtualModelsBatchWeight,
+  selectSetVirtualModelsBlacklistDialogOpen,
+  selectSetVirtualModelsBlacklistedProviders,
+  selectSetVirtualModelsCurrentVirtualModel,
+  selectSetVirtualModelsEditingMapping,
+  selectSetVirtualModelsEditingModel,
+  selectSetVirtualModelsLoading,
+  selectSetVirtualModelsMappingBatchDialogOpen,
+  selectSetVirtualModelsMappingFormDialogOpen,
+  selectSetVirtualModelsMappings,
+  selectSetVirtualModelsMappingsDialogOpen,
+  selectSetVirtualModelsModelDialogOpen,
+  selectSetVirtualModelsModelSearchQuery,
+  selectSetVirtualModelsModelToDeleteId,
+  selectSetVirtualModelsProviderSearchQuery,
+  selectSetVirtualModelsProviderSelectorDialogOpen,
+  selectSetVirtualModelsProviders,
+  selectSetVirtualModelsRealModels,
+  selectSetVirtualModelsSelectedModelIds,
+  selectSetVirtualModelsSelectedProviderIds,
+  selectSetVirtualModelsVirtualModels,
+  selectVirtualModelsBatchEnabled,
+  selectVirtualModelsBatchPriority,
+  selectVirtualModelsBatchWeight,
+  selectVirtualModelsBlacklistDialogOpen,
+  selectVirtualModelsBlacklistedProviders,
+  selectVirtualModelsCurrentVirtualModel,
+  selectVirtualModelsEditingMapping,
+  selectVirtualModelsEditingModel,
+  selectVirtualModelsLoading,
+  selectVirtualModelsMappingBatchDialogOpen,
+  selectVirtualModelsMappingFormDialogOpen,
+  selectVirtualModelsMappings,
+  selectVirtualModelsMappingsDialogOpen,
+  selectVirtualModelsModelDialogOpen,
+  selectVirtualModelsModelSearchQuery,
+  selectVirtualModelsModelToDeleteId,
+  selectVirtualModelsProviderSearchQuery,
+  selectVirtualModelsProviderSelectorDialogOpen,
+  selectVirtualModelsProviders,
+  selectVirtualModelsRealModels,
+  selectVirtualModelsSelectedModelIds,
+  selectVirtualModelsSelectedProviderIds,
+  selectVirtualModelsVirtualModels,
+  useVirtualModelsPageStore,
+} from "@/stores/virtual-models";
 
 const extractErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -38,55 +88,54 @@ const toVirtualModelStrategy = (strategy: string): VirtualModelStrategy => {
 };
 
 export function useVirtualModelsPage() {
-  const {
-    loading,
-    virtualModels,
-    realModels,
-    providers,
-    blacklistedProviders,
-    modelDialogOpen,
-    editingModel,
-    modelToDeleteId,
-    mappingsDialogOpen,
-    currentVirtualModel,
-    mappings,
-    mappingFormDialogOpen,
-    editingMapping,
-    mappingBatchDialogOpen,
-    selectedModelIds,
-    batchPriority,
-    batchWeight,
-    batchEnabled,
-    modelSearchQuery,
-    blacklistDialogOpen,
-    providerSelectorDialogOpen,
-    selectedProviderIds,
-    providerSearchQuery,
-    setLoading,
-    setVirtualModels,
-    setRealModels,
-    setProviders,
-    setBlacklistedProviders,
-    setMappings,
-    setModelDialogOpen,
-    setEditingModel,
-    setModelToDeleteId,
-    setMappingsDialogOpen,
-    setCurrentVirtualModel,
-    setMappingFormDialogOpen,
-    setEditingMapping,
-    setMappingBatchDialogOpen,
-    setSelectedModelIds,
-    setBatchPriority,
-    setBatchWeight,
-    setBatchEnabled,
-    setModelSearchQuery,
-    setBlacklistDialogOpen,
-    setProviderSelectorDialogOpen,
-    setSelectedProviderIds,
-    setProviderSearchQuery,
-    resetTransient,
-  } = useVirtualModelsPageStore((state) => state);
+  const loading = useVirtualModelsPageStore(selectVirtualModelsLoading);
+  const virtualModels = useVirtualModelsPageStore(selectVirtualModelsVirtualModels);
+  const realModels = useVirtualModelsPageStore(selectVirtualModelsRealModels);
+  const providers = useVirtualModelsPageStore(selectVirtualModelsProviders);
+  const blacklistedProviders = useVirtualModelsPageStore(selectVirtualModelsBlacklistedProviders);
+  const modelDialogOpen = useVirtualModelsPageStore(selectVirtualModelsModelDialogOpen);
+  const editingModel = useVirtualModelsPageStore(selectVirtualModelsEditingModel);
+  const modelToDeleteId = useVirtualModelsPageStore(selectVirtualModelsModelToDeleteId);
+  const mappingsDialogOpen = useVirtualModelsPageStore(selectVirtualModelsMappingsDialogOpen);
+  const currentVirtualModel = useVirtualModelsPageStore(selectVirtualModelsCurrentVirtualModel);
+  const mappings = useVirtualModelsPageStore(selectVirtualModelsMappings);
+  const mappingFormDialogOpen = useVirtualModelsPageStore(selectVirtualModelsMappingFormDialogOpen);
+  const editingMapping = useVirtualModelsPageStore(selectVirtualModelsEditingMapping);
+  const mappingBatchDialogOpen = useVirtualModelsPageStore(selectVirtualModelsMappingBatchDialogOpen);
+  const selectedModelIds = useVirtualModelsPageStore(selectVirtualModelsSelectedModelIds);
+  const batchPriority = useVirtualModelsPageStore(selectVirtualModelsBatchPriority);
+  const batchWeight = useVirtualModelsPageStore(selectVirtualModelsBatchWeight);
+  const batchEnabled = useVirtualModelsPageStore(selectVirtualModelsBatchEnabled);
+  const modelSearchQuery = useVirtualModelsPageStore(selectVirtualModelsModelSearchQuery);
+  const blacklistDialogOpen = useVirtualModelsPageStore(selectVirtualModelsBlacklistDialogOpen);
+  const providerSelectorDialogOpen = useVirtualModelsPageStore(selectVirtualModelsProviderSelectorDialogOpen);
+  const selectedProviderIds = useVirtualModelsPageStore(selectVirtualModelsSelectedProviderIds);
+  const providerSearchQuery = useVirtualModelsPageStore(selectVirtualModelsProviderSearchQuery);
+
+  const setLoading = useVirtualModelsPageStore(selectSetVirtualModelsLoading);
+  const setVirtualModels = useVirtualModelsPageStore(selectSetVirtualModelsVirtualModels);
+  const setRealModels = useVirtualModelsPageStore(selectSetVirtualModelsRealModels);
+  const setProviders = useVirtualModelsPageStore(selectSetVirtualModelsProviders);
+  const setBlacklistedProviders = useVirtualModelsPageStore(selectSetVirtualModelsBlacklistedProviders);
+  const setMappings = useVirtualModelsPageStore(selectSetVirtualModelsMappings);
+  const setModelDialogOpen = useVirtualModelsPageStore(selectSetVirtualModelsModelDialogOpen);
+  const setEditingModel = useVirtualModelsPageStore(selectSetVirtualModelsEditingModel);
+  const setModelToDeleteId = useVirtualModelsPageStore(selectSetVirtualModelsModelToDeleteId);
+  const setMappingsDialogOpen = useVirtualModelsPageStore(selectSetVirtualModelsMappingsDialogOpen);
+  const setCurrentVirtualModel = useVirtualModelsPageStore(selectSetVirtualModelsCurrentVirtualModel);
+  const setMappingFormDialogOpen = useVirtualModelsPageStore(selectSetVirtualModelsMappingFormDialogOpen);
+  const setEditingMapping = useVirtualModelsPageStore(selectSetVirtualModelsEditingMapping);
+  const setMappingBatchDialogOpen = useVirtualModelsPageStore(selectSetVirtualModelsMappingBatchDialogOpen);
+  const setSelectedModelIds = useVirtualModelsPageStore(selectSetVirtualModelsSelectedModelIds);
+  const setBatchPriority = useVirtualModelsPageStore(selectSetVirtualModelsBatchPriority);
+  const setBatchWeight = useVirtualModelsPageStore(selectSetVirtualModelsBatchWeight);
+  const setBatchEnabled = useVirtualModelsPageStore(selectSetVirtualModelsBatchEnabled);
+  const setModelSearchQuery = useVirtualModelsPageStore(selectSetVirtualModelsModelSearchQuery);
+  const setBlacklistDialogOpen = useVirtualModelsPageStore(selectSetVirtualModelsBlacklistDialogOpen);
+  const setProviderSelectorDialogOpen = useVirtualModelsPageStore(selectSetVirtualModelsProviderSelectorDialogOpen);
+  const setSelectedProviderIds = useVirtualModelsPageStore(selectSetVirtualModelsSelectedProviderIds);
+  const setProviderSearchQuery = useVirtualModelsPageStore(selectSetVirtualModelsProviderSearchQuery);
+  const resetTransient = useVirtualModelsPageStore(selectResetVirtualModelsTransient);
 
   const virtualModelForm = useForm<VirtualModelFormValues>({
     resolver: zodResolver(virtualModelFormSchema),

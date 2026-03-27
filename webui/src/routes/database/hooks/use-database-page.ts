@@ -11,7 +11,46 @@ import {
 import { toast } from "sonner";
 import { buildImportPreview } from "../utils/import-preview";
 import { buildImportResultMessage } from "../utils/import-result";
-import { useDatabasePageStore } from "@/stores/database";
+import {
+  selectBumpDatabaseImportFileInputKey,
+  selectDatabaseExportConfigDialogOpen,
+  selectDatabaseExportDatabaseDialogOpen,
+  selectDatabaseExportTypes,
+  selectDatabaseExporting,
+  selectDatabaseExportingDatabase,
+  selectDatabaseImportDialogOpen,
+  selectDatabaseImportFileInputKey,
+  selectDatabaseImportMode,
+  selectDatabaseImportTypes,
+  selectDatabaseImporting,
+  selectDatabaseLoading,
+  selectDatabasePreviewData,
+  selectDatabasePreviewError,
+  selectDatabasePreviewLoading,
+  selectDatabaseSelectedFile,
+  selectDatabaseStats,
+  selectDatabaseVacuumDialogOpen,
+  selectDatabaseVacuuming,
+  selectResetDatabaseTransient,
+  selectSetDatabaseExportConfigDialogOpen,
+  selectSetDatabaseExportDatabaseDialogOpen,
+  selectSetDatabaseExporting,
+  selectSetDatabaseExportingDatabase,
+  selectSetDatabaseImportDialogOpen,
+  selectSetDatabaseImportMode,
+  selectSetDatabaseImporting,
+  selectSetDatabaseLoading,
+  selectSetDatabasePreviewData,
+  selectSetDatabasePreviewError,
+  selectSetDatabasePreviewLoading,
+  selectSetDatabaseSelectedFile,
+  selectSetDatabaseStats,
+  selectSetDatabaseVacuumDialogOpen,
+  selectSetDatabaseVacuuming,
+  selectToggleDatabaseExportType,
+  selectToggleDatabaseImportType,
+  useDatabasePageStore,
+} from "@/stores/database";
 
 const toErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
@@ -20,45 +59,44 @@ export function useDatabasePage() {
   const navigate = useNavigate();
   const previewRequestRef = useRef(0);
 
-  const {
-    stats,
-    loading,
-    vacuumDialogOpen,
-    vacuuming,
-    exportConfigDialogOpen,
-    exporting,
-    exportTypes,
-    exportDatabaseDialogOpen,
-    exportingDatabase,
-    importDialogOpen,
-    importing,
-    importMode,
-    importTypes,
-    selectedFile,
-    previewData,
-    previewLoading,
-    previewError,
-    importFileInputKey,
-    setStats,
-    setLoading,
-    setVacuumDialogOpen,
-    setVacuuming,
-    setExportConfigDialogOpen,
-    setExporting,
-    toggleExportType,
-    setExportDatabaseDialogOpen,
-    setExportingDatabase,
-    setImportDialogOpen,
-    setImporting,
-    setImportMode,
-    toggleImportType,
-    setSelectedFile,
-    setPreviewData,
-    setPreviewLoading,
-    setPreviewError,
-    bumpImportFileInputKey,
-    resetTransient,
-  } = useDatabasePageStore((state) => state);
+  const stats = useDatabasePageStore(selectDatabaseStats);
+  const loading = useDatabasePageStore(selectDatabaseLoading);
+  const vacuumDialogOpen = useDatabasePageStore(selectDatabaseVacuumDialogOpen);
+  const vacuuming = useDatabasePageStore(selectDatabaseVacuuming);
+  const exportConfigDialogOpen = useDatabasePageStore(selectDatabaseExportConfigDialogOpen);
+  const exporting = useDatabasePageStore(selectDatabaseExporting);
+  const exportTypes = useDatabasePageStore(selectDatabaseExportTypes);
+  const exportDatabaseDialogOpen = useDatabasePageStore(selectDatabaseExportDatabaseDialogOpen);
+  const exportingDatabase = useDatabasePageStore(selectDatabaseExportingDatabase);
+  const importDialogOpen = useDatabasePageStore(selectDatabaseImportDialogOpen);
+  const importing = useDatabasePageStore(selectDatabaseImporting);
+  const importMode = useDatabasePageStore(selectDatabaseImportMode);
+  const importTypes = useDatabasePageStore(selectDatabaseImportTypes);
+  const selectedFile = useDatabasePageStore(selectDatabaseSelectedFile);
+  const previewData = useDatabasePageStore(selectDatabasePreviewData);
+  const previewLoading = useDatabasePageStore(selectDatabasePreviewLoading);
+  const previewError = useDatabasePageStore(selectDatabasePreviewError);
+  const importFileInputKey = useDatabasePageStore(selectDatabaseImportFileInputKey);
+
+  const setStats = useDatabasePageStore(selectSetDatabaseStats);
+  const setLoading = useDatabasePageStore(selectSetDatabaseLoading);
+  const setVacuumDialogOpen = useDatabasePageStore(selectSetDatabaseVacuumDialogOpen);
+  const setVacuuming = useDatabasePageStore(selectSetDatabaseVacuuming);
+  const setExportConfigDialogOpen = useDatabasePageStore(selectSetDatabaseExportConfigDialogOpen);
+  const setExporting = useDatabasePageStore(selectSetDatabaseExporting);
+  const toggleExportType = useDatabasePageStore(selectToggleDatabaseExportType);
+  const setExportDatabaseDialogOpen = useDatabasePageStore(selectSetDatabaseExportDatabaseDialogOpen);
+  const setExportingDatabase = useDatabasePageStore(selectSetDatabaseExportingDatabase);
+  const setImportDialogOpen = useDatabasePageStore(selectSetDatabaseImportDialogOpen);
+  const setImporting = useDatabasePageStore(selectSetDatabaseImporting);
+  const setImportMode = useDatabasePageStore(selectSetDatabaseImportMode);
+  const toggleImportType = useDatabasePageStore(selectToggleDatabaseImportType);
+  const setSelectedFile = useDatabasePageStore(selectSetDatabaseSelectedFile);
+  const setPreviewData = useDatabasePageStore(selectSetDatabasePreviewData);
+  const setPreviewLoading = useDatabasePageStore(selectSetDatabasePreviewLoading);
+  const setPreviewError = useDatabasePageStore(selectSetDatabasePreviewError);
+  const bumpImportFileInputKey = useDatabasePageStore(selectBumpDatabaseImportFileInputKey);
+  const resetTransient = useDatabasePageStore(selectResetDatabaseTransient);
 
   const clearImportFileSelection = useCallback(() => {
     previewRequestRef.current += 1;

@@ -16,48 +16,84 @@ import {
   readStoredHealthCheckBatchState,
   writeStoredHealthCheckBatchState,
 } from "../utils/storage";
-import { useHealthCheckLogsPageStore } from "@/stores/health-check-logs";
+import {
+  selectHealthCheckLogsBackgroundBatchId,
+  selectHealthCheckLogsBackgroundCheckComplete,
+  selectHealthCheckLogsClearingLogs,
+  selectHealthCheckLogsClearDialogOpen,
+  selectHealthCheckLogsDetailDialogOpen,
+  selectHealthCheckLogsDetailLog,
+  selectHealthCheckLogsFilters,
+  selectHealthCheckLogsLoading,
+  selectHealthCheckLogsLogs,
+  selectHealthCheckLogsModels,
+  selectHealthCheckLogsPage,
+  selectHealthCheckLogsPages,
+  selectHealthCheckLogsPageSize,
+  selectHealthCheckLogsProviders,
+  selectHealthCheckLogsResultDialogOpen,
+  selectHealthCheckLogsTotal,
+  selectHealthCheckLogsCurrentBatchId,
+  selectOpenHealthCheckLogsDetailDialog,
+  selectResetHealthCheckLogsTransient,
+  selectSetHealthCheckLogsBackgroundBatchId,
+  selectSetHealthCheckLogsBackgroundCheckComplete,
+  selectSetHealthCheckLogsClearingLogs,
+  selectSetHealthCheckLogsClearDialogOpen,
+  selectSetHealthCheckLogsDetailDialogOpen,
+  selectSetHealthCheckLogsFilter,
+  selectSetHealthCheckLogsLoading,
+  selectSetHealthCheckLogsLogs,
+  selectSetHealthCheckLogsModels,
+  selectSetHealthCheckLogsPage,
+  selectSetHealthCheckLogsPages,
+  selectSetHealthCheckLogsPageSize,
+  selectSetHealthCheckLogsProviders,
+  selectSetHealthCheckLogsResultDialogOpen,
+  selectSetHealthCheckLogsTotal,
+  selectSetHealthCheckLogsCurrentBatchId,
+  useHealthCheckLogsPageStore,
+} from "@/stores/health-check-logs";
 
 const toErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export function useHealthCheckLogsPage() {
-  const {
-    loading,
-    logs,
-    providers,
-    models,
-    filters,
-    page,
-    pageSize,
-    total,
-    pages,
-    detailLog,
-    detailDialogOpen,
-    clearDialogOpen,
-    clearingLogs,
-    resultDialogOpen,
-    currentBatchId,
-    backgroundBatchId,
-    backgroundCheckComplete,
-    setLoading,
-    setLogs,
-    setProviders,
-    setModels,
-    setFilter,
-    setPage,
-    setPageSize,
-    setTotal,
-    setPages,
-    openDetailDialog,
-    setDetailDialogOpen,
-    setClearDialogOpen,
-    setClearingLogs,
-    setResultDialogOpen,
-    setCurrentBatchId,
-    setBackgroundBatchId,
-    setBackgroundCheckComplete,
-    resetTransient,
-  } = useHealthCheckLogsPageStore((state) => state);
+  const loading = useHealthCheckLogsPageStore(selectHealthCheckLogsLoading);
+  const logs = useHealthCheckLogsPageStore(selectHealthCheckLogsLogs);
+  const providers = useHealthCheckLogsPageStore(selectHealthCheckLogsProviders);
+  const models = useHealthCheckLogsPageStore(selectHealthCheckLogsModels);
+  const filters = useHealthCheckLogsPageStore(selectHealthCheckLogsFilters);
+  const page = useHealthCheckLogsPageStore(selectHealthCheckLogsPage);
+  const pageSize = useHealthCheckLogsPageStore(selectHealthCheckLogsPageSize);
+  const total = useHealthCheckLogsPageStore(selectHealthCheckLogsTotal);
+  const pages = useHealthCheckLogsPageStore(selectHealthCheckLogsPages);
+  const detailLog = useHealthCheckLogsPageStore(selectHealthCheckLogsDetailLog);
+  const detailDialogOpen = useHealthCheckLogsPageStore(selectHealthCheckLogsDetailDialogOpen);
+  const clearDialogOpen = useHealthCheckLogsPageStore(selectHealthCheckLogsClearDialogOpen);
+  const clearingLogs = useHealthCheckLogsPageStore(selectHealthCheckLogsClearingLogs);
+  const resultDialogOpen = useHealthCheckLogsPageStore(selectHealthCheckLogsResultDialogOpen);
+  const currentBatchId = useHealthCheckLogsPageStore(selectHealthCheckLogsCurrentBatchId);
+  const backgroundBatchId = useHealthCheckLogsPageStore(selectHealthCheckLogsBackgroundBatchId);
+  const backgroundCheckComplete = useHealthCheckLogsPageStore(selectHealthCheckLogsBackgroundCheckComplete);
+
+  const setLoading = useHealthCheckLogsPageStore(selectSetHealthCheckLogsLoading);
+  const setLogs = useHealthCheckLogsPageStore(selectSetHealthCheckLogsLogs);
+  const setProviders = useHealthCheckLogsPageStore(selectSetHealthCheckLogsProviders);
+  const setModels = useHealthCheckLogsPageStore(selectSetHealthCheckLogsModels);
+  const setFilter = useHealthCheckLogsPageStore(selectSetHealthCheckLogsFilter);
+  const setPage = useHealthCheckLogsPageStore(selectSetHealthCheckLogsPage);
+  const setPageSize = useHealthCheckLogsPageStore(selectSetHealthCheckLogsPageSize);
+  const setTotal = useHealthCheckLogsPageStore(selectSetHealthCheckLogsTotal);
+  const setPages = useHealthCheckLogsPageStore(selectSetHealthCheckLogsPages);
+  const openDetailDialog = useHealthCheckLogsPageStore(selectOpenHealthCheckLogsDetailDialog);
+  const setDetailDialogOpen = useHealthCheckLogsPageStore(selectSetHealthCheckLogsDetailDialogOpen);
+  const setClearDialogOpen = useHealthCheckLogsPageStore(selectSetHealthCheckLogsClearDialogOpen);
+  const setClearingLogs = useHealthCheckLogsPageStore(selectSetHealthCheckLogsClearingLogs);
+  const setResultDialogOpen = useHealthCheckLogsPageStore(selectSetHealthCheckLogsResultDialogOpen);
+  const setCurrentBatchId = useHealthCheckLogsPageStore(selectSetHealthCheckLogsCurrentBatchId);
+  const setBackgroundBatchId = useHealthCheckLogsPageStore(selectSetHealthCheckLogsBackgroundBatchId);
+  const setBackgroundCheckComplete = useHealthCheckLogsPageStore(selectSetHealthCheckLogsBackgroundCheckComplete);
+  const resetTransient = useHealthCheckLogsPageStore(selectResetHealthCheckLogsTransient);
 
   const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fetchLogsRef = useRef<(pageToFetch?: number, pageSizeToUse?: number) => Promise<void>>(

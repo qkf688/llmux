@@ -5,3 +5,4 @@ export { useVirtualModelsPageStore } from "@/stores/virtual-models/use-virtual-m
 export type { VirtualModelsBatchDefaults } from "@/stores/virtual-models/types";
 export { DEFAULT_VIRTUAL_MODELS_BATCH } from "@/stores/virtual-models/types";
 
+export * from "@/stores/virtual-models/selectors";

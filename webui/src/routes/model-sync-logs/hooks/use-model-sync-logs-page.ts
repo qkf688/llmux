@@ -13,7 +13,52 @@ import {
 } from "@/lib/api";
 import { toast } from "sonner";
 import type { ModelSyncTab } from "../types";
-import { useModelSyncLogsPageStore } from "@/stores/model-sync-logs";
+import {
+  selectModelSyncLogsActiveTab,
+  selectModelSyncLogsClearingErrors,
+  selectModelSyncLogsClearDialogOpen,
+  selectModelSyncLogsDetailLog,
+  selectModelSyncLogsErrorsLoading,
+  selectModelSyncLogsLoading,
+  selectModelSyncLogsLogs,
+  selectModelSyncLogsPage,
+  selectModelSyncLogsProvidersById,
+  selectModelSyncLogsRecentErrors,
+  selectModelSyncLogsRecentLoading,
+  selectModelSyncLogsRecentModels,
+  selectModelSyncLogsSelectedErrorProviders,
+  selectModelSyncLogsSelectedLogs,
+  selectModelSyncLogsShowUnchanged,
+  selectModelSyncLogsStats,
+  selectModelSyncLogsStatsLoading,
+  selectModelSyncLogsSyncing,
+  selectModelSyncLogsSyncTime,
+  selectModelSyncLogsTogglingProviderIds,
+  selectModelSyncLogsTotalPages,
+  selectResetModelSyncLogsTransient,
+  selectSetModelSyncLogsActiveTab,
+  selectSetModelSyncLogsClearingErrors,
+  selectSetModelSyncLogsClearDialogOpen,
+  selectSetModelSyncLogsDetailLog,
+  selectSetModelSyncLogsErrorsLoading,
+  selectSetModelSyncLogsLoading,
+  selectSetModelSyncLogsLogs,
+  selectSetModelSyncLogsPage,
+  selectSetModelSyncLogsProvidersById,
+  selectSetModelSyncLogsRecentErrors,
+  selectSetModelSyncLogsRecentLoading,
+  selectSetModelSyncLogsRecentModels,
+  selectSetModelSyncLogsSelectedErrorProviders,
+  selectSetModelSyncLogsSelectedLogs,
+  selectSetModelSyncLogsShowUnchanged,
+  selectSetModelSyncLogsStats,
+  selectSetModelSyncLogsStatsLoading,
+  selectSetModelSyncLogsSyncing,
+  selectSetModelSyncLogsSyncTime,
+  selectSetModelSyncLogsTogglingProviderIds,
+  selectSetModelSyncLogsTotalPages,
+  useModelSyncLogsPageStore,
+} from "@/stores/model-sync-logs";
 
 const LOG_PAGE_SIZE = 20;
 
@@ -22,51 +67,50 @@ const toErrorMessage = (error: unknown) => (error instanceof Error ? error.messa
 export function useModelSyncLogsPage() {
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const {
-    activeTab,
-    logs,
-    recentModels,
-    recentErrors,
-    syncTime,
-    stats,
-    providersById,
-    loading,
-    recentLoading,
-    errorsLoading,
-    syncing,
-    statsLoading,
-    selectedLogs,
-    selectedErrorProviders,
-    page,
-    totalPages,
-    showUnchanged,
-    togglingProviderIds,
-    detailLog,
-    clearDialogOpen,
-    clearingErrors,
-    setActiveTab,
-    setLogs,
-    setRecentModels,
-    setRecentErrors,
-    setSyncTime,
-    setStats,
-    setProvidersById,
-    setLoading,
-    setRecentLoading,
-    setErrorsLoading,
-    setSyncing,
-    setStatsLoading,
-    setSelectedLogs,
-    setSelectedErrorProviders,
-    setPage,
-    setTotalPages,
-    setShowUnchanged,
-    setTogglingProviderIds,
-    setDetailLog,
-    setClearDialogOpen,
-    setClearingErrors,
-    resetTransient,
-  } = useModelSyncLogsPageStore((state) => state);
+  const activeTab = useModelSyncLogsPageStore(selectModelSyncLogsActiveTab);
+  const logs = useModelSyncLogsPageStore(selectModelSyncLogsLogs);
+  const recentModels = useModelSyncLogsPageStore(selectModelSyncLogsRecentModels);
+  const recentErrors = useModelSyncLogsPageStore(selectModelSyncLogsRecentErrors);
+  const syncTime = useModelSyncLogsPageStore(selectModelSyncLogsSyncTime);
+  const stats = useModelSyncLogsPageStore(selectModelSyncLogsStats);
+  const providersById = useModelSyncLogsPageStore(selectModelSyncLogsProvidersById);
+  const loading = useModelSyncLogsPageStore(selectModelSyncLogsLoading);
+  const recentLoading = useModelSyncLogsPageStore(selectModelSyncLogsRecentLoading);
+  const errorsLoading = useModelSyncLogsPageStore(selectModelSyncLogsErrorsLoading);
+  const syncing = useModelSyncLogsPageStore(selectModelSyncLogsSyncing);
+  const statsLoading = useModelSyncLogsPageStore(selectModelSyncLogsStatsLoading);
+  const selectedLogs = useModelSyncLogsPageStore(selectModelSyncLogsSelectedLogs);
+  const selectedErrorProviders = useModelSyncLogsPageStore(selectModelSyncLogsSelectedErrorProviders);
+  const page = useModelSyncLogsPageStore(selectModelSyncLogsPage);
+  const totalPages = useModelSyncLogsPageStore(selectModelSyncLogsTotalPages);
+  const showUnchanged = useModelSyncLogsPageStore(selectModelSyncLogsShowUnchanged);
+  const togglingProviderIds = useModelSyncLogsPageStore(selectModelSyncLogsTogglingProviderIds);
+  const detailLog = useModelSyncLogsPageStore(selectModelSyncLogsDetailLog);
+  const clearDialogOpen = useModelSyncLogsPageStore(selectModelSyncLogsClearDialogOpen);
+  const clearingErrors = useModelSyncLogsPageStore(selectModelSyncLogsClearingErrors);
+
+  const setActiveTab = useModelSyncLogsPageStore(selectSetModelSyncLogsActiveTab);
+  const setLogs = useModelSyncLogsPageStore(selectSetModelSyncLogsLogs);
+  const setRecentModels = useModelSyncLogsPageStore(selectSetModelSyncLogsRecentModels);
+  const setRecentErrors = useModelSyncLogsPageStore(selectSetModelSyncLogsRecentErrors);
+  const setSyncTime = useModelSyncLogsPageStore(selectSetModelSyncLogsSyncTime);
+  const setStats = useModelSyncLogsPageStore(selectSetModelSyncLogsStats);
+  const setProvidersById = useModelSyncLogsPageStore(selectSetModelSyncLogsProvidersById);
+  const setLoading = useModelSyncLogsPageStore(selectSetModelSyncLogsLoading);
+  const setRecentLoading = useModelSyncLogsPageStore(selectSetModelSyncLogsRecentLoading);
+  const setErrorsLoading = useModelSyncLogsPageStore(selectSetModelSyncLogsErrorsLoading);
+  const setSyncing = useModelSyncLogsPageStore(selectSetModelSyncLogsSyncing);
+  const setStatsLoading = useModelSyncLogsPageStore(selectSetModelSyncLogsStatsLoading);
+  const setSelectedLogs = useModelSyncLogsPageStore(selectSetModelSyncLogsSelectedLogs);
+  const setSelectedErrorProviders = useModelSyncLogsPageStore(selectSetModelSyncLogsSelectedErrorProviders);
+  const setPage = useModelSyncLogsPageStore(selectSetModelSyncLogsPage);
+  const setTotalPages = useModelSyncLogsPageStore(selectSetModelSyncLogsTotalPages);
+  const setShowUnchanged = useModelSyncLogsPageStore(selectSetModelSyncLogsShowUnchanged);
+  const setTogglingProviderIds = useModelSyncLogsPageStore(selectSetModelSyncLogsTogglingProviderIds);
+  const setDetailLog = useModelSyncLogsPageStore(selectSetModelSyncLogsDetailLog);
+  const setClearDialogOpen = useModelSyncLogsPageStore(selectSetModelSyncLogsClearDialogOpen);
+  const setClearingErrors = useModelSyncLogsPageStore(selectSetModelSyncLogsClearingErrors);
+  const resetTransient = useModelSyncLogsPageStore(selectResetModelSyncLogsTransient);
 
   const fetchStats = useCallback(async () => {
     try {

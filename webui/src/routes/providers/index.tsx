@@ -53,7 +53,6 @@ import { Label } from "@/components/ui/label";
 import {
   getProviders,
   getSettings,
-  createProvider,
   updateProvider,
   getProviderTemplates,
   syncAllProviderModels,
@@ -63,13 +62,14 @@ import { parseUpstreamModelsFromConfig } from "@/lib/provider-models";
 import { toast } from "sonner";
 import { Spinner } from "@/components/ui/spinner";
 import { defaultProviderFormValues, providerFormSchema, type ProviderFormValues } from "./form-schema";
-import { buildConfigFromForm, extractAllModels, parseConfigToForm } from "./utils/config";
+import { extractAllModels, parseConfigToForm } from "./utils/config";
 import { useProvidersPageStore } from "@/stores/providers";
 import { useProviderModelTesting } from "./hooks/use-provider-model-testing";
 import { useAllModelsDialog } from "./hooks/use-all-models-dialog";
 import { useUpstreamModelsDialog } from "./hooks/use-upstream-models-dialog";
 import { useProviderDialog } from "./hooks/use-provider-dialog";
 import { useProviderDangerActions } from "./hooks/use-provider-danger-actions";
+import { useProviderMutations } from "./hooks/use-provider-mutations";
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -489,55 +489,13 @@ export default function ProvidersPage() {
     }
   };
 
-  const handleCreate = async (values: ProviderFormValues) => {
-    try {
-      const config = buildConfigFromForm(values);
-      await createProvider({
-        name: values.name,
-        type: values.type,
-        config: config,
-        console: values.console || "",
-        proxy: values.proxy || "",
-        model_endpoint: values.model_endpoint ?? true,
-        model_filter_enabled: values.model_filter_enabled ?? false,
-        auth_type: values.type === "anthropic" ? (values.auth_type || "x-api-key") : undefined,
-      });
-      setOpen(false);
-      toast.success(`提供商 ${values.name} 创建成功`);
-      form.reset({ ...defaultProviderFormValues });
-      fetchProviders();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`创建提供商失败: ${message}`);
-      console.error(err);
-    }
-  };
-
-  const handleUpdate = async (values: ProviderFormValues) => {
-    if (!editingProvider) return;
-    try {
-      const config = buildConfigFromForm(values);
-      await updateProvider(editingProvider.ID, {
-        name: values.name,
-        type: values.type,
-        config: config,
-        console: values.console || "",
-        proxy: values.proxy || "",
-        model_endpoint: values.model_endpoint,
-        model_filter_enabled: values.model_filter_enabled,
-        auth_type: values.type === "anthropic" ? (values.auth_type || "x-api-key") : undefined,
-      });
-      setOpen(false);
-      toast.success(`提供商 ${values.name} 更新成功`);
-      setEditingProvider(null);
-      form.reset({ ...defaultProviderFormValues });
-      fetchProviders();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`更新提供商失败: ${message}`);
-      console.error(err);
-    }
-  };
+  const { handleSubmitProvider } = useProviderMutations({
+    form,
+    editingProvider,
+    setEditingProvider,
+    setOpen,
+    fetchProviders,
+  });
 
   const { openEditDialog, openCreateDialog } = useProviderDialog({
     form,
@@ -919,7 +877,7 @@ export default function ProvidersPage() {
 
           <Form {...form}>
             <form
-              onSubmit={form.handleSubmit(editingProvider ? handleUpdate : handleCreate)}
+              onSubmit={form.handleSubmit(handleSubmitProvider)}
               className="space-y-4 min-w-0 overflow-y-auto flex-1 min-h-0 -mx-1 px-1"
             >
               <FormField

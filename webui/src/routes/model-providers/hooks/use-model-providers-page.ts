@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useFieldArray, useForm, useWatch } from "react-hook-form";
+import { useFieldArray, useForm } from "react-hook-form";
 import {
   selectModelProvidersAssociationTestResults,
   selectModelProvidersBatchDeleteDialogOpen,
@@ -98,12 +98,12 @@ import type {
 import { formSchema, type FormValues } from "../form-schema";
 import type { ProviderModelGroup, ProviderModelWithOwner } from "../types";
 import { buildAssociationPayload } from "../utils/payload";
-import { buildSelectionKey } from "../utils/selection";
 import { useModelProvidersAssociationDialog } from "./use-model-providers-association-dialog";
 import { useModelProvidersAssociationMutations } from "./use-model-providers-association-mutations";
 import { useModelProvidersAssociationStatusToggle } from "./use-model-providers-association-status-toggle";
 import { useModelProvidersAssociationsData } from "./use-model-providers-associations-data";
 import { useModelProvidersAssociationFilters } from "./use-model-providers-association-filters";
+import { useModelProvidersModelListVisibility } from "./use-model-providers-model-list-visibility";
 import { useModelProvidersBatch } from "./use-model-providers-batch";
 import { useModelProvidersBlacklist } from "./use-model-providers-blacklist";
 import { useModelProvidersBootstrap } from "./use-model-providers-bootstrap";
@@ -378,33 +378,14 @@ export function useModelProvidersPage() {
     selectedAssociationIds,
   });
 
-  const existingAssociationKeys = new Set(
-    modelProviders.map((mp) => buildSelectionKey(mp.ProviderID, mp.ProviderModel))
-  );
-  const searchKeywordLower = modelSearchKeyword.toLowerCase();
-  const selectedProviderId = useWatch({
-    control: form.control,
-    name: "provider_id"
-  });
-  const visibleProviderGroups = providerModelGroups
-    .filter((group) =>
-      selectedProviderId && selectedProviderId > 0 ? group.provider.ID === selectedProviderId : true
-    )
-    .map((group) => ({
-      ...group,
-      models: group.models.filter((model) =>
-        model.id.toLowerCase().includes(searchKeywordLower)
-      )
-    }))
-    .filter((group) => group.models.length > 0);
-  const visibleProviderModels = visibleProviderGroups.flatMap((group) => group.models);
-  const visibleAvailableModels = visibleProviderModels.filter(
-    (model) => !existingAssociationKeys.has(buildSelectionKey(model.providerId, model.id))
-  );
-  const visibleExistingCount = visibleProviderModels.length - visibleAvailableModels.length;
-  const selectedKeys = new Set(
-    selectedProviderModels.map((item) => buildSelectionKey(item.providerId, item.modelId))
-  );
+  const { existingAssociationKeys, visibleProviderGroups, visibleAvailableModels, visibleExistingCount, selectedKeys } =
+    useModelProvidersModelListVisibility({
+      control: form.control,
+      providerModelGroups,
+      modelSearchKeyword,
+      modelProviders,
+      selectedProviderModels,
+    });
   const selectedModel = models.find((model) => model.ID === selectedModelId) || null;
   const isGlobalScope = operationScope === "all";
 

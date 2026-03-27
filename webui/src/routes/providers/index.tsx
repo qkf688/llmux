@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
@@ -50,7 +50,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import Loading from "@/components/loading";
 import { Label } from "@/components/ui/label";
-import type { Provider, ProviderTemplate } from "@/lib/api";
 import { parseUpstreamModelsFromConfig } from "@/lib/provider-models";
 import { Spinner } from "@/components/ui/spinner";
 import { defaultProviderFormValues, providerFormSchema, type ProviderFormValues } from "./form-schema";
@@ -70,13 +69,14 @@ import { getAllModelsForProvider } from "./utils/provider-models";
 import { hasActiveProvidersFilter } from "./utils/filters";
 
 export default function ProvidersPage() {
-  const [providers, setProviders] = useState<Provider[]>([]);
-  const [providerTemplates, setProviderTemplates] = useState<ProviderTemplate[]>([]);
-
   // 上游模型测试相关状态
   const {
     loading,
     setLoading,
+    providers,
+    setProviders,
+    providerTemplates,
+    setProviderTemplates,
     clearingAssociation,
     setClearingAssociation,
     modelsLoading,
@@ -143,6 +143,10 @@ export default function ProvidersPage() {
   } = useProvidersPageStore((state) => ({
     loading: state.loading,
     setLoading: state.setLoading,
+    providers: state.providers,
+    setProviders: state.setProviders,
+    providerTemplates: state.providerTemplates,
+    setProviderTemplates: state.setProviderTemplates,
     clearingAssociation: state.clearingAssociation,
     setClearingAssociation: state.setClearingAssociation,
     modelsLoading: state.modelsLoading,

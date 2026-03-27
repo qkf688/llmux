@@ -1,5 +1,5 @@
 import { createStore } from "zustand/vanilla";
-import type { Provider } from "@/lib/api";
+import type { Provider, ProviderTemplate } from "@/lib/api";
 import { readProvidersPagePreferences, writeProvidersPagePreferences } from "@/stores/providers/persist";
 import { DEFAULT_BATCH_TEST_PROGRESS, type BatchTestProgress, type ModelTestResult } from "@/stores/providers/types";
 
@@ -11,6 +11,8 @@ function resolveUpdater<T>(updater: Updater<T>, previous: T): T {
 
 export type ProvidersPageState = {
   loading: boolean;
+  providers: Provider[];
+  providerTemplates: ProviderTemplate[];
   nameFilter: string;
   debouncedNameFilter: string;
   typeFilter: string;
@@ -51,6 +53,8 @@ export type ProvidersPageState = {
   upstreamBatchTestProgress: BatchTestProgress;
 
   setLoading: (loading: boolean) => void;
+  setProviders: (providers: Updater<Provider[]>) => void;
+  setProviderTemplates: (templates: Updater<ProviderTemplate[]>) => void;
   setNameFilter: (value: string) => void;
   setDebouncedNameFilter: (value: string) => void;
   flushNameFilter: () => void;
@@ -110,6 +114,8 @@ const preferences = readProvidersPagePreferences();
 
 export const providersPageStore = createStore<ProvidersPageState>()((set, get) => ({
   loading: true,
+  providers: [],
+  providerTemplates: [],
   nameFilter: preferences.nameFilter,
   debouncedNameFilter: preferences.nameFilter,
   typeFilter: preferences.typeFilter,
@@ -150,6 +156,9 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
   upstreamBatchTestProgress: { ...DEFAULT_BATCH_TEST_PROGRESS },
 
   setLoading: (loading: boolean) => set({ loading }),
+  setProviders: (providers: Updater<Provider[]>) => set((state) => ({ providers: resolveUpdater(providers, state.providers) })),
+  setProviderTemplates: (templates: Updater<ProviderTemplate[]>) =>
+    set((state) => ({ providerTemplates: resolveUpdater(templates, state.providerTemplates) })),
   setNameFilter: (value: string) => {
     set({ nameFilter: value });
     const current = get();
@@ -249,6 +258,9 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
   resetTransient: () =>
     set({
       loading: true,
+      providers: [],
+      providerTemplates: [],
+      availableTypes: [],
       providerDialogOpen: false,
       editingProvider: null,
       deleteId: null,

@@ -246,6 +246,8 @@ export default function ProvidersPage() {
   const {
     allModelsList,
     filteredAllModels,
+    isAllFilteredSelected,
+    toggleSelectAllModels,
     setAllModelsList,
     upstreamModelsList,
     upstreamStatus,
@@ -301,17 +303,6 @@ export default function ProvidersPage() {
     persistModels,
     autoActionsFlags,
   });
-
-  const toggleSelectAllModels = () => {
-    if (filteredAllModels.length === 0) return;
-    if (selectedAllModels.length >= filteredAllModels.length && filteredAllModels.every(m => selectedAllModels.includes(m))) {
-      // 如果当前选中的包含所有过滤后的模型，则取消选中这些
-      setSelectedAllModels(selectedAllModels.filter(m => !filteredAllModels.includes(m)));
-    } else {
-      // 否则选中所有过滤后的模型
-      setSelectedAllModels(Array.from(new Set([...selectedAllModels, ...filteredAllModels])));
-    }
-  };
 
   const {
     updatingFilter,
@@ -1195,7 +1186,7 @@ export default function ProvidersPage() {
                           onClick={toggleSelectAllModels}
                           disabled={filteredAllModels.length === 0 || batchTesting}
                         >
-                          {filteredAllModels.length > 0 && filteredAllModels.every(m => selectedAllModels.includes(m)) ? (
+                          {isAllFilteredSelected ? (
                             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -1207,7 +1198,7 @@ export default function ProvidersPage() {
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
-                        {filteredAllModels.length > 0 && filteredAllModels.every(m => selectedAllModels.includes(m)) ? "取消全选" : "全选"}
+                        {isAllFilteredSelected ? "取消全选" : "全选"}
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>

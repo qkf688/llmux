@@ -58,6 +58,20 @@ export function useAllModelsDialog({
       ? allModelsList
       : allModelsList.filter((model) => model.toLowerCase().includes(allModelsSearchQuery.toLowerCase()));
 
+  const isAllFilteredSelected = filteredAllModels.length > 0 && filteredAllModels.every((model) => selectedAllModels.includes(model));
+
+  const toggleSelectAllModels = () => {
+    if (filteredAllModels.length === 0) return;
+
+    setSelectedAllModels((previous) => {
+      const allSelected = filteredAllModels.every((model) => previous.includes(model));
+      if (allSelected) {
+        return previous.filter((model) => !filteredAllModels.includes(model));
+      }
+      return Array.from(new Set([...previous, ...filteredAllModels]));
+    });
+  };
+
   const openAllModelsDialog = async (provider: Provider) => {
     const allModels = extractAllModels(provider.Config);
     setAllModelsProvider(provider);
@@ -226,6 +240,8 @@ export function useAllModelsDialog({
   return {
     allModelsList,
     filteredAllModels,
+    isAllFilteredSelected,
+    toggleSelectAllModels,
     setAllModelsList,
     upstreamModelsList,
     upstreamStatus,

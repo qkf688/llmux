@@ -114,6 +114,7 @@ import { useModelProvidersPageActions } from "./use-model-providers-page-actions
 import { useModelProvidersModelListSelection } from "./use-model-providers-model-list-selection";
 import { useModelProvidersPreview } from "./use-model-providers-preview";
 import { useModelProvidersPageSectionProps } from "./use-model-providers-page-section-props";
+import { useModelProvidersPageDialogProps } from "./use-model-providers-page-dialog-props";
 import { useModelProvidersTemplateEditor } from "./use-model-providers-template-editor";
 import { useModelProvidersTesting } from "./use-model-providers-testing";
 
@@ -533,42 +534,45 @@ export function useModelProvidersPage() {
       onTest: handleTest,
     });
 
-  const blacklistDialogProps = {
-    open: blacklistDialogOpen,
-    onOpenChange: setBlacklistDialogOpen,
+  const {
+    blacklistDialogProps,
+    templateEditorDialogProps,
+    associationFormDialogProps,
+    testDialogProps,
+    modelListDialogProps,
+    previewDialogProps,
+  } = useModelProvidersPageDialogProps({
+    blacklistDialogOpen,
+    onBlacklistDialogOpenChange: setBlacklistDialogOpen,
     providers,
     filteredProviders,
     blacklistedIds,
-    loading: blacklistLoading,
-    saving: blacklistSaving,
-    searchTerm: blacklistSearchTerm,
-    filter: blacklistFilter,
-    onSearchTermChange: setBlacklistSearchTerm,
-    onFilterChange: setBlacklistFilter,
-    onToggle: handleToggleBlacklist,
-    onSave: handleSaveBlacklist,
-    onCancel: cancelBlacklistDialog,
-  };
+    blacklistLoading,
+    blacklistSaving,
+    blacklistSearchTerm,
+    blacklistFilter,
+    onBlacklistSearchTermChange: setBlacklistSearchTerm,
+    onBlacklistFilterChange: setBlacklistFilter,
+    onToggleBlacklist: handleToggleBlacklist,
+    onSaveBlacklist: handleSaveBlacklist,
+    onCancelBlacklist: cancelBlacklistDialog,
 
-  const templateEditorDialogProps = {
-    open: templateEditorOpen,
-    onOpenChange: setTemplateEditorOpen,
+    templateEditorOpen,
+    onTemplateEditorOpenChange: setTemplateEditorOpen,
     selectedModelId,
-    loading: templateLoading,
+    templateLoading,
     templateData,
-    newItem: templateNewItem,
-    onNewItemChange: setTemplateNewItem,
-    onAdd: addTemplateItem,
-    onDelete: deleteTemplateItem,
-  };
+    templateNewItem,
+    onTemplateNewItemChange: setTemplateNewItem,
+    onAddTemplateItem: addTemplateItem,
+    onDeleteTemplateItem: deleteTemplateItem,
 
-  const associationFormDialogProps = {
-    open,
-    onOpenChange: setOpen,
+    associationFormOpen: open,
+    onAssociationFormOpenChange: setOpen,
     editingAssociation,
     form,
     models,
-    providers,
+    providersForForm: providers,
     selectedProviderModels,
     isSubmitting,
     headerFields,
@@ -580,24 +584,20 @@ export function useModelProvidersPage() {
     onClearSelectedProviderModels: clearSelectedProviderModels,
     onRemoveSelectedProviderModel: removeSelectedProviderModel,
     onProviderChange: handleProviderChange,
-  };
 
-  const testDialogProps = {
-    open: testDialogOpen,
-    onOpenChange: setTestDialogOpen,
+    testDialogOpen,
+    onTestDialogOpenChange: setTestDialogOpen,
     testType,
     onTestTypeChange: setTestType,
     selectedTestId,
     testResults,
     structuredTestResults,
     reactTestResult,
-    onClose: dialogClose,
-    onExecute: executeTestNow,
-  };
+    onCloseTestDialog: dialogClose,
+    onExecuteTestNow: executeTestNow,
 
-  const modelListDialogProps = {
-    open: modelListDialogOpen,
-    onOpenChange: setModelListDialogOpen,
+    modelListDialogOpen,
+    onModelListDialogOpenChange: setModelListDialogOpen,
     modelSearchKeyword,
     onModelSearchKeywordChange: setModelSearchKeyword,
     loadingProviderModels,
@@ -605,24 +605,22 @@ export function useModelProvidersPage() {
     visibleProviderGroups,
     visibleAvailableModels,
     visibleExistingCount,
-    selectedProviderModels,
+    selectedProviderModelsForList: selectedProviderModels,
     selectedKeys,
     existingAssociationKeys,
     collapsedProviders,
     onToggleProviderCollapse: toggleProviderCollapse,
     onSelectAllVisibleAvailable: selectAllVisibleAvailable,
-    onClearSelection: clearModelListSelection,
+    onClearModelListSelection: clearModelListSelection,
     onToggleModelSelection: toggleModelSelection,
-  };
 
-  const previewDialogProps = {
-    open: previewDialogOpen,
-    onOpenChange: setPreviewDialogOpen,
-    type: previewType,
-    data: previewData,
+    previewDialogOpen,
+    onPreviewDialogOpenChange: setPreviewDialogOpen,
+    previewType,
+    previewData,
     executing,
-    onConfirm: confirmPreviewAction,
-  };
+    onConfirmPreview: confirmPreviewAction,
+  });
 
   return {
     shouldShowInitialLoading,

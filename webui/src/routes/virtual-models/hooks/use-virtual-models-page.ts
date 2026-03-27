@@ -1,22 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useCallback, useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
-import {
-  batchCreateVirtualModelMapping,
-  createVirtualModel,
-  createVirtualModelMapping,
-  deleteVirtualModel,
-  deleteVirtualModelMapping,
-  getModels,
-  getProviders,
-  getVirtualModelMappings,
-  getVirtualModels,
-  updateProvider,
-  updateVirtualModel,
-  updateVirtualModelMapping,
-} from "@/lib/api";
-import type { VirtualModel, VirtualModelMapping } from "@/lib/api";
 import {
   defaultMappingFormValues,
   defaultVirtualModelFormValues,
@@ -25,7 +9,6 @@ import {
   type MappingFormValues,
   type VirtualModelFormValues,
 } from "../schemas/forms";
-import type { VirtualModelStrategy } from "../types";
 import {
   DEFAULT_VIRTUAL_MODELS_BATCH,
   selectResetVirtualModelsTransient,
@@ -77,15 +60,10 @@ import {
   selectVirtualModelsVirtualModels,
   useVirtualModelsPageStore,
 } from "@/stores/virtual-models";
-
-const extractErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
-
-const toVirtualModelStrategy = (strategy: string): VirtualModelStrategy => {
-  if (strategy === "round_robin" || strategy === "random") {
-    return strategy;
-  }
-  return "priority";
-};
+import { useVirtualModelsBootstrap } from "./use-virtual-models-bootstrap";
+import { useVirtualModelsBlacklist } from "./use-virtual-models-blacklist";
+import { useVirtualModelsMappings } from "./use-virtual-models-mappings";
+import { useVirtualModelsModelActions } from "./use-virtual-models-model-actions";
 
 export function useVirtualModelsPage() {
   const loading = useVirtualModelsPageStore(selectVirtualModelsLoading);
@@ -147,44 +125,15 @@ export function useVirtualModelsPage() {
     defaultValues: { ...defaultMappingFormValues },
   });
 
-  const fetchInitialData = useCallback(async () => {
-    try {
-      setLoading(true);
-      const [virtualModelData, realModelData, providerData] = await Promise.all([
-        getVirtualModels(),
-        getModels(),
-        getProviders(),
-      ]);
-      setVirtualModels(virtualModelData);
-      setRealModels(realModelData);
-      setProviders(providerData);
-      setBlacklistedProviders(providerData.filter((provider) => provider.blacklisted));
-    } catch (error) {
-      const message = extractErrorMessage(error);
-      toast.error(`获取数据失败: ${message}`);
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  }, [setBlacklistedProviders, setLoading, setProviders, setRealModels, setVirtualModels]);
-
-  useEffect(() => {
-    void fetchInitialData();
-    return () => {
-      resetTransient();
-    };
-  }, [fetchInitialData, resetTransient]);
-
-  const refreshProvidersState = async () => {
-    const latestProviders = await getProviders();
-    setProviders(latestProviders);
-    setBlacklistedProviders(latestProviders.filter((provider) => provider.blacklisted));
-  };
-
-  const refreshMappings = async (virtualModelId: number) => {
-    const latestMappings = await getVirtualModelMappings(virtualModelId);
-    setMappings(latestMappings);
-  };
+  const { fetchInitialData, refreshProvidersState, refreshMappings } = useVirtualModelsBootstrap({
+    setLoading,
+    setVirtualModels,
+    setRealModels,
+    setProviders,
+    setBlacklistedProviders,
+    setMappings,
+    resetTransient,
+  });
 
   const filteredModels = useMemo(() => {
     const keyword = modelSearchQuery.trim().toLowerCase();
@@ -216,275 +165,79 @@ export function useVirtualModelsPage() {
 
   const getRealModelName = (modelId: number) => realModelNameMap.get(modelId) ?? `ID: ${modelId}`;
 
-  const openCreateVirtualModel = () => {
-    setEditingModel(null);
-    virtualModelForm.reset({ ...defaultVirtualModelFormValues });
-    setModelDialogOpen(true);
-  };
+  const {
+    openCreateVirtualModel,
+    openEditVirtualModel,
+    submitVirtualModel,
+    requestDeleteVirtualModel,
+    closeDeleteDialog,
+    confirmDeleteVirtualModel,
+  } = useVirtualModelsModelActions({
+    editingModel,
+    modelToDeleteId,
+    virtualModelForm,
+    fetchInitialData,
+    setEditingModel,
+    setModelDialogOpen,
+    setModelToDeleteId,
+  });
 
-  const openEditVirtualModel = (model: VirtualModel) => {
-    setEditingModel(model);
-    virtualModelForm.reset({
-      name: model.Name,
-      description: model.Description,
-      strategy: toVirtualModelStrategy(model.Strategy),
-      max_retry: model.MaxRetry,
-      time_out: model.TimeOut,
-      io_log: model.IOLog,
-      enabled: model.Enabled,
-    });
-    setModelDialogOpen(true);
-  };
+  const {
+    openMappingsDialog,
+    handleMappingsDialogOpenChange,
+    openAddMappingDialog,
+    openEditMappingDialog,
+    submitMapping,
+    deleteMapping,
+    openBatchMappingDialog,
+    toggleBatchModelSelection,
+    selectAllBatchModels,
+    invertBatchModelSelection,
+    clearBatchModelSelection,
+    submitBatchMapping,
+  } = useVirtualModelsMappings({
+    currentVirtualModel,
+    editingMapping,
+    selectedModelIds,
+    batchPriority,
+    batchWeight,
+    batchEnabled,
+    filteredModels,
+    mappedModelIds,
+    mappingForm,
+    defaults: DEFAULT_VIRTUAL_MODELS_BATCH,
+    getRealModelName,
+    refreshMappings,
+    setCurrentVirtualModel,
+    setMappingsDialogOpen,
+    setMappingFormDialogOpen,
+    setMappingBatchDialogOpen,
+    setEditingMapping,
+    setSelectedModelIds,
+    setBatchPriority,
+    setBatchWeight,
+    setBatchEnabled,
+    setModelSearchQuery,
+  });
 
-  const submitVirtualModel = async (values: VirtualModelFormValues) => {
-    try {
-      if (editingModel) {
-        await updateVirtualModel(editingModel.ID, values);
-        toast.success("虚拟模型更新成功");
-      } else {
-        await createVirtualModel(values);
-        toast.success("虚拟模型创建成功");
-      }
-      setModelDialogOpen(false);
-      await fetchInitialData();
-    } catch (error) {
-      const message = extractErrorMessage(error);
-      toast.error(`操作失败: ${message}`);
-    }
-  };
-
-  const requestDeleteVirtualModel = (modelId: number) => {
-    setModelToDeleteId(modelId);
-  };
-
-  const closeDeleteDialog = () => {
-    setModelToDeleteId(null);
-  };
-
-  const confirmDeleteVirtualModel = async () => {
-    if (!modelToDeleteId) {
-      return;
-    }
-
-    try {
-      await deleteVirtualModel(modelToDeleteId);
-      toast.success("虚拟模型删除成功");
-      setModelToDeleteId(null);
-      await fetchInitialData();
-    } catch (error) {
-      const message = extractErrorMessage(error);
-      toast.error(`删除失败: ${message}`);
-    }
-  };
-
-  const openMappingsDialog = async (model: VirtualModel) => {
-    setCurrentVirtualModel(model);
-    try {
-      await refreshMappings(model.ID);
-      setMappingsDialogOpen(true);
-    } catch (error) {
-      const message = extractErrorMessage(error);
-      toast.error(`获取映射失败: ${message}`);
-    }
-  };
-
-  const handleMappingsDialogOpenChange = (open: boolean) => {
-    setMappingsDialogOpen(open);
-    if (!open) {
-      setMappingFormDialogOpen(false);
-      setMappingBatchDialogOpen(false);
-      setEditingMapping(null);
-    }
-  };
-
-  const openAddMappingDialog = () => {
-    setEditingMapping(null);
-    mappingForm.reset({ ...defaultMappingFormValues });
-    setMappingFormDialogOpen(true);
-  };
-
-  const openEditMappingDialog = (mapping: VirtualModelMapping) => {
-    setEditingMapping(mapping);
-    mappingForm.reset({
-      real_model_id: mapping.RealModelID,
-      priority: mapping.Priority,
-      weight: mapping.Weight,
-      enabled: mapping.Enabled,
-    });
-    setMappingFormDialogOpen(true);
-  };
-
-  const submitMapping = async (values: MappingFormValues) => {
-    if (!currentVirtualModel) {
-      return;
-    }
-
-    try {
-      if (editingMapping) {
-        await updateVirtualModelMapping(currentVirtualModel.ID, editingMapping.ID, values);
-        toast.success("映射更新成功");
-      } else {
-        await createVirtualModelMapping(currentVirtualModel.ID, values);
-        toast.success("映射创建成功");
-      }
-      setMappingFormDialogOpen(false);
-      await refreshMappings(currentVirtualModel.ID);
-    } catch (error) {
-      const message = extractErrorMessage(error);
-      toast.error(`操作失败: ${message}`);
-    }
-  };
-
-  const deleteMapping = async (mappingId: number) => {
-    if (!currentVirtualModel) {
-      return;
-    }
-
-    try {
-      await deleteVirtualModelMapping(currentVirtualModel.ID, mappingId);
-      toast.success("映射删除成功");
-      await refreshMappings(currentVirtualModel.ID);
-    } catch (error) {
-      const message = extractErrorMessage(error);
-      toast.error(`删除失败: ${message}`);
-    }
-  };
-
-  const openBatchMappingDialog = () => {
-    setSelectedModelIds([]);
-    setBatchPriority(DEFAULT_VIRTUAL_MODELS_BATCH.priority);
-    setBatchWeight(DEFAULT_VIRTUAL_MODELS_BATCH.weight);
-    setBatchEnabled(DEFAULT_VIRTUAL_MODELS_BATCH.enabled);
-    setModelSearchQuery("");
-    setMappingBatchDialogOpen(true);
-  };
-
-  const toggleBatchModelSelection = (modelId: number) => {
-    setSelectedModelIds((previous) =>
-      previous.includes(modelId)
-        ? previous.filter((id) => id !== modelId)
-        : [...previous, modelId]
-    );
-  };
-
-  const selectAllBatchModels = () => {
-    const selectableModels = filteredModels.filter((model) => !mappedModelIds.has(model.ID));
-    setSelectedModelIds(selectableModels.map((model) => model.ID));
-  };
-
-  const invertBatchModelSelection = () => {
-    const selectableModels = filteredModels.filter((model) => !mappedModelIds.has(model.ID));
-    setSelectedModelIds((previous) => {
-      const previousSet = new Set(previous);
-      return selectableModels
-        .filter((model) => !previousSet.has(model.ID))
-        .map((model) => model.ID);
-    });
-  };
-
-  const clearBatchModelSelection = () => {
-    setSelectedModelIds([]);
-  };
-
-  const submitBatchMapping = async () => {
-    if (!currentVirtualModel) {
-      return;
-    }
-
-    if (selectedModelIds.length === 0) {
-      toast.error("请至少选择一个真实模型");
-      return;
-    }
-
-    try {
-      const payload = selectedModelIds.map((modelId) => ({
-        real_model_id: modelId,
-        priority: batchPriority,
-        weight: batchWeight,
-        enabled: batchEnabled,
-      }));
-      const result = await batchCreateVirtualModelMapping(currentVirtualModel.ID, payload);
-
-      if (result.success_count > 0) {
-        toast.success(`成功添加 ${result.success_count} 个映射`);
-      }
-      if (result.failed_count > 0) {
-        toast.error(`${result.failed_count} 个映射添加失败`);
-        result.failed_items.forEach((item) => {
-          toast.error(`${getRealModelName(item.real_model_id)}: ${item.reason}`);
-        });
-      }
-
-      setMappingBatchDialogOpen(false);
-      await refreshMappings(currentVirtualModel.ID);
-    } catch (error) {
-      const message = extractErrorMessage(error);
-      toast.error(`批量添加失败: ${message}`);
-    }
-  };
-
-  const openBlacklistDialog = async (model: VirtualModel) => {
-    setCurrentVirtualModel(model);
-    try {
-      await refreshProvidersState();
-    } catch (error) {
-      const message = extractErrorMessage(error);
-      toast.error(`获取提供商数据失败: ${message}`);
-      setBlacklistedProviders(providers.filter((provider) => provider.blacklisted));
-    }
-    setBlacklistDialogOpen(true);
-  };
-
-  const handleBlacklistDialogOpenChange = (open: boolean) => {
-    setBlacklistDialogOpen(open);
-    if (!open) {
-      setProviderSelectorDialogOpen(false);
-    }
-  };
-
-  const openProviderSelectorDialog = () => {
-    setSelectedProviderIds([]);
-    setProviderSearchQuery("");
-    setProviderSelectorDialogOpen(true);
-  };
-
-  const toggleProviderSelection = (providerId: number) => {
-    setSelectedProviderIds((previous) =>
-      previous.includes(providerId)
-        ? previous.filter((id) => id !== providerId)
-        : [...previous, providerId]
-    );
-  };
-
-  const confirmAddBlacklistedProviders = async () => {
-    if (selectedProviderIds.length === 0) {
-      toast.error("请至少选择一个提供商");
-      return;
-    }
-
-    try {
-      for (const providerId of selectedProviderIds) {
-        await updateProvider(providerId, { blacklisted: true });
-      }
-      toast.success(`成功拉黑 ${selectedProviderIds.length} 个提供商`);
-      setProviderSelectorDialogOpen(false);
-      await refreshProvidersState();
-    } catch (error) {
-      const message = extractErrorMessage(error);
-      toast.error(`操作失败: ${message}`);
-    }
-  };
-
-  const removeBlacklistedProvider = async (providerId: number) => {
-    try {
-      await updateProvider(providerId, { blacklisted: false });
-      toast.success("提供商已解除拉黑");
-      await refreshProvidersState();
-    } catch (error) {
-      const message = extractErrorMessage(error);
-      toast.error(`操作失败: ${message}`);
-    }
-  };
+  const {
+    openBlacklistDialog,
+    handleBlacklistDialogOpenChange,
+    openProviderSelectorDialog,
+    toggleProviderSelection,
+    confirmAddBlacklistedProviders,
+    removeBlacklistedProvider,
+  } = useVirtualModelsBlacklist({
+    providers,
+    selectedProviderIds,
+    refreshProvidersState,
+    setCurrentVirtualModel,
+    setBlacklistedProviders,
+    setBlacklistDialogOpen,
+    setProviderSelectorDialogOpen,
+    setSelectedProviderIds,
+    setProviderSearchQuery,
+  });
 
   return {
     loading,

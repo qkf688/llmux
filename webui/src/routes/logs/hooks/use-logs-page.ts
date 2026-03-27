@@ -1,21 +1,5 @@
-import { useCallback, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  batchDeleteLogs,
-  clearAllLogs,
-  clearFilteredLogs,
-  deleteLog,
-  getLogDetail,
-  getLogs,
-  getModels,
-  getProviderTemplates,
-  getProviders,
-  getUserAgents,
-  type ChatLog,
-} from "@/lib/api";
-import { toast } from "sonner";
+import { useEffect } from "react";
 import type { LogsFilters } from "../types";
-import { exportRequestResponse } from "../utils/export-log";
 import {
   buildLogsFiltersSummary,
   hasActiveLogsFilters,
@@ -65,22 +49,13 @@ import {
   selectSetPage,
   selectSetPageSize,
   selectSetSelectedIds,
-  toApiLogsFilters,
   useLogsPageStore,
 } from "@/stores/logs";
-
-const toErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
-
-const needsLogDetail = (log: ChatLog) =>
-  log.RequestHeaders === undefined &&
-  log.RequestBody === undefined &&
-  log.ResponseHeaders === undefined &&
-  log.ResponseBody === undefined &&
-  log.RawResponseBody === undefined;
+import { useLogsActions } from "./use-logs-actions";
+import { useLogsFetchers } from "./use-logs-fetchers";
+import { useLogsSelection } from "./use-logs-selection";
 
 export function useLogsPage() {
-  const navigate = useNavigate();
-
   const loading = useLogsPageStore(selectLogsLoading);
   const logs = useLogsPageStore(selectLogs);
   const providers = useLogsPageStore(selectLogsProviders);
@@ -141,65 +116,19 @@ export function useLogsPage() {
     };
   }, [resetTransient]);
 
-  const fetchFilterOptions = useCallback(async () => {
-    const [providerResult, modelResult, userAgentResult, templateResult] = await Promise.allSettled([
-      getProviders(),
-      getModels(),
-      getUserAgents(),
-      getProviderTemplates(),
-    ]);
-
-    if (providerResult.status === "fulfilled") {
-      setProviders(providerResult.value);
-    } else {
-      console.error("Error fetching providers:", providerResult.reason);
-    }
-
-    if (modelResult.status === "fulfilled") {
-      setModels(modelResult.value);
-    } else {
-      console.error("Error fetching models:", modelResult.reason);
-    }
-
-    if (userAgentResult.status === "fulfilled") {
-      setUserAgents(userAgentResult.value);
-    } else {
-      console.error("Error fetching user agents:", userAgentResult.reason);
-    }
-
-    if (templateResult.status === "fulfilled") {
-      const styleTypes = Array.from(
-        new Set(templateResult.value.map((template) => template.type).filter(Boolean))
-      );
-      setAvailableStyles(styleTypes);
-    } else {
-      console.error("Error fetching provider templates:", templateResult.reason);
-    }
-  }, [setAvailableStyles, setModels, setProviders, setUserAgents]);
-
-  const fetchLogs = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = await getLogs(page, pageSize, toApiLogsFilters(filters));
-      setLogs(result.data);
-      setTotal(result.total);
-      setPages(result.pages);
-    } catch (error) {
-      const message = toErrorMessage(error);
-      toast.error(`获取日志失败: ${message}`);
-      console.error("Error fetching logs:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [filters, page, pageSize, setLoading, setLogs, setPages, setTotal]);
-
-  useEffect(() => {
-    void fetchFilterOptions();
-  }, [fetchFilterOptions]);
-
-  useEffect(() => {
-    void fetchLogs();
-  }, [fetchLogs]);
+  const { fetchLogs } = useLogsFetchers({
+    filters,
+    page,
+    pageSize,
+    setLoading,
+    setLogs,
+    setTotal,
+    setPages,
+    setProviders,
+    setModels,
+    setUserAgents,
+    setAvailableStyles,
+  });
 
   const handleFilterChange = (key: keyof LogsFilters, value: string) => {
     setFilter(key, value);
@@ -219,149 +148,51 @@ export function useLogsPage() {
     void fetchLogs();
   };
 
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedIds(new Set(logs.map((log) => log.ID)));
-      return;
-    }
-    clearSelection();
-  };
-
-  const handleSelectOne = (id: number, checked: boolean) => {
-    const next = new Set(selectedIds);
-    if (checked) {
-      next.add(id);
-    } else {
-      next.delete(id);
-    }
-    setSelectedIds(next);
-  };
+  const { selectedCount, isAllSelected, isSomeSelected, handleSelectAll, handleSelectOne } = useLogsSelection({
+    logs,
+    selectedIds,
+    setSelectedIds,
+    clearSelection,
+  });
 
   const handleDetailDialogOpenChange = (open: boolean) => {
     setDetailDialogOpen(open);
-  };
-
-  const canViewChatIO = (log: ChatLog) => log.Status === "success" && Boolean(log.ChatIO);
-
-  const handleViewChatIO = (log: ChatLog) => {
-    if (!canViewChatIO(log)) {
-      return;
-    }
-    navigate(`/logs/${log.ID}/chat-io`);
-  };
-
-  const handleExportRequestResponse = (log: ChatLog) => {
-    void (async () => {
-      try {
-        const exportLog = needsLogDetail(log) ? await getLogDetail(log.ID) : log;
-        exportRequestResponse(exportLog);
-        toast.success("导出成功");
-      } catch (error) {
-        const message = toErrorMessage(error);
-        toast.error(`导出失败: ${message}`);
-      }
-    })();
   };
 
   const handleDeleteDialogOpenChange = (open: boolean) => {
     setDeleteDialogOpen(open);
   };
 
-  const confirmDeleteLog = async () => {
-    if (logToDelete === null) {
-      return;
-    }
-
-    try {
-      setIsDeleting(true);
-      await deleteLog(logToDelete);
-      toast.success("日志已删除");
-
-      const nextSelected = new Set(selectedIds);
-      nextSelected.delete(logToDelete);
-      setSelectedIds(nextSelected);
-
-      await fetchLogs();
-    } catch (error) {
-      const message = toErrorMessage(error);
-      toast.error(`删除失败: ${message}`);
-    } finally {
-      setIsDeleting(false);
-      setDeleteDialogOpen(false);
-    }
-  };
-
-  const openBatchDeleteDialog = () => {
-    if (selectedIds.size === 0) {
-      return;
-    }
-    setBatchDeleteDialogOpen(true);
-  };
-
-  const confirmBatchDelete = async () => {
-    if (selectedIds.size === 0) {
-      return;
-    }
-
-    try {
-      setIsDeleting(true);
-      const result = await batchDeleteLogs(Array.from(selectedIds));
-      toast.success(`已删除 ${result.deleted} 条日志`);
-      clearSelection();
-      await fetchLogs();
-    } catch (error) {
-      const message = toErrorMessage(error);
-      toast.error(`批量删除失败: ${message}`);
-    } finally {
-      setIsDeleting(false);
-      setBatchDeleteDialogOpen(false);
-    }
-  };
-
-  const confirmClearAllLogs = async () => {
-    try {
-      setIsClearingAll(true);
-      const result = await clearAllLogs();
-      toast.success(`已清空 ${result.deleted} 条日志`);
-      clearSelection();
-      await fetchLogs();
-    } catch (error) {
-      const message = toErrorMessage(error);
-      toast.error(`清空日志失败: ${message}`);
-    } finally {
-      setIsClearingAll(false);
-      setClearAllDialogOpen(false);
-    }
-  };
-
   const canClearFiltered = hasActiveLogsFilters(filters);
 
   const filtersSummary = buildLogsFiltersSummary(filters);
 
-  const confirmClearFilteredLogs = async () => {
-    try {
-      setIsClearingFiltered(true);
-      const result = await clearFilteredLogs(toApiLogsFilters(filters));
-      toast.success(`已清空筛选结果 ${result.deleted} 条日志`);
-      clearSelection();
-
-      if (page !== 1) {
-        setPage(1);
-        return;
-      }
-      await fetchLogs();
-    } catch (error) {
-      const message = toErrorMessage(error);
-      toast.error(`清空筛选结果失败: ${message}`);
-    } finally {
-      setIsClearingFiltered(false);
-      setClearFilteredDialogOpen(false);
-    }
-  };
-
-  const selectedCount = selectedIds.size;
-  const isAllSelected = logs.length > 0 && selectedCount === logs.length;
-  const isSomeSelected = selectedCount > 0 && selectedCount < logs.length;
+  const {
+    canViewChatIO,
+    handleViewChatIO,
+    handleExportRequestResponse,
+    confirmDeleteLog,
+    openBatchDeleteDialog,
+    confirmBatchDelete,
+    confirmClearAllLogs,
+    confirmClearFilteredLogs,
+  } = useLogsActions({
+    filters,
+    page,
+    selectedIds,
+    logToDelete,
+    setSelectedIds,
+    clearSelection,
+    setPage,
+    setDeleteDialogOpen,
+    setBatchDeleteDialogOpen,
+    setClearAllDialogOpen,
+    setClearFilteredDialogOpen,
+    setIsDeleting,
+    setIsClearingAll,
+    setIsClearingFiltered,
+    fetchLogs,
+  });
 
   const hasLogs = logs.length > 0;
 

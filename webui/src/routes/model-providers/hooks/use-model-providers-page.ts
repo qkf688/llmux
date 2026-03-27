@@ -1,9 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
-import { fetchEventSource } from "@microsoft/fetch-event-source";
-import { getAuthToken } from "@/stores/auth";
 import {
   selectModelProvidersAssociationTestResults,
   selectModelProvidersBatchDeleteDialogOpen,
@@ -93,48 +91,32 @@ import {
   useModelProvidersPageStore,
 } from "@/stores/model-providers";
 import {
-  addModelTemplateItem,
-  autoAssociateModels,
-  batchDeleteModelProviders,
-  batchUpdateModelProvidersStatus,
-  cleanInvalidAssociations,
   createModelProvider,
   deleteModelProvider,
-  deleteModelTemplateItem,
-  enableAllAssociations,
   getModelProviderHealthStatus,
   getModelProviderStatus,
   getModelProviders,
-  getModelTemplate,
-  getModels,
-  getProviderBlacklist,
-  getProviders,
-  getSettings,
-  previewAutoAssociate,
-  previewCleanInvalid,
-  resetModelPriorities,
-  resetModelWeights,
-  testModelProvider,
-  testModelProviderStructuredOutput,
   updateModelProvider,
   updateModelProviderStatus,
-  updateProviderBlacklist,
 } from "@/lib/api";
 import type {
-  AssociationPreview,
   Model,
-  ModelProviderTestResult,
-  ModelTemplate,
   ModelWithProvider,
   Provider,
   Settings,
 } from "@/lib/api";
-import { parseAllModelsFromConfig, toProviderModelList } from "@/lib/provider-models";
 import { toast } from "sonner";
 import { formSchema, type FormValues } from "../form-schema";
 import type { ProviderModelGroup, ProviderModelWithOwner } from "../types";
 import { buildAssociationPayload } from "../utils/payload";
 import { buildSelectionKey } from "../utils/selection";
+import { useModelProvidersBatch } from "./use-model-providers-batch";
+import { useModelProvidersBlacklist } from "./use-model-providers-blacklist";
+import { useModelProvidersBootstrap } from "./use-model-providers-bootstrap";
+import { useModelProvidersOperationScope } from "./use-model-providers-operation-scope";
+import { useModelProvidersPreview } from "./use-model-providers-preview";
+import { useModelProvidersTemplateEditor } from "./use-model-providers-template-editor";
+import { useModelProvidersTesting } from "./use-model-providers-testing";
 
 export function useModelProvidersPage() {
   const [modelProviders, setModelProviders] = useState<ModelWithProvider[]>([]);
@@ -241,47 +223,11 @@ export function useModelProvidersPage() {
   const resetTransient = useModelProvidersPageStore(selectResetModelProvidersTransient);
 
   const [selectedModelId, setSelectedModelId] = useState<number | null>(null);
-  const [testResults, setTestResults] = useState<
-    Record<number, { loading: boolean; result: ModelProviderTestResult | null }>
-  >({});
-  const [structuredTestResults, setStructuredTestResults] = useState<
-    Record<number, { loading: boolean; result: ModelProviderTestResult | null }>
-  >({});
   const [statusUpdating, setStatusUpdating] = useState<Record<number, boolean>>({});
   const [statusError, setStatusError] = useState<string | null>(null);
   const [providerModelGroups, setProviderModelGroups] = useState<ProviderModelGroup[]>([]);
   const [providerModels, setProviderModels] = useState<ProviderModelWithOwner[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [previewData, setPreviewData] = useState<AssociationPreview[]>([]);
-  const [templateData, setTemplateData] = useState<ModelTemplate | null>(null);
-  const [testAbortController, setTestAbortController] = useState<AbortController | null>(null);
-
-  // 拉黑管理过滤逻辑
-  const filteredProviders = useMemo(() => {
-    let result = providers;
-    
-    // 应用拉黑状态筛选
-    if (blacklistFilter === 'blacklisted') {
-      result = result.filter(provider => blacklistedIds.includes(provider.ID));
-    } else if (blacklistFilter === 'not-blacklisted') {
-      result = result.filter(provider => !blacklistedIds.includes(provider.ID));
-    }
-    
-    // 应用搜索过滤
-    if (blacklistSearchTerm.trim()) {
-      const term = blacklistSearchTerm.toLowerCase().trim();
-      result = result.filter(provider => 
-        provider.Name.toLowerCase().includes(term) || 
-        provider.Type.toLowerCase().includes(term)
-      );
-    }
-    
-    return result;
-  }, [providers, blacklistedIds, blacklistFilter, blacklistSearchTerm]);
-
-  const dialogClose = () => {
-    setTestDialogOpen(false)
-  };
 
   // 初始化表单
   const form = useForm<FormValues>({
@@ -304,140 +250,50 @@ export function useModelProvidersPage() {
     name: "customer_headers",
   });
 
-  useEffect(() => {
-    return () => {
-      resetTransient();
-    };
-  }, [resetTransient]);
+  useModelProvidersBootstrap({
+    models,
+    setModels,
+    setProviders,
+    setSettings,
+    setLoading,
+    setLoadingProviderModels,
+    setProviderModelGroups,
+    setProviderModels,
+    setCollapsedProviders,
+    resetTransient,
+    selectedModelId,
+    setSelectedModelId,
+    searchParams,
+    setSearchParams,
+    setFormModelId: (value) => form.setValue("model_id", value),
+  });
 
-  useEffect(() => {
-    if (models.length === 0) {
-      if (selectedModelId !== null) {
-        setSelectedModelId(null);
-        form.setValue("model_id", 0);
-      }
-      return;
-    }
+  const { filteredProviders, openBlacklistDialog, cancelBlacklistDialog, handleSaveBlacklist, handleToggleBlacklist } =
+    useModelProvidersBlacklist({
+      providers,
+      blacklistDialogOpen,
+      setBlacklistDialogOpen,
+      blacklistedIds,
+      setBlacklistedIds,
+      setBlacklistLoading,
+      setBlacklistSaving,
+      blacklistSearchTerm,
+      setBlacklistSearchTerm,
+      blacklistFilter,
+      setBlacklistFilter,
+    });
 
-    const modelIdParam = searchParams.get("modelId");
-    const parsedParam = modelIdParam ? Number(modelIdParam) : NaN;
-
-    if (!Number.isNaN(parsedParam) && models.some(model => model.ID === parsedParam)) {
-      if (selectedModelId !== parsedParam) {
-        setSelectedModelId(parsedParam);
-        form.setValue("model_id", parsedParam);
-      }
-      return;
-    }
-
-    const fallbackId = models[0].ID;
-    if (selectedModelId !== fallbackId) {
-      setSelectedModelId(fallbackId);
-      form.setValue("model_id", fallbackId);
-    }
-    if (modelIdParam !== fallbackId.toString()) {
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.set("modelId", fallbackId.toString());
-      setSearchParams(nextParams, { replace: true });
-    }
-  }, [models, searchParams, form, setSearchParams, selectedModelId]);
-
-  useEffect(() => {
-    if (!templateEditorOpen || !selectedModelId) return;
-    setTemplateLoading(true);
-    getModelTemplate(selectedModelId)
-      .then((data) => setTemplateData(data))
-      .catch((err) => {
-        const message = err instanceof Error ? err.message : String(err);
-        toast.error(`加载模板失败: ${message}`);
-      })
-      .finally(() => setTemplateLoading(false));
-  }, [templateEditorOpen, selectedModelId, setTemplateLoading]);
-
-  useEffect(() => {
-    if (!blacklistDialogOpen) return;
-    setBlacklistLoading(true);
-    getProviderBlacklist()
-      .then((data) => setBlacklistedIds(data.blacklisted_ids))
-      .catch((err) => toast.error(`加载黑名单失败: ${err instanceof Error ? err.message : String(err)}`))
-      .finally(() => setBlacklistLoading(false));
-  }, [blacklistDialogOpen, setBlacklistLoading, setBlacklistedIds]);
-
-  const handleSaveBlacklist = async () => {
-    setBlacklistSaving(true);
-    try {
-      await updateProviderBlacklist(blacklistedIds);
-      toast.success("黑名单已保存");
-      setBlacklistDialogOpen(false);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`保存黑名单失败: ${message}`);
-    } finally {
-      setBlacklistSaving(false);
-    }
-  };
-
-  const handleToggleBlacklist = (providerId: number, checked: boolean) => {
-    setBlacklistedIds((prev) =>
-      checked ? [...prev, providerId] : prev.filter((id) => id !== providerId)
-    );
-  };
+  const { templateData, handleToggleTemplateEditor, handleAddTemplateItem, handleDeleteTemplateItem } =
+    useModelProvidersTemplateEditor({
+      templateEditorOpen,
+      setTemplateEditorOpen,
+      setTemplateLoading,
+      selectedModelId,
+      templateNewItem,
+      setTemplateNewItem,
+    });
 
   const buildPayload = buildAssociationPayload;
-
-  const fetchModels = useCallback(async () => {
-    try {
-      const data = await getModels();
-      setModels(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`获取模型列表失败: ${message}`);
-      console.error(err);
-    }
-  }, []);
-
-  const rebuildProviderModels = useCallback((providerList: Provider[]) => {
-    setLoadingProviderModels(true);
-    const groups = providerList.map((provider) => {
-      const models = toProviderModelList(parseAllModelsFromConfig(provider.Config)).map((model) => ({
-        ...model,
-        providerId: provider.ID,
-        providerName: provider.Name,
-      }));
-      return { provider, models };
-    });
-    setProviderModelGroups(groups);
-    setProviderModels(groups.flatMap((group) => group.models));
-    setCollapsedProviders((prev) => {
-      const next: Record<number, boolean> = {};
-      groups.forEach(({ provider }) => {
-        next[provider.ID] = prev[provider.ID] ?? false;
-      });
-      return next;
-    });
-    setLoadingProviderModels(false);
-  }, [setCollapsedProviders, setLoadingProviderModels]);
-
-  const fetchProviders = useCallback(async () => {
-    try {
-      const data = await getProviders();
-      setProviders(data);
-      rebuildProviderModels(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`获取提供商列表失败: ${message}`);
-      console.error(err);
-    }
-  }, [rebuildProviderModels]);
-
-  const fetchSettings = useCallback(async () => {
-    try {
-      const data = await getSettings();
-      setSettings(data);
-    } catch (err) {
-      console.error("获取系统设置失败", err);
-    }
-  }, []);
 
   const loadProviderStatus = useCallback(async (providers: ModelWithProvider[], modelId: number) => {
     const selectedModel = models.find(m => m.ID === modelId);
@@ -492,12 +348,6 @@ export function useModelProvidersPage() {
       setLoading(false);
     }
   }, [loadProviderStatus, setLoading]);
-
-  useEffect(() => {
-    Promise.all([fetchModels(), fetchProviders(), fetchSettings()]).finally(() => {
-      setLoading(false);
-    });
-  }, [fetchModels, fetchProviders, fetchSettings, setLoading]);
 
   useEffect(() => {
     if (selectedModelId) {
@@ -647,170 +497,14 @@ export function useModelProvidersPage() {
     }
   };
 
-  const handleTest = (id: number) => {
-    currentControllerRef.current?.abort(); // 取消之前的请求
-    setSelectedTestId(id);
-    setTestType("connectivity");
-    setTestDialogOpen(true);
-    setReactTestResult({
-      loading: false,
-      messages: "",
-      success: null,
-      error: null
-    });
-  };
-
-  const handleConnectivityTest = async (id: number): Promise<ModelProviderTestResult> => {
-    try {
-      setTestResults(prev => ({
-        ...prev,
-        [id]: { loading: true, result: null }
-      }));
-
-      const result = await testModelProvider(id);
-      setTestResults(prev => ({
-        ...prev,
-        [id]: { loading: false, result }
-      }));
-      return result;
-    } catch (err) {
-      setTestResults(prev => ({
-        ...prev,
-        [id]: { loading: false, result: { error: "测试失败" + err } }
-      }));
-      console.error(err);
-      return { error: "测试失败" + err };
-    }
-  };
-
-  const handleStructuredOutputTest = async (id: number): Promise<ModelProviderTestResult> => {
-    try {
-      setStructuredTestResults(prev => ({
-        ...prev,
-        [id]: { loading: true, result: null }
-      }));
-
-      const result = await testModelProviderStructuredOutput(id);
-      setStructuredTestResults(prev => ({
-        ...prev,
-        [id]: { loading: false, result }
-      }));
-      return result;
-    } catch (err) {
-      setStructuredTestResults(prev => ({
-        ...prev,
-        [id]: { loading: false, result: { passed: false, error: "测试失败" + err } }
-      }));
-      console.error(err);
-      return { passed: false, error: "测试失败" + err };
-    }
-  };
-
-
-  const currentControllerRef = useRef<AbortController | null>(null);
-  const handleReactTest = async (id: number) => {
-    setReactTestResult(prev => ({
-      ...prev,
-      messages: "",
-      loading: true,
-    }));
-    try {
-      const token = getAuthToken();
-      if (!token) {
-        window.location.href = "/login";
-        return;
-      }
-      const controller = new AbortController();
-      currentControllerRef.current = controller;
-      await fetchEventSource(`/api/test/react/${id}`, {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-        signal: controller.signal,
-        onmessage(event) {
-          setReactTestResult(prev => {
-            if (event.event === "start") {
-              return {
-                ...prev,
-                messages: prev.messages + `[开始测试] ${event.data}\n`
-              };
-            } else if (event.event === "toolcall") {
-              return {
-                ...prev,
-                messages: prev.messages + `\n[调用工具] ${event.data}\n`
-              };
-            } else if (event.event === "toolres") {
-              return {
-                ...prev,
-                messages: prev.messages + `\n[工具输出] ${event.data}\n`
-              };
-            }
-            else if (event.event === "message") {
-              if (event.data.trim()) {
-                return {
-                  ...prev,
-                  messages: prev.messages + `${event.data}`
-                };
-              }
-            } else if (event.event === "error") {
-              return {
-                ...prev,
-                success: false,
-                messages: prev.messages + `\n[错误] ${event.data}\n`
-              };
-            } else if (event.event === "success") {
-              return {
-                ...prev,
-                success: true,
-                messages: prev.messages + `\n[成功] ${event.data}`
-              };
-            }
-            return prev;
-          });
-        },
-        onclose() {
-          setReactTestResult(prev => {
-            return {
-              ...prev,
-              loading: false,
-            };
-          });
-        },
-        onerror(err) {
-          setReactTestResult(prev => {
-            return {
-              ...prev,
-              loading: false,
-              error: err.message || "测试过程中发生错误",
-              success: false
-            };
-          });
-          throw err;
-        }
-      });
-    } catch (err) {
-      setReactTestResult(prev => ({
-        ...prev,
-        loading: false,
-        error: "测试失败",
-        success: false
-      }));
-      console.error(err);
-    }
-  };
-
-  const executeTest = async () => {
-    if (!selectedTestId) return;
-
-    if (testType === "connectivity") {
-      await handleConnectivityTest(selectedTestId);
-    } else if (testType === "react") {
-      await handleReactTest(selectedTestId);
-    } else {
-      await handleStructuredOutputTest(selectedTestId);
-    }
-  };
+  const { testResults, structuredTestResults, handleTest, dialogClose, executeTestNow } = useModelProvidersTesting({
+    setTestDialogOpen,
+    setSelectedTestId,
+    setTestType,
+    setReactTestResult,
+    selectedTestId,
+    testType,
+  });
 
   const openEditDialog = (association: ModelWithProvider) => {
     setEditingAssociation(association);
@@ -859,210 +553,6 @@ export function useModelProvidersPage() {
     setDeleteId(id);
   };
 
-  const handleSelectAllAssociations = (checked: boolean) => {
-    if (checked) {
-      setSelectedAssociationIds(filteredModelProviders.map(mp => mp.ID));
-    } else {
-      setSelectedAssociationIds([]);
-    }
-  };
-
-  const handleSelectOneAssociation = (id: number, checked: boolean) => {
-    if (checked) {
-      setSelectedAssociationIds([...selectedAssociationIds, id]);
-    } else {
-      setSelectedAssociationIds(selectedAssociationIds.filter(selectedId => selectedId !== id));
-    }
-  };
-
-  const handleBatchDeleteAssociations = async () => {
-    if (selectedAssociationIds.length === 0) return;
-    setBatchDeleting(true);
-    try {
-      const result = await batchDeleteModelProviders(selectedAssociationIds);
-      toast.success(`成功删除 ${result.deleted} 个关联`);
-      setSelectedAssociationIds([]);
-      setBatchDeleteDialogOpen(false);
-      if (selectedModelId) {
-        fetchModelProviders(selectedModelId);
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`批量删除关联失败: ${message}`);
-    } finally {
-      setBatchDeleting(false);
-    }
-  };
-
-  const handleBatchUpdateStatus = async (status: boolean) => {
-    if (selectedAssociationIds.length === 0) {
-      toast.error("请先选择要操作的关联");
-      return;
-    }
-    
-    setBatchUpdatingStatus(true);
-    try {
-      const result = await batchUpdateModelProvidersStatus(selectedAssociationIds, status);
-      toast.success(`成功${status ? '启用' : '停用'} ${result.updated} 个关联`);
-      
-      // 更新本地状态
-      setModelProviders(prev =>
-        prev.map(item =>
-          selectedAssociationIds.includes(item.ID)
-            ? { ...item, Status: status }
-            : item
-        )
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`批量${status ? '启用' : '停用'}失败: ${message}`);
-    } finally {
-      setBatchUpdatingStatus(false);
-    }
-  };
-
-  const handleAutoAssociate = async () => {
-    try {
-      setPreviewType("associate");
-      const data = await previewAutoAssociate();
-      setPreviewData(data);
-      setPreviewDialogOpen(true);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`获取预览失败: ${message}`);
-    }
-  };
-
-  const handleCleanInvalid = async () => {
-    try {
-      setPreviewType("clean");
-      const data = await previewCleanInvalid();
-      setPreviewData(data);
-      setPreviewDialogOpen(true);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`获取预览失败: ${message}`);
-    }
-  };
-
-  const handleResetWeights = async () => {
-    if (!selectedModelId && !isGlobalScope) return;
-    try {
-      setResettingWeights(true);
-      const result = await resetModelWeights(isGlobalScope ? undefined : (selectedModelId ?? undefined));
-      toast.success(
-        result.updated > 0
-          ? `已重置 ${result.updated} 个模型关联的权重到 ${result.default_weight}`
-          : `所有模型关联已处于默认权重 ${result.default_weight}`
-      );
-      if (selectedModelId) {
-        fetchModelProviders(selectedModelId);
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`重置权重失败: ${message}`);
-    } finally {
-      setResettingWeights(false);
-    }
-  };
-
-  const handleResetPriorities = async () => {
-    if (!selectedModelId && !isGlobalScope) return;
-    try {
-      setResettingPriorities(true);
-      const result = await resetModelPriorities(isGlobalScope ? undefined : (selectedModelId ?? undefined));
-      toast.success(
-        result.updated > 0
-          ? `已重置 ${result.updated} 个模型关联的优先级到 ${result.default_priority}`
-          : `所有模型关联已处于默认优先级 ${result.default_priority}`
-      );
-      if (selectedModelId) {
-        fetchModelProviders(selectedModelId);
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`重置优先级失败: ${message}`);
-    } finally {
-      setResettingPriorities(false);
-    }
-  };
-
-  const handleEnableAssociations = async () => {
-    if (!selectedModelId && !isGlobalScope) return;
-    try {
-      setEnablingAssociations(true);
-      const result = await enableAllAssociations(isGlobalScope ? undefined : (selectedModelId ?? undefined));
-      toast.success(result.updated > 0 ? `已启用 ${result.updated} 个模型关联` : "所有模型关联已处于启用状态");
-      if (selectedModelId) {
-        fetchModelProviders(selectedModelId);
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`启用关联失败: ${message}`);
-    } finally {
-      setEnablingAssociations(false);
-    }
-  };
-
-  const executePreviewAction = async () => {
-    try {
-      setExecuting(true);
-      if (previewType === "associate") {
-        const result = await autoAssociateModels();
-        toast.success(`成功添加 ${result.added} 个关联`);
-      } else {
-        const result = await cleanInvalidAssociations();
-        toast.success(`成功清除 ${result.removed} 个无效关联`);
-      }
-      setPreviewDialogOpen(false);
-      if (selectedModelId) {
-        fetchModelProviders(selectedModelId);
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`操作失败: ${message}`);
-    } finally {
-      setExecuting(false);
-    }
-  };
-
-  const handleToggleTemplateEditor = () => {
-    setTemplateEditorOpen(!templateEditorOpen);
-  };
-
-  const handleAddTemplateItem = async () => {
-    if (!selectedModelId) return;
-    const name = templateNewItem.trim();
-    if (!name) return;
-    setTemplateLoading(true);
-    try {
-      const data = await addModelTemplateItem(selectedModelId, name);
-      setTemplateData(data);
-      setTemplateNewItem("");
-      toast.success("已添加模板项");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`添加模板项失败: ${message}`);
-    } finally {
-      setTemplateLoading(false);
-    }
-  };
-
-  const handleDeleteTemplateItem = async (name: string) => {
-    if (!selectedModelId) return;
-    setTemplateLoading(true);
-    try {
-      const data = await deleteModelTemplateItem(selectedModelId, name);
-      setTemplateData(data);
-      toast.success("已删除手动模板项");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`删除模板项失败: ${message}`);
-    } finally {
-      setTemplateLoading(false);
-    }
-  };
-
   const handleModelChange = (modelId: string) => {
     const id = parseInt(modelId);
     setSelectedModelId(id);
@@ -1075,190 +565,6 @@ export function useModelProvidersPage() {
     nextParams.set("modelId", id.toString());
     setSearchParams(nextParams);
     form.setValue("model_id", id);
-  };
-
-  // 批量测试核心逻辑
-  const testSingleAssociationInBatch = async (
-    associationId: number,
-    testing: Set<number>,
-    signal: AbortSignal,
-    counters: { success: number; failed: number }
-  ) => {
-    if (signal.aborted) {
-      testing.delete(associationId);
-      return;
-    }
-
-    try {
-      setAssociationTestResults(prev => ({
-        ...prev,
-        [associationId]: { loading: true, success: null }
-      }));
-
-      await testModelProvider(associationId);
-      
-      setAssociationTestResults(prev => ({
-        ...prev,
-        [associationId]: { loading: false, success: true }
-      }));
-      
-      // 使用局部计数器
-      counters.success++;
-      
-      setBatchTestProgress(prev => ({
-        ...prev,
-        completed: prev.completed + 1,
-        success: counters.success,
-        testing: testing.size - 1
-      }));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setAssociationTestResults(prev => ({
-        ...prev,
-        [associationId]: { loading: false, success: false, error: message }
-      }));
-      
-      // 使用局部计数器
-      counters.failed++;
-      
-      setBatchTestProgress(prev => ({
-        ...prev,
-        completed: prev.completed + 1,
-        failed: counters.failed,
-        testing: testing.size - 1
-      }));
-    } finally {
-      testing.delete(associationId);
-    }
-  };
-
-  const startBatchTest = async (associationIds: number[]) => {
-    if (associationIds.length === 0) {
-      toast.error("没有可测试的关联");
-      return;
-    }
-
-    setBatchTesting(true);
-    setBatchTestProgress({
-      total: associationIds.length,
-      completed: 0,
-      success: 0,
-      failed: 0,
-      testing: 0
-    });
-
-    const abortController = new AbortController();
-    setTestAbortController(abortController);
-
-    // 添加局部计数器
-    const counters = {
-      success: 0,
-      failed: 0
-    };
-
-    const concurrency = 3;
-    const queue = [...associationIds];
-    const testing = new Set<number>();
-    const promises: Promise<void>[] = [];
-
-    try {
-      while (queue.length > 0 && !abortController.signal.aborted) {
-        while (testing.size < concurrency && queue.length > 0) {
-          const id = queue.shift()!;
-          testing.add(id);
-          
-          setBatchTestProgress(prev => ({
-            ...prev,
-            testing: testing.size
-          }));
-
-          // 传递计数器引用
-          const testPromise = testSingleAssociationInBatch(id, testing, abortController.signal, counters);
-          promises.push(testPromise);
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-
-      // 等待所有测试任务真正完成
-      await Promise.all(promises);
-
-      // 使用局部计数器显示结果
-      if (!abortController.signal.aborted) {
-        toast.success(
-          `批量测试完成：成功 ${counters.success} 个，失败 ${counters.failed} 个`,
-          { duration: 5000 }
-        );
-      }
-    } finally {
-      setBatchTesting(false);
-      setTestAbortController(null);
-    }
-  };
-
-  const handleBatchTestAll = async () => {
-    const ids = filteredModelProviders.map(mp => mp.ID);
-    await startBatchTest(ids);
-  };
-
-  const handleBatchTestSelected = async () => {
-    if (selectedAssociationIds.length === 0) {
-      toast.error("请先选择要测试的关联");
-      return;
-    }
-    await startBatchTest(selectedAssociationIds);
-  };
-
-  const handleCancelBatchTest = () => {
-    if (testAbortController) {
-      testAbortController.abort();
-      toast.info("已取消批量测试");
-    }
-  };
-
-  const selectAllSuccessful = () => {
-    const visibleIds = new Set(filteredModelProviders.map(mp => mp.ID));
-    const successfulIds = Object.entries(associationTestResults)
-      .filter(([id, result]) => result.success === true && visibleIds.has(parseInt(id)))
-      .map(([id]) => parseInt(id));
-    
-    if (successfulIds.length === 0) {
-      toast.info("当前列表中没有测试成功的项");
-      return;
-    }
-    
-    setSelectedAssociationIds(successfulIds);
-    
-    toast.success(`已选择 ${successfulIds.length} 个测试成功的项`);
-  };
-
-  const selectAllFailed = () => {
-    const visibleIds = new Set(filteredModelProviders.map(mp => mp.ID));
-    const failedIds = Object.entries(associationTestResults)
-      .filter(([id, result]) => result.success === false && visibleIds.has(parseInt(id)))
-      .map(([id]) => parseInt(id));
-    
-    if (failedIds.length === 0) {
-      toast.info("当前列表中没有测试失败的项");
-      return;
-    }
-    
-    setSelectedAssociationIds(failedIds);
-    
-    toast.success(`已选择 ${failedIds.length} 个测试失败的项`);
-  };
-
-  // ✅ 新增：清除批量测试结果
-  const clearBatchTestResults = () => {
-    setBatchTestProgress({
-      total: 0,
-      completed: 0,
-      success: 0,
-      failed: 0,
-      testing: 0
-    });
-    setAssociationTestResults({});
-    toast.info("已清除测试结果");
   };
 
   const toggleProviderCollapse = (providerId: number) => {
@@ -1343,9 +649,50 @@ export function useModelProvidersPage() {
 
   const shouldShowInitialLoading = loading && models.length === 0 && providers.length === 0;
 
-  const openBlacklistDialog = () => {
-    setBlacklistDialogOpen(true);
-  };
+  const { handleResetWeights, handleResetPriorities, handleEnableAssociations } = useModelProvidersOperationScope({
+    selectedModelId,
+    isGlobalScope,
+    fetchModelProviders,
+    setResettingWeights,
+    setResettingPriorities,
+    setEnablingAssociations,
+  });
+
+  const { previewData, handleAutoAssociate, handleCleanInvalid, executePreviewAction } = useModelProvidersPreview({
+    selectedModelId,
+    previewType,
+    setPreviewType,
+    setPreviewDialogOpen,
+    setExecuting,
+    fetchModelProviders,
+  });
+
+  const {
+    handleSelectAllAssociations,
+    handleSelectOneAssociation,
+    handleBatchDeleteAssociations,
+    handleBatchUpdateStatus,
+    handleBatchTestAll,
+    handleBatchTestSelected,
+    handleCancelBatchTest,
+    selectAllSuccessful,
+    selectAllFailed,
+    clearBatchTestResults,
+  } = useModelProvidersBatch({
+    selectedModelId,
+    fetchModelProviders,
+    filteredModelProviders,
+    selectedAssociationIds,
+    setSelectedAssociationIds,
+    setModelProviders,
+    setBatchDeleteDialogOpen,
+    setBatchDeleting,
+    setBatchUpdatingStatus,
+    setBatchTesting,
+    setBatchTestProgress,
+    associationTestResults,
+    setAssociationTestResults,
+  });
 
   const refreshStatus = () => {
     if (selectedModelId) {
@@ -1357,12 +704,6 @@ export function useModelProvidersPage() {
     if (!openValue) {
       setDeleteId(null);
     }
-  };
-
-  const cancelBlacklistDialog = () => {
-    setBlacklistDialogOpen(false);
-    setBlacklistSearchTerm("");
-    setBlacklistFilter("all");
   };
 
   const openModelListDialog = () => {
@@ -1382,10 +723,6 @@ export function useModelProvidersPage() {
 
   const handleProviderChange = () => {
     setSelectedProviderModels([]);
-  };
-
-  const executeTestNow = () => {
-    void executeTest();
   };
 
   const selectAllVisibleAvailable = () => {

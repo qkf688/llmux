@@ -5,7 +5,94 @@ import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import Loading from "@/components/loading";
 import { getAuthToken } from "@/stores/auth";
-import { useModelProvidersPageStore } from "@/stores/model-providers";
+import {
+  selectModelProvidersAssociationTestResults,
+  selectModelProvidersBatchDeleteDialogOpen,
+  selectModelProvidersBatchDeleting,
+  selectModelProvidersBatchTestProgress,
+  selectModelProvidersBatchTesting,
+  selectModelProvidersBatchUpdatingStatus,
+  selectModelProvidersBlacklistDialogOpen,
+  selectModelProvidersBlacklistFilter,
+  selectModelProvidersBlacklistLoading,
+  selectModelProvidersBlacklistSaving,
+  selectModelProvidersBlacklistSearchTerm,
+  selectModelProvidersBlacklistedIds,
+  selectModelProvidersCollapsedProviders,
+  selectModelProvidersDeleteId,
+  selectModelProvidersEditingAssociation,
+  selectModelProvidersEnablingAssociations,
+  selectModelProvidersExecuting,
+  selectModelProvidersFilterPanelOpen,
+  selectModelProvidersIsSubmitting,
+  selectModelProvidersLoading,
+  selectModelProvidersLoadingProviderModels,
+  selectModelProvidersModelListDialogOpen,
+  selectModelProvidersModelSearchKeyword,
+  selectModelProvidersOpen,
+  selectModelProvidersOperationScope,
+  selectModelProvidersPreviewDialogOpen,
+  selectModelProvidersPreviewType,
+  selectModelProvidersReactTestResult,
+  selectModelProvidersResettingPriorities,
+  selectModelProvidersResettingWeights,
+  selectModelProvidersSearchKeyword,
+  selectModelProvidersSelectedAssociationIds,
+  selectModelProvidersSelectedProviderFilter,
+  selectModelProvidersSelectedProviderModels,
+  selectModelProvidersSelectedProviderType,
+  selectModelProvidersSelectedStatusFilter,
+  selectModelProvidersSelectedTestId,
+  selectModelProvidersTemplateEditorOpen,
+  selectModelProvidersTemplateLoading,
+  selectModelProvidersTemplateNewItem,
+  selectModelProvidersTestDialogOpen,
+  selectModelProvidersTestType,
+  selectResetModelProvidersTransient,
+  selectSetModelProvidersAssociationTestResults,
+  selectSetModelProvidersBatchDeleteDialogOpen,
+  selectSetModelProvidersBatchDeleting,
+  selectSetModelProvidersBatchTestProgress,
+  selectSetModelProvidersBatchTesting,
+  selectSetModelProvidersBatchUpdatingStatus,
+  selectSetModelProvidersBlacklistDialogOpen,
+  selectSetModelProvidersBlacklistFilter,
+  selectSetModelProvidersBlacklistLoading,
+  selectSetModelProvidersBlacklistSaving,
+  selectSetModelProvidersBlacklistSearchTerm,
+  selectSetModelProvidersBlacklistedIds,
+  selectSetModelProvidersCollapsedProviders,
+  selectSetModelProvidersDeleteId,
+  selectSetModelProvidersEditingAssociation,
+  selectSetModelProvidersEnablingAssociations,
+  selectSetModelProvidersExecuting,
+  selectSetModelProvidersFilterPanelOpen,
+  selectSetModelProvidersIsSubmitting,
+  selectSetModelProvidersLoading,
+  selectSetModelProvidersLoadingProviderModels,
+  selectSetModelProvidersModelListDialogOpen,
+  selectSetModelProvidersModelSearchKeyword,
+  selectSetModelProvidersOpen,
+  selectSetModelProvidersOperationScope,
+  selectSetModelProvidersPreviewDialogOpen,
+  selectSetModelProvidersPreviewType,
+  selectSetModelProvidersReactTestResult,
+  selectSetModelProvidersResettingPriorities,
+  selectSetModelProvidersResettingWeights,
+  selectSetModelProvidersSearchKeyword,
+  selectSetModelProvidersSelectedAssociationIds,
+  selectSetModelProvidersSelectedProviderFilter,
+  selectSetModelProvidersSelectedProviderModels,
+  selectSetModelProvidersSelectedProviderType,
+  selectSetModelProvidersSelectedStatusFilter,
+  selectSetModelProvidersSelectedTestId,
+  selectSetModelProvidersTemplateEditorOpen,
+  selectSetModelProvidersTemplateLoading,
+  selectSetModelProvidersTemplateNewItem,
+  selectSetModelProvidersTestDialogOpen,
+  selectSetModelProvidersTestType,
+  useModelProvidersPageStore,
+} from "@/stores/model-providers";
 import {
   addModelTemplateItem,
   autoAssociateModels,
@@ -67,179 +154,101 @@ export default function ModelProvidersPage() {
   const [providerStatus, setProviderStatus] = useState<Record<number, boolean[]>>({});
   const [healthStatus, setHealthStatus] = useState<Record<number, boolean[]>>({});
 
-  const {
-    loading,
-    setLoading,
-    open,
-    setOpen,
-    editingAssociation,
-    setEditingAssociation,
-    deleteId,
-    setDeleteId,
-    testDialogOpen,
-    setTestDialogOpen,
-    selectedTestId,
-    setSelectedTestId,
-    testType,
-    setTestType,
-    selectedProviderType,
-    setSelectedProviderType,
-    selectedProviderFilter,
-    setSelectedProviderFilter,
-    selectedStatusFilter,
-    setSelectedStatusFilter,
-    reactTestResult,
-    setReactTestResult,
-    isSubmitting,
-    setIsSubmitting,
-    loadingProviderModels,
-    setLoadingProviderModels,
-    modelListDialogOpen,
-    setModelListDialogOpen,
-    modelSearchKeyword,
-    setModelSearchKeyword,
-    selectedProviderModels,
-    setSelectedProviderModels,
-    selectedAssociationIds,
-    setSelectedAssociationIds,
-    collapsedProviders,
-    setCollapsedProviders,
-    batchDeleteDialogOpen,
-    setBatchDeleteDialogOpen,
-    batchDeleting,
-    setBatchDeleting,
-    batchUpdatingStatus,
-    setBatchUpdatingStatus,
-    searchKeyword,
-    setSearchKeyword,
-    previewDialogOpen,
-    setPreviewDialogOpen,
-    previewType,
-    setPreviewType,
-    executing,
-    setExecuting,
-    templateEditorOpen,
-    setTemplateEditorOpen,
-    templateLoading,
-    setTemplateLoading,
-    templateNewItem,
-    setTemplateNewItem,
-    resettingWeights,
-    setResettingWeights,
-    resettingPriorities,
-    setResettingPriorities,
-    enablingAssociations,
-    setEnablingAssociations,
-    operationScope,
-    setOperationScope,
-    filterPanelOpen,
-    setFilterPanelOpen,
-    batchTesting,
-    setBatchTesting,
-    batchTestProgress,
-    setBatchTestProgress,
-    associationTestResults,
-    setAssociationTestResults,
-    blacklistDialogOpen,
-    setBlacklistDialogOpen,
-    blacklistedIds,
-    setBlacklistedIds,
-    blacklistLoading,
-    setBlacklistLoading,
-    blacklistSaving,
-    setBlacklistSaving,
-    blacklistSearchTerm,
-    setBlacklistSearchTerm,
-    blacklistFilter,
-    setBlacklistFilter,
-    resetTransient,
-  } = useModelProvidersPageStore((state) => ({
-    loading: state.loading,
-    setLoading: state.setLoading,
-    open: state.open,
-    setOpen: state.setOpen,
-    editingAssociation: state.editingAssociation,
-    setEditingAssociation: state.setEditingAssociation,
-    deleteId: state.deleteId,
-    setDeleteId: state.setDeleteId,
-    testDialogOpen: state.testDialogOpen,
-    setTestDialogOpen: state.setTestDialogOpen,
-    selectedTestId: state.selectedTestId,
-    setSelectedTestId: state.setSelectedTestId,
-    testType: state.testType,
-    setTestType: state.setTestType,
-    selectedProviderType: state.selectedProviderType,
-    setSelectedProviderType: state.setSelectedProviderType,
-    selectedProviderFilter: state.selectedProviderFilter,
-    setSelectedProviderFilter: state.setSelectedProviderFilter,
-    selectedStatusFilter: state.selectedStatusFilter,
-    setSelectedStatusFilter: state.setSelectedStatusFilter,
-    reactTestResult: state.reactTestResult,
-    setReactTestResult: state.setReactTestResult,
-    isSubmitting: state.isSubmitting,
-    setIsSubmitting: state.setIsSubmitting,
-    loadingProviderModels: state.loadingProviderModels,
-    setLoadingProviderModels: state.setLoadingProviderModels,
-    modelListDialogOpen: state.modelListDialogOpen,
-    setModelListDialogOpen: state.setModelListDialogOpen,
-    modelSearchKeyword: state.modelSearchKeyword,
-    setModelSearchKeyword: state.setModelSearchKeyword,
-    selectedProviderModels: state.selectedProviderModels,
-    setSelectedProviderModels: state.setSelectedProviderModels,
-    selectedAssociationIds: state.selectedAssociationIds,
-    setSelectedAssociationIds: state.setSelectedAssociationIds,
-    collapsedProviders: state.collapsedProviders,
-    setCollapsedProviders: state.setCollapsedProviders,
-    batchDeleteDialogOpen: state.batchDeleteDialogOpen,
-    setBatchDeleteDialogOpen: state.setBatchDeleteDialogOpen,
-    batchDeleting: state.batchDeleting,
-    setBatchDeleting: state.setBatchDeleting,
-    batchUpdatingStatus: state.batchUpdatingStatus,
-    setBatchUpdatingStatus: state.setBatchUpdatingStatus,
-    searchKeyword: state.searchKeyword,
-    setSearchKeyword: state.setSearchKeyword,
-    previewDialogOpen: state.previewDialogOpen,
-    setPreviewDialogOpen: state.setPreviewDialogOpen,
-    previewType: state.previewType,
-    setPreviewType: state.setPreviewType,
-    executing: state.executing,
-    setExecuting: state.setExecuting,
-    templateEditorOpen: state.templateEditorOpen,
-    setTemplateEditorOpen: state.setTemplateEditorOpen,
-    templateLoading: state.templateLoading,
-    setTemplateLoading: state.setTemplateLoading,
-    templateNewItem: state.templateNewItem,
-    setTemplateNewItem: state.setTemplateNewItem,
-    resettingWeights: state.resettingWeights,
-    setResettingWeights: state.setResettingWeights,
-    resettingPriorities: state.resettingPriorities,
-    setResettingPriorities: state.setResettingPriorities,
-    enablingAssociations: state.enablingAssociations,
-    setEnablingAssociations: state.setEnablingAssociations,
-    operationScope: state.operationScope,
-    setOperationScope: state.setOperationScope,
-    filterPanelOpen: state.filterPanelOpen,
-    setFilterPanelOpen: state.setFilterPanelOpen,
-    batchTesting: state.batchTesting,
-    setBatchTesting: state.setBatchTesting,
-    batchTestProgress: state.batchTestProgress,
-    setBatchTestProgress: state.setBatchTestProgress,
-    associationTestResults: state.associationTestResults,
-    setAssociationTestResults: state.setAssociationTestResults,
-    blacklistDialogOpen: state.blacklistDialogOpen,
-    setBlacklistDialogOpen: state.setBlacklistDialogOpen,
-    blacklistedIds: state.blacklistedIds,
-    setBlacklistedIds: state.setBlacklistedIds,
-    blacklistLoading: state.blacklistLoading,
-    setBlacklistLoading: state.setBlacklistLoading,
-    blacklistSaving: state.blacklistSaving,
-    setBlacklistSaving: state.setBlacklistSaving,
-    blacklistSearchTerm: state.blacklistSearchTerm,
-    setBlacklistSearchTerm: state.setBlacklistSearchTerm,
-    blacklistFilter: state.blacklistFilter,
-    setBlacklistFilter: state.setBlacklistFilter,
-    resetTransient: state.resetTransient,
-  }));
+  const loading = useModelProvidersPageStore(selectModelProvidersLoading);
+  const setLoading = useModelProvidersPageStore(selectSetModelProvidersLoading);
+  const open = useModelProvidersPageStore(selectModelProvidersOpen);
+  const setOpen = useModelProvidersPageStore(selectSetModelProvidersOpen);
+  const editingAssociation = useModelProvidersPageStore(selectModelProvidersEditingAssociation);
+  const setEditingAssociation = useModelProvidersPageStore(selectSetModelProvidersEditingAssociation);
+  const deleteId = useModelProvidersPageStore(selectModelProvidersDeleteId);
+  const setDeleteId = useModelProvidersPageStore(selectSetModelProvidersDeleteId);
+
+  const testDialogOpen = useModelProvidersPageStore(selectModelProvidersTestDialogOpen);
+  const setTestDialogOpen = useModelProvidersPageStore(selectSetModelProvidersTestDialogOpen);
+  const selectedTestId = useModelProvidersPageStore(selectModelProvidersSelectedTestId);
+  const setSelectedTestId = useModelProvidersPageStore(selectSetModelProvidersSelectedTestId);
+  const testType = useModelProvidersPageStore(selectModelProvidersTestType);
+  const setTestType = useModelProvidersPageStore(selectSetModelProvidersTestType);
+  const reactTestResult = useModelProvidersPageStore(selectModelProvidersReactTestResult);
+  const setReactTestResult = useModelProvidersPageStore(selectSetModelProvidersReactTestResult);
+  const isSubmitting = useModelProvidersPageStore(selectModelProvidersIsSubmitting);
+  const setIsSubmitting = useModelProvidersPageStore(selectSetModelProvidersIsSubmitting);
+
+  const loadingProviderModels = useModelProvidersPageStore(selectModelProvidersLoadingProviderModels);
+  const setLoadingProviderModels = useModelProvidersPageStore(selectSetModelProvidersLoadingProviderModels);
+  const modelListDialogOpen = useModelProvidersPageStore(selectModelProvidersModelListDialogOpen);
+  const setModelListDialogOpen = useModelProvidersPageStore(selectSetModelProvidersModelListDialogOpen);
+  const modelSearchKeyword = useModelProvidersPageStore(selectModelProvidersModelSearchKeyword);
+  const setModelSearchKeyword = useModelProvidersPageStore(selectSetModelProvidersModelSearchKeyword);
+  const selectedProviderModels = useModelProvidersPageStore(selectModelProvidersSelectedProviderModels);
+  const setSelectedProviderModels = useModelProvidersPageStore(selectSetModelProvidersSelectedProviderModels);
+  const selectedAssociationIds = useModelProvidersPageStore(selectModelProvidersSelectedAssociationIds);
+  const setSelectedAssociationIds = useModelProvidersPageStore(selectSetModelProvidersSelectedAssociationIds);
+  const collapsedProviders = useModelProvidersPageStore(selectModelProvidersCollapsedProviders);
+  const setCollapsedProviders = useModelProvidersPageStore(selectSetModelProvidersCollapsedProviders);
+
+  const batchDeleteDialogOpen = useModelProvidersPageStore(selectModelProvidersBatchDeleteDialogOpen);
+  const setBatchDeleteDialogOpen = useModelProvidersPageStore(selectSetModelProvidersBatchDeleteDialogOpen);
+  const batchDeleting = useModelProvidersPageStore(selectModelProvidersBatchDeleting);
+  const setBatchDeleting = useModelProvidersPageStore(selectSetModelProvidersBatchDeleting);
+  const batchUpdatingStatus = useModelProvidersPageStore(selectModelProvidersBatchUpdatingStatus);
+  const setBatchUpdatingStatus = useModelProvidersPageStore(selectSetModelProvidersBatchUpdatingStatus);
+
+  const searchKeyword = useModelProvidersPageStore(selectModelProvidersSearchKeyword);
+  const setSearchKeyword = useModelProvidersPageStore(selectSetModelProvidersSearchKeyword);
+  const selectedProviderType = useModelProvidersPageStore(selectModelProvidersSelectedProviderType);
+  const setSelectedProviderType = useModelProvidersPageStore(selectSetModelProvidersSelectedProviderType);
+  const selectedProviderFilter = useModelProvidersPageStore(selectModelProvidersSelectedProviderFilter);
+  const setSelectedProviderFilter = useModelProvidersPageStore(selectSetModelProvidersSelectedProviderFilter);
+  const selectedStatusFilter = useModelProvidersPageStore(selectModelProvidersSelectedStatusFilter);
+  const setSelectedStatusFilter = useModelProvidersPageStore(selectSetModelProvidersSelectedStatusFilter);
+  const operationScope = useModelProvidersPageStore(selectModelProvidersOperationScope);
+  const setOperationScope = useModelProvidersPageStore(selectSetModelProvidersOperationScope);
+  const filterPanelOpen = useModelProvidersPageStore(selectModelProvidersFilterPanelOpen);
+  const setFilterPanelOpen = useModelProvidersPageStore(selectSetModelProvidersFilterPanelOpen);
+
+  const previewDialogOpen = useModelProvidersPageStore(selectModelProvidersPreviewDialogOpen);
+  const setPreviewDialogOpen = useModelProvidersPageStore(selectSetModelProvidersPreviewDialogOpen);
+  const previewType = useModelProvidersPageStore(selectModelProvidersPreviewType);
+  const setPreviewType = useModelProvidersPageStore(selectSetModelProvidersPreviewType);
+  const executing = useModelProvidersPageStore(selectModelProvidersExecuting);
+  const setExecuting = useModelProvidersPageStore(selectSetModelProvidersExecuting);
+
+  const templateEditorOpen = useModelProvidersPageStore(selectModelProvidersTemplateEditorOpen);
+  const setTemplateEditorOpen = useModelProvidersPageStore(selectSetModelProvidersTemplateEditorOpen);
+  const templateLoading = useModelProvidersPageStore(selectModelProvidersTemplateLoading);
+  const setTemplateLoading = useModelProvidersPageStore(selectSetModelProvidersTemplateLoading);
+  const templateNewItem = useModelProvidersPageStore(selectModelProvidersTemplateNewItem);
+  const setTemplateNewItem = useModelProvidersPageStore(selectSetModelProvidersTemplateNewItem);
+
+  const resettingWeights = useModelProvidersPageStore(selectModelProvidersResettingWeights);
+  const setResettingWeights = useModelProvidersPageStore(selectSetModelProvidersResettingWeights);
+  const resettingPriorities = useModelProvidersPageStore(selectModelProvidersResettingPriorities);
+  const setResettingPriorities = useModelProvidersPageStore(selectSetModelProvidersResettingPriorities);
+  const enablingAssociations = useModelProvidersPageStore(selectModelProvidersEnablingAssociations);
+  const setEnablingAssociations = useModelProvidersPageStore(selectSetModelProvidersEnablingAssociations);
+
+  const batchTesting = useModelProvidersPageStore(selectModelProvidersBatchTesting);
+  const setBatchTesting = useModelProvidersPageStore(selectSetModelProvidersBatchTesting);
+  const batchTestProgress = useModelProvidersPageStore(selectModelProvidersBatchTestProgress);
+  const setBatchTestProgress = useModelProvidersPageStore(selectSetModelProvidersBatchTestProgress);
+  const associationTestResults = useModelProvidersPageStore(selectModelProvidersAssociationTestResults);
+  const setAssociationTestResults = useModelProvidersPageStore(selectSetModelProvidersAssociationTestResults);
+
+  const blacklistDialogOpen = useModelProvidersPageStore(selectModelProvidersBlacklistDialogOpen);
+  const setBlacklistDialogOpen = useModelProvidersPageStore(selectSetModelProvidersBlacklistDialogOpen);
+  const blacklistedIds = useModelProvidersPageStore(selectModelProvidersBlacklistedIds);
+  const setBlacklistedIds = useModelProvidersPageStore(selectSetModelProvidersBlacklistedIds);
+  const blacklistLoading = useModelProvidersPageStore(selectModelProvidersBlacklistLoading);
+  const setBlacklistLoading = useModelProvidersPageStore(selectSetModelProvidersBlacklistLoading);
+  const blacklistSaving = useModelProvidersPageStore(selectModelProvidersBlacklistSaving);
+  const setBlacklistSaving = useModelProvidersPageStore(selectSetModelProvidersBlacklistSaving);
+  const blacklistSearchTerm = useModelProvidersPageStore(selectModelProvidersBlacklistSearchTerm);
+  const setBlacklistSearchTerm = useModelProvidersPageStore(selectSetModelProvidersBlacklistSearchTerm);
+  const blacklistFilter = useModelProvidersPageStore(selectModelProvidersBlacklistFilter);
+  const setBlacklistFilter = useModelProvidersPageStore(selectSetModelProvidersBlacklistFilter);
+
+  const resetTransient = useModelProvidersPageStore(selectResetModelProvidersTransient);
 
   const [selectedModelId, setSelectedModelId] = useState<number | null>(null);
   const [testResults, setTestResults] = useState<

@@ -93,8 +93,6 @@ import {
 import {
   createModelProvider,
   deleteModelProvider,
-  getModelProviderHealthStatus,
-  getModelProviderStatus,
   getModelProviders,
   updateModelProvider,
   updateModelProviderStatus,
@@ -114,6 +112,7 @@ import { useModelProvidersBatch } from "./use-model-providers-batch";
 import { useModelProvidersBlacklist } from "./use-model-providers-blacklist";
 import { useModelProvidersBootstrap } from "./use-model-providers-bootstrap";
 import { useModelProvidersOperationScope } from "./use-model-providers-operation-scope";
+import { useModelProvidersAssociationStatus } from "./use-model-providers-association-status";
 import { useModelProvidersPreview } from "./use-model-providers-preview";
 import { useModelProvidersTemplateEditor } from "./use-model-providers-template-editor";
 import { useModelProvidersTesting } from "./use-model-providers-testing";
@@ -123,8 +122,7 @@ export function useModelProvidersPage() {
   const [models, setModels] = useState<Model[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [providerStatus, setProviderStatus] = useState<Record<number, boolean[]>>({});
-  const [healthStatus, setHealthStatus] = useState<Record<number, boolean[]>>({});
+  const { providerStatus, healthStatus, loadProviderStatus } = useModelProvidersAssociationStatus(models);
 
   const loading = useModelProvidersPageStore(selectModelProvidersLoading);
   const setLoading = useModelProvidersPageStore(selectSetModelProvidersLoading);
@@ -294,41 +292,6 @@ export function useModelProvidersPage() {
     });
 
   const buildPayload = buildAssociationPayload;
-
-  const loadProviderStatus = useCallback(async (providers: ModelWithProvider[], modelId: number) => {
-    const selectedModel = models.find(m => m.ID === modelId);
-    if (!selectedModel) return;
-    setProviderStatus({});
-    setHealthStatus({});
-
-    const newStatus: Record<number, boolean[]> = {};
-    const newHealthStatus: Record<number, boolean[]> = {};
-
-    // 并行加载所有状态数据
-    await Promise.all(
-      providers.map(async (provider) => {
-        try {
-          const [status, healthStatusList] = await Promise.all([
-            getModelProviderStatus(
-              provider.ProviderID,
-              selectedModel.Name,
-              provider.ProviderModel
-            ),
-            getModelProviderHealthStatus(provider.ID)
-          ]);
-          newStatus[provider.ID] = status;
-          newHealthStatus[provider.ID] = healthStatusList;
-        } catch (error) {
-          console.error(`Failed to load status for provider ${provider.ID}:`, error);
-          newStatus[provider.ID] = [];
-          newHealthStatus[provider.ID] = [];
-        }
-      })
-    );
-
-    setProviderStatus(newStatus);
-    setHealthStatus(newHealthStatus);
-  }, [models]);
 
   const fetchModelProviders = useCallback(async (modelId: number) => {
     try {

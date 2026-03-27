@@ -90,12 +90,8 @@ import {
   selectSetModelProvidersTestType,
   useModelProvidersPageStore,
 } from "@/stores/model-providers";
-import {
-  updateModelProviderStatus,
-} from "@/lib/api";
 import type {
   Model,
-  ModelWithProvider,
   Provider,
   Settings,
 } from "@/lib/api";
@@ -105,6 +101,7 @@ import { buildAssociationPayload } from "../utils/payload";
 import { buildSelectionKey } from "../utils/selection";
 import { useModelProvidersAssociationDialog } from "./use-model-providers-association-dialog";
 import { useModelProvidersAssociationMutations } from "./use-model-providers-association-mutations";
+import { useModelProvidersAssociationStatusToggle } from "./use-model-providers-association-status-toggle";
 import { useModelProvidersAssociationsData } from "./use-model-providers-associations-data";
 import { useModelProvidersBatch } from "./use-model-providers-batch";
 import { useModelProvidersBlacklist } from "./use-model-providers-blacklist";
@@ -314,40 +311,11 @@ export function useModelProvidersPage() {
     setDeleteId,
   });
 
-  const handleStatusToggle = async (association: ModelWithProvider, nextStatus: boolean) => {
-    const previousStatus = association.Status ?? true;
-    setStatusError(null);
-    setStatusUpdating(prev => ({ ...prev, [association.ID]: true }));
-    setModelProviders(prev =>
-      prev.map(item =>
-        item.ID === association.ID ? { ...item, Status: nextStatus } : item
-      )
-    );
-
-    try {
-      const updated = await updateModelProviderStatus(association.ID, nextStatus);
-      const normalized = { ...updated, CustomerHeaders: updated.CustomerHeaders || {} };
-      setModelProviders(prev =>
-        prev.map(item =>
-          item.ID === association.ID ? normalized : item
-        )
-      );
-    } catch (err) {
-      setModelProviders(prev =>
-        prev.map(item =>
-          item.ID === association.ID ? { ...item, Status: previousStatus } : item
-        )
-      );
-      setStatusError("更新启用状态失败");
-      console.error(err);
-    } finally {
-      setStatusUpdating(prev => {
-        const next = { ...prev };
-        delete next[association.ID];
-        return next;
-      });
-    }
-  };
+  const { handleStatusToggle } = useModelProvidersAssociationStatusToggle({
+    setModelProviders,
+    setStatusUpdating,
+    setStatusError,
+  });
 
   const { testResults, structuredTestResults, handleTest, dialogClose, executeTestNow } = useModelProvidersTesting({
     setTestDialogOpen,

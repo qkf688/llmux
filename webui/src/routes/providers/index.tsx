@@ -67,6 +67,7 @@ import { useProviderSwitchActions } from "./hooks/use-provider-switch-actions";
 import { useProvidersBootstrap } from "./hooks/use-providers-bootstrap";
 import { applyProviderTemplateDefaults } from "./utils/template-defaults";
 import { getAllModelsForProvider } from "./utils/provider-models";
+import { hasActiveProvidersFilter } from "./utils/filters";
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -382,7 +383,7 @@ export default function ProvidersPage() {
     autoCleanOnDeleteEnabled,
   });
 
-  const hasFilter = nameFilter.trim() !== "" || typeFilter !== "all";
+  const hasFilter = hasActiveProvidersFilter(nameFilter, typeFilter);
 
   return (
     <div className="h-full min-h-0 flex flex-col gap-4 p-1">

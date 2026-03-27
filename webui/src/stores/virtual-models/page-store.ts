@@ -1,12 +1,34 @@
 import { createStore } from "zustand/vanilla";
 import type { Model, Provider, VirtualModel, VirtualModelMapping } from "@/lib/api";
-import { DEFAULT_VIRTUAL_MODELS_BATCH } from "@/stores/virtual-models/types";
+import { readVirtualModelsPagePreferences, writeVirtualModelsPagePreferences } from "@/stores/virtual-models/persist";
+import type { VirtualModelsPagePreferences } from "@/stores/virtual-models/types";
 
 type Updater<T> = T | ((previous: T) => T);
 
 function resolveUpdater<T>(updater: Updater<T>, previous: T): T {
   return typeof updater === "function" ? (updater as (previous: T) => T)(previous) : updater;
 }
+
+type PreferencesState = {
+  batchPriority: number;
+  batchWeight: number;
+  batchEnabled: boolean;
+  modelSearchQuery: string;
+  providerSearchQuery: string;
+};
+
+function persistPreferences(get: () => PreferencesState, next: Partial<VirtualModelsPagePreferences>): void {
+  const current = get();
+  writeVirtualModelsPagePreferences({
+    batchPriority: next.batchPriority ?? current.batchPriority,
+    batchWeight: next.batchWeight ?? current.batchWeight,
+    batchEnabled: next.batchEnabled ?? current.batchEnabled,
+    modelSearchQuery: next.modelSearchQuery ?? current.modelSearchQuery,
+    providerSearchQuery: next.providerSearchQuery ?? current.providerSearchQuery,
+  });
+}
+
+const preferences = readVirtualModelsPagePreferences();
 
 export type VirtualModelsPageState = {
   loading: boolean;
@@ -70,7 +92,7 @@ export type VirtualModelsPageState = {
   resetTransient: () => void;
 };
 
-export const virtualModelsPageStore = createStore<VirtualModelsPageState>()((set) => ({
+export const virtualModelsPageStore = createStore<VirtualModelsPageState>()((set, get) => ({
   loading: true,
   virtualModels: [],
   realModels: [],
@@ -90,15 +112,15 @@ export const virtualModelsPageStore = createStore<VirtualModelsPageState>()((set
 
   mappingBatchDialogOpen: false,
   selectedModelIds: [],
-  batchPriority: DEFAULT_VIRTUAL_MODELS_BATCH.priority,
-  batchWeight: DEFAULT_VIRTUAL_MODELS_BATCH.weight,
-  batchEnabled: DEFAULT_VIRTUAL_MODELS_BATCH.enabled,
-  modelSearchQuery: "",
+  batchPriority: preferences.batchPriority,
+  batchWeight: preferences.batchWeight,
+  batchEnabled: preferences.batchEnabled,
+  modelSearchQuery: preferences.modelSearchQuery,
 
   blacklistDialogOpen: false,
   providerSelectorDialogOpen: false,
   selectedProviderIds: [],
-  providerSearchQuery: "",
+  providerSearchQuery: preferences.providerSearchQuery,
 
   setLoading: (loading: boolean) => set({ loading }),
   setVirtualModels: (models: VirtualModel[]) => set({ virtualModels: models }),
@@ -120,16 +142,41 @@ export const virtualModelsPageStore = createStore<VirtualModelsPageState>()((set
   setMappingBatchDialogOpen: (open: boolean) => set({ mappingBatchDialogOpen: open }),
   setSelectedModelIds: (next: Updater<number[]>) =>
     set((state) => ({ selectedModelIds: resolveUpdater(next, state.selectedModelIds) })),
-  setBatchPriority: (priority: number) => set({ batchPriority: priority }),
-  setBatchWeight: (weight: number) => set({ batchWeight: weight }),
-  setBatchEnabled: (enabled: boolean) => set({ batchEnabled: enabled }),
-  setModelSearchQuery: (query: string) => set({ modelSearchQuery: query }),
+  setBatchPriority: (priority: number) => {
+    const current = get();
+    if (current.batchPriority === priority) return;
+    persistPreferences(get, { batchPriority: priority });
+    set({ batchPriority: priority });
+  },
+  setBatchWeight: (weight: number) => {
+    const current = get();
+    if (current.batchWeight === weight) return;
+    persistPreferences(get, { batchWeight: weight });
+    set({ batchWeight: weight });
+  },
+  setBatchEnabled: (enabled: boolean) => {
+    const current = get();
+    if (current.batchEnabled === enabled) return;
+    persistPreferences(get, { batchEnabled: enabled });
+    set({ batchEnabled: enabled });
+  },
+  setModelSearchQuery: (query: string) => {
+    const current = get();
+    if (current.modelSearchQuery === query) return;
+    persistPreferences(get, { modelSearchQuery: query });
+    set({ modelSearchQuery: query });
+  },
 
   setBlacklistDialogOpen: (open: boolean) => set({ blacklistDialogOpen: open }),
   setProviderSelectorDialogOpen: (open: boolean) => set({ providerSelectorDialogOpen: open }),
   setSelectedProviderIds: (next: Updater<number[]>) =>
     set((state) => ({ selectedProviderIds: resolveUpdater(next, state.selectedProviderIds) })),
-  setProviderSearchQuery: (query: string) => set({ providerSearchQuery: query }),
+  setProviderSearchQuery: (query: string) => {
+    const current = get();
+    if (current.providerSearchQuery === query) return;
+    persistPreferences(get, { providerSearchQuery: query });
+    set({ providerSearchQuery: query });
+  },
 
   resetTransient: () =>
     set({
@@ -143,14 +190,8 @@ export const virtualModelsPageStore = createStore<VirtualModelsPageState>()((set
       editingMapping: null,
       mappingBatchDialogOpen: false,
       selectedModelIds: [],
-      batchPriority: DEFAULT_VIRTUAL_MODELS_BATCH.priority,
-      batchWeight: DEFAULT_VIRTUAL_MODELS_BATCH.weight,
-      batchEnabled: DEFAULT_VIRTUAL_MODELS_BATCH.enabled,
-      modelSearchQuery: "",
       blacklistDialogOpen: false,
       providerSelectorDialogOpen: false,
       selectedProviderIds: [],
-      providerSearchQuery: "",
     }),
 }));
-

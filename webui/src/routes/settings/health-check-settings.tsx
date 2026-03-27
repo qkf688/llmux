@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -9,6 +8,7 @@ import { updateHealthCheckSettings } from "@/lib/api";
 import type { HealthCheckSettings } from "@/lib/api";
 import { Spinner } from "@/components/ui/spinner";
 import { healthCheckSettingsEditorStore, useSettingsStore } from "@/stores/settings";
+import { useSettingsEditorSync } from "./hooks/use-settings-editor-sync";
 
 interface HealthCheckSettingsProps {
   healthCheckSettings: HealthCheckSettings | null;
@@ -27,12 +27,12 @@ export function HealthCheckSettingsTab({ healthCheckSettings, onHealthCheckSetti
     resetTransient,
   } = useSettingsStore(healthCheckSettingsEditorStore, (state) => state);
 
-  useEffect(() => {
-    syncFromServerSettings(healthCheckSettings);
-    return () => {
-      resetTransient();
-    };
-  }, [healthCheckSettings, resetTransient, syncFromServerSettings]);
+  useSettingsEditorSync({
+    syncMode: "always",
+    serverSettings: healthCheckSettings,
+    syncFromServerSettings,
+    resetTransient,
+  });
 
   const handleSave = async () => {
     if (!localSettings) return;

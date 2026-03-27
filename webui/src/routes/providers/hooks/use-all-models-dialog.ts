@@ -4,11 +4,10 @@ import { getProviderModels, getProviders, syncProviderModels, updateProvider, ty
 import { buildConfigWithModels, parseCustomModelsFromConfig, parseUpstreamModelsFromConfig } from "@/lib/provider-models";
 import type { ModelTestResult, UpstreamStatus } from "../types";
 import { extractAllModels, parseCustomModelsInput } from "../utils/config";
+import { buildAutoActionsDescription, type AutoActionsFlags } from "../utils/auto-actions";
 
 type Updater<T> = T | ((previous: T) => T);
 type Setter<T> = (value: Updater<T>) => void;
-
-type AutoActions = { associate?: boolean; clean?: boolean };
 
 type UseAllModelsDialogInput = {
   setProviders: Setter<Provider[]>;
@@ -30,7 +29,7 @@ type UseAllModelsDialogInput = {
   setAddingModels: (adding: boolean) => void;
   setSyncingModels: (syncing: boolean) => void;
 
-  buildAutoActionsDescription: (options: AutoActions) => string | undefined;
+  autoActionsFlags: AutoActionsFlags;
 };
 
 export function useAllModelsDialog({
@@ -48,7 +47,7 @@ export function useAllModelsDialog({
   setAllModelsTestResults,
   setAddingModels,
   setSyncingModels,
-  buildAutoActionsDescription,
+  autoActionsFlags,
 }: UseAllModelsDialogInput) {
   const [allModelsList, setAllModelsList] = useState<string[]>([]);
   const [upstreamModelsList, setUpstreamModelsList] = useState<string[]>([]);
@@ -107,7 +106,7 @@ export function useAllModelsDialog({
       setAllModelsList([...upstream, ...merged]);
       setCustomModelInput("");
       toast.success(`已添加 ${merged.length - custom.length} 个自定义模型`, {
-        description: buildAutoActionsDescription({ associate: true }),
+        description: buildAutoActionsDescription({ associate: true }, autoActionsFlags),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -139,7 +138,7 @@ export function useAllModelsDialog({
       setAllModelsList([...nextUpstream, ...nextCustom]);
       setSelectedAllModels([]);
       toast.success(`已移除 ${removedCount} 个模型`, {
-        description: buildAutoActionsDescription({ clean: true }),
+        description: buildAutoActionsDescription({ clean: true }, autoActionsFlags),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -188,7 +187,7 @@ export function useAllModelsDialog({
           description: buildAutoActionsDescription({
             associate: AddedCount > 0,
             clean: RemovedCount > 0,
-          }),
+          }, autoActionsFlags),
         });
       } else {
         toast.info("没有检测到模型变化");

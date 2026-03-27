@@ -2,11 +2,10 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { getProviderModels, type Provider, type ProviderModel } from "@/lib/api";
 import { parseCustomModelsFromConfig, parseUpstreamModelsFromConfig } from "@/lib/provider-models";
+import { buildAutoActionsDescription, type AutoActionsFlags } from "../utils/auto-actions";
 
 type Updater<T> = T | ((previous: T) => T);
 type Setter<T> = (value: Updater<T>) => void;
-
-type AutoActions = { associate?: boolean; clean?: boolean };
 
 type UseUpstreamModelsDialogInput = {
   providers: Provider[];
@@ -27,7 +26,7 @@ type UseUpstreamModelsDialogInput = {
   setAllModelsList: Setter<string[]>;
   persistModels: (provider: Provider, upstreamModels: string[], customModels: string[]) => Promise<string>;
 
-  buildAutoActionsDescription: (options: AutoActions) => string | undefined;
+  autoActionsFlags: AutoActionsFlags;
 };
 
 export function useUpstreamModelsDialog({
@@ -45,7 +44,7 @@ export function useUpstreamModelsDialog({
   setAllModelsProvider,
   setAllModelsList,
   persistModels,
-  buildAutoActionsDescription,
+  autoActionsFlags,
 }: UseUpstreamModelsDialogInput) {
   const [providerModels, setProviderModels] = useState<ProviderModel[]>([]);
   const [filteredProviderModels, setFilteredProviderModels] = useState<ProviderModel[]>([]);
@@ -121,7 +120,7 @@ export function useUpstreamModelsDialog({
       }
       setSelectedUpstreamModels([]);
       toast.success(`已添加 ${merged.length - upstream.length} 个模型到上游模型`, {
-        description: buildAutoActionsDescription({ associate: true }),
+        description: buildAutoActionsDescription({ associate: true }, autoActionsFlags),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -143,4 +142,3 @@ export function useUpstreamModelsDialog({
     handleAddUpstreamToAll,
   };
 }
-

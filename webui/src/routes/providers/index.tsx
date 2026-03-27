@@ -239,17 +239,7 @@ export default function ProvidersPage() {
     setAutoCleanOnDeleteEnabled,
   });
 
-  const buildAutoActionsDescription = (options: { associate?: boolean; clean?: boolean }) => {
-    const actions: string[] = [];
-    if (options.associate && autoAssociateOnAddEnabled) {
-      actions.push("自动关联");
-    }
-    if (options.clean && autoCleanOnDeleteEnabled) {
-      actions.push("自动清理无效关联");
-    }
-    if (actions.length === 0) return undefined;
-    return `已触发${actions.join("、")}（后台异步）`;
-  };
+  const autoActionsFlags = { autoAssociateOnAddEnabled, autoCleanOnDeleteEnabled };
 
   const getAllModelsForProvider = (providerId: number): string[] => {
     const provider = providers.find((item) => item.ID === providerId);
@@ -284,7 +274,7 @@ export default function ProvidersPage() {
     setAllModelsTestResults,
     setAddingModels,
     setSyncingModels,
-    buildAutoActionsDescription,
+    autoActionsFlags,
   });
 
   const {
@@ -309,7 +299,7 @@ export default function ProvidersPage() {
     setAllModelsProvider,
     setAllModelsList,
     persistModels,
-    buildAutoActionsDescription,
+    autoActionsFlags,
   });
 
   const toggleSelectAllModels = () => {

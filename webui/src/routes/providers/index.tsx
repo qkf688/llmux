@@ -2,7 +2,78 @@ import { useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { defaultProviderFormValues, providerFormSchema, type ProviderFormValues } from "./form-schema";
-import { useProvidersPageStore } from "@/stores/providers";
+import {
+  selectAddingModels,
+  selectAllModelsOpen,
+  selectAllModelsProvider,
+  selectAllModelsSearchQuery,
+  selectAllModelsTestResults,
+  selectAutoAssociateOnAddEnabled,
+  selectAutoCleanOnDeleteEnabled,
+  selectAvailableTypes,
+  selectBatchTestProgress,
+  selectBatchTesting,
+  selectClearAssociationId,
+  selectClearingAssociation,
+  selectCustomModelInput,
+  selectDebouncedNameFilter,
+  selectDeleteId,
+  selectEditingProvider,
+  selectFlushNameFilter,
+  selectLoading,
+  selectModelsLoading,
+  selectModelsOpen,
+  selectModelsOpenId,
+  selectNameFilter,
+  selectProviderDialogOpen,
+  selectProviderTemplates,
+  selectProviders,
+  selectResetProvidersTransient,
+  selectSelectedAllModels,
+  selectSelectedUpstreamModels,
+  selectSetAddingModels,
+  selectSetAllModelsOpen,
+  selectSetAllModelsProvider,
+  selectSetAllModelsSearchQuery,
+  selectSetAllModelsTestResults,
+  selectSetAutoAssociateOnAddEnabled,
+  selectSetAutoCleanOnDeleteEnabled,
+  selectSetAvailableTypes,
+  selectSetBatchTestProgress,
+  selectSetBatchTesting,
+  selectSetClearAssociationId,
+  selectSetClearingAssociation,
+  selectSetCustomModelInput,
+  selectSetDebouncedNameFilter,
+  selectSetDeleteId,
+  selectSetEditingProvider,
+  selectSetLoading,
+  selectSetModelsLoading,
+  selectSetModelsOpen,
+  selectSetModelsOpenId,
+  selectSetNameFilter,
+  selectSetProviderDialogOpen,
+  selectSetProviderTemplates,
+  selectSetProviders,
+  selectSetSelectedAllModels,
+  selectSetSelectedUpstreamModels,
+  selectSetShowApiKey,
+  selectSetSyncingAll,
+  selectSetSyncingModels,
+  selectSetTypeFilter,
+  selectSetUpstreamBatchTesting,
+  selectSetUpstreamBatchTestProgress,
+  selectSetUpstreamTestResults,
+  selectShowApiKey,
+  selectSyncingAll,
+  selectSyncingModels,
+  selectToggleShowApiKey,
+  selectTypeFilter,
+  selectUpstreamBatchTesting,
+  selectUpstreamBatchTestProgress,
+  selectUpstreamTestResults,
+  useProvidersPageStore,
+} from "@/stores/providers";
 import { useProviderModelTesting } from "./hooks/use-provider-model-testing";
 import { useAllModelsDialog } from "./hooks/use-all-models-dialog";
 import { useUpstreamModelsDialog } from "./hooks/use-upstream-models-dialog";
@@ -22,147 +93,86 @@ import { UpstreamModelsDialog } from "./components/dialogs/upstream-models-dialo
 
 export default function ProvidersPage() {
   // 上游模型测试相关状态
-  const {
-    loading,
-    setLoading,
-    providers,
-    setProviders,
-    providerTemplates,
-    setProviderTemplates,
-    clearingAssociation,
-    setClearingAssociation,
-    modelsLoading,
-    setModelsLoading,
-    addingModels,
-    setAddingModels,
-    syncingModels,
-    setSyncingModels,
-    syncingAll,
-    setSyncingAll,
-    autoAssociateOnAddEnabled,
-    setAutoAssociateOnAddEnabled,
-    autoCleanOnDeleteEnabled,
-    setAutoCleanOnDeleteEnabled,
-    open,
-    setOpen,
-    editingProvider,
-    setEditingProvider,
-    deleteId,
-    setDeleteId,
-    clearAssociationId,
-    setClearAssociationId,
-    modelsOpen,
-    setModelsOpen,
-    modelsOpenId,
-    setModelsOpenId,
-    selectedUpstreamModels,
-    setSelectedUpstreamModels,
-    allModelsOpen,
-    setAllModelsOpen,
-    allModelsProvider,
-    setAllModelsProvider,
-    selectedAllModels,
-    setSelectedAllModels,
-    customModelInput,
-    setCustomModelInput,
-    allModelsSearchQuery,
-    setAllModelsSearchQuery,
-    allModelsTestResults,
-    setAllModelsTestResults,
-    batchTesting,
-    setBatchTesting,
-    batchTestProgress,
-    setBatchTestProgress,
-    upstreamTestResults,
-    setUpstreamTestResults,
-    upstreamBatchTesting,
-    setUpstreamBatchTesting,
-    upstreamBatchTestProgress,
-    setUpstreamBatchTestProgress,
-    showApiKey,
-    setShowApiKey,
-    toggleShowApiKey,
-    nameFilter,
-    setNameFilter,
-    debouncedNameFilter,
-    setDebouncedNameFilter,
-    typeFilter,
-    setTypeFilter,
-    availableTypes,
-    setAvailableTypes,
-    flushNameFilter,
-    resetTransient,
-  } = useProvidersPageStore((state) => ({
-    loading: state.loading,
-    setLoading: state.setLoading,
-    providers: state.providers,
-    setProviders: state.setProviders,
-    providerTemplates: state.providerTemplates,
-    setProviderTemplates: state.setProviderTemplates,
-    clearingAssociation: state.clearingAssociation,
-    setClearingAssociation: state.setClearingAssociation,
-    modelsLoading: state.modelsLoading,
-    setModelsLoading: state.setModelsLoading,
-    addingModels: state.addingModels,
-    setAddingModels: state.setAddingModels,
-    syncingModels: state.syncingModels,
-    setSyncingModels: state.setSyncingModels,
-    syncingAll: state.syncingAll,
-    setSyncingAll: state.setSyncingAll,
-    autoAssociateOnAddEnabled: state.autoAssociateOnAddEnabled,
-    setAutoAssociateOnAddEnabled: state.setAutoAssociateOnAddEnabled,
-    autoCleanOnDeleteEnabled: state.autoCleanOnDeleteEnabled,
-    setAutoCleanOnDeleteEnabled: state.setAutoCleanOnDeleteEnabled,
-    open: state.providerDialogOpen,
-    setOpen: state.setProviderDialogOpen,
-    editingProvider: state.editingProvider,
-    setEditingProvider: state.setEditingProvider,
-    deleteId: state.deleteId,
-    setDeleteId: state.setDeleteId,
-    clearAssociationId: state.clearAssociationId,
-    setClearAssociationId: state.setClearAssociationId,
-    modelsOpen: state.modelsOpen,
-    setModelsOpen: state.setModelsOpen,
-    modelsOpenId: state.modelsOpenId,
-    setModelsOpenId: state.setModelsOpenId,
-    selectedUpstreamModels: state.selectedUpstreamModels,
-    setSelectedUpstreamModels: state.setSelectedUpstreamModels,
-    allModelsOpen: state.allModelsOpen,
-    setAllModelsOpen: state.setAllModelsOpen,
-    allModelsProvider: state.allModelsProvider,
-    setAllModelsProvider: state.setAllModelsProvider,
-    selectedAllModels: state.selectedAllModels,
-    setSelectedAllModels: state.setSelectedAllModels,
-    customModelInput: state.customModelInput,
-    setCustomModelInput: state.setCustomModelInput,
-    allModelsSearchQuery: state.allModelsSearchQuery,
-    setAllModelsSearchQuery: state.setAllModelsSearchQuery,
-    allModelsTestResults: state.allModelsTestResults,
-    setAllModelsTestResults: state.setAllModelsTestResults,
-    batchTesting: state.batchTesting,
-    setBatchTesting: state.setBatchTesting,
-    batchTestProgress: state.batchTestProgress,
-    setBatchTestProgress: state.setBatchTestProgress,
-    upstreamTestResults: state.upstreamTestResults,
-    setUpstreamTestResults: state.setUpstreamTestResults,
-    upstreamBatchTesting: state.upstreamBatchTesting,
-    setUpstreamBatchTesting: state.setUpstreamBatchTesting,
-    upstreamBatchTestProgress: state.upstreamBatchTestProgress,
-    setUpstreamBatchTestProgress: state.setUpstreamBatchTestProgress,
-    showApiKey: state.showApiKey,
-    setShowApiKey: state.setShowApiKey,
-    toggleShowApiKey: state.toggleShowApiKey,
-    nameFilter: state.nameFilter,
-    setNameFilter: state.setNameFilter,
-    debouncedNameFilter: state.debouncedNameFilter,
-    setDebouncedNameFilter: state.setDebouncedNameFilter,
-    typeFilter: state.typeFilter,
-    setTypeFilter: state.setTypeFilter,
-    availableTypes: state.availableTypes,
-    setAvailableTypes: state.setAvailableTypes,
-    flushNameFilter: state.flushNameFilter,
-    resetTransient: state.resetTransient,
-  }));
+  const loading = useProvidersPageStore(selectLoading);
+  const setLoading = useProvidersPageStore(selectSetLoading);
+  const providers = useProvidersPageStore(selectProviders);
+  const setProviders = useProvidersPageStore(selectSetProviders);
+  const providerTemplates = useProvidersPageStore(selectProviderTemplates);
+  const setProviderTemplates = useProvidersPageStore(selectSetProviderTemplates);
+
+  const clearingAssociation = useProvidersPageStore(selectClearingAssociation);
+  const setClearingAssociation = useProvidersPageStore(selectSetClearingAssociation);
+  const modelsLoading = useProvidersPageStore(selectModelsLoading);
+  const setModelsLoading = useProvidersPageStore(selectSetModelsLoading);
+  const addingModels = useProvidersPageStore(selectAddingModels);
+  const setAddingModels = useProvidersPageStore(selectSetAddingModels);
+  const syncingModels = useProvidersPageStore(selectSyncingModels);
+  const setSyncingModels = useProvidersPageStore(selectSetSyncingModels);
+  const syncingAll = useProvidersPageStore(selectSyncingAll);
+  const setSyncingAll = useProvidersPageStore(selectSetSyncingAll);
+  const autoAssociateOnAddEnabled = useProvidersPageStore(selectAutoAssociateOnAddEnabled);
+  const setAutoAssociateOnAddEnabled = useProvidersPageStore(selectSetAutoAssociateOnAddEnabled);
+  const autoCleanOnDeleteEnabled = useProvidersPageStore(selectAutoCleanOnDeleteEnabled);
+  const setAutoCleanOnDeleteEnabled = useProvidersPageStore(selectSetAutoCleanOnDeleteEnabled);
+
+  const open = useProvidersPageStore(selectProviderDialogOpen);
+  const setOpen = useProvidersPageStore(selectSetProviderDialogOpen);
+  const editingProvider = useProvidersPageStore(selectEditingProvider);
+  const setEditingProvider = useProvidersPageStore(selectSetEditingProvider);
+  const deleteId = useProvidersPageStore(selectDeleteId);
+  const setDeleteId = useProvidersPageStore(selectSetDeleteId);
+  const clearAssociationId = useProvidersPageStore(selectClearAssociationId);
+  const setClearAssociationId = useProvidersPageStore(selectSetClearAssociationId);
+
+  const modelsOpen = useProvidersPageStore(selectModelsOpen);
+  const setModelsOpen = useProvidersPageStore(selectSetModelsOpen);
+  const modelsOpenId = useProvidersPageStore(selectModelsOpenId);
+  const setModelsOpenId = useProvidersPageStore(selectSetModelsOpenId);
+
+  const selectedUpstreamModels = useProvidersPageStore(selectSelectedUpstreamModels);
+  const setSelectedUpstreamModels = useProvidersPageStore(selectSetSelectedUpstreamModels);
+
+  const allModelsOpen = useProvidersPageStore(selectAllModelsOpen);
+  const setAllModelsOpen = useProvidersPageStore(selectSetAllModelsOpen);
+  const allModelsProvider = useProvidersPageStore(selectAllModelsProvider);
+  const setAllModelsProvider = useProvidersPageStore(selectSetAllModelsProvider);
+
+  const selectedAllModels = useProvidersPageStore(selectSelectedAllModels);
+  const setSelectedAllModels = useProvidersPageStore(selectSetSelectedAllModels);
+  const customModelInput = useProvidersPageStore(selectCustomModelInput);
+  const setCustomModelInput = useProvidersPageStore(selectSetCustomModelInput);
+  const allModelsSearchQuery = useProvidersPageStore(selectAllModelsSearchQuery);
+  const setAllModelsSearchQuery = useProvidersPageStore(selectSetAllModelsSearchQuery);
+
+  const allModelsTestResults = useProvidersPageStore(selectAllModelsTestResults);
+  const setAllModelsTestResults = useProvidersPageStore(selectSetAllModelsTestResults);
+  const batchTesting = useProvidersPageStore(selectBatchTesting);
+  const setBatchTesting = useProvidersPageStore(selectSetBatchTesting);
+  const batchTestProgress = useProvidersPageStore(selectBatchTestProgress);
+  const setBatchTestProgress = useProvidersPageStore(selectSetBatchTestProgress);
+
+  const upstreamTestResults = useProvidersPageStore(selectUpstreamTestResults);
+  const setUpstreamTestResults = useProvidersPageStore(selectSetUpstreamTestResults);
+  const upstreamBatchTesting = useProvidersPageStore(selectUpstreamBatchTesting);
+  const setUpstreamBatchTesting = useProvidersPageStore(selectSetUpstreamBatchTesting);
+  const upstreamBatchTestProgress = useProvidersPageStore(selectUpstreamBatchTestProgress);
+  const setUpstreamBatchTestProgress = useProvidersPageStore(selectSetUpstreamBatchTestProgress);
+
+  const showApiKey = useProvidersPageStore(selectShowApiKey);
+  const setShowApiKey = useProvidersPageStore(selectSetShowApiKey);
+  const toggleShowApiKey = useProvidersPageStore(selectToggleShowApiKey);
+
+  const nameFilter = useProvidersPageStore(selectNameFilter);
+  const setNameFilter = useProvidersPageStore(selectSetNameFilter);
+  const debouncedNameFilter = useProvidersPageStore(selectDebouncedNameFilter);
+  const setDebouncedNameFilter = useProvidersPageStore(selectSetDebouncedNameFilter);
+  const typeFilter = useProvidersPageStore(selectTypeFilter);
+  const setTypeFilter = useProvidersPageStore(selectSetTypeFilter);
+  const availableTypes = useProvidersPageStore(selectAvailableTypes);
+  const setAvailableTypes = useProvidersPageStore(selectSetAvailableTypes);
+  const flushNameFilter = useProvidersPageStore(selectFlushNameFilter);
+
+  const resetTransient = useProvidersPageStore(selectResetProvidersTransient);
 
   // 筛选条件
   useEffect(() => {
@@ -341,6 +351,86 @@ export default function ProvidersPage() {
 
   const hasFilter = hasActiveProvidersFilter(nameFilter, typeFilter);
 
+  const providerFormDialogProps = {
+    open,
+    onOpenChange: setOpen,
+    editingProvider,
+    form,
+    providerTemplates,
+    watchedType,
+    showApiKey,
+    toggleShowApiKey,
+    onSubmit: handleSubmitProvider,
+  };
+
+  const allModelsDialogProps = {
+    open: allModelsOpen,
+    onOpenChange: setAllModelsOpen,
+    allModelsProvider,
+    upstreamStatus,
+    upstreamModelsList,
+    allModelsList,
+    filteredAllModels,
+    allModelsSearchQuery,
+    setAllModelsSearchQuery,
+    allModelsTestResults,
+    batchTesting,
+    batchTestProgress,
+    syncingModels,
+    addingModels,
+    selectedAllModels,
+    setSelectedAllModels,
+    isAllFilteredSelected,
+    toggleSelectAllModels,
+    handleSyncUpstreamModels,
+    handleBatchTestAll,
+    handleBatchTestSelected,
+    handleCancelBatchTest,
+    selectAllSuccessful,
+    selectAllFailed,
+    handleRemoveSelectedModels,
+    handleTestAllModel,
+    copyModelName,
+    handleRemoveModelFromAll,
+    customModelInput,
+    setCustomModelInput,
+    handleAddCustomModels,
+  };
+
+  const upstreamProviderName = providers.find((v) => v.ID === modelsOpenId)?.Name;
+  const cachedModelsCount = getAllModelsForProvider(providers, modelsOpenId || 0).length;
+
+  const upstreamModelsDialogProps = {
+    open: modelsOpen,
+    onOpenChange: setModelsOpen,
+    providerName: upstreamProviderName,
+    modelsOpenId,
+    modelsLoading,
+    addingModels,
+    providerModels,
+    filteredProviderModels,
+    cachedModelsCount,
+    savedModelSet,
+    selectedUpstreamModels,
+    setSelectedUpstreamModels,
+    upstreamTestResults,
+    upstreamBatchTesting,
+    upstreamBatchTestProgress,
+    selectableModelIds,
+    isAllSelectableChecked,
+    toggleSelectAll,
+    handleBatchTestUpstreamAll,
+    handleBatchTestUpstreamSelected,
+    handleCancelUpstreamBatchTest,
+    selectUpstreamSuccessful,
+    selectUpstreamFailed,
+    refreshUpstreamModels,
+    handleUpstreamSearchChange,
+    handleAddUpstreamToAll,
+    handleTestUpstreamModel,
+    copyModelName,
+  };
+
   return (
     <div className="h-full min-h-0 flex flex-col gap-4 p-1">
       <ProvidersToolbar
@@ -375,82 +465,11 @@ export default function ProvidersPage() {
         onHandleDelete={handleDelete}
       />
 
-      <ProviderFormDialog
-        open={open}
-        onOpenChange={setOpen}
-        editingProvider={editingProvider}
-        form={form}
-        providerTemplates={providerTemplates}
-        watchedType={watchedType}
-        showApiKey={showApiKey}
-        toggleShowApiKey={toggleShowApiKey}
-        onSubmit={handleSubmitProvider}
-      />
+      <ProviderFormDialog {...providerFormDialogProps} />
 
-      <AllModelsDialog
-        open={allModelsOpen}
-        onOpenChange={setAllModelsOpen}
-        allModelsProvider={allModelsProvider}
-        upstreamStatus={upstreamStatus}
-        upstreamModelsList={upstreamModelsList}
-        allModelsList={allModelsList}
-        filteredAllModels={filteredAllModels}
-        allModelsSearchQuery={allModelsSearchQuery}
-        setAllModelsSearchQuery={setAllModelsSearchQuery}
-        allModelsTestResults={allModelsTestResults}
-        batchTesting={batchTesting}
-        batchTestProgress={batchTestProgress}
-        syncingModels={syncingModels}
-        addingModels={addingModels}
-        selectedAllModels={selectedAllModels}
-        setSelectedAllModels={setSelectedAllModels}
-        isAllFilteredSelected={isAllFilteredSelected}
-        toggleSelectAllModels={toggleSelectAllModels}
-        handleSyncUpstreamModels={handleSyncUpstreamModels}
-        handleBatchTestAll={handleBatchTestAll}
-        handleBatchTestSelected={handleBatchTestSelected}
-        handleCancelBatchTest={handleCancelBatchTest}
-        selectAllSuccessful={selectAllSuccessful}
-        selectAllFailed={selectAllFailed}
-        handleRemoveSelectedModels={handleRemoveSelectedModels}
-        handleTestAllModel={handleTestAllModel}
-        copyModelName={copyModelName}
-        handleRemoveModelFromAll={handleRemoveModelFromAll}
-        customModelInput={customModelInput}
-        setCustomModelInput={setCustomModelInput}
-        handleAddCustomModels={handleAddCustomModels}
-      />
+      <AllModelsDialog {...allModelsDialogProps} />
 
-      <UpstreamModelsDialog
-        open={modelsOpen}
-        onOpenChange={setModelsOpen}
-        providerName={providers.find((v) => v.ID === modelsOpenId)?.Name}
-        modelsOpenId={modelsOpenId}
-        modelsLoading={modelsLoading}
-        addingModels={addingModels}
-        providerModels={providerModels}
-        filteredProviderModels={filteredProviderModels}
-        cachedModelsCount={getAllModelsForProvider(providers, modelsOpenId || 0).length}
-        savedModelSet={savedModelSet}
-        selectedUpstreamModels={selectedUpstreamModels}
-        setSelectedUpstreamModels={setSelectedUpstreamModels}
-        upstreamTestResults={upstreamTestResults}
-        upstreamBatchTesting={upstreamBatchTesting}
-        upstreamBatchTestProgress={upstreamBatchTestProgress}
-        selectableModelIds={selectableModelIds}
-        isAllSelectableChecked={isAllSelectableChecked}
-        toggleSelectAll={toggleSelectAll}
-        handleBatchTestUpstreamAll={handleBatchTestUpstreamAll}
-        handleBatchTestUpstreamSelected={handleBatchTestUpstreamSelected}
-        handleCancelUpstreamBatchTest={handleCancelUpstreamBatchTest}
-        selectUpstreamSuccessful={selectUpstreamSuccessful}
-        selectUpstreamFailed={selectUpstreamFailed}
-        refreshUpstreamModels={refreshUpstreamModels}
-        handleUpstreamSearchChange={handleUpstreamSearchChange}
-        handleAddUpstreamToAll={handleAddUpstreamToAll}
-        handleTestUpstreamModel={handleTestUpstreamModel}
-        copyModelName={copyModelName}
-      />
+      <UpstreamModelsDialog {...upstreamModelsDialogProps} />
     </div>
   );
 }

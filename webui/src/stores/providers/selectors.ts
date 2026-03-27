@@ -1,6 +1,8 @@
 import type { ProvidersPageState } from "@/stores/providers/page-store";
 
 export const selectLoading = (state: ProvidersPageState) => state.loading;
+export const selectProviders = (state: ProvidersPageState) => state.providers;
+export const selectProviderTemplates = (state: ProvidersPageState) => state.providerTemplates;
 export const selectNameFilter = (state: ProvidersPageState) => state.nameFilter;
 export const selectDebouncedNameFilter = (state: ProvidersPageState) => state.debouncedNameFilter;
 export const selectTypeFilter = (state: ProvidersPageState) => state.typeFilter;
@@ -41,6 +43,8 @@ export const selectUpstreamBatchTesting = (state: ProvidersPageState) => state.u
 export const selectUpstreamBatchTestProgress = (state: ProvidersPageState) => state.upstreamBatchTestProgress;
 
 export const selectSetLoading = (state: ProvidersPageState) => state.setLoading;
+export const selectSetProviders = (state: ProvidersPageState) => state.setProviders;
+export const selectSetProviderTemplates = (state: ProvidersPageState) => state.setProviderTemplates;
 export const selectSetNameFilter = (state: ProvidersPageState) => state.setNameFilter;
 export const selectSetDebouncedNameFilter = (state: ProvidersPageState) => state.setDebouncedNameFilter;
 export const selectFlushNameFilter = (state: ProvidersPageState) => state.flushNameFilter;
@@ -59,6 +63,9 @@ export const selectSetShowApiKey = (state: ProvidersPageState) => state.setShowA
 export const selectToggleShowApiKey = (state: ProvidersPageState) => state.toggleShowApiKey;
 
 export const selectSetProviderDialogOpen = (state: ProvidersPageState) => state.setProviderDialogOpen;
+export const selectSetEditingProvider = (state: ProvidersPageState) => state.setEditingProvider;
+export const selectSetDeleteId = (state: ProvidersPageState) => state.setDeleteId;
+export const selectSetClearAssociationId = (state: ProvidersPageState) => state.setClearAssociationId;
 export const selectOpenCreateProvider = (state: ProvidersPageState) => state.openCreateProvider;
 export const selectOpenEditProvider = (state: ProvidersPageState) => state.openEditProvider;
 
@@ -70,6 +77,7 @@ export const selectClearClearAssociation = (state: ProvidersPageState) => state.
 
 export const selectOpenProviderModels = (state: ProvidersPageState) => state.openProviderModels;
 export const selectSetModelsOpen = (state: ProvidersPageState) => state.setModelsOpen;
+export const selectSetModelsOpenId = (state: ProvidersPageState) => state.setModelsOpenId;
 
 export const selectOpenAllModels = (state: ProvidersPageState) => state.openAllModels;
 export const selectSetAllModelsOpen = (state: ProvidersPageState) => state.setAllModelsOpen;

@@ -66,6 +66,7 @@ import { useProviderSyncActions } from "./hooks/use-provider-sync-actions";
 import { useProviderSwitchActions } from "./hooks/use-provider-switch-actions";
 import { useProvidersBootstrap } from "./hooks/use-providers-bootstrap";
 import { applyProviderTemplateDefaults } from "./utils/template-defaults";
+import { getAllModelsForProvider } from "./utils/provider-models";
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -242,12 +243,6 @@ export default function ProvidersPage() {
 
   const autoActionsFlags = { autoAssociateOnAddEnabled, autoCleanOnDeleteEnabled };
 
-  const getAllModelsForProvider = (providerId: number): string[] => {
-    const provider = providers.find((item) => item.ID === providerId);
-    if (!provider) return [];
-    return extractAllModels(provider.Config);
-  };
-
   const {
     allModelsList,
     filteredAllModels,
@@ -394,7 +389,7 @@ export default function ProvidersPage() {
 
   const hasFilter = nameFilter.trim() !== "" || typeFilter !== "all";
 
-  const savedModelSet = new Set(getAllModelsForProvider(modelsOpenId || 0).map((item) => item.toLowerCase()));
+  const savedModelSet = new Set(getAllModelsForProvider(providers, modelsOpenId || 0).map((item) => item.toLowerCase()));
   const selectableModelIds = filteredProviderModels
     .filter((model) => !savedModelSet.has(model.id.toLowerCase()))
     .map((model) => model.id);
@@ -1464,7 +1459,7 @@ export default function ProvidersPage() {
             <div className="text-sm text-muted-foreground">
               {modelsLoading
                 ? "正在从上游获取..."
-                : `上游返回 ${providerModels.length} 个，已缓存 ${getAllModelsForProvider(modelsOpenId || 0).length} 个`}
+                : `上游返回 ${providerModels.length} 个，已缓存 ${getAllModelsForProvider(providers, modelsOpenId || 0).length} 个`}
             </div>
             <div className="flex gap-1 flex-wrap">
               <TooltipProvider>

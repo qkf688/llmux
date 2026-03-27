@@ -110,6 +110,7 @@ import { useModelProvidersBootstrap } from "./use-model-providers-bootstrap";
 import { useModelProvidersModelChange } from "./use-model-providers-model-change";
 import { useModelProvidersOperationScope } from "./use-model-providers-operation-scope";
 import { useModelProvidersAssociationStatus } from "./use-model-providers-association-status";
+import { useModelProvidersPageActions } from "./use-model-providers-page-actions";
 import { useModelProvidersModelListSelection } from "./use-model-providers-model-list-selection";
 import { useModelProvidersPreview } from "./use-model-providers-preview";
 import { useModelProvidersTemplateEditor } from "./use-model-providers-template-editor";
@@ -337,10 +338,6 @@ export function useModelProvidersPage() {
     setSelectedProviderModels,
   });
 
-  const openDeleteDialog = (id: number) => {
-    setDeleteId(id);
-  };
-
   const { handleModelChange } = useModelProvidersModelChange({
     searchParams,
     setSearchParams,
@@ -352,13 +349,6 @@ export function useModelProvidersPage() {
     resetSelectedStatusFilter: () => setSelectedStatusFilter("all"),
     form,
   });
-
-  const toggleProviderCollapse = (providerId: number) => {
-    setCollapsedProviders((prev) => ({
-      ...prev,
-      [providerId]: !prev[providerId],
-    }));
-  };
 
   const {
     providerTypes,
@@ -435,18 +425,6 @@ export function useModelProvidersPage() {
     setAssociationTestResults,
   });
 
-  const refreshStatus = () => {
-    if (selectedModelId) {
-      void loadProviderStatus(modelProviders, selectedModelId);
-    }
-  };
-
-  const handleDeleteDialogChange = (openValue: boolean) => {
-    if (!openValue) {
-      setDeleteId(null);
-    }
-  };
-
   const {
     openModelListDialog,
     clearSelectedProviderModels,
@@ -462,17 +440,24 @@ export function useModelProvidersPage() {
     visibleAvailableModels,
   });
 
-  const confirmPreviewAction = () => {
-    void executePreviewAction();
-  };
-
-  const addTemplateItem = () => {
-    void handleAddTemplateItem();
-  };
-
-  const deleteTemplateItem = (name: string) => {
-    void handleDeleteTemplateItem(name);
-  };
+  const {
+    openDeleteDialog,
+    toggleProviderCollapse,
+    refreshStatus,
+    handleDeleteDialogChange,
+    confirmPreviewAction,
+    addTemplateItem,
+    deleteTemplateItem,
+  } = useModelProvidersPageActions({
+    selectedModelId,
+    modelProviders,
+    setDeleteId,
+    setCollapsedProviders,
+    loadProviderStatus,
+    executePreviewAction,
+    handleAddTemplateItem,
+    handleDeleteTemplateItem,
+  });
 
   const operationScopeToolbarProps = {
     operationScope,

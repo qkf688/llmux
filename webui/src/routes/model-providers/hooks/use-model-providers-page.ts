@@ -91,9 +91,6 @@ import {
   useModelProvidersPageStore,
 } from "@/stores/model-providers";
 import {
-  createModelProvider,
-  deleteModelProvider,
-  updateModelProvider,
   updateModelProviderStatus,
 } from "@/lib/api";
 import type {
@@ -102,11 +99,12 @@ import type {
   Provider,
   Settings,
 } from "@/lib/api";
-import { toast } from "sonner";
 import { formSchema, type FormValues } from "../form-schema";
 import type { ProviderModelGroup, ProviderModelWithOwner } from "../types";
 import { buildAssociationPayload } from "../utils/payload";
 import { buildSelectionKey } from "../utils/selection";
+import { useModelProvidersAssociationDialog } from "./use-model-providers-association-dialog";
+import { useModelProvidersAssociationMutations } from "./use-model-providers-association-mutations";
 import { useModelProvidersAssociationsData } from "./use-model-providers-associations-data";
 import { useModelProvidersBatch } from "./use-model-providers-batch";
 import { useModelProvidersBlacklist } from "./use-model-providers-blacklist";
@@ -299,112 +297,22 @@ export function useModelProvidersPage() {
     loadProviderStatus,
   });
 
-  const handleCreate = async (values: FormValues) => {
-    if (isSubmitting) return;
-    setIsSubmitting(true);
-    try {
-      // 如果选择了多个模型，批量创建关联
-      if (selectedProviderModels.length > 0) {
-        const promises = selectedProviderModels.map(({ providerId, modelId }) =>
-          createModelProvider(
-            buildPayload(values, {
-              providerId,
-              providerModel: modelId
-            })
-          )
-        );
-        await Promise.all(promises);
-        toast.success(`成功创建 ${selectedProviderModels.length} 个模型提供商关联`);
-      } else {
-        const modelName = values.provider_name?.trim();
-        if (!modelName) {
-          toast.error("请选择模型或手动输入模型名称");
-          return;
-        }
-        if (!values.provider_id || values.provider_id <= 0) {
-          toast.error("请选择具体的提供商");
-          return;
-        }
-        await createModelProvider(
-          buildPayload(values, {
-            providerId: values.provider_id,
-            providerModel: modelName
-          })
-        );
-        toast.success("模型提供商关联创建成功");
-      }
-      
-      setOpen(false);
-      form.reset({
-        model_id: selectedModelId || 0,
-        provider_name: "",
-        provider_id: 0,
-        tool_call: true,
-        structured_output: false,
-        image: false,
-        with_header: false,
-        weight: settings?.auto_weight_decay_default || 5,
-        priority: settings?.auto_priority_decay_default || 10,
-        customer_headers: []
-      });
-      setSelectedProviderModels([]);
-      if (selectedModelId) {
-        fetchModelProviders(selectedModelId);
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`创建模型提供商关联失败: ${message}`);
-      console.error(err);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleUpdate = async (values: FormValues) => {
-    if (!editingAssociation) return;
-
-    try {
-      await updateModelProvider(editingAssociation.ID, buildPayload(values));
-      setOpen(false);
-      toast.success("模型提供商关联更新成功");
-      setEditingAssociation(null);
-      form.reset({
-        model_id: 0,
-        provider_name: "",
-        provider_id: 0,
-        tool_call: false,
-        structured_output: false,
-        image: false,
-        with_header: false,
-        weight: 1,
-        priority: 100,
-        customer_headers: []
-      });
-      if (selectedModelId) {
-        fetchModelProviders(selectedModelId);
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`更新模型提供商关联失败: ${message}`);
-      console.error(err);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!deleteId) return;
-    try {
-      await deleteModelProvider(deleteId);
-      setDeleteId(null);
-      if (selectedModelId) {
-        fetchModelProviders(selectedModelId);
-      }
-      toast.success("模型提供商关联删除成功");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`删除模型提供商关联失败: ${message}`);
-      console.error(err);
-    }
-  };
+  const { handleCreate, handleUpdate, handleDelete } = useModelProvidersAssociationMutations({
+    form,
+    buildPayload,
+    selectedModelId,
+    settings,
+    fetchModelProviders,
+    isSubmitting,
+    setIsSubmitting,
+    selectedProviderModels,
+    setSelectedProviderModels,
+    setOpen,
+    editingAssociation,
+    setEditingAssociation,
+    deleteId,
+    setDeleteId,
+  });
 
   const handleStatusToggle = async (association: ModelWithProvider, nextStatus: boolean) => {
     const previousStatus = association.Status ?? true;
@@ -450,48 +358,14 @@ export function useModelProvidersPage() {
     testType,
   });
 
-  const openEditDialog = (association: ModelWithProvider) => {
-    setEditingAssociation(association);
-    setSelectedProviderModels([]);
-    const headerPairs = Object.entries(association.CustomerHeaders || {}).map(([key, value]) => ({
-      key,
-      value,
-    }));
-    form.reset({
-      model_id: association.ModelID,
-      provider_name: association.ProviderModel,
-      provider_id: association.ProviderID,
-      tool_call: association.ToolCall,
-      structured_output: association.StructuredOutput,
-      image: association.Image,
-      with_header: association.WithHeader,
-      weight: association.Weight,
-      priority: association.Priority ?? 100,
-      customer_headers: headerPairs.length ? headerPairs : [],
-    });
-    setOpen(true);
-  };
-
-  const openCreateDialog = () => {
-    setEditingAssociation(null);
-    setSelectedProviderModels([]);
-    // 始终使用设置中的默认权重和优先级值
-    const defaultWeight = settings?.auto_weight_decay_default || 5;
-    const defaultPriority = settings?.auto_priority_decay_default || 10;
-    form.reset({
-      model_id: selectedModelId || 0,
-      provider_name: "",
-      provider_id: 0,
-      tool_call: true,
-      structured_output: false,
-      image: false,
-      with_header: false,
-      weight: defaultWeight,
-      priority: defaultPriority,
-      customer_headers: []
-    });
-    setOpen(true);
-  };
+  const { openEditDialog, openCreateDialog } = useModelProvidersAssociationDialog({
+    form,
+    settings,
+    selectedModelId,
+    setOpen,
+    setEditingAssociation,
+    setSelectedProviderModels,
+  });
 
   const openDeleteDialog = (id: number) => {
     setDeleteId(id);

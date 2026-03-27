@@ -54,7 +54,7 @@ import type { Provider, ProviderTemplate } from "@/lib/api";
 import { parseUpstreamModelsFromConfig } from "@/lib/provider-models";
 import { Spinner } from "@/components/ui/spinner";
 import { defaultProviderFormValues, providerFormSchema, type ProviderFormValues } from "./form-schema";
-import { extractAllModels, parseConfigToForm } from "./utils/config";
+import { extractAllModels } from "./utils/config";
 import { useProvidersPageStore } from "@/stores/providers";
 import { useProviderModelTesting } from "./hooks/use-provider-model-testing";
 import { useAllModelsDialog } from "./hooks/use-all-models-dialog";
@@ -65,6 +65,7 @@ import { useProviderMutations } from "./hooks/use-provider-mutations";
 import { useProviderSyncActions } from "./hooks/use-provider-sync-actions";
 import { useProviderSwitchActions } from "./hooks/use-provider-switch-actions";
 import { useProvidersBootstrap } from "./hooks/use-providers-bootstrap";
+import { applyProviderTemplateDefaults } from "./utils/template-defaults";
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -774,21 +775,7 @@ export default function ProvidersPage() {
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                         onChange={(e) => {
                           field.onChange(e);
-                          // When type changes, populate config fields with template defaults if available
-                          const selectedTemplate = providerTemplates.find(t => t.type === e.target.value);
-                          if (selectedTemplate) {
-                            const parsed = parseConfigToForm(selectedTemplate.template);
-                            // Only set base_url if it's empty
-                            const currentBaseUrl = form.getValues("base_url");
-                            if (!currentBaseUrl || currentBaseUrl.trim() === "") {
-                              form.setValue("base_url", parsed.base_url);
-                            }
-                            // Don't set api_key as it should be entered by user
-                            if (e.target.value === "anthropic") {
-                              form.setValue("version", parsed.version || "2023-06-01");
-                              form.setValue("beta", parsed.beta || "");
-                            }
-                          }
+                          applyProviderTemplateDefaults(e.target.value, providerTemplates, form);
                         }}
                       >
                         <option value="">请选择提供商类型</option>

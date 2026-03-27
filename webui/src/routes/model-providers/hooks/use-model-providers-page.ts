@@ -107,6 +107,7 @@ import { useModelProvidersModelListVisibility } from "./use-model-providers-mode
 import { useModelProvidersBatch } from "./use-model-providers-batch";
 import { useModelProvidersBlacklist } from "./use-model-providers-blacklist";
 import { useModelProvidersBootstrap } from "./use-model-providers-bootstrap";
+import { useModelProvidersModelChange } from "./use-model-providers-model-change";
 import { useModelProvidersOperationScope } from "./use-model-providers-operation-scope";
 import { useModelProvidersAssociationStatus } from "./use-model-providers-association-status";
 import { useModelProvidersModelListSelection } from "./use-model-providers-model-list-selection";
@@ -340,19 +341,17 @@ export function useModelProvidersPage() {
     setDeleteId(id);
   };
 
-  const handleModelChange = (modelId: string) => {
-    const id = parseInt(modelId);
-    setSelectedModelId(id);
-    setSelectedAssociationIds([]); // 切换模型时清空选择
-    setSelectedProviderModels([]);
-    setTemplateEditorOpen(false);
-    setAssociationTestResults({}); // 切换模型时清空测试结果
-    setSelectedStatusFilter("all"); // 切换模型时重置启用状态筛选器
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set("modelId", id.toString());
-    setSearchParams(nextParams);
-    form.setValue("model_id", id);
-  };
+  const { handleModelChange } = useModelProvidersModelChange({
+    searchParams,
+    setSearchParams,
+    setSelectedModelId,
+    clearSelectedAssociationIds: () => setSelectedAssociationIds([]),
+    clearSelectedProviderModels: () => setSelectedProviderModels([]),
+    closeTemplateEditor: () => setTemplateEditorOpen(false),
+    resetAssociationTestResults: () => setAssociationTestResults({}),
+    resetSelectedStatusFilter: () => setSelectedStatusFilter("all"),
+    form,
+  });
 
   const toggleProviderCollapse = (providerId: number) => {
     setCollapsedProviders((prev) => ({

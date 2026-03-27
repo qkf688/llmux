@@ -1,8 +1,9 @@
-import { useCallback, useEffect } from "react";
+import { useCallback } from "react";
 import { toast } from "sonner";
 import { updateSettings, type Settings } from "@/lib/api";
 import type { BalancerSettingsProps } from "../types";
 import { balancerSettingsEditorStore, useSettingsStore } from "@/stores/settings";
+import { useSettingsEditorSync } from "../../hooks/use-settings-editor-sync";
 
 export function useBalancerSettingsForm({ settings, onSettingsChange }: BalancerSettingsProps) {
   const {
@@ -16,12 +17,12 @@ export function useBalancerSettingsForm({ settings, onSettingsChange }: Balancer
     resetTransient,
   } = useSettingsStore(balancerSettingsEditorStore, (state) => state);
 
-  useEffect(() => {
-    syncFromServerSettings(settings);
-    return () => {
-      resetTransient();
-    };
-  }, [resetTransient, settings, syncFromServerSettings]);
+  useSettingsEditorSync({
+    syncMode: "always",
+    serverSettings: settings,
+    syncFromServerSettings,
+    resetTransient,
+  });
 
   const updateLocalSettings = useCallback(
     (updates: Partial<Settings>) => {
@@ -61,4 +62,3 @@ export function useBalancerSettingsForm({ settings, onSettingsChange }: Balancer
     handleReset,
   };
 }
-

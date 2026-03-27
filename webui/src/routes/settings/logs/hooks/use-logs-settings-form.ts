@@ -1,8 +1,9 @@
-import { useCallback, useEffect } from "react";
+import { useCallback } from "react";
 import { toast } from "sonner";
 import { updateSettings, type Settings } from "@/lib/api";
 import { logsSettingsEditorStore, useSettingsStore } from "@/stores/settings";
 import type { LogsSettingsProps } from "../types";
+import { useSettingsEditorSync } from "../../hooks/use-settings-editor-sync";
 
 export function useLogsSettingsForm({ settings, onSettingsChange }: LogsSettingsProps) {
   const {
@@ -16,12 +17,12 @@ export function useLogsSettingsForm({ settings, onSettingsChange }: LogsSettings
     resetTransient,
   } = useSettingsStore(logsSettingsEditorStore, (state) => state);
 
-  useEffect(() => {
-    syncFromServerSettings(settings);
-    return () => {
-      resetTransient();
-    };
-  }, [resetTransient, settings, syncFromServerSettings]);
+  useSettingsEditorSync({
+    syncMode: "always",
+    serverSettings: settings,
+    syncFromServerSettings,
+    resetTransient,
+  });
 
   const updateLocalSettings = useCallback(
     (updates: Partial<Settings>) => {
@@ -61,4 +62,3 @@ export function useLogsSettingsForm({ settings, onSettingsChange }: LogsSettings
     handleReset,
   };
 }
-

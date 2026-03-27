@@ -1,9 +1,10 @@
-import { useCallback, useEffect } from "react";
+import { useCallback } from "react";
 import { toast } from "sonner";
 import { updateSettings, type Settings } from "@/lib/api";
 import type { RoutingSettingsProps } from "../types";
 import { sanitizeRoutingSettings } from "../utils/sanitize-routing-settings";
 import { routingSettingsEditorStore, useSettingsStore } from "@/stores/settings";
+import { useSettingsEditorSync } from "../../hooks/use-settings-editor-sync";
 
 export function useRoutingSettingsForm({ settings, onSettingsChange }: RoutingSettingsProps) {
   const {
@@ -17,15 +18,13 @@ export function useRoutingSettingsForm({ settings, onSettingsChange }: RoutingSe
     resetTransient,
   } = useSettingsStore(routingSettingsEditorStore, (state) => state);
 
-  useEffect(() => {
-    if (!hasChanges) {
-      syncFromServerSettings(settings);
-    }
-  }, [hasChanges, settings, syncFromServerSettings]);
-
-  useEffect(() => () => {
-    resetTransient();
-  }, [resetTransient]);
+  useSettingsEditorSync({
+    syncMode: "when_clean",
+    hasChanges,
+    serverSettings: settings,
+    syncFromServerSettings,
+    resetTransient,
+  });
 
   const updateLocalSettings = useCallback(
     (updates: Partial<Settings>) => {

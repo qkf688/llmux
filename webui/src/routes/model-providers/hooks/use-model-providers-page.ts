@@ -113,6 +113,7 @@ import { useModelProvidersBlacklist } from "./use-model-providers-blacklist";
 import { useModelProvidersBootstrap } from "./use-model-providers-bootstrap";
 import { useModelProvidersOperationScope } from "./use-model-providers-operation-scope";
 import { useModelProvidersAssociationStatus } from "./use-model-providers-association-status";
+import { useModelProvidersModelListSelection } from "./use-model-providers-model-list-selection";
 import { useModelProvidersPreview } from "./use-model-providers-preview";
 import { useModelProvidersTemplateEditor } from "./use-model-providers-template-editor";
 import { useModelProvidersTesting } from "./use-model-providers-testing";
@@ -669,61 +670,20 @@ export function useModelProvidersPage() {
     }
   };
 
-  const openModelListDialog = () => {
-    setModelSearchKeyword("");
-    setModelListDialogOpen(true);
-  };
-
-  const clearSelectedProviderModels = () => {
-    setSelectedProviderModels([]);
-  };
-
-  const removeSelectedProviderModel = (selectionKey: string) => {
-    setSelectedProviderModels((prev) =>
-      prev.filter((item) => buildSelectionKey(item.providerId, item.modelId) !== selectionKey)
-    );
-  };
-
-  const handleProviderChange = () => {
-    setSelectedProviderModels([]);
-  };
-
-  const selectAllVisibleAvailable = () => {
-    setSelectedProviderModels((prev) => {
-      const merged = new Map(prev.map((item) => [buildSelectionKey(item.providerId, item.modelId), item]));
-      visibleAvailableModels.forEach((model) => {
-        merged.set(buildSelectionKey(model.providerId, model.id), {
-          providerId: model.providerId,
-          providerName: model.providerName,
-          modelId: model.id,
-        });
-      });
-      return Array.from(merged.values());
-    });
-  };
-
-  const clearModelListSelection = () => {
-    setSelectedProviderModels([]);
-  };
-
-  const toggleModelSelection = (model: ProviderModelWithOwner, checkedValue: boolean, selectionKey: string) => {
-    if (checkedValue) {
-      setSelectedProviderModels((prev) => {
-        const merged = new Map(prev.map((item) => [buildSelectionKey(item.providerId, item.modelId), item]));
-        merged.set(selectionKey, {
-          providerId: model.providerId,
-          providerName: model.providerName,
-          modelId: model.id,
-        });
-        return Array.from(merged.values());
-      });
-      return;
-    }
-
-    setSelectedProviderModels((prev) =>
-      prev.filter((item) => buildSelectionKey(item.providerId, item.modelId) !== selectionKey)
-    );
-  };
+  const {
+    openModelListDialog,
+    clearSelectedProviderModels,
+    removeSelectedProviderModel,
+    handleProviderChange,
+    selectAllVisibleAvailable,
+    clearModelListSelection,
+    toggleModelSelection,
+  } = useModelProvidersModelListSelection({
+    setModelSearchKeyword,
+    setModelListDialogOpen,
+    setSelectedProviderModels,
+    visibleAvailableModels,
+  });
 
   const confirmPreviewAction = () => {
     void executePreviewAction();

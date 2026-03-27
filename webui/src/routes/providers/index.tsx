@@ -276,6 +276,10 @@ export default function ProvidersPage() {
   const {
     providerModels,
     filteredProviderModels,
+    savedModelSet,
+    selectableModelIds,
+    isAllSelectableChecked,
+    toggleSelectAll,
     openModelsDialog,
     refreshUpstreamModels,
     handleUpstreamSearchChange,
@@ -388,26 +392,6 @@ export default function ProvidersPage() {
   });
 
   const hasFilter = nameFilter.trim() !== "" || typeFilter !== "all";
-
-  const savedModelSet = new Set(getAllModelsForProvider(providers, modelsOpenId || 0).map((item) => item.toLowerCase()));
-  const selectableModelIds = filteredProviderModels
-    .filter((model) => !savedModelSet.has(model.id.toLowerCase()))
-    .map((model) => model.id);
-  const isAllSelectableChecked = selectableModelIds.length > 0 && selectableModelIds.every((id) => selectedUpstreamModels.includes(id));
-
-  const toggleSelectAll = () => {
-    if (selectableModelIds.length === 0) {
-      setSelectedUpstreamModels([]);
-      return;
-    }
-    const hasUnselected = selectableModelIds.some((id) => !selectedUpstreamModels.includes(id));
-    setSelectedUpstreamModels((prev) => {
-      if (hasUnselected) {
-        return Array.from(new Set([...prev, ...selectableModelIds]));
-      }
-      return prev.filter((id) => !selectableModelIds.includes(id));
-    });
-  };
 
   return (
     <div className="h-full min-h-0 flex flex-col gap-4 p-1">

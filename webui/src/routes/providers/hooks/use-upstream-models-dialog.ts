@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { getProviderModels, type Provider, type ProviderModel } from "@/lib/api";
 import { parseCustomModelsFromConfig, parseUpstreamModelsFromConfig } from "@/lib/provider-models";
 import { buildAutoActionsDescription, type AutoActionsFlags } from "../utils/auto-actions";
+import { getAllModelsForProvider } from "../utils/provider-models";
 
 type Updater<T> = T | ((previous: T) => T);
 type Setter<T> = (value: Updater<T>) => void;
@@ -49,6 +50,31 @@ export function useUpstreamModelsDialog({
   const [providerModels, setProviderModels] = useState<ProviderModel[]>([]);
   const [filteredProviderModels, setFilteredProviderModels] = useState<ProviderModel[]>([]);
   const [upstreamModelsCache, setUpstreamModelsCache] = useState<Record<number, ProviderModel[]>>({});
+
+  const savedModelSet = new Set(
+    getAllModelsForProvider(providers, modelsOpenId || 0).map((item) => item.toLowerCase()),
+  );
+
+  const selectableModelIds = filteredProviderModels
+    .filter((model) => !savedModelSet.has(model.id.toLowerCase()))
+    .map((model) => model.id);
+
+  const isAllSelectableChecked =
+    selectableModelIds.length > 0 && selectableModelIds.every((id) => selectedUpstreamModels.includes(id));
+
+  const toggleSelectAll = () => {
+    if (selectableModelIds.length === 0) {
+      setSelectedUpstreamModels([]);
+      return;
+    }
+    const hasUnselected = selectableModelIds.some((id) => !selectedUpstreamModels.includes(id));
+    setSelectedUpstreamModels((prev) => {
+      if (hasUnselected) {
+        return Array.from(new Set([...prev, ...selectableModelIds]));
+      }
+      return prev.filter((id) => !selectableModelIds.includes(id));
+    });
+  };
 
   const fetchProviderModels = async (providerId: number, source: "upstream" | "all" = "upstream") => {
     try {
@@ -134,6 +160,10 @@ export function useUpstreamModelsDialog({
   return {
     providerModels,
     filteredProviderModels,
+    savedModelSet,
+    selectableModelIds,
+    isAllSelectableChecked,
+    toggleSelectAll,
     modelsLoading,
     addingModels,
     openModelsDialog,

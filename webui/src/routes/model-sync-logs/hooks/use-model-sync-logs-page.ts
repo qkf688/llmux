@@ -1,17 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
-  clearModelSyncLogs,
-  clearModelSyncErrorLogs,
-  deleteModelSyncLogs,
-  getModelSyncLogs,
-  getModelSyncStats,
-  getRecentAddedModels,
-  getProviders,
-  syncAllProviderModels,
-  updateProvider,
   type ModelSyncLog,
 } from "@/lib/api";
-import { toast } from "sonner";
 import type { ModelSyncTab } from "../types";
 import {
   selectModelSyncLogsActiveTab,
@@ -59,10 +49,9 @@ import {
   selectSetModelSyncLogsTotalPages,
   useModelSyncLogsPageStore,
 } from "@/stores/model-sync-logs";
-
-const LOG_PAGE_SIZE = 20;
-
-const toErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
+import { useModelSyncLogsActions } from "./use-model-sync-logs-actions";
+import { useModelSyncLogsFetchers } from "./use-model-sync-logs-fetchers";
+import { useModelSyncLogsSelection } from "./use-model-sync-logs-selection";
 
 export function useModelSyncLogsPage() {
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -112,86 +101,23 @@ export function useModelSyncLogsPage() {
   const setClearingErrors = useModelSyncLogsPageStore(selectSetModelSyncLogsClearingErrors);
   const resetTransient = useModelSyncLogsPageStore(selectResetModelSyncLogsTransient);
 
-  const fetchStats = useCallback(async () => {
-    try {
-      setStatsLoading(true);
-      const data = await getModelSyncStats();
-      setStats(data);
-    } catch (error) {
-      console.error("加载统计信息失败:", error);
-    } finally {
-      setStatsLoading(false);
-    }
-  }, [setStats, setStatsLoading]);
-
-  const fetchLogs = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await getModelSyncLogs({
-        page,
-        page_size: LOG_PAGE_SIZE,
-        show_unchanged: showUnchanged,
-      });
-      setLogs(data.data ?? []);
-      setTotalPages(data.pagination?.total_pages ?? 1);
-    } catch (error) {
-      toast.error(`加载日志失败: ${toErrorMessage(error)}`);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, setLoading, setLogs, setTotalPages, showUnchanged]);
-
-  const fetchRecentModels = useCallback(async () => {
-    try {
-      setRecentLoading(true);
-      const data = await getRecentAddedModels();
-      setRecentModels(data.data ?? []);
-      setSyncTime(data.sync_time || "");
-    } catch (error) {
-      toast.error(`加载最近新增模型失败: ${toErrorMessage(error)}`);
-    } finally {
-      setRecentLoading(false);
-    }
-  }, [setRecentLoading, setRecentModels, setSyncTime]);
-
-  const fetchRecentErrors = useCallback(async () => {
-    try {
-      setErrorsLoading(true);
-      const [logsData, providers] = await Promise.all([
-        getModelSyncLogs({ page: 1, page_size: 100, status: "error" }),
-        getProviders(),
-      ]);
-
-      setRecentErrors(logsData.data ?? []);
-      setProvidersById(Object.fromEntries((providers ?? []).map((provider) => [provider.ID, provider])));
-    } catch (error) {
-      toast.error(`加载最近错误失败: ${toErrorMessage(error)}`);
-    } finally {
-      setErrorsLoading(false);
-    }
-  }, [setErrorsLoading, setProvidersById, setRecentErrors]);
-
-  useEffect(() => {
-    void fetchStats();
-  }, [fetchStats]);
-
-  useEffect(() => {
-    if (activeTab === "logs") {
-      void fetchLogs();
-    }
-  }, [activeTab, fetchLogs]);
-
-  useEffect(() => {
-    if (activeTab === "recent") {
-      void fetchRecentModels();
-    }
-  }, [activeTab, fetchRecentModels]);
-
-  useEffect(() => {
-    if (activeTab === "errors") {
-      void fetchRecentErrors();
-    }
-  }, [activeTab, fetchRecentErrors]);
+  const { fetchStats, fetchLogs, fetchRecentModels, fetchRecentErrors, refreshCurrentTab } =
+    useModelSyncLogsFetchers({
+      activeTab,
+      page,
+      showUnchanged,
+      setStats,
+      setStatsLoading,
+      setLogs,
+      setTotalPages,
+      setLoading,
+      setRecentModels,
+      setSyncTime,
+      setRecentLoading,
+      setRecentErrors,
+      setProvidersById,
+      setErrorsLoading,
+    });
 
   useEffect(
     () => () => {
@@ -204,195 +130,61 @@ export function useModelSyncLogsPage() {
     [resetTransient]
   );
 
-  useEffect(() => {
-    setSelectedLogs(new Set());
-  }, [activeTab, page, setSelectedLogs, showUnchanged]);
+  const {
+    selectedCount,
+    allSelected,
+    canDeleteSelected,
+    selectedErrorProvidersCount,
+    allErrorProvidersSelected,
+    handleToggleSelectAll,
+    handleToggleSelectLog,
+    handlePageChange,
+    handleShowUnchangedChange,
+    handleToggleSelectAllErrorProviders,
+    handleToggleSelectErrorProvider,
+    isLogSelected,
+    isErrorProviderSelected,
+  } = useModelSyncLogsSelection({
+    activeTab,
+    logs,
+    recentErrors,
+    selectedLogs,
+    selectedErrorProviders,
+    page,
+    totalPages,
+    showUnchanged,
+    setSelectedLogs,
+    setSelectedErrorProviders,
+    setPage,
+    setShowUnchanged,
+  });
 
-  useEffect(() => {
-    if (activeTab !== "errors") {
-      setSelectedErrorProviders(new Set());
-    }
-  }, [activeTab, setSelectedErrorProviders]);
-
-  const selectedCount = selectedLogs.size;
-  const allSelected = logs.length > 0 && logs.every((log) => selectedLogs.has(log.ID));
-  const canDeleteSelected = selectedCount > 0;
-
-  const recentErrorProviderIds = useMemo(
-    () => Array.from(new Set(recentErrors.map((log) => log.ProviderID))),
-    [recentErrors]
-  );
-  const selectedErrorProvidersCount = selectedErrorProviders.size;
-  const allErrorProvidersSelected =
-    recentErrorProviderIds.length > 0 && recentErrorProviderIds.every((id) => selectedErrorProviders.has(id));
-
-  useEffect(() => {
-    if (selectedErrorProviders.size === 0) {
-      return;
-    }
-
-    const allowed = new Set(recentErrorProviderIds);
-    setSelectedErrorProviders((previous) => {
-      if (previous.size === 0) {
-        return previous;
-      }
-
-      const next = new Set<number>();
-      for (const providerId of previous) {
-        if (allowed.has(providerId)) {
-          next.add(providerId);
-        }
-      }
-
-      return next.size === previous.size ? previous : next;
-    });
-  }, [recentErrorProviderIds, selectedErrorProviders.size, setSelectedErrorProviders]);
-
-  const handleSyncNow = async () => {
-    try {
-      setSyncing(true);
-      await syncAllProviderModels();
-      toast.success("同步已开始，请稍后刷新查看结果");
-
-      if (refreshTimerRef.current) {
-        clearTimeout(refreshTimerRef.current);
-      }
-
-      refreshTimerRef.current = setTimeout(() => {
-        void fetchStats();
-        void fetchLogs();
-        if (activeTab === "recent") {
-          void fetchRecentModels();
-        } else if (activeTab === "errors") {
-          void fetchRecentErrors();
-        }
-      }, 2000);
-    } catch (error) {
-      toast.error(`同步失败: ${toErrorMessage(error)}`);
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  const handleDeleteSelected = async () => {
-    if (selectedLogs.size === 0) {
-      return;
-    }
-
-    const ids = Array.from(selectedLogs);
-    try {
-      await deleteModelSyncLogs(ids);
-      toast.success(`已删除 ${ids.length} 条日志`);
-      setSelectedLogs(new Set());
-      await fetchLogs();
-    } catch (error) {
-      toast.error(`删除失败: ${toErrorMessage(error)}`);
-    }
-  };
-
-  const handleClearAll = async () => {
-    try {
-      await clearModelSyncLogs();
-      toast.success("已清空所有日志");
-      setClearDialogOpen(false);
-      setSelectedLogs(new Set());
-
-      if (page !== 1) {
-        setPage(1);
-      } else {
-        await fetchLogs();
-      }
-    } catch (error) {
-      toast.error(`清空失败: ${toErrorMessage(error)}`);
-    }
-  };
-
-  const handleToggleSelectAllErrorProviders = () => {
-    if (allErrorProvidersSelected) {
-      setSelectedErrorProviders(new Set());
-      return;
-    }
-    setSelectedErrorProviders(new Set(recentErrorProviderIds));
-  };
-
-  const handleToggleSelectErrorProvider = (providerId: number, checked: boolean) => {
-    setSelectedErrorProviders((previous) => {
-      const next = new Set(previous);
-      if (checked) {
-        next.add(providerId);
-      } else {
-        next.delete(providerId);
-      }
-      return next;
-    });
-  };
-
-  const handleClearSelectedErrors = async () => {
-    if (selectedErrorProviders.size === 0) {
-      return;
-    }
-
-    const providerIds = Array.from(selectedErrorProviders);
-    try {
-      setClearingErrors(true);
-      const result = await clearModelSyncErrorLogs({ provider_ids: providerIds });
-      toast.success(`已清除 ${providerIds.length} 个提供商的错误日志（共 ${result.deleted} 条）`);
-      setSelectedErrorProviders(new Set());
-      await fetchRecentErrors();
-      void fetchStats();
-    } catch (error) {
-      toast.error(`清除失败: ${toErrorMessage(error)}`);
-    } finally {
-      setClearingErrors(false);
-    }
-  };
-
-  const handleClearAllErrors = async () => {
-    try {
-      setClearingErrors(true);
-      const result = await clearModelSyncErrorLogs();
-      toast.success(`已清空全部错误日志（共 ${result.deleted} 条）`);
-      setSelectedErrorProviders(new Set());
-      await fetchRecentErrors();
-      void fetchStats();
-    } catch (error) {
-      toast.error(`清空失败: ${toErrorMessage(error)}`);
-    } finally {
-      setClearingErrors(false);
-    }
-  };
-
-  const handleToggleSelectAll = () => {
-    if (allSelected) {
-      setSelectedLogs(new Set());
-      return;
-    }
-
-    setSelectedLogs(new Set(logs.map((log) => log.ID)));
-  };
-
-  const handleToggleSelectLog = (logId: number, checked: boolean) => {
-    setSelectedLogs((previous) => {
-      const next = new Set(previous);
-      if (checked) {
-        next.add(logId);
-      } else {
-        next.delete(logId);
-      }
-      return next;
-    });
-  };
-
-  const handlePageChange = (newPage: number) => {
-    if (newPage < 1 || newPage > totalPages || newPage === page) {
-      return;
-    }
-    setPage(newPage);
-  };
-
-  const handleShowUnchangedChange = (checked: boolean) => {
-    setShowUnchanged(checked);
-  };
+  const {
+    handleSyncNow,
+    handleDeleteSelected,
+    handleClearAll,
+    handleClearSelectedErrors,
+    handleClearAllErrors,
+    handleToggleProviderModelEndpoint,
+  } = useModelSyncLogsActions({
+    refreshTimerRef,
+    activeTab,
+    page,
+    selectedLogs,
+    selectedErrorProviders,
+    setSyncing,
+    setSelectedLogs,
+    setClearDialogOpen,
+    setPage,
+    setClearingErrors,
+    setSelectedErrorProviders,
+    setTogglingProviderIds,
+    setProvidersById,
+    fetchStats,
+    fetchLogs,
+    fetchRecentModels,
+    fetchRecentErrors,
+  });
 
   const openDetailLog = (log: ModelSyncLog) => {
     setDetailLog(log);
@@ -405,58 +197,6 @@ export function useModelSyncLogsPage() {
   const switchToTab = (tab: ModelSyncTab) => {
     setActiveTab(tab);
   };
-
-  const refreshCurrentTab = useCallback(() => {
-    if (activeTab === "logs") {
-      void fetchLogs();
-      return;
-    }
-    if (activeTab === "recent") {
-      void fetchRecentModels();
-      return;
-    }
-    void fetchRecentErrors();
-  }, [activeTab, fetchLogs, fetchRecentErrors, fetchRecentModels]);
-
-  const handleToggleProviderModelEndpoint = useCallback(
-    async (providerId: number, enabled: boolean) => {
-      setTogglingProviderIds((previous) => new Set(previous).add(providerId));
-      try {
-        const updated = await updateProvider(providerId, { model_endpoint: enabled });
-        setProvidersById((previous) => ({ ...previous, [providerId]: updated }));
-        toast.success(`${updated.Name} 模型端点已${enabled ? "开启" : "关闭"}`);
-        void fetchStats();
-      } catch (error) {
-        const message = toErrorMessage(error);
-        if (message.includes("Provider not found")) {
-          setProvidersById((previous) => {
-            if (!(providerId in previous)) {
-              return previous;
-            }
-            const next = { ...previous };
-            delete next[providerId];
-            return next;
-          });
-          toast.info("提供商已删除，模型端点无需操作");
-          return;
-        }
-        toast.error(`更新提供商失败: ${message}`);
-      } finally {
-        setTogglingProviderIds((previous) => {
-          const next = new Set(previous);
-          next.delete(providerId);
-          return next;
-        });
-      }
-    },
-    [fetchStats, setProvidersById, setTogglingProviderIds]
-  );
-
-  const isLogSelected = useCallback((logId: number) => selectedLogs.has(logId), [selectedLogs]);
-  const isErrorProviderSelected = useCallback(
-    (providerId: number) => selectedErrorProviders.has(providerId),
-    [selectedErrorProviders]
-  );
 
   const paginationText = useMemo(() => `第 ${page} / ${totalPages} 页`, [page, totalPages]);
 

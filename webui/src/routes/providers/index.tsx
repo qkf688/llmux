@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
@@ -50,14 +50,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import Loading from "@/components/loading";
 import { Label } from "@/components/ui/label";
-import {
-  getProviders,
-  getSettings,
-  getProviderTemplates,
-} from "@/lib/api";
 import type { Provider, ProviderTemplate } from "@/lib/api";
 import { parseUpstreamModelsFromConfig } from "@/lib/provider-models";
-import { toast } from "sonner";
 import { Spinner } from "@/components/ui/spinner";
 import { defaultProviderFormValues, providerFormSchema, type ProviderFormValues } from "./form-schema";
 import { extractAllModels, parseConfigToForm } from "./utils/config";
@@ -70,6 +64,7 @@ import { useProviderDangerActions } from "./hooks/use-provider-danger-actions";
 import { useProviderMutations } from "./hooks/use-provider-mutations";
 import { useProviderSyncActions } from "./hooks/use-provider-sync-actions";
 import { useProviderSwitchActions } from "./hooks/use-provider-switch-actions";
+import { useProvidersBootstrap } from "./hooks/use-providers-bootstrap";
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -233,57 +228,16 @@ export default function ProvidersPage() {
     return () => window.clearTimeout(timeoutId);
   }, [nameFilter, setDebouncedNameFilter]);
 
-  const fetchProviders = useCallback(async () => {
-    try {
-      setLoading(true);
-      // 处理筛选条件，"all"表示不过滤，空字符串表示不过滤
-      const name = debouncedNameFilter.trim() || undefined;
-      const type = typeFilter === "all" ? undefined : typeFilter;
-
-      const data = await getProviders({ name, type });
-      setProviders(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`获取提供商列表失败: ${message}`);
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [debouncedNameFilter, setLoading, typeFilter]);
-
-  const fetchProviderTemplates = useCallback(async () => {
-    try {
-      const data = await getProviderTemplates();
-      setProviderTemplates(data);
-      // 设置可用的提供商类型
-      const types = data.map(template => template.type);
-      setAvailableTypes(types);
-    } catch (err) {
-      console.error("获取提供商模板失败", err);
-    }
-  }, [setAvailableTypes]);
-
-  const fetchSettings = useCallback(async () => {
-    try {
-      const data = await getSettings();
-      setAutoAssociateOnAddEnabled(data.auto_associate_on_add ?? false);
-      setAutoCleanOnDeleteEnabled(data.auto_clean_on_delete ?? false);
-    } catch (err) {
-      console.error("获取系统设置失败", err);
-      setAutoAssociateOnAddEnabled(false);
-      setAutoCleanOnDeleteEnabled(false);
-    }
-  }, [setAutoAssociateOnAddEnabled, setAutoCleanOnDeleteEnabled]);
-
-  useEffect(() => {
-    void fetchProviderTemplates();
-    void fetchSettings();
-  }, [fetchProviderTemplates, fetchSettings]);
-
-  // 监听筛选条件变化
-  useEffect(() => {
-    void fetchProviders();
-  }, [fetchProviders]);
+  const { fetchProviders } = useProvidersBootstrap({
+    debouncedNameFilter,
+    typeFilter,
+    setLoading,
+    setProviders,
+    setProviderTemplates,
+    setAvailableTypes,
+    setAutoAssociateOnAddEnabled,
+    setAutoCleanOnDeleteEnabled,
+  });
 
   const buildAutoActionsDescription = (options: { associate?: boolean; clean?: boolean }) => {
     const actions: string[] = [];

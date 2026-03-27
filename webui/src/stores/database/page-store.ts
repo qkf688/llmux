@@ -1,6 +1,7 @@
 import { createStore } from "zustand/vanilla";
 import type { DatabaseStats, ExportType } from "@/lib/api";
-import { ALL_EXPORT_TYPES, type ImportMode, type ImportPreviewData } from "@/stores/database/types";
+import { readDatabasePagePreferences, writeDatabasePagePreferences } from "@/stores/database/persist";
+import type { DatabasePagePreferences, ImportMode, ImportPreviewData } from "@/stores/database/types";
 
 type Updater<T> = T | ((previous: T) => T);
 
@@ -11,6 +12,23 @@ function resolveUpdater<T>(updater: Updater<T>, previous: T): T {
 function toggleTypeSelection(types: ExportType[], type: ExportType): ExportType[] {
   return types.includes(type) ? types.filter((item) => item !== type) : [...types, type];
 }
+
+type PreferencesState = {
+  exportTypes: ExportType[];
+  importMode: ImportMode;
+  importTypes: ExportType[];
+};
+
+function persistPreferences(get: () => PreferencesState, next: Partial<DatabasePagePreferences>): void {
+  const current = get();
+  writeDatabasePagePreferences({
+    exportTypes: next.exportTypes ?? current.exportTypes,
+    importMode: next.importMode ?? current.importMode,
+    importTypes: next.importTypes ?? current.importTypes,
+  });
+}
+
+const preferences = readDatabasePagePreferences();
 
 export type DatabasePageState = {
   stats: DatabaseStats | null;
@@ -73,15 +91,15 @@ export const databasePageStore = createStore<DatabasePageState>()((set, get) => 
 
   exportConfigDialogOpen: false,
   exporting: false,
-  exportTypes: [...ALL_EXPORT_TYPES],
+  exportTypes: preferences.exportTypes,
 
   exportDatabaseDialogOpen: false,
   exportingDatabase: false,
 
   importDialogOpen: false,
   importing: false,
-  importMode: "merge",
-  importTypes: [...ALL_EXPORT_TYPES],
+  importMode: preferences.importMode,
+  importTypes: preferences.importTypes,
   selectedFile: null,
   previewData: null,
   previewLoading: false,
@@ -97,10 +115,16 @@ export const databasePageStore = createStore<DatabasePageState>()((set, get) => 
   setExportConfigDialogOpen: (open: boolean) => set({ exportConfigDialogOpen: open }),
   setExporting: (exporting: boolean) => set({ exporting }),
   setExportTypes: (next: Updater<ExportType[]>) =>
-    set((state) => ({ exportTypes: resolveUpdater(next, state.exportTypes) })),
+    set((state) => {
+      const resolved = resolveUpdater(next, state.exportTypes);
+      persistPreferences(get, { exportTypes: resolved });
+      return { exportTypes: resolved };
+    }),
   toggleExportType: (type: ExportType) => {
     const current = get();
-    set({ exportTypes: toggleTypeSelection(current.exportTypes, type) });
+    const next = toggleTypeSelection(current.exportTypes, type);
+    persistPreferences(get, { exportTypes: next });
+    set({ exportTypes: next });
   },
 
   setExportDatabaseDialogOpen: (open: boolean) => set({ exportDatabaseDialogOpen: open }),
@@ -108,12 +132,23 @@ export const databasePageStore = createStore<DatabasePageState>()((set, get) => 
 
   setImportDialogOpen: (open: boolean) => set({ importDialogOpen: open }),
   setImporting: (importing: boolean) => set({ importing }),
-  setImportMode: (mode: ImportMode) => set({ importMode: mode }),
+  setImportMode: (mode: ImportMode) => {
+    const current = get();
+    if (current.importMode === mode) return;
+    persistPreferences(get, { importMode: mode });
+    set({ importMode: mode });
+  },
   setImportTypes: (next: Updater<ExportType[]>) =>
-    set((state) => ({ importTypes: resolveUpdater(next, state.importTypes) })),
+    set((state) => {
+      const resolved = resolveUpdater(next, state.importTypes);
+      persistPreferences(get, { importTypes: resolved });
+      return { importTypes: resolved };
+    }),
   toggleImportType: (type: ExportType) => {
     const current = get();
-    set({ importTypes: toggleTypeSelection(current.importTypes, type) });
+    const next = toggleTypeSelection(current.importTypes, type);
+    persistPreferences(get, { importTypes: next });
+    set({ importTypes: next });
   },
   setSelectedFile: (file: File | null) => set({ selectedFile: file }),
   setPreviewData: (data: ImportPreviewData | null) => set({ previewData: data }),
@@ -129,13 +164,10 @@ export const databasePageStore = createStore<DatabasePageState>()((set, get) => 
       vacuuming: false,
       exportConfigDialogOpen: false,
       exporting: false,
-      exportTypes: [...ALL_EXPORT_TYPES],
       exportDatabaseDialogOpen: false,
       exportingDatabase: false,
       importDialogOpen: false,
       importing: false,
-      importMode: "merge",
-      importTypes: [...ALL_EXPORT_TYPES],
       selectedFile: null,
       previewData: null,
       previewLoading: false,
@@ -143,4 +175,3 @@ export const databasePageStore = createStore<DatabasePageState>()((set, get) => 
       importFileInputKey: 0,
     }),
 }));
-

@@ -48,6 +48,9 @@ export type ModelProvidersPageState = {
   batchDeleteDialogOpen: boolean;
   batchDeleting: boolean;
   batchUpdatingStatus: boolean;
+  batchActionSheetOpen: boolean;
+  batchCapabilitiesDialogOpen: boolean;
+  batchUpdatingCapabilities: boolean;
 
   searchKeyword: string;
   selectedProviderType: string;
@@ -103,6 +106,9 @@ export type ModelProvidersPageState = {
   setBatchDeleteDialogOpen: (open: boolean) => void;
   setBatchDeleting: (loading: boolean) => void;
   setBatchUpdatingStatus: (loading: boolean) => void;
+  setBatchActionSheetOpen: (open: boolean) => void;
+  setBatchCapabilitiesDialogOpen: (open: boolean) => void;
+  setBatchUpdatingCapabilities: (loading: boolean) => void;
 
   setSearchKeyword: (keyword: string) => void;
   setSelectedProviderType: (value: string) => void;
@@ -175,6 +181,9 @@ export const modelProvidersPageStore = createStore<ModelProvidersPageState>()((s
   batchDeleteDialogOpen: false,
   batchDeleting: false,
   batchUpdatingStatus: false,
+  batchActionSheetOpen: false,
+  batchCapabilitiesDialogOpen: false,
+  batchUpdatingCapabilities: false,
 
   searchKeyword: preferences.searchKeyword,
   selectedProviderType: preferences.selectedProviderType,
@@ -234,6 +243,9 @@ export const modelProvidersPageStore = createStore<ModelProvidersPageState>()((s
   setBatchDeleteDialogOpen: (open: boolean) => set({ batchDeleteDialogOpen: open }),
   setBatchDeleting: (loading: boolean) => set({ batchDeleting: loading }),
   setBatchUpdatingStatus: (loading: boolean) => set({ batchUpdatingStatus: loading }),
+  setBatchActionSheetOpen: (open: boolean) => set({ batchActionSheetOpen: open }),
+  setBatchCapabilitiesDialogOpen: (open: boolean) => set({ batchCapabilitiesDialogOpen: open }),
+  setBatchUpdatingCapabilities: (loading: boolean) => set({ batchUpdatingCapabilities: loading }),
 
   setSearchKeyword: (keyword: string) => {
     set({ searchKeyword: keyword });
@@ -305,6 +317,9 @@ export const modelProvidersPageStore = createStore<ModelProvidersPageState>()((s
       batchDeleteDialogOpen: false,
       batchDeleting: false,
       batchUpdatingStatus: false,
+      batchActionSheetOpen: false,
+      batchCapabilitiesDialogOpen: false,
+      batchUpdatingCapabilities: false,
       previewDialogOpen: false,
       previewType: "associate",
       executing: false,

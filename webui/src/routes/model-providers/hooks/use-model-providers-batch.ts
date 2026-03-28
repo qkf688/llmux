@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import {
   batchDeleteModelProviders,
+  batchUpdateModelProvidersCapabilities,
   batchUpdateModelProvidersStatus,
   testModelProvider,
   type ModelWithProvider,
@@ -24,6 +25,8 @@ type UseModelProvidersBatchInput = {
   setBatchDeleteDialogOpen: (open: boolean) => void;
   setBatchDeleting: (deleting: boolean) => void;
   setBatchUpdatingStatus: (updating: boolean) => void;
+  setBatchCapabilitiesDialogOpen: (open: boolean) => void;
+  setBatchUpdatingCapabilities: (updating: boolean) => void;
 
   setBatchTesting: (testing: boolean) => void;
   setBatchTestProgress: Setter<BatchTestProgress>;
@@ -42,6 +45,8 @@ export function useModelProvidersBatch({
   setBatchDeleteDialogOpen,
   setBatchDeleting,
   setBatchUpdatingStatus,
+  setBatchCapabilitiesDialogOpen,
+  setBatchUpdatingCapabilities,
   setBatchTesting,
   setBatchTestProgress,
   associationTestResults,
@@ -120,6 +125,54 @@ export function useModelProvidersBatch({
       }
     },
     [selectedAssociationIds, setBatchUpdatingStatus, setModelProviders]
+  );
+
+  const handleBatchUpdateCapabilities = useCallback(
+    async (capabilities: { tool_call?: boolean; structured_output?: boolean; image?: boolean }) => {
+      if (selectedAssociationIds.length === 0) {
+        toast.error("请先选择要操作的关联");
+        return;
+      }
+      if (
+        capabilities.tool_call === undefined &&
+        capabilities.structured_output === undefined &&
+        capabilities.image === undefined
+      ) {
+        toast.error("请选择至少一个能力字段进行更新");
+        return;
+      }
+
+      setBatchUpdatingCapabilities(true);
+      try {
+        const result = await batchUpdateModelProvidersCapabilities(selectedAssociationIds, capabilities);
+        toast.success(`成功更新 ${result.updated} 个关联能力`);
+
+        setModelProviders((prev) =>
+          prev.map((item) => {
+            if (!selectedAssociationIds.includes(item.ID)) return item;
+            return {
+              ...item,
+              ToolCall: capabilities.tool_call ?? item.ToolCall,
+              StructuredOutput: capabilities.structured_output ?? item.StructuredOutput,
+              Image: capabilities.image ?? item.Image,
+            };
+          })
+        );
+
+        setBatchCapabilitiesDialogOpen(false);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        toast.error(`批量更新能力失败: ${message}`);
+      } finally {
+        setBatchUpdatingCapabilities(false);
+      }
+    },
+    [
+      selectedAssociationIds,
+      setBatchCapabilitiesDialogOpen,
+      setBatchUpdatingCapabilities,
+      setModelProviders,
+    ]
   );
 
   const testSingleAssociationInBatch = useCallback(
@@ -279,6 +332,7 @@ export function useModelProvidersBatch({
     handleSelectOneAssociation,
     handleBatchDeleteAssociations,
     handleBatchUpdateStatus,
+    handleBatchUpdateCapabilities,
     handleBatchTestAll,
     handleBatchTestSelected,
     handleCancelBatchTest,
@@ -287,4 +341,3 @@ export function useModelProvidersBatch({
     clearBatchTestResults,
   };
 }
-

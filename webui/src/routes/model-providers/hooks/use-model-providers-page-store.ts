@@ -1,9 +1,12 @@
 import {
   selectModelProvidersAssociationTestResults,
+  selectModelProvidersBatchActionSheetOpen,
   selectModelProvidersBatchDeleteDialogOpen,
   selectModelProvidersBatchDeleting,
+  selectModelProvidersBatchCapabilitiesDialogOpen,
   selectModelProvidersBatchTestProgress,
   selectModelProvidersBatchTesting,
+  selectModelProvidersBatchUpdatingCapabilities,
   selectModelProvidersBatchUpdatingStatus,
   selectModelProvidersBlacklistDialogOpen,
   selectModelProvidersBlacklistFilter,
@@ -43,10 +46,13 @@ import {
   selectModelProvidersTestType,
   selectResetModelProvidersTransient,
   selectSetModelProvidersAssociationTestResults,
+  selectSetModelProvidersBatchActionSheetOpen,
   selectSetModelProvidersBatchDeleteDialogOpen,
   selectSetModelProvidersBatchDeleting,
+  selectSetModelProvidersBatchCapabilitiesDialogOpen,
   selectSetModelProvidersBatchTestProgress,
   selectSetModelProvidersBatchTesting,
+  selectSetModelProvidersBatchUpdatingCapabilities,
   selectSetModelProvidersBatchUpdatingStatus,
   selectSetModelProvidersBlacklistDialogOpen,
   selectSetModelProvidersBlacklistFilter,
@@ -127,6 +133,12 @@ export function useModelProvidersPageStoreState() {
   const setBatchDeleting = useModelProvidersPageStore(selectSetModelProvidersBatchDeleting);
   const batchUpdatingStatus = useModelProvidersPageStore(selectModelProvidersBatchUpdatingStatus);
   const setBatchUpdatingStatus = useModelProvidersPageStore(selectSetModelProvidersBatchUpdatingStatus);
+  const batchActionSheetOpen = useModelProvidersPageStore(selectModelProvidersBatchActionSheetOpen);
+  const setBatchActionSheetOpen = useModelProvidersPageStore(selectSetModelProvidersBatchActionSheetOpen);
+  const batchCapabilitiesDialogOpen = useModelProvidersPageStore(selectModelProvidersBatchCapabilitiesDialogOpen);
+  const setBatchCapabilitiesDialogOpen = useModelProvidersPageStore(selectSetModelProvidersBatchCapabilitiesDialogOpen);
+  const batchUpdatingCapabilities = useModelProvidersPageStore(selectModelProvidersBatchUpdatingCapabilities);
+  const setBatchUpdatingCapabilities = useModelProvidersPageStore(selectSetModelProvidersBatchUpdatingCapabilities);
 
   const searchKeyword = useModelProvidersPageStore(selectModelProvidersSearchKeyword);
   const setSearchKeyword = useModelProvidersPageStore(selectSetModelProvidersSearchKeyword);
@@ -221,6 +233,12 @@ export function useModelProvidersPageStoreState() {
     setBatchDeleting,
     batchUpdatingStatus,
     setBatchUpdatingStatus,
+    batchActionSheetOpen,
+    setBatchActionSheetOpen,
+    batchCapabilitiesDialogOpen,
+    setBatchCapabilitiesDialogOpen,
+    batchUpdatingCapabilities,
+    setBatchUpdatingCapabilities,
     searchKeyword,
     setSearchKeyword,
     selectedProviderType,
@@ -272,4 +290,3 @@ export function useModelProvidersPageStoreState() {
     resetTransient,
   };
 }
-

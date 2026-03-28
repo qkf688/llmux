@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
-import { CheckCircle, TestTube, TestTubes, Trash2, X, XCircle } from "lucide-react";
+import { CheckCircle, SlidersHorizontal, TestTube, TestTubes, Trash2, X, XCircle } from "lucide-react";
 
 type BatchActionSheetProps = {
   open: boolean;
@@ -23,6 +23,7 @@ type BatchActionSheetProps = {
   onBatchTestAll: () => void;
   onSelectAllSuccessful: () => void;
   onSelectAllFailed: () => void;
+  onOpenBatchCapabilitiesDialog: () => void;
   onOpenBatchDeleteDialog: () => void;
 };
 
@@ -39,6 +40,7 @@ export function BatchActionSheet({
   onBatchTestAll,
   onSelectAllSuccessful,
   onSelectAllFailed,
+  onOpenBatchCapabilitiesDialog,
   onOpenBatchDeleteDialog,
 }: BatchActionSheetProps) {
   const successfulCount = Object.values(associationTestResults).filter((result) => result.success === true).length;
@@ -108,6 +110,25 @@ export function BatchActionSheet({
                   {selectedAssociationCount > 0 && (
                     <span className="text-[10px] text-muted-foreground">{selectedAssociationCount} 项</span>
                   )}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide px-1">能力操作</p>
+              <div className="grid grid-cols-1 gap-2">
+                <Button
+                  variant="outline"
+                  disabled={selectedAssociationCount === 0}
+                  onClick={() => {
+                    onOpenBatchCapabilitiesDialog();
+                    onOpenChange(false);
+                  }}
+                  className="h-14 flex items-center justify-center gap-2"
+                >
+                  <SlidersHorizontal className="h-5 w-5" />
+                  <span className="text-xs font-medium">批量设置能力</span>
+                  {selectedAssociationCount > 0 && <span className="ml-auto text-xs text-muted-foreground">{selectedAssociationCount} 项</span>}
                 </Button>
               </div>
             </div>

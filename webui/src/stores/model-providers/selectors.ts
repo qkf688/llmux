@@ -20,6 +20,9 @@ export const selectModelProvidersSelectedAssociationIds = (state: ModelProviders
 export const selectModelProvidersBatchDeleteDialogOpen = (state: ModelProvidersPageState) => state.batchDeleteDialogOpen;
 export const selectModelProvidersBatchDeleting = (state: ModelProvidersPageState) => state.batchDeleting;
 export const selectModelProvidersBatchUpdatingStatus = (state: ModelProvidersPageState) => state.batchUpdatingStatus;
+export const selectModelProvidersBatchActionSheetOpen = (state: ModelProvidersPageState) => state.batchActionSheetOpen;
+export const selectModelProvidersBatchCapabilitiesDialogOpen = (state: ModelProvidersPageState) => state.batchCapabilitiesDialogOpen;
+export const selectModelProvidersBatchUpdatingCapabilities = (state: ModelProvidersPageState) => state.batchUpdatingCapabilities;
 
 export const selectModelProvidersSearchKeyword = (state: ModelProvidersPageState) => state.searchKeyword;
 export const selectModelProvidersSelectedProviderType = (state: ModelProvidersPageState) => state.selectedProviderType;
@@ -72,6 +75,10 @@ export const selectSetModelProvidersSelectedAssociationIds = (state: ModelProvid
 export const selectSetModelProvidersBatchDeleteDialogOpen = (state: ModelProvidersPageState) => state.setBatchDeleteDialogOpen;
 export const selectSetModelProvidersBatchDeleting = (state: ModelProvidersPageState) => state.setBatchDeleting;
 export const selectSetModelProvidersBatchUpdatingStatus = (state: ModelProvidersPageState) => state.setBatchUpdatingStatus;
+export const selectSetModelProvidersBatchActionSheetOpen = (state: ModelProvidersPageState) => state.setBatchActionSheetOpen;
+export const selectSetModelProvidersBatchCapabilitiesDialogOpen = (state: ModelProvidersPageState) =>
+  state.setBatchCapabilitiesDialogOpen;
+export const selectSetModelProvidersBatchUpdatingCapabilities = (state: ModelProvidersPageState) => state.setBatchUpdatingCapabilities;
 
 export const selectSetModelProvidersSearchKeyword = (state: ModelProvidersPageState) => state.setSearchKeyword;
 export const selectSetModelProvidersSelectedProviderType = (state: ModelProvidersPageState) => state.setSelectedProviderType;

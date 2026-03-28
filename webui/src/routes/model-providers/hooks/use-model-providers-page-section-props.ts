@@ -30,6 +30,12 @@ type UseModelProvidersPageSectionPropsInput = {
   providerTypes: string[];
   selectedAssociationCount: number;
   batchUpdatingStatus: boolean;
+  batchActionSheetOpen: boolean;
+  onBatchActionSheetOpenChange: (open: boolean) => void;
+  batchCapabilitiesDialogOpen: boolean;
+  onBatchCapabilitiesDialogOpenChange: (open: boolean) => void;
+  batchUpdatingCapabilities: boolean;
+  onBatchUpdateCapabilities: (capabilities: { tool_call?: boolean; structured_output?: boolean; image?: boolean }) => Promise<void>;
   batchTesting: boolean;
   filteredAssociationCount: number;
   associationTestResults: Record<number, AssociationBatchTestResult>;
@@ -106,6 +112,12 @@ export function useModelProvidersPageSectionProps(input: UseModelProvidersPageSe
     providerTypes: input.providerTypes,
     selectedAssociationCount: input.selectedAssociationCount,
     batchUpdatingStatus: input.batchUpdatingStatus,
+    batchActionSheetOpen: input.batchActionSheetOpen,
+    onBatchActionSheetOpenChange: input.onBatchActionSheetOpenChange,
+    batchCapabilitiesDialogOpen: input.batchCapabilitiesDialogOpen,
+    onBatchCapabilitiesDialogOpenChange: input.onBatchCapabilitiesDialogOpenChange,
+    batchUpdatingCapabilities: input.batchUpdatingCapabilities,
+    onBatchUpdateCapabilities: input.onBatchUpdateCapabilities,
     batchTesting: input.batchTesting,
     filteredAssociationCount: input.filteredAssociationCount,
     associationTestResults: input.associationTestResults,

@@ -417,6 +417,15 @@ type BatchUpdateModelProvidersStatusRequest struct {
 	Status bool   `json:"status"`
 }
 
+// BatchUpdateModelProvidersCapabilitiesRequest represents the request body for batch updating model-provider association capabilities.
+// A nil capability field means "keep unchanged".
+type BatchUpdateModelProvidersCapabilitiesRequest struct {
+	IDs              []uint `json:"ids"`
+	ToolCall         *bool  `json:"tool_call"`
+	StructuredOutput *bool  `json:"structured_output"`
+	Image            *bool  `json:"image"`
+}
+
 // BatchDeleteModelProviders 批量删除模型提供商关联
 func BatchDeleteModelProviders(c *gin.Context) {
 	var req BatchDeleteModelProvidersRequest
@@ -475,6 +484,43 @@ func BatchUpdateModelProvidersStatus(c *gin.Context) {
 
 	if err != nil {
 		common.InternalServerError(c, "Failed to update status: "+err.Error())
+		return
+	}
+
+	common.Success(c, map[string]interface{}{
+		"updated": result,
+	})
+}
+
+// BatchUpdateModelProvidersCapabilities 批量更新模型提供商关联能力字段（tool_call/structured_output/image）。
+func BatchUpdateModelProvidersCapabilities(c *gin.Context) {
+	var req BatchUpdateModelProvidersCapabilitiesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		common.BadRequest(c, "No IDs provided")
+		return
+	}
+
+	if req.ToolCall == nil && req.StructuredOutput == nil && req.Image == nil {
+		common.BadRequest(c, "No capability fields provided")
+		return
+	}
+
+	updates := models.ModelWithProvider{
+		ToolCall:         req.ToolCall,
+		StructuredOutput: req.StructuredOutput,
+		Image:            req.Image,
+	}
+
+	result, err := gorm.G[models.ModelWithProvider](models.DB).
+		Where("id IN ?", req.IDs).
+		Updates(c.Request.Context(), updates)
+	if err != nil {
+		common.InternalServerError(c, "Failed to update capabilities: "+err.Error())
 		return
 	}
 

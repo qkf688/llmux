@@ -6,7 +6,18 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
-import { CheckCircle, ChevronDown, ChevronUp, Filter, MoreHorizontal, TestTube, TestTubes, Trash2, XCircle } from "lucide-react";
+import {
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  Filter,
+  MoreHorizontal,
+  SlidersHorizontal,
+  TestTube,
+  TestTubes,
+  Trash2,
+  XCircle,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +25,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { BatchActionSheet } from "../dialogs/batch-action-sheet";
+import { BatchCapabilitiesDialog } from "../dialogs/batch-capabilities-dialog";
 import { BatchDeleteDialog } from "../dialogs/batch-delete-dialog";
 
 type AssociationFilterPanelProps = {
@@ -35,6 +48,12 @@ type AssociationFilterPanelProps = {
   providerTypes: string[];
   selectedAssociationCount: number;
   batchUpdatingStatus: boolean;
+  batchActionSheetOpen: boolean;
+  onBatchActionSheetOpenChange: (open: boolean) => void;
+  batchCapabilitiesDialogOpen: boolean;
+  onBatchCapabilitiesDialogOpenChange: (open: boolean) => void;
+  batchUpdatingCapabilities: boolean;
+  onBatchUpdateCapabilities: (capabilities: { tool_call?: boolean; structured_output?: boolean; image?: boolean }) => Promise<void>;
   batchTesting: boolean;
   filteredAssociationCount: number;
   associationTestResults: Record<number, AssociationBatchTestResult>;
@@ -73,6 +92,12 @@ export function AssociationFilterPanel({
   providerTypes,
   selectedAssociationCount,
   batchUpdatingStatus,
+  batchActionSheetOpen,
+  onBatchActionSheetOpenChange,
+  batchCapabilitiesDialogOpen,
+  onBatchCapabilitiesDialogOpenChange,
+  batchUpdatingCapabilities,
+  onBatchUpdateCapabilities,
   batchTesting,
   filteredAssociationCount,
   associationTestResults,
@@ -250,9 +275,19 @@ export function AssociationFilterPanel({
           />
         </div>
         <div className="flex gap-2 sm:flex-shrink-0 flex-wrap">
+          <Button
+            variant="outline"
+            className="h-8 text-xs flex-1 sm:hidden"
+            onClick={() => onBatchActionSheetOpenChange(true)}
+          >
+            批量操作
+            {selectedAssociationCount > 0 && <span className="ml-1">({selectedAssociationCount})</span>}
+            <ChevronDown className="ml-2 h-4 w-4" />
+          </Button>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="h-8 text-xs flex-1 sm:flex-initial">
+              <Button variant="outline" className="h-8 text-xs hidden sm:flex">
                 批量操作
                 {selectedAssociationCount > 0 && <span className="ml-1">({selectedAssociationCount})</span>}
                 <ChevronDown className="ml-2 h-4 w-4" />
@@ -260,6 +295,22 @@ export function AssociationFilterPanel({
             </DropdownMenuTrigger>
 
             <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuItem
+                disabled={selectedAssociationCount === 0}
+                onSelect={() => {
+                  window.setTimeout(() => onBatchCapabilitiesDialogOpenChange(true), 0);
+                }}
+                className="cursor-pointer"
+              >
+                <SlidersHorizontal className="mr-2 h-4 w-4" />
+                <span>批量设置能力</span>
+                {selectedAssociationCount > 0 && (
+                  <span className="ml-auto text-xs text-muted-foreground">{selectedAssociationCount}</span>
+                )}
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+
               <DropdownMenuItem
                 disabled={selectedAssociationCount === 0}
                 onSelect={() => {
@@ -389,6 +440,35 @@ export function AssociationFilterPanel({
         selectedCount={selectedAssociationCount}
         deleting={batchDeleting}
         onConfirm={onBatchDeleteConfirm}
+      />
+
+      <BatchCapabilitiesDialog
+        open={batchCapabilitiesDialogOpen}
+        onOpenChange={onBatchCapabilitiesDialogOpenChange}
+        selectedCount={selectedAssociationCount}
+        updating={batchUpdatingCapabilities}
+        onConfirm={onBatchUpdateCapabilities}
+      />
+
+      <BatchActionSheet
+        open={batchActionSheetOpen}
+        onOpenChange={onBatchActionSheetOpenChange}
+        selectedAssociationCount={selectedAssociationCount}
+        filteredAssociationCount={filteredAssociationCount}
+        batchUpdatingStatus={batchUpdatingStatus}
+        batchTesting={batchTesting}
+        associationTestResults={associationTestResults}
+        onBatchUpdateStatus={onBatchUpdateStatus}
+        onBatchTestSelected={onBatchTestSelected}
+        onBatchTestAll={onBatchTestAll}
+        onSelectAllSuccessful={onSelectAllSuccessful}
+        onSelectAllFailed={onSelectAllFailed}
+        onOpenBatchCapabilitiesDialog={() => {
+          window.setTimeout(() => onBatchCapabilitiesDialogOpenChange(true), 0);
+        }}
+        onOpenBatchDeleteDialog={() => {
+          window.setTimeout(() => onBatchDeleteDialogOpenChange(true), 0);
+        }}
       />
     </div>
   );

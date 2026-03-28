@@ -126,6 +126,20 @@ export async function batchUpdateModelProvidersStatus(
   });
 }
 
+export async function batchUpdateModelProvidersCapabilities(
+  ids: number[],
+  capabilities: {
+    tool_call?: boolean;
+    structured_output?: boolean;
+    image?: boolean;
+  }
+): Promise<{ updated: number }> {
+  return apiRequest<{ updated: number }>("/model-providers/batch/capabilities", {
+    method: "PATCH",
+    body: JSON.stringify({ ids, ...capabilities }),
+  });
+}
+
 export async function testModelProvider(id: number): Promise<ModelProviderTestResult> {
   return apiRequest<ModelProviderTestResult>(`/test/${id}`);
 }

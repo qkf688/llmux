@@ -10,8 +10,8 @@ export function useModelProvidersAssociationForm() {
       provider_name: "",
       provider_id: 0,
       tool_call: true,
-      structured_output: false,
-      image: false,
+      structured_output: true,
+      image: true,
       with_header: false,
       weight: 5,
       priority: 10,
@@ -26,4 +26,3 @@ export function useModelProvidersAssociationForm() {
 
   return { form, headerFields, appendHeader, removeHeader };
 }
-

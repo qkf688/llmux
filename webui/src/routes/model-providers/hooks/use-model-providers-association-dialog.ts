@@ -56,8 +56,8 @@ export function useModelProvidersAssociationDialog({
       provider_name: "",
       provider_id: 0,
       tool_call: true,
-      structured_output: false,
-      image: false,
+      structured_output: true,
+      image: true,
       with_header: false,
       weight: defaultWeight,
       priority: defaultPriority,
@@ -68,4 +68,3 @@ export function useModelProvidersAssociationDialog({
 
   return { openEditDialog, openCreateDialog };
 }
-

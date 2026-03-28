@@ -1,7 +1,5 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useFieldArray, useForm } from "react-hook-form";
 import {
   selectModelProvidersAssociationTestResults,
   selectModelProvidersBatchDeleteDialogOpen,
@@ -95,7 +93,6 @@ import type {
   Provider,
   Settings,
 } from "@/lib/api";
-import { formSchema, type FormValues } from "../form-schema";
 import type { ProviderModelGroup, ProviderModelWithOwner } from "../types";
 import { buildAssociationPayload } from "../utils/payload";
 import { useModelProvidersAssociationDialog } from "./use-model-providers-association-dialog";
@@ -117,6 +114,7 @@ import { useModelProvidersPageSectionProps } from "./use-model-providers-page-se
 import { useModelProvidersPageDialogProps } from "./use-model-providers-page-dialog-props";
 import { useModelProvidersTemplateEditor } from "./use-model-providers-template-editor";
 import { useModelProvidersTesting } from "./use-model-providers-testing";
+import { useModelProvidersAssociationForm } from "./use-model-providers-association-form";
 
 export function useModelProvidersPage() {
   const [models, setModels] = useState<Model[]>([]);
@@ -227,26 +225,7 @@ export function useModelProvidersPage() {
   const [providerModels, setProviderModels] = useState<ProviderModelWithOwner[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
 
-  // 初始化表单
-  const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      model_id: 0,
-      provider_name: "",
-      provider_id: 0,
-      tool_call: true,
-      structured_output: false,
-      image: false,
-      with_header: false,
-      weight: 5,
-      priority: 10,
-      customer_headers: [],
-    },
-  });
-  const { fields: headerFields, append: appendHeader, remove: removeHeader } = useFieldArray({
-    control: form.control,
-    name: "customer_headers",
-  });
+  const { form, headerFields, appendHeader, removeHeader } = useModelProvidersAssociationForm();
 
   useModelProvidersBootstrap({
     models,

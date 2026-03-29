@@ -12,6 +12,10 @@ export default defineConfig({
     },
 
   },
+  test: {
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+  },
   build: {
     chunkSizeWarningLimit: 1000,
     rollupOptions: {

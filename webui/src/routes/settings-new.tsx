@@ -2,6 +2,7 @@ import { useCallback, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { toErrorMessage } from "@/lib/errors";
 import { getSettings, getHealthCheckSettings } from "@/lib/api";
 import type { Settings, HealthCheckSettings } from "@/lib/api";
 import { Spinner } from "@/components/ui/spinner";
@@ -28,7 +29,7 @@ export default function SettingsPage() {
       const data = await getSettings();
       setSettings(data);
     } catch (error) {
-      toast.error("加载设置失败: " + (error as Error).message);
+      toast.error(`加载设置失败: ${toErrorMessage(error)}`);
     } finally {
       setLoading(false);
     }
@@ -39,7 +40,7 @@ export default function SettingsPage() {
       const data = await getHealthCheckSettings();
       setHealthCheckSettings(data);
     } catch (error) {
-      toast.error("加载健康检测设置失败: " + (error as Error).message);
+      toast.error(`加载健康检测设置失败: ${toErrorMessage(error)}`);
     }
   }, [setHealthCheckSettings]);
 

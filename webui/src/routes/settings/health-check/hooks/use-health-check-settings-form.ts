@@ -1,13 +1,15 @@
 import { useCallback } from "react";
 import { toast } from "sonner";
-import { updateSettings, type Settings } from "@/lib/api";
+import { updateHealthCheckSettings, type HealthCheckSettings } from "@/lib/api";
 import { toErrorMessage } from "@/lib/errors";
-import type { RoutingSettingsProps } from "../types";
-import { sanitizeRoutingSettings } from "../utils/sanitize-routing-settings";
-import { routingSettingsEditorStore, useSettingsStore } from "@/stores/settings";
+import type { HealthCheckSettingsProps } from "../types";
+import { healthCheckSettingsEditorStore, useSettingsStore } from "@/stores/settings";
 import { useSettingsEditorSync } from "../../hooks/use-settings-editor-sync";
 
-export function useRoutingSettingsForm({ settings, onSettingsChange }: RoutingSettingsProps) {
+export function useHealthCheckSettingsForm({
+  healthCheckSettings,
+  onHealthCheckSettingsChange,
+}: HealthCheckSettingsProps) {
   const {
     saving,
     localSettings,
@@ -17,18 +19,17 @@ export function useRoutingSettingsForm({ settings, onSettingsChange }: RoutingSe
     updateLocalSettings: updateLocalSettingsInternal,
     markSaved,
     resetTransient,
-  } = useSettingsStore(routingSettingsEditorStore, (state) => state);
+  } = useSettingsStore(healthCheckSettingsEditorStore, (state) => state);
 
   useSettingsEditorSync({
-    syncMode: "when_clean",
-    hasChanges,
-    serverSettings: settings,
+    syncMode: "always",
+    serverSettings: healthCheckSettings,
     syncFromServerSettings,
     resetTransient,
   });
 
   const updateLocalSettings = useCallback(
-    (updates: Partial<Settings>) => {
+    (updates: Partial<HealthCheckSettings>) => {
       updateLocalSettingsInternal(updates);
     },
     [updateLocalSettingsInternal]
@@ -41,21 +42,20 @@ export function useRoutingSettingsForm({ settings, onSettingsChange }: RoutingSe
 
     try {
       setSaving(true);
-      const cleanedSettings = sanitizeRoutingSettings(localSettings);
-      const updated = await updateSettings(cleanedSettings);
+      const updated = await updateHealthCheckSettings(localSettings);
       markSaved(updated);
-      onSettingsChange(updated);
-      toast.success("通用设置保存成功");
+      onHealthCheckSettingsChange(updated);
+      toast.success("健康检测设置保存成功");
     } catch (error) {
-      toast.error(`保存设置失败: ${toErrorMessage(error)}`);
+      toast.error(`保存健康检测设置失败: ${toErrorMessage(error)}`);
     } finally {
       setSaving(false);
     }
-  }, [localSettings, markSaved, onSettingsChange, setSaving]);
+  }, [localSettings, markSaved, onHealthCheckSettingsChange, setSaving]);
 
   const handleReset = useCallback(() => {
-    syncFromServerSettings(settings);
-  }, [settings, syncFromServerSettings]);
+    syncFromServerSettings(healthCheckSettings);
+  }, [healthCheckSettings, syncFromServerSettings]);
 
   return {
     saving,
@@ -66,3 +66,4 @@ export function useRoutingSettingsForm({ settings, onSettingsChange }: RoutingSe
     handleReset,
   };
 }
+

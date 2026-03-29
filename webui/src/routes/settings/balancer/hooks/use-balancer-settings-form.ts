@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { toast } from "sonner";
 import { updateSettings, type Settings } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 import type { BalancerSettingsProps } from "../types";
 import { balancerSettingsEditorStore, useSettingsStore } from "@/stores/settings";
 import { useSettingsEditorSync } from "../../hooks/use-settings-editor-sync";
@@ -43,7 +44,7 @@ export function useBalancerSettingsForm({ settings, onSettingsChange }: Balancer
       onSettingsChange(updated);
       toast.success("负载均衡设置保存成功");
     } catch (error) {
-      toast.error("保存设置失败: " + (error as Error).message);
+      toast.error(`保存设置失败: ${toErrorMessage(error)}`);
     } finally {
       setSaving(false);
     }

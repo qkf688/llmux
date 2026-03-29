@@ -54,8 +54,7 @@ import {
   selectSetHealthCheckLogsCurrentBatchId,
   useHealthCheckLogsPageStore,
 } from "@/stores/health-check-logs";
-
-const toErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
+import { toErrorMessage } from "@/lib/errors";
 
 export function useHealthCheckLogsPage() {
   const loading = useHealthCheckLogsPageStore(selectHealthCheckLogsLoading);

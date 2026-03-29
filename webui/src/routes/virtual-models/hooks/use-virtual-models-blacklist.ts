@@ -1,9 +1,8 @@
 import { toast } from "sonner";
 import { updateProvider, type VirtualModel } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 import type { VirtualModelsPageState } from "@/stores/virtual-models";
 import type { Provider } from "@/lib/api";
-
-const extractErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 type UseVirtualModelsBlacklistInput = {
   providers: Provider[];
@@ -33,7 +32,7 @@ export function useVirtualModelsBlacklist({
     try {
       await refreshProvidersState();
     } catch (error) {
-      const message = extractErrorMessage(error);
+      const message = toErrorMessage(error);
       toast.error(`获取提供商数据失败: ${message}`);
       setBlacklistedProviders(providers.filter((provider) => provider.blacklisted));
     }
@@ -73,7 +72,7 @@ export function useVirtualModelsBlacklist({
       setProviderSelectorDialogOpen(false);
       await refreshProvidersState();
     } catch (error) {
-      const message = extractErrorMessage(error);
+      const message = toErrorMessage(error);
       toast.error(`操作失败: ${message}`);
     }
   };
@@ -84,7 +83,7 @@ export function useVirtualModelsBlacklist({
       toast.success("提供商已解除拉黑");
       await refreshProvidersState();
     } catch (error) {
-      const message = extractErrorMessage(error);
+      const message = toErrorMessage(error);
       toast.error(`操作失败: ${message}`);
     }
   };
@@ -98,4 +97,3 @@ export function useVirtualModelsBlacklist({
     removeBlacklistedProvider,
   };
 }
-

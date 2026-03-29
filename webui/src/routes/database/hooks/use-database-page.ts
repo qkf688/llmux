@@ -8,6 +8,7 @@ import {
   vacuumDatabase,
   type ImportConfigResponse,
 } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 import { toast } from "sonner";
 import { buildImportPreview } from "../utils/import-preview";
 import { buildImportResultMessage } from "../utils/import-result";
@@ -51,9 +52,6 @@ import {
   selectToggleDatabaseImportType,
   useDatabasePageStore,
 } from "@/stores/database";
-
-const toErrorMessage = (error: unknown, fallback: string) =>
-  error instanceof Error ? error.message : fallback;
 
 export function useDatabasePage() {
   const navigate = useNavigate();

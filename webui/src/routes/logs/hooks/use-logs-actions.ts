@@ -11,8 +11,7 @@ import { toast } from "sonner";
 import type { LogsFilters } from "../types";
 import { exportRequestResponse } from "../utils/export-log";
 import { toApiLogsFilters, type LogsPageState } from "@/stores/logs";
-
-const toErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
+import { toErrorMessage } from "@/lib/errors";
 
 const needsLogDetail = (log: ChatLog) =>
   log.RequestHeaders === undefined &&

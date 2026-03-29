@@ -7,6 +7,7 @@ import {
   type VirtualModel,
   type VirtualModelMapping,
 } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 import type { UseFormReturn } from "react-hook-form";
 import type { VirtualModelsPageState } from "@/stores/virtual-models";
 import {
@@ -15,8 +16,6 @@ import {
 } from "../schemas/forms";
 import type { Model } from "@/lib/api";
 import type { VirtualModelsBatchDefaults } from "@/stores/virtual-models";
-
-const extractErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 type UseVirtualModelsMappingsInput = {
   currentVirtualModel: VirtualModelsPageState["currentVirtualModel"];
@@ -73,7 +72,7 @@ export function useVirtualModelsMappings({
       await refreshMappings(model.ID);
       setMappingsDialogOpen(true);
     } catch (error) {
-      const message = extractErrorMessage(error);
+      const message = toErrorMessage(error);
       toast.error(`获取映射失败: ${message}`);
     }
   };
@@ -120,7 +119,7 @@ export function useVirtualModelsMappings({
       setMappingFormDialogOpen(false);
       await refreshMappings(currentVirtualModel.ID);
     } catch (error) {
-      const message = extractErrorMessage(error);
+      const message = toErrorMessage(error);
       toast.error(`操作失败: ${message}`);
     }
   };
@@ -135,7 +134,7 @@ export function useVirtualModelsMappings({
       toast.success("映射删除成功");
       await refreshMappings(currentVirtualModel.ID);
     } catch (error) {
-      const message = extractErrorMessage(error);
+      const message = toErrorMessage(error);
       toast.error(`删除失败: ${message}`);
     }
   };
@@ -204,7 +203,7 @@ export function useVirtualModelsMappings({
       setMappingBatchDialogOpen(false);
       await refreshMappings(currentVirtualModel.ID);
     } catch (error) {
-      const message = extractErrorMessage(error);
+      const message = toErrorMessage(error);
       toast.error(`批量添加失败: ${message}`);
     }
   };
@@ -224,4 +223,3 @@ export function useVirtualModelsMappings({
     submitBatchMapping,
   };
 }
-

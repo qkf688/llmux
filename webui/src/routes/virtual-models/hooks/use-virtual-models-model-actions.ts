@@ -5,12 +5,11 @@ import {
   updateVirtualModel,
   type VirtualModel,
 } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 import type { UseFormReturn } from "react-hook-form";
 import type { VirtualModelsPageState } from "@/stores/virtual-models";
 import { defaultVirtualModelFormValues, type VirtualModelFormValues } from "../schemas/forms";
 import type { VirtualModelStrategy } from "../types";
-
-const extractErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 const toVirtualModelStrategy = (strategy: string): VirtualModelStrategy => {
   if (strategy === "round_robin" || strategy === "random") {
@@ -70,7 +69,7 @@ export function useVirtualModelsModelActions({
       setModelDialogOpen(false);
       await fetchInitialData();
     } catch (error) {
-      const message = extractErrorMessage(error);
+      const message = toErrorMessage(error);
       toast.error(`操作失败: ${message}`);
     }
   };
@@ -94,7 +93,7 @@ export function useVirtualModelsModelActions({
       setModelToDeleteId(null);
       await fetchInitialData();
     } catch (error) {
-      const message = extractErrorMessage(error);
+      const message = toErrorMessage(error);
       toast.error(`删除失败: ${message}`);
     }
   };
@@ -108,4 +107,3 @@ export function useVirtualModelsModelActions({
     confirmDeleteVirtualModel,
   };
 }
-

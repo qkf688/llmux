@@ -1,9 +1,8 @@
 import { useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import { getModels, getProviders, getVirtualModelMappings, getVirtualModels } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 import type { VirtualModelsPageState } from "@/stores/virtual-models";
-
-const extractErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 type UseVirtualModelsBootstrapInput = {
   setLoading: VirtualModelsPageState["setLoading"];
@@ -37,7 +36,7 @@ export function useVirtualModelsBootstrap({
       setProviders(providerData);
       setBlacklistedProviders(providerData.filter((provider) => provider.blacklisted));
     } catch (error) {
-      const message = extractErrorMessage(error);
+      const message = toErrorMessage(error);
       toast.error(`获取数据失败: ${message}`);
       console.error(error);
     } finally {
@@ -72,4 +71,3 @@ export function useVirtualModelsBootstrap({
     refreshMappings,
   };
 }
-

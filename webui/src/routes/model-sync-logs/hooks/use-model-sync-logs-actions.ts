@@ -6,11 +6,10 @@ import {
   syncAllProviderModels,
   updateProvider,
 } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 import { toast } from "sonner";
 import type { ModelSyncTab } from "../types";
 import type { ModelSyncLogsPageState } from "@/stores/model-sync-logs";
-
-const toErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 type UseModelSyncLogsActionsInput = {
   refreshTimerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
@@ -188,4 +187,3 @@ export function useModelSyncLogsActions({
     handleToggleProviderModelEndpoint,
   };
 }
-

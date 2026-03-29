@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getLogDetail, type ChatLog } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 import {
   formatDateTime,
   formatDurationValue,
@@ -16,8 +17,6 @@ type LogDetailDialogProps = {
   onOpenChange: (open: boolean) => void;
   onExportRequestResponse: (log: ChatLog) => void | Promise<void>;
 };
-
-const toErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 const needsLogDetail = (log: ChatLog) =>
   log.RequestHeaders === undefined &&

@@ -6,11 +6,10 @@ import {
   getProviders,
   getUserAgents,
 } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 import { toast } from "sonner";
 import type { LogsFilters } from "../types";
 import { toApiLogsFilters, type LogsPageState } from "@/stores/logs";
-
-const toErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 type UseLogsFetchersInput = {
   filters: LogsFilters;
@@ -99,4 +98,3 @@ export function useLogsFetchers({
 
   return { fetchFilterOptions, fetchLogs };
 }
-

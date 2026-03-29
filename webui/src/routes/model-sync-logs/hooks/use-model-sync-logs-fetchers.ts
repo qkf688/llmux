@@ -5,13 +5,12 @@ import {
   getProviders,
   getRecentAddedModels,
 } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 import { toast } from "sonner";
 import type { ModelSyncTab } from "../types";
 import type { ModelSyncLogsPageState } from "@/stores/model-sync-logs";
 
 const LOG_PAGE_SIZE = 20;
-
-const toErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 type UseModelSyncLogsFetchersInput = {
   activeTab: ModelSyncTab;
@@ -147,4 +146,3 @@ export function useModelSyncLogsFetchers({
     refreshCurrentTab,
   };
 }
-

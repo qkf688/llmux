@@ -60,43 +60,6 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 			"count", len(orderedModels),
 			"first_model", orderedModels[0].Model.Name)
 
-		// 获取第一个真实模型的提供商信息（用于初始化）
-		firstModel := orderedModels[0].Model
-
-		// 覆盖 MaxRetry 和 TimeOut（如果虚拟模型有配置）
-		if virtualModel.MaxRetry > 0 {
-			firstModel.MaxRetry = virtualModel.MaxRetry
-		}
-		if virtualModel.TimeOut > 0 {
-			firstModel.TimeOut = virtualModel.TimeOut
-		}
-		if virtualModel.IOLog != nil {
-			firstModel.IOLog = virtualModel.IOLog
-		}
-
-		// 获取第一个真实模型的提供商
-		modelWithProviders, err := queryEnabledModelProviders(ctx, firstModel.ID, before)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(modelWithProviders) == 0 {
-			return nil, errors.New("no provider for model " + firstModel.Name)
-		}
-
-		modelWithProviderMap := lo.KeyBy(modelWithProviders, func(mp models.ModelWithProvider) uint { return mp.ID })
-
-		providerMap, err := buildProviderMapByModelProviders(ctx, modelWithProviders)
-		if err != nil {
-			return nil, err
-		}
-
-		weightItems, priorityItems := buildSelectionItemsByModelProviders(modelWithProviders, providerMap)
-
-		if firstModel.IOLog == nil {
-			firstModel.IOLog = new(bool)
-		}
-
 		// 应用虚拟模型的配置到所有真实模型
 		for i := range orderedModels {
 			if virtualModel.MaxRetry > 0 {
@@ -110,11 +73,16 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 			}
 		}
 
+		firstModel := orderedModels[0].Model
+		if firstModel.IOLog == nil {
+			firstModel.IOLog = new(bool)
+		}
+
 		return &ProvidersWithMeta{
-			ModelWithProviderMap: modelWithProviderMap,
-			WeightItems:          weightItems,
-			PriorityItems:        priorityItems,
-			ProviderMap:          providerMap,
+			ModelWithProviderMap: map[uint]models.ModelWithProvider{},
+			WeightItems:          map[uint]int{},
+			PriorityItems:        map[uint]int{},
+			ProviderMap:          map[uint]models.Provider{},
 			MaxRetry:             firstModel.MaxRetry,
 			TimeOut:              firstModel.TimeOut,
 			IOLog:                *firstModel.IOLog,

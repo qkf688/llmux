@@ -44,6 +44,9 @@ export type VirtualModelsPageState = {
   mappingsDialogOpen: boolean;
   currentVirtualModel: VirtualModel | null;
   mappings: VirtualModelMapping[];
+  mappingSearchQuery: string;
+  selectedMappingIds: Set<number>;
+  mappingBatchDeleteDialogOpen: boolean;
 
   mappingFormDialogOpen: boolean;
   editingMapping: VirtualModelMapping | null;
@@ -73,6 +76,9 @@ export type VirtualModelsPageState = {
 
   setMappingsDialogOpen: (open: boolean) => void;
   setCurrentVirtualModel: (model: VirtualModel | null) => void;
+  setMappingSearchQuery: (query: string) => void;
+  setSelectedMappingIds: (next: Updater<Set<number>>) => void;
+  setMappingBatchDeleteDialogOpen: (open: boolean) => void;
 
   setMappingFormDialogOpen: (open: boolean) => void;
   setEditingMapping: (mapping: VirtualModelMapping | null) => void;
@@ -106,6 +112,9 @@ export const virtualModelsPageStore = createStore<VirtualModelsPageState>()((set
   mappingsDialogOpen: false,
   currentVirtualModel: null,
   mappings: [],
+  mappingSearchQuery: "",
+  selectedMappingIds: new Set<number>(),
+  mappingBatchDeleteDialogOpen: false,
 
   mappingFormDialogOpen: false,
   editingMapping: null,
@@ -135,6 +144,10 @@ export const virtualModelsPageStore = createStore<VirtualModelsPageState>()((set
 
   setMappingsDialogOpen: (open: boolean) => set({ mappingsDialogOpen: open }),
   setCurrentVirtualModel: (model: VirtualModel | null) => set({ currentVirtualModel: model }),
+  setMappingSearchQuery: (query: string) => set({ mappingSearchQuery: query }),
+  setSelectedMappingIds: (next: Updater<Set<number>>) =>
+    set((state) => ({ selectedMappingIds: resolveUpdater(next, state.selectedMappingIds) })),
+  setMappingBatchDeleteDialogOpen: (open: boolean) => set({ mappingBatchDeleteDialogOpen: open }),
 
   setMappingFormDialogOpen: (open: boolean) => set({ mappingFormDialogOpen: open }),
   setEditingMapping: (mapping: VirtualModelMapping | null) => set({ editingMapping: mapping }),
@@ -186,6 +199,9 @@ export const virtualModelsPageStore = createStore<VirtualModelsPageState>()((set
       mappingsDialogOpen: false,
       currentVirtualModel: null,
       mappings: [],
+      mappingSearchQuery: "",
+      selectedMappingIds: new Set<number>(),
+      mappingBatchDeleteDialogOpen: false,
       mappingFormDialogOpen: false,
       editingMapping: null,
       mappingBatchDialogOpen: false,

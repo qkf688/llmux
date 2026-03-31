@@ -1,6 +1,8 @@
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   batchCreateVirtualModelMapping,
+  batchDeleteVirtualModelMapping,
   createVirtualModelMapping,
   deleteVirtualModelMapping,
   updateVirtualModelMapping,
@@ -19,11 +21,15 @@ import type { VirtualModelsBatchDefaults } from "@/stores/virtual-models";
 
 type UseVirtualModelsMappingsInput = {
   currentVirtualModel: VirtualModelsPageState["currentVirtualModel"];
+  mappings: VirtualModelsPageState["mappings"];
   editingMapping: VirtualModelsPageState["editingMapping"];
   selectedModelIds: VirtualModelsPageState["selectedModelIds"];
   batchPriority: VirtualModelsPageState["batchPriority"];
   batchWeight: VirtualModelsPageState["batchWeight"];
   batchEnabled: VirtualModelsPageState["batchEnabled"];
+  mappingSearchQuery: VirtualModelsPageState["mappingSearchQuery"];
+  selectedMappingIds: VirtualModelsPageState["selectedMappingIds"];
+  mappingBatchDeleteDialogOpen: VirtualModelsPageState["mappingBatchDeleteDialogOpen"];
   filteredModels: Model[];
   mappedModelIds: Set<number>;
   mappingForm: UseFormReturn<MappingFormValues>;
@@ -40,15 +46,22 @@ type UseVirtualModelsMappingsInput = {
   setBatchWeight: VirtualModelsPageState["setBatchWeight"];
   setBatchEnabled: VirtualModelsPageState["setBatchEnabled"];
   setModelSearchQuery: VirtualModelsPageState["setModelSearchQuery"];
+  setMappingSearchQuery: VirtualModelsPageState["setMappingSearchQuery"];
+  setSelectedMappingIds: VirtualModelsPageState["setSelectedMappingIds"];
+  setMappingBatchDeleteDialogOpen: VirtualModelsPageState["setMappingBatchDeleteDialogOpen"];
 };
 
 export function useVirtualModelsMappings({
   currentVirtualModel,
+  mappings,
   editingMapping,
   selectedModelIds,
   batchPriority,
   batchWeight,
   batchEnabled,
+  mappingSearchQuery,
+  selectedMappingIds,
+  mappingBatchDeleteDialogOpen,
   filteredModels,
   mappedModelIds,
   mappingForm,
@@ -65,9 +78,35 @@ export function useVirtualModelsMappings({
   setBatchWeight,
   setBatchEnabled,
   setModelSearchQuery,
+  setMappingSearchQuery,
+  setSelectedMappingIds,
+  setMappingBatchDeleteDialogOpen,
 }: UseVirtualModelsMappingsInput) {
+  const [batchDeleting, setBatchDeleting] = useState(false);
+
+  const filteredMappings = useMemo(() => {
+    const keyword = mappingSearchQuery.trim().toLowerCase();
+    if (!keyword) {
+      return mappings;
+    }
+
+    return mappings.filter((mapping) =>
+      getRealModelName(mapping.RealModelID).toLowerCase().includes(keyword)
+    );
+  }, [getRealModelName, mappingSearchQuery, mappings]);
+
+  const filteredMappingIds = useMemo(() => filteredMappings.map((mapping) => mapping.ID), [filteredMappings]);
+
+  const isAllFilteredSelected =
+    filteredMappingIds.length > 0 && filteredMappingIds.every((id) => selectedMappingIds.has(id));
+  const isSomeFilteredSelected =
+    !isAllFilteredSelected && filteredMappingIds.some((id) => selectedMappingIds.has(id));
+
   const openMappingsDialog = async (model: VirtualModel) => {
     setCurrentVirtualModel(model);
+    setMappingSearchQuery("");
+    setSelectedMappingIds(() => new Set<number>());
+    setMappingBatchDeleteDialogOpen(false);
     try {
       await refreshMappings(model.ID);
       setMappingsDialogOpen(true);
@@ -83,6 +122,9 @@ export function useVirtualModelsMappings({
       setMappingFormDialogOpen(false);
       setMappingBatchDialogOpen(false);
       setEditingMapping(null);
+      setMappingSearchQuery("");
+      setSelectedMappingIds(() => new Set<number>());
+      setMappingBatchDeleteDialogOpen(false);
     }
   };
 
@@ -132,6 +174,14 @@ export function useVirtualModelsMappings({
     try {
       await deleteVirtualModelMapping(currentVirtualModel.ID, mappingId);
       toast.success("映射删除成功");
+      setSelectedMappingIds((previous) => {
+        if (!previous.has(mappingId)) {
+          return previous;
+        }
+        const next = new Set(previous);
+        next.delete(mappingId);
+        return next;
+      });
       await refreshMappings(currentVirtualModel.ID);
     } catch (error) {
       const message = toErrorMessage(error);
@@ -208,6 +258,63 @@ export function useVirtualModelsMappings({
     }
   };
 
+  const toggleMappingSelection = (mappingId: number) => {
+    setSelectedMappingIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(mappingId)) {
+        next.delete(mappingId);
+      } else {
+        next.add(mappingId);
+      }
+      return next;
+    });
+  };
+
+  const selectAllFilteredMappings = (checked: boolean) => {
+    setSelectedMappingIds((previous) => {
+      const next = new Set(previous);
+      filteredMappingIds.forEach((id) => {
+        if (checked) {
+          next.add(id);
+        } else {
+          next.delete(id);
+        }
+      });
+      return next;
+    });
+  };
+
+  const openBatchDeleteDialog = () => {
+    if (selectedMappingIds.size === 0) {
+      return;
+    }
+    setMappingBatchDeleteDialogOpen(true);
+  };
+
+  const confirmBatchDelete = async () => {
+    if (!currentVirtualModel || selectedMappingIds.size === 0) {
+      return;
+    }
+    if (batchDeleting) {
+      return;
+    }
+
+    try {
+      setBatchDeleting(true);
+      const ids = Array.from(selectedMappingIds);
+      const result = await batchDeleteVirtualModelMapping(currentVirtualModel.ID, ids);
+      toast.success(`已删除 ${result.deleted} 条映射`);
+      setMappingBatchDeleteDialogOpen(false);
+      setSelectedMappingIds(() => new Set<number>());
+      await refreshMappings(currentVirtualModel.ID);
+    } catch (error) {
+      const message = toErrorMessage(error);
+      toast.error(`批量删除失败: ${message}`);
+    } finally {
+      setBatchDeleting(false);
+    }
+  };
+
   return {
     openMappingsDialog,
     handleMappingsDialogOpenChange,
@@ -221,5 +328,18 @@ export function useVirtualModelsMappings({
     invertBatchModelSelection,
     clearBatchModelSelection,
     submitBatchMapping,
+    filteredMappings,
+    mappingBatchDeleteDialogOpen,
+    setMappingBatchDeleteDialogOpen,
+    mappingSearchQuery,
+    setMappingSearchQuery,
+    selectedMappingIds,
+    isAllFilteredSelected,
+    isSomeFilteredSelected,
+    toggleMappingSelection,
+    selectAllFilteredMappings,
+    openBatchDeleteDialog,
+    confirmBatchDelete,
+    batchDeleting,
   };
 }

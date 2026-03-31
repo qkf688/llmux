@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -6,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -20,9 +22,18 @@ interface MappingManagementDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   virtualModelName?: string;
+  totalMappingsCount: number;
   mappings: VirtualModelMapping[];
   getRealModelName: (modelId: number) => string;
+  searchQuery: string;
+  onSearchQueryChange: (value: string) => void;
+  selectedMappingIds: Set<number>;
+  isAllFilteredSelected: boolean;
+  isSomeFilteredSelected: boolean;
+  onSelectAllFiltered: (checked: boolean) => void;
+  onToggleMappingSelection: (mappingId: number) => void;
   onOpenBatchDialog: () => void;
+  onOpenBatchDeleteDialog: () => void;
   onEditMapping: (mapping: VirtualModelMapping) => void;
   onDeleteMapping: (mappingId: number) => void;
 }
@@ -31,23 +42,52 @@ export function MappingManagementDialog({
   open,
   onOpenChange,
   virtualModelName,
+  totalMappingsCount,
   mappings,
   getRealModelName,
+  searchQuery,
+  onSearchQueryChange,
+  selectedMappingIds,
+  isAllFilteredSelected,
+  isSomeFilteredSelected,
+  onSelectAllFiltered,
+  onToggleMappingSelection,
   onOpenBatchDialog,
+  onOpenBatchDeleteDialog,
   onEditMapping,
   onDeleteMapping,
 }: MappingManagementDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[82vh] max-h-[92vh] w-[96vw] max-w-3xl flex-col gap-3 overflow-hidden p-4 sm:w-auto sm:p-6">
+      <DialogContent className="flex h-[82vh] max-h-[92vh] w-[96vw] max-w-3xl flex-col gap-3 overflow-hidden p-4 sm:max-w-3xl sm:p-6">
         <DialogHeader>
           <DialogTitle className="text-base sm:text-lg">管理映射 - {virtualModelName}</DialogTitle>
           <DialogDescription className="text-xs sm:text-sm">配置虚拟模型关联的真实模型</DialogDescription>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col gap-2">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex-1 min-w-[200px]">
+              <Input
+                placeholder="搜索真实模型..."
+                value={searchQuery}
+                onChange={(event) => onSearchQueryChange(event.target.value)}
+              />
+            </div>
+
+            <span className="self-center text-sm text-muted-foreground">
+              已选择 {selectedMappingIds.size} 条
+            </span>
             <Button size="sm" className="h-8 px-3" onClick={onOpenBatchDialog}>
               添加映射
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-8 px-3"
+              disabled={selectedMappingIds.size === 0}
+              onClick={onOpenBatchDeleteDialog}
+            >
+              批量删除 ({selectedMappingIds.size})
             </Button>
           </div>
 
@@ -57,6 +97,13 @@ export function MappingManagementDialog({
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="py-2 text-xs w-[40px]">
+                      <Checkbox
+                        checked={isSomeFilteredSelected ? "indeterminate" : isAllFilteredSelected}
+                        onCheckedChange={(checked) => onSelectAllFiltered(checked === true)}
+                        aria-label="全选筛选结果"
+                      />
+                    </TableHead>
                     <TableHead className="py-2 text-xs">真实模型</TableHead>
                     <TableHead className="py-2 text-xs">优先级</TableHead>
                     <TableHead className="py-2 text-xs">权重</TableHead>
@@ -67,13 +114,20 @@ export function MappingManagementDialog({
                 <TableBody>
                   {mappings.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="py-3 text-center text-sm text-muted-foreground">
-                        暂无映射
+                      <TableCell colSpan={6} className="py-3 text-center text-sm text-muted-foreground">
+                        {totalMappingsCount === 0 ? "暂无映射" : "无匹配映射"}
                       </TableCell>
                     </TableRow>
                   ) : (
                     mappings.map((mapping) => (
-                      <TableRow key={mapping.ID}>
+                      <TableRow key={mapping.ID} className={selectedMappingIds.has(mapping.ID) ? "bg-muted/50" : ""}>
+                        <TableCell className="py-2">
+                          <Checkbox
+                            checked={selectedMappingIds.has(mapping.ID)}
+                            onCheckedChange={() => onToggleMappingSelection(mapping.ID)}
+                            aria-label={`选择映射 ${mapping.ID}`}
+                          />
+                        </TableCell>
                         <TableCell className="py-2 text-sm">{getRealModelName(mapping.RealModelID)}</TableCell>
                         <TableCell className="py-2 text-sm">{mapping.Priority}</TableCell>
                         <TableCell className="py-2 text-sm">{mapping.Weight}</TableCell>
@@ -118,13 +172,24 @@ export function MappingManagementDialog({
             {/* Mobile: compact card list (avoids horizontal overflow/clipping) */}
             <div className="divide-y sm:hidden">
               {mappings.length === 0 ? (
-                <div className="py-3 text-center text-sm text-muted-foreground">暂无映射</div>
+                <div className="py-3 text-center text-sm text-muted-foreground">
+                  {totalMappingsCount === 0 ? "暂无映射" : "无匹配映射"}
+                </div>
               ) : (
                 mappings.map((mapping) => {
                   const enabled = mapping.Enabled;
                   return (
-                    <div key={mapping.ID} className="p-2.5">
+                    <div
+                      key={mapping.ID}
+                      className={`p-2.5 ${selectedMappingIds.has(mapping.ID) ? "bg-muted/50" : ""}`}
+                    >
                       <div className="flex items-start gap-2">
+                        <Checkbox
+                          checked={selectedMappingIds.has(mapping.ID)}
+                          onCheckedChange={() => onToggleMappingSelection(mapping.ID)}
+                          className="mt-0.5 shrink-0"
+                          aria-label={`选择映射 ${mapping.ID}`}
+                        />
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-medium">
                             {getRealModelName(mapping.RealModelID)}

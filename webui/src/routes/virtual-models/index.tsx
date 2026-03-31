@@ -2,6 +2,7 @@ import Loading from "@/components/loading";
 import { BlacklistManagementDialog } from "./components/dialogs/blacklist/blacklist-management-dialog";
 import { ProviderSelectorDialog } from "./components/dialogs/blacklist/provider-selector-dialog";
 import { MappingBatchDialog } from "./components/dialogs/mappings/mapping-batch-dialog";
+import { BatchDeleteMappingsDialog } from "./components/dialogs/mappings/batch-delete-mappings-dialog";
 import { MappingFormDialog } from "./components/dialogs/mappings/mapping-form-dialog";
 import { MappingManagementDialog } from "./components/dialogs/mappings/mapping-management-dialog";
 import { VirtualModelDeleteDialog } from "./components/dialogs/virtual-model-delete-dialog";
@@ -61,12 +62,31 @@ export default function VirtualModelsPage() {
         open={page.mappingsDialogOpen}
         onOpenChange={page.handleMappingsDialogOpenChange}
         virtualModelName={page.currentVirtualModel?.Name}
-        mappings={page.mappings}
+        totalMappingsCount={page.mappings.length}
+        mappings={page.filteredMappings}
         getRealModelName={page.getRealModelName}
+        searchQuery={page.mappingSearchQuery}
+        onSearchQueryChange={page.setMappingSearchQuery}
+        selectedMappingIds={page.selectedMappingIds}
+        isAllFilteredSelected={page.isAllFilteredSelected}
+        isSomeFilteredSelected={page.isSomeFilteredSelected}
+        onSelectAllFiltered={page.selectAllFilteredMappings}
+        onToggleMappingSelection={page.toggleMappingSelection}
         onOpenBatchDialog={page.openBatchMappingDialog}
+        onOpenBatchDeleteDialog={page.openBatchDeleteDialog}
         onEditMapping={page.openEditMappingDialog}
         onDeleteMapping={(mappingId) => {
           void page.deleteMapping(mappingId);
+        }}
+      />
+
+      <BatchDeleteMappingsDialog
+        open={page.mappingBatchDeleteDialogOpen}
+        onOpenChange={page.setMappingBatchDeleteDialogOpen}
+        selectedCount={page.selectedMappingIds.size}
+        deleting={page.batchDeleting}
+        onConfirm={() => {
+          void page.confirmBatchDelete();
         }}
       />
 

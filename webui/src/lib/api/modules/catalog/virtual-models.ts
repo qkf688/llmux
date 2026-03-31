@@ -129,6 +129,16 @@ export async function deleteVirtualModelMapping(id: number, mappingId: number): 
   });
 }
 
+export async function batchDeleteVirtualModelMapping(
+  id: number,
+  ids: number[]
+): Promise<{ deleted: number }> {
+  return apiRequest<{ deleted: number }>(`/virtual-models/${id}/mappings/batch`, {
+    method: "DELETE",
+    body: JSON.stringify({ ids }),
+  });
+}
+
 export async function getVirtualModelStats(id: number): Promise<VirtualModelStats> {
   return apiRequest<VirtualModelStats>(`/virtual-models/${id}/stats`);
 }

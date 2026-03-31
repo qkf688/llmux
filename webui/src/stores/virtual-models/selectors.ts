@@ -13,6 +13,10 @@ export const selectVirtualModelsModelToDeleteId = (state: VirtualModelsPageState
 export const selectVirtualModelsMappingsDialogOpen = (state: VirtualModelsPageState) => state.mappingsDialogOpen;
 export const selectVirtualModelsCurrentVirtualModel = (state: VirtualModelsPageState) => state.currentVirtualModel;
 export const selectVirtualModelsMappings = (state: VirtualModelsPageState) => state.mappings;
+export const selectVirtualModelsMappingSearchQuery = (state: VirtualModelsPageState) => state.mappingSearchQuery;
+export const selectVirtualModelsSelectedMappingIds = (state: VirtualModelsPageState) => state.selectedMappingIds;
+export const selectVirtualModelsMappingBatchDeleteDialogOpen = (state: VirtualModelsPageState) =>
+  state.mappingBatchDeleteDialogOpen;
 
 export const selectVirtualModelsMappingFormDialogOpen = (state: VirtualModelsPageState) => state.mappingFormDialogOpen;
 export const selectVirtualModelsEditingMapping = (state: VirtualModelsPageState) => state.editingMapping;
@@ -43,6 +47,10 @@ export const selectSetVirtualModelsModelToDeleteId = (state: VirtualModelsPageSt
 
 export const selectSetVirtualModelsMappingsDialogOpen = (state: VirtualModelsPageState) => state.setMappingsDialogOpen;
 export const selectSetVirtualModelsCurrentVirtualModel = (state: VirtualModelsPageState) => state.setCurrentVirtualModel;
+export const selectSetVirtualModelsMappingSearchQuery = (state: VirtualModelsPageState) => state.setMappingSearchQuery;
+export const selectSetVirtualModelsSelectedMappingIds = (state: VirtualModelsPageState) => state.setSelectedMappingIds;
+export const selectSetVirtualModelsMappingBatchDeleteDialogOpen = (state: VirtualModelsPageState) =>
+  state.setMappingBatchDeleteDialogOpen;
 
 export const selectSetVirtualModelsMappingFormDialogOpen = (state: VirtualModelsPageState) =>
   state.setMappingFormDialogOpen;
@@ -63,4 +71,3 @@ export const selectSetVirtualModelsSelectedProviderIds = (state: VirtualModelsPa
 export const selectSetVirtualModelsProviderSearchQuery = (state: VirtualModelsPageState) => state.setProviderSearchQuery;
 
 export const selectResetVirtualModelsTransient = (state: VirtualModelsPageState) => state.resetTransient;
-

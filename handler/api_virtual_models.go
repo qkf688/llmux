@@ -36,6 +36,11 @@ type BatchVirtualModelMappingRequest struct {
 	Mappings []VirtualModelMappingRequest `json:"mappings"`
 }
 
+// BatchDeleteVirtualModelMappingRequest 批量删除虚拟模型映射请求结构
+type BatchDeleteVirtualModelMappingRequest struct {
+	IDs []uint `json:"ids"`
+}
+
 // BatchFailedItem 批量创建失败项
 type BatchFailedItem struct {
 	RealModelID uint   `json:"real_model_id"`
@@ -353,6 +358,39 @@ func DeleteVirtualModelMapping(c *gin.Context) {
 	}
 
 	common.Success(c, gin.H{"message": "Mapping deleted successfully"})
+}
+
+// BatchDeleteVirtualModelMapping 批量删除虚拟模型映射（硬删）
+func BatchDeleteVirtualModelMapping(c *gin.Context) {
+	id := c.Param("id")
+	var req BatchDeleteVirtualModelMappingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
+	if len(req.IDs) == 0 {
+		common.BadRequest(c, "No IDs provided")
+		return
+	}
+
+	// 检查虚拟模型是否存在
+	_, err := gorm.G[models.VirtualModel](models.DB).Where("id = ?", id).First(c.Request.Context())
+	if err != nil {
+		common.NotFound(c, "Virtual model not found")
+		return
+	}
+
+	// 批量删除映射（仅限该虚拟模型）
+	result := models.DB.WithContext(c.Request.Context()).
+		Unscoped().
+		Where("virtual_model_id = ? AND id IN ?", id, req.IDs).
+		Delete(&models.VirtualModelMapping{})
+	if result.Error != nil {
+		common.InternalServerError(c, "Failed to delete mappings: "+result.Error.Error())
+		return
+	}
+
+	common.Success(c, gin.H{"deleted": result.RowsAffected})
 }
 
 // GetVirtualModelStats 获取虚拟模型统计信息

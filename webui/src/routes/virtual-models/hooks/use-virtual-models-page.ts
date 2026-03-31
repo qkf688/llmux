@@ -22,7 +22,9 @@ import {
   selectSetVirtualModelsEditingModel,
   selectSetVirtualModelsLoading,
   selectSetVirtualModelsMappingBatchDialogOpen,
+  selectSetVirtualModelsMappingBatchDeleteDialogOpen,
   selectSetVirtualModelsMappingFormDialogOpen,
+  selectSetVirtualModelsMappingSearchQuery,
   selectSetVirtualModelsMappings,
   selectSetVirtualModelsMappingsDialogOpen,
   selectSetVirtualModelsModelDialogOpen,
@@ -32,6 +34,7 @@ import {
   selectSetVirtualModelsProviderSelectorDialogOpen,
   selectSetVirtualModelsProviders,
   selectSetVirtualModelsRealModels,
+  selectSetVirtualModelsSelectedMappingIds,
   selectSetVirtualModelsSelectedModelIds,
   selectSetVirtualModelsSelectedProviderIds,
   selectSetVirtualModelsVirtualModels,
@@ -45,7 +48,9 @@ import {
   selectVirtualModelsEditingModel,
   selectVirtualModelsLoading,
   selectVirtualModelsMappingBatchDialogOpen,
+  selectVirtualModelsMappingBatchDeleteDialogOpen,
   selectVirtualModelsMappingFormDialogOpen,
+  selectVirtualModelsMappingSearchQuery,
   selectVirtualModelsMappings,
   selectVirtualModelsMappingsDialogOpen,
   selectVirtualModelsModelDialogOpen,
@@ -55,6 +60,7 @@ import {
   selectVirtualModelsProviderSelectorDialogOpen,
   selectVirtualModelsProviders,
   selectVirtualModelsRealModels,
+  selectVirtualModelsSelectedMappingIds,
   selectVirtualModelsSelectedModelIds,
   selectVirtualModelsSelectedProviderIds,
   selectVirtualModelsVirtualModels,
@@ -77,6 +83,9 @@ export function useVirtualModelsPage() {
   const mappingsDialogOpen = useVirtualModelsPageStore(selectVirtualModelsMappingsDialogOpen);
   const currentVirtualModel = useVirtualModelsPageStore(selectVirtualModelsCurrentVirtualModel);
   const mappings = useVirtualModelsPageStore(selectVirtualModelsMappings);
+  const mappingSearchQuery = useVirtualModelsPageStore(selectVirtualModelsMappingSearchQuery);
+  const selectedMappingIds = useVirtualModelsPageStore(selectVirtualModelsSelectedMappingIds);
+  const mappingBatchDeleteDialogOpen = useVirtualModelsPageStore(selectVirtualModelsMappingBatchDeleteDialogOpen);
   const mappingFormDialogOpen = useVirtualModelsPageStore(selectVirtualModelsMappingFormDialogOpen);
   const editingMapping = useVirtualModelsPageStore(selectVirtualModelsEditingMapping);
   const mappingBatchDialogOpen = useVirtualModelsPageStore(selectVirtualModelsMappingBatchDialogOpen);
@@ -101,6 +110,11 @@ export function useVirtualModelsPage() {
   const setModelToDeleteId = useVirtualModelsPageStore(selectSetVirtualModelsModelToDeleteId);
   const setMappingsDialogOpen = useVirtualModelsPageStore(selectSetVirtualModelsMappingsDialogOpen);
   const setCurrentVirtualModel = useVirtualModelsPageStore(selectSetVirtualModelsCurrentVirtualModel);
+  const setMappingSearchQuery = useVirtualModelsPageStore(selectSetVirtualModelsMappingSearchQuery);
+  const setSelectedMappingIds = useVirtualModelsPageStore(selectSetVirtualModelsSelectedMappingIds);
+  const setMappingBatchDeleteDialogOpen = useVirtualModelsPageStore(
+    selectSetVirtualModelsMappingBatchDeleteDialogOpen
+  );
   const setMappingFormDialogOpen = useVirtualModelsPageStore(selectSetVirtualModelsMappingFormDialogOpen);
   const setEditingMapping = useVirtualModelsPageStore(selectSetVirtualModelsEditingMapping);
   const setMappingBatchDialogOpen = useVirtualModelsPageStore(selectSetVirtualModelsMappingBatchDialogOpen);
@@ -195,13 +209,30 @@ export function useVirtualModelsPage() {
     invertBatchModelSelection,
     clearBatchModelSelection,
     submitBatchMapping,
+    filteredMappings,
+    mappingBatchDeleteDialogOpen: mappingBatchDeleteDialogOpenFromHook,
+    setMappingBatchDeleteDialogOpen: setMappingBatchDeleteDialogOpenFromHook,
+    mappingSearchQuery: mappingSearchQueryFromHook,
+    setMappingSearchQuery: setMappingSearchQueryFromHook,
+    selectedMappingIds: selectedMappingIdsFromHook,
+    isAllFilteredSelected,
+    isSomeFilteredSelected,
+    toggleMappingSelection,
+    selectAllFilteredMappings,
+    openBatchDeleteDialog,
+    confirmBatchDelete,
+    batchDeleting,
   } = useVirtualModelsMappings({
     currentVirtualModel,
+    mappings,
     editingMapping,
     selectedModelIds,
     batchPriority,
     batchWeight,
     batchEnabled,
+    mappingSearchQuery,
+    selectedMappingIds,
+    mappingBatchDeleteDialogOpen,
     filteredModels,
     mappedModelIds,
     mappingForm,
@@ -218,6 +249,9 @@ export function useVirtualModelsPage() {
     setBatchWeight,
     setBatchEnabled,
     setModelSearchQuery,
+    setMappingSearchQuery,
+    setSelectedMappingIds,
+    setMappingBatchDeleteDialogOpen,
   });
 
   const {
@@ -249,9 +283,13 @@ export function useVirtualModelsPage() {
     mappedModelIds,
     currentVirtualModel,
     mappings,
+    filteredMappings,
     editingModel,
     editingMapping,
     modelToDeleteId,
+    mappingSearchQuery: mappingSearchQueryFromHook,
+    selectedMappingIds: selectedMappingIdsFromHook,
+    mappingBatchDeleteDialogOpen: mappingBatchDeleteDialogOpenFromHook,
     selectedModelIds,
     selectedProviderIds,
     batchPriority,
@@ -286,6 +324,15 @@ export function useVirtualModelsPage() {
     invertBatchModelSelection,
     clearBatchModelSelection,
     submitBatchMapping,
+    isAllFilteredSelected,
+    isSomeFilteredSelected,
+    toggleMappingSelection,
+    selectAllFilteredMappings,
+    openBatchDeleteDialog,
+    confirmBatchDelete,
+    batchDeleting,
+    setMappingBatchDeleteDialogOpen: setMappingBatchDeleteDialogOpenFromHook,
+    setMappingSearchQuery: setMappingSearchQueryFromHook,
     openBlacklistDialog,
     handleBlacklistDialogOpenChange,
     openProviderSelectorDialog,

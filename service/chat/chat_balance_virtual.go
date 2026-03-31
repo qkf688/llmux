@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -35,10 +36,24 @@ func balanceChatVirtual(ctx context.Context, start time.Time, style string, befo
 		modelWithProviders, err := queryEnabledModelProviders(ctx, realModel.ID, before)
 		if err != nil {
 			slog.Error("failed to get providers for real model", "real_model", realModel.Name, "error", err)
+			_, _ = SaveChatLog(ctx, models.ChatLog{
+				Name:          providersWithMeta.VirtualModelName,
+				ProviderModel: realModel.Name,
+				Status:        "error",
+				Style:         style,
+				Error:         fmt.Sprintf("virtual model skip: failed to query providers for real model %q: %v", realModel.Name, err),
+			})
 			continue
 		}
 		if len(modelWithProviders) == 0 {
 			slog.Warn("no providers for real model", "real_model", realModel.Name)
+			_, _ = SaveChatLog(ctx, models.ChatLog{
+				Name:          providersWithMeta.VirtualModelName,
+				ProviderModel: realModel.Name,
+				Status:        "error",
+				Style:         style,
+				Error:         fmt.Sprintf("virtual model skip: no enabled providers for real model %q", realModel.Name),
+			})
 			continue
 		}
 

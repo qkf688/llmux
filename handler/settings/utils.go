@@ -59,7 +59,8 @@ func GetSettingBool(ctx context.Context, key string) bool {
 func cleanupExcessLogs(retentionCount int) {
 	// 获取总日志数
 	var total int64
-	if err := models.DB.Model(&models.ChatLog{}).Count(&total).Error; err != nil {
+	// 注意：ChatLog 使用 gorm.Model（包含 DeletedAt）。这里必须使用 Unscoped 统计，确保历史软删记录也会被真正清理。
+	if err := models.DB.Unscoped().Model(&models.ChatLog{}).Count(&total).Error; err != nil {
 		slog.Error("failed to count logs for cleanup", "error", err)
 		return
 	}
@@ -70,7 +71,7 @@ func cleanupExcessLogs(retentionCount int) {
 
 		// 获取需要删除的日志ID（最旧的）
 		var logsToDelete []models.ChatLog
-		if err := models.DB.Model(&models.ChatLog{}).
+		if err := models.DB.Unscoped().Model(&models.ChatLog{}).
 			Order("id ASC").
 			Limit(deleteCount).
 			Find(&logsToDelete).Error; err != nil {

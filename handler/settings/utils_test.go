@@ -281,3 +281,79 @@ func TestEnableAllAssociations(t *testing.T) {
 		t.Fatalf("deleted status = %#v, want false", gotDeleted.Status)
 	}
 }
+
+func TestCleanupExcessLogs_HardDeletesSoftDeletedBeyondRetention(t *testing.T) {
+	initTestDB(t)
+
+	logs := make([]models.ChatLog, 200)
+	for i := range logs {
+		logs[i] = models.ChatLog{
+			Name:          "m1",
+			ProviderModel: "pm1",
+			ProviderName:  "p1",
+			Status:        "success",
+		}
+		if err := models.DB.Create(&logs[i]).Error; err != nil {
+			t.Fatalf("create log %d: %v", i, err)
+		}
+		if err := models.DB.Create(&models.ChatIO{
+			LogId: logs[i].ID,
+			Input: "in",
+			OutputUnion: models.OutputUnion{
+				OfString: "out",
+			},
+		}).Error; err != nil {
+			t.Fatalf("create chat io %d: %v", i, err)
+		}
+	}
+
+	idsToSoftDelete := make([]uint, 100)
+	for i := 0; i < 100; i++ {
+		idsToSoftDelete[i] = logs[i].ID
+	}
+	if err := models.DB.Where("id IN ?", idsToSoftDelete).Delete(&models.ChatLog{}).Error; err != nil {
+		t.Fatalf("soft delete logs: %v", err)
+	}
+
+	var visible int64
+	if err := models.DB.Model(&models.ChatLog{}).Count(&visible).Error; err != nil {
+		t.Fatalf("count visible logs: %v", err)
+	}
+	if visible != 100 {
+		t.Fatalf("visible logs = %d, want 100", visible)
+	}
+
+	var total int64
+	if err := models.DB.Unscoped().Model(&models.ChatLog{}).Count(&total).Error; err != nil {
+		t.Fatalf("count total logs: %v", err)
+	}
+	if total != 200 {
+		t.Fatalf("total logs = %d, want 200", total)
+	}
+
+	cleanupExcessLogs(100)
+
+	var afterTotal int64
+	if err := models.DB.Unscoped().Model(&models.ChatLog{}).Count(&afterTotal).Error; err != nil {
+		t.Fatalf("count total logs after cleanup: %v", err)
+	}
+	if afterTotal != 100 {
+		t.Fatalf("total logs after cleanup = %d, want 100", afterTotal)
+	}
+
+	var softDeleted int64
+	if err := models.DB.Unscoped().Model(&models.ChatLog{}).Where("deleted_at IS NOT NULL").Count(&softDeleted).Error; err != nil {
+		t.Fatalf("count soft deleted logs: %v", err)
+	}
+	if softDeleted != 0 {
+		t.Fatalf("soft deleted logs = %d, want 0", softDeleted)
+	}
+
+	var ioTotal int64
+	if err := models.DB.Unscoped().Model(&models.ChatIO{}).Count(&ioTotal).Error; err != nil {
+		t.Fatalf("count chat io: %v", err)
+	}
+	if ioTotal != 100 {
+		t.Fatalf("chat io total = %d, want 100", ioTotal)
+	}
+}

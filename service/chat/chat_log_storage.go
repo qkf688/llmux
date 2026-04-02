@@ -35,7 +35,9 @@ func cleanupLogsIfNeeded() {
 
 	// 获取总日志数
 	var total int64
-	if err := models.DB.Model(&models.ChatLog{}).Count(&total).Error; err != nil {
+	// 注意：ChatLog 使用 gorm.Model（包含 DeletedAt）。这里必须使用 Unscoped 统计，确保历史软删记录也会被真正清理，
+	// 否则 UI 看起来只保留了 retentionCount 条，但数据库内仍会堆积软删记录，导致“清空日志”时 deleted 远大于 retentionCount。
+	if err := models.DB.Unscoped().Model(&models.ChatLog{}).Count(&total).Error; err != nil {
 		slog.Error("failed to count logs for cleanup", "error", err)
 		return
 	}
@@ -46,7 +48,7 @@ func cleanupLogsIfNeeded() {
 
 		// 获取需要删除的日志ID（最旧的）
 		var logsToDelete []models.ChatLog
-		if err := models.DB.Model(&models.ChatLog{}).
+		if err := models.DB.Unscoped().Model(&models.ChatLog{}).
 			Order("id ASC").
 			Limit(deleteCount).
 			Find(&logsToDelete).Error; err != nil {
@@ -60,17 +62,17 @@ func cleanupLogsIfNeeded() {
 			ids[i] = log.ID
 		}
 
-		// 删除对应的ChatIO记录
-		if _, err := gorm.G[models.ChatIO](models.DB).
+		// 删除对应的ChatIO记录（硬删）
+		if err := models.DB.WithContext(ctx).Unscoped().
 			Where("log_id IN ?", ids).
-			Delete(ctx); err != nil {
+			Delete(&models.ChatIO{}).Error; err != nil {
 			slog.Error("failed to delete chat io records", "error", err)
 		}
 
-		// 删除日志记录
-		if _, err := gorm.G[models.ChatLog](models.DB).
+		// 删除日志记录（硬删）
+		if err := models.DB.WithContext(ctx).Unscoped().
 			Where("id IN ?", ids).
-			Delete(ctx); err != nil {
+			Delete(&models.ChatLog{}).Error; err != nil {
 			slog.Error("failed to delete logs", "error", err)
 			return
 		}

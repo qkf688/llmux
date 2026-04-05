@@ -2,6 +2,12 @@ import { apiRequest } from "../../core/client";
 
 export interface PromptTokensDetails {
   cached_tokens: number;
+  audio_tokens: number;
+}
+
+export interface CompletionTokensDetails {
+  reasoning_tokens: number;
+  audio_tokens: number;
 }
 
 export interface ChatLog {
@@ -25,6 +31,7 @@ export interface ChatLog {
   completion_tokens: number;
   total_tokens: number;
   prompt_tokens_details: PromptTokensDetails;
+  completion_tokens_details: CompletionTokensDetails;
   RequestHeaders?: string;
   RequestBody?: string;
   ResponseHeaders?: string;

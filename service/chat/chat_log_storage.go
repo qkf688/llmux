@@ -4,12 +4,18 @@ import (
 	"context"
 	"log/slog"
 	"strconv"
+	"time"
 
 	"github.com/atopos31/llmio/models"
 	"gorm.io/gorm"
 )
 
 func SaveChatLog(ctx context.Context, log models.ChatLog) (uint, error) {
+	// 统计应独立于日志存储：即使关闭日志记录，也要更新仪表盘统计。
+	if err := recordRequestStats(ctx, time.Now(), log.Name); err != nil {
+		slog.Warn("failed to record request stats", "error", err)
+	}
+
 	// 检查是否完全关闭日志记录
 	if getDisableAllLogs(ctx) {
 		return 0, nil // 返回0表示不记录日志

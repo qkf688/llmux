@@ -9,7 +9,7 @@ import {
 } from "@/lib/api";
 import { toast } from "sonner";
 import type { LogsFilters } from "../types";
-import { exportRequestResponse } from "../utils/export-log";
+import { exportChatLog, type ChatLogExportSections } from "../utils/export-log";
 import { toApiLogsFilters, type LogsPageState } from "@/stores/logs";
 import { toErrorMessage } from "@/lib/errors";
 
@@ -19,6 +19,8 @@ const needsLogDetail = (log: ChatLog) =>
   log.ResponseHeaders === undefined &&
   log.ResponseBody === undefined &&
   log.RawResponseBody === undefined;
+
+const shouldIncludeRequestResponse = (sections: ChatLogExportSections) => sections.request || sections.response;
 
 type UseLogsActionsInput = {
   filters: LogsFilters;
@@ -66,17 +68,17 @@ export function useLogsActions({
     navigate(`/logs/${log.ID}/chat-io`);
   };
 
-  const handleExportRequestResponse = (log: ChatLog) => {
-    void (async () => {
-      try {
-        const exportLog = needsLogDetail(log) ? await getLogDetail(log.ID) : log;
-        exportRequestResponse(exportLog);
-        toast.success("导出成功");
-      } catch (error) {
-        const message = toErrorMessage(error);
-        toast.error(`导出失败: ${message}`);
-      }
-    })();
+  const handleExportLog = async (log: ChatLog, sections: ChatLogExportSections) => {
+    try {
+      const exportLog =
+        shouldIncludeRequestResponse(sections) && needsLogDetail(log) ? await getLogDetail(log.ID) : log;
+      exportChatLog(exportLog, sections);
+      toast.success("导出成功");
+    } catch (error) {
+      const message = toErrorMessage(error);
+      toast.error(`导出失败: ${message}`);
+      throw error;
+    }
   };
 
   const confirmDeleteLog = async () => {
@@ -170,7 +172,7 @@ export function useLogsActions({
   return {
     canViewChatIO,
     handleViewChatIO,
-    handleExportRequestResponse,
+    handleExportLog,
     confirmDeleteLog,
     openBatchDeleteDialog,
     confirmBatchDelete,

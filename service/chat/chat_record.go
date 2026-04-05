@@ -23,17 +23,29 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 		if err != nil {
 			slog.Error("processer error", "log_id", logId, "error", err)
 			// 更新日志状态为错误
-			if _, updateErr := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, models.ChatLog{
-				Status: "error",
-				Error:  fmt.Sprintf("processer error: %v", err),
-			}); updateErr != nil {
-				slog.Error("failed to update log status on processer error", "log_id", logId, "error", updateErr)
+			if logId != 0 {
+				if _, updateErr := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, models.ChatLog{
+					Status: "error",
+					Error:  fmt.Sprintf("processer error: %v", err),
+				}); updateErr != nil {
+					slog.Error("failed to update log status on processer error", "log_id", logId, "error", updateErr)
+				}
 			}
 			return err
 		}
 
 		// 更新日志记录
 		logUpdate := *log
+
+		// 统计应独立于日志存储：即使关闭日志记录（logId==0），也要写入 tokens 统计。
+		if err := recordTokenStats(ctx, reqStart, logUpdate.Usage.TotalTokens); err != nil {
+			slog.Warn("failed to record token stats", "error", err)
+		}
+
+		// 若未记录 ChatLog（例如 disable_all_logs=true），这里不再进行任何日志表更新/写入。
+		if logId == 0 {
+			return nil
+		}
 
 		// 检查是否启用原始请求响应记录
 		logRawOptions := getLogRawRequestResponse(ctx)

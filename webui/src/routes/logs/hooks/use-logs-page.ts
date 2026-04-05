@@ -170,7 +170,7 @@ export function useLogsPage() {
   const {
     canViewChatIO,
     handleViewChatIO,
-    handleExportRequestResponse,
+    handleExportLog,
     confirmDeleteLog,
     openBatchDeleteDialog,
     confirmBatchDelete,
@@ -234,7 +234,7 @@ export function useLogsPage() {
     handleDetailDialogOpenChange,
     canViewChatIO,
     handleViewChatIO,
-    handleExportRequestResponse,
+    handleExportLog,
     openDeleteDialog,
     handleDeleteDialogOpenChange,
     confirmDeleteLog,

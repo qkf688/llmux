@@ -10,12 +10,13 @@ import {
 } from "../../../utils/formatters";
 import { DetailCard } from "./detail-card";
 import { RequestResponseSection } from "./request-response-section";
+import type { ChatLogExportSections } from "../../../utils/export-log";
 
 type LogDetailDialogProps = {
   open: boolean;
   log: ChatLog | null;
   onOpenChange: (open: boolean) => void;
-  onExportRequestResponse: (log: ChatLog) => void | Promise<void>;
+  onExportLog: (log: ChatLog, sections: ChatLogExportSections) => void | Promise<void>;
 };
 
 const needsLogDetail = (log: ChatLog) =>
@@ -25,7 +26,7 @@ const needsLogDetail = (log: ChatLog) =>
   log.ResponseBody === undefined &&
   log.RawResponseBody === undefined;
 
-export function LogDetailDialog({ open, log, onOpenChange, onExportRequestResponse }: LogDetailDialogProps) {
+export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDetailDialogProps) {
   const [detailLog, setDetailLog] = useState<ChatLog | null>(log);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -137,7 +138,7 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportRequestRespon
             <RequestResponseSection
               log={detailLog}
               loading={detailLoading}
-              onExportRequestResponse={onExportRequestResponse}
+              onExportLog={onExportLog}
             />
 
             <div className="space-y-2">

@@ -64,7 +64,7 @@ export default function LogsPage() {
         open={page.detailDialogOpen}
         log={page.selectedLog}
         onOpenChange={page.handleDetailDialogOpenChange}
-        onExportRequestResponse={page.handleExportRequestResponse}
+        onExportLog={page.handleExportLog}
       />
 
       <DeleteLogDialog

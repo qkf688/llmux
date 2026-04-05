@@ -123,6 +123,33 @@ type Usage struct {
 	CompletionTokensDetails CompletionTokensDetails `json:"completion_tokens_details" gorm:"serializer:json"`
 }
 
+// StatsTotal 系统统计（全量累计）
+// 注意：该表用于仪表盘统计，不依赖 chat_logs，避免清空日志影响仪表盘。
+type StatsTotal struct {
+	ID        uint      `gorm:"primaryKey"`
+	Reqs      int64     `json:"reqs"`
+	Tokens    int64     `json:"tokens"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// StatsDaily 系统统计（按天累计，日期格式：2006-01-02）
+type StatsDaily struct {
+	Date      string    `gorm:"primaryKey;type:varchar(10)" json:"date"`
+	Reqs      int64     `json:"reqs"`
+	Tokens    int64     `json:"tokens"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// StatsModelTotal 模型调用统计（全量累计）
+type StatsModelTotal struct {
+	Name      string    `gorm:"primaryKey;type:varchar(255)" json:"name"`
+	Calls     int64     `json:"calls"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type PromptTokensDetails struct {
 	CachedTokens int64 `json:"cached_tokens"`
 	AudioTokens  int64 `json:"audio_tokens"`

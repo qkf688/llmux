@@ -219,6 +219,10 @@ func validateAndPatchOutgoingOpenAIRequest(providerType string, body []byte) ([]
 		body = patched
 	}
 
+	if patched, changed, err := preprocessopenai.FillMissingMessageContent(body); err == nil && changed {
+		body = patched
+	}
+
 	return body, nil
 }
 

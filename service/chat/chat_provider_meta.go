@@ -41,7 +41,8 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 		orderedModels, err := virtualModelService.SelectRealModelsOrdered(ctx, &virtualModel)
 		if err != nil {
 			if _, err := SaveChatLog(ctx, models.ChatLog{
-				Name:   before.Model,
+				Name: before.Model,
+				// RealModelName unknown: virtual selection failed before any real model was chosen.
 				Status: "error",
 				Style:  style,
 				Error:  fmt.Sprintf("virtual model selection failed: %v", err),
@@ -100,10 +101,11 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			if _, err := SaveChatLog(ctx, models.ChatLog{
-				Name:   before.Model,
-				Status: "error",
-				Style:  style,
-				Error:  err.Error(),
+				Name:          before.Model,
+				RealModelName: before.Model,
+				Status:        "error",
+				Style:         style,
+				Error:         err.Error(),
 			}); err != nil {
 				return nil, err
 			}

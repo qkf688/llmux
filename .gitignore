@@ -22,3 +22,5 @@ nul
 .trae
 .gomodcache
 .pnpm-store/
+.kilo/
+webui/tsconfig.tsbuildinfo

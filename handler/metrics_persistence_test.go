@@ -21,6 +21,9 @@ func TestMetricsAndCounts_NotAffectedByClearAllLogs(t *testing.T) {
 	if err := models.DB.Create(&models.StatsModelTotal{Name: "m1", Calls: 42}).Error; err != nil {
 		t.Fatalf("create stats model total: %v", err)
 	}
+	if err := models.DB.Create(&models.StatsRealModelTotal{Name: "m1", Calls: 5}).Error; err != nil {
+		t.Fatalf("create stats real model total: %v", err)
+	}
 
 	// Insert logs so clear endpoints actually delete something.
 	log := models.ChatLog{Name: "m1", Status: "success"}
@@ -68,6 +71,25 @@ func TestMetricsAndCounts_NotAffectedByClearAllLogs(t *testing.T) {
 		}
 		if len(payload.Data) == 0 || payload.Data[0].Model != "m1" || payload.Data[0].Calls != 42 {
 			t.Fatalf("counts = %+v, want first item m1=42", payload.Data)
+		}
+	}
+
+	// real model counts before clear
+	{
+		c, w := newHandlerTestContext("GET", "/metrics/real-model-counts")
+		RealModelCounts(c)
+		if w.Code != 200 {
+			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
+		}
+		var payload apiEnvelope[[]Count]
+		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
+		}
+		if payload.Code != 200 {
+			t.Fatalf("payload code = %d, want 200, body=%s", payload.Code, w.Body.String())
+		}
+		if len(payload.Data) == 0 || payload.Data[0].Model != "m1" || payload.Data[0].Calls != 5 {
+			t.Fatalf("real model counts = %+v, want first item m1=5", payload.Data)
 		}
 	}
 
@@ -132,6 +154,25 @@ func TestMetricsAndCounts_NotAffectedByClearAllLogs(t *testing.T) {
 		}
 	}
 
+	// real model counts after clear
+	{
+		c, w := newHandlerTestContext("GET", "/metrics/real-model-counts")
+		RealModelCounts(c)
+		if w.Code != 200 {
+			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
+		}
+		var payload apiEnvelope[[]Count]
+		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
+		}
+		if payload.Code != 200 {
+			t.Fatalf("payload code = %d, want 200, body=%s", payload.Code, w.Body.String())
+		}
+		if len(payload.Data) == 0 || payload.Data[0].Model != "m1" || payload.Data[0].Calls != 5 {
+			t.Fatalf("real model counts after clear = %+v, want first item m1=5", payload.Data)
+		}
+	}
+
 	// Ensure the log tables are actually cleared.
 	{
 		var logsCount int64
@@ -171,4 +212,3 @@ func TestMetricsAndCounts_NotAffectedByClearAllLogs(t *testing.T) {
 		}
 	}
 }
-

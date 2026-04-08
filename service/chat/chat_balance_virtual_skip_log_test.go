@@ -39,7 +39,7 @@ func TestBalanceChatVirtual_NoProvidersForRealModel_WritesSkipLog(t *testing.T) 
 		},
 	}
 
-	_, _, err := balanceChatVirtual(context.Background(), time.Now(), "openai", Before{Model: virtual.Name}, pwm, models.ReqMeta{})
+	_, _, _, err := balanceChatVirtual(context.Background(), time.Now(), "openai", Before{Model: virtual.Name}, pwm, models.ReqMeta{})
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}

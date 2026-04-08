@@ -61,12 +61,20 @@ func TestDisableAllLogs_StillUpdatesStats(t *testing.T) {
 		t.Fatalf("modelTotal.calls = %d, want 1", modelTotal.Calls)
 	}
 
+	var realModelTotal models.StatsRealModelTotal
+	if err := models.DB.First(&realModelTotal, "name = ?", "m1").Error; err != nil {
+		t.Fatalf("load stats real model total: %v", err)
+	}
+	if realModelTotal.Calls != 1 {
+		t.Fatalf("realModelTotal.calls = %d, want 1", realModelTotal.Calls)
+	}
+
 	proc := func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
 		_, _ = io.ReadAll(pr)
 		return &models.ChatLog{Usage: models.Usage{TotalTokens: 123}}, &models.OutputUnion{OfString: `{"ok":true}`}, nil
 	}
 
-	RecordLog(context.Background(), time.Now(), io.NopCloser(strings.NewReader("x")), proc, 0, Before{Stream: false, raw: []byte(`{}`)}, false)
+	RecordLog(context.Background(), time.Now(), io.NopCloser(strings.NewReader("x")), proc, 0, Before{Stream: false, raw: []byte(`{}`)}, false, "p1")
 
 	var afterDaily models.StatsDaily
 	if err := models.DB.First(&afterDaily, "date = ?", today).Error; err != nil {
@@ -99,3 +107,49 @@ func TestDisableAllLogs_StillUpdatesStats(t *testing.T) {
 	}
 }
 
+func TestRecordRequestStatsAndTokenStats_UpdatesHourly(t *testing.T) {
+	initChatRecordTestDB(t)
+
+	at := time.Date(2026, 1, 2, 15, 4, 5, 0, time.Now().Location())
+	date := at.Format("2006-01-02")
+	hour := at.Hour()
+
+	if err := recordRequestStats(context.Background(), at, ""); err != nil {
+		t.Fatalf("recordRequestStats: %v", err)
+	}
+	if err := recordRequestStats(context.Background(), at, ""); err != nil {
+		t.Fatalf("recordRequestStats again: %v", err)
+	}
+	if err := recordTokenStats(context.Background(), at, 100); err != nil {
+		t.Fatalf("recordTokenStats: %v", err)
+	}
+	if err := recordTokenStats(context.Background(), at, 23); err != nil {
+		t.Fatalf("recordTokenStats again: %v", err)
+	}
+
+	if err := recordRealModelRequestStats(context.Background(), at, "rm1"); err != nil {
+		t.Fatalf("recordRealModelRequestStats: %v", err)
+	}
+	if err := recordRealModelRequestStats(context.Background(), at, "rm1"); err != nil {
+		t.Fatalf("recordRealModelRequestStats again: %v", err)
+	}
+
+	var realModelTotal models.StatsRealModelTotal
+	if err := models.DB.First(&realModelTotal, "name = ?", "rm1").Error; err != nil {
+		t.Fatalf("load stats real model total: %v", err)
+	}
+	if realModelTotal.Calls != 2 {
+		t.Fatalf("realModelTotal.calls=%d, want 2", realModelTotal.Calls)
+	}
+
+	var hourly models.StatsHourly
+	if err := models.DB.First(&hourly, "date = ? AND hour = ?", date, hour).Error; err != nil {
+		t.Fatalf("load stats hourly: %v", err)
+	}
+	if hourly.Reqs != 2 {
+		t.Fatalf("hourly.reqs=%d, want 2", hourly.Reqs)
+	}
+	if hourly.Tokens != 123 {
+		t.Fatalf("hourly.tokens=%d, want 123", hourly.Tokens)
+	}
+}

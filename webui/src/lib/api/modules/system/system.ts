@@ -22,6 +22,7 @@ export interface ProviderMetric {
   success_rate: number;
   avg_response_time: number;
   total_requests: number;
+  total_tokens: number;
   success_count: number;
   failure_count: number;
 }

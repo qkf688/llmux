@@ -27,6 +27,7 @@ type singleProviderAttemptInput struct {
 	Start             time.Time
 	Style             string
 	Before            Before
+	RealModelName     string
 	ReqMeta           models.ReqMeta
 	IOLog             bool
 	Retry             int
@@ -54,6 +55,7 @@ type requestLogSnapshot struct {
 func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog chan<- models.ChatLog) singleProviderAttemptResult {
 	logEntry := models.ChatLog{
 		Name:          input.Before.Model,
+		RealModelName: input.RealModelName,
 		ProviderModel: input.ModelWithProvider.ProviderModel,
 		ProviderName:  input.Provider.Name,
 		Status:        "success",
@@ -83,6 +85,9 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 			return singleProviderAttemptResult{FatalErr: bodyErr}
 		}
 		retryLog <- logEntry.WithError(fmt.Errorf("transform request error: %v", bodyErr))
+		if err := recordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
+			slog.Warn("failed to record provider stats", "provider", input.Provider.Name, "error", err)
+		}
 		return singleProviderAttemptResult{RemoveWeight: true}
 	}
 
@@ -92,6 +97,9 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 	req, err := input.ChatModel.BuildReq(reqCtx, header, input.ModelWithProvider.ProviderModel, requestBody)
 	if err != nil {
 		retryLog <- logEntry.WithError(err)
+		if err := recordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
+			slog.Warn("failed to record provider stats", "provider", input.Provider.Name, "error", err)
+		}
 		return singleProviderAttemptResult{RemoveWeight: true}
 	}
 
@@ -115,6 +123,9 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		}
 		updateChatLogByID(input.Ctx, logID, errorUpdate, "failed to update log status")
 		applyProviderFailureAdjustments(input.Ctx, input.ModelWithProvider.ID, input.Provider.Name, input.ModelWithProvider.ProviderModel)
+		if err := recordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
+			slog.Warn("failed to record provider stats", "provider", input.Provider.Name, "error", err)
+		}
 		return singleProviderAttemptResult{RemoveWeight: true, RemovePriority: true}
 	}
 
@@ -151,6 +162,9 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 			}
 			updateChatLogByID(input.Ctx, logID, errorUpdate, "failed to update log status")
 			applyProviderFailureAdjustments(input.Ctx, input.ModelWithProvider.ID, input.Provider.Name, input.ModelWithProvider.ProviderModel)
+			if err := recordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
+				slog.Warn("failed to record provider stats", "provider", input.Provider.Name, "error", err)
+			}
 			res.Body.Close()
 			return singleProviderAttemptResult{RemoveWeight: true}
 		}
@@ -289,6 +303,9 @@ func handleNonOKProviderResponse(
 
 	updateChatLogByID(ctx, logID, errorUpdate, "failed to update log status")
 	applyProviderFailureAdjustments(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
+	if err := recordProviderStats(context.Background(), provider.Name, false, 0, 0); err != nil {
+		slog.Warn("failed to record provider stats", "provider", provider.Name, "error", err)
+	}
 	res.Body.Close()
 
 	if res.StatusCode == http.StatusTooManyRequests {

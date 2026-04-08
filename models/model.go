@@ -84,7 +84,10 @@ type VirtualModelMapping struct {
 
 type ChatLog struct {
 	gorm.Model
-	Name          string `gorm:"index"`
+	Name string `gorm:"index"`
+	// RealModelName is the actual system model name that was hit.
+	// For direct requests it equals Name; for virtual model routing it is the selected real model.
+	RealModelName string `gorm:"index"`
 	ProviderModel string `gorm:"index"`
 	ProviderName  string `gorm:"index"`
 	Status        string `gorm:"index"` // error or success
@@ -142,12 +145,43 @@ type StatsDaily struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// StatsHourly 系统统计（按小时累计，日期格式：2006-01-02，小时范围：0-23）
+type StatsHourly struct {
+	Date      string    `gorm:"primaryKey;type:varchar(10)" json:"date"`
+	Hour      int       `gorm:"primaryKey" json:"hour"`
+	Reqs      int64     `json:"reqs"`
+	Tokens    int64     `json:"tokens"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 // StatsModelTotal 模型调用统计（全量累计）
 type StatsModelTotal struct {
 	Name      string    `gorm:"primaryKey;type:varchar(255)" json:"name"`
 	Calls     int64     `json:"calls"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// StatsRealModelTotal 真实命中模型调用统计（全量累计）
+// 口径：按 ChatLog.RealModelName（为空时由写入侧回退到 ChatLog.Name）累计。
+type StatsRealModelTotal struct {
+	Name      string    `gorm:"primaryKey;type:varchar(255)" json:"name"`
+	Calls     int64     `json:"calls"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// StatsProviderTotal 供应商调用统计（全量累计）
+type StatsProviderTotal struct {
+	ProviderName    string    `gorm:"primaryKey;type:varchar(255)" json:"provider_name"`
+	TotalRequests   int64     `json:"total_requests"`
+	SuccessCount    int64     `json:"success_count"`
+	FailureCount    int64     `json:"failure_count"`
+	TotalTokens     int64     `json:"total_tokens"`
+	AvgResponseTime int64     `json:"avg_response_time"` // 累计响应时间（用于计算平均值）
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 type PromptTokensDetails struct {

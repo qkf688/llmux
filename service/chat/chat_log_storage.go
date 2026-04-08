@@ -15,6 +15,14 @@ func SaveChatLog(ctx context.Context, log models.ChatLog) (uint, error) {
 	if err := recordRequestStats(ctx, time.Now(), log.Name); err != nil {
 		slog.Warn("failed to record request stats", "error", err)
 	}
+	// 真实模型统计：优先用 RealModelName，异常路径回退到 Name。
+	realModelName := log.RealModelName
+	if realModelName == "" {
+		realModelName = log.Name
+	}
+	if err := recordRealModelRequestStats(ctx, time.Now(), realModelName); err != nil {
+		slog.Warn("failed to record real model request stats", "error", err)
+	}
 
 	// 检查是否完全关闭日志记录
 	if getDisableAllLogs(ctx) {

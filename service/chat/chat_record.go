@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, processer Processer, logId uint, before Before, ioLog bool) {
+func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, processer Processer, logId uint, before Before, ioLog bool, providerName string) {
 	recordFunc := func() error {
 		defer reader.Close()
 
@@ -31,6 +31,10 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 					slog.Error("failed to update log status on processer error", "log_id", logId, "error", updateErr)
 				}
 			}
+
+			if statErr := recordProviderStats(ctx, providerName, false, 0, 0); statErr != nil {
+				slog.Warn("failed to record provider stats on processer error", "error", statErr)
+			}
 			return err
 		}
 
@@ -40,6 +44,11 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 		// 统计应独立于日志存储：即使关闭日志记录（logId==0），也要写入 tokens 统计。
 		if err := recordTokenStats(ctx, reqStart, logUpdate.Usage.TotalTokens); err != nil {
 			slog.Warn("failed to record token stats", "error", err)
+		}
+
+		responseTimeMs := int64(logUpdate.FirstChunkTime.Milliseconds())
+		if statErr := recordProviderStats(ctx, providerName, true, responseTimeMs, logUpdate.Usage.TotalTokens); statErr != nil {
+			slog.Warn("failed to record provider stats", "error", statErr)
 		}
 
 		// 若未记录 ChatLog（例如 disable_all_logs=true），这里不再进行任何日志表更新/写入。

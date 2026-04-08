@@ -53,7 +53,12 @@ func main() {
 	api := router.Group("/api")
 	api.Use(middleware.Auth(os.Getenv("TOKEN")))
 	api.GET("/metrics/use/:days", handler.Metrics)
+	api.GET("/metrics/dailies/:days", handler.MetricsDailies)
+	api.GET("/metrics/hourlies/today", handler.MetricsHourliesToday)
 	api.GET("/metrics/counts", handler.Counts)
+	api.GET("/metrics/real-model-counts", handler.RealModelCounts)
+	api.GET("/metrics/total", handler.MetricsTotal)
+	api.GET("/metrics/providers", handler.ProviderMetrics)
 	// Provider management
 	api.GET("/providers/template", handler.GetProviderTemplates)
 	api.GET("/providers", handler.GetProviders)

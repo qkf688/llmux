@@ -65,6 +65,43 @@ export function ModelRankingChart({ data }: ModelRankingChartProps) {
   const chartData = generateChartData(data)
   const chartConfig = generateChartConfig(data)
 
+  const renderModelLabel = (props: any) => {
+    const { x, y, width, height, value } = props ?? {}
+    if (typeof value !== "string") return null
+    if (typeof x !== "number" || typeof y !== "number" || typeof width !== "number" || typeof height !== "number") return null
+    if (width <= 0 || height <= 0) return null
+
+    return (
+      <foreignObject x={x} y={y} width={width} height={height}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            height: "100%",
+            paddingLeft: 8,
+            paddingRight: 6,
+            overflow: "hidden",
+          }}
+        >
+          <span
+            style={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              color: "white",
+              fontWeight: 500,
+              fontSize: 12,
+              lineHeight: "14px",
+            }}
+            title={value}
+          >
+            {value}
+          </span>
+        </div>
+      </foreignObject>
+    )
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -103,10 +140,7 @@ export function ModelRankingChart({ data }: ModelRankingChartProps) {
             >
               <LabelList
                 dataKey="model"
-                position="insideLeft"
-                offset={8}
-                className="fill-white font-medium"
-                fontSize={12}
+                content={renderModelLabel}
               />
               <LabelList
                 dataKey="calls"

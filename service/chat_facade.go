@@ -37,12 +37,12 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 	return chat.ProvidersWithMetaBymodelsName(ctx, style, before)
 }
 
-func BalanceChat(ctx context.Context, start time.Time, style string, before Before, providersWithMeta ProvidersWithMeta, reqMeta models.ReqMeta) (*http.Response, uint, error) {
+func BalanceChat(ctx context.Context, start time.Time, style string, before Before, providersWithMeta ProvidersWithMeta, reqMeta models.ReqMeta) (*http.Response, uint, string, error) {
 	return chat.BalanceChat(ctx, start, style, before, providersWithMeta, reqMeta)
 }
 
-func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, processer Processer, logId uint, before Before, ioLog bool) {
-	chat.RecordLog(ctx, reqStart, reader, processer, logId, before, ioLog)
+func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, processer Processer, logId uint, before Before, ioLog bool, providerName string) {
+	chat.RecordLog(ctx, reqStart, reader, processer, logId, before, ioLog, providerName)
 }
 
 func GetStripResponseHeaders(ctx context.Context) bool { return chat.GetStripResponseHeaders(ctx) }

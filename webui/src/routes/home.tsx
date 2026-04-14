@@ -3,9 +3,8 @@
 import type { ComponentType, ReactNode } from "react";
 import { useState, useEffect, Suspense, lazy } from "react";
 import { motion } from "motion/react";
-import { Activity, BarChart3, Bot, CalendarDays, Database, HardDrive, MessageSquare, PieChart } from "lucide-react";
+import { Activity, BarChart3, Bot, CalendarDays, Database, HardDrive, MessageSquare } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import Loading from "@/components/loading";
 import {
   getMetrics,
@@ -22,7 +21,6 @@ import { formatCompactCount } from "@/lib/formatters";
 import { toast } from "sonner";
 
 // 懒加载图表组件
-const ChartPieDonutText = lazy(() => import("@/components/charts/pie-chart").then(module => ({ default: module.ChartPieDonutText })));
 const ModelRankingList = lazy(() => import("@/components/charts/model-ranking").then(module => ({ default: module.ModelRankingList })));
 const ProviderRankCard = lazy(() => import("@/components/charts/provider-ranking").then(module => ({ default: module.ProviderRankCard })));
 const ActivityHeatmapCard = lazy(() => import("@/components/charts/activity-heatmap").then(module => ({ default: module.ActivityHeatmapCard })));
@@ -124,7 +122,6 @@ function MetricItem({
 
 export default function Home() {
   const [loading, setLoading] = useState(true);
-  const [activeChart, setActiveChart] = useState<"distribution" | "ranking">("ranking");
   
   // Real data from APIs
   const [todayMetrics, setTodayMetrics] = useState<MetricsData>({ reqs: 0, tokens: 0 });
@@ -299,7 +296,7 @@ export default function Home() {
               {dbStats?.file_size_human ?? "-"}
             </div>
           </MetricItem>
-          <MetricItem icon={PieChart} label="使用率" toneClassName="bg-[color:var(--chart-4)]/10 text-[color:var(--chart-4)]">
+          <MetricItem icon={HardDrive} label="使用率" toneClassName="bg-[color:var(--chart-4)]/10 text-[color:var(--chart-4)]">
             <AnimatedMetricValue
               value={dbUsagePercent}
               formatter={(v) => ({ value: v.toFixed(1), unit: "%" })}
@@ -326,49 +323,22 @@ export default function Home() {
           <CardDescription className="hidden sm:block">真实命中模型与用户请求模型对比</CardDescription>
         </CardHeader>
         <CardContent className="px-3 sm:px-6">
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-2 mb-3 sm:mb-4">
-            <Button
-              variant={activeChart === "ranking" ? "default" : "outline"}
-              onClick={() => setActiveChart("ranking")}
-              size="sm"
-              className="w-full sm:w-auto"
-            >
-              调用次数排行
-            </Button>
-            <Button
-              variant={activeChart === "distribution" ? "default" : "outline"}
-              onClick={() => setActiveChart("distribution")}
-              size="sm"
-              className="w-full sm:w-auto"
-            >
-              调用次数分布
-            </Button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div className="rounded-2xl border bg-card/50 p-3 sm:p-4">
+              <div className="text-xs text-muted-foreground mb-2">真实命中模型排行</div>
+              <Suspense fallback={<Loading message="加载真实模型排行..." />}>
+                <ModelRankingList data={realModelCounts} />
+              </Suspense>
+            </div>
+            <div className="rounded-2xl border bg-card/50 p-3 sm:p-4">
+              <div className="text-xs text-muted-foreground mb-2">用户请求模型排行</div>
+              <Suspense fallback={<Loading message="加载请求模型排行..." />}>
+                <ModelRankingList data={requestedModelCounts} />
+              </Suspense>
+            </div>
           </div>
-	          <div className="mt-3 sm:mt-4">
-	            <Suspense fallback={<div className="h-56 sm:h-64 flex items-center justify-center">
-	              <Loading message="加载图表..." />
-	            </div>}>
-	              {activeChart === "distribution" ? (
-	                <div className="space-y-2">
-	                  <div className="text-xs text-muted-foreground">真实命中模型调用次数分布</div>
-	                  <ChartPieDonutText data={realModelCounts} />
-	                </div>
-	              ) : (
-	                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-	                  <div className="rounded-2xl border bg-card/50 p-3 sm:p-4">
-	                    <div className="text-xs text-muted-foreground mb-2">真实命中模型排行</div>
-	                    <ModelRankingList data={realModelCounts} />
-	                  </div>
-	                  <div className="rounded-2xl border bg-card/50 p-3 sm:p-4">
-	                    <div className="text-xs text-muted-foreground mb-2">用户请求模型排行</div>
-	                    <ModelRankingList data={requestedModelCounts} />
-	                  </div>
-	                </div>
-	              )}
-	            </Suspense>
-	          </div>
-	        </CardContent>
-	      </Card>
+        </CardContent>
+      </Card>
 
       <Suspense fallback={<div className="py-10 flex items-center justify-center">
         <Loading message="加载供应商排行..." />

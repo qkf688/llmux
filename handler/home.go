@@ -54,18 +54,6 @@ func Counts(c *gin.Context) {
 		common.InternalServerError(c, err.Error())
 		return
 	}
-	const topN = 5
-	if len(results) > topN {
-		var othersCalls int64
-		for _, item := range results[topN:] {
-			othersCalls += item.Calls
-		}
-		othersCount := Count{
-			Model: "others",
-			Calls: othersCalls,
-		}
-		results = append(results[:topN], othersCount)
-	}
 
 	common.Success(c, results)
 }
@@ -75,18 +63,6 @@ func RealModelCounts(c *gin.Context) {
 	if err := models.DB.Raw("SELECT name as model,calls as calls FROM `stats_real_model_totals` ORDER BY `calls` DESC").Scan(&results).Error; err != nil {
 		common.InternalServerError(c, err.Error())
 		return
-	}
-	const topN = 5
-	if len(results) > topN {
-		var othersCalls int64
-		for _, item := range results[topN:] {
-			othersCalls += item.Calls
-		}
-		othersCount := Count{
-			Model: "others",
-			Calls: othersCalls,
-		}
-		results = append(results[:topN], othersCount)
 	}
 
 	common.Success(c, results)

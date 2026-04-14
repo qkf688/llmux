@@ -14,20 +14,14 @@ function rankToneClass(rank: number) {
 
 export function ModelRankingList({
   data,
-  topN = 10,
 }: {
   data: ModelCount[];
-  topN?: number;
 }) {
   const ranked = useMemo(() => {
     const rows = [...(data ?? [])];
     rows.sort((a, b) => (b.calls ?? 0) - (a.calls ?? 0));
-    return rows.slice(0, topN);
-  }, [data, topN]);
-
-  const totalCalls = useMemo(() => {
-    return ranked.reduce((acc, item) => acc + (item.calls ?? 0), 0);
-  }, [ranked]);
+    return rows;
+  }, [data]);
 
   if (ranked.length === 0) {
     return (
@@ -43,7 +37,6 @@ export function ModelRankingList({
       {ranked.map((item, index) => {
         const rank = index + 1;
         const calls = formatCompactCount(item.calls);
-        const share = totalCalls > 0 ? ((item.calls ?? 0) / totalCalls) * 100 : 0;
 
         return (
           <div
@@ -60,10 +53,6 @@ export function ModelRankingList({
               <p className="font-medium text-sm truncate" title={item.model}>
                 {item.model}
               </p>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                <span>占比:</span>
-                <span className="tabular-nums">{share.toFixed(1)}%</span>
-              </div>
             </div>
 
             <div className="text-right shrink-0 font-semibold text-base tabular-nums">

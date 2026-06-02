@@ -22,7 +22,7 @@ make webui
 # 或
 cd webui && pnpm install && pnpm run build
 
-# 启动后端服务（默认端口 7070）
+# 格式化 + 整理依赖 + 创建 db 目录 + 启动服务（默认端口 7070）
 make run
 # 或
 go run .
@@ -50,6 +50,17 @@ pnpm run build
 
 # 代码检查
 pnpm lint
+
+# 运行测试
+pnpm test
+pnpm test:watch
+```
+
+### Windows 脚本
+
+```powershell
+.\run.bat        # 构建 webui + 启动服务（自动释放 7070 端口）
+.\build.bat      # 构建 webui + 编译 Go 二进制
 ```
 
 ### 测试
@@ -63,6 +74,9 @@ go test ./service/virtualmodel/...
 
 # 运行单个测试
 go test -run TestFunctionName ./path/to/package
+
+# 前端测试（Vitest + Testing Library + jsdom）
+cd webui && pnpm test
 ```
 
 ### Docker
@@ -80,40 +94,47 @@ docker compose logs -f
 ### 后端分层架构
 
 ```
-main.go                    # 入口：路由注册、服务启动
-├── handler/               # HTTP 处理层（Gin handlers）
-│   ├── api.go            # 主 API 路由
-│   ├── chat.go           # 聊天请求处理
-│   ├── api_model.go      # 模型管理 API
+main.go                       # 入口：路由注册、服务启动
+├── handler/                  # HTTP 处理层（Gin handlers）
+│   ├── chat.go              # 聊天请求处理
+│   ├── api_model.go         # 模型管理 API
 │   ├── api_virtual_models.go  # 虚拟模型 API
-│   ├── api_association.go     # 模型-供应商关联 API
-│   ├── api_health.go          # 健康检查 API
-│   ├── api_settings.go        # 设置 API
-│   ├── modelapi/         # 模型相关子包
-│   ├── autoassoc/        # 自动关联子包
-│   ├── settings/         # 设置相关子包
-│   └── testapi/          # 测试 API 子包
-├── service/              # 业务逻辑层
-│   ├── chat/             # 聊天核心逻辑（负载均衡、重试、日志）
-│   ├── virtualmodel/     # 虚拟模型服务（加权随机、轮询、优先级）
-│   ├── healthcheck/      # 健康检查服务
-│   ├── modelsync/        # 模型同步服务
-│   ├── chatcore/         # 聊天核心工具（请求头、模型选择）
-│   └── anthropic/        # Anthropic 协议转换
-├── providers/            # 供应商实现层
-│   ├── provider.go       # Provider 接口定义
-│   ├── openai.go         # OpenAI 实现
-│   └── anthropic.go      # Anthropic 实现
-├── models/               # 数据模型层（GORM）
-│   ├── init.go           # 数据库初始化
-│   ├── model.go          # 数据库模型定义
-│   └── unified/          # 统一请求/响应格式
-├── middleware/           # 中间件
-│   └── auth.go           # 认证中间件（Bearer Token）
-├── balancer/             # 负载均衡器
-├── common/               # 公共工具
-│   └── response.go       # 统一响应格式
-└── consts/               # 常量定义
+│   ├── api_association.go   # 模型-供应商关联 API
+│   ├── api_health.go        # 健康检查 API
+│   ├── api_settings.go      # 设置 API
+│   ├── modelapi/            # 模型相关子包
+│   ├── autoassoc/           # 自动关联子包
+│   ├── settings/            # 设置相关子包
+│   └── testapi/             # 测试 API 子包
+├── service/                 # 业务逻辑层（核心引擎）
+│   ├── chat/                # 聊天请求处理（重试、日志、查找供应商）
+│   │   └── preprocess/openai/  # OpenAI 消息预处理（tool_call_ids 等）
+│   ├── transform/           # ★ 协议转换核心（40+ 文件）
+│   │   ├── transformer.go   # 转换引擎入口
+│   │   ├── transform_openai_request.go / response.go / stream_*.go
+│   │   ├── transform_anthropic.go
+│   │   ├── transform_responses.go（OpenAI Responses API ↔ 统一格式）
+│   │   └── golden_test.go   # 协议转换金测试
+│   ├── anthropic/           # Anthropic 协议适配
+│   ├── responses/           # OpenAI Responses API 格式处理
+│   ├── virtualmodel/        # 虚拟模型服务（加权随机、轮询、优先级）
+│   ├── healthcheck/         # 健康检查服务
+│   ├── modelsync/           # 模型同步服务
+│   └── chatcore/            # 聊天核心工具（请求头、模型选择）
+├── providers/               # 供应商实现层
+│   ├── provider.go          # Provider 接口定义
+│   ├── openai.go            # OpenAI 实现
+│   └── anthropic.go         # Anthropic 实现
+├── models/                  # 数据模型层（GORM）
+│   ├── init.go              # 数据库初始化
+│   ├── model.go             # 数据库模型定义
+│   └── unified/             # 统一请求/响应格式
+├── middleware/              # 中间件
+│   └── auth.go              # 认证中间件（Bearer Token + x-api-key）
+├── balancer/                # 负载均衡器
+├── common/                  # 公共工具
+│   └── response.go          # 统一响应格式
+└── consts/                  # 常量定义
 ```
 
 ### 前端架构
@@ -121,25 +142,56 @@ main.go                    # 入口：路由注册、服务启动
 ```
 webui/
 ├── src/
-│   ├── routes/           # 页面路由组件
-│   │   ├── layout/       # 布局组件
-│   │   ├── home/         # 主页（Dashboard）
-│   │   ├── providers/    # 供应商管理
-│   │   ├── models/       # 模型管理
-│   │   ├── virtual-models/  # 虚拟模型管理
-│   │   ├── logs/         # 请求日志
-│   │   └── settings/     # 系统设置
-│   ├── components/       # 可复用组件
-│   │   ├── ui/           # 基础 UI 组件（Radix UI）
-│   │   ├── charts/       # 图表组件（Recharts）
-│   │   └── forms/        # 表单组件
-│   ├── lib/              # 工具函数
-│   │   ├── api.ts        # API 调用封装
-│   │   └── utils.ts      # 通用工具
-│   ├── hooks/            # 自定义 Hooks
-│   └── types/            # TypeScript 类型定义
-└── vite.config.ts        # Vite 配置（开发时代理 /api）
+│   ├── main.tsx              # 入口
+│   ├── App.tsx               # 路由配置（react-router-dom v7）
+│   ├── routes/               # 页面路由组件（每页一个文件夹）
+│   │   ├── home/             # 主页（Dashboard）
+│   │   ├── providers/        # 供应商管理
+│   │   ├── models/           # 模型管理
+│   │   ├── model-providers/  # 模型-供应商关联
+│   │   ├── virtual-models/   # 虚拟模型管理
+│   │   ├── logs/             # 请求日志
+│   │   ├── model-sync-logs/  # 模型同步日志
+│   │   ├── database/         # 数据库管理
+│   │   └── settings/         # 系统设置
+│   ├── components/           # 可复用组件
+│   │   ├── ui/               # 基础 UI（封装 Radix UI + Tailwind + CVA）
+│   │   ├── charts/           # 图表组件（Recharts）
+│   │   └── theme-provider.tsx # next-themes 暗色模式
+│   ├── lib/                  # 工具函数
+│   │   ├── api.ts            # API 调用门面
+│   │   ├── api/              # 按模块拆分的 API 层
+│   │   │   ├── core/client.ts          # 基础 HTTP 客户端
+│   │   │   ├── core/download.ts        # 文件下载
+│   │   │   └── modules/
+│   │   │       ├── catalog/            # 供应商/模型/关联/虚拟模型 CRUD
+│   │   │       ├── logs/               # 聊天日志
+│   │   │       └── system/             # 指标/健康检查/同步/系统设置
+│   │   ├── utils.ts          # 通用工具
+│   │   ├── formatters.ts     # 格式化函数
+│   │   ├── errors.ts         # 错误处理
+│   │   └── provider-models.ts # 供应商模型数据处理
+│   ├── hooks/                # 自定义 Hooks
+│   └── types/                # TypeScript 类型定义
+└── vite.config.ts            # Vite 7 + Tailwind CSS 4 + SWC
 ```
+
+**技术栈**：
+- **构建**: Vite 7 + `@vitejs/plugin-react-swc`
+- **样式**: Tailwind CSS 4 + `tw-animate-css` + `class-variance-authority`
+- **UI 组件**: Radix UI（Dialog/Select/Checkbox 等）+ Lucide React 图标
+- **路由**: react-router-dom v7
+- **状态管理**: zustand
+- **表单**: react-hook-form + zod
+- **图表**: recharts
+- **路径别名**: `@` → `src/`
+
+**路由页面组织模式**（以 `models/` 为例）：每个页面文件夹下包含：
+- `components/sections/` — 桌面/移动端分段组件
+- `components/dialogs/` — 弹窗组件
+- `components/shared/` — 页面内共享组件
+- `utils/` — 页面级工具函数
+- `schemas/` / `types/` — 表单校验和类型定义
 
 ### 关键数据流
 
@@ -194,9 +246,18 @@ webui/
 
 ### 协议转换
 
-- `service/anthropic/` 负责 OpenAI ↔ Anthropic 格式互转
-- 统一格式定义在 `models/unified/`
-- 流式响应使用 SSE（Server-Sent Events）
+协议转换在两层完成，核心引擎位于 `service/transform/`：
+
+- `service/transform/transformer.go` — **转换引擎入口**，内部分发到各格式处理器
+- `service/transform/transform_anthropic.go` — Anthropic ↔ 统一格式
+- `service/transform/transform_openai_request.go` / `transform_openai_response.go` — OpenAI Chat API ↔ 统一格式
+- `service/transform/transform_openai_stream_*.go` — 流式响应转换（Legacy / Realtime / Responses 流）
+- `service/transform/transform_responses.go` — OpenAI Responses API ↔ 统一格式
+- `service/anthropic/` — Anthropic 特有的请求/响应编解码（入口/出口适配）
+- `service/responses/` — OpenAI Responses API 格式编解码
+- `models/unified/` — 统一格式定义（所有协议归一化为该格式）
+
+**转换矩阵**：任何外部格式（OpenAI Chat / OpenAI Responses / Anthropic）都能互转，流式响应通过 SSE 实现。
 
 ## 开发注意事项
 

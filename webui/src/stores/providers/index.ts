@@ -1,4 +1,4 @@
-export type { ProvidersPagePreferences, ProvidersFilters, ProvidersDialogsState, ModelTestResult, BatchTestProgress, UpstreamStatus } from "@/stores/providers/types";
+export type { ProvidersPagePreferences, ProvidersFilters, ProvidersDialogsState, ModelTestResult, BatchTestProgress, UpstreamStatus, AllModelsTypeFilter } from "@/stores/providers/types";
 export { DEFAULT_BATCH_TEST_PROGRESS } from "@/stores/providers/types";
 
 export { providersPageStore } from "@/stores/providers/page-store";

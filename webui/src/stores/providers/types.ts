@@ -16,6 +16,8 @@ export type BatchTestProgress = {
 
 export type UpstreamStatus = "loading" | "success" | "empty" | "error" | "disabled";
 
+export type AllModelsTypeFilter = "all" | "upstream" | "custom";
+
 export const DEFAULT_BATCH_TEST_PROGRESS: BatchTestProgress = {
   total: 0,
   completed: 0,

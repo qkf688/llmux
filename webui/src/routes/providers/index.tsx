@@ -8,6 +8,7 @@ import {
   selectAllModelsProvider,
   selectAllModelsSearchQuery,
   selectAllModelsTestResults,
+  selectAllModelsTypeFilter,
   selectAutoAssociateOnAddEnabled,
   selectAutoCleanOnDeleteEnabled,
   selectAvailableTypes,
@@ -36,6 +37,7 @@ import {
   selectSetAllModelsProvider,
   selectSetAllModelsSearchQuery,
   selectSetAllModelsTestResults,
+  selectSetAllModelsTypeFilter,
   selectSetAutoAssociateOnAddEnabled,
   selectSetAutoCleanOnDeleteEnabled,
   selectSetAvailableTypes,
@@ -144,6 +146,9 @@ export default function ProvidersPage() {
   const allModelsSearchQuery = useProvidersPageStore(selectAllModelsSearchQuery);
   const setAllModelsSearchQuery = useProvidersPageStore(selectSetAllModelsSearchQuery);
 
+  const allModelsTypeFilter = useProvidersPageStore(selectAllModelsTypeFilter);
+  const setAllModelsTypeFilter = useProvidersPageStore(selectSetAllModelsTypeFilter);
+
   const allModelsTestResults = useProvidersPageStore(selectAllModelsTestResults);
   const setAllModelsTestResults = useProvidersPageStore(selectSetAllModelsTestResults);
   const batchTesting = useProvidersPageStore(selectBatchTesting);
@@ -213,6 +218,7 @@ export default function ProvidersPage() {
   const {
     allModelsList,
     filteredAllModels,
+    upstreamSet,
     isAllFilteredSelected,
     toggleSelectAllModels,
     setAllModelsList,
@@ -236,6 +242,8 @@ export default function ProvidersPage() {
     setCustomModelInput,
     allModelsSearchQuery,
     setAllModelsSearchQuery,
+    allModelsTypeFilter,
+    setAllModelsTypeFilter,
     setAllModelsTestResults,
     setAddingModels,
     setSyncingModels,
@@ -369,10 +377,13 @@ export default function ProvidersPage() {
     allModelsProvider,
     upstreamStatus,
     upstreamModelsList,
+    upstreamSet,
     allModelsList,
     filteredAllModels,
     allModelsSearchQuery,
     setAllModelsSearchQuery,
+    allModelsTypeFilter,
+    setAllModelsTypeFilter,
     allModelsTestResults,
     batchTesting,
     batchTestProgress,

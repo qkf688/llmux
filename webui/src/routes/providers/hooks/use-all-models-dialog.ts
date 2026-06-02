@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { getProviderModels, getProviders, syncProviderModels, updateProvider, type Provider } from "@/lib/api";
 import { buildConfigWithModels, parseCustomModelsFromConfig, parseUpstreamModelsFromConfig } from "@/lib/provider-models";
-import type { ModelTestResult, UpstreamStatus } from "../types";
+import type { AllModelsTypeFilter, ModelTestResult, UpstreamStatus } from "../types";
 import { extractAllModels, parseCustomModelsInput } from "../utils/config";
 import { buildAutoActionsDescription, type AutoActionsFlags } from "../utils/auto-actions";
 
@@ -25,6 +25,9 @@ type UseAllModelsDialogInput = {
   allModelsSearchQuery: string;
   setAllModelsSearchQuery: (query: string) => void;
 
+  allModelsTypeFilter: AllModelsTypeFilter;
+  setAllModelsTypeFilter: (value: AllModelsTypeFilter) => void;
+
   setAllModelsTestResults: (results: Updater<Record<string, ModelTestResult>>) => void;
   setAddingModels: (adding: boolean) => void;
   setSyncingModels: (syncing: boolean) => void;
@@ -44,6 +47,8 @@ export function useAllModelsDialog({
   setCustomModelInput,
   allModelsSearchQuery,
   setAllModelsSearchQuery,
+  allModelsTypeFilter,
+  setAllModelsTypeFilter,
   setAllModelsTestResults,
   setAddingModels,
   setSyncingModels,
@@ -53,10 +58,31 @@ export function useAllModelsDialog({
   const [upstreamModelsList, setUpstreamModelsList] = useState<string[]>([]);
   const [upstreamStatus, setUpstreamStatus] = useState<UpstreamStatus>("disabled");
 
-  const filteredAllModels =
-    allModelsSearchQuery.trim() === ""
-      ? allModelsList
-      : allModelsList.filter((model) => model.toLowerCase().includes(allModelsSearchQuery.toLowerCase()));
+  const providerConfig = allModelsProvider?.Config;
+  const upstreamSet = useMemo<Set<string>>(
+    () => (providerConfig ? new Set(parseUpstreamModelsFromConfig(providerConfig).map((m) => m.toLowerCase())) : new Set<string>()),
+    [providerConfig],
+  );
+  const customSet = useMemo<Set<string>>(
+    () => (providerConfig ? new Set(parseCustomModelsFromConfig(providerConfig).map((m) => m.toLowerCase())) : new Set<string>()),
+    [providerConfig],
+  );
+
+  const filteredAllModels = useMemo<string[]>(() => {
+    let result = allModelsList;
+    if (allModelsSearchQuery.trim() !== "") {
+      const q = allModelsSearchQuery.toLowerCase();
+      result = result.filter((model) => model.toLowerCase().includes(q));
+    }
+    if (allModelsTypeFilter !== "all") {
+      if (allModelsTypeFilter === "upstream") {
+        result = result.filter((model) => upstreamSet.has(model.toLowerCase()));
+      } else {
+        result = result.filter((model) => customSet.has(model.toLowerCase()));
+      }
+    }
+    return result;
+  }, [allModelsList, allModelsSearchQuery, allModelsTypeFilter, upstreamSet, customSet]);
 
   const isAllFilteredSelected = filteredAllModels.length > 0 && filteredAllModels.every((model) => selectedAllModels.includes(model));
 
@@ -79,6 +105,7 @@ export function useAllModelsDialog({
     setSelectedAllModels([]);
     setCustomModelInput("");
     setAllModelsSearchQuery("");
+    setAllModelsTypeFilter("all");
     setAllModelsTestResults({});
     setAllModelsOpen(true);
     setUpstreamModelsList([]);
@@ -240,6 +267,7 @@ export function useAllModelsDialog({
   return {
     allModelsList,
     filteredAllModels,
+    upstreamSet,
     isAllFilteredSelected,
     toggleSelectAllModels,
     setAllModelsList,

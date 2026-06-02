@@ -1,7 +1,7 @@
 import { createStore } from "zustand/vanilla";
 import type { Provider, ProviderTemplate } from "@/lib/api";
 import { readProvidersPagePreferences, writeProvidersPagePreferences } from "@/stores/providers/persist";
-import { DEFAULT_BATCH_TEST_PROGRESS, type BatchTestProgress, type ModelTestResult } from "@/stores/providers/types";
+import { DEFAULT_BATCH_TEST_PROGRESS, type AllModelsTypeFilter, type BatchTestProgress, type ModelTestResult } from "@/stores/providers/types";
 
 type Updater<T> = T | ((previous: T) => T);
 
@@ -38,6 +38,8 @@ export type ProvidersPageState = {
 
   allModelsOpen: boolean;
   allModelsProvider: Provider | null;
+
+  allModelsTypeFilter: AllModelsTypeFilter;
 
   selectedUpstreamModels: string[];
   selectedAllModels: string[];
@@ -96,6 +98,7 @@ export type ProvidersPageState = {
 
   setSelectedUpstreamModels: (models: Updater<string[]>) => void;
   setSelectedAllModels: (models: Updater<string[]>) => void;
+  setAllModelsTypeFilter: (value: AllModelsTypeFilter) => void;
   setAllModelsSearchQuery: (query: string) => void;
   setCustomModelInput: (value: string) => void;
 
@@ -141,6 +144,8 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
 
   allModelsOpen: false,
   allModelsProvider: null,
+
+  allModelsTypeFilter: "all",
 
   selectedUpstreamModels: [],
   selectedAllModels: [],
@@ -231,7 +236,14 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
     ),
 
   openAllModels: (provider: Provider) =>
-    set({ allModelsOpen: true, allModelsProvider: provider, selectedAllModels: [], allModelsTestResults: {} }),
+    set({
+      allModelsOpen: true,
+      allModelsProvider: provider,
+      selectedAllModels: [],
+      allModelsTestResults: {},
+      allModelsTypeFilter: "all",
+      allModelsSearchQuery: "",
+    }),
   setAllModelsOpen: (open: boolean) =>
     set(open ? { allModelsOpen: true } : { allModelsOpen: false, allModelsProvider: null, selectedAllModels: [], allModelsTestResults: {} }),
   setAllModelsProvider: (provider: Provider | null) => set({ allModelsProvider: provider }),
@@ -240,6 +252,7 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
     set((state) => ({ selectedUpstreamModels: resolveUpdater(models, state.selectedUpstreamModels) })),
   setSelectedAllModels: (models: Updater<string[]>) =>
     set((state) => ({ selectedAllModels: resolveUpdater(models, state.selectedAllModels) })),
+  setAllModelsTypeFilter: (value: AllModelsTypeFilter) => set({ allModelsTypeFilter: value }),
   setAllModelsSearchQuery: (query: string) => set({ allModelsSearchQuery: query }),
   setCustomModelInput: (value: string) => set({ customModelInput: value }),
 
@@ -269,6 +282,7 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
       modelsOpenId: null,
       allModelsOpen: false,
       allModelsProvider: null,
+      allModelsTypeFilter: "all",
       selectedUpstreamModels: [],
       selectedAllModels: [],
       allModelsSearchQuery: "",

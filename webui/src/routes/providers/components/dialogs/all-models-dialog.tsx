@@ -17,8 +17,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { Provider } from "@/lib/api";
-import { parseUpstreamModelsFromConfig } from "@/lib/provider-models";
-import type { BatchTestProgress, ModelTestResult, UpstreamStatus } from "../../types";
+import type { AllModelsTypeFilter, BatchTestProgress, ModelTestResult, UpstreamStatus } from "../../types";
+
+const FILTER_OPTIONS: { readonly key: AllModelsTypeFilter; readonly label: string }[] = [
+  { key: "all", label: "全部" },
+  { key: "upstream", label: "上游" },
+  { key: "custom", label: "自定义" },
+];
 
 type Updater<T> = T | ((previous: T) => T);
 type Setter<T> = (value: Updater<T>) => void;
@@ -30,12 +35,16 @@ interface AllModelsDialogProps {
 
   upstreamStatus: UpstreamStatus;
   upstreamModelsList: string[];
+  upstreamSet: Set<string>;
 
   allModelsList: string[];
   filteredAllModels: string[];
 
   allModelsSearchQuery: string;
   setAllModelsSearchQuery: (query: string) => void;
+
+  allModelsTypeFilter: AllModelsTypeFilter;
+  setAllModelsTypeFilter: (value: AllModelsTypeFilter) => void;
 
   allModelsTestResults: Record<string, ModelTestResult>;
   batchTesting: boolean;
@@ -71,10 +80,13 @@ export function AllModelsDialog({
   allModelsProvider,
   upstreamStatus,
   upstreamModelsList,
+  upstreamSet,
   allModelsList,
   filteredAllModels,
   allModelsSearchQuery,
   setAllModelsSearchQuery,
+  allModelsTypeFilter,
+  setAllModelsTypeFilter,
   allModelsTestResults,
   batchTesting,
   batchTestProgress,
@@ -172,6 +184,34 @@ export function AllModelsDialog({
                   onChange={(e) => setAllModelsSearchQuery(e.target.value)}
                   className="h-8 flex-1 min-w-0"
                 />
+              </div>
+
+              {/* 类型筛选 */}
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-muted-foreground mr-1">筛选：</span>
+                <div
+                  className="inline-flex rounded-md border border-input bg-background"
+                  role="radiogroup"
+                  aria-label="模型类型筛选"
+                >
+                  {FILTER_OPTIONS.map(({ key, label }) => {
+                    const checked = allModelsTypeFilter === key;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        role="radio"
+                        aria-checked={checked}
+                        onClick={() => setAllModelsTypeFilter(key)}
+                        className={`px-2.5 py-1 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md border-r border-input last:border-r-0 ${
+                          checked ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* 第二行：测试结果统计（条件渲染）*/}
@@ -402,8 +442,7 @@ export function AllModelsDialog({
               ) : (
                 filteredAllModels.map((model) => {
                   const checked = selectedAllModels.includes(model);
-                  const upstreamModels = allModelsProvider ? parseUpstreamModelsFromConfig(allModelsProvider.Config) : [];
-                  const isUpstream = upstreamModels.includes(model);
+                  const isUpstream = upstreamSet.has(model.toLowerCase());
                   const testResult = allModelsTestResults[model];
                   return (
                     <div

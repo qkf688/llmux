@@ -29,6 +29,8 @@ export const selectModelsOpenId = (state: ProvidersPageState) => state.modelsOpe
 export const selectAllModelsOpen = (state: ProvidersPageState) => state.allModelsOpen;
 export const selectAllModelsProvider = (state: ProvidersPageState) => state.allModelsProvider;
 
+export const selectAllModelsTypeFilter = (state: ProvidersPageState) => state.allModelsTypeFilter;
+
 export const selectSelectedUpstreamModels = (state: ProvidersPageState) => state.selectedUpstreamModels;
 export const selectSelectedAllModels = (state: ProvidersPageState) => state.selectedAllModels;
 export const selectAllModelsSearchQuery = (state: ProvidersPageState) => state.allModelsSearchQuery;
@@ -85,6 +87,7 @@ export const selectSetAllModelsProvider = (state: ProvidersPageState) => state.s
 
 export const selectSetSelectedUpstreamModels = (state: ProvidersPageState) => state.setSelectedUpstreamModels;
 export const selectSetSelectedAllModels = (state: ProvidersPageState) => state.setSelectedAllModels;
+export const selectSetAllModelsTypeFilter = (state: ProvidersPageState) => state.setAllModelsTypeFilter;
 export const selectSetAllModelsSearchQuery = (state: ProvidersPageState) => state.setAllModelsSearchQuery;
 export const selectSetCustomModelInput = (state: ProvidersPageState) => state.setCustomModelInput;
 

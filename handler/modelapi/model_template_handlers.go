@@ -98,26 +98,8 @@ func AddModelTemplateItem(c *gin.Context) {
 			Name:    name,
 		}
 		if err := gorm.G[models.ModelTemplateItem](models.DB).Create(c.Request.Context(), &item); err != nil {
-			if isUniqueConstraintError(err) {
-				var existing models.ModelTemplateItem
-				restoreErr := models.DB.WithContext(c.Request.Context()).
-					Unscoped().
-					Where("model_id = ? AND name = ?", id, name).
-					First(&existing).Error
-				if restoreErr == nil && existing.DeletedAt.Valid {
-					if err := models.DB.WithContext(c.Request.Context()).
-						Unscoped().
-						Model(&models.ModelTemplateItem{}).
-						Where("id = ?", existing.ID).
-						Update("deleted_at", nil).Error; err != nil {
-						common.InternalServerError(c, "Failed to restore template item: "+err.Error())
-						return
-					}
-				}
-			} else {
-				common.InternalServerError(c, "Failed to create template item: "+err.Error())
-				return
-			}
+			common.InternalServerError(c, "Failed to create template item: "+err.Error())
+			return
 		}
 	}
 

@@ -23,3 +23,22 @@ func parseModelIDParam(c *gin.Context) (uint64, bool) {
 func getModelByID(ctx context.Context, id uint64) (models.Model, error) {
 	return gorm.G[models.Model](models.DB).Where("id = ?", id).First(ctx)
 }
+
+func deleteModelAssociations(ctx context.Context, id uint) error {
+	if err := models.DB.WithContext(ctx).
+		Where("model_id = ?", id).
+		Delete(&models.ModelWithProvider{}).Error; err != nil {
+		return err
+	}
+	if err := models.DB.WithContext(ctx).
+		Where("model_id = ?", id).
+		Delete(&models.ModelTemplateItem{}).Error; err != nil {
+		return err
+	}
+	if err := models.DB.WithContext(ctx).
+		Where("real_model_id = ?", id).
+		Delete(&models.VirtualModelMapping{}).Error; err != nil {
+		return err
+	}
+	return nil
+}

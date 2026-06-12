@@ -106,7 +106,13 @@ func DeleteModel(c *gin.Context) {
 		return
 	}
 
-	result, err := gorm.G[models.Model](models.DB).Where("id = ?", id).Delete(c.Request.Context())
+	ctx := c.Request.Context()
+	if err := deleteModelAssociations(ctx, uint(id)); err != nil {
+		common.InternalServerError(c, "Failed to delete model associations: "+err.Error())
+		return
+	}
+
+	result, err := gorm.G[models.Model](models.DB).Where("id = ?", id).Delete(ctx)
 	if err != nil {
 		common.InternalServerError(c, "Failed to delete model: "+err.Error())
 		return

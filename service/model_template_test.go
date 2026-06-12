@@ -4,20 +4,19 @@ import (
 	"testing"
 
 	"github.com/atopos31/llmio/models"
-	"gorm.io/gorm"
 )
 
 func TestTemplateIndexMatch_UnionAndCaseSensitive(t *testing.T) {
 	allModels := []models.Model{
-		{Model: gorm.Model{ID: 1}, Name: "gpt-4o"},
-		{Model: gorm.Model{ID: 2}, Name: "claude"},
+		{ID: 1, Name: "gpt-4o"},
+		{ID: 2, Name: "claude"},
 	}
 	allAssociations := []models.ModelWithProvider{
-		{Model: gorm.Model{ID: 10}, ModelID: 1, ProviderModel: "alias-x"},
+		{ModelID: 1, ProviderModel: "alias-x"},
 	}
 	manual := []models.ModelTemplateItem{
-		{Model: gorm.Model{ID: 20}, ModelID: 2, Name: "alias-x"},
-		{Model: gorm.Model{ID: 21}, ModelID: 2, Name: "manual-only"},
+		{ModelID: 2, Name: "alias-x"},
+		{ModelID: 2, Name: "manual-only"},
 	}
 
 	index := BuildTemplateIndexFromData(allModels, allAssociations, manual)

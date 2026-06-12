@@ -27,7 +27,9 @@ type AnthropicConfig struct {
 }
 
 type Model struct {
-	gorm.Model
+	ID        uint `gorm:"primarykey"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
 	Name          string
 	Remark        string
 	MaxRetry      int   // 重试次数限制

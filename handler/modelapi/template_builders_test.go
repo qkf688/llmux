@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/atopos31/llmio/models"
-	"gorm.io/gorm"
 )
 
 func TestIsUniqueConstraintError(t *testing.T) {
@@ -48,8 +47,8 @@ func TestIsUniqueConstraintError(t *testing.T) {
 
 func TestBuildModelTemplateResponse(t *testing.T) {
 	model := models.Model{
-		Model: gorm.Model{ID: 10},
-		Name:  "gpt-4.1",
+		ID:   10,
+		Name: "gpt-4.1",
 	}
 	associations := []models.ModelWithProvider{
 		{ProviderModel: "gpt-4.1-mini"},

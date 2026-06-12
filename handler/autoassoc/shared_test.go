@@ -33,8 +33,8 @@ func TestBuildExistingAssociationMap(t *testing.T) {
 
 func TestIndexModelsByID(t *testing.T) {
 	allModels := []models.Model{
-		{Model: gorm.Model{ID: 10}, Name: "gpt-4.1"},
-		{Model: gorm.Model{ID: 11}, Name: "claude-4"},
+		{ID: 10, Name: "gpt-4.1"},
+		{ID: 11, Name: "claude-4"},
 	}
 
 	modelByID := indexModelsByID(allModels)

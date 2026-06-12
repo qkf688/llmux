@@ -19,7 +19,15 @@ func BatchDeleteModels(c *gin.Context) {
 		return
 	}
 
-	result, err := gorm.G[models.Model](models.DB).Where("id IN ?", req.IDs).Delete(c.Request.Context())
+	ctx := c.Request.Context()
+	for _, id := range req.IDs {
+		if err := deleteModelAssociations(ctx, id); err != nil {
+			common.InternalServerError(c, "Failed to delete model associations: "+err.Error())
+			return
+		}
+	}
+
+	result, err := gorm.G[models.Model](models.DB).Where("id IN ?", req.IDs).Delete(ctx)
 	if err != nil {
 		common.InternalServerError(c, "Failed to delete models: "+err.Error())
 		return

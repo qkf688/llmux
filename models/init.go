@@ -2,6 +2,7 @@ package models
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -212,28 +213,33 @@ func migrateSettingKeys(ctx context.Context) {
 
 	// 检查旧键是否存在
 	oldSetting, err := gorm.G[Setting](DB).Where("key = ?", oldKey).First(ctx)
-	if err == nil {
-		// 检查新键是否已存在
-		count, err := gorm.G[Setting](DB).Where("key = ?", newKey).Count(ctx, "id")
-		if err != nil {
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return
+		}
+		panic(err)
+	}
+
+	// 检查新键是否已存在
+	count, err := gorm.G[Setting](DB).Where("key = ?", newKey).Count(ctx, "id")
+	if err != nil {
+		panic(err)
+	}
+
+	// 如果新键不存在，则创建新键并复制旧键的值
+	if count == 0 {
+		newSetting := Setting{
+			Key:   newKey,
+			Value: oldSetting.Value,
+		}
+		if err := gorm.G[Setting](DB).Create(ctx, &newSetting); err != nil {
 			panic(err)
 		}
+	}
 
-		// 如果新键不存在，则创建新键并复制旧键的值
-		if count == 0 {
-			newSetting := Setting{
-				Key:   newKey,
-				Value: oldSetting.Value,
-			}
-			if err := gorm.G[Setting](DB).Create(ctx, &newSetting); err != nil {
-				panic(err)
-			}
-		}
-
-		// 删除旧键
-		if _, err := gorm.G[Setting](DB).Where("key = ?", oldKey).Delete(ctx); err != nil {
-			panic(err)
-		}
+	// 删除旧键
+	if _, err := gorm.G[Setting](DB).Where("key = ?", oldKey).Delete(ctx); err != nil {
+		panic(err)
 	}
 }
 

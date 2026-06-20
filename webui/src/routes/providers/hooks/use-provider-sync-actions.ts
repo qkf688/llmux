@@ -1,12 +1,15 @@
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { syncAllProviderModels } from "@/lib/api";
+import { providerKeys } from "@/hooks/api/use-providers";
 
 type UseProviderSyncActionsInput = {
   setSyncingAll: (syncing: boolean) => void;
-  fetchProviders: () => Promise<void>;
 };
 
-export function useProviderSyncActions({ setSyncingAll, fetchProviders }: UseProviderSyncActionsInput) {
+export function useProviderSyncActions({ setSyncingAll }: UseProviderSyncActionsInput) {
+  const queryClient = useQueryClient();
+
   const handleSyncAllProviders = async () => {
     try {
       setSyncingAll(true);
@@ -24,7 +27,7 @@ export function useProviderSyncActions({ setSyncingAll, fetchProviders }: UsePro
         toast.info(result.message ?? "没有检测到模型变化");
       }
 
-      await fetchProviders();
+      void queryClient.invalidateQueries({ queryKey: providerKeys.lists() });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast.error(`同步失败: ${message}`);
@@ -36,4 +39,3 @@ export function useProviderSyncActions({ setSyncingAll, fetchProviders }: UsePro
 
   return { handleSyncAllProviders };
 }
-

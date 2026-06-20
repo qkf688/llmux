@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { defaultProviderFormValues, providerFormSchema, type ProviderFormValues } from "./form-schema";
@@ -9,8 +9,6 @@ import {
   selectAllModelsSearchQuery,
   selectAllModelsTestResults,
   selectAllModelsTypeFilter,
-  selectAutoAssociateOnAddEnabled,
-  selectAutoCleanOnDeleteEnabled,
   selectAvailableTypes,
   selectBatchTestProgress,
   selectBatchTesting,
@@ -21,14 +19,11 @@ import {
   selectDeleteId,
   selectEditingProvider,
   selectFlushNameFilter,
-  selectLoading,
   selectModelsLoading,
   selectModelsOpen,
   selectModelsOpenId,
   selectNameFilter,
   selectProviderDialogOpen,
-  selectProviderTemplates,
-  selectProviders,
   selectResetProvidersTransient,
   selectSelectedAllModels,
   selectSelectedUpstreamModels,
@@ -38,8 +33,6 @@ import {
   selectSetAllModelsSearchQuery,
   selectSetAllModelsTestResults,
   selectSetAllModelsTypeFilter,
-  selectSetAutoAssociateOnAddEnabled,
-  selectSetAutoCleanOnDeleteEnabled,
   selectSetAvailableTypes,
   selectSetBatchTestProgress,
   selectSetBatchTesting,
@@ -49,13 +42,11 @@ import {
   selectSetDebouncedNameFilter,
   selectSetDeleteId,
   selectSetEditingProvider,
-  selectSetLoading,
   selectSetModelsLoading,
   selectSetModelsOpen,
   selectSetModelsOpenId,
   selectSetNameFilter,
   selectSetProviderDialogOpen,
-  selectSetProviderTemplates,
   selectSetProviders,
   selectSetSelectedAllModels,
   selectSetSelectedUpstreamModels,
@@ -84,7 +75,7 @@ import { useProviderDangerActions } from "./hooks/use-provider-danger-actions";
 import { useProviderMutations } from "./hooks/use-provider-mutations";
 import { useProviderSyncActions } from "./hooks/use-provider-sync-actions";
 import { useProviderSwitchActions } from "./hooks/use-provider-switch-actions";
-import { useProvidersBootstrap } from "./hooks/use-providers-bootstrap";
+import { useProviders, useProviderTemplates, useSettings } from "@/hooks/api/use-providers";
 import { getAllModelsForProvider } from "./utils/provider-models";
 import { hasActiveProvidersFilter } from "./utils/filters";
 import { ProvidersListSection } from "./components/sections/providers-list-section";
@@ -94,13 +85,42 @@ import { AllModelsDialog } from "./components/dialogs/all-models-dialog";
 import { UpstreamModelsDialog } from "./components/dialogs/upstream-models-dialog";
 
 export default function ProvidersPage() {
-  // 上游模型测试相关状态
-  const loading = useProvidersPageStore(selectLoading);
-  const setLoading = useProvidersPageStore(selectSetLoading);
-  const providers = useProvidersPageStore(selectProviders);
   const setProviders = useProvidersPageStore(selectSetProviders);
-  const providerTemplates = useProvidersPageStore(selectProviderTemplates);
-  const setProviderTemplates = useProvidersPageStore(selectSetProviderTemplates);
+  const setAvailableTypes = useProvidersPageStore(selectSetAvailableTypes);
+
+  const nameFilter = useProvidersPageStore(selectNameFilter);
+  const setNameFilter = useProvidersPageStore(selectSetNameFilter);
+  const debouncedNameFilter = useProvidersPageStore(selectDebouncedNameFilter);
+  const setDebouncedNameFilter = useProvidersPageStore(selectSetDebouncedNameFilter);
+  const typeFilter = useProvidersPageStore(selectTypeFilter);
+  const setTypeFilter = useProvidersPageStore(selectSetTypeFilter);
+  const availableTypes = useProvidersPageStore(selectAvailableTypes);
+  const flushNameFilter = useProvidersPageStore(selectFlushNameFilter);
+
+  const filters = useMemo(
+    () => ({
+      name: debouncedNameFilter.trim() || undefined,
+      type: typeFilter === "all" ? undefined : typeFilter,
+    }),
+    [debouncedNameFilter, typeFilter],
+  );
+
+  const { data: providers = [], isLoading: loading } = useProviders(filters);
+  const { data: providerTemplates = [] } = useProviderTemplates();
+  const { data: settings } = useSettings();
+
+  const autoAssociateOnAddEnabled = settings?.auto_associate_on_add ?? false;
+  const autoCleanOnDeleteEnabled = settings?.auto_clean_on_delete ?? false;
+
+  useEffect(() => {
+    setProviders(providers);
+  }, [providers, setProviders]);
+
+  useEffect(() => {
+    if (providerTemplates.length > 0) {
+      setAvailableTypes(providerTemplates.map((t) => t.type));
+    }
+  }, [providerTemplates, setAvailableTypes]);
 
   const clearingAssociation = useProvidersPageStore(selectClearingAssociation);
   const setClearingAssociation = useProvidersPageStore(selectSetClearingAssociation);
@@ -112,10 +132,6 @@ export default function ProvidersPage() {
   const setSyncingModels = useProvidersPageStore(selectSetSyncingModels);
   const syncingAll = useProvidersPageStore(selectSyncingAll);
   const setSyncingAll = useProvidersPageStore(selectSetSyncingAll);
-  const autoAssociateOnAddEnabled = useProvidersPageStore(selectAutoAssociateOnAddEnabled);
-  const setAutoAssociateOnAddEnabled = useProvidersPageStore(selectSetAutoAssociateOnAddEnabled);
-  const autoCleanOnDeleteEnabled = useProvidersPageStore(selectAutoCleanOnDeleteEnabled);
-  const setAutoCleanOnDeleteEnabled = useProvidersPageStore(selectSetAutoCleanOnDeleteEnabled);
 
   const open = useProvidersPageStore(selectProviderDialogOpen);
   const setOpen = useProvidersPageStore(selectSetProviderDialogOpen);
@@ -167,16 +183,6 @@ export default function ProvidersPage() {
   const setShowApiKey = useProvidersPageStore(selectSetShowApiKey);
   const toggleShowApiKey = useProvidersPageStore(selectToggleShowApiKey);
 
-  const nameFilter = useProvidersPageStore(selectNameFilter);
-  const setNameFilter = useProvidersPageStore(selectSetNameFilter);
-  const debouncedNameFilter = useProvidersPageStore(selectDebouncedNameFilter);
-  const setDebouncedNameFilter = useProvidersPageStore(selectSetDebouncedNameFilter);
-  const typeFilter = useProvidersPageStore(selectTypeFilter);
-  const setTypeFilter = useProvidersPageStore(selectSetTypeFilter);
-  const availableTypes = useProvidersPageStore(selectAvailableTypes);
-  const setAvailableTypes = useProvidersPageStore(selectSetAvailableTypes);
-  const flushNameFilter = useProvidersPageStore(selectFlushNameFilter);
-
   const resetTransient = useProvidersPageStore(selectResetProvidersTransient);
 
   // 筛选条件
@@ -202,17 +208,6 @@ export default function ProvidersPage() {
     return () => window.clearTimeout(timeoutId);
   }, [nameFilter, setDebouncedNameFilter]);
 
-  const { fetchProviders } = useProvidersBootstrap({
-    debouncedNameFilter,
-    typeFilter,
-    setLoading,
-    setProviders,
-    setProviderTemplates,
-    setAvailableTypes,
-    setAutoAssociateOnAddEnabled,
-    setAutoCleanOnDeleteEnabled,
-  });
-
   const autoActionsFlags = { autoAssociateOnAddEnabled, autoCleanOnDeleteEnabled };
 
   const {
@@ -232,7 +227,6 @@ export default function ProvidersPage() {
     handleSyncUpstreamModels,
   } = useAllModelsDialog({
     setProviders,
-    fetchProviders,
     allModelsProvider,
     setAllModelsProvider,
     setAllModelsOpen,
@@ -321,14 +315,13 @@ export default function ProvidersPage() {
     setUpstreamBatchTestProgress,
   });
 
-  const { handleSyncAllProviders } = useProviderSyncActions({ setSyncingAll, fetchProviders });
+  const { handleSyncAllProviders } = useProviderSyncActions({ setSyncingAll });
 
   const { handleSubmitProvider } = useProviderMutations({
     form,
     editingProvider,
     setEditingProvider,
     setOpen,
-    fetchProviders,
   });
 
   const { openEditDialog, openCreateDialog } = useProviderDialog({
@@ -347,7 +340,6 @@ export default function ProvidersPage() {
     handleClearAssociations,
   } = useProviderDangerActions({
     providers,
-    fetchProviders,
     deleteId,
     setDeleteId,
     clearAssociationId,

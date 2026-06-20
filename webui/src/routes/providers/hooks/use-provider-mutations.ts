@@ -1,6 +1,8 @@
 import type { UseFormReturn } from "react-hook-form";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { createProvider, updateProvider, type Provider } from "@/lib/api";
+import { providerKeys } from "@/hooks/api/use-providers";
 import { defaultProviderFormValues, type ProviderFormValues } from "../form-schema";
 import { buildConfigFromForm } from "../utils/config";
 
@@ -9,7 +11,6 @@ type UseProviderMutationsInput = {
   editingProvider: Provider | null;
   setEditingProvider: (provider: Provider | null) => void;
   setOpen: (open: boolean) => void;
-  fetchProviders: () => Promise<void>;
 };
 
 export function useProviderMutations({
@@ -17,8 +18,9 @@ export function useProviderMutations({
   editingProvider,
   setEditingProvider,
   setOpen,
-  fetchProviders,
 }: UseProviderMutationsInput) {
+  const queryClient = useQueryClient();
+
   const handleSubmitProvider = async (values: ProviderFormValues) => {
     if (editingProvider) {
       try {
@@ -37,7 +39,7 @@ export function useProviderMutations({
         toast.success(`提供商 ${values.name} 更新成功`);
         setEditingProvider(null);
         form.reset({ ...defaultProviderFormValues });
-        void fetchProviders();
+        void queryClient.invalidateQueries({ queryKey: providerKeys.lists() });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         toast.error(`更新提供商失败: ${message}`);
@@ -61,7 +63,7 @@ export function useProviderMutations({
       setOpen(false);
       toast.success(`提供商 ${values.name} 创建成功`);
       form.reset({ ...defaultProviderFormValues });
-      void fetchProviders();
+      void queryClient.invalidateQueries({ queryKey: providerKeys.lists() });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast.error(`创建提供商失败: ${message}`);
@@ -71,4 +73,3 @@ export function useProviderMutations({
 
   return { handleSubmitProvider };
 }
-

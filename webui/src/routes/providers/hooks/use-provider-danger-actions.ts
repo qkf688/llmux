@@ -1,9 +1,10 @@
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { clearProviderAssociations, deleteProvider, type Provider } from "@/lib/api";
+import { providerKeys } from "@/hooks/api/use-providers";
 
 type UseProviderDangerActionsInput = {
   providers: Provider[];
-  fetchProviders: () => Promise<void>;
 
   deleteId: number | null;
   setDeleteId: (id: number | null) => void;
@@ -19,7 +20,6 @@ type UseProviderDangerActionsInput = {
 
 export function useProviderDangerActions({
   providers,
-  fetchProviders,
   deleteId,
   setDeleteId,
   clearAssociationId,
@@ -28,6 +28,8 @@ export function useProviderDangerActions({
   setClearingAssociation,
   autoCleanOnDeleteEnabled,
 }: UseProviderDangerActionsInput) {
+  const queryClient = useQueryClient();
+
   const openDeleteDialog = (id: number) => {
     setDeleteId(id);
   };
@@ -42,7 +44,7 @@ export function useProviderDangerActions({
       const targetProvider = providers.find((provider) => provider.ID === deleteId);
       await deleteProvider(deleteId);
       setDeleteId(null);
-      await fetchProviders();
+      void queryClient.invalidateQueries({ queryKey: providerKeys.lists() });
       const message = `提供商 ${targetProvider?.Name ?? deleteId} 删除成功`;
       if (autoCleanOnDeleteEnabled) {
         toast.success(message, { description: "已触发自动清理无效关联（后台异步）" });
@@ -93,4 +95,3 @@ export function useProviderDangerActions({
     handleClearAssociations,
   };
 }
-

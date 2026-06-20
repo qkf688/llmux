@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { getProviderModels, getProviders, syncProviderModels, updateProvider, type Provider } from "@/lib/api";
+import { providerKeys } from "@/hooks/api/use-providers";
 import { buildConfigWithModels, parseCustomModelsFromConfig, parseUpstreamModelsFromConfig } from "@/lib/provider-models";
 import type { AllModelsTypeFilter, ModelTestResult, UpstreamStatus } from "../types";
 import { extractAllModels, parseCustomModelsInput } from "../utils/config";
@@ -11,7 +13,6 @@ type Setter<T> = (value: Updater<T>) => void;
 
 type UseAllModelsDialogInput = {
   setProviders: Setter<Provider[]>;
-  fetchProviders: () => Promise<void>;
 
   allModelsProvider: Provider | null;
   setAllModelsProvider: (provider: Provider | null) => void;
@@ -37,7 +38,6 @@ type UseAllModelsDialogInput = {
 
 export function useAllModelsDialog({
   setProviders,
-  fetchProviders,
   allModelsProvider,
   setAllModelsProvider,
   setAllModelsOpen,
@@ -54,6 +54,7 @@ export function useAllModelsDialog({
   setSyncingModels,
   autoActionsFlags,
 }: UseAllModelsDialogInput) {
+  const queryClient = useQueryClient();
   const [allModelsList, setAllModelsList] = useState<string[]>([]);
   const [upstreamModelsList, setUpstreamModelsList] = useState<string[]>([]);
   const [upstreamStatus, setUpstreamStatus] = useState<UpstreamStatus>("disabled");
@@ -234,9 +235,11 @@ export function useAllModelsDialog({
         toast.info("没有检测到模型变化");
       }
 
-      await fetchProviders();
-
-      const updatedProviders = await getProviders({});
+      const updatedProviders = await queryClient.fetchQuery({
+        queryKey: providerKeys.list(),
+        queryFn: () => getProviders({}),
+        staleTime: 0,
+      });
       const updatedProvider = updatedProviders.find((provider) => provider.ID === allModelsProvider.ID);
       if (updatedProvider) {
         const updatedModels = extractAllModels(updatedProvider.Config);

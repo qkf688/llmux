@@ -6,19 +6,8 @@ import { motion } from "motion/react";
 import { Activity, BarChart3, Bot, CalendarDays, Database, HardDrive, MessageSquare } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Loading from "@/components/loading";
-import {
-  getMetrics,
-  getTotalMetrics,
-  getDailyMetrics,
-  getHourlyMetricsToday,
-  getModelCounts,
-  getRealModelCounts,
-  getDatabaseStats,
-  getProviderMetrics
-} from "@/lib/api";
-import type { MetricsData, ModelCount, DatabaseStats, ProviderMetric, DailyMetricsData, HourlyMetricsData } from "@/lib/api";
+import { useHomeMetrics } from "@/hooks/api/use-home";
 import { formatCompactCount } from "@/lib/formatters";
-import { toast } from "sonner";
 
 // 懒加载图表组件
 const ModelRankingList = lazy(() => import("@/components/charts/model-ranking").then(module => ({ default: module.ModelRankingList })));
@@ -121,124 +110,19 @@ function MetricItem({
 }
 
 export default function Home() {
-  const [loading, setLoading] = useState(true);
-  
-  // Real data from APIs
-  const [todayMetrics, setTodayMetrics] = useState<MetricsData>({ reqs: 0, tokens: 0 });
-  const [totalMetrics, setTotalMetrics] = useState<MetricsData>({ reqs: 0, tokens: 0 });
-  const [allMetrics, setAllMetrics] = useState<MetricsData>({ reqs: 0, tokens: 0 });
-  const [dailyMetrics, setDailyMetrics] = useState<DailyMetricsData[]>([]);
-  const [hourlyMetrics, setHourlyMetrics] = useState<HourlyMetricsData[]>([]);
-  const [realModelCounts, setRealModelCounts] = useState<ModelCount[]>([]);
-  const [requestedModelCounts, setRequestedModelCounts] = useState<ModelCount[]>([]);
-  const [dbStats, setDbStats] = useState<DatabaseStats | null>(null);
-  const [providerMetrics, setProviderMetrics] = useState<ProviderMetric[]>([]);
+  const results = useHomeMetrics();
 
-  useEffect(() => {
-    void fetchTodayMetrics();
-    void fetchTotalMetrics();
-    void fetchAllMetrics();
-    void fetchDailyMetrics();
-    void fetchHourlyMetrics();
-    void fetchDatabaseStats();
-    void fetchProviderMetrics();
-    void Promise.allSettled([fetchRealModelCounts(), fetchRequestedModelCounts()]).finally(() => setLoading(false));
-  }, []);
-  
-  const fetchTodayMetrics = async () => {
-    try {
-      const data = await getMetrics(0);
-      setTodayMetrics(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`获取今日指标失败: ${message}`);
-      console.error(err);
-    }
-  };
-  
-  const fetchTotalMetrics = async () => {
-    try {
-      const data = await getMetrics(30); // Get last 30 days for "total" metrics
-      setTotalMetrics(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`获取总计指标失败: ${message}`);
-      console.error(err);
-    }
-  };
+  const todayMetrics = results[0].data ?? { reqs: 0, tokens: 0 };
+  const totalMetrics = results[1].data ?? { reqs: 0, tokens: 0 };
+  const allMetrics = results[2].data ?? { reqs: 0, tokens: 0 };
+  const dailyMetrics = results[3].data ?? [];
+  const hourlyMetrics = results[4].data ?? [];
+  const realModelCounts = results[5].data ?? [];
+  const requestedModelCounts = results[6].data ?? [];
+  const dbStats = results[7].data ?? null;
+  const providerMetrics = results[8].data ?? [];
 
-  const fetchAllMetrics = async () => {
-    try {
-      const data = await getTotalMetrics();
-      setAllMetrics(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`获取全量指标失败: ${message}`);
-      console.error(err);
-    }
-  };
-
-  const fetchDailyMetrics = async () => {
-    try {
-      const data = await getDailyMetrics(380);
-      setDailyMetrics(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`获取每日统计失败: ${message}`);
-    }
-  };
-
-  const fetchHourlyMetrics = async () => {
-    try {
-      const data = await getHourlyMetricsToday();
-      setHourlyMetrics(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`获取小时统计失败: ${message}`);
-    }
-  };
-  
-  const fetchRealModelCounts = async () => {
-    try {
-      const data = await getRealModelCounts();
-      setRealModelCounts(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`获取真实模型调用统计失败: ${message}`);
-      console.error(err);
-    }
-  };
-
-  const fetchRequestedModelCounts = async () => {
-    try {
-      const data = await getModelCounts();
-      setRequestedModelCounts(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`获取用户请求模型统计失败: ${message}`);
-      console.error(err);
-    }
-  };
-
-  const fetchDatabaseStats = async () => {
-    try {
-      const data = await getDatabaseStats();
-      setDbStats(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`获取数据库统计失败: ${message}`);
-    }
-  };
-
-  const fetchProviderMetrics = async () => {
-    try {
-      const data = await getProviderMetrics();
-      setProviderMetrics(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`获取供应商排行失败: ${message}`);
-    }
-  };
+  const loading = results.some((r) => r.isPending);
 
   const dbUsagePercent = dbStats && dbStats.page_count > 0
     ? ((dbStats.page_count - dbStats.free_pages) / dbStats.page_count) * 100

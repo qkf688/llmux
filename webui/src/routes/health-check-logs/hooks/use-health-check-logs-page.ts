@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
-  clearHealthCheckLogs,
   getBatchHealthCheckStatus,
-  getHealthCheckLogs,
-  getModels,
-  getProviders,
   runHealthCheckAll,
 } from "@/lib/api";
 import { toast } from "sonner";
@@ -19,85 +16,74 @@ import {
 import {
   selectHealthCheckLogsBackgroundBatchId,
   selectHealthCheckLogsBackgroundCheckComplete,
-  selectHealthCheckLogsClearingLogs,
   selectHealthCheckLogsClearDialogOpen,
   selectHealthCheckLogsDetailDialogOpen,
   selectHealthCheckLogsDetailLog,
   selectHealthCheckLogsFilters,
-  selectHealthCheckLogsLoading,
-  selectHealthCheckLogsLogs,
-  selectHealthCheckLogsModels,
   selectHealthCheckLogsPage,
-  selectHealthCheckLogsPages,
   selectHealthCheckLogsPageSize,
-  selectHealthCheckLogsProviders,
   selectHealthCheckLogsResultDialogOpen,
-  selectHealthCheckLogsTotal,
   selectHealthCheckLogsCurrentBatchId,
   selectOpenHealthCheckLogsDetailDialog,
   selectResetHealthCheckLogsTransient,
   selectSetHealthCheckLogsBackgroundBatchId,
   selectSetHealthCheckLogsBackgroundCheckComplete,
-  selectSetHealthCheckLogsClearingLogs,
   selectSetHealthCheckLogsClearDialogOpen,
   selectSetHealthCheckLogsDetailDialogOpen,
   selectSetHealthCheckLogsFilter,
-  selectSetHealthCheckLogsLoading,
-  selectSetHealthCheckLogsLogs,
-  selectSetHealthCheckLogsModels,
   selectSetHealthCheckLogsPage,
-  selectSetHealthCheckLogsPages,
   selectSetHealthCheckLogsPageSize,
-  selectSetHealthCheckLogsProviders,
   selectSetHealthCheckLogsResultDialogOpen,
-  selectSetHealthCheckLogsTotal,
   selectSetHealthCheckLogsCurrentBatchId,
   useHealthCheckLogsPageStore,
 } from "@/stores/health-check-logs";
+import {
+  healthCheckLogsKeys,
+  useHealthCheckLogsQuery,
+  useClearHealthCheckLogs,
+  useProviders,
+  useModels,
+} from "@/hooks/api";
 import { toErrorMessage } from "@/lib/errors";
 
 export function useHealthCheckLogsPage() {
-  const loading = useHealthCheckLogsPageStore(selectHealthCheckLogsLoading);
-  const logs = useHealthCheckLogsPageStore(selectHealthCheckLogsLogs);
-  const providers = useHealthCheckLogsPageStore(selectHealthCheckLogsProviders);
-  const models = useHealthCheckLogsPageStore(selectHealthCheckLogsModels);
+  const queryClient = useQueryClient();
+
   const filters = useHealthCheckLogsPageStore(selectHealthCheckLogsFilters);
   const page = useHealthCheckLogsPageStore(selectHealthCheckLogsPage);
   const pageSize = useHealthCheckLogsPageStore(selectHealthCheckLogsPageSize);
-  const total = useHealthCheckLogsPageStore(selectHealthCheckLogsTotal);
-  const pages = useHealthCheckLogsPageStore(selectHealthCheckLogsPages);
   const detailLog = useHealthCheckLogsPageStore(selectHealthCheckLogsDetailLog);
   const detailDialogOpen = useHealthCheckLogsPageStore(selectHealthCheckLogsDetailDialogOpen);
   const clearDialogOpen = useHealthCheckLogsPageStore(selectHealthCheckLogsClearDialogOpen);
-  const clearingLogs = useHealthCheckLogsPageStore(selectHealthCheckLogsClearingLogs);
   const resultDialogOpen = useHealthCheckLogsPageStore(selectHealthCheckLogsResultDialogOpen);
   const currentBatchId = useHealthCheckLogsPageStore(selectHealthCheckLogsCurrentBatchId);
   const backgroundBatchId = useHealthCheckLogsPageStore(selectHealthCheckLogsBackgroundBatchId);
   const backgroundCheckComplete = useHealthCheckLogsPageStore(selectHealthCheckLogsBackgroundCheckComplete);
 
-  const setLoading = useHealthCheckLogsPageStore(selectSetHealthCheckLogsLoading);
-  const setLogs = useHealthCheckLogsPageStore(selectSetHealthCheckLogsLogs);
-  const setProviders = useHealthCheckLogsPageStore(selectSetHealthCheckLogsProviders);
-  const setModels = useHealthCheckLogsPageStore(selectSetHealthCheckLogsModels);
   const setFilter = useHealthCheckLogsPageStore(selectSetHealthCheckLogsFilter);
   const setPage = useHealthCheckLogsPageStore(selectSetHealthCheckLogsPage);
   const setPageSize = useHealthCheckLogsPageStore(selectSetHealthCheckLogsPageSize);
-  const setTotal = useHealthCheckLogsPageStore(selectSetHealthCheckLogsTotal);
-  const setPages = useHealthCheckLogsPageStore(selectSetHealthCheckLogsPages);
   const openDetailDialog = useHealthCheckLogsPageStore(selectOpenHealthCheckLogsDetailDialog);
   const setDetailDialogOpen = useHealthCheckLogsPageStore(selectSetHealthCheckLogsDetailDialogOpen);
   const setClearDialogOpen = useHealthCheckLogsPageStore(selectSetHealthCheckLogsClearDialogOpen);
-  const setClearingLogs = useHealthCheckLogsPageStore(selectSetHealthCheckLogsClearingLogs);
   const setResultDialogOpen = useHealthCheckLogsPageStore(selectSetHealthCheckLogsResultDialogOpen);
   const setCurrentBatchId = useHealthCheckLogsPageStore(selectSetHealthCheckLogsCurrentBatchId);
   const setBackgroundBatchId = useHealthCheckLogsPageStore(selectSetHealthCheckLogsBackgroundBatchId);
   const setBackgroundCheckComplete = useHealthCheckLogsPageStore(selectSetHealthCheckLogsBackgroundCheckComplete);
   const resetTransient = useHealthCheckLogsPageStore(selectResetHealthCheckLogsTransient);
 
+  const apiFilters = toHealthCheckLogsApiFilters(filters);
+  const logsResponse = useHealthCheckLogsQuery(page, pageSize, apiFilters);
+  const { data: providers = [] } = useProviders();
+  const { data: models = [] } = useModels();
+  const clearMutation = useClearHealthCheckLogs();
+
+  const logs = logsResponse.data?.data ?? [];
+  const total = logsResponse.data?.total ?? 0;
+  const pages = logsResponse.data?.pages ?? 0;
+  const loading = logsResponse.isLoading;
+
   const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const fetchLogsRef = useRef<(pageToFetch?: number, pageSizeToUse?: number) => Promise<void>>(
-    async () => {}
-  );
   const resultDialogOpenRef = useRef(resultDialogOpen);
 
   const stopBackgroundPolling = useCallback(() => {
@@ -107,66 +93,13 @@ export function useHealthCheckLogsPage() {
     }
   }, []);
 
-  const fetchFilterOptions = useCallback(async () => {
-    const [providerResult, modelResult] = await Promise.allSettled([getProviders(), getModels()]);
-
-    if (providerResult.status === "fulfilled") {
-      setProviders(providerResult.value);
-    } else {
-      console.error("Error fetching providers:", providerResult.reason);
-    }
-
-    if (modelResult.status === "fulfilled") {
-      setModels(modelResult.value);
-    } else {
-      console.error("Error fetching models:", modelResult.reason);
-    }
-  }, [setModels, setProviders]);
-
-  const fetchLogs = useCallback(
-    async (pageToFetch = page, pageSizeToUse: number = pageSize) => {
-      setLoading(true);
-      try {
-        const result = await getHealthCheckLogs(
-          pageToFetch,
-          pageSizeToUse,
-          toHealthCheckLogsApiFilters(filters)
-        );
-        setLogs(result.data);
-        setTotal(result.total);
-        setPages(result.pages);
-      } catch (error) {
-        console.error("Error fetching health check logs:", error);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [filters, page, pageSize, setLoading, setLogs, setPages, setTotal]
-  );
-
-  useEffect(() => {
-    void fetchFilterOptions();
-  }, [fetchFilterOptions]);
-
-  useEffect(() => {
-    void fetchLogs();
-  }, [fetchLogs]);
-
-  useEffect(
-    () => () => {
-      stopBackgroundPolling();
-      resetTransient();
-    },
-    [resetTransient, stopBackgroundPolling]
-  );
-
-  useEffect(() => {
-    fetchLogsRef.current = fetchLogs;
-  }, [fetchLogs]);
-
   useEffect(() => {
     resultDialogOpenRef.current = resultDialogOpen;
   }, [resultDialogOpen]);
+
+  const refreshLogs = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: healthCheckLogsKeys.all });
+  }, [queryClient]);
 
   const handleFilterChange = (key: keyof HealthCheckLogsFilters, value: string) => {
     setFilter(key, value);
@@ -182,26 +115,18 @@ export function useHealthCheckLogsPage() {
     setPageSize(size);
   };
 
-  const refreshLogs = () => {
-    void fetchLogs();
-  };
-
   const handleDetailDialogOpenChange = (open: boolean) => {
     setDetailDialogOpen(open);
   };
 
   const confirmClearLogs = async () => {
     try {
-      setClearingLogs(true);
-      const result = await clearHealthCheckLogs();
+      const result = await clearMutation.mutateAsync();
       toast.success(`已清空 ${result.deleted} 条健康检测日志`);
       setClearDialogOpen(false);
       setPage(1);
-      await fetchLogs(1, pageSize);
     } catch (error) {
       toast.error(`清空健康检测日志失败: ${toErrorMessage(error)}`);
-    } finally {
-      setClearingLogs(false);
     }
   };
 
@@ -220,7 +145,7 @@ export function useHealthCheckLogsPage() {
             stopBackgroundPolling();
 
             if (!resultDialogOpenRef.current) {
-              void fetchLogsRef.current();
+              void queryClient.invalidateQueries({ queryKey: healthCheckLogsKeys.all });
             }
           }
         } catch (error) {
@@ -228,7 +153,7 @@ export function useHealthCheckLogsPage() {
         }
       }, 3000);
     },
-    [setBackgroundCheckComplete, stopBackgroundPolling]
+    [setBackgroundCheckComplete, stopBackgroundPolling, queryClient]
   );
 
   const handleRunHealthCheck = async () => {
@@ -255,7 +180,7 @@ export function useHealthCheckLogsPage() {
     if (!open && backgroundCheckComplete) {
       setCurrentBatchId(null);
       setBackgroundBatchId(null);
-      void fetchLogs();
+      refreshLogs();
     }
   };
 
@@ -268,6 +193,14 @@ export function useHealthCheckLogsPage() {
     stopBackgroundPolling();
     clearStoredHealthCheckBatchState();
   };
+
+  useEffect(
+    () => () => {
+      stopBackgroundPolling();
+      resetTransient();
+    },
+    [resetTransient, stopBackgroundPolling]
+  );
 
   useEffect(() => {
     const storedState = readStoredHealthCheckBatchState();
@@ -298,7 +231,7 @@ export function useHealthCheckLogsPage() {
     detailLog,
     detailDialogOpen,
     clearDialogOpen,
-    clearingLogs,
+    clearingLogs: clearMutation.isPending,
     resultDialogOpen,
     currentBatchId,
     backgroundBatchId,

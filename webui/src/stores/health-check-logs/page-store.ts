@@ -1,5 +1,5 @@
 import { createStore } from "zustand/vanilla";
-import type { HealthCheckLog, Model, Provider } from "@/lib/api";
+import type { HealthCheckLog } from "@/lib/api";
 import {
   readHealthCheckLogsPagePreferences,
   writeHealthCheckLogsPagePreferences,
@@ -14,43 +14,27 @@ import {
 const preferences = readHealthCheckLogsPagePreferences();
 
 export type HealthCheckLogsPageState = {
-  loading: boolean;
-  logs: HealthCheckLog[];
-  providers: Provider[];
-  models: Model[];
-
   filters: HealthCheckLogsFilters;
   page: number;
   pageSize: HealthCheckLogsPagePreferences["pageSize"];
-  total: number;
-  pages: number;
 
   detailLog: HealthCheckLog | null;
   detailDialogOpen: boolean;
   clearDialogOpen: boolean;
-  clearingLogs: boolean;
 
   resultDialogOpen: boolean;
   currentBatchId: string | null;
   backgroundBatchId: string | null;
   backgroundCheckComplete: boolean;
 
-  setLoading: (loading: boolean) => void;
-  setLogs: (logs: HealthCheckLog[]) => void;
-  setProviders: (providers: Provider[]) => void;
-  setModels: (models: Model[]) => void;
-
   setFilter: (key: keyof HealthCheckLogsFilters, value: string) => void;
   setPage: (page: number) => void;
   setPageSize: (size: number) => void;
-  setTotal: (total: number) => void;
-  setPages: (pages: number) => void;
 
   openDetailDialog: (log: HealthCheckLog) => void;
   setDetailDialogOpen: (open: boolean) => void;
 
   setClearDialogOpen: (open: boolean) => void;
-  setClearingLogs: (clearing: boolean) => void;
 
   setResultDialogOpen: (open: boolean) => void;
   setCurrentBatchId: (batchId: string | null) => void;
@@ -69,31 +53,18 @@ function persistPreferences(get: () => HealthCheckLogsPageState, next: Partial<H
 }
 
 export const healthCheckLogsPageStore = createStore<HealthCheckLogsPageState>()((set, get) => ({
-  loading: true,
-  logs: [],
-  providers: [],
-  models: [],
-
   filters: preferences.filters ?? { ...DEFAULT_HEALTH_CHECK_LOGS_FILTERS },
   page: 1,
   pageSize: preferences.pageSize,
-  total: 0,
-  pages: 0,
 
   detailLog: null,
   detailDialogOpen: false,
   clearDialogOpen: false,
-  clearingLogs: false,
 
   resultDialogOpen: false,
   currentBatchId: null,
   backgroundBatchId: null,
   backgroundCheckComplete: false,
-
-  setLoading: (loading: boolean) => set({ loading }),
-  setLogs: (logs: HealthCheckLog[]) => set({ logs }),
-  setProviders: (providers: Provider[]) => set({ providers }),
-  setModels: (models: Model[]) => set({ models }),
 
   setFilter: (key: keyof HealthCheckLogsFilters, value: string) => {
     const current = get();
@@ -119,14 +90,11 @@ export const healthCheckLogsPageStore = createStore<HealthCheckLogsPageState>()(
     persistPreferences(get, { pageSize: validated });
     set({ pageSize: validated, page: 1 });
   },
-  setTotal: (total: number) => set({ total }),
-  setPages: (pages: number) => set({ pages }),
 
   openDetailDialog: (log: HealthCheckLog) => set({ detailLog: log, detailDialogOpen: true }),
   setDetailDialogOpen: (open: boolean) => set(open ? { detailDialogOpen: true } : { detailDialogOpen: false, detailLog: null }),
 
   setClearDialogOpen: (open: boolean) => set({ clearDialogOpen: open }),
-  setClearingLogs: (clearing: boolean) => set({ clearingLogs: clearing }),
 
   setResultDialogOpen: (open: boolean) => set({ resultDialogOpen: open }),
   setCurrentBatchId: (batchId: string | null) => set({ currentBatchId: batchId }),
@@ -135,17 +103,10 @@ export const healthCheckLogsPageStore = createStore<HealthCheckLogsPageState>()(
 
   resetTransient: () =>
     set({
-      loading: true,
-      logs: [],
-      providers: [],
-      models: [],
       page: 1,
-      total: 0,
-      pages: 0,
       detailLog: null,
       detailDialogOpen: false,
       clearDialogOpen: false,
-      clearingLogs: false,
       resultDialogOpen: false,
       currentBatchId: null,
       backgroundBatchId: null,

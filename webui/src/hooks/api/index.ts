@@ -5,3 +5,4 @@ export * from './use-models';
 export * from './use-virtual-models';
 export * from './use-logs';
 export * from './use-database';
+export * from './use-health-check-logs';

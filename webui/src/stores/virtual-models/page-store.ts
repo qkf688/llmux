@@ -1,5 +1,5 @@
 import { createStore } from "zustand/vanilla";
-import type { Model, Provider, VirtualModel, VirtualModelMapping } from "@/lib/api";
+import type { VirtualModel, VirtualModelMapping } from "@/lib/api";
 import { readVirtualModelsPagePreferences, writeVirtualModelsPagePreferences } from "@/stores/virtual-models/persist";
 import type { VirtualModelsPagePreferences } from "@/stores/virtual-models/types";
 
@@ -31,19 +31,12 @@ function persistPreferences(get: () => PreferencesState, next: Partial<VirtualMo
 const preferences = readVirtualModelsPagePreferences();
 
 export type VirtualModelsPageState = {
-  loading: boolean;
-  virtualModels: VirtualModel[];
-  realModels: Model[];
-  providers: Provider[];
-  blacklistedProviders: Provider[];
-
   modelDialogOpen: boolean;
   editingModel: VirtualModel | null;
   modelToDeleteId: number | null;
 
   mappingsDialogOpen: boolean;
   currentVirtualModel: VirtualModel | null;
-  mappings: VirtualModelMapping[];
   mappingSearchQuery: string;
   selectedMappingIds: Set<number>;
   mappingBatchDeleteDialogOpen: boolean;
@@ -62,13 +55,6 @@ export type VirtualModelsPageState = {
   providerSelectorDialogOpen: boolean;
   selectedProviderIds: number[];
   providerSearchQuery: string;
-
-  setLoading: (loading: boolean) => void;
-  setVirtualModels: (models: VirtualModel[]) => void;
-  setRealModels: (models: Model[]) => void;
-  setProviders: (providers: Provider[]) => void;
-  setBlacklistedProviders: (providers: Provider[]) => void;
-  setMappings: (mappings: VirtualModelMapping[]) => void;
 
   setModelDialogOpen: (open: boolean) => void;
   setEditingModel: (model: VirtualModel | null) => void;
@@ -99,19 +85,12 @@ export type VirtualModelsPageState = {
 };
 
 export const virtualModelsPageStore = createStore<VirtualModelsPageState>()((set, get) => ({
-  loading: true,
-  virtualModels: [],
-  realModels: [],
-  providers: [],
-  blacklistedProviders: [],
-
   modelDialogOpen: false,
   editingModel: null,
   modelToDeleteId: null,
 
   mappingsDialogOpen: false,
   currentVirtualModel: null,
-  mappings: [],
   mappingSearchQuery: "",
   selectedMappingIds: new Set<number>(),
   mappingBatchDeleteDialogOpen: false,
@@ -130,13 +109,6 @@ export const virtualModelsPageStore = createStore<VirtualModelsPageState>()((set
   providerSelectorDialogOpen: false,
   selectedProviderIds: [],
   providerSearchQuery: preferences.providerSearchQuery,
-
-  setLoading: (loading: boolean) => set({ loading }),
-  setVirtualModels: (models: VirtualModel[]) => set({ virtualModels: models }),
-  setRealModels: (models: Model[]) => set({ realModels: models }),
-  setProviders: (providers: Provider[]) => set({ providers }),
-  setBlacklistedProviders: (providers: Provider[]) => set({ blacklistedProviders: providers }),
-  setMappings: (mappings: VirtualModelMapping[]) => set({ mappings }),
 
   setModelDialogOpen: (open: boolean) => set({ modelDialogOpen: open }),
   setEditingModel: (model: VirtualModel | null) => set({ editingModel: model }),
@@ -198,7 +170,6 @@ export const virtualModelsPageStore = createStore<VirtualModelsPageState>()((set
       modelToDeleteId: null,
       mappingsDialogOpen: false,
       currentVirtualModel: null,
-      mappings: [],
       mappingSearchQuery: "",
       selectedMappingIds: new Set<number>(),
       mappingBatchDeleteDialogOpen: false,

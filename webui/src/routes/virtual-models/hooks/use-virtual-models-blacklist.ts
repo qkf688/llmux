@@ -2,14 +2,11 @@ import { toast } from "sonner";
 import { updateProvider, type VirtualModel } from "@/lib/api";
 import { toErrorMessage } from "@/lib/errors";
 import type { VirtualModelsPageState } from "@/stores/virtual-models";
-import type { Provider } from "@/lib/api";
 
 type UseVirtualModelsBlacklistInput = {
-  providers: Provider[];
   selectedProviderIds: VirtualModelsPageState["selectedProviderIds"];
   refreshProvidersState: () => Promise<void>;
   setCurrentVirtualModel: VirtualModelsPageState["setCurrentVirtualModel"];
-  setBlacklistedProviders: VirtualModelsPageState["setBlacklistedProviders"];
   setBlacklistDialogOpen: VirtualModelsPageState["setBlacklistDialogOpen"];
   setProviderSelectorDialogOpen: VirtualModelsPageState["setProviderSelectorDialogOpen"];
   setSelectedProviderIds: VirtualModelsPageState["setSelectedProviderIds"];
@@ -17,11 +14,9 @@ type UseVirtualModelsBlacklistInput = {
 };
 
 export function useVirtualModelsBlacklist({
-  providers,
   selectedProviderIds,
   refreshProvidersState,
   setCurrentVirtualModel,
-  setBlacklistedProviders,
   setBlacklistDialogOpen,
   setProviderSelectorDialogOpen,
   setSelectedProviderIds,
@@ -34,7 +29,6 @@ export function useVirtualModelsBlacklist({
     } catch (error) {
       const message = toErrorMessage(error);
       toast.error(`获取提供商数据失败: ${message}`);
-      setBlacklistedProviders(providers.filter((provider) => provider.blacklisted));
     }
     setBlacklistDialogOpen(true);
   };

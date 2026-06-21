@@ -1,6 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useForm } from "react-hook-form";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   defaultMappingFormValues,
   defaultVirtualModelFormValues,
@@ -16,73 +17,73 @@ import {
   selectSetVirtualModelsBatchPriority,
   selectSetVirtualModelsBatchWeight,
   selectSetVirtualModelsBlacklistDialogOpen,
-  selectSetVirtualModelsBlacklistedProviders,
   selectSetVirtualModelsCurrentVirtualModel,
   selectSetVirtualModelsEditingMapping,
   selectSetVirtualModelsEditingModel,
-  selectSetVirtualModelsLoading,
   selectSetVirtualModelsMappingBatchDialogOpen,
   selectSetVirtualModelsMappingBatchDeleteDialogOpen,
   selectSetVirtualModelsMappingFormDialogOpen,
   selectSetVirtualModelsMappingSearchQuery,
-  selectSetVirtualModelsMappings,
   selectSetVirtualModelsMappingsDialogOpen,
   selectSetVirtualModelsModelDialogOpen,
   selectSetVirtualModelsModelSearchQuery,
   selectSetVirtualModelsModelToDeleteId,
   selectSetVirtualModelsProviderSearchQuery,
   selectSetVirtualModelsProviderSelectorDialogOpen,
-  selectSetVirtualModelsProviders,
-  selectSetVirtualModelsRealModels,
   selectSetVirtualModelsSelectedMappingIds,
   selectSetVirtualModelsSelectedModelIds,
   selectSetVirtualModelsSelectedProviderIds,
-  selectSetVirtualModelsVirtualModels,
   selectVirtualModelsBatchEnabled,
   selectVirtualModelsBatchPriority,
   selectVirtualModelsBatchWeight,
   selectVirtualModelsBlacklistDialogOpen,
-  selectVirtualModelsBlacklistedProviders,
   selectVirtualModelsCurrentVirtualModel,
   selectVirtualModelsEditingMapping,
   selectVirtualModelsEditingModel,
-  selectVirtualModelsLoading,
   selectVirtualModelsMappingBatchDialogOpen,
   selectVirtualModelsMappingBatchDeleteDialogOpen,
   selectVirtualModelsMappingFormDialogOpen,
   selectVirtualModelsMappingSearchQuery,
-  selectVirtualModelsMappings,
   selectVirtualModelsMappingsDialogOpen,
   selectVirtualModelsModelDialogOpen,
   selectVirtualModelsModelSearchQuery,
   selectVirtualModelsModelToDeleteId,
   selectVirtualModelsProviderSearchQuery,
   selectVirtualModelsProviderSelectorDialogOpen,
-  selectVirtualModelsProviders,
-  selectVirtualModelsRealModels,
   selectVirtualModelsSelectedMappingIds,
   selectVirtualModelsSelectedModelIds,
   selectVirtualModelsSelectedProviderIds,
-  selectVirtualModelsVirtualModels,
   useVirtualModelsPageStore,
 } from "@/stores/virtual-models";
+import { useVirtualModels, useVMMappings, virtualModelKeys } from "@/hooks/api/use-virtual-models";
+import { useModels } from "@/hooks/api/use-models";
+import { useProviders } from "@/hooks/api/use-providers";
 import { useVirtualModelsBootstrap } from "./use-virtual-models-bootstrap";
 import { useVirtualModelsBlacklist } from "./use-virtual-models-blacklist";
 import { useVirtualModelsMappings } from "./use-virtual-models-mappings";
 import { useVirtualModelsModelActions } from "./use-virtual-models-model-actions";
 
 export function useVirtualModelsPage() {
-  const loading = useVirtualModelsPageStore(selectVirtualModelsLoading);
-  const virtualModels = useVirtualModelsPageStore(selectVirtualModelsVirtualModels);
-  const realModels = useVirtualModelsPageStore(selectVirtualModelsRealModels);
-  const providers = useVirtualModelsPageStore(selectVirtualModelsProviders);
-  const blacklistedProviders = useVirtualModelsPageStore(selectVirtualModelsBlacklistedProviders);
+  const queryClient = useQueryClient();
+
+  const { data: virtualModelsData, isLoading: virtualModelsLoading } = useVirtualModels();
+  const { data: realModelsData, isLoading: modelsLoading } = useModels();
+  const { data: providersData, isLoading: providersLoading } = useProviders();
+
+  const virtualModels = virtualModelsData ?? [];
+  const realModels = realModelsData ?? [];
+  const providers = providersData ?? [];
+
+  const blacklistedProviders = useMemo(
+    () => providers.filter((p) => p.blacklisted),
+    [providers],
+  );
+
   const modelDialogOpen = useVirtualModelsPageStore(selectVirtualModelsModelDialogOpen);
   const editingModel = useVirtualModelsPageStore(selectVirtualModelsEditingModel);
   const modelToDeleteId = useVirtualModelsPageStore(selectVirtualModelsModelToDeleteId);
   const mappingsDialogOpen = useVirtualModelsPageStore(selectVirtualModelsMappingsDialogOpen);
   const currentVirtualModel = useVirtualModelsPageStore(selectVirtualModelsCurrentVirtualModel);
-  const mappings = useVirtualModelsPageStore(selectVirtualModelsMappings);
   const mappingSearchQuery = useVirtualModelsPageStore(selectVirtualModelsMappingSearchQuery);
   const selectedMappingIds = useVirtualModelsPageStore(selectVirtualModelsSelectedMappingIds);
   const mappingBatchDeleteDialogOpen = useVirtualModelsPageStore(selectVirtualModelsMappingBatchDeleteDialogOpen);
@@ -99,12 +100,6 @@ export function useVirtualModelsPage() {
   const selectedProviderIds = useVirtualModelsPageStore(selectVirtualModelsSelectedProviderIds);
   const providerSearchQuery = useVirtualModelsPageStore(selectVirtualModelsProviderSearchQuery);
 
-  const setLoading = useVirtualModelsPageStore(selectSetVirtualModelsLoading);
-  const setVirtualModels = useVirtualModelsPageStore(selectSetVirtualModelsVirtualModels);
-  const setRealModels = useVirtualModelsPageStore(selectSetVirtualModelsRealModels);
-  const setProviders = useVirtualModelsPageStore(selectSetVirtualModelsProviders);
-  const setBlacklistedProviders = useVirtualModelsPageStore(selectSetVirtualModelsBlacklistedProviders);
-  const setMappings = useVirtualModelsPageStore(selectSetVirtualModelsMappings);
   const setModelDialogOpen = useVirtualModelsPageStore(selectSetVirtualModelsModelDialogOpen);
   const setEditingModel = useVirtualModelsPageStore(selectSetVirtualModelsEditingModel);
   const setModelToDeleteId = useVirtualModelsPageStore(selectSetVirtualModelsModelToDeleteId);
@@ -139,15 +134,20 @@ export function useVirtualModelsPage() {
     defaultValues: { ...defaultMappingFormValues },
   });
 
-  const { fetchInitialData, refreshProvidersState, refreshMappings } = useVirtualModelsBootstrap({
-    setLoading,
-    setVirtualModels,
-    setRealModels,
-    setProviders,
-    setBlacklistedProviders,
-    setMappings,
+  const { fetchInitialData, refreshProvidersState } = useVirtualModelsBootstrap({
     resetTransient,
   });
+
+  const { data: mappingsData } = useVMMappings(currentVirtualModel?.ID ?? null);
+  const mappings = mappingsData ?? [];
+
+  const refreshMappings = useCallback(async () => {
+    if (currentVirtualModel) {
+      await queryClient.invalidateQueries({ queryKey: virtualModelKeys.mappings(currentVirtualModel.ID) });
+    }
+  }, [queryClient, currentVirtualModel]);
+
+  const loading = virtualModelsLoading || modelsLoading || providersLoading;
 
   const filteredModels = useMemo(() => {
     const keyword = modelSearchQuery.trim().toLowerCase();
@@ -262,11 +262,9 @@ export function useVirtualModelsPage() {
     confirmAddBlacklistedProviders,
     removeBlacklistedProvider,
   } = useVirtualModelsBlacklist({
-    providers,
     selectedProviderIds,
     refreshProvidersState,
     setCurrentVirtualModel,
-    setBlacklistedProviders,
     setBlacklistDialogOpen,
     setProviderSelectorDialogOpen,
     setSelectedProviderIds,

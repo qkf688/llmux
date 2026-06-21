@@ -1,18 +1,11 @@
 import type { VirtualModelsPageState } from "@/stores/virtual-models/page-store";
 
-export const selectVirtualModelsLoading = (state: VirtualModelsPageState) => state.loading;
-export const selectVirtualModelsVirtualModels = (state: VirtualModelsPageState) => state.virtualModels;
-export const selectVirtualModelsRealModels = (state: VirtualModelsPageState) => state.realModels;
-export const selectVirtualModelsProviders = (state: VirtualModelsPageState) => state.providers;
-export const selectVirtualModelsBlacklistedProviders = (state: VirtualModelsPageState) => state.blacklistedProviders;
-
 export const selectVirtualModelsModelDialogOpen = (state: VirtualModelsPageState) => state.modelDialogOpen;
 export const selectVirtualModelsEditingModel = (state: VirtualModelsPageState) => state.editingModel;
 export const selectVirtualModelsModelToDeleteId = (state: VirtualModelsPageState) => state.modelToDeleteId;
 
 export const selectVirtualModelsMappingsDialogOpen = (state: VirtualModelsPageState) => state.mappingsDialogOpen;
 export const selectVirtualModelsCurrentVirtualModel = (state: VirtualModelsPageState) => state.currentVirtualModel;
-export const selectVirtualModelsMappings = (state: VirtualModelsPageState) => state.mappings;
 export const selectVirtualModelsMappingSearchQuery = (state: VirtualModelsPageState) => state.mappingSearchQuery;
 export const selectVirtualModelsSelectedMappingIds = (state: VirtualModelsPageState) => state.selectedMappingIds;
 export const selectVirtualModelsMappingBatchDeleteDialogOpen = (state: VirtualModelsPageState) =>
@@ -33,13 +26,6 @@ export const selectVirtualModelsProviderSelectorDialogOpen = (state: VirtualMode
   state.providerSelectorDialogOpen;
 export const selectVirtualModelsSelectedProviderIds = (state: VirtualModelsPageState) => state.selectedProviderIds;
 export const selectVirtualModelsProviderSearchQuery = (state: VirtualModelsPageState) => state.providerSearchQuery;
-
-export const selectSetVirtualModelsLoading = (state: VirtualModelsPageState) => state.setLoading;
-export const selectSetVirtualModelsVirtualModels = (state: VirtualModelsPageState) => state.setVirtualModels;
-export const selectSetVirtualModelsRealModels = (state: VirtualModelsPageState) => state.setRealModels;
-export const selectSetVirtualModelsProviders = (state: VirtualModelsPageState) => state.setProviders;
-export const selectSetVirtualModelsBlacklistedProviders = (state: VirtualModelsPageState) => state.setBlacklistedProviders;
-export const selectSetVirtualModelsMappings = (state: VirtualModelsPageState) => state.setMappings;
 
 export const selectSetVirtualModelsModelDialogOpen = (state: VirtualModelsPageState) => state.setModelDialogOpen;
 export const selectSetVirtualModelsEditingModel = (state: VirtualModelsPageState) => state.setEditingModel;

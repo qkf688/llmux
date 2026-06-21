@@ -21,7 +21,7 @@ import type { VirtualModelsBatchDefaults } from "@/stores/virtual-models";
 
 type UseVirtualModelsMappingsInput = {
   currentVirtualModel: VirtualModelsPageState["currentVirtualModel"];
-  mappings: VirtualModelsPageState["mappings"];
+  mappings: VirtualModelMapping[];
   editingMapping: VirtualModelsPageState["editingMapping"];
   selectedModelIds: VirtualModelsPageState["selectedModelIds"];
   batchPriority: VirtualModelsPageState["batchPriority"];
@@ -35,7 +35,7 @@ type UseVirtualModelsMappingsInput = {
   mappingForm: UseFormReturn<MappingFormValues>;
   defaults: VirtualModelsBatchDefaults;
   getRealModelName: (modelId: number) => string;
-  refreshMappings: (virtualModelId: number) => Promise<void>;
+  refreshMappings: () => Promise<void>;
   setCurrentVirtualModel: VirtualModelsPageState["setCurrentVirtualModel"];
   setMappingsDialogOpen: VirtualModelsPageState["setMappingsDialogOpen"];
   setMappingFormDialogOpen: VirtualModelsPageState["setMappingFormDialogOpen"];
@@ -108,7 +108,7 @@ export function useVirtualModelsMappings({
     setSelectedMappingIds(() => new Set<number>());
     setMappingBatchDeleteDialogOpen(false);
     try {
-      await refreshMappings(model.ID);
+      await refreshMappings();
       setMappingsDialogOpen(true);
     } catch (error) {
       const message = toErrorMessage(error);
@@ -159,7 +159,7 @@ export function useVirtualModelsMappings({
         toast.success("映射创建成功");
       }
       setMappingFormDialogOpen(false);
-      await refreshMappings(currentVirtualModel.ID);
+      await refreshMappings();
     } catch (error) {
       const message = toErrorMessage(error);
       toast.error(`操作失败: ${message}`);
@@ -182,7 +182,7 @@ export function useVirtualModelsMappings({
         next.delete(mappingId);
         return next;
       });
-      await refreshMappings(currentVirtualModel.ID);
+      await refreshMappings();
     } catch (error) {
       const message = toErrorMessage(error);
       toast.error(`删除失败: ${message}`);
@@ -251,7 +251,7 @@ export function useVirtualModelsMappings({
       }
 
       setMappingBatchDialogOpen(false);
-      await refreshMappings(currentVirtualModel.ID);
+      await refreshMappings();
     } catch (error) {
       const message = toErrorMessage(error);
       toast.error(`批量添加失败: ${message}`);
@@ -306,7 +306,7 @@ export function useVirtualModelsMappings({
       toast.success(`已删除 ${result.deleted} 条映射`);
       setMappingBatchDeleteDialogOpen(false);
       setSelectedMappingIds(() => new Set<number>());
-      await refreshMappings(currentVirtualModel.ID);
+      await refreshMappings();
     } catch (error) {
       const message = toErrorMessage(error);
       toast.error(`批量删除失败: ${message}`);

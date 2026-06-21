@@ -1,14 +1,16 @@
 import { useCallback } from "react";
-import {
-  clearModelSyncErrorLogs,
-  clearModelSyncLogs,
-  deleteModelSyncLogs,
-  syncAllProviderModels,
-  updateProvider,
-} from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
 import { toErrorMessage } from "@/lib/errors";
 import { toast } from "sonner";
 import type { ModelSyncTab } from "../types";
+import {
+  modelSyncLogsKeys,
+  useSyncAllProvidersMutation,
+  useDeleteModelSyncLogsMutation,
+  useClearModelSyncLogsMutation,
+  useClearModelSyncErrorLogsMutation,
+  useToggleProviderModelEndpointMutation,
+} from "@/hooks/api";
 import type { ModelSyncLogsPageState } from "@/stores/model-sync-logs";
 
 type UseModelSyncLogsActionsInput = {
@@ -17,18 +19,11 @@ type UseModelSyncLogsActionsInput = {
   page: ModelSyncLogsPageState["page"];
   selectedLogs: ModelSyncLogsPageState["selectedLogs"];
   selectedErrorProviders: ModelSyncLogsPageState["selectedErrorProviders"];
-  setSyncing: ModelSyncLogsPageState["setSyncing"];
   setSelectedLogs: ModelSyncLogsPageState["setSelectedLogs"];
   setClearDialogOpen: ModelSyncLogsPageState["setClearDialogOpen"];
   setPage: ModelSyncLogsPageState["setPage"];
-  setClearingErrors: ModelSyncLogsPageState["setClearingErrors"];
   setSelectedErrorProviders: ModelSyncLogsPageState["setSelectedErrorProviders"];
   setTogglingProviderIds: ModelSyncLogsPageState["setTogglingProviderIds"];
-  setProvidersById: ModelSyncLogsPageState["setProvidersById"];
-  fetchStats: () => Promise<void>;
-  fetchLogs: () => Promise<void>;
-  fetchRecentModels: () => Promise<void>;
-  fetchRecentErrors: () => Promise<void>;
 };
 
 export function useModelSyncLogsActions({
@@ -37,23 +32,33 @@ export function useModelSyncLogsActions({
   page,
   selectedLogs,
   selectedErrorProviders,
-  setSyncing,
   setSelectedLogs,
   setClearDialogOpen,
   setPage,
-  setClearingErrors,
   setSelectedErrorProviders,
   setTogglingProviderIds,
-  setProvidersById,
-  fetchStats,
-  fetchLogs,
-  fetchRecentModels,
-  fetchRecentErrors,
 }: UseModelSyncLogsActionsInput) {
+  const queryClient = useQueryClient();
+  const syncAllMutation = useSyncAllProvidersMutation();
+  const deleteLogsMutation = useDeleteModelSyncLogsMutation();
+  const clearLogsMutation = useClearModelSyncLogsMutation();
+  const clearErrorsMutation = useClearModelSyncErrorLogsMutation();
+  const toggleEndpointMutation = useToggleProviderModelEndpointMutation();
+
+  const invalidateCurrentTab = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: modelSyncLogsKeys.stats() });
+    if (activeTab === "logs") {
+      void queryClient.invalidateQueries({ queryKey: modelSyncLogsKeys.logsList() });
+    } else if (activeTab === "recent") {
+      void queryClient.invalidateQueries({ queryKey: modelSyncLogsKeys.recent() });
+    } else {
+      void queryClient.invalidateQueries({ queryKey: modelSyncLogsKeys.errors() });
+    }
+  }, [activeTab, queryClient]);
+
   const handleSyncNow = async () => {
     try {
-      setSyncing(true);
-      await syncAllProviderModels();
+      await syncAllMutation.mutateAsync();
       toast.success("同步已开始，请稍后刷新查看结果");
 
       if (refreshTimerRef.current) {
@@ -61,18 +66,10 @@ export function useModelSyncLogsActions({
       }
 
       refreshTimerRef.current = setTimeout(() => {
-        void fetchStats();
-        void fetchLogs();
-        if (activeTab === "recent") {
-          void fetchRecentModels();
-        } else if (activeTab === "errors") {
-          void fetchRecentErrors();
-        }
+        invalidateCurrentTab();
       }, 2000);
     } catch (error) {
       toast.error(`同步失败: ${toErrorMessage(error)}`);
-    } finally {
-      setSyncing(false);
     }
   };
 
@@ -83,10 +80,9 @@ export function useModelSyncLogsActions({
 
     const ids = Array.from(selectedLogs);
     try {
-      await deleteModelSyncLogs(ids);
+      await deleteLogsMutation.mutateAsync(ids);
       toast.success(`已删除 ${ids.length} 条日志`);
       setSelectedLogs(new Set());
-      await fetchLogs();
     } catch (error) {
       toast.error(`删除失败: ${toErrorMessage(error)}`);
     }
@@ -94,15 +90,13 @@ export function useModelSyncLogsActions({
 
   const handleClearAll = async () => {
     try {
-      await clearModelSyncLogs();
+      await clearLogsMutation.mutateAsync();
       toast.success("已清空所有日志");
       setClearDialogOpen(false);
       setSelectedLogs(new Set());
 
       if (page !== 1) {
         setPage(1);
-      } else {
-        await fetchLogs();
       }
     } catch (error) {
       toast.error(`清空失败: ${toErrorMessage(error)}`);
@@ -116,31 +110,21 @@ export function useModelSyncLogsActions({
 
     const providerIds = Array.from(selectedErrorProviders);
     try {
-      setClearingErrors(true);
-      const result = await clearModelSyncErrorLogs({ provider_ids: providerIds });
+      const result = await clearErrorsMutation.mutateAsync({ provider_ids: providerIds });
       toast.success(`已清除 ${providerIds.length} 个提供商的错误日志（共 ${result.deleted} 条）`);
       setSelectedErrorProviders(new Set());
-      await fetchRecentErrors();
-      void fetchStats();
     } catch (error) {
       toast.error(`清除失败: ${toErrorMessage(error)}`);
-    } finally {
-      setClearingErrors(false);
     }
   };
 
   const handleClearAllErrors = async () => {
     try {
-      setClearingErrors(true);
-      const result = await clearModelSyncErrorLogs();
+      const result = await clearErrorsMutation.mutateAsync(undefined);
       toast.success(`已清空全部错误日志（共 ${result.deleted} 条）`);
       setSelectedErrorProviders(new Set());
-      await fetchRecentErrors();
-      void fetchStats();
     } catch (error) {
       toast.error(`清空失败: ${toErrorMessage(error)}`);
-    } finally {
-      setClearingErrors(false);
     }
   };
 
@@ -148,24 +132,10 @@ export function useModelSyncLogsActions({
     async (providerId: number, enabled: boolean) => {
       setTogglingProviderIds((previous) => new Set(previous).add(providerId));
       try {
-        const updated = await updateProvider(providerId, { model_endpoint: enabled });
-        setProvidersById((previous) => ({ ...previous, [providerId]: updated }));
-        toast.success(`${updated.Name} 模型端点已${enabled ? "开启" : "关闭"}`);
-        void fetchStats();
+        await toggleEndpointMutation.mutateAsync({ providerId, enabled });
+        toast.success(`模型端点已${enabled ? "开启" : "关闭"}`);
       } catch (error) {
         const message = toErrorMessage(error);
-        if (message.includes("Provider not found")) {
-          setProvidersById((previous) => {
-            if (!(providerId in previous)) {
-              return previous;
-            }
-            const next = { ...previous };
-            delete next[providerId];
-            return next;
-          });
-          toast.info("提供商已删除，模型端点无需操作");
-          return;
-        }
         toast.error(`更新提供商失败: ${message}`);
       } finally {
         setTogglingProviderIds((previous) => {
@@ -175,10 +145,15 @@ export function useModelSyncLogsActions({
         });
       }
     },
-    [fetchStats, setProvidersById, setTogglingProviderIds]
+    [setTogglingProviderIds, toggleEndpointMutation]
   );
 
+  const syncing = syncAllMutation.isPending;
+  const clearingErrors = clearErrorsMutation.isPending;
+
   return {
+    syncing,
+    clearingErrors,
     handleSyncNow,
     handleDeleteSelected,
     handleClearAll,

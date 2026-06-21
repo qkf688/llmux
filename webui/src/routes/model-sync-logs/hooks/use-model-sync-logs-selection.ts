@@ -1,19 +1,21 @@
 import { useCallback, useEffect, useMemo } from "react";
-import type { ModelSyncLogsPageState } from "@/stores/model-sync-logs";
+import type { ModelSyncLog } from "@/lib/api";
+
+type Updater<T> = T | ((previous: T) => T);
 
 type UseModelSyncLogsSelectionInput = {
-  activeTab: ModelSyncLogsPageState["activeTab"];
-  logs: ModelSyncLogsPageState["logs"];
-  recentErrors: ModelSyncLogsPageState["recentErrors"];
-  selectedLogs: ModelSyncLogsPageState["selectedLogs"];
-  selectedErrorProviders: ModelSyncLogsPageState["selectedErrorProviders"];
-  page: ModelSyncLogsPageState["page"];
-  totalPages: ModelSyncLogsPageState["totalPages"];
-  showUnchanged: ModelSyncLogsPageState["showUnchanged"];
-  setSelectedLogs: ModelSyncLogsPageState["setSelectedLogs"];
-  setSelectedErrorProviders: ModelSyncLogsPageState["setSelectedErrorProviders"];
-  setPage: ModelSyncLogsPageState["setPage"];
-  setShowUnchanged: ModelSyncLogsPageState["setShowUnchanged"];
+  activeTab: string;
+  logs: ModelSyncLog[];
+  recentErrors: ModelSyncLog[];
+  selectedLogs: Set<number>;
+  selectedErrorProviders: Set<number>;
+  page: number;
+  totalPages: number;
+  showUnchanged: boolean;
+  setSelectedLogs: (next: Updater<Set<number>>) => void;
+  setSelectedErrorProviders: (next: Updater<Set<number>>) => void;
+  setPage: (page: number) => void;
+  setShowUnchanged: (show: boolean) => void;
 };
 
 export function useModelSyncLogsSelection({
@@ -150,4 +152,3 @@ export function useModelSyncLogsSelection({
     isErrorProviderSelected,
   };
 }
-

@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useCallback, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { LogsFilters } from "../types";
 import {
   buildLogsFiltersSummary,
@@ -10,23 +11,11 @@ import {
   selectDeleteDialogOpen,
   selectDetailDialogOpen,
   selectLogToDelete,
-  selectLogs,
-  selectLogsAvailableStyles,
   selectLogsFilters,
-  selectLogsIsClearingAll,
-  selectLogsIsClearingFiltered,
-  selectLogsIsDeleting,
-  selectLogsLoading,
   selectLogsPage,
-  selectLogsPages,
   selectLogsPageSize,
-  selectLogsProviders,
-  selectLogsModels,
-  selectLogsTotal,
-  selectLogsUserAgents,
   selectOpenDeleteDialog,
   selectOpenDetailDialog,
-  selectResetLogsTransient,
   selectSelectedIds,
   selectSelectedLog,
   selectSetBatchDeleteDialogOpen,
@@ -35,50 +24,25 @@ import {
   selectSetDeleteDialogOpen,
   selectSetDetailDialogOpen,
   selectSetFilter,
-  selectSetLogs,
-  selectSetLogsAvailableStyles,
-  selectSetLogsIsClearingAll,
-  selectSetLogsIsClearingFiltered,
-  selectSetLogsIsDeleting,
-  selectSetLogsLoading,
-  selectSetLogsModels,
-  selectSetLogsPages,
-  selectSetLogsProviders,
-  selectSetLogsTotal,
-  selectSetLogsUserAgents,
   selectSetPage,
   selectSetPageSize,
   selectSetSelectedIds,
   useLogsPageStore,
 } from "@/stores/logs";
+import { toApiLogsFilters } from "@/stores/logs";
+import { useLogsQuery, useUserAgents, logsKeys } from "@/hooks/api/use-logs";
+import { useModels } from "@/hooks/api/use-models";
+import { useProviders, useProviderTemplates } from "@/hooks/api/use-providers";
 import { useLogsActions } from "./use-logs-actions";
-import { useLogsFetchers } from "./use-logs-fetchers";
 import { useLogsSelection } from "./use-logs-selection";
 
 export function useLogsPage() {
-  const loading = useLogsPageStore(selectLogsLoading);
-  const logs = useLogsPageStore(selectLogs);
-  const providers = useLogsPageStore(selectLogsProviders);
-  const models = useLogsPageStore(selectLogsModels);
-  const userAgents = useLogsPageStore(selectLogsUserAgents);
-  const availableStyles = useLogsPageStore(selectLogsAvailableStyles);
-  const total = useLogsPageStore(selectLogsTotal);
-  const pages = useLogsPageStore(selectLogsPages);
-
   const filters = useLogsPageStore(selectLogsFilters);
   const page = useLogsPageStore(selectLogsPage);
   const pageSize = useLogsPageStore(selectLogsPageSize);
-  const setLoading = useLogsPageStore(selectSetLogsLoading);
-  const setLogs = useLogsPageStore(selectSetLogs);
-  const setProviders = useLogsPageStore(selectSetLogsProviders);
-  const setModels = useLogsPageStore(selectSetLogsModels);
-  const setUserAgents = useLogsPageStore(selectSetLogsUserAgents);
-  const setAvailableStyles = useLogsPageStore(selectSetLogsAvailableStyles);
   const setFilter = useLogsPageStore(selectSetFilter);
   const setPage = useLogsPageStore(selectSetPage);
   const setPageSize = useLogsPageStore(selectSetPageSize);
-  const setTotal = useLogsPageStore(selectSetLogsTotal);
-  const setPages = useLogsPageStore(selectSetLogsPages);
 
   const selectedIds = useLogsPageStore(selectSelectedIds);
   const setSelectedIds = useLogsPageStore(selectSetSelectedIds);
@@ -102,33 +66,26 @@ export function useLogsPage() {
   const setClearFilteredDialogOpen = useLogsPageStore(selectSetClearFilteredDialogOpen);
 
   const logToDelete = useLogsPageStore(selectLogToDelete);
-  const resetTransient = useLogsPageStore(selectResetLogsTransient);
-  const isDeleting = useLogsPageStore(selectLogsIsDeleting);
-  const isClearingAll = useLogsPageStore(selectLogsIsClearingAll);
-  const isClearingFiltered = useLogsPageStore(selectLogsIsClearingFiltered);
-  const setIsDeleting = useLogsPageStore(selectSetLogsIsDeleting);
-  const setIsClearingAll = useLogsPageStore(selectSetLogsIsClearingAll);
-  const setIsClearingFiltered = useLogsPageStore(selectSetLogsIsClearingFiltered);
 
-  useEffect(() => {
-    return () => {
-      resetTransient();
-    };
-  }, [resetTransient]);
+  const queryClient = useQueryClient();
+  const refreshLogs = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: logsKeys.all });
+  }, [queryClient]);
 
-  const { fetchLogs } = useLogsFetchers({
-    filters,
-    page,
-    pageSize,
-    setLoading,
-    setLogs,
-    setTotal,
-    setPages,
-    setProviders,
-    setModels,
-    setUserAgents,
-    setAvailableStyles,
-  });
+  const apiFilters = useMemo(() => toApiLogsFilters(filters), [filters]);
+  const { data: logsResponse, isLoading: loading } = useLogsQuery(page, pageSize, apiFilters);
+  const logs = logsResponse?.data ?? [];
+  const total = logsResponse?.total ?? 0;
+  const pages = logsResponse?.pages ?? 0;
+
+  const { data: providers = [] } = useProviders();
+  const { data: models = [] } = useModels();
+  const { data: userAgents = [] } = useUserAgents();
+  const { data: templates = [] } = useProviderTemplates();
+  const availableStyles = useMemo(
+    () => Array.from(new Set(templates.map((t) => t.type).filter(Boolean))),
+    [templates],
+  );
 
   const handleFilterChange = (key: keyof LogsFilters, value: string) => {
     setFilter(key, value);
@@ -142,10 +99,6 @@ export function useLogsPage() {
 
   const handlePageSizeChange = (size: number) => {
     setPageSize(size);
-  };
-
-  const refreshLogs = () => {
-    void fetchLogs();
   };
 
   const { selectedCount, isAllSelected, isSomeSelected, handleSelectAll, handleSelectOne } = useLogsSelection({
@@ -164,7 +117,6 @@ export function useLogsPage() {
   };
 
   const canClearFiltered = hasActiveLogsFilters(filters);
-
   const filtersSummary = buildLogsFiltersSummary(filters);
 
   const {
@@ -176,6 +128,9 @@ export function useLogsPage() {
     confirmBatchDelete,
     confirmClearAllLogs,
     confirmClearFilteredLogs,
+    isDeleting,
+    isClearingAll,
+    isClearingFiltered,
   } = useLogsActions({
     filters,
     page,
@@ -188,10 +143,6 @@ export function useLogsPage() {
     setBatchDeleteDialogOpen,
     setClearAllDialogOpen,
     setClearFilteredDialogOpen,
-    setIsDeleting,
-    setIsClearingAll,
-    setIsClearingFiltered,
-    fetchLogs,
   });
 
   const hasLogs = logs.length > 0;

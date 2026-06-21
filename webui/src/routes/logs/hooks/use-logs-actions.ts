@@ -1,17 +1,16 @@
 import { useNavigate } from "react-router-dom";
-import {
-  batchDeleteLogs,
-  clearAllLogs,
-  clearFilteredLogs,
-  deleteLog,
-  getLogDetail,
-  type ChatLog,
-} from "@/lib/api";
+import { getLogDetail, type ChatLog } from "@/lib/api";
 import { toast } from "sonner";
 import type { LogsFilters } from "../types";
 import { exportChatLog, type ChatLogExportSections } from "../utils/export-log";
 import { toApiLogsFilters, type LogsPageState } from "@/stores/logs";
 import { toErrorMessage } from "@/lib/errors";
+import {
+  useDeleteLog,
+  useBatchDeleteLogs,
+  useClearAllLogs,
+  useClearFilteredLogs,
+} from "@/hooks/api/use-logs";
 
 const needsLogDetail = (log: ChatLog) =>
   log.RequestHeaders === undefined &&
@@ -34,10 +33,6 @@ type UseLogsActionsInput = {
   setBatchDeleteDialogOpen: LogsPageState["setBatchDeleteDialogOpen"];
   setClearAllDialogOpen: LogsPageState["setClearAllDialogOpen"];
   setClearFilteredDialogOpen: LogsPageState["setClearFilteredDialogOpen"];
-  setIsDeleting: LogsPageState["setIsDeleting"];
-  setIsClearingAll: LogsPageState["setIsClearingAll"];
-  setIsClearingFiltered: LogsPageState["setIsClearingFiltered"];
-  fetchLogs: () => Promise<void>;
 };
 
 export function useLogsActions({
@@ -52,12 +47,12 @@ export function useLogsActions({
   setBatchDeleteDialogOpen,
   setClearAllDialogOpen,
   setClearFilteredDialogOpen,
-  setIsDeleting,
-  setIsClearingAll,
-  setIsClearingFiltered,
-  fetchLogs,
 }: UseLogsActionsInput) {
   const navigate = useNavigate();
+  const deleteLogMutation = useDeleteLog();
+  const batchDeleteMutation = useBatchDeleteLogs();
+  const clearAllMutation = useClearAllLogs();
+  const clearFilteredMutation = useClearFilteredLogs();
 
   const canViewChatIO = (log: ChatLog) => log.Status === "success" && Boolean(log.ChatIO);
 
@@ -87,20 +82,16 @@ export function useLogsActions({
     }
 
     try {
-      setIsDeleting(true);
-      await deleteLog(logToDelete);
+      await deleteLogMutation.mutateAsync(logToDelete);
       toast.success("日志已删除");
 
       const nextSelected = new Set(selectedIds);
       nextSelected.delete(logToDelete);
       setSelectedIds(nextSelected);
-
-      await fetchLogs();
     } catch (error) {
       const message = toErrorMessage(error);
       toast.error(`删除失败: ${message}`);
     } finally {
-      setIsDeleting(false);
       setDeleteDialogOpen(false);
     }
   };
@@ -118,56 +109,50 @@ export function useLogsActions({
     }
 
     try {
-      setIsDeleting(true);
-      const result = await batchDeleteLogs(Array.from(selectedIds));
+      const result = await batchDeleteMutation.mutateAsync(Array.from(selectedIds));
       toast.success(`已删除 ${result.deleted} 条日志`);
       clearSelection();
-      await fetchLogs();
     } catch (error) {
       const message = toErrorMessage(error);
       toast.error(`批量删除失败: ${message}`);
     } finally {
-      setIsDeleting(false);
       setBatchDeleteDialogOpen(false);
     }
   };
 
   const confirmClearAllLogs = async () => {
     try {
-      setIsClearingAll(true);
-      const result = await clearAllLogs();
+      const result = await clearAllMutation.mutateAsync();
       toast.success(`已清空 ${result.deleted} 条日志`);
       clearSelection();
-      await fetchLogs();
     } catch (error) {
       const message = toErrorMessage(error);
       toast.error(`清空日志失败: ${message}`);
     } finally {
-      setIsClearingAll(false);
       setClearAllDialogOpen(false);
     }
   };
 
   const confirmClearFilteredLogs = async () => {
     try {
-      setIsClearingFiltered(true);
-      const result = await clearFilteredLogs(toApiLogsFilters(filters));
+      const result = await clearFilteredMutation.mutateAsync(toApiLogsFilters(filters));
       toast.success(`已清空筛选结果 ${result.deleted} 条日志`);
       clearSelection();
 
       if (page !== 1) {
         setPage(1);
-        return;
       }
-      await fetchLogs();
     } catch (error) {
       const message = toErrorMessage(error);
       toast.error(`清空筛选结果失败: ${message}`);
     } finally {
-      setIsClearingFiltered(false);
       setClearFilteredDialogOpen(false);
     }
   };
+
+  const isDeleting = deleteLogMutation.isPending || batchDeleteMutation.isPending;
+  const isClearingAll = clearAllMutation.isPending;
+  const isClearingFiltered = clearFilteredMutation.isPending;
 
   return {
     canViewChatIO,
@@ -178,5 +163,8 @@ export function useLogsActions({
     confirmBatchDelete,
     confirmClearAllLogs,
     confirmClearFilteredLogs,
+    isDeleting,
+    isClearingAll,
+    isClearingFiltered,
   };
 }

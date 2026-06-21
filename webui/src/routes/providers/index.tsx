@@ -9,7 +9,6 @@ import {
   selectAllModelsSearchQuery,
   selectAllModelsTestResults,
   selectAllModelsTypeFilter,
-  selectAvailableTypes,
   selectBatchTestProgress,
   selectBatchTesting,
   selectClearAssociationId,
@@ -33,7 +32,6 @@ import {
   selectSetAllModelsSearchQuery,
   selectSetAllModelsTestResults,
   selectSetAllModelsTypeFilter,
-  selectSetAvailableTypes,
   selectSetBatchTestProgress,
   selectSetBatchTesting,
   selectSetClearAssociationId,
@@ -47,7 +45,6 @@ import {
   selectSetModelsOpenId,
   selectSetNameFilter,
   selectSetProviderDialogOpen,
-  selectSetProviders,
   selectSetSelectedAllModels,
   selectSetSelectedUpstreamModels,
   selectSetShowApiKey,
@@ -85,16 +82,12 @@ import { AllModelsDialog } from "./components/dialogs/all-models-dialog";
 import { UpstreamModelsDialog } from "./components/dialogs/upstream-models-dialog";
 
 export default function ProvidersPage() {
-  const setProviders = useProvidersPageStore(selectSetProviders);
-  const setAvailableTypes = useProvidersPageStore(selectSetAvailableTypes);
-
   const nameFilter = useProvidersPageStore(selectNameFilter);
   const setNameFilter = useProvidersPageStore(selectSetNameFilter);
   const debouncedNameFilter = useProvidersPageStore(selectDebouncedNameFilter);
   const setDebouncedNameFilter = useProvidersPageStore(selectSetDebouncedNameFilter);
   const typeFilter = useProvidersPageStore(selectTypeFilter);
   const setTypeFilter = useProvidersPageStore(selectSetTypeFilter);
-  const availableTypes = useProvidersPageStore(selectAvailableTypes);
   const flushNameFilter = useProvidersPageStore(selectFlushNameFilter);
 
   const filters = useMemo(
@@ -112,15 +105,7 @@ export default function ProvidersPage() {
   const autoAssociateOnAddEnabled = settings?.auto_associate_on_add ?? false;
   const autoCleanOnDeleteEnabled = settings?.auto_clean_on_delete ?? false;
 
-  useEffect(() => {
-    setProviders(providers);
-  }, [providers, setProviders]);
-
-  useEffect(() => {
-    if (providerTemplates.length > 0) {
-      setAvailableTypes(providerTemplates.map((t) => t.type));
-    }
-  }, [providerTemplates, setAvailableTypes]);
+  const availableTypes = useMemo(() => providerTemplates.map((t) => t.type), [providerTemplates]);
 
   const clearingAssociation = useProvidersPageStore(selectClearingAssociation);
   const setClearingAssociation = useProvidersPageStore(selectSetClearingAssociation);
@@ -226,7 +211,6 @@ export default function ProvidersPage() {
     handleRemoveSelectedModels,
     handleSyncUpstreamModels,
   } = useAllModelsDialog({
-    setProviders,
     allModelsProvider,
     setAllModelsProvider,
     setAllModelsOpen,
@@ -279,7 +263,7 @@ export default function ProvidersPage() {
     handleToggleModelEndpoint,
     handleToggleModelFilter,
     handleToggleAssociationTrigger,
-  } = useProviderSwitchActions({ setProviders });
+  } = useProviderSwitchActions();
 
 
   const {

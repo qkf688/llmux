@@ -1,5 +1,5 @@
 import { createStore } from "zustand/vanilla";
-import type { Provider, ProviderTemplate } from "@/lib/api";
+import type { Provider } from "@/lib/api";
 import { readProvidersPagePreferences, writeProvidersPagePreferences } from "@/stores/providers/persist";
 import { DEFAULT_BATCH_TEST_PROGRESS, type AllModelsTypeFilter, type BatchTestProgress, type ModelTestResult } from "@/stores/providers/types";
 
@@ -10,13 +10,9 @@ function resolveUpdater<T>(updater: Updater<T>, previous: T): T {
 }
 
 export type ProvidersPageState = {
-  loading: boolean;
-  providers: Provider[];
-  providerTemplates: ProviderTemplate[];
   nameFilter: string;
   debouncedNameFilter: string;
   typeFilter: string;
-  availableTypes: string[];
 
   clearingAssociation: boolean;
   modelsLoading: boolean;
@@ -54,14 +50,10 @@ export type ProvidersPageState = {
   upstreamBatchTesting: boolean;
   upstreamBatchTestProgress: BatchTestProgress;
 
-  setLoading: (loading: boolean) => void;
-  setProviders: (providers: Updater<Provider[]>) => void;
-  setProviderTemplates: (templates: Updater<ProviderTemplate[]>) => void;
   setNameFilter: (value: string) => void;
   setDebouncedNameFilter: (value: string) => void;
   flushNameFilter: () => void;
   setTypeFilter: (value: string) => void;
-  setAvailableTypes: (types: string[]) => void;
 
   setClearingAssociation: (clearing: boolean) => void;
   setModelsLoading: (loading: boolean) => void;
@@ -116,13 +108,9 @@ export type ProvidersPageState = {
 const preferences = readProvidersPagePreferences();
 
 export const providersPageStore = createStore<ProvidersPageState>()((set, get) => ({
-  loading: true,
-  providers: [],
-  providerTemplates: [],
   nameFilter: preferences.nameFilter,
   debouncedNameFilter: preferences.nameFilter,
   typeFilter: preferences.typeFilter,
-  availableTypes: [],
 
   clearingAssociation: false,
   modelsLoading: false,
@@ -160,10 +148,6 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
   upstreamBatchTesting: false,
   upstreamBatchTestProgress: { ...DEFAULT_BATCH_TEST_PROGRESS },
 
-  setLoading: (loading: boolean) => set({ loading }),
-  setProviders: (providers: Updater<Provider[]>) => set((state) => ({ providers: resolveUpdater(providers, state.providers) })),
-  setProviderTemplates: (templates: Updater<ProviderTemplate[]>) =>
-    set((state) => ({ providerTemplates: resolveUpdater(templates, state.providerTemplates) })),
   setNameFilter: (value: string) => {
     set({ nameFilter: value });
     const current = get();
@@ -179,7 +163,6 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
     const current = get();
     writeProvidersPagePreferences({ nameFilter: current.nameFilter, typeFilter: value });
   },
-  setAvailableTypes: (types: string[]) => set({ availableTypes: types }),
 
   setClearingAssociation: (clearing: boolean) => set({ clearingAssociation: clearing }),
   setModelsLoading: (loading: boolean) => set({ modelsLoading: loading }),
@@ -270,10 +253,6 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
 
   resetTransient: () =>
     set({
-      loading: true,
-      providers: [],
-      providerTemplates: [],
-      availableTypes: [],
       providerDialogOpen: false,
       editingProvider: null,
       deleteId: null,

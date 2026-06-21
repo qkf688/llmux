@@ -8,8 +8,12 @@ import {
   clearProviderAssociations,
   syncAllProviderModels,
   getSettings,
+  updateSettings,
+  getHealthCheckSettings,
+  updateHealthCheckSettings,
   type Provider,
   type ProviderTemplate,
+  type HealthCheckSettings,
 } from '@/lib/api';
 import type { Settings } from '@/lib/api';
 
@@ -23,6 +27,10 @@ export const providerKeys = {
 
 export const settingsKeys = {
   all: ['settings'] as const,
+};
+
+export const healthCheckSettingsKeys = {
+  all: ['healthCheckSettings'] as const,
 };
 
 export function useProviders(filters?: { name?: string; type?: string }) {
@@ -99,4 +107,32 @@ export function useSyncAllProviders() {
   });
 }
 
-export type { Provider, ProviderTemplate, Settings };
+export function useHealthCheckSettingsQuery() {
+  return useQuery<HealthCheckSettings>({
+    queryKey: healthCheckSettingsKeys.all,
+    queryFn: getHealthCheckSettings,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useUpdateSettingsMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: updateSettings,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: settingsKeys.all });
+    },
+  });
+}
+
+export function useUpdateHealthCheckSettingsMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: updateHealthCheckSettings,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: healthCheckSettingsKeys.all });
+    },
+  });
+}
+
+export type { Provider, ProviderTemplate, Settings, HealthCheckSettings };

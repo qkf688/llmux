@@ -1,12 +1,8 @@
 import type { ProvidersPageState } from "@/stores/providers/page-store";
 
-export const selectLoading = (state: ProvidersPageState) => state.loading;
-export const selectProviders = (state: ProvidersPageState) => state.providers;
-export const selectProviderTemplates = (state: ProvidersPageState) => state.providerTemplates;
 export const selectNameFilter = (state: ProvidersPageState) => state.nameFilter;
 export const selectDebouncedNameFilter = (state: ProvidersPageState) => state.debouncedNameFilter;
 export const selectTypeFilter = (state: ProvidersPageState) => state.typeFilter;
-export const selectAvailableTypes = (state: ProvidersPageState) => state.availableTypes;
 
 export const selectClearingAssociation = (state: ProvidersPageState) => state.clearingAssociation;
 export const selectModelsLoading = (state: ProvidersPageState) => state.modelsLoading;
@@ -44,14 +40,10 @@ export const selectUpstreamTestResults = (state: ProvidersPageState) => state.up
 export const selectUpstreamBatchTesting = (state: ProvidersPageState) => state.upstreamBatchTesting;
 export const selectUpstreamBatchTestProgress = (state: ProvidersPageState) => state.upstreamBatchTestProgress;
 
-export const selectSetLoading = (state: ProvidersPageState) => state.setLoading;
-export const selectSetProviders = (state: ProvidersPageState) => state.setProviders;
-export const selectSetProviderTemplates = (state: ProvidersPageState) => state.setProviderTemplates;
 export const selectSetNameFilter = (state: ProvidersPageState) => state.setNameFilter;
 export const selectSetDebouncedNameFilter = (state: ProvidersPageState) => state.setDebouncedNameFilter;
 export const selectFlushNameFilter = (state: ProvidersPageState) => state.flushNameFilter;
 export const selectSetTypeFilter = (state: ProvidersPageState) => state.setTypeFilter;
-export const selectSetAvailableTypes = (state: ProvidersPageState) => state.setAvailableTypes;
 
 export const selectSetClearingAssociation = (state: ProvidersPageState) => state.setClearingAssociation;
 export const selectSetModelsLoading = (state: ProvidersPageState) => state.setModelsLoading;

@@ -12,8 +12,6 @@ type Updater<T> = T | ((previous: T) => T);
 type Setter<T> = (value: Updater<T>) => void;
 
 type UseAllModelsDialogInput = {
-  setProviders: Setter<Provider[]>;
-
   allModelsProvider: Provider | null;
   setAllModelsProvider: (provider: Provider | null) => void;
   setAllModelsOpen: (open: boolean) => void;
@@ -37,7 +35,6 @@ type UseAllModelsDialogInput = {
 };
 
 export function useAllModelsDialog({
-  setProviders,
   allModelsProvider,
   setAllModelsProvider,
   setAllModelsOpen,
@@ -122,7 +119,10 @@ export function useAllModelsDialog({
       console: provider.Console || "",
       proxy: provider.Proxy || "",
     });
-    setProviders((prev) => prev.map((item) => (item.ID === provider.ID ? { ...item, Config: nextConfig } : item)));
+    queryClient.setQueriesData<Provider[]>(
+      { queryKey: providerKeys.lists() },
+      (old) => old?.map((item) => (item.ID === provider.ID ? { ...item, Config: nextConfig } : item)),
+    );
     return nextConfig;
   };
 

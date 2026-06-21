@@ -1,17 +1,20 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { updateProvider, type Provider } from "@/lib/api";
+import { providerKeys } from "@/hooks/api/use-providers";
 
-type Updater<T> = T | ((previous: T) => T);
-type Setter<T> = (value: Updater<T>) => void;
-
-type UseProviderSwitchActionsInput = {
-  setProviders: Setter<Provider[]>;
-};
-
-export function useProviderSwitchActions({ setProviders }: UseProviderSwitchActionsInput) {
+export function useProviderSwitchActions() {
+  const queryClient = useQueryClient();
   const [updatingFilter, setUpdatingFilter] = useState<Record<number, boolean>>({});
   const [updatingAssociationTrigger, setUpdatingAssociationTrigger] = useState<Record<number, boolean>>({});
+
+  const patchProviderInCache = (providerId: number, patch: Partial<Provider>) => {
+    queryClient.setQueriesData<Provider[]>(
+      { queryKey: providerKeys.lists() },
+      (old) => old?.map((item) => (item.ID === providerId ? { ...item, ...patch } : item)),
+    );
+  };
 
   const handleToggleModelEndpoint = async (provider: Provider) => {
     const newValue = !(provider.ModelEndpoint ?? true);
@@ -24,7 +27,7 @@ export function useProviderSwitchActions({ setProviders }: UseProviderSwitchActi
         proxy: provider.Proxy || "",
         model_endpoint: newValue,
       });
-      setProviders((prev) => prev.map((item) => (item.ID === provider.ID ? { ...item, ModelEndpoint: newValue } : item)));
+      patchProviderInCache(provider.ID, { ModelEndpoint: newValue });
       toast.success(`已${newValue ? "启用" : "禁用"}模型端点`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -37,7 +40,7 @@ export function useProviderSwitchActions({ setProviders }: UseProviderSwitchActi
     setUpdatingFilter((prev) => ({ ...prev, [provider.ID]: true }));
     try {
       await updateProvider(provider.ID, { model_filter_enabled: enabled });
-      setProviders((prev) => prev.map((item) => (item.ID === provider.ID ? { ...item, ModelFilterEnabled: enabled } : item)));
+      patchProviderInCache(provider.ID, { ModelFilterEnabled: enabled });
       toast.success("已更新模型过滤设置");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -52,7 +55,7 @@ export function useProviderSwitchActions({ setProviders }: UseProviderSwitchActi
     setUpdatingAssociationTrigger((prev) => ({ ...prev, [provider.ID]: true }));
     try {
       await updateProvider(provider.ID, { blacklisted: !enabled });
-      setProviders((prev) => prev.map((item) => (item.ID === provider.ID ? { ...item, blacklisted: !enabled } : item)));
+      patchProviderInCache(provider.ID, { blacklisted: !enabled });
       toast.success(`已${enabled ? "开启" : "关闭"}该提供商的自动关联/一键关联触发`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

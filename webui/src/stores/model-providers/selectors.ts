@@ -1,6 +1,5 @@
 import type { ModelProvidersPageState } from "@/stores/model-providers/page-store";
 
-export const selectModelProvidersLoading = (state: ModelProvidersPageState) => state.loading;
 export const selectModelProvidersOpen = (state: ModelProvidersPageState) => state.open;
 export const selectModelProvidersEditingAssociation = (state: ModelProvidersPageState) => state.editingAssociation;
 export const selectModelProvidersDeleteId = (state: ModelProvidersPageState) => state.deleteId;
@@ -10,7 +9,6 @@ export const selectModelProvidersSelectedTestId = (state: ModelProvidersPageStat
 export const selectModelProvidersTestType = (state: ModelProvidersPageState) => state.testType;
 export const selectModelProvidersIsSubmitting = (state: ModelProvidersPageState) => state.isSubmitting;
 
-export const selectModelProvidersLoadingProviderModels = (state: ModelProvidersPageState) => state.loadingProviderModels;
 export const selectModelProvidersModelListDialogOpen = (state: ModelProvidersPageState) => state.modelListDialogOpen;
 export const selectModelProvidersModelSearchKeyword = (state: ModelProvidersPageState) => state.modelSearchKeyword;
 export const selectModelProvidersSelectedProviderModels = (state: ModelProvidersPageState) => state.selectedProviderModels;
@@ -55,7 +53,6 @@ export const selectModelProvidersBlacklistSaving = (state: ModelProvidersPageSta
 export const selectModelProvidersBlacklistSearchTerm = (state: ModelProvidersPageState) => state.blacklistSearchTerm;
 export const selectModelProvidersBlacklistFilter = (state: ModelProvidersPageState) => state.blacklistFilter;
 
-export const selectSetModelProvidersLoading = (state: ModelProvidersPageState) => state.setLoading;
 export const selectSetModelProvidersOpen = (state: ModelProvidersPageState) => state.setOpen;
 export const selectSetModelProvidersEditingAssociation = (state: ModelProvidersPageState) => state.setEditingAssociation;
 export const selectSetModelProvidersDeleteId = (state: ModelProvidersPageState) => state.setDeleteId;
@@ -65,7 +62,6 @@ export const selectSetModelProvidersSelectedTestId = (state: ModelProvidersPageS
 export const selectSetModelProvidersTestType = (state: ModelProvidersPageState) => state.setTestType;
 export const selectSetModelProvidersIsSubmitting = (state: ModelProvidersPageState) => state.setIsSubmitting;
 
-export const selectSetModelProvidersLoadingProviderModels = (state: ModelProvidersPageState) => state.setLoadingProviderModels;
 export const selectSetModelProvidersModelListDialogOpen = (state: ModelProvidersPageState) => state.setModelListDialogOpen;
 export const selectSetModelProvidersModelSearchKeyword = (state: ModelProvidersPageState) => state.setModelSearchKeyword;
 export const selectSetModelProvidersSelectedProviderModels = (state: ModelProvidersPageState) => state.setSelectedProviderModels;

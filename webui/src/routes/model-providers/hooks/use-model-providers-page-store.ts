@@ -21,8 +21,6 @@ import {
   selectModelProvidersExecuting,
   selectModelProvidersFilterPanelOpen,
   selectModelProvidersIsSubmitting,
-  selectModelProvidersLoading,
-  selectModelProvidersLoadingProviderModels,
   selectModelProvidersModelListDialogOpen,
   selectModelProvidersModelSearchKeyword,
   selectModelProvidersOpen,
@@ -67,8 +65,6 @@ import {
   selectSetModelProvidersExecuting,
   selectSetModelProvidersFilterPanelOpen,
   selectSetModelProvidersIsSubmitting,
-  selectSetModelProvidersLoading,
-  selectSetModelProvidersLoadingProviderModels,
   selectSetModelProvidersModelListDialogOpen,
   selectSetModelProvidersModelSearchKeyword,
   selectSetModelProvidersOpen,
@@ -94,8 +90,6 @@ import {
 } from "@/stores/model-providers";
 
 export function useModelProvidersPageStoreState() {
-  const loading = useModelProvidersPageStore(selectModelProvidersLoading);
-  const setLoading = useModelProvidersPageStore(selectSetModelProvidersLoading);
   const open = useModelProvidersPageStore(selectModelProvidersOpen);
   const setOpen = useModelProvidersPageStore(selectSetModelProvidersOpen);
   const editingAssociation = useModelProvidersPageStore(selectModelProvidersEditingAssociation);
@@ -114,8 +108,6 @@ export function useModelProvidersPageStoreState() {
   const isSubmitting = useModelProvidersPageStore(selectModelProvidersIsSubmitting);
   const setIsSubmitting = useModelProvidersPageStore(selectSetModelProvidersIsSubmitting);
 
-  const loadingProviderModels = useModelProvidersPageStore(selectModelProvidersLoadingProviderModels);
-  const setLoadingProviderModels = useModelProvidersPageStore(selectSetModelProvidersLoadingProviderModels);
   const modelListDialogOpen = useModelProvidersPageStore(selectModelProvidersModelListDialogOpen);
   const setModelListDialogOpen = useModelProvidersPageStore(selectSetModelProvidersModelListDialogOpen);
   const modelSearchKeyword = useModelProvidersPageStore(selectModelProvidersModelSearchKeyword);
@@ -197,8 +189,6 @@ export function useModelProvidersPageStoreState() {
   const resetTransient = useModelProvidersPageStore(selectResetModelProvidersTransient);
 
   return {
-    loading,
-    setLoading,
     open,
     setOpen,
     editingAssociation,
@@ -215,8 +205,6 @@ export function useModelProvidersPageStoreState() {
     setReactTestResult,
     isSubmitting,
     setIsSubmitting,
-    loadingProviderModels,
-    setLoadingProviderModels,
     modelListDialogOpen,
     setModelListDialogOpen,
     modelSearchKeyword,

@@ -25,9 +25,7 @@ import { useModelProvidersPageStoreState } from "./use-model-providers-page-stor
 export function useModelProvidersPage() {
   const {
     models,
-    setModels,
     providers,
-    setProviders,
     searchParams,
     setSearchParams,
     selectedModelId,
@@ -37,18 +35,14 @@ export function useModelProvidersPage() {
     statusError,
     setStatusError,
     providerModelGroups,
-    setProviderModelGroups,
     providerModels,
-    setProviderModels,
     settings,
-    setSettings,
+    loading: dataLoading,
   } = useModelProvidersPageLocalState();
 
   const { providerStatus, healthStatus, loadProviderStatus } = useModelProvidersAssociationStatus(models);
 
   const {
-    loading,
-    setLoading,
     open,
     setOpen,
     editingAssociation,
@@ -65,8 +59,6 @@ export function useModelProvidersPage() {
     setReactTestResult,
     isSubmitting,
     setIsSubmitting,
-    loadingProviderModels,
-    setLoadingProviderModels,
     modelListDialogOpen,
     setModelListDialogOpen,
     modelSearchKeyword,
@@ -144,14 +136,6 @@ export function useModelProvidersPage() {
 
   useModelProvidersBootstrap({
     models,
-    setModels,
-    setProviders,
-    setSettings,
-    setLoading,
-    setLoadingProviderModels,
-    setProviderModelGroups,
-    setProviderModels,
-    setCollapsedProviders,
     resetTransient,
     selectedModelId,
     setSelectedModelId,
@@ -189,7 +173,6 @@ export function useModelProvidersPage() {
 
   const { modelProviders, setModelProviders, fetchModelProviders } = useModelProvidersAssociationsData({
     selectedModelId,
-    setLoading,
     loadProviderStatus,
   });
 
@@ -274,7 +257,7 @@ export function useModelProvidersPage() {
   const selectedModel = models.find((model) => model.ID === selectedModelId) || null;
   const isGlobalScope = operationScope === "all";
 
-  const shouldShowInitialLoading = loading && models.length === 0 && providers.length === 0;
+  const shouldShowInitialLoading = dataLoading && models.length === 0 && providers.length === 0;
 
   const { handleResetWeights, handleResetPriorities, handleEnableAssociations } = useModelProvidersOperationScope({
     selectedModelId,
@@ -416,7 +399,7 @@ export function useModelProvidersPage() {
       onCancelBatchTest: handleCancelBatchTest,
       onClearBatchTestResults: clearBatchTestResults,
 
-      loading,
+      loading: dataLoading,
       hasAssociationFilter,
       associations: filteredModelProviders,
       selectedAssociationIds,
@@ -503,7 +486,7 @@ export function useModelProvidersPage() {
     onModelListDialogOpenChange: setModelListDialogOpen,
     modelSearchKeyword,
     onModelSearchKeywordChange: setModelSearchKeyword,
-    loadingProviderModels,
+    loadingProviderModels: dataLoading,
     providerModels,
     visibleProviderGroups,
     visibleAvailableModels,

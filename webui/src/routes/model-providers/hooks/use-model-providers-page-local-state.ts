@@ -1,27 +1,51 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { Model, Provider, Settings } from "@/lib/api";
+import { useModels } from "@/hooks/api/use-models";
+import { useProviders } from "@/hooks/api/use-providers";
+import { useSettings } from "@/hooks/api/use-providers";
+import { parseAllModelsFromConfig, toProviderModelList } from "@/lib/provider-models";
 import type { ProviderModelGroup, ProviderModelWithOwner } from "../types";
 
 export function useModelProvidersPageLocalState() {
-  const [models, setModels] = useState<Model[]>([]);
-  const [providers, setProviders] = useState<Provider[]>([]);
-  const [searchParams, setSearchParams] = useSearchParams();
+  const { data: models = [], isLoading: modelsLoading } = useModels();
+  const { data: providers = [], isLoading: providersLoading } = useProviders();
+  const { data: settingsData } = useSettings();
+  const settings = settingsData ?? null;
+
+  const searchParams = useSearchParams();
+  const [searchParamsValue, setSearchParamsValue] = searchParams;
 
   const [selectedModelId, setSelectedModelId] = useState<number | null>(null);
   const [statusUpdating, setStatusUpdating] = useState<Record<number, boolean>>({});
   const [statusError, setStatusError] = useState<string | null>(null);
-  const [providerModelGroups, setProviderModelGroups] = useState<ProviderModelGroup[]>([]);
-  const [providerModels, setProviderModels] = useState<ProviderModelWithOwner[]>([]);
-  const [settings, setSettings] = useState<Settings | null>(null);
+
+  const providerModelGroups = useMemo<ProviderModelGroup[]>(
+    () =>
+      providers.map((provider) => {
+        const models = toProviderModelList(parseAllModelsFromConfig(provider.Config)).map((model) => ({
+          ...model,
+          providerId: provider.ID,
+          providerName: provider.Name,
+        }));
+        return { provider, models };
+      }),
+    [providers],
+  );
+
+  const providerModels = useMemo<ProviderModelWithOwner[]>(
+    () => providerModelGroups.flatMap((group) => group.models),
+    [providerModelGroups],
+  );
+
+  const loading = modelsLoading || providersLoading;
 
   return {
     models,
-    setModels,
     providers,
-    setProviders,
-    searchParams,
-    setSearchParams,
+    settings,
+    loading,
+    searchParams: searchParamsValue,
+    setSearchParams: setSearchParamsValue,
     selectedModelId,
     setSelectedModelId,
     statusUpdating,
@@ -29,11 +53,6 @@ export function useModelProvidersPageLocalState() {
     statusError,
     setStatusError,
     providerModelGroups,
-    setProviderModelGroups,
     providerModels,
-    setProviderModels,
-    settings,
-    setSettings,
   };
 }
-

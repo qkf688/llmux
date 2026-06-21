@@ -1,49 +1,47 @@
-import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
-import { getModelProviders, type ModelWithProvider } from "@/lib/api";
+import { useCallback, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import type { ModelWithProvider } from "@/lib/api";
+import { useModelProvidersQuery, modelProviderKeys } from "@/hooks/api/use-model-providers";
 
 type UseModelProvidersAssociationsDataInput = {
   selectedModelId: number | null;
-  setLoading: (loading: boolean) => void;
   loadProviderStatus: (providers: ModelWithProvider[], modelId: number) => Promise<void>;
 };
 
 export function useModelProvidersAssociationsData({
   selectedModelId,
-  setLoading,
   loadProviderStatus,
 }: UseModelProvidersAssociationsDataInput) {
-  const [modelProviders, setModelProviders] = useState<ModelWithProvider[]>([]);
+  const queryClient = useQueryClient();
+  const { data: modelProviders = [] } = useModelProvidersQuery(selectedModelId);
+
+  useEffect(() => {
+    if (modelProviders.length > 0 && selectedModelId !== null) {
+      void loadProviderStatus(modelProviders, selectedModelId);
+    }
+  }, [modelProviders, selectedModelId, loadProviderStatus]);
 
   const fetchModelProviders = useCallback(
     async (modelId: number) => {
-      try {
-        setLoading(true);
-        const data = await getModelProviders(modelId);
-        setModelProviders(
-          data.map((item) => ({
-            ...item,
-            CustomerHeaders: item.CustomerHeaders || {},
-          }))
-        );
-        void loadProviderStatus(data, modelId);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        toast.error(`获取模型提供商关联列表失败: ${message}`);
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
+      await queryClient.invalidateQueries({ queryKey: modelProviderKeys.list(modelId) });
+      void loadProviderStatus(modelProviders, modelId);
     },
-    [loadProviderStatus, setLoading]
+    [queryClient, loadProviderStatus, modelProviders],
   );
 
-  useEffect(() => {
-    if (selectedModelId) {
-      void fetchModelProviders(selectedModelId);
-    }
-  }, [fetchModelProviders, selectedModelId]);
+  const setModelProviders = useCallback(
+    (updater: ModelWithProvider[] | ((prev: ModelWithProvider[]) => ModelWithProvider[])) => {
+      if (selectedModelId === null) return;
+      queryClient.setQueryData<ModelWithProvider[]>(
+        modelProviderKeys.list(selectedModelId),
+        (old) => {
+          if (!old) return old;
+          return typeof updater === "function" ? updater(old) : updater;
+        },
+      );
+    },
+    [queryClient, selectedModelId],
+  );
 
   return { modelProviders, setModelProviders, fetchModelProviders };
 }
-

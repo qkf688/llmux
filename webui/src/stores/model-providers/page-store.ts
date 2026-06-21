@@ -28,7 +28,6 @@ function getInitialReactTestResult(): ReactTestResultState {
 const preferences = readModelProvidersPagePreferences();
 
 export type ModelProvidersPageState = {
-  loading: boolean;
   open: boolean;
   editingAssociation: ModelWithProvider | null;
   deleteId: number | null;
@@ -38,7 +37,6 @@ export type ModelProvidersPageState = {
   testType: TestType;
   isSubmitting: boolean;
 
-  loadingProviderModels: boolean;
   modelListDialogOpen: boolean;
   modelSearchKeyword: string;
   selectedProviderModels: ProviderModelSelection[];
@@ -84,7 +82,6 @@ export type ModelProvidersPageState = {
   blacklistSearchTerm: string;
   blacklistFilter: BlacklistFilter;
 
-  setLoading: (loading: boolean) => void;
   setOpen: (open: boolean) => void;
   openCreateDialog: () => void;
   openEditDialog: (association: ModelWithProvider) => void;
@@ -96,7 +93,6 @@ export type ModelProvidersPageState = {
   setTestType: (type: TestType) => void;
   setIsSubmitting: (loading: boolean) => void;
 
-  setLoadingProviderModels: (loading: boolean) => void;
   setModelListDialogOpen: (open: boolean) => void;
   setModelSearchKeyword: (keyword: string) => void;
   setSelectedProviderModels: (next: Updater<ProviderModelSelection[]>) => void;
@@ -161,7 +157,6 @@ function buildPreferences(current: ModelProvidersPageState, overrides: Partial<M
 }
 
 export const modelProvidersPageStore = createStore<ModelProvidersPageState>()((set, get) => ({
-  loading: true,
   open: false,
   editingAssociation: null,
   deleteId: null,
@@ -171,7 +166,6 @@ export const modelProvidersPageStore = createStore<ModelProvidersPageState>()((s
   testType: "connectivity",
   isSubmitting: false,
 
-  loadingProviderModels: false,
   modelListDialogOpen: false,
   modelSearchKeyword: "",
   selectedProviderModels: [],
@@ -217,8 +211,6 @@ export const modelProvidersPageStore = createStore<ModelProvidersPageState>()((s
   blacklistSearchTerm: "",
   blacklistFilter: "all",
 
-  setLoading: (loading: boolean) => set({ loading }),
-
   setOpen: (open: boolean) => set(open ? { open: true } : { open: false, editingAssociation: null }),
   openCreateDialog: () => set({ open: true, editingAssociation: null }),
   openEditDialog: (association: ModelWithProvider) => set({ open: true, editingAssociation: association }),
@@ -230,7 +222,6 @@ export const modelProvidersPageStore = createStore<ModelProvidersPageState>()((s
   setTestType: (type: TestType) => set({ testType: type }),
   setIsSubmitting: (loading: boolean) => set({ isSubmitting: loading }),
 
-  setLoadingProviderModels: (loading: boolean) => set({ loadingProviderModels: loading }),
   setModelListDialogOpen: (open: boolean) => set({ modelListDialogOpen: open }),
   setModelSearchKeyword: (keyword: string) => set({ modelSearchKeyword: keyword }),
   setSelectedProviderModels: (next: Updater<ProviderModelSelection[]>) =>
@@ -300,7 +291,6 @@ export const modelProvidersPageStore = createStore<ModelProvidersPageState>()((s
 
   resetTransient: () =>
     set({
-      loading: true,
       open: false,
       editingAssociation: null,
       deleteId: null,
@@ -308,7 +298,6 @@ export const modelProvidersPageStore = createStore<ModelProvidersPageState>()((s
       selectedTestId: null,
       testType: "connectivity",
       isSubmitting: false,
-      loadingProviderModels: false,
       modelListDialogOpen: false,
       modelSearchKeyword: "",
       selectedProviderModels: [],

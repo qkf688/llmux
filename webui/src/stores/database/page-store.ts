@@ -1,5 +1,5 @@
 import { createStore } from "zustand/vanilla";
-import type { DatabaseStats, ExportType } from "@/lib/api";
+import type { ExportType } from "@/lib/api";
 import { readDatabasePagePreferences, writeDatabasePagePreferences } from "@/stores/database/persist";
 import type { DatabasePagePreferences, ImportMode, ImportPreviewData } from "@/stores/database/types";
 
@@ -31,9 +31,6 @@ function persistPreferences(get: () => PreferencesState, next: Partial<DatabaseP
 const preferences = readDatabasePagePreferences();
 
 export type DatabasePageState = {
-  stats: DatabaseStats | null;
-  loading: boolean;
-
   vacuumDialogOpen: boolean;
   vacuuming: boolean;
 
@@ -53,9 +50,6 @@ export type DatabasePageState = {
   previewLoading: boolean;
   previewError: string | null;
   importFileInputKey: number;
-
-  setStats: (stats: DatabaseStats | null) => void;
-  setLoading: (loading: boolean) => void;
 
   setVacuumDialogOpen: (open: boolean) => void;
   setVacuuming: (vacuuming: boolean) => void;
@@ -83,9 +77,6 @@ export type DatabasePageState = {
 };
 
 export const databasePageStore = createStore<DatabasePageState>()((set, get) => ({
-  stats: null,
-  loading: true,
-
   vacuumDialogOpen: false,
   vacuuming: false,
 
@@ -105,9 +96,6 @@ export const databasePageStore = createStore<DatabasePageState>()((set, get) => 
   previewLoading: false,
   previewError: null,
   importFileInputKey: 0,
-
-  setStats: (stats: DatabaseStats | null) => set({ stats }),
-  setLoading: (loading: boolean) => set({ loading }),
 
   setVacuumDialogOpen: (open: boolean) => set({ vacuumDialogOpen: open }),
   setVacuuming: (vacuuming: boolean) => set({ vacuuming }),
@@ -158,8 +146,6 @@ export const databasePageStore = createStore<DatabasePageState>()((set, get) => 
 
   resetTransient: () =>
     set({
-      stats: null,
-      loading: true,
       vacuumDialogOpen: false,
       vacuuming: false,
       exportConfigDialogOpen: false,

@@ -1,8 +1,5 @@
 import type { DatabasePageState } from "@/stores/database/page-store";
 
-export const selectDatabaseStats = (state: DatabasePageState) => state.stats;
-export const selectDatabaseLoading = (state: DatabasePageState) => state.loading;
-
 export const selectDatabaseVacuumDialogOpen = (state: DatabasePageState) => state.vacuumDialogOpen;
 export const selectDatabaseVacuuming = (state: DatabasePageState) => state.vacuuming;
 
@@ -22,9 +19,6 @@ export const selectDatabasePreviewData = (state: DatabasePageState) => state.pre
 export const selectDatabasePreviewLoading = (state: DatabasePageState) => state.previewLoading;
 export const selectDatabasePreviewError = (state: DatabasePageState) => state.previewError;
 export const selectDatabaseImportFileInputKey = (state: DatabasePageState) => state.importFileInputKey;
-
-export const selectSetDatabaseStats = (state: DatabasePageState) => state.setStats;
-export const selectSetDatabaseLoading = (state: DatabasePageState) => state.setLoading;
 
 export const selectSetDatabaseVacuumDialogOpen = (state: DatabasePageState) => state.setVacuumDialogOpen;
 export const selectSetDatabaseVacuuming = (state: DatabasePageState) => state.setVacuuming;

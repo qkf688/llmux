@@ -1,64 +1,29 @@
-import { useCallback, useEffect } from "react";
+import { useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { toast } from "sonner";
-import { toErrorMessage } from "@/lib/errors";
-import { getSettings, getHealthCheckSettings } from "@/lib/api";
 import type { Settings, HealthCheckSettings } from "@/lib/api";
 import { Spinner } from "@/components/ui/spinner";
 import { RoutingSettings } from "./settings/routing-settings";
 import { BalancerSettings } from "./settings/balancer-settings";
 import { LogsSettings } from "./settings/logs-settings";
 import { HealthCheckSettingsTab } from "./settings/health-check-settings";
-import { settingsPageStore, useSettingsStore } from "@/stores/settings";
+import { useSettings, useHealthCheckSettingsQuery, settingsKeys, healthCheckSettingsKeys } from "@/hooks/api/use-providers";
 
 export default function SettingsPage() {
-  const {
-    settings,
-    healthCheckSettings,
-    loading,
-    setLoading,
-    setSettings,
-    setHealthCheckSettings,
-    resetTransient,
-  } = useSettingsStore(settingsPageStore, (state) => state);
+  const queryClient = useQueryClient();
+  const { data: settings = null, isLoading: settingsLoading } = useSettings();
+  const { data: healthCheckSettings = null, isLoading: healthCheckLoading } = useHealthCheckSettingsQuery();
 
-  const loadSettings = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await getSettings();
-      setSettings(data);
-    } catch (error) {
-      toast.error(`加载设置失败: ${toErrorMessage(error)}`);
-    } finally {
-      setLoading(false);
-    }
-  }, [setLoading, setSettings]);
+  const loading = settingsLoading || healthCheckLoading;
 
-  const loadHealthCheckSettings = useCallback(async () => {
-    try {
-      const data = await getHealthCheckSettings();
-      setHealthCheckSettings(data);
-    } catch (error) {
-      toast.error(`加载健康检测设置失败: ${toErrorMessage(error)}`);
-    }
-  }, [setHealthCheckSettings]);
+  const handleSettingsChange = useCallback((_newSettings: Settings) => {
+    void queryClient.invalidateQueries({ queryKey: settingsKeys.all });
+  }, [queryClient]);
 
-  useEffect(() => {
-    void loadSettings();
-    void loadHealthCheckSettings();
-    return () => {
-      resetTransient();
-    };
-  }, [loadHealthCheckSettings, loadSettings, resetTransient]);
-
-  const handleSettingsChange = useCallback((newSettings: Settings) => {
-    setSettings(newSettings);
-  }, [setSettings]);
-
-  const handleHealthCheckSettingsChange = useCallback((newSettings: HealthCheckSettings) => {
-    setHealthCheckSettings(newSettings);
-  }, [setHealthCheckSettings]);
+  const handleHealthCheckSettingsChange = useCallback((_newSettings: HealthCheckSettings) => {
+    void queryClient.invalidateQueries({ queryKey: healthCheckSettingsKeys.all });
+  }, [queryClient]);
 
   if (loading) {
     return (

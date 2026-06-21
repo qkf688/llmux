@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   exportConfig,
   exportDatabase,
-  getDatabaseStats,
   importConfig,
   vacuumDatabase,
   type ImportConfigResponse,
@@ -24,12 +24,10 @@ import {
   selectDatabaseImportMode,
   selectDatabaseImportTypes,
   selectDatabaseImporting,
-  selectDatabaseLoading,
   selectDatabasePreviewData,
   selectDatabasePreviewError,
   selectDatabasePreviewLoading,
   selectDatabaseSelectedFile,
-  selectDatabaseStats,
   selectDatabaseVacuumDialogOpen,
   selectDatabaseVacuuming,
   selectResetDatabaseTransient,
@@ -40,25 +38,25 @@ import {
   selectSetDatabaseImportDialogOpen,
   selectSetDatabaseImportMode,
   selectSetDatabaseImporting,
-  selectSetDatabaseLoading,
   selectSetDatabasePreviewData,
   selectSetDatabasePreviewError,
   selectSetDatabasePreviewLoading,
   selectSetDatabaseSelectedFile,
-  selectSetDatabaseStats,
   selectSetDatabaseVacuumDialogOpen,
   selectSetDatabaseVacuuming,
   selectToggleDatabaseExportType,
   selectToggleDatabaseImportType,
   useDatabasePageStore,
 } from "@/stores/database";
+import { useDatabaseStats, databaseKeys } from "@/hooks/api/use-database";
 
 export function useDatabasePage() {
   const navigate = useNavigate();
   const previewRequestRef = useRef(0);
+  const queryClient = useQueryClient();
 
-  const stats = useDatabasePageStore(selectDatabaseStats);
-  const loading = useDatabasePageStore(selectDatabaseLoading);
+  const { data: stats = null, isLoading: loading } = useDatabaseStats();
+
   const vacuumDialogOpen = useDatabasePageStore(selectDatabaseVacuumDialogOpen);
   const vacuuming = useDatabasePageStore(selectDatabaseVacuuming);
   const exportConfigDialogOpen = useDatabasePageStore(selectDatabaseExportConfigDialogOpen);
@@ -76,8 +74,6 @@ export function useDatabasePage() {
   const previewError = useDatabasePageStore(selectDatabasePreviewError);
   const importFileInputKey = useDatabasePageStore(selectDatabaseImportFileInputKey);
 
-  const setStats = useDatabasePageStore(selectSetDatabaseStats);
-  const setLoading = useDatabasePageStore(selectSetDatabaseLoading);
   const setVacuumDialogOpen = useDatabasePageStore(selectSetDatabaseVacuumDialogOpen);
   const setVacuuming = useDatabasePageStore(selectSetDatabaseVacuuming);
   const setExportConfigDialogOpen = useDatabasePageStore(selectSetDatabaseExportConfigDialogOpen);
@@ -105,26 +101,12 @@ export function useDatabasePage() {
     bumpImportFileInputKey();
   }, [bumpImportFileInputKey, setPreviewData, setPreviewError, setPreviewLoading, setSelectedFile]);
 
-  const fetchStats = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await getDatabaseStats();
-      setStats(data);
-    } catch (error) {
-      toast.error("获取数据库统计信息失败");
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  }, [setLoading, setStats]);
-
   useEffect(() => {
-    void fetchStats();
     return () => {
       previewRequestRef.current += 1;
       resetTransient();
     };
-  }, [fetchStats, resetTransient]);
+  }, [resetTransient]);
 
   const usageRate =
     stats?.page_count && stats.page_count > 0
@@ -135,9 +117,9 @@ export function useDatabasePage() {
     navigate("/");
   };
 
-  const refreshStats = () => {
-    void fetchStats();
-  };
+  const refreshStats = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: databaseKeys.stats() });
+  }, [queryClient]);
 
   const handleVacuum = async () => {
     setVacuumDialogOpen(false);
@@ -145,7 +127,7 @@ export function useDatabasePage() {
     try {
       await vacuumDatabase();
       toast.success("数据库压缩完成");
-      await fetchStats();
+      await queryClient.invalidateQueries({ queryKey: databaseKeys.stats() });
     } catch (error) {
       toast.error("数据库压缩失败");
       console.error(error);
@@ -249,7 +231,7 @@ export function useDatabasePage() {
 
       setImportDialogOpen(false);
       clearImportFileSelection();
-      await fetchStats();
+      await queryClient.invalidateQueries({ queryKey: databaseKeys.stats() });
     } catch (error) {
       toast.error(`导入失败: ${toErrorMessage(error, "未知错误")}`);
       console.error(error);

@@ -9,10 +9,8 @@ function resolveUpdater<T>(updater: Updater<T>, previous: T): T {
 }
 
 export type ModelsPageState = {
-  loading: boolean;
   batchDeleting: boolean;
   batchUpdating: boolean;
-  loadingProviderModels: boolean;
 
   searchQuery: string;
   selectedProviderId: string;
@@ -28,10 +26,8 @@ export type ModelsPageState = {
   modelPickerOpen: boolean;
   collapsedProviders: Record<number, boolean>;
 
-  setLoading: (loading: boolean) => void;
   setBatchDeleting: (loading: boolean) => void;
   setBatchUpdating: (loading: boolean) => void;
-  setLoadingProviderModels: (loading: boolean) => void;
 
   setSearchQuery: (query: string) => void;
   setSelectedProviderId: (providerId: string) => void;
@@ -61,10 +57,8 @@ export type ModelsPageState = {
 const preferences = readModelsPagePreferences();
 
 export const modelsPageStore = createStore<ModelsPageState>()((set, get) => ({
-  loading: true,
   batchDeleting: false,
   batchUpdating: false,
-  loadingProviderModels: false,
 
   searchQuery: preferences.searchQuery,
   selectedProviderId: preferences.selectedProviderId,
@@ -80,10 +74,8 @@ export const modelsPageStore = createStore<ModelsPageState>()((set, get) => ({
   modelPickerOpen: false,
   collapsedProviders: {},
 
-  setLoading: (loading: boolean) => set({ loading }),
   setBatchDeleting: (loading: boolean) => set({ batchDeleting: loading }),
   setBatchUpdating: (loading: boolean) => set({ batchUpdating: loading }),
-  setLoadingProviderModels: (loading: boolean) => set({ loadingProviderModels: loading }),
 
   setSearchQuery: (query: string) => {
     set({ searchQuery: query });
@@ -122,10 +114,8 @@ export const modelsPageStore = createStore<ModelsPageState>()((set, get) => ({
 
   resetTransient: () =>
     set({
-      loading: true,
       batchDeleting: false,
       batchUpdating: false,
-      loadingProviderModels: false,
       formDialogOpen: false,
       editingModel: null,
       deletingModel: null,

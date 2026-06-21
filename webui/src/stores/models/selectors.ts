@@ -1,9 +1,7 @@
 import type { ModelsPageState } from "@/stores/models/page-store";
 
-export const selectModelsLoading = (state: ModelsPageState) => state.loading;
 export const selectModelsBatchDeleting = (state: ModelsPageState) => state.batchDeleting;
 export const selectModelsBatchUpdating = (state: ModelsPageState) => state.batchUpdating;
-export const selectModelsLoadingProviderModels = (state: ModelsPageState) => state.loadingProviderModels;
 
 export const selectModelsSearchQuery = (state: ModelsPageState) => state.searchQuery;
 export const selectModelsSelectedProviderId = (state: ModelsPageState) => state.selectedProviderId;
@@ -19,10 +17,8 @@ export const selectModelsBatchSettingsDialogOpen = (state: ModelsPageState) => s
 export const selectModelsModelPickerOpen = (state: ModelsPageState) => state.modelPickerOpen;
 export const selectModelsCollapsedProviders = (state: ModelsPageState) => state.collapsedProviders;
 
-export const selectSetModelsLoading = (state: ModelsPageState) => state.setLoading;
 export const selectSetModelsBatchDeleting = (state: ModelsPageState) => state.setBatchDeleting;
 export const selectSetModelsBatchUpdating = (state: ModelsPageState) => state.setBatchUpdating;
-export const selectSetModelsLoadingProviderModels = (state: ModelsPageState) => state.setLoadingProviderModels;
 
 export const selectSetModelsSearchQuery = (state: ModelsPageState) => state.setSearchQuery;
 export const selectSetModelsSelectedProviderId = (state: ModelsPageState) => state.setSelectedProviderId;

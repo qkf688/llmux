@@ -2,28 +2,16 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-  batchDeleteModels,
-  batchUpdateModels,
-  createModel,
-  deleteModel,
-  getModels,
-  getProviders,
-  updateModel,
-} from "@/lib/api";
-import type { Model, Provider } from "@/lib/api";
+import type { Model } from "@/lib/api";
 import {
   selectModelsBatchDeleteDialogOpen,
-  selectModelsBatchDeleting,
   selectModelsBatchSettingsDialogOpen,
-  selectModelsBatchUpdating,
   selectModelsCollapsedProviders,
   selectModelsDeletingModel,
   selectModelsEditingModel,
   selectModelsFormDialogOpen,
-  selectModelsLoading,
-  selectModelsLoadingProviderModels,
   selectModelsModelPickerOpen,
   selectModelsModelSearchQuery,
   selectModelsSearchQuery,
@@ -31,15 +19,11 @@ import {
   selectModelsSelectedProviderId,
   selectResetModelsTransient,
   selectSetModelsBatchDeleteDialogOpen,
-  selectSetModelsBatchDeleting,
   selectSetModelsBatchSettingsDialogOpen,
-  selectSetModelsBatchUpdating,
   selectSetModelsCollapsedProviders,
   selectSetModelsDeletingModel,
   selectSetModelsEditingModel,
   selectSetModelsFormDialogOpen,
-  selectSetModelsLoading,
-  selectSetModelsLoadingProviderModels,
   selectSetModelsModelPickerOpen,
   selectSetModelsModelSearchQuery,
   selectSetModelsSearchQuery,
@@ -47,6 +31,16 @@ import {
   selectSetModelsSelectedProviderId,
   useModelsPageStore,
 } from "@/stores/models";
+import {
+  useModels,
+  useCreateModel,
+  useUpdateModel,
+  useDeleteModel,
+  useBatchDeleteModels,
+  useBatchUpdateModels,
+  modelKeys,
+} from "@/hooks/api/use-models";
+import { useProviders } from "@/hooks/api/use-providers";
 import { BatchSettingsDialog } from "./components/dialogs/batch-settings-dialog";
 import { ModelDeleteDialog } from "./components/dialogs/model-delete-dialog";
 import { ModelFormDialog } from "./components/dialogs/model-form-dialog";
@@ -59,7 +53,6 @@ import {
   type BatchUpdateValues,
   type ModelFormValues,
 } from "./schemas/forms";
-import type { ProviderModelGroup, ProviderModelWithOwner } from "./types";
 import {
   defaultBatchUpdateValues,
   defaultModelFormValues,
@@ -75,22 +68,29 @@ import { calculateSelectedRanges, collectSelectedModels, filterModelsByName } fr
 
 export default function ModelsPage() {
   const navigate = useNavigate();
-  const [models, setModels] = useState<Model[]>([]);
+  const queryClient = useQueryClient();
   const [togglingIOLog, setTogglingIOLog] = useState<Record<number, boolean>>({});
   const [togglingAutoAssociate, setTogglingAutoAssociate] = useState<Record<number, boolean>>({});
 
-  const [providers, setProviders] = useState<Provider[]>([]);
-  const [providerModels, setProviderModels] = useState<ProviderModelWithOwner[]>([]);
-  const [providerModelGroups, setProviderModelGroups] = useState<ProviderModelGroup[]>([]);
+  const { data: models = [], isLoading: loading } = useModels();
+  const { data: providersData = [], isLoading: loadingProviderModels } = useProviders();
 
-  const loading = useModelsPageStore(selectModelsLoading);
-  const setLoading = useModelsPageStore(selectSetModelsLoading);
-  const batchDeleting = useModelsPageStore(selectModelsBatchDeleting);
-  const setBatchDeleting = useModelsPageStore(selectSetModelsBatchDeleting);
-  const batchUpdating = useModelsPageStore(selectModelsBatchUpdating);
-  const setBatchUpdating = useModelsPageStore(selectSetModelsBatchUpdating);
-  const loadingProviderModels = useModelsPageStore(selectModelsLoadingProviderModels);
-  const setLoadingProviderModels = useModelsPageStore(selectSetModelsLoadingProviderModels);
+  const providerModelGroups = useMemo(() => buildProviderModelGroups(providersData), [providersData]);
+  const providerModels = useMemo(
+    () => providerModelGroups.flatMap((group) => group.models),
+    [providerModelGroups],
+  );
+
+  const batchDeleteMutation = useBatchDeleteModels();
+  const batchUpdateMutation = useBatchUpdateModels();
+  const createMutation = useCreateModel();
+  const updateMutation = useUpdateModel();
+  const deleteMutation = useDeleteModel();
+
+  const batchDeleting = useModelsPageStore((s) => s.batchDeleting);
+  const setBatchDeleting = useModelsPageStore((s) => s.setBatchDeleting);
+  const batchUpdating = useModelsPageStore((s) => s.batchUpdating);
+  const setBatchUpdating = useModelsPageStore((s) => s.setBatchUpdating);
 
   const formDialogOpen = useModelsPageStore(selectModelsFormDialogOpen);
   const setFormDialogOpen = useModelsPageStore(selectSetModelsFormDialogOpen);
@@ -134,41 +134,9 @@ export default function ModelsPage() {
     };
   }, [resetTransient]);
 
-  const fetchModels = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await getModels();
-      setModels(data);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      toast.error(`获取模型列表失败: ${message}`);
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  }, [setLoading]);
-
-  const fetchProviders = useCallback(async () => {
-    try {
-      setLoadingProviderModels(true);
-      const data = await getProviders();
-      const groups = buildProviderModelGroups(data);
-
-      setProviders(data);
-      setProviderModelGroups(groups);
-      setProviderModels(groups.flatMap((group) => group.models));
-      setCollapsedProviders((previous) => buildCollapsedProviderState(groups, previous));
-    } catch (error) {
-      console.error("获取供应商列表失败:", error);
-    } finally {
-      setLoadingProviderModels(false);
-    }
-  }, [setCollapsedProviders, setLoadingProviderModels]);
-
   useEffect(() => {
-    void fetchModels();
-    void fetchProviders();
-  }, [fetchModels, fetchProviders]);
+    setCollapsedProviders((previous) => buildCollapsedProviderState(providerModelGroups, previous));
+  }, [providerModelGroups, setCollapsedProviders]);
 
   useEffect(() => {
     setSelectedIds((previous) => {
@@ -205,6 +173,16 @@ export default function ModelsPage() {
   const isAllSelected = models.length > 0 && selectedIds.length === models.length;
   const isPartialSelected = selectedIds.length > 0 && selectedIds.length < models.length;
 
+  const patchModelInCache = useCallback(
+    (modelId: number, patch: Partial<Model>) => {
+      queryClient.setQueriesData<Model[]>(
+        { queryKey: modelKeys.list() },
+        (old) => old?.map((item) => (item.ID === modelId ? { ...item, ...patch } : item)),
+      );
+    },
+    [queryClient],
+  );
+
   const handleSelectProviderModel = (modelId: string) => {
     form.setValue("name", modelId);
     setModelPickerOpen(false);
@@ -220,7 +198,7 @@ export default function ModelsPage() {
 
   const openModelPicker = () => {
     if (providerModels.length === 0) {
-      toast.error("暂无任何“全部模型”，请先在提供商管理页同步或添加模型");
+      toast.error('暂无任何"全部模型"，请先在提供商管理页同步或添加模型');
       return;
     }
 
@@ -229,11 +207,10 @@ export default function ModelsPage() {
 
   const handleCreate = async (values: ModelFormValues) => {
     try {
-      await createModel(values);
+      await createMutation.mutateAsync(values);
       setFormDialogOpen(false);
       toast.success(`模型: ${values.name} 创建成功`);
       form.reset(defaultModelFormValues);
-      await fetchModels();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error(`创建模型失败: ${message}`);
@@ -246,12 +223,11 @@ export default function ModelsPage() {
     }
 
     try {
-      await updateModel(editingModel.ID, values);
+      await updateMutation.mutateAsync({ id: editingModel.ID, data: values });
       setFormDialogOpen(false);
       setEditingModel(null);
       toast.success(`模型: ${values.name} 更新成功`);
       form.reset(defaultModelFormValues);
-      await fetchModels();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error(`更新模型失败: ${message}`);
@@ -265,9 +241,8 @@ export default function ModelsPage() {
     }
 
     try {
-      await deleteModel(deletingModel.ID);
+      await deleteMutation.mutateAsync(deletingModel.ID);
       setDeletingModel(null);
-      await fetchModels();
       toast.success(`模型: ${deletingModel.Name ?? deletingModel.ID} 删除成功`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -320,11 +295,10 @@ export default function ModelsPage() {
     setBatchDeleting(true);
 
     try {
-      const result = await batchDeleteModels(selectedIds);
+      const result = await batchDeleteMutation.mutateAsync(selectedIds);
       toast.success(`成功删除 ${result.deleted} 个模型`);
       setSelectedIds([]);
       setBatchDeleteDialogOpen(false);
-      await fetchModels();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error(`批量删除模型失败: ${message}`);
@@ -340,14 +314,15 @@ export default function ModelsPage() {
     setTogglingIOLog((previous) => ({ ...previous, [modelId]: true }));
 
     try {
-      await updateModel(modelId, {
-        ...buildModelUpdatePayload(model),
-        io_log: newIOLogValue,
+      await updateMutation.mutateAsync({
+        id: modelId,
+        data: {
+          ...buildModelUpdatePayload(model),
+          io_log: newIOLogValue,
+        },
       });
 
-      setModels((previousModels) =>
-        previousModels.map((item) => (item.ID === modelId ? { ...item, IOLog: newIOLogValue } : item))
-      );
+      patchModelInCache(modelId, { IOLog: newIOLogValue });
 
       toast.success(`模型 ${model.Name} 的 IO 记录已${newIOLogValue ? "开启" : "关闭"}`);
     } catch (error) {
@@ -368,14 +343,15 @@ export default function ModelsPage() {
     setTogglingAutoAssociate((previous) => ({ ...previous, [modelId]: true }));
 
     try {
-      await updateModel(modelId, {
-        ...buildModelUpdatePayload(model),
-        auto_associate: checked,
+      await updateMutation.mutateAsync({
+        id: modelId,
+        data: {
+          ...buildModelUpdatePayload(model),
+          auto_associate: checked,
+        },
       });
 
-      setModels((previousModels) =>
-        previousModels.map((item) => (item.ID === modelId ? { ...item, auto_associate: checked } : item))
-      );
+      patchModelInCache(modelId, { auto_associate: checked });
 
       toast.success(`模型 "${model.Name}" 的自动关联设置已更新`);
     } catch (error) {
@@ -411,12 +387,11 @@ export default function ModelsPage() {
         params.time_out = values.time_out;
       }
 
-      const result = await batchUpdateModels(params);
+      const result = await batchUpdateMutation.mutateAsync(params);
       toast.success(`成功更新 ${result.updated} 个模型`);
       setSelectedIds([]);
       setBatchSettingsDialogOpen(false);
       batchUpdateForm.reset(defaultBatchUpdateValues);
-      await fetchModels();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error(`批量更新模型失败: ${message}`);
@@ -430,7 +405,7 @@ export default function ModelsPage() {
     onOpenChange: setFormDialogOpen,
     editingModel,
     form,
-    providers,
+    providers: providersData,
     selectedProviderId,
     onSelectedProviderIdChange: setSelectedProviderId,
     loadingProviderModels,
@@ -444,7 +419,7 @@ export default function ModelsPage() {
     open: modelPickerOpen,
     onOpenChange: setModelPickerOpen,
     selectedProviderId,
-    providers,
+    providers: providersData,
     loadingProviderModels,
     providerModels,
     filteredProviderGroups,

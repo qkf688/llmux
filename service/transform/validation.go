@@ -7,7 +7,6 @@ import (
 )
 
 // 参数验证函数
-// 参考: E:\a-2025_12-projects\octopus\internal\transformer\
 
 // validateTemperature 验证 temperature 参数范围 (0-2)
 func validateTemperature(temp *float64) error {

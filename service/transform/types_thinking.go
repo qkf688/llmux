@@ -2,7 +2,6 @@ package transform
 
 // Thinking 思考配置 (Anthropic Extended Thinking)
 // 参考: https://docs.anthropic.com/claude/docs/extended-thinking
-// 参考: E:\a-2025_12-projects\octopus\internal\transformer\inbound\anthropic\thinking.go
 //
 // Extended Thinking 功能允许模型在生成响应前进行更深入的推理。
 // 通过设置 thinking 配置，可以控制模型的推理行为和预算。

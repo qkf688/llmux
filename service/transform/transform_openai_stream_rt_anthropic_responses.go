@@ -3,6 +3,8 @@ package transform
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/atopos31/llmio/common/maputil"
 )
 
 func handleRealtimeAnthropicToResponses(state *realtimeStreamState, data string) error {
@@ -19,7 +21,7 @@ func handleRealtimeAnthropicToResponses(state *realtimeStreamState, data string)
 
 	eventType := state.currentEvent
 	if eventType == "" {
-		eventType = getString(chunk, "type")
+		eventType = maputil.String(chunk, "type")
 	}
 
 	switch eventType {
@@ -83,8 +85,8 @@ func handleAnthropicToResponsesContentBlockStart(state *realtimeStreamState, chu
 	if !ok {
 		return nil
 	}
-	blockType := getString(contentBlock, "type")
-	blockIndex := int(getFloat(chunk, "index"))
+	blockType := maputil.String(contentBlock, "type")
+	blockIndex := int(maputil.Float64(chunk, "index"))
 
 	if blockType == "thinking" {
 		// 处理 thinking 类型的 content block（Extended Thinking）
@@ -169,10 +171,10 @@ func handleAnthropicToResponsesContentBlockDelta(state *realtimeStreamState, chu
 	if !ok {
 		return nil
 	}
-	deltaType := getString(delta, "type")
+	deltaType := maputil.String(delta, "type")
 
 	if deltaType == "thinking_delta" {
-		text := getString(delta, "thinking")
+		text := maputil.String(delta, "thinking")
 		if text == "" {
 			return nil
 		}
@@ -189,7 +191,7 @@ func handleAnthropicToResponsesContentBlockDelta(state *realtimeStreamState, chu
 	}
 
 	if deltaType == "text_delta" {
-		text := getString(delta, "text")
+		text := maputil.String(delta, "text")
 		if text == "" {
 			return nil
 		}
@@ -197,7 +199,7 @@ func handleAnthropicToResponsesContentBlockDelta(state *realtimeStreamState, chu
 		textDelta := map[string]interface{}{
 			"type":            "response.output_text.delta",
 			"sequence_number": nextRealtimeSequence(state),
-			"output_index":    int(getFloat(chunk, "index")),
+			"output_index":    int(maputil.Float64(chunk, "index")),
 			"item_id":         state.itemID,
 			"content_index":   0,
 			"delta":           text,
@@ -206,14 +208,14 @@ func handleAnthropicToResponsesContentBlockDelta(state *realtimeStreamState, chu
 	}
 
 	if deltaType == "input_json_delta" {
-		partialJSON := getString(delta, "partial_json")
+		partialJSON := maputil.String(delta, "partial_json")
 		if partialJSON == "" {
 			return nil
 		}
 		argsDelta := map[string]interface{}{
 			"type":            "response.function_call_arguments.delta",
 			"sequence_number": nextRealtimeSequence(state),
-			"output_index":    int(getFloat(chunk, "index")),
+			"output_index":    int(maputil.Float64(chunk, "index")),
 			"delta":           partialJSON,
 		}
 		return writeRealtimeOrderedData(state, argsDelta)
@@ -340,7 +342,7 @@ func handleAnthropicToResponsesMessageDelta(state *realtimeStreamState, chunk ma
 
 	status := "completed"
 	if delta, ok := chunk["delta"].(map[string]interface{}); ok {
-		if reason := getString(delta, "stop_reason"); reason != "" && reason == "max_tokens" {
+		if reason := maputil.String(delta, "stop_reason"); reason != "" && reason == "max_tokens" {
 			status = "incomplete"
 		}
 	}
@@ -361,18 +363,18 @@ func handleAnthropicToResponsesMessageDelta(state *realtimeStreamState, chunk ma
 	// 添加 usage 信息
 	if usage, ok := chunk["usage"].(map[string]interface{}); ok {
 		usageMap := map[string]interface{}{
-			"input_tokens":  int(getFloat(usage, "input_tokens")),
-			"output_tokens": int(getFloat(usage, "output_tokens")),
-			"total_tokens":  int(getFloat(usage, "input_tokens") + getFloat(usage, "output_tokens")),
+			"input_tokens":  int(maputil.Float64(usage, "input_tokens")),
+			"output_tokens": int(maputil.Float64(usage, "output_tokens")),
+			"total_tokens":  int(maputil.Float64(usage, "input_tokens") + maputil.Float64(usage, "output_tokens")),
 		}
 		// 添加 input_tokens_details
-		if inputTokens := int(getFloat(usage, "input_tokens")); inputTokens > 0 {
+		if inputTokens := int(maputil.Float64(usage, "input_tokens")); inputTokens > 0 {
 			usageMap["input_tokens_details"] = map[string]interface{}{
 				"cached_tokens": 0,
 			}
 		}
 		// 添加 output_tokens_details
-		if outputTokens := int(getFloat(usage, "output_tokens")); outputTokens > 0 {
+		if outputTokens := int(maputil.Float64(usage, "output_tokens")); outputTokens > 0 {
 			usageMap["output_tokens_details"] = map[string]interface{}{
 				"reasoning_tokens": 0,
 			}

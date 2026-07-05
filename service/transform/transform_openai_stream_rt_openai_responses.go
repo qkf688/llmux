@@ -1,6 +1,10 @@
 package transform
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/atopos31/llmio/common/maputil"
+)
 
 func handleRealtimeOpenAIToResponses(state *realtimeStreamState, data string) error {
 	// OpenAI 的 [DONE] 不需要转换
@@ -29,19 +33,19 @@ func handleRealtimeOpenAIToResponses(state *realtimeStreamState, data string) er
 		return nil
 	}
 
-	if role := getString(delta, "role"); role != "" {
+	if role := maputil.String(delta, "role"); role != "" {
 		if err := startOpenAIToResponsesStream(state, chunk, role); err != nil {
 			return err
 		}
 	}
 
-	if reasoningContent := getString(delta, "reasoning_content"); reasoningContent != "" {
+	if reasoningContent := maputil.String(delta, "reasoning_content"); reasoningContent != "" {
 		if err := emitOpenAIToResponsesReasoningDelta(state, reasoningContent); err != nil {
 			return err
 		}
 	}
 
-	if content := getString(delta, "content"); content != "" {
+	if content := maputil.String(delta, "content"); content != "" {
 		state.accumulatedText += content
 		textDelta := map[string]interface{}{
 			"type":            "response.output_text.delta",
@@ -62,7 +66,7 @@ func handleRealtimeOpenAIToResponses(state *realtimeStreamState, data string) er
 		}
 	}
 
-	if finishReason := getString(choice, "finish_reason"); finishReason != "" {
+	if finishReason := maputil.String(choice, "finish_reason"); finishReason != "" {
 		return finishOpenAIToResponsesStream(state, chunk, finishReason)
 	}
 
@@ -70,7 +74,7 @@ func handleRealtimeOpenAIToResponses(state *realtimeStreamState, data string) er
 }
 
 func startOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]interface{}, role string) error {
-	state.responseID = getString(chunk, "id")
+	state.responseID = maputil.String(chunk, "id")
 	state.itemID = "msg_" + state.responseID
 
 	responseCreated := map[string]interface{}{
@@ -79,8 +83,8 @@ func startOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]i
 		"response": map[string]interface{}{
 			"id":         state.responseID,
 			"object":     "response",
-			"model":      getString(chunk, "model"),
-			"created_at": int(getFloat(chunk, "created")),
+			"model":      maputil.String(chunk, "model"),
+			"created_at": int(maputil.Float64(chunk, "created")),
 			"status":     "in_progress",
 			"output":     []interface{}{},
 		},
@@ -95,8 +99,8 @@ func startOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]i
 		"response": map[string]interface{}{
 			"id":         state.responseID,
 			"object":     "response",
-			"model":      getString(chunk, "model"),
-			"created_at": int(getFloat(chunk, "created")),
+			"model":      maputil.String(chunk, "model"),
+			"created_at": int(maputil.Float64(chunk, "created")),
 			"status":     "in_progress",
 			"output":     []interface{}{},
 		},
@@ -196,15 +200,15 @@ func emitOpenAIToResponsesToolCalls(state *realtimeStreamState, toolCalls []inte
 		}
 
 		// 首包含 id/name 时，发送 output_item.added 事件
-		if id := getString(toolCall, "id"); id != "" {
+		if id := maputil.String(toolCall, "id"); id != "" {
 			itemAdded := map[string]interface{}{
 				"type":         "response.output_item.added",
-				"output_index": int(getFloat(toolCall, "index")),
+				"output_index": int(maputil.Float64(toolCall, "index")),
 				"item": map[string]interface{}{
 					"type":      "function_call",
 					"id":        id,
 					"call_id":   id,
-					"name":      getString(function, "name"),
+					"name":      maputil.String(function, "name"),
 					"arguments": "",
 				},
 			}
@@ -214,10 +218,10 @@ func emitOpenAIToResponsesToolCalls(state *realtimeStreamState, toolCalls []inte
 		}
 
 		// 参数增量
-		if args := getString(function, "arguments"); args != "" {
+		if args := maputil.String(function, "arguments"); args != "" {
 			argsDelta := map[string]interface{}{
 				"type":         "response.function_call_arguments.delta",
-				"output_index": int(getFloat(toolCall, "index")),
+				"output_index": int(maputil.Float64(toolCall, "index")),
 				"delta":        args,
 			}
 			if err := writeRealtimeEventJSONData(state, "response.function_call_arguments.delta", argsDelta); err != nil {
@@ -336,8 +340,8 @@ func finishOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]
 		"response": map[string]interface{}{
 			"object":     "response",
 			"id":         state.responseID,
-			"model":      getString(chunk, "model"),
-			"created_at": int(getFloat(chunk, "created")),
+			"model":      maputil.String(chunk, "model"),
+			"created_at": int(maputil.Float64(chunk, "created")),
 			"status":     status,
 			"output":     []interface{}{},
 		},
@@ -346,18 +350,18 @@ func finishOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]
 	// 添加 usage 信息
 	if usage, ok := chunk["usage"].(map[string]interface{}); ok {
 		usageMap := map[string]interface{}{
-			"input_tokens":  int(getFloat(usage, "prompt_tokens")),
-			"output_tokens": int(getFloat(usage, "completion_tokens")),
-			"total_tokens":  int(getFloat(usage, "total_tokens")),
+			"input_tokens":  int(maputil.Float64(usage, "prompt_tokens")),
+			"output_tokens": int(maputil.Float64(usage, "completion_tokens")),
+			"total_tokens":  int(maputil.Float64(usage, "total_tokens")),
 		}
 		// 添加 input_tokens_details
-		if promptTokens := int(getFloat(usage, "prompt_tokens")); promptTokens > 0 {
+		if promptTokens := int(maputil.Float64(usage, "prompt_tokens")); promptTokens > 0 {
 			usageMap["input_tokens_details"] = map[string]interface{}{
 				"cached_tokens": 0,
 			}
 		}
 		// 添加 output_tokens_details
-		if completionTokens := int(getFloat(usage, "completion_tokens")); completionTokens > 0 {
+		if completionTokens := int(maputil.Float64(usage, "completion_tokens")); completionTokens > 0 {
 			usageMap["output_tokens_details"] = map[string]interface{}{
 				"reasoning_tokens": 0,
 			}

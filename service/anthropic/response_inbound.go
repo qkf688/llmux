@@ -3,6 +3,8 @@ package anthropic
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/atopos31/llmio/common/maputil"
 )
 
 // ParseResponse 将 Anthropic 响应格式转换为统一格式。
@@ -13,13 +15,13 @@ func ParseResponse(body []byte) (*UnifiedResponse, error) {
 	}
 
 	unified := &UnifiedResponse{
-		ID:      getString(resp, "id"),
+		ID:      maputil.String(resp, "id"),
 		Object:  "chat.completion",
 		Created: 0,
-		Model:   getString(resp, "model"),
+		Model:   maputil.String(resp, "model"),
 	}
 
-	finishReason := getString(resp, "stop_reason")
+	finishReason := maputil.String(resp, "stop_reason")
 	switch finishReason {
 	case "end_turn", "stop_sequence":
 		finishReason = "stop"
@@ -78,9 +80,9 @@ func ParseResponse(body []byte) (*UnifiedResponse, error) {
 
 	if usage, ok := asMap(resp["usage"]); ok {
 		unified.Usage = &Usage{
-			PromptTokens:     int64(getFloat(usage, "input_tokens")),
-			CompletionTokens: int64(getFloat(usage, "output_tokens")),
-			TotalTokens:      int64(getFloat(usage, "input_tokens") + getFloat(usage, "output_tokens")),
+			PromptTokens:     int64(maputil.Float64(usage, "input_tokens")),
+			CompletionTokens: int64(maputil.Float64(usage, "output_tokens")),
+			TotalTokens:      int64(maputil.Float64(usage, "input_tokens") + maputil.Float64(usage, "output_tokens")),
 		}
 	}
 
@@ -98,11 +100,11 @@ func extractThinking(raw interface{}) (thinking string, signature string) {
 		if !ok {
 			continue
 		}
-		if getString(itemMap, "type") != "thinking" {
+		if maputil.String(itemMap, "type") != "thinking" {
 			continue
 		}
-		thinking = getString(itemMap, "thinking")
-		signature = getString(itemMap, "signature")
+		thinking = maputil.String(itemMap, "thinking")
+		signature = maputil.String(itemMap, "signature")
 		if thinking != "" || signature != "" {
 			return thinking, signature
 		}

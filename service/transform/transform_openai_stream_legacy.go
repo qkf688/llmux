@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/atopos31/llmio/common/maputil"
 )
 
 func transformStreamResponse(response *http.Response, body []byte, providerType, clientType string) (*http.Response, error) {
@@ -58,7 +60,7 @@ func transformStreamResponse(response *http.Response, body []byte, providerType,
 
 			// Anthropic → OpenAI 转换
 			if providerType == "anthropic" && clientType == "openai" {
-				eventType := getString(chunk, "type")
+				eventType := maputil.String(chunk, "type")
 
 				switch eventType {
 				case "message_start":
@@ -76,7 +78,7 @@ func transformStreamResponse(response *http.Response, body []byte, providerType,
 				case "content_block_delta":
 					// 提取文本内容
 					if delta, ok := chunk["delta"].(map[string]interface{}); ok {
-						if text := getString(delta, "text"); text != "" {
+						if text := maputil.String(delta, "text"); text != "" {
 							textBuffer.WriteString(text)
 
 							// 构造 OpenAI 流式响应
@@ -109,7 +111,7 @@ func transformStreamResponse(response *http.Response, body []byte, providerType,
 					// 发送结束块
 					stopReason := "stop"
 					if delta, ok := chunk["delta"].(map[string]interface{}); ok {
-						if reason := getString(delta, "stop_reason"); reason != "" {
+						if reason := maputil.String(delta, "stop_reason"); reason != "" {
 							if reason == "end_turn" {
 								stopReason = "stop"
 							} else if reason == "tool_use" {
@@ -136,9 +138,9 @@ func transformStreamResponse(response *http.Response, body []byte, providerType,
 					// 添加 usage 信息
 					if usage, ok := chunk["usage"].(map[string]interface{}); ok {
 						finalChunk["usage"] = map[string]interface{}{
-							"prompt_tokens":     int(getFloat(usage, "input_tokens")),
-							"completion_tokens": int(getFloat(usage, "output_tokens")),
-							"total_tokens":      int(getFloat(usage, "input_tokens") + getFloat(usage, "output_tokens")),
+							"prompt_tokens":     int(maputil.Float64(usage, "input_tokens")),
+							"completion_tokens": int(maputil.Float64(usage, "output_tokens")),
+							"total_tokens":      int(maputil.Float64(usage, "input_tokens") + maputil.Float64(usage, "output_tokens")),
 						}
 					}
 
@@ -157,16 +159,16 @@ func transformStreamResponse(response *http.Response, body []byte, providerType,
 					// 检查是否有 delta
 					if delta, ok := choice["delta"].(map[string]interface{}); ok {
 						// 处理角色信息（第一个chunk）
-						if role := getString(delta, "role"); role != "" {
+						if role := maputil.String(delta, "role"); role != "" {
 							// 发送 message_start 事件
 							messageStart := map[string]interface{}{
 								"type": "message_start",
 								"message": map[string]interface{}{
-									"id":      getString(chunk, "id"),
+									"id":      maputil.String(chunk, "id"),
 									"type":    "message",
 									"role":    "assistant",
 									"content": []interface{}{},
-									"model":   getString(chunk, "model"),
+									"model":   maputil.String(chunk, "model"),
 									"usage": map[string]interface{}{
 										"input_tokens":  0,
 										"output_tokens": 0,
@@ -190,7 +192,7 @@ func transformStreamResponse(response *http.Response, body []byte, providerType,
 						}
 
 						// 处理内容
-						if content := getString(delta, "content"); content != "" {
+						if content := maputil.String(delta, "content"); content != "" {
 							contentDelta := map[string]interface{}{
 								"type":  "content_block_delta",
 								"index": 0,
@@ -204,7 +206,7 @@ func transformStreamResponse(response *http.Response, body []byte, providerType,
 						}
 
 						// 处理结束
-						if finishReason := getString(choice, "finish_reason"); finishReason != "" {
+						if finishReason := maputil.String(choice, "finish_reason"); finishReason != "" {
 							// 发送 content_block_stop
 							blockStop := map[string]interface{}{
 								"type":  "content_block_stop",
@@ -231,8 +233,8 @@ func transformStreamResponse(response *http.Response, body []byte, providerType,
 
 							// 添加 usage 信息（Anthropic 格式）
 							if usage, ok := chunk["usage"].(map[string]interface{}); ok {
-								inputTokens := int(getFloat(usage, "prompt_tokens"))
-								outputTokens := int(getFloat(usage, "completion_tokens"))
+								inputTokens := int(maputil.Float64(usage, "prompt_tokens"))
+								outputTokens := int(maputil.Float64(usage, "completion_tokens"))
 								messageDelta["usage"] = map[string]interface{}{
 									"input_tokens":  inputTokens,
 									"output_tokens": outputTokens,

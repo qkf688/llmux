@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"github.com/atopos31/llmio/common/maputil"
 )
 
 func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequest, error) {
@@ -13,8 +15,8 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 	}
 
 	unified := &UnifiedRequest{
-		Model:  getString(req, "model"),
-		Stream: getBool(req, "stream"),
+		Model:  maputil.String(req, "model"),
+		Stream: maputil.Bool(req, "stream"),
 	}
 
 	if maxTokens, ok := req["max_tokens"].(float64); ok {
@@ -36,7 +38,7 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 			if !ok {
 				continue
 			}
-			if getString(msgMap, "role") != "system" {
+			if maputil.String(msgMap, "role") != "system" {
 				nonSystemCount++
 			}
 		}
@@ -50,7 +52,7 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 			if !ok {
 				continue
 			}
-			role := getString(msgMap, "role")
+			role := maputil.String(msgMap, "role")
 
 			// 只在有其他消息时才提取 system 消息
 			if role == "system" && extractSystem {
@@ -78,7 +80,7 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 					for _, item := range contentArray {
 						if itemMap, ok := item.(map[string]interface{}); ok {
 							part := UnifiedMessageContentPart{
-								Type: getString(itemMap, "type"),
+								Type: maputil.String(itemMap, "type"),
 							}
 
 							switch part.Type {
@@ -89,15 +91,15 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 							case "image_url":
 								if imgMap, ok := itemMap["image_url"].(map[string]interface{}); ok {
 									part.ImageURL = &UnifiedImageURL{
-										URL:    getString(imgMap, "url"),
+										URL:    maputil.String(imgMap, "url"),
 										Detail: getStringPtr(imgMap, "detail"),
 									}
 								}
 							case "input_audio":
 								if audioMap, ok := itemMap["input_audio"].(map[string]interface{}); ok {
 									part.InputAudio = &UnifiedInputAudio{
-										Data:   getString(audioMap, "data"),
-										Format: getString(audioMap, "format"),
+										Data:   maputil.String(audioMap, "data"),
+										Format: maputil.String(audioMap, "format"),
 									}
 								}
 							}
@@ -134,8 +136,8 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 				unified.Tools = append(unified.Tools, UnifiedTool{
 					Type: "function",
 					Function: UnifiedFunc{
-						Name:        getString(funcMap, "name"),
-						Description: getString(funcMap, "description"),
+						Name:        maputil.String(funcMap, "name"),
+						Description: maputil.String(funcMap, "description"),
 						Parameters:  funcMap["parameters"],
 					},
 				})
@@ -161,7 +163,7 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 	unified.Seed = getInt64Ptr(req, "seed")
 	unified.LogitBias = getIntMap(req, "logit_bias")
 	unified.User = getStringPtr(req, "user")
-	unified.Metadata = getStringMap(req, "metadata")
+	unified.Metadata = maputil.StringMap(req, "metadata")
 	unified.Logprobs = getBoolPtr(req, "logprobs")
 	unified.TopLogprobs = getInt64Ptr(req, "top_logprobs")
 	unified.MaxCompletionTokens = getInt64Ptr(req, "max_completion_tokens")
@@ -174,7 +176,7 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 		case string:
 			unified.Stop.Single = &v
 		case []interface{}:
-			unified.Stop.Multiple = getStringArray(req, "stop")
+			unified.Stop.Multiple = maputil.StringSlice(req, "stop")
 		}
 	}
 
@@ -182,7 +184,7 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 	// 解析 response_format
 	if rfVal, ok := req["response_format"].(map[string]interface{}); ok {
 		unified.ResponseFormat = &UnifiedResponseFormat{
-			Type: getString(rfVal, "type"),
+			Type: maputil.String(rfVal, "type"),
 		}
 		if schema, ok := rfVal["json_schema"]; ok {
 			if schemaBytes, err := json.Marshal(schema); err == nil {
@@ -199,11 +201,11 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 			unified.ToolChoice.StringValue = &v
 		case map[string]interface{}:
 			obj := UnifiedToolChoiceObject{
-				Type: getString(v, "type"),
+				Type: maputil.String(v, "type"),
 			}
 			if funcMap, ok := v["function"].(map[string]interface{}); ok {
 				obj.Function = &UnifiedToolChoiceFunction{
-					Name: getString(funcMap, "name"),
+					Name: maputil.String(funcMap, "name"),
 				}
 			}
 			unified.ToolChoice.ObjectValue = &obj
@@ -215,18 +217,18 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 	// 解析 stream_options
 	if soVal, ok := req["stream_options"].(map[string]interface{}); ok {
 		unified.StreamOptions = &UnifiedStreamOptions{
-			IncludeUsage: getBool(soVal, "include_usage"),
+			IncludeUsage: maputil.Bool(soVal, "include_usage"),
 		}
 	}
 
 	// 阶段 3: 解析多模态参数
-	unified.Modalities = getStringArray(req, "modalities")
+	unified.Modalities = maputil.StringSlice(req, "modalities")
 
 	// 解析 audio 配置
 	if audioVal, ok := req["audio"].(map[string]interface{}); ok {
 		unified.Audio = &UnifiedAudio{
-			Voice:  getString(audioVal, "voice"),
-			Format: getString(audioVal, "format"),
+			Voice:  maputil.String(audioVal, "voice"),
+			Format: maputil.String(audioVal, "format"),
 		}
 	}
 

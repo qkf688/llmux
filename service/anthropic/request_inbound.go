@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/atopos31/llmio/common/maputil"
 )
 
 // TransformToUnified 将 Anthropic 请求格式转换为统一格式。
@@ -14,8 +16,8 @@ func TransformToUnified(rawBody []byte) (*UnifiedRequest, error) {
 	}
 
 	unified := &UnifiedRequest{
-		Model:  getString(req, "model"),
-		Stream: getBool(req, "stream"),
+		Model:  maputil.String(req, "model"),
+		Stream: maputil.Bool(req, "stream"),
 	}
 	unified.System, unified.SystemParts = parseSystem(req["system"])
 
@@ -32,17 +34,17 @@ func TransformToUnified(rawBody []byte) (*UnifiedRequest, error) {
 	unified.Messages = parseMessages(req["messages"])
 	unified.Tools = parseTools(req["tools"])
 
-	if stopSeqs := getStringArray(req, "stop_sequences"); len(stopSeqs) > 0 {
+	if stopSeqs := maputil.StringSlice(req, "stop_sequences"); len(stopSeqs) > 0 {
 		unified.Stop = &UnifiedStop{Multiple: stopSeqs}
 	}
 
-	if metadata := getStringMap(req, "metadata"); len(metadata) > 0 {
+	if metadata := maputil.StringMap(req, "metadata"); len(metadata) > 0 {
 		unified.Metadata = metadata
 	}
 
 	if thinking, ok := asMap(req["thinking"]); ok {
-		thinkingType := getString(thinking, "type")
-		budgetTokens := getInt64(thinking, "budget_tokens")
+		thinkingType := maputil.String(thinking, "type")
+		budgetTokens := maputil.Int64(thinking, "budget_tokens")
 		if thinkingType == "enabled" && budgetTokens > 0 {
 			effort := thinkingBudgetToReasoningEffort(budgetTokens)
 			if effort != "" {
@@ -59,10 +61,10 @@ func TransformToUnified(rawBody []byte) (*UnifiedRequest, error) {
 		if v, ok := rawToolChoice.(string); ok && v != "" {
 			unified.ToolChoice.StringValue = &v
 		} else if tcMap, ok := asMap(rawToolChoice); ok {
-			tcType := getString(tcMap, "type")
+			tcType := maputil.String(tcMap, "type")
 			switch tcType {
 			case "tool":
-				name := getString(tcMap, "name")
+				name := maputil.String(tcMap, "name")
 				if name != "" {
 					unified.ToolChoice.ObjectValue = &UnifiedToolChoiceObject{
 						Type: "function",
@@ -101,7 +103,7 @@ func parseMessages(raw interface{}) []UnifiedMessage {
 
 		content, toolResultMessages := parseMessageContentAndToolResults(msgMap["content"])
 		msg := UnifiedMessage{
-			Role:      getString(msgMap, "role"),
+			Role:      maputil.String(msgMap, "role"),
 			Content:   content,
 			ToolCalls: parseToolCalls(msgMap["content"]),
 		}
@@ -138,8 +140,8 @@ func parseTools(raw interface{}) []UnifiedTool {
 		tool := UnifiedTool{
 			Type: "function",
 			Function: UnifiedFunc{
-				Name:        getString(toolMap, "name"),
-				Description: getString(toolMap, "description"),
+				Name:        maputil.String(toolMap, "name"),
+				Description: maputil.String(toolMap, "description"),
 				Parameters:  toolMap["input_schema"],
 			},
 		}
@@ -158,7 +160,7 @@ func parseToolCalls(rawContent interface{}) []UnifiedToolCall {
 	toolCalls := make([]UnifiedToolCall, 0)
 	for _, item := range content {
 		itemMap, ok := asMap(item)
-		if !ok || getString(itemMap, "type") != "tool_use" {
+		if !ok || maputil.String(itemMap, "type") != "tool_use" {
 			continue
 		}
 
@@ -171,11 +173,11 @@ func parseToolCalls(rawContent interface{}) []UnifiedToolCall {
 
 		index := len(toolCalls)
 		toolCalls = append(toolCalls, UnifiedToolCall{
-			ID:    getString(itemMap, "id"),
+			ID:    maputil.String(itemMap, "id"),
 			Type:  "function",
 			Index: index,
 			Function: UnifiedToolCallFunction{
-				Name:      getString(itemMap, "name"),
+				Name:      maputil.String(itemMap, "name"),
 				Arguments: argsStr,
 			},
 			CacheControl: parseCacheControl(itemMap["cache_control"]),
@@ -208,12 +210,12 @@ func parseMessageContentAndToolResults(raw interface{}) (content interface{}, to
 			continue
 		}
 
-		switch getString(itemMap, "type") {
+		switch maputil.String(itemMap, "type") {
 		case "text":
-			text := getString(itemMap, "text")
+			text := maputil.String(itemMap, "text")
 			if text == "" {
 				// Some callers use "content" for text blocks.
-				text = getString(itemMap, "content")
+				text = maputil.String(itemMap, "content")
 			}
 			if text == "" {
 				continue
@@ -233,16 +235,16 @@ func parseMessageContentAndToolResults(raw interface{}) (content interface{}, to
 			}
 
 			var url string
-			switch getString(source, "type") {
+			switch maputil.String(source, "type") {
 			case "base64":
-				mediaType := getString(source, "media_type")
-				data := getString(source, "data")
+				mediaType := maputil.String(source, "media_type")
+				data := maputil.String(source, "data")
 				if mediaType == "" || data == "" {
 					continue
 				}
 				url = fmt.Sprintf("data:%s;base64,%s", mediaType, data)
 			case "url":
-				url = getString(source, "url")
+				url = maputil.String(source, "url")
 			}
 			if url == "" {
 				continue
@@ -258,7 +260,7 @@ func parseMessageContentAndToolResults(raw interface{}) (content interface{}, to
 			parts = append(parts, part)
 
 		case "tool_result":
-			toolUseID := getString(itemMap, "tool_use_id")
+			toolUseID := maputil.String(itemMap, "tool_use_id")
 			if toolUseID == "" {
 				continue
 			}
@@ -300,13 +302,13 @@ func extractTextFromContentBlocks(items []interface{}) string {
 	var b strings.Builder
 	for _, item := range items {
 		itemMap, ok := asMap(item)
-		if !ok || getString(itemMap, "type") != "text" {
+		if !ok || maputil.String(itemMap, "type") != "text" {
 			continue
 		}
 
-		text := getString(itemMap, "text")
+		text := maputil.String(itemMap, "text")
 		if text == "" {
-			text = getString(itemMap, "content")
+			text = maputil.String(itemMap, "content")
 		}
 		if text == "" {
 			continue

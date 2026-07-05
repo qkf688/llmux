@@ -2,17 +2,11 @@ package transform
 
 import (
 	"context"
+
 	"github.com/atopos31/llmio/models"
 	"gorm.io/gorm"
 	"strings"
 )
-
-func getString(m map[string]interface{}, key string) string {
-	if v, ok := m[key].(string); ok {
-		return v
-	}
-	return ""
-}
 
 // getNestedString 支持点路径取值，如 "response.id"
 func getNestedString(m map[string]interface{}, path string) string {
@@ -72,34 +66,12 @@ func getNestedMap(m map[string]interface{}, path string) map[string]interface{} 
 	return current
 }
 
-func getBool(m map[string]interface{}, key string) bool {
-	if v, ok := m[key].(bool); ok {
-		return v
-	}
-	return false
-}
-
-func getFloat(m map[string]interface{}, key string) float64 {
-	if v, ok := m[key].(float64); ok {
-		return v
-	}
-	return 0
-}
-
 // 阶段 1: 新增辅助函数，支持新字段类型
 
 // getInt 安全获取 int 值
 func getInt(m map[string]interface{}, key string) int {
 	if v, ok := m[key].(float64); ok {
 		return int(v)
-	}
-	return 0
-}
-
-// getInt64 安全获取 int64 值
-func getInt64(m map[string]interface{}, key string) int64 {
-	if v, ok := m[key].(float64); ok {
-		return int64(v)
 	}
 	return 0
 }
@@ -137,20 +109,6 @@ func getBoolPtr(m map[string]interface{}, key string) *bool {
 	return nil
 }
 
-// getStringArray 安全获取 []string 值
-func getStringArray(m map[string]interface{}, key string) []string {
-	if arr, ok := m[key].([]interface{}); ok {
-		result := make([]string, 0, len(arr))
-		for _, item := range arr {
-			if str, ok := item.(string); ok {
-				result = append(result, str)
-			}
-		}
-		return result
-	}
-	return nil
-}
-
 // getIntMap 安全获取 map[string]int64 值
 func getIntMap(m map[string]interface{}, key string) map[string]int64 {
 	if mapVal, ok := m[key].(map[string]interface{}); ok {
@@ -158,20 +116,6 @@ func getIntMap(m map[string]interface{}, key string) map[string]int64 {
 		for k, v := range mapVal {
 			if num, ok := v.(float64); ok {
 				result[k] = int64(num)
-			}
-		}
-		return result
-	}
-	return nil
-}
-
-// getStringMap 安全获取 map[string]string 值
-func getStringMap(m map[string]interface{}, key string) map[string]string {
-	if mapVal, ok := m[key].(map[string]interface{}); ok {
-		result := make(map[string]string, len(mapVal))
-		for k, v := range mapVal {
-			if str, ok := v.(string); ok {
-				result[k] = str
 			}
 		}
 		return result

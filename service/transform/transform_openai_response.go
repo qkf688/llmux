@@ -3,6 +3,8 @@ package transform
 import (
 	"bytes"
 	"encoding/json"
+
+	"github.com/atopos31/llmio/common/maputil"
 	"github.com/atopos31/llmio/models"
 )
 
@@ -213,10 +215,10 @@ func parseOpenAIToolCalls(msgMap map[string]interface{}) []UnifiedToolCall {
 			}
 
 			toolCalls = append(toolCalls, UnifiedToolCall{
-				ID:   getString(tcMap, "id"),
-				Type: getString(tcMap, "type"),
+				ID:   maputil.String(tcMap, "id"),
+				Type: maputil.String(tcMap, "type"),
 				Function: UnifiedToolCallFunction{
-					Name:      getString(funcMap, "name"),
+					Name:      maputil.String(funcMap, "name"),
 					Arguments: argsStr,
 				},
 			})

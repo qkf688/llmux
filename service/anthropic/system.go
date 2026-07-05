@@ -1,6 +1,10 @@
 package anthropic
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/atopos31/llmio/common/maputil"
+)
 
 // parseSystem parses Anthropic's "system" field, which can be either a string or an array of text blocks.
 // It returns:
@@ -28,7 +32,7 @@ func parseSystemParts(items []interface{}) []UnifiedMessageContentPart {
 		if !ok {
 			continue
 		}
-		if getString(itemMap, "type") != "text" {
+		if maputil.String(itemMap, "type") != "text" {
 			continue
 		}
 

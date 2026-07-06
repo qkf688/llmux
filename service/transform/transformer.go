@@ -80,36 +80,20 @@ func NewTransformerManager(clientType, providerType string) *TransformerManager 
 
 // ProcessRequest 处理请求转换
 func (tm *TransformerManager) ProcessRequest(ctx context.Context, rawBody []byte) ([]byte, error) {
-	// 1. 客户端格式 -> 统一格式
-	var unified *models.UnifiedRequest
-	var err error
-
-	switch tm.clientType {
-	case "openai":
-		unified, err = TransformOpenAIToUnified(ctx, rawBody)
-	case "openai-res":
-		unified, err = TransformResponsesToUnified(ctx, rawBody)
-	case "anthropic":
-		unified, err = TransformAnthropicToUnified(rawBody)
-	default:
-		unified, err = TransformOpenAIToUnified(ctx, rawBody)
+	clientAdapter, err := getAdapterOrDefault(tm.clientType)
+	if err != nil {
+		return nil, err
 	}
-
+	unified, err := clientAdapter.ToUnified(ctx, rawBody)
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. 统一格式 -> 上游供应商格式
-	switch tm.providerType {
-	case "openai":
-		return TransformUnifiedToOpenAI(unified)
-	case "openai-res":
-		return TransformUnifiedToResponses(unified)
-	case "anthropic":
-		return TransformUnifiedToAnthropic(unified)
-	default:
-		return TransformUnifiedToOpenAI(unified)
+	providerAdapter, err := getAdapterOrDefault(tm.providerType)
+	if err != nil {
+		return nil, err
 	}
+	return providerAdapter.FromUnified(unified)
 }
 
 // ProcessResponse 处理响应转换

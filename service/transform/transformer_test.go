@@ -120,9 +120,88 @@ func TestTransformerManager(t *testing.T) {
 		t.Fatalf("ProcessRequest failed: %v", err)
 	}
 
-	if len(result) == 0 {
-		t.Error("Expected non-empty result")
+	var out map[string]interface{}
+	if err := json.Unmarshal(result, &out); err != nil {
+		t.Fatalf("unmarshal transformed request: %v", err)
 	}
+	if out["model"] != "gpt-4" {
+		t.Fatalf("expected model gpt-4, got %#v", out["model"])
+	}
+	if _, ok := out["messages"].([]interface{}); !ok {
+		t.Fatalf("expected Anthropic messages array, got %#v", out["messages"])
+	}
+}
+
+func TestFormatAdapterRegistry(t *testing.T) {
+	for _, name := range []string{"openai", "openai-res", "anthropic"} {
+		if _, ok := formatAdapters[name]; !ok {
+			t.Fatalf("expected %q adapter to be registered", name)
+		}
+	}
+}
+
+func TestTransformerManager_UnknownTypesFallBackToOpenAI(t *testing.T) {
+	openaiRequest := []byte(`{
+		"model": "gpt-4",
+		"messages": [{"role": "user", "content": "Hello"}],
+		"max_tokens": 100
+	}`)
+
+	unknownClient := NewTransformerManager("unknown-client", "anthropic")
+	unknownClientResult, err := unknownClient.ProcessRequest(context.Background(), openaiRequest)
+	if err != nil {
+		t.Fatalf("ProcessRequest with unknown client type failed: %v", err)
+	}
+
+	openAIClient := NewTransformerManager("openai", "anthropic")
+	openAIClientResult, err := openAIClient.ProcessRequest(context.Background(), openaiRequest)
+	if err != nil {
+		t.Fatalf("ProcessRequest with openai client type failed: %v", err)
+	}
+
+	assertJSONEqual(t, unknownClientResult, openAIClientResult)
+
+	unknownProvider := NewTransformerManager("openai", "unknown-provider")
+	unknownProviderResult, err := unknownProvider.ProcessRequest(context.Background(), openaiRequest)
+	if err != nil {
+		t.Fatalf("ProcessRequest with unknown provider type failed: %v", err)
+	}
+
+	openAIProvider := NewTransformerManager("openai", "openai")
+	openAIProviderResult, err := openAIProvider.ProcessRequest(context.Background(), openaiRequest)
+	if err != nil {
+		t.Fatalf("ProcessRequest with openai provider type failed: %v", err)
+	}
+
+	assertJSONEqual(t, unknownProviderResult, openAIProviderResult)
+}
+
+func assertJSONEqual(t *testing.T, got, want []byte) {
+	t.Helper()
+
+	var gotJSON interface{}
+	if err := json.Unmarshal(got, &gotJSON); err != nil {
+		t.Fatalf("unmarshal got JSON: %v", err)
+	}
+	var wantJSON interface{}
+	if err := json.Unmarshal(want, &wantJSON); err != nil {
+		t.Fatalf("unmarshal want JSON: %v", err)
+	}
+	if !jsonEqual(gotJSON, wantJSON) {
+		t.Fatalf("JSON mismatch\ngot:  %s\nwant: %s", got, want)
+	}
+}
+
+func jsonEqual(a, b interface{}) bool {
+	aBytes, err := json.Marshal(a)
+	if err != nil {
+		return false
+	}
+	bBytes, err := json.Marshal(b)
+	if err != nil {
+		return false
+	}
+	return string(aBytes) == string(bBytes)
 }
 
 // 阶段 1: 测试基础高级参数

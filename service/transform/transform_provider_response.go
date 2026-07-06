@@ -2,7 +2,6 @@ package transform
 
 import (
 	"bytes"
-	"github.com/atopos31/llmio/models"
 	"io"
 	"net/http"
 	"strconv"
@@ -34,38 +33,20 @@ func TransformProviderResponse(response *http.Response, providerType, clientType
 }
 
 func transformNonStreamResponse(response *http.Response, body []byte, providerType, clientType string) (*http.Response, error) {
-	var unified *models.UnifiedResponse
-	var err error
-
-	// 供应商格式 -> 统一格式
-	switch providerType {
-	case "openai":
-		unified, err = parseOpenAIResponse(body)
-	case "openai-res":
-		unified, err = parseResponsesResponse(body)
-	case "anthropic":
-		unified, err = parseAnthropicResponse(body)
-	default:
-		unified, err = parseOpenAIResponse(body)
+	providerAdapter, err := getAdapterOrDefault(providerType)
+	if err != nil {
+		return nil, err
 	}
-
+	unified, err := providerAdapter.ParseResponse(body)
 	if err != nil {
 		return nil, err
 	}
 
-	// 统一格式 -> 客户端格式
-	var newBody []byte
-	switch clientType {
-	case "openai":
-		newBody, err = formatOpenAIResponse(unified)
-	case "openai-res":
-		newBody, err = formatResponsesResponse(unified)
-	case "anthropic":
-		newBody, err = formatAnthropicResponse(unified)
-	default:
-		newBody, err = formatOpenAIResponse(unified)
+	clientAdapter, err := getAdapterOrDefault(clientType)
+	if err != nil {
+		return nil, err
 	}
-
+	newBody, err := clientAdapter.FormatResponse(unified)
 	if err != nil {
 		return nil, err
 	}

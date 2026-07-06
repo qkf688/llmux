@@ -4,233 +4,100 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
-	"github.com/atopos31/llmio/common/maputil"
 )
 
 func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequest, error) {
-	var req map[string]interface{}
+	var req openAIChatCompletionRequest
 	if err := json.Unmarshal(rawBody, &req); err != nil {
 		return nil, err
 	}
 
 	unified := &UnifiedRequest{
-		Model:  maputil.String(req, "model"),
-		Stream: maputil.Bool(req, "stream"),
+		Model:  req.Model.Value,
+		Stream: req.Stream.Value,
 	}
 
-	if maxTokens, ok := req["max_tokens"].(float64); ok {
-		unified.MaxTokens = int(maxTokens)
+	if req.MaxTokens.Set {
+		unified.MaxTokens = req.MaxTokens.Value
 	}
-	if temp, ok := req["temperature"].(float64); ok {
-		unified.Temperature = &temp
+	if req.Temperature.Set {
+		unified.Temperature = &req.Temperature.Value
 	}
-	if topP, ok := req["top_p"].(float64); ok {
-		unified.TopP = &topP
-	}
-
-	// 转换消息
-	if messages, ok := req["messages"].([]interface{}); ok {
-		// 先统计非 system 消息的数量
-		nonSystemCount := 0
-		for _, msg := range messages {
-			msgMap, ok := msg.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			if maputil.String(msgMap, "role") != "system" {
-				nonSystemCount++
-			}
-		}
-
-		// 只有在有非 system 消息时才提取 system 消息
-		// 否则保持原样以便提供商返回合适的错误
-		extractSystem := nonSystemCount > 0
-
-		for _, msg := range messages {
-			msgMap, ok := msg.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			role := maputil.String(msgMap, "role")
-
-			// 只在有其他消息时才提取 system 消息
-			if role == "system" && extractSystem {
-				if content, ok := msgMap["content"].(string); ok && content != "" {
-					if unified.System != "" {
-						unified.System += "\n\n" + content
-					} else {
-						unified.System = content
-					}
-				}
-				continue // 不将 system 消息添加到 messages 数组
-			}
-
-			msg := UnifiedMessage{
-				Role:      role,
-				Content:   msgMap["content"],
-				ToolCalls: parseOpenAIToolCalls(msgMap),
-			}
-
-			// 阶段 3: 解析多模态内容
-			if content, ok := msgMap["content"]; ok && content != nil {
-				// 尝试解析为多模态内容数组
-				if contentArray, ok := content.([]interface{}); ok {
-					parts := make([]UnifiedMessageContentPart, 0, len(contentArray))
-					for _, item := range contentArray {
-						if itemMap, ok := item.(map[string]interface{}); ok {
-							part := UnifiedMessageContentPart{
-								Type: maputil.String(itemMap, "type"),
-							}
-
-							switch part.Type {
-							case "text":
-								if text, ok := itemMap["text"].(string); ok {
-									part.Text = &text
-								}
-							case "image_url":
-								if imgMap, ok := itemMap["image_url"].(map[string]interface{}); ok {
-									part.ImageURL = &UnifiedImageURL{
-										URL:    maputil.String(imgMap, "url"),
-										Detail: getStringPtr(imgMap, "detail"),
-									}
-								}
-							case "input_audio":
-								if audioMap, ok := itemMap["input_audio"].(map[string]interface{}); ok {
-									part.InputAudio = &UnifiedInputAudio{
-										Data:   maputil.String(audioMap, "data"),
-										Format: maputil.String(audioMap, "format"),
-									}
-								}
-							}
-
-							parts = append(parts, part)
-						}
-					}
-					if len(parts) > 0 {
-						msg.Content = parts
-					}
-				}
-				// 否则保持原样 (string 或其他类型)
-			}
-
-			// 处理 tool 角色消息的 tool_call_id
-			if role == "tool" {
-				if toolCallID, ok := msgMap["tool_call_id"].(string); ok {
-					msg.ToolCallID = toolCallID
-				}
-			}
-
-			unified.Messages = append(unified.Messages, msg)
-		}
+	if req.TopP.Set {
+		unified.TopP = &req.TopP.Value
 	}
 
-	// 转换工具
-	if tools, ok := req["tools"].([]interface{}); ok {
-		for _, tool := range tools {
-			toolMap, ok := tool.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			if funcMap, ok := toolMap["function"].(map[string]interface{}); ok {
-				unified.Tools = append(unified.Tools, UnifiedTool{
-					Type: "function",
-					Function: UnifiedFunc{
-						Name:        maputil.String(funcMap, "name"),
-						Description: maputil.String(funcMap, "description"),
-						Parameters:  funcMap["parameters"],
-					},
-				})
-			}
-		}
+	if len(req.Messages) > 0 {
+		var system string
+		unified.Messages, system = parseOpenAIChatMessages(req.Messages)
+		unified.System = system
+	}
+
+	if len(req.Tools) > 0 {
+		unified.Tools = parseOpenAIChatTools(req.Tools)
 	}
 
 	// 处理 reasoning_effort 参数
-	if effort, ok := req["reasoning_effort"].(string); ok && effort != "" {
+	if req.ReasoningEffort.Set && req.ReasoningEffort.Value != "" {
 		// 检查是否启用映射
 		if getReasoningEffortMappingEnabled(ctx) {
-			normalized := normalizeReasoningEffort(ctx, effort)
+			normalized := normalizeReasoningEffort(ctx, req.ReasoningEffort.Value)
 			unified.ReasoningEffort = &normalized
 		} else {
 			// 不启用映射时直接透传
+			effort := req.ReasoningEffort.Value
 			unified.ReasoningEffort = &effort
 		}
 	}
 
 	// 阶段 1: 解析基础高级参数
-	unified.FrequencyPenalty = getFloat64Ptr(req, "frequency_penalty")
-	unified.PresencePenalty = getFloat64Ptr(req, "presence_penalty")
-	unified.Seed = getInt64Ptr(req, "seed")
-	unified.LogitBias = getIntMap(req, "logit_bias")
-	unified.User = getStringPtr(req, "user")
-	unified.Metadata = maputil.StringMap(req, "metadata")
-	unified.Logprobs = getBoolPtr(req, "logprobs")
-	unified.TopLogprobs = getInt64Ptr(req, "top_logprobs")
-	unified.MaxCompletionTokens = getInt64Ptr(req, "max_completion_tokens")
-	unified.Store = getBoolPtr(req, "store")
+	if req.FrequencyPenalty.Set {
+		unified.FrequencyPenalty = &req.FrequencyPenalty.Value
+	}
+	if req.PresencePenalty.Set {
+		unified.PresencePenalty = &req.PresencePenalty.Value
+	}
+	if req.Seed.Set {
+		unified.Seed = &req.Seed.Value
+	}
+	if req.LogitBias.Set {
+		unified.LogitBias = req.LogitBias.Value
+	}
+	if req.User.Set {
+		unified.User = &req.User.Value
+	}
+	if req.Metadata.Set {
+		unified.Metadata = req.Metadata.Value
+	}
+	if req.Logprobs.Set {
+		unified.Logprobs = &req.Logprobs.Value
+	}
+	if req.TopLogprobs.Set {
+		unified.TopLogprobs = &req.TopLogprobs.Value
+	}
+	if req.MaxCompletionTokens.Set {
+		unified.MaxCompletionTokens = &req.MaxCompletionTokens.Value
+	}
+	if req.Store.Set {
+		unified.Store = &req.Store.Value
+	}
 
 	// 处理 stop (可能是 string 或 []string)
-	if stopVal, ok := req["stop"]; ok && stopVal != nil {
-		unified.Stop = &UnifiedStop{}
-		switch v := stopVal.(type) {
-		case string:
-			unified.Stop.Single = &v
-		case []interface{}:
-			unified.Stop.Multiple = maputil.StringSlice(req, "stop")
-		}
-	}
+	unified.Stop = parseOpenAIChatStop(req.Stop)
 
 	// 阶段 2: 解析响应格式和工具增强参数
-	// 解析 response_format
-	if rfVal, ok := req["response_format"].(map[string]interface{}); ok {
-		unified.ResponseFormat = &UnifiedResponseFormat{
-			Type: maputil.String(rfVal, "type"),
-		}
-		if schema, ok := rfVal["json_schema"]; ok {
-			if schemaBytes, err := json.Marshal(schema); err == nil {
-				unified.ResponseFormat.JSONSchema = schemaBytes
-			}
-		}
+	unified.ResponseFormat = parseOpenAIChatResponseFormat(req.ResponseFormat)
+	unified.ToolChoice = parseOpenAIChatToolChoice(req.ToolChoice)
+	if req.ParallelToolCalls.Set {
+		unified.ParallelToolCalls = &req.ParallelToolCalls.Value
 	}
-
-	// 解析 tool_choice
-	if tcVal, ok := req["tool_choice"]; ok && tcVal != nil {
-		unified.ToolChoice = &UnifiedToolChoice{}
-		switch v := tcVal.(type) {
-		case string:
-			unified.ToolChoice.StringValue = &v
-		case map[string]interface{}:
-			obj := UnifiedToolChoiceObject{
-				Type: maputil.String(v, "type"),
-			}
-			if funcMap, ok := v["function"].(map[string]interface{}); ok {
-				obj.Function = &UnifiedToolChoiceFunction{
-					Name: maputil.String(funcMap, "name"),
-				}
-			}
-			unified.ToolChoice.ObjectValue = &obj
-		}
-	}
-
-	unified.ParallelToolCalls = getBoolPtr(req, "parallel_tool_calls")
-
-	// 解析 stream_options
-	if soVal, ok := req["stream_options"].(map[string]interface{}); ok {
-		unified.StreamOptions = &UnifiedStreamOptions{
-			IncludeUsage: maputil.Bool(soVal, "include_usage"),
-		}
-	}
+	unified.StreamOptions = parseOpenAIChatStreamOptions(req.StreamOptions)
 
 	// 阶段 3: 解析多模态参数
-	unified.Modalities = maputil.StringSlice(req, "modalities")
-
-	// 解析 audio 配置
-	if audioVal, ok := req["audio"].(map[string]interface{}); ok {
-		unified.Audio = &UnifiedAudio{
-			Voice:  maputil.String(audioVal, "voice"),
-			Format: maputil.String(audioVal, "format"),
-		}
+	if req.Modalities.Set {
+		unified.Modalities = req.Modalities.Value
 	}
+	unified.Audio = parseOpenAIChatAudio(req.Audio)
 
 	return unified, nil
 }

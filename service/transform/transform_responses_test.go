@@ -3,6 +3,7 @@ package transform
 import (
 	"context"
 	"encoding/json"
+	"github.com/atopos31/llmio/models"
 	"testing"
 
 	"github.com/atopos31/llmio/service/responses"
@@ -119,9 +120,9 @@ func TestTransformResponsesToUnified_ValidInput(t *testing.T) {
 
 // TestTransformUnifiedToOpenAI_EmptyMessages 测试 messages 为空的情况
 func TestTransformUnifiedToOpenAI_EmptyMessages(t *testing.T) {
-	unified := &UnifiedRequest{
+	unified := &models.UnifiedRequest{
 		Model:    "gpt-4",
-		Messages: []UnifiedMessage{}, // 空数组
+		Messages: []models.UnifiedMessage{}, // 空数组
 		Stream:   false,
 	}
 
@@ -319,7 +320,7 @@ func TestTransformResponsesToUnified_MapsToolChoiceTextFormatAndMetadata(t *test
 	if len(unified.Messages) != 1 {
 		t.Fatalf("messages 数量应为 1（developer 被提取为 system），实际: %d", len(unified.Messages))
 	}
-	parts, ok := unified.Messages[0].Content.([]UnifiedMessageContentPart)
+	parts, ok := unified.Messages[0].Content.([]models.UnifiedMessageContentPart)
 	if !ok {
 		t.Fatalf("用户消息 content 应转换为多模态 parts，实际: %#v", unified.Messages[0].Content)
 	}
@@ -381,28 +382,28 @@ func TestTransformResponsesToUnified_MapsToolChoiceTextFormatAndMetadata(t *test
 func TestTransformUnifiedToResponses_MapsTextToolChoiceReasoningAndMetadata(t *testing.T) {
 	effort := "medium"
 
-	unified := &UnifiedRequest{
+	unified := &models.UnifiedRequest{
 		Model:  "gpt-4.1",
 		System: "sys",
-		Messages: []UnifiedMessage{
+		Messages: []models.UnifiedMessage{
 			{
 				Role: "user",
-				Content: []UnifiedMessageContentPart{
+				Content: []models.UnifiedMessageContentPart{
 					{Type: "text", Text: ptr("hi")},
-					{Type: "image_url", ImageURL: &UnifiedImageURL{URL: "https://example.com/a.png"}},
+					{Type: "image_url", ImageURL: &models.UnifiedImageURL{URL: "https://example.com/a.png"}},
 				},
 			},
 		},
 		ReasoningEffort: &effort,
 		Metadata:        map[string]string{"trace_id": "abc"},
-		ResponseFormat: &UnifiedResponseFormat{
+		ResponseFormat: &models.UnifiedResponseFormat{
 			Type:       "json_schema",
 			JSONSchema: []byte(`{"name":"test","schema":{"type":"object"}}`),
 		},
-		ToolChoice: &UnifiedToolChoice{
-			ObjectValue: &UnifiedToolChoiceObject{
+		ToolChoice: &models.UnifiedToolChoice{
+			ObjectValue: &models.UnifiedToolChoiceObject{
 				Type: "function",
-				Function: &UnifiedToolChoiceFunction{
+				Function: &models.UnifiedToolChoiceFunction{
 					Name: "get_weather",
 				},
 			},

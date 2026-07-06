@@ -3,6 +3,7 @@ package transform
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/atopos31/llmio/models"
 )
 
 type openAIChatCompletionRequest struct {
@@ -302,7 +303,7 @@ func rawOpenAIString(data json.RawMessage) (string, bool) {
 	return value, true
 }
 
-func parseOpenAIChatMessages(messages openAIRawArray) ([]UnifiedMessage, string) {
+func parseOpenAIChatMessages(messages openAIRawArray) ([]models.UnifiedMessage, string) {
 	decoded := make([]openAIChatMessage, 0, len(messages))
 	for _, raw := range messages {
 		var msg openAIChatMessage
@@ -320,7 +321,7 @@ func parseOpenAIChatMessages(messages openAIRawArray) ([]UnifiedMessage, string)
 	}
 	extractSystem := nonSystemCount > 0
 
-	var unifiedMessages []UnifiedMessage
+	var unifiedMessages []models.UnifiedMessage
 	system := ""
 	for _, msg := range decoded {
 		role := msg.Role.Value
@@ -335,7 +336,7 @@ func parseOpenAIChatMessages(messages openAIRawArray) ([]UnifiedMessage, string)
 			continue
 		}
 
-		unified := UnifiedMessage{
+		unified := models.UnifiedMessage{
 			Role:      role,
 			Content:   parseOpenAIChatMessageContent(msg.Content),
 			ToolCalls: parseOpenAIChatToolCalls(msg.ToolCalls),
@@ -360,14 +361,14 @@ func parseOpenAIChatMessageContent(raw json.RawMessage) interface{} {
 		return content
 	}
 
-	parts := make([]UnifiedMessageContentPart, 0, len(rawParts))
+	parts := make([]models.UnifiedMessageContentPart, 0, len(rawParts))
 	for _, rawPart := range rawParts {
 		var part openAIChatContentPart
 		if !decodeOpenAIChatObject(rawPart, &part) {
 			continue
 		}
 
-		unifiedPart := UnifiedMessageContentPart{Type: part.Type.Value}
+		unifiedPart := models.UnifiedMessageContentPart{Type: part.Type.Value}
 		switch unifiedPart.Type {
 		case "text":
 			if part.Text.Set {
@@ -381,7 +382,7 @@ func parseOpenAIChatMessageContent(raw json.RawMessage) interface{} {
 				if image.Detail.Set {
 					detail = &image.Detail.Value
 				}
-				unifiedPart.ImageURL = &UnifiedImageURL{
+				unifiedPart.ImageURL = &models.UnifiedImageURL{
 					URL:    image.URL.Value,
 					Detail: detail,
 				}
@@ -389,7 +390,7 @@ func parseOpenAIChatMessageContent(raw json.RawMessage) interface{} {
 		case "input_audio":
 			var audio openAIChatInputAudio
 			if decodeOpenAIChatObject(part.InputAudio, &audio) {
-				unifiedPart.InputAudio = &UnifiedInputAudio{
+				unifiedPart.InputAudio = &models.UnifiedInputAudio{
 					Data:   audio.Data.Value,
 					Format: audio.Format.Value,
 				}
@@ -404,8 +405,8 @@ func parseOpenAIChatMessageContent(raw json.RawMessage) interface{} {
 	return parts
 }
 
-func parseOpenAIChatTools(tools openAIRawArray) []UnifiedTool {
-	var unified []UnifiedTool
+func parseOpenAIChatTools(tools openAIRawArray) []models.UnifiedTool {
+	var unified []models.UnifiedTool
 	for _, raw := range tools {
 		var tool openAIChatTool
 		if !decodeOpenAIChatObject(raw, &tool) {
@@ -415,9 +416,9 @@ func parseOpenAIChatTools(tools openAIRawArray) []UnifiedTool {
 		if !decodeOpenAIChatObject(tool.Function, &fn) {
 			continue
 		}
-		unified = append(unified, UnifiedTool{
+		unified = append(unified, models.UnifiedTool{
 			Type: "function",
-			Function: UnifiedFunc{
+			Function: models.UnifiedFunc{
 				Name:        fn.Name.Value,
 				Description: fn.Description.Value,
 				Parameters:  rawOpenAIValue(fn.Parameters),
@@ -427,8 +428,8 @@ func parseOpenAIChatTools(tools openAIRawArray) []UnifiedTool {
 	return unified
 }
 
-func parseOpenAIChatToolCalls(toolCalls openAIRawArray) []UnifiedToolCall {
-	var unified []UnifiedToolCall
+func parseOpenAIChatToolCalls(toolCalls openAIRawArray) []models.UnifiedToolCall {
+	var unified []models.UnifiedToolCall
 	for _, raw := range toolCalls {
 		var toolCall openAIChatToolCall
 		if !decodeOpenAIChatObject(raw, &toolCall) {
@@ -438,10 +439,10 @@ func parseOpenAIChatToolCalls(toolCalls openAIRawArray) []UnifiedToolCall {
 		if !decodeOpenAIChatObject(toolCall.Function, &fn) {
 			continue
 		}
-		unified = append(unified, UnifiedToolCall{
+		unified = append(unified, models.UnifiedToolCall{
 			ID:   toolCall.ID.Value,
 			Type: toolCall.Type.Value,
-			Function: UnifiedToolCallFunction{
+			Function: models.UnifiedToolCallFunction{
 				Name:      fn.Name.Value,
 				Arguments: normalizeOpenAIChatToolCallArguments(fn.Arguments),
 			},
@@ -476,11 +477,11 @@ func normalizeOpenAIChatToolCallArguments(raw json.RawMessage) string {
 	return "{}"
 }
 
-func parseOpenAIChatStop(raw json.RawMessage) *UnifiedStop {
+func parseOpenAIChatStop(raw json.RawMessage) *models.UnifiedStop {
 	if len(raw) == 0 || isOpenAINullRaw(raw) {
 		return nil
 	}
-	stop := &UnifiedStop{}
+	stop := &models.UnifiedStop{}
 	if value, ok := rawOpenAIString(raw); ok {
 		stop.Single = &value
 		return stop
@@ -493,22 +494,22 @@ func parseOpenAIChatStop(raw json.RawMessage) *UnifiedStop {
 	return stop
 }
 
-func parseOpenAIChatResponseFormat(raw json.RawMessage) *UnifiedResponseFormat {
+func parseOpenAIChatResponseFormat(raw json.RawMessage) *models.UnifiedResponseFormat {
 	var rf openAIChatResponseFormat
 	if !decodeOpenAIChatObject(raw, &rf) {
 		return nil
 	}
-	return &UnifiedResponseFormat{
+	return &models.UnifiedResponseFormat{
 		Type:       rf.Type.Value,
 		JSONSchema: rf.JSONSchema,
 	}
 }
 
-func parseOpenAIChatToolChoice(raw json.RawMessage) *UnifiedToolChoice {
+func parseOpenAIChatToolChoice(raw json.RawMessage) *models.UnifiedToolChoice {
 	if len(raw) == 0 || isOpenAINullRaw(raw) {
 		return nil
 	}
-	choice := &UnifiedToolChoice{}
+	choice := &models.UnifiedToolChoice{}
 	if value, ok := rawOpenAIString(raw); ok {
 		choice.StringValue = &value
 		return choice
@@ -518,29 +519,29 @@ func parseOpenAIChatToolChoice(raw json.RawMessage) *UnifiedToolChoice {
 	if !decodeOpenAIChatObject(raw, &obj) {
 		return choice
 	}
-	unifiedObj := UnifiedToolChoiceObject{Type: obj.Type.Value}
+	unifiedObj := models.UnifiedToolChoiceObject{Type: obj.Type.Value}
 	var fn openAIChatToolChoiceFunction
 	if decodeOpenAIChatObject(obj.Function, &fn) {
-		unifiedObj.Function = &UnifiedToolChoiceFunction{Name: fn.Name.Value}
+		unifiedObj.Function = &models.UnifiedToolChoiceFunction{Name: fn.Name.Value}
 	}
 	choice.ObjectValue = &unifiedObj
 	return choice
 }
 
-func parseOpenAIChatStreamOptions(raw json.RawMessage) *UnifiedStreamOptions {
+func parseOpenAIChatStreamOptions(raw json.RawMessage) *models.UnifiedStreamOptions {
 	var streamOptions openAIChatStreamOptions
 	if !decodeOpenAIChatObject(raw, &streamOptions) {
 		return nil
 	}
-	return &UnifiedStreamOptions{IncludeUsage: streamOptions.IncludeUsage.Value}
+	return &models.UnifiedStreamOptions{IncludeUsage: streamOptions.IncludeUsage.Value}
 }
 
-func parseOpenAIChatAudio(raw json.RawMessage) *UnifiedAudio {
+func parseOpenAIChatAudio(raw json.RawMessage) *models.UnifiedAudio {
 	var audio openAIChatAudio
 	if !decodeOpenAIChatObject(raw, &audio) {
 		return nil
 	}
-	return &UnifiedAudio{
+	return &models.UnifiedAudio{
 		Voice:  audio.Voice.Value,
 		Format: audio.Format.Value,
 	}

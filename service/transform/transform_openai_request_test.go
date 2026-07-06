@@ -2,6 +2,7 @@ package transform
 
 import (
 	"context"
+	"github.com/atopos31/llmio/models"
 	"testing"
 )
 
@@ -77,7 +78,7 @@ func TestTransformOpenAIToUnified_TypedRequestCompatibility(t *testing.T) {
 		t.Fatalf("expected 3 non-system messages, got %d", len(unified.Messages))
 	}
 
-	parts, ok := unified.Messages[0].Content.([]UnifiedMessageContentPart)
+	parts, ok := unified.Messages[0].Content.([]models.UnifiedMessageContentPart)
 	if !ok {
 		t.Fatalf("expected multimodal parts, got %T", unified.Messages[0].Content)
 	}

@@ -3,12 +3,13 @@ package anthropic
 import (
 	"encoding/json"
 	"errors"
+	"github.com/atopos31/llmio/models"
 
 	"github.com/atopos31/llmio/common"
 )
 
 // TransformFromUnified 将统一请求格式转换为 Anthropic 请求格式。
-func TransformFromUnified(unified *UnifiedRequest) ([]byte, error) {
+func TransformFromUnified(unified *models.UnifiedRequest) ([]byte, error) {
 	if unified == nil {
 		return nil, errors.New("unified request cannot be nil")
 	}
@@ -84,7 +85,7 @@ func TransformFromUnified(unified *UnifiedRequest) ([]byte, error) {
 	return json.Marshal(req)
 }
 
-func buildMessages(unified *UnifiedRequest, req map[string]interface{}) []interface{} {
+func buildMessages(unified *models.UnifiedRequest, req map[string]interface{}) []interface{} {
 	messages := make([]interface{}, 0, len(unified.Messages))
 
 	nonSystemCount := 0
@@ -97,7 +98,7 @@ func buildMessages(unified *UnifiedRequest, req map[string]interface{}) []interf
 
 	for _, msg := range unified.Messages {
 		if msg.Role == "system" && shouldExtractSystem {
-			if parts, ok := msg.Content.([]UnifiedMessageContentPart); ok {
+			if parts, ok := msg.Content.([]models.UnifiedMessageContentPart); ok {
 				appendSystemParts(req, parts)
 			} else if content, ok := msg.Content.(string); ok {
 				appendSystemText(req, content)
@@ -135,7 +136,7 @@ func buildMessages(unified *UnifiedRequest, req map[string]interface{}) []interf
 		}
 
 		if msg.Content != nil {
-			if parts, ok := msg.Content.([]UnifiedMessageContentPart); ok {
+			if parts, ok := msg.Content.([]models.UnifiedMessageContentPart); ok {
 				contentArray := buildContentParts(parts)
 				if len(contentArray) > 0 {
 					msgMap["content"] = contentArray
@@ -155,7 +156,7 @@ func buildMessages(unified *UnifiedRequest, req map[string]interface{}) []interf
 	return messages
 }
 
-func buildContentParts(parts []UnifiedMessageContentPart) []interface{} {
+func buildContentParts(parts []models.UnifiedMessageContentPart) []interface{} {
 	contentArray := make([]interface{}, 0, len(parts))
 
 	for _, part := range parts {
@@ -207,7 +208,7 @@ func buildContentParts(parts []UnifiedMessageContentPart) []interface{} {
 	return contentArray
 }
 
-func buildToolUseContent(msg UnifiedMessage) []interface{} {
+func buildToolUseContent(msg models.UnifiedMessage) []interface{} {
 	contentArray := make([]interface{}, 0, len(msg.ToolCalls)+1)
 
 	if contentStr, ok := msg.Content.(string); ok && contentStr != "" {
@@ -236,7 +237,7 @@ func buildToolUseContent(msg UnifiedMessage) []interface{} {
 	return contentArray
 }
 
-func buildTools(tools []UnifiedTool) []interface{} {
+func buildTools(tools []models.UnifiedTool) []interface{} {
 	result := make([]interface{}, 0, len(tools))
 	for _, tool := range tools {
 		toolMap := map[string]interface{}{

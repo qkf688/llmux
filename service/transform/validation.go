@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/atopos31/llmio/models"
 )
 
 // 参数验证函数
@@ -63,8 +64,8 @@ func validateTopLogprobs(topLogprobs *int64) error {
 	return nil
 }
 
-// ValidateUnifiedRequest 验证 UnifiedRequest 的所有参数
-func ValidateUnifiedRequest(req *UnifiedRequest) error {
+// ValidateUnifiedRequest 验证 models.UnifiedRequest 的所有参数
+func ValidateUnifiedRequest(req *models.UnifiedRequest) error {
 	if req == nil {
 		return errors.New("request cannot be nil")
 	}
@@ -137,9 +138,9 @@ func repairInvalidJSON(jsonStr string) string {
 	return "{}"
 }
 
-// RepairUnifiedRequest 自动修复 UnifiedRequest 的参数
+// RepairUnifiedRequest 自动修复 models.UnifiedRequest 的参数
 // 将超出范围的参数限制在有效范围内
-func RepairUnifiedRequest(req *UnifiedRequest) {
+func RepairUnifiedRequest(req *models.UnifiedRequest) {
 	if req == nil {
 		return
 	}

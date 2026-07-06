@@ -1,6 +1,7 @@
 package anthropic
 
 import (
+	"github.com/atopos31/llmio/models"
 	"strings"
 
 	"github.com/atopos31/llmio/common/maputil"
@@ -10,7 +11,7 @@ import (
 // It returns:
 // - the extracted plain text (used by internal logic and other providers),
 // - the structured blocks (used to preserve Anthropic's system array format when round-tripping).
-func parseSystem(value interface{}) (string, []UnifiedMessageContentPart) {
+func parseSystem(value interface{}) (string, []models.UnifiedMessageContentPart) {
 	switch v := value.(type) {
 	case string:
 		if v == "" {
@@ -25,8 +26,8 @@ func parseSystem(value interface{}) (string, []UnifiedMessageContentPart) {
 	}
 }
 
-func parseSystemParts(items []interface{}) []UnifiedMessageContentPart {
-	parts := make([]UnifiedMessageContentPart, 0, len(items))
+func parseSystemParts(items []interface{}) []models.UnifiedMessageContentPart {
+	parts := make([]models.UnifiedMessageContentPart, 0, len(items))
 	for _, item := range items {
 		itemMap, ok := asMap(item)
 		if !ok {
@@ -47,7 +48,7 @@ func parseSystemParts(items []interface{}) []UnifiedMessageContentPart {
 		}
 
 		partText := text
-		parts = append(parts, UnifiedMessageContentPart{
+		parts = append(parts, models.UnifiedMessageContentPart{
 			Type:         "text",
 			Text:         &partText,
 			CacheControl: parseCacheControl(itemMap["cache_control"]),
@@ -56,7 +57,7 @@ func parseSystemParts(items []interface{}) []UnifiedMessageContentPart {
 	return parts
 }
 
-func systemPartsToText(parts []UnifiedMessageContentPart) string {
+func systemPartsToText(parts []models.UnifiedMessageContentPart) string {
 	texts := make([]string, 0, len(parts))
 	for _, part := range parts {
 		if part.Type != "text" || part.Text == nil || *part.Text == "" {
@@ -67,7 +68,7 @@ func systemPartsToText(parts []UnifiedMessageContentPart) string {
 	return strings.Join(texts, "\n")
 }
 
-func buildSystemValue(unified *UnifiedRequest) interface{} {
+func buildSystemValue(unified *models.UnifiedRequest) interface{} {
 	if unified == nil {
 		return nil
 	}
@@ -83,7 +84,7 @@ func buildSystemValue(unified *UnifiedRequest) interface{} {
 	return nil
 }
 
-func buildSystemBlocks(parts []UnifiedMessageContentPart) []interface{} {
+func buildSystemBlocks(parts []models.UnifiedMessageContentPart) []interface{} {
 	blocks := make([]interface{}, 0, len(parts))
 	for _, part := range parts {
 		if part.Type != "text" || part.Text == nil || *part.Text == "" {
@@ -125,7 +126,7 @@ func appendSystemText(req map[string]interface{}, text string) {
 	req["system"] = text
 }
 
-func appendSystemParts(req map[string]interface{}, parts []UnifiedMessageContentPart) {
+func appendSystemParts(req map[string]interface{}, parts []models.UnifiedMessageContentPart) {
 	if len(parts) == 0 {
 		return
 	}

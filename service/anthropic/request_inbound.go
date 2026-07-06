@@ -3,19 +3,20 @@ package anthropic
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/atopos31/llmio/models"
 	"strings"
 
 	"github.com/atopos31/llmio/common/maputil"
 )
 
 // TransformToUnified 将 Anthropic 请求格式转换为统一格式。
-func TransformToUnified(rawBody []byte) (*UnifiedRequest, error) {
+func TransformToUnified(rawBody []byte) (*models.UnifiedRequest, error) {
 	var req map[string]interface{}
 	if err := json.Unmarshal(rawBody, &req); err != nil {
 		return nil, err
 	}
 
-	unified := &UnifiedRequest{
+	unified := &models.UnifiedRequest{
 		Model:  maputil.String(req, "model"),
 		Stream: maputil.Bool(req, "stream"),
 	}
@@ -35,7 +36,7 @@ func TransformToUnified(rawBody []byte) (*UnifiedRequest, error) {
 	unified.Tools = parseTools(req["tools"])
 
 	if stopSeqs := maputil.StringSlice(req, "stop_sequences"); len(stopSeqs) > 0 {
-		unified.Stop = &UnifiedStop{Multiple: stopSeqs}
+		unified.Stop = &models.UnifiedStop{Multiple: stopSeqs}
 	}
 
 	if metadata := maputil.StringMap(req, "metadata"); len(metadata) > 0 {
@@ -56,7 +57,7 @@ func TransformToUnified(rawBody []byte) (*UnifiedRequest, error) {
 
 	// tool_choice (best-effort): keep unified semantics as OpenAI-style tool_choice.
 	if rawToolChoice, exists := req["tool_choice"]; exists && rawToolChoice != nil {
-		unified.ToolChoice = &UnifiedToolChoice{}
+		unified.ToolChoice = &models.UnifiedToolChoice{}
 
 		if v, ok := rawToolChoice.(string); ok && v != "" {
 			unified.ToolChoice.StringValue = &v
@@ -66,9 +67,9 @@ func TransformToUnified(rawBody []byte) (*UnifiedRequest, error) {
 			case "tool":
 				name := maputil.String(tcMap, "name")
 				if name != "" {
-					unified.ToolChoice.ObjectValue = &UnifiedToolChoiceObject{
+					unified.ToolChoice.ObjectValue = &models.UnifiedToolChoiceObject{
 						Type: "function",
-						Function: &UnifiedToolChoiceFunction{
+						Function: &models.UnifiedToolChoiceFunction{
 							Name: name,
 						},
 					}
@@ -88,13 +89,13 @@ func TransformToUnified(rawBody []byte) (*UnifiedRequest, error) {
 	return unified, nil
 }
 
-func parseMessages(raw interface{}) []UnifiedMessage {
+func parseMessages(raw interface{}) []models.UnifiedMessage {
 	items, ok := asSlice(raw)
 	if !ok {
 		return nil
 	}
 
-	messages := make([]UnifiedMessage, 0, len(items))
+	messages := make([]models.UnifiedMessage, 0, len(items))
 	for _, item := range items {
 		msgMap, ok := asMap(item)
 		if !ok {
@@ -102,7 +103,7 @@ func parseMessages(raw interface{}) []UnifiedMessage {
 		}
 
 		content, toolResultMessages := parseMessageContentAndToolResults(msgMap["content"])
-		msg := UnifiedMessage{
+		msg := models.UnifiedMessage{
 			Role:      maputil.String(msgMap, "role"),
 			Content:   content,
 			ToolCalls: parseToolCalls(msgMap["content"]),
@@ -124,22 +125,22 @@ func parseMessages(raw interface{}) []UnifiedMessage {
 	return messages
 }
 
-func parseTools(raw interface{}) []UnifiedTool {
+func parseTools(raw interface{}) []models.UnifiedTool {
 	items, ok := asSlice(raw)
 	if !ok {
 		return nil
 	}
 
-	tools := make([]UnifiedTool, 0, len(items))
+	tools := make([]models.UnifiedTool, 0, len(items))
 	for _, item := range items {
 		toolMap, ok := asMap(item)
 		if !ok {
 			continue
 		}
 
-		tool := UnifiedTool{
+		tool := models.UnifiedTool{
 			Type: "function",
-			Function: UnifiedFunc{
+			Function: models.UnifiedFunc{
 				Name:        maputil.String(toolMap, "name"),
 				Description: maputil.String(toolMap, "description"),
 				Parameters:  toolMap["input_schema"],
@@ -151,13 +152,13 @@ func parseTools(raw interface{}) []UnifiedTool {
 	return tools
 }
 
-func parseToolCalls(rawContent interface{}) []UnifiedToolCall {
+func parseToolCalls(rawContent interface{}) []models.UnifiedToolCall {
 	content, ok := asSlice(rawContent)
 	if !ok {
 		return nil
 	}
 
-	toolCalls := make([]UnifiedToolCall, 0)
+	toolCalls := make([]models.UnifiedToolCall, 0)
 	for _, item := range content {
 		itemMap, ok := asMap(item)
 		if !ok || maputil.String(itemMap, "type") != "tool_use" {
@@ -172,11 +173,11 @@ func parseToolCalls(rawContent interface{}) []UnifiedToolCall {
 		}
 
 		index := len(toolCalls)
-		toolCalls = append(toolCalls, UnifiedToolCall{
+		toolCalls = append(toolCalls, models.UnifiedToolCall{
 			ID:    maputil.String(itemMap, "id"),
 			Type:  "function",
 			Index: index,
-			Function: UnifiedToolCallFunction{
+			Function: models.UnifiedToolCallFunction{
 				Name:      maputil.String(itemMap, "name"),
 				Arguments: argsStr,
 			},
@@ -187,7 +188,7 @@ func parseToolCalls(rawContent interface{}) []UnifiedToolCall {
 	return toolCalls
 }
 
-func parseMessageContentAndToolResults(raw interface{}) (content interface{}, toolResultMessages []UnifiedMessage) {
+func parseMessageContentAndToolResults(raw interface{}) (content interface{}, toolResultMessages []models.UnifiedMessage) {
 	if raw == nil {
 		return nil, nil
 	}
@@ -202,7 +203,7 @@ func parseMessageContentAndToolResults(raw interface{}) (content interface{}, to
 		return raw, nil
 	}
 
-	parts := make([]UnifiedMessageContentPart, 0, len(items))
+	parts := make([]models.UnifiedMessageContentPart, 0, len(items))
 
 	for _, item := range items {
 		itemMap, ok := asMap(item)
@@ -221,7 +222,7 @@ func parseMessageContentAndToolResults(raw interface{}) (content interface{}, to
 				continue
 			}
 
-			part := UnifiedMessageContentPart{
+			part := models.UnifiedMessageContentPart{
 				Type: "text",
 				Text: &text,
 			}
@@ -250,9 +251,9 @@ func parseMessageContentAndToolResults(raw interface{}) (content interface{}, to
 				continue
 			}
 
-			part := UnifiedMessageContentPart{
+			part := models.UnifiedMessageContentPart{
 				Type: "image_url",
-				ImageURL: &UnifiedImageURL{
+				ImageURL: &models.UnifiedImageURL{
 					URL: url,
 				},
 			}
@@ -273,7 +274,7 @@ func parseMessageContentAndToolResults(raw interface{}) (content interface{}, to
 				toolContent = extractTextFromContentBlocks(v)
 			}
 
-			toolMsg := UnifiedMessage{
+			toolMsg := models.UnifiedMessage{
 				Role:         "tool",
 				ToolCallID:   toolUseID,
 				Content:      toolContent,

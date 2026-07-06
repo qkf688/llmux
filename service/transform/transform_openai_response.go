@@ -8,13 +8,13 @@ import (
 	"github.com/atopos31/llmio/models"
 )
 
-func parseOpenAIResponse(body []byte) (*UnifiedResponse, error) {
+func parseOpenAIResponse(body []byte) (*models.UnifiedResponse, error) {
 	var resp openAIChatCompletionResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, err
 	}
 
-	unified := &UnifiedResponse{
+	unified := &models.UnifiedResponse{
 		ID:                resp.ID,
 		Object:            resp.Object,
 		Created:           resp.Created,
@@ -36,12 +36,12 @@ func parseOpenAIResponse(body []byte) (*UnifiedResponse, error) {
 	}
 
 	if len(resp.Choices) > 0 {
-		unified.Choices = make([]UnifiedChoice, 0, len(resp.Choices))
+		unified.Choices = make([]models.UnifiedChoice, 0, len(resp.Choices))
 		for _, choice := range resp.Choices {
 			content := parseOpenAIMessageContent(choice.Message.Content)
-			unified.Choices = append(unified.Choices, UnifiedChoice{
+			unified.Choices = append(unified.Choices, models.UnifiedChoice{
 				Index: choice.Index,
-				Message: &UnifiedMessage{
+				Message: &models.UnifiedMessage{
 					Role:      choice.Message.Role,
 					Content:   content,
 					ToolCalls: parseOpenAIResponseToolCalls(choice.Message.ToolCalls),
@@ -70,7 +70,7 @@ func parseOpenAIResponse(body []byte) (*UnifiedResponse, error) {
 	return unified, nil
 }
 
-func formatOpenAIResponse(unified *UnifiedResponse) ([]byte, error) {
+func formatOpenAIResponse(unified *models.UnifiedResponse) ([]byte, error) {
 	if unified.Error != nil && len(unified.Choices) == 0 {
 		return json.Marshal(struct {
 			Error *openAIResponseErrorEnvelope `json:"error"`
@@ -154,17 +154,17 @@ func formatOpenAIResponse(unified *UnifiedResponse) ([]byte, error) {
 	return json.Marshal(resp)
 }
 
-func parseOpenAIResponseToolCalls(tcs []openAIToolCall) []UnifiedToolCall {
+func parseOpenAIResponseToolCalls(tcs []openAIToolCall) []models.UnifiedToolCall {
 	if len(tcs) == 0 {
 		return nil
 	}
 
-	toolCalls := make([]UnifiedToolCall, 0, len(tcs))
+	toolCalls := make([]models.UnifiedToolCall, 0, len(tcs))
 	for _, tc := range tcs {
-		toolCalls = append(toolCalls, UnifiedToolCall{
+		toolCalls = append(toolCalls, models.UnifiedToolCall{
 			ID:   tc.ID,
 			Type: tc.Type,
-			Function: UnifiedToolCallFunction{
+			Function: models.UnifiedToolCallFunction{
 				Name:      tc.Function.Name,
 				Arguments: normalizeOpenAIToolCallArguments(tc.Function.Arguments),
 			},
@@ -175,8 +175,8 @@ func parseOpenAIResponseToolCalls(tcs []openAIToolCall) []UnifiedToolCall {
 
 // parseOpenAIToolCalls parses tool_calls from an OpenAI Chat Completions request message.
 // This is used by request-side transformers and intentionally keeps the permissive `map[string]interface{}` parsing.
-func parseOpenAIToolCalls(msgMap map[string]interface{}) []UnifiedToolCall {
-	var toolCalls []UnifiedToolCall
+func parseOpenAIToolCalls(msgMap map[string]interface{}) []models.UnifiedToolCall {
+	var toolCalls []models.UnifiedToolCall
 	if tcs, ok := msgMap["tool_calls"].([]interface{}); ok {
 		for _, tc := range tcs {
 			tcMap, ok := tc.(map[string]interface{})
@@ -214,10 +214,10 @@ func parseOpenAIToolCalls(msgMap map[string]interface{}) []UnifiedToolCall {
 				}
 			}
 
-			toolCalls = append(toolCalls, UnifiedToolCall{
+			toolCalls = append(toolCalls, models.UnifiedToolCall{
 				ID:   maputil.String(tcMap, "id"),
 				Type: maputil.String(tcMap, "type"),
-				Function: UnifiedToolCallFunction{
+				Function: models.UnifiedToolCallFunction{
 					Name:      maputil.String(funcMap, "name"),
 					Arguments: argsStr,
 				},
@@ -261,7 +261,7 @@ func parseOpenAIMessageContent(raw json.RawMessage) any {
 		return str
 	}
 
-	var parts []UnifiedMessageContentPart
+	var parts []models.UnifiedMessageContentPart
 	if err := json.Unmarshal(trimmed, &parts); err == nil {
 		return parts
 	}

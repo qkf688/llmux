@@ -2,12 +2,13 @@ package transform
 
 import (
 	"context"
+	"github.com/atopos31/llmio/models"
 
 	"github.com/atopos31/llmio/service/responses"
 )
 
 // TransformResponsesToUnified 将 Responses API 格式转换为统一格式（兼容层）。
-func TransformResponsesToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequest, error) {
+func TransformResponsesToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedRequest, error) {
 	return responses.TransformRequest(rawBody, responses.RequestTransformOptions{
 		MapReasoningEffort: func(effort string) string {
 			if getReasoningEffortMappingEnabled(ctx) {
@@ -19,16 +20,16 @@ func TransformResponsesToUnified(ctx context.Context, rawBody []byte) (*UnifiedR
 }
 
 // TransformUnifiedToResponses 将统一格式转换为 Responses API 格式（兼容层）。
-func TransformUnifiedToResponses(unified *UnifiedRequest) ([]byte, error) {
+func TransformUnifiedToResponses(unified *models.UnifiedRequest) ([]byte, error) {
 	return responses.TransformFromUnified(unified)
 }
 
 // parseResponsesResponse 将 Responses API 响应转换为统一格式（兼容层）。
-func parseResponsesResponse(body []byte) (*UnifiedResponse, error) {
+func parseResponsesResponse(body []byte) (*models.UnifiedResponse, error) {
 	return responses.ParseResponse(body)
 }
 
 // formatResponsesResponse 将统一格式转换为 Responses API 响应（兼容层）。
-func formatResponsesResponse(unified *UnifiedResponse) ([]byte, error) {
+func formatResponsesResponse(unified *models.UnifiedResponse) ([]byte, error) {
 	return responses.FormatResponse(unified)
 }

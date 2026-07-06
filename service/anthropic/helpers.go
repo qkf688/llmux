@@ -1,14 +1,17 @@
 package anthropic
 
-import "github.com/atopos31/llmio/common/maputil"
+import (
+	"github.com/atopos31/llmio/common/maputil"
+	"github.com/atopos31/llmio/models"
+)
 
-func parseCacheControl(raw interface{}) *CacheControl {
+func parseCacheControl(raw interface{}) *models.CacheControl {
 	cacheControl, ok := asMap(raw)
 	if !ok {
 		return nil
 	}
 
-	return &CacheControl{
+	return &models.CacheControl{
 		Type: maputil.String(cacheControl, "type"),
 	}
 }

@@ -1,6 +1,7 @@
 package transform
 
 import (
+	"github.com/atopos31/llmio/models"
 	"testing"
 )
 
@@ -129,7 +130,7 @@ func TestValidateTopLogprobs(t *testing.T) {
 func TestValidateUnifiedRequest(t *testing.T) {
 	tests := []struct {
 		name    string
-		req     *UnifiedRequest
+		req     *models.UnifiedRequest
 		wantErr bool
 	}{
 		{
@@ -139,24 +140,24 @@ func TestValidateUnifiedRequest(t *testing.T) {
 		},
 		{
 			name: "missing model",
-			req: &UnifiedRequest{
-				Messages: []UnifiedMessage{{Role: "user", Content: "Hello"}},
+			req: &models.UnifiedRequest{
+				Messages: []models.UnifiedMessage{{Role: "user", Content: "Hello"}},
 			},
 			wantErr: true,
 		},
 		{
 			name: "empty messages",
-			req: &UnifiedRequest{
+			req: &models.UnifiedRequest{
 				Model:    "gpt-4",
-				Messages: []UnifiedMessage{},
+				Messages: []models.UnifiedMessage{},
 			},
 			wantErr: true,
 		},
 		{
 			name: "valid request",
-			req: &UnifiedRequest{
+			req: &models.UnifiedRequest{
 				Model:       "gpt-4",
-				Messages:    []UnifiedMessage{{Role: "user", Content: "Hello"}},
+				Messages:    []models.UnifiedMessage{{Role: "user", Content: "Hello"}},
 				Temperature: floatPtr(0.7),
 				TopP:        floatPtr(0.9),
 			},
@@ -164,18 +165,18 @@ func TestValidateUnifiedRequest(t *testing.T) {
 		},
 		{
 			name: "invalid temperature",
-			req: &UnifiedRequest{
+			req: &models.UnifiedRequest{
 				Model:       "gpt-4",
-				Messages:    []UnifiedMessage{{Role: "user", Content: "Hello"}},
+				Messages:    []models.UnifiedMessage{{Role: "user", Content: "Hello"}},
 				Temperature: floatPtr(3.0),
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid top_p",
-			req: &UnifiedRequest{
+			req: &models.UnifiedRequest{
 				Model:    "gpt-4",
-				Messages: []UnifiedMessage{{Role: "user", Content: "Hello"}},
+				Messages: []models.UnifiedMessage{{Role: "user", Content: "Hello"}},
 				TopP:     floatPtr(1.5),
 			},
 			wantErr: true,
@@ -269,24 +270,24 @@ func TestRepairInvalidJSON(t *testing.T) {
 func TestRepairUnifiedRequest(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    *UnifiedRequest
-		validate func(*testing.T, *UnifiedRequest)
+		input    *models.UnifiedRequest
+		validate func(*testing.T, *models.UnifiedRequest)
 	}{
 		{
 			name:  "nil request",
 			input: nil,
-			validate: func(t *testing.T, req *UnifiedRequest) {
+			validate: func(t *testing.T, req *models.UnifiedRequest) {
 				// Should not panic
 			},
 		},
 		{
 			name: "repair temperature",
-			input: &UnifiedRequest{
+			input: &models.UnifiedRequest{
 				Model:       "gpt-4",
-				Messages:    []UnifiedMessage{{Role: "user", Content: "Hello"}},
+				Messages:    []models.UnifiedMessage{{Role: "user", Content: "Hello"}},
 				Temperature: floatPtr(3.0),
 			},
-			validate: func(t *testing.T, req *UnifiedRequest) {
+			validate: func(t *testing.T, req *models.UnifiedRequest) {
 				if req.Temperature == nil || *req.Temperature != 2.0 {
 					t.Errorf("Expected temperature to be clamped to 2.0, got %v", req.Temperature)
 				}
@@ -294,12 +295,12 @@ func TestRepairUnifiedRequest(t *testing.T) {
 		},
 		{
 			name: "repair top_p",
-			input: &UnifiedRequest{
+			input: &models.UnifiedRequest{
 				Model:    "gpt-4",
-				Messages: []UnifiedMessage{{Role: "user", Content: "Hello"}},
+				Messages: []models.UnifiedMessage{{Role: "user", Content: "Hello"}},
 				TopP:     floatPtr(1.5),
 			},
-			validate: func(t *testing.T, req *UnifiedRequest) {
+			validate: func(t *testing.T, req *models.UnifiedRequest) {
 				if req.TopP == nil || *req.TopP != 1.0 {
 					t.Errorf("Expected top_p to be clamped to 1.0, got %v", req.TopP)
 				}
@@ -307,12 +308,12 @@ func TestRepairUnifiedRequest(t *testing.T) {
 		},
 		{
 			name: "repair frequency_penalty",
-			input: &UnifiedRequest{
+			input: &models.UnifiedRequest{
 				Model:            "gpt-4",
-				Messages:         []UnifiedMessage{{Role: "user", Content: "Hello"}},
+				Messages:         []models.UnifiedMessage{{Role: "user", Content: "Hello"}},
 				FrequencyPenalty: floatPtr(3.0),
 			},
-			validate: func(t *testing.T, req *UnifiedRequest) {
+			validate: func(t *testing.T, req *models.UnifiedRequest) {
 				if req.FrequencyPenalty == nil || *req.FrequencyPenalty != 2.0 {
 					t.Errorf("Expected frequency_penalty to be clamped to 2.0, got %v", req.FrequencyPenalty)
 				}
@@ -320,12 +321,12 @@ func TestRepairUnifiedRequest(t *testing.T) {
 		},
 		{
 			name: "repair presence_penalty",
-			input: &UnifiedRequest{
+			input: &models.UnifiedRequest{
 				Model:           "gpt-4",
-				Messages:        []UnifiedMessage{{Role: "user", Content: "Hello"}},
+				Messages:        []models.UnifiedMessage{{Role: "user", Content: "Hello"}},
 				PresencePenalty: floatPtr(-3.0),
 			},
-			validate: func(t *testing.T, req *UnifiedRequest) {
+			validate: func(t *testing.T, req *models.UnifiedRequest) {
 				if req.PresencePenalty == nil || *req.PresencePenalty != -2.0 {
 					t.Errorf("Expected presence_penalty to be clamped to -2.0, got %v", req.PresencePenalty)
 				}
@@ -333,12 +334,12 @@ func TestRepairUnifiedRequest(t *testing.T) {
 		},
 		{
 			name: "repair top_logprobs",
-			input: &UnifiedRequest{
+			input: &models.UnifiedRequest{
 				Model:       "gpt-4",
-				Messages:    []UnifiedMessage{{Role: "user", Content: "Hello"}},
+				Messages:    []models.UnifiedMessage{{Role: "user", Content: "Hello"}},
 				TopLogprobs: int64Ptr(25),
 			},
-			validate: func(t *testing.T, req *UnifiedRequest) {
+			validate: func(t *testing.T, req *models.UnifiedRequest) {
 				if req.TopLogprobs == nil || *req.TopLogprobs != 20 {
 					t.Errorf("Expected top_logprobs to be clamped to 20, got %v", req.TopLogprobs)
 				}
@@ -346,12 +347,12 @@ func TestRepairUnifiedRequest(t *testing.T) {
 		},
 		{
 			name: "repair negative max_tokens",
-			input: &UnifiedRequest{
+			input: &models.UnifiedRequest{
 				Model:     "gpt-4",
-				Messages:  []UnifiedMessage{{Role: "user", Content: "Hello"}},
+				Messages:  []models.UnifiedMessage{{Role: "user", Content: "Hello"}},
 				MaxTokens: -100,
 			},
-			validate: func(t *testing.T, req *UnifiedRequest) {
+			validate: func(t *testing.T, req *models.UnifiedRequest) {
 				if req.MaxTokens != 1 {
 					t.Errorf("Expected max_tokens to be repaired to 1, got %d", req.MaxTokens)
 				}

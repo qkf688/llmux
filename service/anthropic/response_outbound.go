@@ -3,11 +3,12 @@ package anthropic
 import (
 	"encoding/json"
 	"errors"
+	"github.com/atopos31/llmio/models"
 	"strings"
 )
 
 // FormatResponse 将统一响应格式转换为 Anthropic 响应格式。
-func FormatResponse(unified *UnifiedResponse) ([]byte, error) {
+func FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
 	if unified == nil {
 		return nil, errors.New("unified response cannot be nil")
 	}
@@ -39,7 +40,7 @@ func FormatResponse(unified *UnifiedResponse) ([]byte, error) {
 				content = append(content, thinking)
 			}
 
-			if parts, ok := adjustedContent.([]UnifiedMessageContentPart); ok {
+			if parts, ok := adjustedContent.([]models.UnifiedMessageContentPart); ok {
 				content = append(content, buildContentParts(parts)...)
 			} else if textStr, ok := adjustedContent.(string); ok && textStr != "" {
 				content = append(content, map[string]interface{}{
@@ -112,7 +113,7 @@ func stripReasoningPrefix(content interface{}, reasoning string) interface{} {
 		}
 		return v
 
-	case []UnifiedMessageContentPart:
+	case []models.UnifiedMessageContentPart:
 		if len(v) == 0 {
 			return v
 		}

@@ -70,7 +70,7 @@ func TestOpenAIResponseCodec_ErrorEnvelopeRoundTrip(t *testing.T) {
 		t.Fatalf("expected request_id=req_1, got %q", unified.Error.Detail.RequestID)
 	}
 
-	out, err := formatOpenAIResponse(&UnifiedResponse{
+	out, err := formatOpenAIResponse(&models.UnifiedResponse{
 		Error: &models.ResponseError{
 			Detail: unified.Error.Detail,
 		},

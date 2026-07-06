@@ -2,6 +2,7 @@ package transform
 
 import (
 	"bytes"
+	"github.com/atopos31/llmio/models"
 	"io"
 	"net/http"
 	"strconv"
@@ -33,7 +34,7 @@ func TransformProviderResponse(response *http.Response, providerType, clientType
 }
 
 func transformNonStreamResponse(response *http.Response, body []byte, providerType, clientType string) (*http.Response, error) {
-	var unified *UnifiedResponse
+	var unified *models.UnifiedResponse
 	var err error
 
 	// 供应商格式 -> 统一格式

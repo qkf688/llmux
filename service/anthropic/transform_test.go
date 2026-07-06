@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"encoding/json"
+	"github.com/atopos31/llmio/models"
 	"testing"
 )
 
@@ -120,7 +121,7 @@ func TestTransformToUnified_MapsAnthropicBase64ImageToOpenAIDataURL(t *testing.T
 		t.Fatalf("expected 1 message, got %d", len(unified.Messages))
 	}
 
-	parts, ok := unified.Messages[0].Content.([]UnifiedMessageContentPart)
+	parts, ok := unified.Messages[0].Content.([]models.UnifiedMessageContentPart)
 	if !ok || len(parts) != 1 {
 		t.Fatalf("expected 1 content part, got %#v", unified.Messages[0].Content)
 	}
@@ -133,13 +134,13 @@ func TestTransformToUnified_MapsAnthropicBase64ImageToOpenAIDataURL(t *testing.T
 }
 
 func TestTransformFromUnified_MapsOpenAIDataURLToAnthropicBase64Image(t *testing.T) {
-	unified := &UnifiedRequest{
+	unified := &models.UnifiedRequest{
 		Model: "claude-3-5-sonnet",
-		Messages: []UnifiedMessage{
+		Messages: []models.UnifiedMessage{
 			{
 				Role: "user",
-				Content: []UnifiedMessageContentPart{
-					{Type: "image_url", ImageURL: &UnifiedImageURL{URL: "data:image/png;base64,AAA"}},
+				Content: []models.UnifiedMessageContentPart{
+					{Type: "image_url", ImageURL: &models.UnifiedImageURL{URL: "data:image/png;base64,AAA"}},
 				},
 			},
 		},
@@ -227,20 +228,20 @@ func TestTransformFromUnified(t *testing.T) {
 	stop := "done"
 	effort := "high"
 
-	unified := &UnifiedRequest{
+	unified := &models.UnifiedRequest{
 		Model:  "claude-3-5-sonnet",
 		Stream: true,
-		Messages: []UnifiedMessage{
+		Messages: []models.UnifiedMessage{
 			{Role: "system", Content: "follow rules"},
 			{Role: "user", Content: "hello"},
 			{
 				Role:    "assistant",
 				Content: "calling tool",
-				ToolCalls: []UnifiedToolCall{
+				ToolCalls: []models.UnifiedToolCall{
 					{
 						ID:   "tool_1",
 						Type: "function",
-						Function: UnifiedToolCallFunction{
+						Function: models.UnifiedToolCallFunction{
 							Name:      "calc",
 							Arguments: `{"x":1}`,
 						},
@@ -249,7 +250,7 @@ func TestTransformFromUnified(t *testing.T) {
 			},
 			{Role: "tool", ToolCallID: "tool_1", Content: "42"},
 		},
-		Stop:            &UnifiedStop{Single: &stop},
+		Stop:            &models.UnifiedStop{Single: &stop},
 		ReasoningEffort: &effort,
 	}
 
@@ -324,20 +325,20 @@ func TestParseResponse(t *testing.T) {
 }
 
 func TestFormatResponse(t *testing.T) {
-	unified := &UnifiedResponse{
+	unified := &models.UnifiedResponse{
 		ID:    "msg_1",
 		Model: "claude-3-5-sonnet",
-		Choices: []UnifiedChoice{
+		Choices: []models.UnifiedChoice{
 			{
 				Index: 0,
-				Message: &UnifiedMessage{
+				Message: &models.UnifiedMessage{
 					Role:    "assistant",
 					Content: "hello",
-					ToolCalls: []UnifiedToolCall{
+					ToolCalls: []models.UnifiedToolCall{
 						{
 							ID:   "tool_1",
 							Type: "function",
-							Function: UnifiedToolCallFunction{
+							Function: models.UnifiedToolCallFunction{
 								Name:      "calc",
 								Arguments: `{"x":1}`,
 							},
@@ -347,7 +348,7 @@ func TestFormatResponse(t *testing.T) {
 				FinishReason: "tool_calls",
 			},
 		},
-		Usage: &Usage{
+		Usage: &models.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 20,
 		},
@@ -412,7 +413,7 @@ func TestParseResponse_MapsThinkingAndMultimodalContent(t *testing.T) {
 		t.Fatalf("expected reasoning_signature=sig, got %+v", msg.ReasoningSignature)
 	}
 
-	parts, ok := msg.Content.([]UnifiedMessageContentPart)
+	parts, ok := msg.Content.([]models.UnifiedMessageContentPart)
 	if !ok || len(parts) < 2 {
 		t.Fatalf("expected multimodal content parts, got %#v", msg.Content)
 	}
@@ -444,27 +445,27 @@ func TestFormatResponse_MapsContentPartsAndThinking(t *testing.T) {
 	reasoning := "plan"
 	signature := "sig"
 	text := "hello"
-	unified := &UnifiedResponse{
+	unified := &models.UnifiedResponse{
 		ID:    "msg_1",
 		Model: "claude-3-5-sonnet",
-		Choices: []UnifiedChoice{
+		Choices: []models.UnifiedChoice{
 			{
 				Index: 0,
-				Message: &UnifiedMessage{
+				Message: &models.UnifiedMessage{
 					Role:             "assistant",
 					ReasoningContent: &reasoning,
 					ReasoningSignature: func() *string {
 						return &signature
 					}(),
-					Content: []UnifiedMessageContentPart{
+					Content: []models.UnifiedMessageContentPart{
 						{Type: "text", Text: &text},
-						{Type: "image_url", ImageURL: &UnifiedImageURL{URL: "data:image/png;base64,AAA"}},
+						{Type: "image_url", ImageURL: &models.UnifiedImageURL{URL: "data:image/png;base64,AAA"}},
 					},
-					ToolCalls: []UnifiedToolCall{
+					ToolCalls: []models.UnifiedToolCall{
 						{
 							ID:   "tool_1",
 							Type: "function",
-							Function: UnifiedToolCallFunction{
+							Function: models.UnifiedToolCallFunction{
 								Name:      "calc",
 								Arguments: `{"x":1}`,
 							},

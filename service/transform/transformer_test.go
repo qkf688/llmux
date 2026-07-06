@@ -3,6 +3,7 @@ package transform
 import (
 	"context"
 	"encoding/json"
+	"github.com/atopos31/llmio/models"
 	"testing"
 )
 
@@ -62,12 +63,12 @@ func TestTransformAnthropicToUnified(t *testing.T) {
 
 func TestTransformUnifiedToOpenAI(t *testing.T) {
 	temp := 0.7
-	unified := &UnifiedRequest{
+	unified := &models.UnifiedRequest{
 		Model:       "gpt-4",
 		MaxTokens:   100,
 		Temperature: &temp,
 		Stream:      false,
-		Messages: []UnifiedMessage{
+		Messages: []models.UnifiedMessage{
 			{Role: "user", Content: "Hello"},
 		},
 	}
@@ -84,12 +85,12 @@ func TestTransformUnifiedToOpenAI(t *testing.T) {
 
 func TestTransformUnifiedToAnthropic(t *testing.T) {
 	temp := 0.7
-	unified := &UnifiedRequest{
+	unified := &models.UnifiedRequest{
 		Model:       "claude-3-opus",
 		MaxTokens:   100,
 		Temperature: &temp,
 		Stream:      false,
-		Messages: []UnifiedMessage{
+		Messages: []models.UnifiedMessage{
 			{Role: "user", Content: "Hello"},
 		},
 	}
@@ -129,7 +130,7 @@ func TestTransformOpenAIToUnified_AdvancedParams(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		validate func(*testing.T, *UnifiedRequest)
+		validate func(*testing.T, *models.UnifiedRequest)
 	}{
 		{
 			name: "frequency_penalty",
@@ -138,7 +139,7 @@ func TestTransformOpenAIToUnified_AdvancedParams(t *testing.T) {
 				"messages": [{"role": "user", "content": "hi"}],
 				"frequency_penalty": 0.5
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.FrequencyPenalty == nil {
 					t.Fatal("FrequencyPenalty is nil")
 				}
@@ -154,7 +155,7 @@ func TestTransformOpenAIToUnified_AdvancedParams(t *testing.T) {
 				"messages": [{"role": "user", "content": "hi"}],
 				"presence_penalty": -0.3
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.PresencePenalty == nil {
 					t.Fatal("PresencePenalty is nil")
 				}
@@ -170,7 +171,7 @@ func TestTransformOpenAIToUnified_AdvancedParams(t *testing.T) {
 				"messages": [{"role": "user", "content": "hi"}],
 				"seed": 12345
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.Seed == nil {
 					t.Fatal("Seed is nil")
 				}
@@ -186,7 +187,7 @@ func TestTransformOpenAIToUnified_AdvancedParams(t *testing.T) {
 				"messages": [{"role": "user", "content": "hi"}],
 				"logit_bias": {"50256": -100, "50257": 100}
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.LogitBias == nil {
 					t.Fatal("LogitBias is nil")
 				}
@@ -205,7 +206,7 @@ func TestTransformOpenAIToUnified_AdvancedParams(t *testing.T) {
 				"messages": [{"role": "user", "content": "hi"}],
 				"stop": "END"
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.Stop == nil {
 					t.Fatal("Stop is nil")
 				}
@@ -224,7 +225,7 @@ func TestTransformOpenAIToUnified_AdvancedParams(t *testing.T) {
 				"messages": [{"role": "user", "content": "hi"}],
 				"stop": ["END", "STOP"]
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.Stop == nil {
 					t.Fatal("Stop is nil")
 				}
@@ -243,7 +244,7 @@ func TestTransformOpenAIToUnified_AdvancedParams(t *testing.T) {
 				"messages": [{"role": "user", "content": "hi"}],
 				"user": "user-123"
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.User == nil {
 					t.Fatal("User is nil")
 				}
@@ -259,7 +260,7 @@ func TestTransformOpenAIToUnified_AdvancedParams(t *testing.T) {
 				"messages": [{"role": "user", "content": "hi"}],
 				"metadata": {"key1": "value1", "key2": "value2"}
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.Metadata == nil {
 					t.Fatal("Metadata is nil")
 				}
@@ -279,7 +280,7 @@ func TestTransformOpenAIToUnified_AdvancedParams(t *testing.T) {
 				"logprobs": true,
 				"top_logprobs": 5
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.Logprobs == nil {
 					t.Fatal("Logprobs is nil")
 				}
@@ -301,7 +302,7 @@ func TestTransformOpenAIToUnified_AdvancedParams(t *testing.T) {
 				"messages": [{"role": "user", "content": "hi"}],
 				"max_completion_tokens": 2000
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.MaxCompletionTokens == nil {
 					t.Fatal("MaxCompletionTokens is nil")
 				}
@@ -317,7 +318,7 @@ func TestTransformOpenAIToUnified_AdvancedParams(t *testing.T) {
 				"messages": [{"role": "user", "content": "hi"}],
 				"store": true
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.Store == nil {
 					t.Fatal("Store is nil")
 				}
@@ -338,7 +339,7 @@ func TestTransformOpenAIToUnified_AdvancedParams(t *testing.T) {
 				"user": "user-123",
 				"metadata": {"key": "value"}
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.FrequencyPenalty == nil || *u.FrequencyPenalty != 0.5 {
 					t.Error("FrequencyPenalty mismatch")
 				}
@@ -382,14 +383,14 @@ func TestTransformUnifiedToOpenAI_AdvancedParams(t *testing.T) {
 	maxCompTokens := int64(2000)
 	store := true
 
-	unified := &UnifiedRequest{
+	unified := &models.UnifiedRequest{
 		Model:               "gpt-4",
-		Messages:            []UnifiedMessage{{Role: "user", Content: "hi"}},
+		Messages:            []models.UnifiedMessage{{Role: "user", Content: "hi"}},
 		FrequencyPenalty:    &freq,
 		PresencePenalty:     &pres,
 		Seed:                &seed,
 		LogitBias:           map[string]int64{"50256": -100},
-		Stop:                &UnifiedStop{Multiple: []string{"END"}},
+		Stop:                &models.UnifiedStop{Multiple: []string{"END"}},
 		User:                &user,
 		Metadata:            map[string]string{"key": "value"},
 		Logprobs:            &logprobs,
@@ -455,10 +456,10 @@ func TestTransformUnifiedToOpenAI_AdvancedParams(t *testing.T) {
 }
 
 func TestTransformUnifiedToAnthropic_CompatibleFields(t *testing.T) {
-	unified := &UnifiedRequest{
+	unified := &models.UnifiedRequest{
 		Model:    "claude-3-opus",
-		Messages: []UnifiedMessage{{Role: "user", Content: "hi"}},
-		Stop:     &UnifiedStop{Multiple: []string{"END", "STOP"}},
+		Messages: []models.UnifiedMessage{{Role: "user", Content: "hi"}},
+		Stop:     &models.UnifiedStop{Multiple: []string{"END", "STOP"}},
 		Metadata: map[string]string{"key": "value"},
 		// 这些字段 Anthropic 不支持，应该被忽略
 		FrequencyPenalty: func() *float64 { v := 0.5; return &v }(),
@@ -496,7 +497,7 @@ func TestTransformUnifiedToAnthropic_CompatibleFields(t *testing.T) {
 
 func TestUnifiedStop_JSON(t *testing.T) {
 	// 测试 string 序列化
-	stop1 := UnifiedStop{Single: func() *string { s := "END"; return &s }()}
+	stop1 := models.UnifiedStop{Single: func() *string { s := "END"; return &s }()}
 	data1, err := json.Marshal(stop1)
 	if err != nil {
 		t.Fatalf("marshal failed: %v", err)
@@ -506,7 +507,7 @@ func TestUnifiedStop_JSON(t *testing.T) {
 	}
 
 	// 测试 []string 序列化
-	stop2 := UnifiedStop{Multiple: []string{"END", "STOP"}}
+	stop2 := models.UnifiedStop{Multiple: []string{"END", "STOP"}}
 	data2, err := json.Marshal(stop2)
 	if err != nil {
 		t.Fatalf("marshal failed: %v", err)
@@ -516,7 +517,7 @@ func TestUnifiedStop_JSON(t *testing.T) {
 	}
 
 	// 测试 string 反序列化
-	var stop3 UnifiedStop
+	var stop3 models.UnifiedStop
 	if err := json.Unmarshal([]byte(`"END"`), &stop3); err != nil {
 		t.Fatalf("unmarshal failed: %v", err)
 	}
@@ -525,7 +526,7 @@ func TestUnifiedStop_JSON(t *testing.T) {
 	}
 
 	// 测试 []string 反序列化
-	var stop4 UnifiedStop
+	var stop4 models.UnifiedStop
 	if err := json.Unmarshal([]byte(`["END","STOP"]`), &stop4); err != nil {
 		t.Fatalf("unmarshal failed: %v", err)
 	}
@@ -539,7 +540,7 @@ func TestTransformOpenAIToUnified_ResponseFormat(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		validate func(*testing.T, *UnifiedRequest)
+		validate func(*testing.T, *models.UnifiedRequest)
 	}{
 		{
 			name: "response_format_text",
@@ -548,7 +549,7 @@ func TestTransformOpenAIToUnified_ResponseFormat(t *testing.T) {
 				"messages": [{"role": "user", "content": "hi"}],
 				"response_format": {"type": "text"}
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.ResponseFormat == nil {
 					t.Fatal("ResponseFormat is nil")
 				}
@@ -564,7 +565,7 @@ func TestTransformOpenAIToUnified_ResponseFormat(t *testing.T) {
 				"messages": [{"role": "user", "content": "hi"}],
 				"response_format": {"type": "json_object"}
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.ResponseFormat == nil {
 					t.Fatal("ResponseFormat is nil")
 				}
@@ -586,7 +587,7 @@ func TestTransformOpenAIToUnified_ResponseFormat(t *testing.T) {
 					}
 				}
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.ResponseFormat == nil {
 					t.Fatal("ResponseFormat is nil")
 				}
@@ -615,7 +616,7 @@ func TestTransformOpenAIToUnified_ToolChoice(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		validate func(*testing.T, *UnifiedRequest)
+		validate func(*testing.T, *models.UnifiedRequest)
 	}{
 		{
 			name: "tool_choice_auto",
@@ -624,7 +625,7 @@ func TestTransformOpenAIToUnified_ToolChoice(t *testing.T) {
 				"messages": [{"role": "user", "content": "hi"}],
 				"tool_choice": "auto"
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.ToolChoice == nil {
 					t.Fatal("ToolChoice is nil")
 				}
@@ -640,7 +641,7 @@ func TestTransformOpenAIToUnified_ToolChoice(t *testing.T) {
 				"messages": [{"role": "user", "content": "hi"}],
 				"tool_choice": "none"
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.ToolChoice == nil {
 					t.Fatal("ToolChoice is nil")
 				}
@@ -656,7 +657,7 @@ func TestTransformOpenAIToUnified_ToolChoice(t *testing.T) {
 				"messages": [{"role": "user", "content": "hi"}],
 				"tool_choice": "required"
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.ToolChoice == nil {
 					t.Fatal("ToolChoice is nil")
 				}
@@ -675,7 +676,7 @@ func TestTransformOpenAIToUnified_ToolChoice(t *testing.T) {
 					"function": {"name": "get_weather"}
 				}
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.ToolChoice == nil {
 					t.Fatal("ToolChoice is nil")
 				}
@@ -710,7 +711,7 @@ func TestTransformOpenAIToUnified_StreamOptions(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		validate func(*testing.T, *UnifiedRequest)
+		validate func(*testing.T, *models.UnifiedRequest)
 	}{
 		{
 			name: "stream_options_include_usage",
@@ -720,7 +721,7 @@ func TestTransformOpenAIToUnified_StreamOptions(t *testing.T) {
 				"stream": true,
 				"stream_options": {"include_usage": true}
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.StreamOptions == nil {
 					t.Fatal("StreamOptions is nil")
 				}
@@ -736,7 +737,7 @@ func TestTransformOpenAIToUnified_StreamOptions(t *testing.T) {
 				"messages": [{"role": "user", "content": "hi"}],
 				"parallel_tool_calls": false
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if u.ParallelToolCalls == nil {
 					t.Fatal("ParallelToolCalls is nil")
 				}
@@ -760,10 +761,10 @@ func TestTransformOpenAIToUnified_StreamOptions(t *testing.T) {
 
 func TestTransformUnifiedToOpenAI_Phase2(t *testing.T) {
 	// 测试响应格式
-	unified1 := &UnifiedRequest{
+	unified1 := &models.UnifiedRequest{
 		Model:    "gpt-4",
-		Messages: []UnifiedMessage{{Role: "user", Content: "hi"}},
-		ResponseFormat: &UnifiedResponseFormat{
+		Messages: []models.UnifiedMessage{{Role: "user", Content: "hi"}},
+		ResponseFormat: &models.UnifiedResponseFormat{
 			Type:       "json_object",
 			JSONSchema: json.RawMessage(`{"name":"test"}`),
 		},
@@ -787,10 +788,10 @@ func TestTransformUnifiedToOpenAI_Phase2(t *testing.T) {
 
 	// 测试工具选择 (string)
 	tcAuto := "auto"
-	unified2 := &UnifiedRequest{
+	unified2 := &models.UnifiedRequest{
 		Model:      "gpt-4",
-		Messages:   []UnifiedMessage{{Role: "user", Content: "hi"}},
-		ToolChoice: &UnifiedToolChoice{StringValue: &tcAuto},
+		Messages:   []models.UnifiedMessage{{Role: "user", Content: "hi"}},
+		ToolChoice: &models.UnifiedToolChoice{StringValue: &tcAuto},
 	}
 
 	result2, err := TransformUnifiedToOpenAI(unified2)
@@ -808,13 +809,13 @@ func TestTransformUnifiedToOpenAI_Phase2(t *testing.T) {
 	}
 
 	// 测试工具选择 (object)
-	unified3 := &UnifiedRequest{
+	unified3 := &models.UnifiedRequest{
 		Model:    "gpt-4",
-		Messages: []UnifiedMessage{{Role: "user", Content: "hi"}},
-		ToolChoice: &UnifiedToolChoice{
-			ObjectValue: &UnifiedToolChoiceObject{
+		Messages: []models.UnifiedMessage{{Role: "user", Content: "hi"}},
+		ToolChoice: &models.UnifiedToolChoice{
+			ObjectValue: &models.UnifiedToolChoiceObject{
 				Type: "function",
-				Function: &UnifiedToolChoiceFunction{
+				Function: &models.UnifiedToolChoiceFunction{
 					Name: "get_weather",
 				},
 			},
@@ -839,9 +840,9 @@ func TestTransformUnifiedToOpenAI_Phase2(t *testing.T) {
 
 	// 测试 parallel_tool_calls
 	ptc := false
-	unified4 := &UnifiedRequest{
+	unified4 := &models.UnifiedRequest{
 		Model:             "gpt-4",
-		Messages:          []UnifiedMessage{{Role: "user", Content: "hi"}},
+		Messages:          []models.UnifiedMessage{{Role: "user", Content: "hi"}},
 		ParallelToolCalls: &ptc,
 	}
 
@@ -860,11 +861,11 @@ func TestTransformUnifiedToOpenAI_Phase2(t *testing.T) {
 	}
 
 	// 测试 stream_options
-	unified5 := &UnifiedRequest{
+	unified5 := &models.UnifiedRequest{
 		Model:    "gpt-4",
-		Messages: []UnifiedMessage{{Role: "user", Content: "hi"}},
+		Messages: []models.UnifiedMessage{{Role: "user", Content: "hi"}},
 		Stream:   true,
-		StreamOptions: &UnifiedStreamOptions{
+		StreamOptions: &models.UnifiedStreamOptions{
 			IncludeUsage: true,
 		},
 	}
@@ -889,7 +890,7 @@ func TestTransformUnifiedToOpenAI_Phase2(t *testing.T) {
 func TestUnifiedToolChoice_JSON(t *testing.T) {
 	// 测试 string 序列化
 	tcAuto := "auto"
-	tc1 := UnifiedToolChoice{StringValue: &tcAuto}
+	tc1 := models.UnifiedToolChoice{StringValue: &tcAuto}
 	data1, err := json.Marshal(tc1)
 	if err != nil {
 		t.Fatalf("marshal failed: %v", err)
@@ -899,10 +900,10 @@ func TestUnifiedToolChoice_JSON(t *testing.T) {
 	}
 
 	// 测试 object 序列化
-	tc2 := UnifiedToolChoice{
-		ObjectValue: &UnifiedToolChoiceObject{
+	tc2 := models.UnifiedToolChoice{
+		ObjectValue: &models.UnifiedToolChoiceObject{
 			Type: "function",
-			Function: &UnifiedToolChoiceFunction{
+			Function: &models.UnifiedToolChoiceFunction{
 				Name: "get_weather",
 			},
 		},
@@ -920,7 +921,7 @@ func TestUnifiedToolChoice_JSON(t *testing.T) {
 	}
 
 	// 测试 string 反序列化
-	var tc3 UnifiedToolChoice
+	var tc3 models.UnifiedToolChoice
 	if err := json.Unmarshal([]byte(`"none"`), &tc3); err != nil {
 		t.Fatalf("unmarshal failed: %v", err)
 	}
@@ -929,7 +930,7 @@ func TestUnifiedToolChoice_JSON(t *testing.T) {
 	}
 
 	// 测试 object 反序列化
-	var tc4 UnifiedToolChoice
+	var tc4 models.UnifiedToolChoice
 	if err := json.Unmarshal([]byte(`{"type":"function","function":{"name":"test"}}`), &tc4); err != nil {
 		t.Fatalf("unmarshal failed: %v", err)
 	}
@@ -943,7 +944,7 @@ func TestTransformOpenAIToUnified_MultimodalContent(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		validate func(*testing.T, *UnifiedRequest)
+		validate func(*testing.T, *models.UnifiedRequest)
 	}{
 		{
 			name: "text_only",
@@ -951,7 +952,7 @@ func TestTransformOpenAIToUnified_MultimodalContent(t *testing.T) {
 				"model": "gpt-4",
 				"messages": [{"role": "user", "content": "Hello"}]
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if len(u.Messages) != 1 {
 					t.Fatal("expected 1 message")
 				}
@@ -972,13 +973,13 @@ func TestTransformOpenAIToUnified_MultimodalContent(t *testing.T) {
 					]
 				}]
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if len(u.Messages) != 1 {
 					t.Fatal("expected 1 message")
 				}
-				parts, ok := u.Messages[0].Content.([]UnifiedMessageContentPart)
+				parts, ok := u.Messages[0].Content.([]models.UnifiedMessageContentPart)
 				if !ok {
-					t.Fatal("content should be []UnifiedMessageContentPart")
+					t.Fatal("content should be []models.UnifiedMessageContentPart")
 				}
 				if len(parts) != 2 {
 					t.Fatalf("expected 2 parts, got %d", len(parts))
@@ -1009,13 +1010,13 @@ func TestTransformOpenAIToUnified_MultimodalContent(t *testing.T) {
 					]
 				}]
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if len(u.Messages) != 1 {
 					t.Fatal("expected 1 message")
 				}
-				parts, ok := u.Messages[0].Content.([]UnifiedMessageContentPart)
+				parts, ok := u.Messages[0].Content.([]models.UnifiedMessageContentPart)
 				if !ok {
-					t.Fatal("content should be []UnifiedMessageContentPart")
+					t.Fatal("content should be []models.UnifiedMessageContentPart")
 				}
 				if len(parts) != 2 {
 					t.Fatalf("expected 2 parts, got %d", len(parts))
@@ -1039,7 +1040,7 @@ func TestTransformOpenAIToUnified_MultimodalContent(t *testing.T) {
 				"modalities": ["text", "audio"],
 				"audio": {"voice": "alloy", "format": "wav"}
 			}`,
-			validate: func(t *testing.T, u *UnifiedRequest) {
+			validate: func(t *testing.T, u *models.UnifiedRequest) {
 				if len(u.Modalities) != 2 {
 					t.Fatalf("expected 2 modalities, got %d", len(u.Modalities))
 				}
@@ -1072,9 +1073,9 @@ func TestTransformOpenAIToUnified_MultimodalContent(t *testing.T) {
 
 func TestTransformUnifiedToOpenAI_MultimodalContent(t *testing.T) {
 	// 测试纯文本 (向后兼容)
-	unified1 := &UnifiedRequest{
+	unified1 := &models.UnifiedRequest{
 		Model:    "gpt-4",
-		Messages: []UnifiedMessage{{Role: "user", Content: "Hello"}},
+		Messages: []models.UnifiedMessage{{Role: "user", Content: "Hello"}},
 	}
 
 	result1, err := TransformUnifiedToOpenAI(unified1)
@@ -1096,13 +1097,13 @@ func TestTransformUnifiedToOpenAI_MultimodalContent(t *testing.T) {
 	// 测试多模态内容
 	text := "What's in this image?"
 	detail := "high"
-	unified2 := &UnifiedRequest{
+	unified2 := &models.UnifiedRequest{
 		Model: "gpt-4-vision",
-		Messages: []UnifiedMessage{{
+		Messages: []models.UnifiedMessage{{
 			Role: "user",
-			Content: []UnifiedMessageContentPart{
+			Content: []models.UnifiedMessageContentPart{
 				{Type: "text", Text: &text},
-				{Type: "image_url", ImageURL: &UnifiedImageURL{
+				{Type: "image_url", ImageURL: &models.UnifiedImageURL{
 					URL:    "https://example.com/image.jpg",
 					Detail: &detail,
 				}},
@@ -1138,11 +1139,11 @@ func TestTransformUnifiedToOpenAI_MultimodalContent(t *testing.T) {
 	}
 
 	// 测试 Modalities 和 Audio
-	unified3 := &UnifiedRequest{
+	unified3 := &models.UnifiedRequest{
 		Model:      "gpt-4-audio",
-		Messages:   []UnifiedMessage{{Role: "user", Content: "Generate audio"}},
+		Messages:   []models.UnifiedMessage{{Role: "user", Content: "Generate audio"}},
 		Modalities: []string{"text", "audio"},
-		Audio: &UnifiedAudio{
+		Audio: &models.UnifiedAudio{
 			Voice:  "alloy",
 			Format: "wav",
 		},
@@ -1171,7 +1172,7 @@ func TestTransformUnifiedToOpenAI_MultimodalContent(t *testing.T) {
 
 func TestUnifiedMessage_Helpers(t *testing.T) {
 	// 测试 GetContentAsString - 纯文本
-	msg1 := UnifiedMessage{Content: "Hello"}
+	msg1 := models.UnifiedMessage{Content: "Hello"}
 	if msg1.GetContentAsString() != "Hello" {
 		t.Error("GetContentAsString failed for string")
 	}
@@ -1179,10 +1180,10 @@ func TestUnifiedMessage_Helpers(t *testing.T) {
 	// 测试 GetContentAsString - 多模态
 	text1 := "Part 1"
 	text2 := "Part 2"
-	msg2 := UnifiedMessage{
-		Content: []UnifiedMessageContentPart{
+	msg2 := models.UnifiedMessage{
+		Content: []models.UnifiedMessageContentPart{
 			{Type: "text", Text: &text1},
-			{Type: "image_url", ImageURL: &UnifiedImageURL{URL: "http://example.com/img.jpg"}},
+			{Type: "image_url", ImageURL: &models.UnifiedImageURL{URL: "http://example.com/img.jpg"}},
 			{Type: "text", Text: &text2},
 		},
 	}
@@ -1203,18 +1204,18 @@ func TestUnifiedMessage_Helpers(t *testing.T) {
 	}
 
 	// 测试 SetContentString
-	msg3 := UnifiedMessage{}
+	msg3 := models.UnifiedMessage{}
 	msg3.SetContentString("Test")
 	if msg3.Content != "Test" {
 		t.Error("SetContentString failed")
 	}
 
 	// 测试 SetContentParts
-	msg4 := UnifiedMessage{}
-	msg4.SetContentParts([]UnifiedMessageContentPart{
+	msg4 := models.UnifiedMessage{}
+	msg4.SetContentParts([]models.UnifiedMessageContentPart{
 		{Type: "text", Text: &text1},
 	})
-	if parts, ok := msg4.Content.([]UnifiedMessageContentPart); !ok || len(parts) != 1 {
+	if parts, ok := msg4.Content.([]models.UnifiedMessageContentPart); !ok || len(parts) != 1 {
 		t.Error("SetContentParts failed")
 	}
 }
@@ -1233,7 +1234,7 @@ func TestUnifiedMessageContent_JSON(t *testing.T) {
 	// 测试多模态序列化
 	text := "Test"
 	content2 := UnifiedMessageContent{
-		MultipleContent: []UnifiedMessageContentPart{
+		MultipleContent: []models.UnifiedMessageContentPart{
 			{Type: "text", Text: &text},
 		},
 	}
@@ -1248,9 +1249,9 @@ func TestUnifiedMessageContent_JSON(t *testing.T) {
 
 	// 测试多个部分序列化
 	content3 := UnifiedMessageContent{
-		MultipleContent: []UnifiedMessageContentPart{
+		MultipleContent: []models.UnifiedMessageContentPart{
 			{Type: "text", Text: &text},
-			{Type: "image_url", ImageURL: &UnifiedImageURL{URL: "http://example.com/img.jpg"}},
+			{Type: "image_url", ImageURL: &models.UnifiedImageURL{URL: "http://example.com/img.jpg"}},
 		},
 	}
 	data3, err := json.Marshal(content3)
@@ -1310,7 +1311,7 @@ func TestCacheControl_MessageLevel(t *testing.T) {
 	}
 
 	if unified.Messages[0].CacheControl == nil {
-		t.Fatal("Expected CacheControl to be set")
+		t.Fatal("Expected models.CacheControl to be set")
 	}
 
 	if unified.Messages[0].CacheControl.Type != "ephemeral" {
@@ -1346,7 +1347,7 @@ func TestCacheControl_ToolLevel(t *testing.T) {
 	}
 
 	if unified.Tools[0].CacheControl == nil {
-		t.Fatal("Expected CacheControl to be set")
+		t.Fatal("Expected models.CacheControl to be set")
 	}
 
 	if unified.Tools[0].CacheControl.Type != "ephemeral" {
@@ -1357,15 +1358,15 @@ func TestCacheControl_ToolLevel(t *testing.T) {
 func TestCacheControl_UnifiedToAnthropic_Message(t *testing.T) {
 	// 测试 Unified → Anthropic 消息级别缓存控制转换
 	temp := 0.7
-	unified := &UnifiedRequest{
+	unified := &models.UnifiedRequest{
 		Model:       "claude-3-opus",
 		MaxTokens:   100,
 		Temperature: &temp,
-		Messages: []UnifiedMessage{
+		Messages: []models.UnifiedMessage{
 			{
 				Role:    "user",
 				Content: "Hello",
-				CacheControl: &CacheControl{
+				CacheControl: &models.CacheControl{
 					Type: "ephemeral",
 				},
 			},
@@ -1405,22 +1406,22 @@ func TestCacheControl_UnifiedToAnthropic_Message(t *testing.T) {
 func TestCacheControl_UnifiedToAnthropic_Tool(t *testing.T) {
 	// 测试 Unified → Anthropic 工具级别缓存控制转换
 	temp := 0.7
-	unified := &UnifiedRequest{
+	unified := &models.UnifiedRequest{
 		Model:       "claude-3-opus",
 		MaxTokens:   100,
 		Temperature: &temp,
-		Messages: []UnifiedMessage{
+		Messages: []models.UnifiedMessage{
 			{Role: "user", Content: "Hello"},
 		},
-		Tools: []UnifiedTool{
+		Tools: []models.UnifiedTool{
 			{
 				Type: "function",
-				Function: UnifiedFunc{
+				Function: models.UnifiedFunc{
 					Name:        "get_weather",
 					Description: "Get weather info",
 					Parameters:  map[string]interface{}{"type": "object"},
 				},
-				CacheControl: &CacheControl{
+				CacheControl: &models.CacheControl{
 					Type: "ephemeral",
 				},
 			},
@@ -1461,18 +1462,18 @@ func TestCacheControl_ContentPartLevel(t *testing.T) {
 	// 测试内容部分级别的缓存控制
 	temp := 0.7
 	text := "This is a long context that should be cached"
-	unified := &UnifiedRequest{
+	unified := &models.UnifiedRequest{
 		Model:       "claude-3-opus",
 		MaxTokens:   100,
 		Temperature: &temp,
-		Messages: []UnifiedMessage{
+		Messages: []models.UnifiedMessage{
 			{
 				Role: "user",
-				Content: []UnifiedMessageContentPart{
+				Content: []models.UnifiedMessageContentPart{
 					{
 						Type: "text",
 						Text: &text,
-						CacheControl: &CacheControl{
+						CacheControl: &models.CacheControl{
 							Type: "ephemeral",
 						},
 					},
@@ -1524,15 +1525,15 @@ func TestCacheControl_ContentPartLevel(t *testing.T) {
 func TestCacheControl_OpenAI_Ignored(t *testing.T) {
 	// 测试 OpenAI 格式忽略缓存控制（不报错）
 	temp := 0.7
-	unified := &UnifiedRequest{
+	unified := &models.UnifiedRequest{
 		Model:       "gpt-4",
 		MaxTokens:   100,
 		Temperature: &temp,
-		Messages: []UnifiedMessage{
+		Messages: []models.UnifiedMessage{
 			{
 				Role:    "user",
 				Content: "Hello",
-				CacheControl: &CacheControl{
+				CacheControl: &models.CacheControl{
 					Type: "ephemeral",
 				},
 			},
@@ -1651,12 +1652,12 @@ func TestThinking_UnifiedToAnthropic_WithBudget(t *testing.T) {
 	// 测试 Unified → Anthropic 转换 (使用 ReasoningBudget)
 	temp := 0.7
 	budget := int64(30000)
-	unified := &UnifiedRequest{
+	unified := &models.UnifiedRequest{
 		Model:           "claude-3-opus",
 		MaxTokens:       100,
 		Temperature:     &temp,
 		ReasoningBudget: &budget,
-		Messages: []UnifiedMessage{
+		Messages: []models.UnifiedMessage{
 			{Role: "user", Content: "Solve this problem"},
 		},
 	}
@@ -1694,12 +1695,12 @@ func TestThinking_UnifiedToAnthropic_WithEffort(t *testing.T) {
 	// 测试 Unified → Anthropic 转换 (使用 ReasoningEffort)
 	temp := 0.7
 	effort := "high"
-	unified := &UnifiedRequest{
+	unified := &models.UnifiedRequest{
 		Model:           "claude-3-opus",
 		MaxTokens:       100,
 		Temperature:     &temp,
 		ReasoningEffort: &effort,
-		Messages: []UnifiedMessage{
+		Messages: []models.UnifiedMessage{
 			{Role: "user", Content: "Solve this problem"},
 		},
 	}
@@ -1739,13 +1740,13 @@ func TestThinking_UnifiedToAnthropic_BudgetPriority(t *testing.T) {
 	temp := 0.7
 	effort := "high"
 	budget := int64(15000)
-	unified := &UnifiedRequest{
+	unified := &models.UnifiedRequest{
 		Model:           "claude-3-opus",
 		MaxTokens:       100,
 		Temperature:     &temp,
 		ReasoningEffort: &effort,
 		ReasoningBudget: &budget,
-		Messages: []UnifiedMessage{
+		Messages: []models.UnifiedMessage{
 			{Role: "user", Content: "Solve this problem"},
 		},
 	}
@@ -1780,12 +1781,12 @@ func TestThinking_OpenAI_Ignored(t *testing.T) {
 	// 测试 OpenAI 格式忽略 thinking 配置（不报错）
 	temp := 0.7
 	budget := int64(30000)
-	unified := &UnifiedRequest{
+	unified := &models.UnifiedRequest{
 		Model:           "gpt-4",
 		MaxTokens:       100,
 		Temperature:     &temp,
 		ReasoningBudget: &budget,
-		Messages: []UnifiedMessage{
+		Messages: []models.UnifiedMessage{
 			{Role: "user", Content: "Solve this problem"},
 		},
 	}

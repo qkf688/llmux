@@ -4,15 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/atopos31/llmio/models"
 )
 
-func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequest, error) {
+func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedRequest, error) {
 	var req openAIChatCompletionRequest
 	if err := json.Unmarshal(rawBody, &req); err != nil {
 		return nil, err
 	}
 
-	unified := &UnifiedRequest{
+	unified := &models.UnifiedRequest{
 		Model:  req.Model.Value,
 		Stream: req.Stream.Value,
 	}
@@ -103,7 +104,7 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*UnifiedRequ
 }
 
 // TransformUnifiedToOpenAI 将统一格式转换为 OpenAI 格式
-func TransformUnifiedToOpenAI(unified *UnifiedRequest) ([]byte, error) {
+func TransformUnifiedToOpenAI(unified *models.UnifiedRequest) ([]byte, error) {
 	if unified == nil {
 		return nil, fmt.Errorf("unified request cannot be nil")
 	}
@@ -143,7 +144,7 @@ func TransformUnifiedToOpenAI(unified *UnifiedRequest) ([]byte, error) {
 		}
 		if msg.Content != nil {
 			// 阶段 3: 处理多模态内容
-			if parts, ok := msg.Content.([]UnifiedMessageContentPart); ok {
+			if parts, ok := msg.Content.([]models.UnifiedMessageContentPart); ok {
 				// 多模态内容
 				contentArray := make([]interface{}, 0, len(parts))
 				for _, part := range parts {

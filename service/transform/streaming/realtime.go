@@ -1,4 +1,4 @@
-package transform
+package streaming
 
 import (
 	"bufio"
@@ -46,14 +46,15 @@ type realtimeStreamState struct {
 	responsesOutputIndexToAnthropicBlockIndex map[int]int
 }
 
-// transformStreamResponseRealtime 实时流式响应转换（直接从 Body 读取器转换）
-func transformStreamResponseRealtime(response *http.Response, providerType, clientType string) (*http.Response, error) {
+// TransformResponseRealtime performs real-time streaming response conversion
+// directly from the response Body reader.
+func TransformResponseRealtime(response *http.Response, providerType, clientType string) (*http.Response, error) {
 	// Reduce N×N streaming conversions to N+N by routing through OpenAI Responses
 	// streaming format when neither side is already using it.
 	//
 	// provider -> openai-res (canonical) -> client
 	if providerType != "openai-res" && clientType != "openai-res" {
-		return transformStreamResponseRealtimeViaResponses(response, providerType, clientType)
+		return transformResponseRealtimeViaResponses(response, providerType, clientType)
 	}
 
 	pr, pw := io.Pipe()
@@ -82,7 +83,7 @@ func transformStreamResponseRealtime(response *http.Response, providerType, clie
 	return newResponse, nil
 }
 
-func transformStreamResponseRealtimeViaResponses(response *http.Response, providerType, clientType string) (*http.Response, error) {
+func transformResponseRealtimeViaResponses(response *http.Response, providerType, clientType string) (*http.Response, error) {
 	midReader, midWriter := io.Pipe()
 	outReader, outWriter := io.Pipe()
 

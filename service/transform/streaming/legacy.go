@@ -1,4 +1,4 @@
-package transform
+package streaming
 
 import (
 	"encoding/json"
@@ -11,7 +11,9 @@ import (
 	"github.com/atopos31/llmio/common/maputil"
 )
 
-func transformStreamResponse(response *http.Response, body []byte, providerType, clientType string) (*http.Response, error) {
+// TransformStreamResponse is the legacy whole-body stream transformer.
+// It is preserved for compatibility but no longer used by the real-time router.
+func TransformStreamResponse(response *http.Response, body []byte, providerType, clientType string) (*http.Response, error) {
 	pr, pw := io.Pipe()
 
 	go func() {

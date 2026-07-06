@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/service/transform/responses"
 )
 
 type responsesAdapter struct{}
@@ -13,17 +14,17 @@ func init() {
 }
 
 func (responsesAdapter) ToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedRequest, error) {
-	return TransformResponsesToUnified(ctx, rawBody)
+	return responses.ToUnified(ctx, rawBody)
 }
 
 func (responsesAdapter) FromUnified(unified *models.UnifiedRequest) ([]byte, error) {
-	return TransformUnifiedToResponses(unified)
+	return responses.FromUnified(unified)
 }
 
 func (responsesAdapter) ParseResponse(body []byte) (*models.UnifiedResponse, error) {
-	return parseResponsesResponse(body)
+	return responses.ParseResponse(body)
 }
 
 func (responsesAdapter) FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
-	return formatResponsesResponse(unified)
+	return responses.FormatResponse(unified)
 }

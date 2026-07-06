@@ -1,13 +1,17 @@
-package transform
+package openai
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/service/transform/shared"
 )
 
-func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedRequest, error) {
+// ToUnified converts an OpenAI Chat Completion request body into the unified
+// request representation.
+func ToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedRequest, error) {
 	var req openAIChatCompletionRequest
 	if err := json.Unmarshal(rawBody, &req); err != nil {
 		return nil, err
@@ -41,8 +45,8 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*models.Unif
 	// 处理 reasoning_effort 参数
 	if req.ReasoningEffort.Set && req.ReasoningEffort.Value != "" {
 		// 检查是否启用映射
-		if getReasoningEffortMappingEnabled(ctx) {
-			normalized := normalizeReasoningEffort(ctx, req.ReasoningEffort.Value)
+		if shared.GetReasoningEffortMappingEnabled(ctx) {
+			normalized := shared.NormalizeReasoningEffort(ctx, req.ReasoningEffort.Value)
 			unified.ReasoningEffort = &normalized
 		} else {
 			// 不启用映射时直接透传
@@ -103,8 +107,9 @@ func TransformOpenAIToUnified(ctx context.Context, rawBody []byte) (*models.Unif
 	return unified, nil
 }
 
-// TransformUnifiedToOpenAI 将统一格式转换为 OpenAI 格式
-func TransformUnifiedToOpenAI(unified *models.UnifiedRequest) ([]byte, error) {
+// FromUnified converts a unified request into an OpenAI Chat Completion
+// request body.
+func FromUnified(unified *models.UnifiedRequest) ([]byte, error) {
 	if unified == nil {
 		return nil, fmt.Errorf("unified request cannot be nil")
 	}

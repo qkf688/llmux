@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/atopos31/llmio/service/transform/streaming"
 )
 
 func TransformProviderResponse(response *http.Response, providerType, clientType string) (*http.Response, error) {
@@ -19,7 +21,7 @@ func TransformProviderResponse(response *http.Response, providerType, clientType
 
 	if isStream {
 		// 流式响应：直接从 Body 读取器进行实时转换
-		return transformStreamResponseRealtime(response, providerType, clientType)
+		return streaming.TransformResponseRealtime(response, providerType, clientType)
 	}
 
 	// 非流式响应：读取完整响应体后转换
@@ -72,5 +74,3 @@ func transformNonStreamResponse(response *http.Response, body []byte, providerTy
 
 	return newResponse, nil
 }
-
-// transformStreamResponseRealtime 实时流式响应转换（直接从 Body 读取器转换）

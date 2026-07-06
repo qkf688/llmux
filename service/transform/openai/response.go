@@ -1,4 +1,4 @@
-package transform
+package openai
 
 import (
 	"bytes"
@@ -8,7 +8,9 @@ import (
 	"github.com/atopos31/llmio/models"
 )
 
-func parseOpenAIResponse(body []byte) (*models.UnifiedResponse, error) {
+// ParseResponse parses an OpenAI Chat Completion response body into the
+// unified response representation.
+func ParseResponse(body []byte) (*models.UnifiedResponse, error) {
 	var resp openAIChatCompletionResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, err
@@ -70,7 +72,9 @@ func parseOpenAIResponse(body []byte) (*models.UnifiedResponse, error) {
 	return unified, nil
 }
 
-func formatOpenAIResponse(unified *models.UnifiedResponse) ([]byte, error) {
+// FormatResponse formats a unified response as an OpenAI Chat Completion
+// response body.
+func FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
 	if unified.Error != nil && len(unified.Choices) == 0 {
 		return json.Marshal(struct {
 			Error *openAIResponseErrorEnvelope `json:"error"`

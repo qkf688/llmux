@@ -1,12 +1,13 @@
-package transform
+package openai
 
 import (
 	"context"
-	"github.com/atopos31/llmio/models"
 	"testing"
+
+	"github.com/atopos31/llmio/models"
 )
 
-func TestTransformOpenAIToUnified_TypedRequestCompatibility(t *testing.T) {
+func TestToUnified_TypedRequestCompatibility(t *testing.T) {
 	input := []byte(`{
 		"model": "gpt-4.1",
 		"messages": [
@@ -57,9 +58,9 @@ func TestTransformOpenAIToUnified_TypedRequestCompatibility(t *testing.T) {
 		"audio": null
 	}`)
 
-	unified, err := TransformOpenAIToUnified(context.Background(), input)
+	unified, err := ToUnified(context.Background(), input)
 	if err != nil {
-		t.Fatalf("TransformOpenAIToUnified failed: %v", err)
+		t.Fatalf("ToUnified failed: %v", err)
 	}
 
 	if unified.Model != "gpt-4.1" {
@@ -121,15 +122,15 @@ func TestTransformOpenAIToUnified_TypedRequestCompatibility(t *testing.T) {
 	}
 }
 
-func TestTransformOpenAIToUnified_SystemOnlyMessagePreserved(t *testing.T) {
+func TestToUnified_SystemOnlyMessagePreserved(t *testing.T) {
 	input := []byte(`{
 		"model": "gpt-4",
 		"messages": [{"role": "system", "content": "only system"}]
 	}`)
 
-	unified, err := TransformOpenAIToUnified(context.Background(), input)
+	unified, err := ToUnified(context.Background(), input)
 	if err != nil {
-		t.Fatalf("TransformOpenAIToUnified failed: %v", err)
+		t.Fatalf("ToUnified failed: %v", err)
 	}
 
 	if unified.System != "" {

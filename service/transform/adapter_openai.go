@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/service/transform/openai"
 )
 
 type openAIAdapter struct{}
@@ -13,17 +14,17 @@ func init() {
 }
 
 func (openAIAdapter) ToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedRequest, error) {
-	return TransformOpenAIToUnified(ctx, rawBody)
+	return openai.ToUnified(ctx, rawBody)
 }
 
 func (openAIAdapter) FromUnified(unified *models.UnifiedRequest) ([]byte, error) {
-	return TransformUnifiedToOpenAI(unified)
+	return openai.FromUnified(unified)
 }
 
 func (openAIAdapter) ParseResponse(body []byte) (*models.UnifiedResponse, error) {
-	return parseOpenAIResponse(body)
+	return openai.ParseResponse(body)
 }
 
 func (openAIAdapter) FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
-	return formatOpenAIResponse(unified)
+	return openai.FormatResponse(unified)
 }

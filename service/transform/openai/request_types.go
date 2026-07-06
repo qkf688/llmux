@@ -1,8 +1,9 @@
-package transform
+package openai
 
 import (
 	"bytes"
 	"encoding/json"
+
 	"github.com/atopos31/llmio/models"
 )
 

@@ -1,4 +1,4 @@
-package transform
+package streaming
 
 import (
 	"bufio"
@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestTransformStreamResponseRealtime_ResponsesToOpenAI_StableMeta(t *testing.T) {
+func TestTransformResponseRealtime_ResponsesToOpenAI_StableMeta(t *testing.T) {
 	responsesStream := `event: response.created
 data: {"type":"response.created","response":{"id":"resp_123","object":"response","model":"gpt-4","created_at":1234567890,"status":"in_progress","output":[]}}
 
@@ -31,7 +31,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","object":"respons
 		Body: io.NopCloser(strings.NewReader(responsesStream)),
 	}
 
-	result, err := transformStreamResponseRealtime(response, "openai-res", "openai")
+	result, err := TransformResponseRealtime(response, "openai-res", "openai")
 	if err != nil {
 		t.Fatalf("转换失败: %v", err)
 	}
@@ -98,7 +98,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","object":"respons
 	}
 }
 
-func TestTransformStreamResponseRealtime_ResponsesToOpenAI_MultiLineEventData(t *testing.T) {
+func TestTransformResponseRealtime_ResponsesToOpenAI_MultiLineEventData(t *testing.T) {
 	responsesStream := `event: response.created
 data: {"type":"response.created","response":{"id":"resp_123","object":"response",
 data: "model":"gpt-4","created_at":1234567890,"status":"in_progress","output":[]}}
@@ -118,7 +118,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","object":"respons
 		Body: io.NopCloser(strings.NewReader(responsesStream)),
 	}
 
-	result, err := transformStreamResponseRealtime(response, "openai-res", "openai")
+	result, err := TransformResponseRealtime(response, "openai-res", "openai")
 	if err != nil {
 		t.Fatalf("转换失败: %v", err)
 	}
@@ -154,7 +154,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","object":"respons
 	t.Fatal("未找到包含 id 的 OpenAI chunk")
 }
 
-func TestTransformStreamResponseRealtime_AnthropicToOpenAI_StableMeta(t *testing.T) {
+func TestTransformResponseRealtime_AnthropicToOpenAI_StableMeta(t *testing.T) {
 	anthropicStream := `event: message_start
 data: {"type":"message_start","message":{"id":"msg_123","type":"message","role":"assistant","model":"claude-3-5-sonnet","created_at":111,"usage":{"input_tokens":0,"output_tokens":0}}}
 
@@ -176,7 +176,7 @@ data: {"type":"message_stop"}
 		Body: io.NopCloser(strings.NewReader(anthropicStream)),
 	}
 
-	result, err := transformStreamResponseRealtime(response, "anthropic", "openai")
+	result, err := TransformResponseRealtime(response, "anthropic", "openai")
 	if err != nil {
 		t.Fatalf("转换失败: %v", err)
 	}
@@ -243,7 +243,7 @@ data: {"type":"message_stop"}
 	}
 }
 
-func TestTransformStreamResponseRealtime_OpenAIToAnthropic_EmitsMessageStart(t *testing.T) {
+func TestTransformResponseRealtime_OpenAIToAnthropic_EmitsMessageStart(t *testing.T) {
 	openaiStream := `data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4","choices":[{"index":0,"delta":{"role":"assistant","content":"Hi"},"finish_reason":null}]}
 
 data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}}
@@ -260,7 +260,7 @@ data: [DONE]
 		Body: io.NopCloser(strings.NewReader(openaiStream)),
 	}
 
-	result, err := transformStreamResponseRealtime(response, "openai", "anthropic")
+	result, err := TransformResponseRealtime(response, "openai", "anthropic")
 	if err != nil {
 		t.Fatalf("转换失败: %v", err)
 	}

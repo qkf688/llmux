@@ -1,8 +1,8 @@
-package transform
+package openai
 
 import "testing"
 
-func TestParseOpenAIToolCalls_ArgumentsNormalization(t *testing.T) {
+func TestParseToolCalls_ArgumentsNormalization(t *testing.T) {
 	tests := []struct {
 		name      string
 		arguments interface{}

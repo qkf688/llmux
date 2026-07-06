@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/service/transform/anthropic"
 )
 
 type anthropicAdapter struct{}
@@ -13,17 +14,17 @@ func init() {
 }
 
 func (anthropicAdapter) ToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedRequest, error) {
-	return TransformAnthropicToUnified(rawBody)
+	return anthropic.ToUnified(rawBody)
 }
 
 func (anthropicAdapter) FromUnified(unified *models.UnifiedRequest) ([]byte, error) {
-	return TransformUnifiedToAnthropic(unified)
+	return anthropic.FromUnified(unified)
 }
 
 func (anthropicAdapter) ParseResponse(body []byte) (*models.UnifiedResponse, error) {
-	return parseAnthropicResponse(body)
+	return anthropic.ParseResponse(body)
 }
 
 func (anthropicAdapter) FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
-	return formatAnthropicResponse(unified)
+	return anthropic.FormatResponse(unified)
 }

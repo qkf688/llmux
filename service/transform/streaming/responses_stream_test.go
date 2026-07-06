@@ -1,4 +1,4 @@
-package transform
+package streaming
 
 import (
 	"bufio"
@@ -45,7 +45,7 @@ data: {"type":"message_stop"}
 	}
 
 	// 执行转换
-	result, err := transformStreamResponseRealtime(response, "anthropic", "openai-res")
+	result, err := TransformResponseRealtime(response, "anthropic", "openai-res")
 	if err != nil {
 		t.Fatalf("转换失败: %v", err)
 	}
@@ -152,7 +152,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","status":"complet
 		Body: io.NopCloser(strings.NewReader(responsesStream)),
 	}
 
-	result, err := transformStreamResponseRealtime(response, "openai-res", "anthropic")
+	result, err := TransformResponseRealtime(response, "openai-res", "anthropic")
 	if err != nil {
 		t.Fatalf("转换失败: %v", err)
 	}
@@ -261,7 +261,7 @@ data: [DONE]
 		Body: io.NopCloser(strings.NewReader(openaiStream)),
 	}
 
-	result, err := transformStreamResponseRealtime(response, "openai", "openai-res")
+	result, err := TransformResponseRealtime(response, "openai", "openai-res")
 	if err != nil {
 		t.Fatalf("转换失败: %v", err)
 	}
@@ -382,7 +382,7 @@ data: [DONE]
 	}
 
 	// 测试 openai-res → anthropic
-	result, err := transformStreamResponseRealtime(response, "openai-res", "anthropic")
+	result, err := TransformResponseRealtime(response, "openai-res", "anthropic")
 	if err != nil {
 		t.Fatalf("转换失败: %v", err)
 	}
@@ -443,7 +443,7 @@ data: {"type":"message_stop"}
 		Body: io.NopCloser(strings.NewReader(anthropicStream)),
 	}
 
-	result, err := transformStreamResponseRealtime(response, "anthropic", "openai-res")
+	result, err := TransformResponseRealtime(response, "anthropic", "openai-res")
 	if err != nil {
 		t.Fatalf("转换失败: %v", err)
 	}
@@ -504,7 +504,7 @@ data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text
 			Body: io.NopCloser(strings.NewReader(stream)),
 		}
 
-		result, err := transformStreamResponseRealtime(response, "anthropic", "openai-res")
+		result, err := TransformResponseRealtime(response, "anthropic", "openai-res")
 		if err != nil {
 			b.Fatal(err)
 		}

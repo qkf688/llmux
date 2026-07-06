@@ -1,4 +1,4 @@
-package transform
+package streaming
 
 import (
 	"encoding/json"

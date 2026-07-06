@@ -1,10 +1,11 @@
-package transform
+package streaming
 
 import (
 	"encoding/json"
 	"fmt"
 
 	"github.com/atopos31/llmio/common/maputil"
+	"github.com/atopos31/llmio/service/transform/shared"
 )
 
 func handleRealtimeAnthropicToResponses(state *realtimeStreamState, data string) error {
@@ -43,9 +44,9 @@ func handleRealtimeAnthropicToResponses(state *realtimeStreamState, data string)
 
 func handleAnthropicToResponsesMessageStart(state *realtimeStreamState, chunk map[string]interface{}) error {
 	// 获取 message ID 并生成 item ID
-	state.responseID = getNestedString(chunk, "message.id")
+	state.responseID = shared.GetNestedString(chunk, "message.id")
 	state.itemID = fmt.Sprintf("msg_%s", state.responseID)
-	createdAt := int(getNestedFloat(chunk, "message.created_at"))
+	createdAt := int(shared.GetNestedFloat(chunk, "message.created_at"))
 
 	// 发送 response.created 事件
 	responseCreated := map[string]interface{}{
@@ -54,7 +55,7 @@ func handleAnthropicToResponsesMessageStart(state *realtimeStreamState, chunk ma
 		"response": map[string]interface{}{
 			"object":     "response",
 			"id":         state.responseID,
-			"model":      getNestedString(chunk, "message.model"),
+			"model":      shared.GetNestedString(chunk, "message.model"),
 			"created_at": createdAt,
 			"output":     []interface{}{},
 			"status":     "in_progress",
@@ -71,7 +72,7 @@ func handleAnthropicToResponsesMessageStart(state *realtimeStreamState, chunk ma
 		"response": map[string]interface{}{
 			"object":     "response",
 			"id":         state.responseID,
-			"model":      getNestedString(chunk, "message.model"),
+			"model":      shared.GetNestedString(chunk, "message.model"),
 			"created_at": createdAt,
 			"output":     []interface{}{},
 			"status":     "in_progress",
@@ -353,7 +354,7 @@ func handleAnthropicToResponsesMessageDelta(state *realtimeStreamState, chunk ma
 		"response": map[string]interface{}{
 			"object":     "response",
 			"id":         state.responseID,
-			"model":      getNestedString(chunk, "message.model"),
+			"model":      shared.GetNestedString(chunk, "message.model"),
 			"created_at": 0,
 			"output":     []interface{}{},
 			"status":     status,

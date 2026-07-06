@@ -1,4 +1,4 @@
-package transform
+package openai
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 	"github.com/atopos31/llmio/models"
 )
 
-func TestParseOpenAIResponse_MultipleChoicesAndUsageDetails(t *testing.T) {
+func TestParseResponse_MultipleChoicesAndUsageDetails(t *testing.T) {
 	t.Parallel()
 
 	body := []byte(`{
@@ -28,9 +28,9 @@ func TestParseOpenAIResponse_MultipleChoicesAndUsageDetails(t *testing.T) {
 		}
 	}`)
 
-	unified, err := parseOpenAIResponse(body)
+	unified, err := ParseResponse(body)
 	if err != nil {
-		t.Fatalf("parseOpenAIResponse: %v", err)
+		t.Fatalf("ParseResponse: %v", err)
 	}
 	if unified == nil {
 		t.Fatal("expected unified response, got nil")
@@ -55,13 +55,13 @@ func TestParseOpenAIResponse_MultipleChoicesAndUsageDetails(t *testing.T) {
 	}
 }
 
-func TestOpenAIResponseCodec_ErrorEnvelopeRoundTrip(t *testing.T) {
+func TestResponseCodec_ErrorEnvelopeRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	body := []byte(`{"error":{"message":"nope","type":"invalid_request_error","code":"bad","param":"x","request_id":"req_1"}}`)
-	unified, err := parseOpenAIResponse(body)
+	unified, err := ParseResponse(body)
 	if err != nil {
-		t.Fatalf("parseOpenAIResponse: %v", err)
+		t.Fatalf("ParseResponse: %v", err)
 	}
 	if unified.Error == nil {
 		t.Fatal("expected unified.Error to be set")
@@ -70,13 +70,13 @@ func TestOpenAIResponseCodec_ErrorEnvelopeRoundTrip(t *testing.T) {
 		t.Fatalf("expected request_id=req_1, got %q", unified.Error.Detail.RequestID)
 	}
 
-	out, err := formatOpenAIResponse(&models.UnifiedResponse{
+	out, err := FormatResponse(&models.UnifiedResponse{
 		Error: &models.ResponseError{
 			Detail: unified.Error.Detail,
 		},
 	})
 	if err != nil {
-		t.Fatalf("formatOpenAIResponse: %v", err)
+		t.Fatalf("FormatResponse: %v", err)
 	}
 
 	var decoded map[string]interface{}

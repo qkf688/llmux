@@ -3,6 +3,7 @@ package chat
 import (
 	"errors"
 
+	"github.com/atopos31/llmio/consts"
 	preprocessopenai "github.com/atopos31/llmio/service/chat/preprocess/openai"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -211,4 +212,10 @@ func BeforerAnthropic(data []byte) (*Before, error) {
 		image:            image,
 		raw:              data,
 	}, nil
+}
+
+func init() {
+	RegisterBeforer(consts.StyleOpenAI, BeforerOpenAI)
+	RegisterBeforer(consts.StyleOpenAIRes, BeforerOpenAIRes)
+	RegisterBeforer(consts.StyleAnthropic, BeforerAnthropic)
 }

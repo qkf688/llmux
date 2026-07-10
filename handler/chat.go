@@ -60,15 +60,29 @@ func ModelsHandler(c *gin.Context) {
 }
 
 func ChatCompletionsHandler(c *gin.Context) {
-	chatHandler(c, service.BeforerOpenAI, service.ProcesserOpenAI, consts.StyleOpenAI)
+	chatHandlerByStyle(c, consts.StyleOpenAI)
 }
 
 func ResponsesHandler(c *gin.Context) {
-	chatHandler(c, service.BeforerOpenAIRes, service.ProcesserOpenAiRes, consts.StyleOpenAIRes)
+	chatHandlerByStyle(c, consts.StyleOpenAIRes)
 }
 
 func Messages(c *gin.Context) {
-	chatHandler(c, service.BeforerAnthropic, service.ProcesserAnthropic, consts.StyleAnthropic)
+	chatHandlerByStyle(c, consts.StyleAnthropic)
+}
+
+func chatHandlerByStyle(c *gin.Context, style string) {
+	beforer, err := service.GetBeforer(style)
+	if err != nil {
+		common.ErrorWithHttpStatus(c, http.StatusBadRequest, http.StatusBadRequest, err.Error())
+		return
+	}
+	processer, err := service.GetProcesser(style)
+	if err != nil {
+		common.ErrorWithHttpStatus(c, http.StatusBadRequest, http.StatusBadRequest, err.Error())
+		return
+	}
+	chatHandler(c, beforer, processer, style)
 }
 
 func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor service.Processer, style string) {

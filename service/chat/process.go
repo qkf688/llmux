@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/atopos31/llmio/consts"
 	"github.com/atopos31/llmio/models"
 	"github.com/tidwall/gjson"
 )
@@ -396,4 +397,10 @@ func ScannerToken(reader *bufio.Scanner) iter.Seq[string] {
 			}
 		}
 	}
+}
+
+func init() {
+	RegisterProcesser(consts.StyleOpenAI, ProcesserOpenAI)
+	RegisterProcesser(consts.StyleOpenAIRes, ProcesserOpenAiRes)
+	RegisterProcesser(consts.StyleAnthropic, ProcesserAnthropic)
 }

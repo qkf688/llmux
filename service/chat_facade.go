@@ -17,6 +17,8 @@ func BeforerOpenAI(data []byte) (*Before, error)    { return chat.BeforerOpenAI(
 func BeforerOpenAIRes(data []byte) (*Before, error) { return chat.BeforerOpenAIRes(data) }
 func BeforerAnthropic(data []byte) (*Before, error) { return chat.BeforerAnthropic(data) }
 
+func GetBeforer(style string) (Beforer, error) { return chat.GetBeforer(style) }
+
 type Processer = chat.Processer
 
 func ProcesserOpenAI(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
@@ -30,6 +32,8 @@ func ProcesserOpenAiRes(ctx context.Context, pr io.Reader, stream bool, start ti
 func ProcesserAnthropic(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
 	return chat.ProcesserAnthropic(ctx, pr, stream, start, disablePerformanceTracking, disableTokenCounting)
 }
+
+func GetProcesser(style string) (Processer, error) { return chat.GetProcesser(style) }
 
 type ProvidersWithMeta = chat.ProvidersWithMeta
 

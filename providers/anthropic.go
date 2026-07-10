@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 
+	"github.com/atopos31/llmio/consts"
 	"github.com/tidwall/sjson"
 )
 
@@ -20,6 +22,19 @@ type Anthropic struct {
 	CustomModels []string `json:"custom_models"`
 	Proxy        string   `json:"proxy"`
 	AuthType     string   `json:"auth_type"` // x-api-key 或 bearer
+}
+
+func init() {
+	Register(consts.StyleAnthropic, func(config, proxy string) (Provider, error) {
+		var anthropic Anthropic
+		if err := json.Unmarshal([]byte(config), &anthropic); err != nil {
+			return nil, errors.New("invalid anthropic config")
+		}
+		if proxy != "" {
+			anthropic.Proxy = proxy
+		}
+		return &anthropic, nil
+	})
 }
 
 func (a *Anthropic) BuildReq(ctx context.Context, header http.Header, model string, rawBody []byte) (*http.Request, error) {

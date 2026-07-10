@@ -2,13 +2,10 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/atopos31/llmio/consts"
 )
 
 type ModelList struct {
@@ -47,40 +44,27 @@ func buildCustomModels(custom []string) []Model {
 	return models
 }
 
-// New 根据类型创建对应的 Provider 实例，并注入外层存储的代理。
+// Factory 根据 JSON 配置与外部代理地址构造 Provider。
+// 实现内部负责反序列化，并在外部 proxy 非空时覆盖配置中的 proxy。
+type Factory func(config, proxy string) (Provider, error)
+
+var factories = make(map[string]Factory)
+
+// Register 注册一个 Provider 构造器。
+// 重复注册同一类型会 panic，避免运行期覆盖导致行为不可预期。
+func Register(providerType string, factory Factory) {
+	if _, exists := factories[providerType]; exists {
+		panic("provider factory already registered: " + providerType)
+	}
+	factories[providerType] = factory
+}
+
+// New 根据类型从注册表创建 Provider 实例。
 // proxy 参数优先级高于 config 内的代理字段，避免双处配置导致遗漏。
-func New(Type, providerConfig, proxy string) (Provider, error) {
-	switch Type {
-	case consts.StyleOpenAI:
-		var openai OpenAI
-		if err := json.Unmarshal([]byte(providerConfig), &openai); err != nil {
-			return nil, errors.New("invalid openai config")
-		}
-		if proxy != "" {
-			openai.Proxy = proxy
-		}
-
-		return &openai, nil
-	case consts.StyleOpenAIRes:
-		var openaiRes OpenAIRes
-		if err := json.Unmarshal([]byte(providerConfig), &openaiRes); err != nil {
-			return nil, errors.New("invalid openai-res config")
-		}
-		if proxy != "" {
-			openaiRes.Proxy = proxy
-		}
-
-		return &openaiRes, nil
-	case consts.StyleAnthropic:
-		var anthropic Anthropic
-		if err := json.Unmarshal([]byte(providerConfig), &anthropic); err != nil {
-			return nil, errors.New("invalid anthropic config")
-		}
-		if proxy != "" {
-			anthropic.Proxy = proxy
-		}
-		return &anthropic, nil
-	default:
+func New(providerType, providerConfig, proxy string) (Provider, error) {
+	factory, ok := factories[providerType]
+	if !ok {
 		return nil, errors.New("unknown provider")
 	}
+	return factory(providerConfig, proxy)
 }

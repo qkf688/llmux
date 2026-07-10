@@ -126,7 +126,8 @@ func balanceChatVirtual(ctx context.Context, start time.Time, style string, befo
 				return nil, 0, "", result.FatalErr
 			}
 			if result.Success {
-				if providersWithMeta.VirtualStrategy == "round_robin" {
+				sel, _ := virtualmodel.GetSelector(providersWithMeta.VirtualStrategy)
+				if sel.RequiresAdvanceOnSuccess() {
 					virtualModelService := virtualmodel.NewService(models.DB)
 					virtualModelService.UpdateRoundRobinIndex(providersWithMeta.VirtualModelID)
 				}

@@ -46,16 +46,12 @@ func (s *Service) SelectRealModel(ctx context.Context, virtualModel *models.Virt
 		return nil, err
 	}
 
-	switch virtualModel.Strategy {
-	case "priority":
-		return s.selectByPriority(pool.mappings, pool.modelByID)
-	case "round_robin":
-		return s.selectByRoundRobin(virtualModel.ID, pool.mappings, pool.modelByID)
-	case "random":
-		return s.selectByRandom(pool.mappings, pool.modelByID)
-	default:
-		return s.selectByPriority(pool.mappings, pool.modelByID)
-	}
+	sel, _ := GetSelector(virtualModel.Strategy)
+	return sel.Select(ctx, s, SelectionContext{
+		VirtualModelID: virtualModel.ID,
+		Mappings:       pool.mappings,
+		ModelByID:      pool.modelByID,
+	})
 }
 
 // SelectRealModelsOrdered 根据虚拟模型和策略返回有序的真实模型列表。
@@ -66,14 +62,10 @@ func (s *Service) SelectRealModelsOrdered(ctx context.Context, virtualModel *mod
 		return nil, err
 	}
 
-	switch virtualModel.Strategy {
-	case "priority":
-		return s.selectOrderedByPriority(pool.mappings, pool.modelByID)
-	case "round_robin":
-		return s.selectOrderedByRoundRobin(virtualModel.ID, pool.mappings, pool.modelByID)
-	case "random":
-		return s.selectOrderedByRandom(pool.mappings, pool.modelByID)
-	default:
-		return s.selectOrderedByPriority(pool.mappings, pool.modelByID)
-	}
+	sel, _ := GetSelector(virtualModel.Strategy)
+	return sel.SelectOrdered(ctx, s, SelectionContext{
+		VirtualModelID: virtualModel.ID,
+		Mappings:       pool.mappings,
+		ModelByID:      pool.modelByID,
+	})
 }

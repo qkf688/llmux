@@ -7,7 +7,10 @@ import (
 )
 
 func TestDefaultSettingsResponse(t *testing.T) {
-	response := defaultSettingsResponse()
+	response, err := buildSettingsResponse(nil)
+	if err != nil {
+		t.Fatalf("buildSettingsResponse error: %v", err)
+	}
 
 	if !response.StrictCapabilityMatch {
 		t.Fatalf("expected StrictCapabilityMatch default to be true")
@@ -27,8 +30,6 @@ func TestDefaultSettingsResponse(t *testing.T) {
 }
 
 func TestApplySettingToResponse(t *testing.T) {
-	response := defaultSettingsResponse()
-
 	settings := []models.Setting{
 		{Key: models.SettingKeyAutoWeightDecay, Value: "true"},
 		{Key: models.SettingKeyAutoWeightDecayDefault, Value: "88"},
@@ -37,8 +38,9 @@ func TestApplySettingToResponse(t *testing.T) {
 		{Key: models.SettingKeyReasoningEffortDefaultValue, Value: "high"},
 	}
 
-	for _, setting := range settings {
-		applySettingToResponse(&response, setting)
+	response, err := buildSettingsResponse(settings)
+	if err != nil {
+		t.Fatalf("buildSettingsResponse error: %v", err)
 	}
 
 	if !response.AutoWeightDecay {
@@ -62,16 +64,15 @@ func TestApplySettingToResponse(t *testing.T) {
 }
 
 func TestApplySettingToResponseKeepsDefaultsOnInvalidValues(t *testing.T) {
-	response := defaultSettingsResponse()
+	settings := []models.Setting{
+		{Key: models.SettingKeyAutoWeightDecayDefault, Value: "invalid-int"},
+		{Key: models.SettingKeyTemplateFuzzyMatchSeparators, Value: "invalid-json"},
+	}
 
-	applySettingToResponse(&response, models.Setting{
-		Key:   models.SettingKeyAutoWeightDecayDefault,
-		Value: "invalid-int",
-	})
-	applySettingToResponse(&response, models.Setting{
-		Key:   models.SettingKeyTemplateFuzzyMatchSeparators,
-		Value: "invalid-json",
-	})
+	response, err := buildSettingsResponse(settings)
+	if err != nil {
+		t.Fatalf("buildSettingsResponse error: %v", err)
+	}
 
 	if response.AutoWeightDecayDefault != 100 {
 		t.Fatalf("expected AutoWeightDecayDefault to keep default 100, got %d", response.AutoWeightDecayDefault)

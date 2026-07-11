@@ -1,69 +1,23 @@
-import { useCallback } from "react";
-import { toast } from "sonner";
-import { updateHealthCheckSettings, type HealthCheckSettings } from "@/lib/api";
-import { toErrorMessage } from "@/lib/errors";
-import type { HealthCheckSettingsProps } from "../types";
+import { updateHealthCheckSettings } from "@/lib/api";
 import { healthCheckSettingsEditorStore, useSettingsStore } from "@/stores/settings";
-import { useSettingsEditorSync } from "../../hooks/use-settings-editor-sync";
+import { createSettingsFormHook } from "../../hooks/create-settings-form-hook";
+import type { HealthCheckSettingsProps } from "../types";
 
+const useHealthCheckSettingsFormInternal = createSettingsFormHook({
+  useStore: () => useSettingsStore(healthCheckSettingsEditorStore, (state) => state),
+  syncMode: "always",
+  successMessage: "健康检测设置保存成功",
+  save: updateHealthCheckSettings,
+  errorMessagePrefix: "保存健康检测设置失败",
+});
+
+/** props 命名与通用 settings 不同，在此适配后交给工厂 hook */
 export function useHealthCheckSettingsForm({
   healthCheckSettings,
   onHealthCheckSettingsChange,
 }: HealthCheckSettingsProps) {
-  const {
-    saving,
-    localSettings,
-    hasChanges,
-    setSaving,
-    syncFromServerSettings,
-    updateLocalSettings: updateLocalSettingsInternal,
-    markSaved,
-    resetTransient,
-  } = useSettingsStore(healthCheckSettingsEditorStore, (state) => state);
-
-  useSettingsEditorSync({
-    syncMode: "always",
-    serverSettings: healthCheckSettings,
-    syncFromServerSettings,
-    resetTransient,
+  return useHealthCheckSettingsFormInternal({
+    settings: healthCheckSettings,
+    onSettingsChange: onHealthCheckSettingsChange,
   });
-
-  const updateLocalSettings = useCallback(
-    (updates: Partial<HealthCheckSettings>) => {
-      updateLocalSettingsInternal(updates);
-    },
-    [updateLocalSettingsInternal]
-  );
-
-  const handleSave = useCallback(async () => {
-    if (!localSettings) {
-      return;
-    }
-
-    try {
-      setSaving(true);
-      const updated = await updateHealthCheckSettings(localSettings);
-      markSaved(updated);
-      onHealthCheckSettingsChange(updated);
-      toast.success("健康检测设置保存成功");
-    } catch (error) {
-      toast.error(`保存健康检测设置失败: ${toErrorMessage(error)}`);
-    } finally {
-      setSaving(false);
-    }
-  }, [localSettings, markSaved, onHealthCheckSettingsChange, setSaving]);
-
-  const handleReset = useCallback(() => {
-    syncFromServerSettings(healthCheckSettings);
-  }, [healthCheckSettings, syncFromServerSettings]);
-
-  return {
-    saving,
-    localSettings,
-    hasChanges,
-    updateLocalSettings,
-    handleSave,
-    handleReset,
-  };
 }
-

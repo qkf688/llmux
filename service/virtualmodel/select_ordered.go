@@ -20,15 +20,11 @@ func (s *Service) selectOrderedByPriority(mappings []models.VirtualModelMapping,
 
 	ordered := make([]OrderedRealModel, 0, len(sorted))
 	for _, mapping := range sorted {
-		model, ok := modelByID[mapping.RealModelID]
+		model, ok := findModelByID(mapping.RealModelID, modelByID)
 		if !ok {
 			continue
 		}
-		ordered = append(ordered, OrderedRealModel{
-			Model:    model,
-			Priority: mapping.Priority,
-			Weight:   mapping.Weight,
-		})
+		ordered = append(ordered, buildOrderedRealModel(mapping, model))
 	}
 
 	slog.Debug("selected ordered models by priority", "count", len(ordered), "strategy", "priority")
@@ -49,15 +45,11 @@ func (s *Service) selectOrderedByRoundRobin(virtualModelID uint, mappings []mode
 	for i := 0; i < len(mappings); i++ {
 		idx := (currentIndex + i) % len(mappings)
 		mapping := mappings[idx]
-		model, ok := modelByID[mapping.RealModelID]
+		model, ok := findModelByID(mapping.RealModelID, modelByID)
 		if !ok {
 			continue
 		}
-		ordered = append(ordered, OrderedRealModel{
-			Model:    model,
-			Priority: mapping.Priority,
-			Weight:   mapping.Weight,
-		})
+		ordered = append(ordered, buildOrderedRealModel(mapping, model))
 	}
 
 	slog.Debug("selected ordered models by round_robin", "count", len(ordered), "start_index", currentIndex)
@@ -68,15 +60,11 @@ func (s *Service) selectOrderedByRoundRobin(virtualModelID uint, mappings []mode
 func (s *Service) selectOrderedByRandom(mappings []models.VirtualModelMapping, modelByID map[uint]models.Model) ([]OrderedRealModel, error) {
 	ordered := make([]OrderedRealModel, 0, len(mappings))
 	for _, mapping := range mappings {
-		model, ok := modelByID[mapping.RealModelID]
+		model, ok := findModelByID(mapping.RealModelID, modelByID)
 		if !ok {
 			continue
 		}
-		ordered = append(ordered, OrderedRealModel{
-			Model:    model,
-			Priority: mapping.Priority,
-			Weight:   mapping.Weight,
-		})
+		ordered = append(ordered, buildOrderedRealModel(mapping, model))
 	}
 
 	for i := len(ordered) - 1; i > 0; i-- {

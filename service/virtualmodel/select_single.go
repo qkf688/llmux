@@ -24,7 +24,7 @@ func (s *Service) selectByPriority(mappings []models.VirtualModelMapping, modelB
 	}
 
 	if len(highPriorityMappings) == 1 {
-		model, ok := modelByID[highPriorityMappings[0].RealModelID]
+		model, ok := findModelByID(highPriorityMappings[0].RealModelID, modelByID)
 		if !ok {
 			return nil, errModelNotFoundInMap
 		}
@@ -41,7 +41,7 @@ func (s *Service) selectByPriority(mappings []models.VirtualModelMapping, modelB
 		return nil, fmt.Errorf("failed to select by weight: %w", err)
 	}
 
-	model, ok := modelByID[*selectedID]
+	model, ok := findModelByID(*selectedID, modelByID)
 	if !ok {
 		return nil, errSelectedModelNotFound
 	}
@@ -61,7 +61,7 @@ func (s *Service) selectByRoundRobin(virtualModelID uint, mappings []models.Virt
 	}
 
 	selectedMapping := mappings[currentIndex]
-	model, ok := modelByID[selectedMapping.RealModelID]
+	model, ok := findModelByID(selectedMapping.RealModelID, modelByID)
 	if !ok {
 		return nil, errSelectedModelNotFound
 	}
@@ -84,7 +84,7 @@ func (s *Service) selectByRandom(mappings []models.VirtualModelMapping, modelByI
 		return nil, fmt.Errorf("failed to select randomly: %w", err)
 	}
 
-	model, ok := modelByID[*selectedID]
+	model, ok := findModelByID(*selectedID, modelByID)
 	if !ok {
 		return nil, errSelectedModelNotFound
 	}

@@ -3,7 +3,6 @@ package chat
 import (
 	"context"
 	"log/slog"
-	"strconv"
 
 	"github.com/atopos31/llmio/models"
 	"gorm.io/gorm"
@@ -21,45 +20,36 @@ func applySuccessAdjustments(ctx context.Context, modelProviderID uint) {
 
 // applyWeightIncreaseByID 根据配置提升权重
 func applyWeightIncreaseByID(ctx context.Context, modelProviderID uint) {
-	step := getAutoWeightIncreaseStep(ctx)
-	max := getAutoWeightIncreaseMax(ctx)
-	if step <= 0 || max <= 0 {
-		return
-	}
-
-	mp, err := gorm.G[models.ModelWithProvider](models.DB).Where("id = ?", modelProviderID).First(ctx)
-	if err != nil {
-		return
-	}
-
-	if max < mp.Weight {
-		max = mp.Weight
-	}
-
-	newWeight := mp.Weight + step
-	if newWeight > max {
-		newWeight = max
-	}
-
-	if newWeight == mp.Weight {
-		return
-	}
-
-	if _, err := gorm.G[models.ModelWithProvider](models.DB).
-		Where("id = ?", modelProviderID).
-		Update(ctx, "weight", newWeight); err != nil {
-		slog.Error("update weight increase error", "error", err, "id", modelProviderID)
-		return
-	}
-
-	slog.Info("weight increased after success", "id", modelProviderID, "old_weight", mp.Weight, "new_weight", newWeight)
+	adjustIntField(ctx, modelProviderID,
+		getAutoWeightIncreaseStep, getAutoWeightIncreaseMax,
+		"weight", "old_weight",
+		func(max int) bool { return max <= 0 }, // 权重 max=0 也表示禁用
+	)
 }
 
 // applyPriorityIncreaseByID 根据配置提升优先级
 func applyPriorityIncreaseByID(ctx context.Context, modelProviderID uint) {
-	step := getAutoPriorityIncreaseStep(ctx)
-	max := getAutoPriorityIncreaseMax(ctx)
-	if step <= 0 || max < 0 {
+	adjustIntField(ctx, modelProviderID,
+		getAutoPriorityIncreaseStep, getAutoPriorityIncreaseMax,
+		"priority", "old_priority",
+		func(max int) bool { return max < 0 }, // 优先级 max=0 是有效值（表示不允许增加）
+	)
+}
+
+// adjustIntField 泛化权重/优先级提升逻辑。
+// maxDisabled 判断 max 是否表示禁用：权重 max<=0 禁用，优先级 max<0 禁用。
+func adjustIntField(
+	ctx context.Context,
+	modelProviderID uint,
+	getStep func(context.Context) int,
+	getMax func(context.Context) int,
+	fieldName string,   // "weight" 或 "priority"
+	logFieldName string, // "old_weight" 或 "old_priority"
+	maxDisabled func(int) bool,
+) {
+	step := getStep(ctx)
+	max := getMax(ctx)
+	if step <= 0 || maxDisabled(max) {
 		return
 	}
 
@@ -68,98 +58,57 @@ func applyPriorityIncreaseByID(ctx context.Context, modelProviderID uint) {
 		return
 	}
 
-	if max < mp.Priority {
-		max = mp.Priority
+	currentValue := mp.Weight
+	if fieldName == "priority" {
+		currentValue = mp.Priority
 	}
 
-	newPriority := mp.Priority + step
-	if newPriority > max {
-		newPriority = max
+	if max < currentValue {
+		max = currentValue
 	}
 
-	if newPriority == mp.Priority {
+	newValue := currentValue + step
+	if newValue > max {
+		newValue = max
+	}
+
+	if newValue == currentValue {
 		return
 	}
 
 	if _, err := gorm.G[models.ModelWithProvider](models.DB).
 		Where("id = ?", modelProviderID).
-		Update(ctx, "priority", newPriority); err != nil {
-		slog.Error("update priority increase error", "error", err, "id", modelProviderID)
+		Update(ctx, fieldName, newValue); err != nil {
+		slog.Error("update "+fieldName+" increase error", "error", err, "id", modelProviderID)
 		return
 	}
 
-	slog.Info("priority increased after success", "id", modelProviderID, "old_priority", mp.Priority, "new_priority", newPriority)
+	slog.Info(fieldName+" increased after success", "id", modelProviderID, logFieldName, currentValue, "new_"+fieldName, newValue)
 }
 
 // getAutoWeightIncreaseStep 获取自动权重增加步长
 func getAutoWeightIncreaseStep(ctx context.Context) int {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyAutoWeightIncreaseStep).
-		First(ctx)
-	if err != nil {
-		return 1
-	}
-	step, err := strconv.Atoi(setting.Value)
-	if err != nil || step < 1 {
-		return 1
-	}
-	return step
+	return models.GetSettingInt(ctx, models.SettingKeyAutoWeightIncreaseStep, 1, 1)
 }
 
 // getAutoWeightIncreaseMax 获取自动权重增加上限
 func getAutoWeightIncreaseMax(ctx context.Context) int {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyAutoWeightIncreaseMax).
-		First(ctx)
-	if err != nil {
-		return 100
-	}
-	max, err := strconv.Atoi(setting.Value)
-	if err != nil || max < 1 {
-		return 100
-	}
-	return max
+	return models.GetSettingInt(ctx, models.SettingKeyAutoWeightIncreaseMax, 100, 1)
 }
 
 // getAutoPriorityIncreaseStep 获取自动优先级增加步长
 func getAutoPriorityIncreaseStep(ctx context.Context) int {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyAutoPriorityIncreaseStep).
-		First(ctx)
-	if err != nil {
-		return 1
-	}
-	step, err := strconv.Atoi(setting.Value)
-	if err != nil || step < 1 {
-		return 1
-	}
-	return step
+	return models.GetSettingInt(ctx, models.SettingKeyAutoPriorityIncreaseStep, 1, 1)
 }
 
 // getAutoPriorityIncreaseMax 获取自动优先级增加上限
 func getAutoPriorityIncreaseMax(ctx context.Context) int {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyAutoPriorityIncreaseMax).
-		First(ctx)
-	if err != nil {
-		return 100
-	}
-	max, err := strconv.Atoi(setting.Value)
-	if err != nil || max < 0 {
-		return 100
-	}
-	return max
+	return models.GetSettingInt(ctx, models.SettingKeyAutoPriorityIncreaseMax, 100, 0)
 }
 
 // getAutoSuccessIncrease 获取成功自增开关
 func getAutoSuccessIncrease(ctx context.Context) bool {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyAutoSuccessIncrease).
-		First(ctx)
-	if err != nil {
-		return true
-	}
-	return setting.Value == "true"
+	return models.GetSettingBool(ctx, models.SettingKeyAutoSuccessIncrease, true)
 }
 
 // applyWeightDecayByModelProviderID 根据配置对指定关联应用权重衰减
@@ -239,59 +188,25 @@ func applyPriorityDecayByModelProviderID(ctx context.Context, modelProviderID ui
 
 // shouldCountHealthCheckSuccess 健康检测成功是否计入成功调用
 func shouldCountHealthCheckSuccess(ctx context.Context) bool {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyHealthCheckCountAsSuccess).
-		First(ctx)
-	if err != nil {
-		return true
-	}
-	return setting.Value == "true"
+	return models.GetSettingBool(ctx, models.SettingKeyHealthCheckCountAsSuccess, true)
 }
 
 // shouldCountHealthCheckFailure 健康检测失败是否计入失败调用
 func shouldCountHealthCheckFailure(ctx context.Context) bool {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyHealthCheckCountAsFailure).
-		First(ctx)
-	if err != nil {
-		return false
-	}
-	return setting.Value == "true"
+	return models.GetSettingBool(ctx, models.SettingKeyHealthCheckCountAsFailure, false)
 }
 
 // getAutoPriorityDecayDisableEnabled 获取自动优先级衰减禁用开关
 func getAutoPriorityDecayDisableEnabled(ctx context.Context) bool {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyAutoPriorityDecayDisableEnabled).
-		First(ctx)
-	if err != nil {
-		return true // 默认启用自动禁用功能
-	}
-	return setting.Value == "true"
+	return models.GetSettingBool(ctx, models.SettingKeyAutoPriorityDecayDisableEnabled, true)
 }
 
 func getConsecutiveFailureThreshold(ctx context.Context) int {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyConsecutiveFailureThreshold).
-		First(ctx)
-	if err != nil {
-		return 3
-	}
-	threshold, err := strconv.Atoi(setting.Value)
-	if err != nil || threshold < 1 {
-		return 3
-	}
-	return threshold
+	return models.GetSettingInt(ctx, models.SettingKeyConsecutiveFailureThreshold, 3, 1)
 }
 
 func getConsecutiveFailureDisableEnabled(ctx context.Context) bool {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyConsecutiveFailureDisableEnabled).
-		First(ctx)
-	if err != nil {
-		return true
-	}
-	return setting.Value == "true"
+	return models.GetSettingBool(ctx, models.SettingKeyConsecutiveFailureDisableEnabled, true)
 }
 
 func incrementConsecutiveFailures(ctx context.Context, modelProviderID uint, providerName, providerModel string) {

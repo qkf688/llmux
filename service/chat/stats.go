@@ -15,33 +15,11 @@ func recordRequestStats(ctx context.Context, at time.Time, modelName string) err
 	date := at.Format("2006-01-02")
 	hour := at.Hour()
 
-	if err := db.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "id"}},
-		DoUpdates: clause.Assignments(map[string]any{
-			"reqs":       gorm.Expr("reqs + 1"),
-			"updated_at": now,
-		}),
-	}).Create(&models.StatsTotal{ID: 1, Reqs: 1}).Error; err != nil {
-		return err
-	}
-
-	if err := db.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "date"}},
-		DoUpdates: clause.Assignments(map[string]any{
-			"reqs":       gorm.Expr("reqs + 1"),
-			"updated_at": now,
-		}),
-	}).Create(&models.StatsDaily{Date: date, Reqs: 1}).Error; err != nil {
-		return err
-	}
-
-	if err := db.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "date"}, {Name: "hour"}},
-		DoUpdates: clause.Assignments(map[string]any{
-			"reqs":       gorm.Expr("reqs + 1"),
-			"updated_at": now,
-		}),
-	}).Create(&models.StatsHourly{Date: date, Hour: hour, Reqs: 1}).Error; err != nil {
+	if err := upsertTimeBasedStats(db, now, date, hour, "reqs", gorm.Expr("reqs + 1"),
+		func() *models.StatsTotal { return &models.StatsTotal{ID: 1, Reqs: 1} },
+		func() *models.StatsDaily { return &models.StatsDaily{Date: date, Reqs: 1} },
+		func() *models.StatsHourly { return &models.StatsHourly{Date: date, Hour: hour, Reqs: 1} },
+	); err != nil {
 		return err
 	}
 
@@ -145,33 +123,45 @@ func recordTokenStats(ctx context.Context, at time.Time, tokens int64) error {
 	date := at.Format("2006-01-02")
 	hour := at.Hour()
 
+	return upsertTimeBasedStats(db, now, date, hour, "tokens", gorm.Expr("tokens + ?", tokens),
+		func() *models.StatsTotal { return &models.StatsTotal{ID: 1, Tokens: tokens} },
+		func() *models.StatsDaily { return &models.StatsDaily{Date: date, Tokens: tokens} },
+		func() *models.StatsHourly { return &models.StatsHourly{Date: date, Hour: hour, Tokens: tokens} },
+	)
+}
+
+// upsertTimeBasedStats 处理 StatsTotal、StatsDaily、StatsHourly 三个时间维度表的 upsert 逻辑。
+// makeTotal/makeDaily/makeHourly 构造首次插入的记录指针（含初始值），updateExpr 为冲突时的更新表达式。
+func upsertTimeBasedStats(
+	db *gorm.DB, now time.Time, date string, hour int,
+	fieldName string, updateExpr clause.Expr,
+	makeTotal func() *models.StatsTotal,
+	makeDaily func() *models.StatsDaily,
+	makeHourly func() *models.StatsHourly,
+) error {
+	updates := clause.Assignments(map[string]any{
+		fieldName:    updateExpr,
+		"updated_at": now,
+	})
+
 	if err := db.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "id"}},
-		DoUpdates: clause.Assignments(map[string]any{
-			"tokens":     gorm.Expr("tokens + ?", tokens),
-			"updated_at": now,
-		}),
-	}).Create(&models.StatsTotal{ID: 1, Tokens: tokens}).Error; err != nil {
+		Columns:   []clause.Column{{Name: "id"}},
+		DoUpdates: updates,
+	}).Create(makeTotal()).Error; err != nil {
 		return err
 	}
 
 	if err := db.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "date"}},
-		DoUpdates: clause.Assignments(map[string]any{
-			"tokens":     gorm.Expr("tokens + ?", tokens),
-			"updated_at": now,
-		}),
-	}).Create(&models.StatsDaily{Date: date, Tokens: tokens}).Error; err != nil {
+		Columns:   []clause.Column{{Name: "date"}},
+		DoUpdates: updates,
+	}).Create(makeDaily()).Error; err != nil {
 		return err
 	}
 
 	if err := db.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "date"}, {Name: "hour"}},
-		DoUpdates: clause.Assignments(map[string]any{
-			"tokens":     gorm.Expr("tokens + ?", tokens),
-			"updated_at": now,
-		}),
-	}).Create(&models.StatsHourly{Date: date, Hour: hour, Tokens: tokens}).Error; err != nil {
+		Columns:   []clause.Column{{Name: "date"}, {Name: "hour"}},
+		DoUpdates: updates,
+	}).Create(makeHourly()).Error; err != nil {
 		return err
 	}
 

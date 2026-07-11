@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/handler/settings"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/service"
@@ -84,7 +84,7 @@ func PreviewCleanInvalid(c *gin.Context) {
 
 	data, err := fetchCleanData(ctx, true)
 	if err != nil {
-		common.InternalServerError(c, "Failed to "+err.Error())
+		httpresp.InternalServerError(c, "Failed to "+err.Error())
 		return
 	}
 	modelByID := indexModelsByID(data.allModels)
@@ -116,7 +116,7 @@ func PreviewCleanInvalid(c *gin.Context) {
 		},
 	)
 
-	common.Success(c, previews)
+	httpresp.Success(c, previews)
 }
 
 // CleanInvalidAssociations 清除无效关联：删除提供商不存在或模型不存在的关联。
@@ -125,7 +125,7 @@ func CleanInvalidAssociations(c *gin.Context) {
 
 	data, err := fetchCleanData(ctx, false)
 	if err != nil {
-		common.InternalServerError(c, "Failed to "+err.Error())
+		httpresp.InternalServerError(c, "Failed to "+err.Error())
 		return
 	}
 
@@ -146,7 +146,7 @@ func CleanInvalidAssociations(c *gin.Context) {
 		},
 	)
 
-	common.Success(c, map[string]interface{}{
+	httpresp.Success(c, map[string]interface{}{
 		"removed": removedCount,
 	})
 }

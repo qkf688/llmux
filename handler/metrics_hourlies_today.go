@@ -3,7 +3,7 @@ package handler
 import (
 	"time"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 )
@@ -29,7 +29,7 @@ func MetricsHourliesToday(c *gin.Context) {
 	if err := models.DB.WithContext(c.Request.Context()).
 		Raw("SELECT `hour` as hour, COALESCE(reqs,0) as reqs, COALESCE(tokens,0) as tokens FROM `stats_hourlies` WHERE `date` = ? ORDER BY `hour` ASC", dateStr).
 		Scan(&rows).Error; err != nil {
-		common.InternalServerError(c, "Failed to query hourly metrics: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to query hourly metrics: "+err.Error())
 		return
 	}
 
@@ -51,5 +51,5 @@ func MetricsHourliesToday(c *gin.Context) {
 		result = append(result, HourlyMetricsRes{Hour: hour, Reqs: row.Reqs, Tokens: row.Tokens})
 	}
 
-	common.Success(c, result)
+	httpresp.Success(c, result)
 }

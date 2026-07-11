@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/repository"
 	"github.com/gin-gonic/gin"
@@ -29,15 +29,15 @@ func DeleteLog(c *gin.Context) {
 
 	affected, err := repos().ChatLog.HardDelete(ctx, id)
 	if err != nil {
-		common.InternalServerError(c, "Failed to delete log: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to delete log: "+err.Error())
 		return
 	}
 	if affected == 0 {
-		common.NotFound(c, "Log not found")
+		httpresp.NotFound(c, "Log not found")
 		return
 	}
 
-	common.Success(c, nil)
+	httpresp.Success(c, nil)
 }
 
 // BatchDeleteLogs 批量删除日志。
@@ -47,7 +47,7 @@ func BatchDeleteLogs(c *gin.Context) {
 		return
 	}
 	if len(req.IDs) == 0 {
-		common.BadRequest(c, "No IDs provided")
+		httpresp.BadRequest(c, "No IDs provided")
 		return
 	}
 
@@ -58,11 +58,11 @@ func BatchDeleteLogs(c *gin.Context) {
 
 	affected, err := repos().ChatLog.HardDeleteByIDs(ctx, req.IDs)
 	if err != nil {
-		common.InternalServerError(c, "Failed to delete logs: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to delete logs: "+err.Error())
 		return
 	}
 
-	common.Success(c, map[string]interface{}{
+	httpresp.Success(c, map[string]interface{}{
 		"deleted": affected,
 	})
 }
@@ -76,11 +76,11 @@ func ClearAllLogs(c *gin.Context) {
 
 	affected, err := repos().ChatLog.HardDeleteAll(ctx)
 	if err != nil {
-		common.InternalServerError(c, "Failed to clear logs: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to clear logs: "+err.Error())
 		return
 	}
 
-	common.Success(c, map[string]interface{}{
+	httpresp.Success(c, map[string]interface{}{
 		"deleted": affected,
 	})
 }
@@ -96,17 +96,17 @@ func ClearFilteredLogs(c *gin.Context) {
 	}
 
 	if filter.ProviderName == "" && filter.Name == "" && filter.Status == "" && filter.Style == "" && filter.UserAgent == "" {
-		common.BadRequest(c, "At least one filter parameter is required")
+		httpresp.BadRequest(c, "At least one filter parameter is required")
 		return
 	}
 
 	deleted, err := repos().ChatLog.HardDeleteFiltered(c.Request.Context(), filter)
 	if err != nil {
-		common.InternalServerError(c, "Failed to clear logs: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to clear logs: "+err.Error())
 		return
 	}
 
-	common.Success(c, map[string]interface{}{
+	httpresp.Success(c, map[string]interface{}{
 		"deleted": deleted,
 	})
 }

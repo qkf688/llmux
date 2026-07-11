@@ -3,7 +3,7 @@ package settings
 import (
 	"log/slog"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/service/settings"
 	"github.com/gin-gonic/gin"
@@ -20,17 +20,17 @@ func GetSettings(c *gin.Context) {
 	ctx := c.Request.Context()
 	settingsList, err := gorm.G[models.Setting](models.DB).Find(ctx)
 	if err != nil {
-		common.InternalServerError(c, "Failed to get settings: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to get settings: "+err.Error())
 		return
 	}
 
 	response, err := buildSettingsResponse(settingsList)
 	if err != nil {
-		common.InternalServerError(c, "Failed to build settings response: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to build settings response: "+err.Error())
 		return
 	}
 
-	common.Success(c, response)
+	httpresp.Success(c, response)
 }
 
 // buildSettingsResponse 根据 schema 默认值与数据库值构建 SettingsResponse。

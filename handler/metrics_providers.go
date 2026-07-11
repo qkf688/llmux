@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 )
@@ -23,7 +23,7 @@ func ProviderMetrics(c *gin.Context) {
 	if err := models.DB.WithContext(c.Request.Context()).
 		Order("total_requests DESC").
 		Find(&rows).Error; err != nil {
-		common.InternalServerError(c, "Failed to query provider metrics: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to query provider metrics: "+err.Error())
 		return
 	}
 
@@ -47,5 +47,5 @@ func ProviderMetrics(c *gin.Context) {
 		})
 	}
 
-	common.Success(c, res)
+	httpresp.Success(c, res)
 }

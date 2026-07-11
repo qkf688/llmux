@@ -1,7 +1,7 @@
 package healthchecklogs
 
 import (
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/repository"
 	"github.com/gin-gonic/gin"
@@ -29,11 +29,11 @@ func GetHealthCheckLogs(c *gin.Context) {
 		PageSize: pageSize,
 	})
 	if err != nil {
-		common.InternalServerError(c, "Failed to query health check logs: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to query health check logs: "+err.Error())
 		return
 	}
 
-	common.Success(c, map[string]any{
+	httpresp.Success(c, map[string]any{
 		"data":      list.Logs,
 		"total":     list.Total,
 		"page":      page,
@@ -46,11 +46,11 @@ func GetHealthCheckLogs(c *gin.Context) {
 func ClearHealthCheckLogs(c *gin.Context) {
 	deleted, err := repos().HealthCheckLog.HardDeleteAll(c.Request.Context())
 	if err != nil {
-		common.InternalServerError(c, "Failed to clear health check logs: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to clear health check logs: "+err.Error())
 		return
 	}
 
-	common.Success(c, map[string]interface{}{
+	httpresp.Success(c, map[string]interface{}{
 		"deleted": deleted,
 	})
 }

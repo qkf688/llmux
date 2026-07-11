@@ -4,7 +4,7 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -18,20 +18,20 @@ func GetModelProviderStatus(c *gin.Context) {
 	providerModel := c.Query("provider_model")
 
 	if providerIDStr == "" || modelName == "" || providerModel == "" {
-		common.BadRequest(c, "provider_id, model_name and provider_model query parameters are required")
+		httpresp.BadRequest(c, "provider_id, model_name and provider_model query parameters are required")
 		return
 	}
 
 	providerID, err := strconv.ParseUint(providerIDStr, 10, 64)
 	if err != nil {
-		common.BadRequest(c, "Invalid provider_id format")
+		httpresp.BadRequest(c, "Invalid provider_id format")
 		return
 	}
 
 	ctx := c.Request.Context()
 	provider, err := repos().Provider.Get(ctx, uint(providerID))
 	if err != nil {
-		common.InternalServerError(c, "Failed to retrieve provider: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to retrieve provider: "+err.Error())
 		return
 	}
 
@@ -43,7 +43,7 @@ func GetModelProviderStatus(c *gin.Context) {
 		Order("created_at DESC").
 		Find(ctx)
 	if err != nil {
-		common.InternalServerError(c, "Failed to retrieve chat log: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to retrieve chat log: "+err.Error())
 		return
 	}
 
@@ -52,7 +52,7 @@ func GetModelProviderStatus(c *gin.Context) {
 		status = append(status, log.Status == "success")
 	}
 	slices.Reverse(status)
-	common.Success(c, status)
+	httpresp.Success(c, status)
 }
 
 // GetModelProviderHealthStatus 获取模型提供商的健康检测结果。
@@ -62,13 +62,13 @@ func GetModelProviderHealthStatus(c *gin.Context) {
 	limitStr := c.Query("limit")
 
 	if modelProviderIDStr == "" {
-		common.BadRequest(c, "model_provider_id query parameter is required")
+		httpresp.BadRequest(c, "model_provider_id query parameter is required")
 		return
 	}
 
 	modelProviderID, err := strconv.ParseUint(modelProviderIDStr, 10, 64)
 	if err != nil {
-		common.BadRequest(c, "Invalid model_provider_id format")
+		httpresp.BadRequest(c, "Invalid model_provider_id format")
 		return
 	}
 
@@ -76,7 +76,7 @@ func GetModelProviderHealthStatus(c *gin.Context) {
 	if limitStr != "" {
 		parsed, parseErr := strconv.Atoi(limitStr)
 		if parseErr != nil || parsed < 1 || parsed > 50 {
-			common.BadRequest(c, "Invalid limit parameter (must be between 1 and 50)")
+			httpresp.BadRequest(c, "Invalid limit parameter (must be between 1 and 50)")
 			return
 		}
 		limit = parsed
@@ -88,7 +88,7 @@ func GetModelProviderHealthStatus(c *gin.Context) {
 		Limit(limit).
 		Find(c.Request.Context())
 	if err != nil {
-		common.InternalServerError(c, "Failed to retrieve health check logs: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to retrieve health check logs: "+err.Error())
 		return
 	}
 
@@ -97,5 +97,5 @@ func GetModelProviderHealthStatus(c *gin.Context) {
 		status = append(status, log.Status == "success")
 	}
 	slices.Reverse(status)
-	common.Success(c, status)
+	httpresp.Success(c, status)
 }

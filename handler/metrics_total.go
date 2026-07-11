@@ -3,7 +3,7 @@ package handler
 import (
 	"errors"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -18,13 +18,13 @@ func MetricsTotal(c *gin.Context) {
 		Take(&total).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			common.Success(c, MetricsRes{Reqs: 0, Tokens: 0})
+			httpresp.Success(c, MetricsRes{Reqs: 0, Tokens: 0})
 			return
 		}
-		common.InternalServerError(c, "Failed to query total metrics: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to query total metrics: "+err.Error())
 		return
 	}
 
-	common.Success(c, MetricsRes{Reqs: total.Reqs, Tokens: total.Tokens})
+	httpresp.Success(c, MetricsRes{Reqs: total.Reqs, Tokens: total.Tokens})
 }
 

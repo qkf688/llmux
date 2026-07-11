@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/consts"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/providers"
@@ -49,17 +49,17 @@ func TestReactHandler(c *gin.Context) {
 	ctx := c.Request.Context()
 	id := c.Param("id")
 	if id == "" {
-		common.BadRequest(c, "Invalid ID format")
+		httpresp.BadRequest(c, "Invalid ID format")
 		return
 	}
 
 	chatModel, err := FindChatModel(ctx, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			common.NotFound(c, "ModelWithProvider not found")
+			httpresp.NotFound(c, "ModelWithProvider not found")
 			return
 		}
-		common.InternalServerError(c, "Database error")
+		httpresp.InternalServerError(c, "Database error")
 		return
 	}
 

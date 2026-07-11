@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"strconv"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -15,30 +15,30 @@ import (
 func GetModelProviders(c *gin.Context) {
 	modelIDStr := c.Query("model_id")
 	if modelIDStr == "" {
-		common.BadRequest(c, "model_id query parameter is required")
+		httpresp.BadRequest(c, "model_id query parameter is required")
 		return
 	}
 
 	modelID, err := strconv.ParseUint(modelIDStr, 10, 64)
 	if err != nil {
-		common.BadRequest(c, "Invalid model_id format")
+		httpresp.BadRequest(c, "Invalid model_id format")
 		return
 	}
 
 	modelProviders, err := repos().ModelWithProvider.ListByModelID(c.Request.Context(), uint(modelID))
 	if err != nil {
-		common.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err.Error())
 		return
 	}
 
-	common.Success(c, modelProviders)
+	httpresp.Success(c, modelProviders)
 }
 
 // CreateModelProvider 创建模型提供商关联。
 func CreateModelProvider(c *gin.Context) {
 	var req ModelWithProviderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
 		return
 	}
 
@@ -46,7 +46,7 @@ func CreateModelProvider(c *gin.Context) {
 
 	// 检查模型是否存在（手动关联始终允许，与现网一致）
 	if _, err := repos().Model.Get(ctx, req.ModelID); err != nil {
-		common.InternalServerError(c, "Failed to get model: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to get model: "+err.Error())
 		return
 	}
 
@@ -78,7 +78,7 @@ func CreateModelProvider(c *gin.Context) {
 	modelProvider.Status = &defaultStatus
 
 	if err := repos().ModelWithProvider.Create(ctx, &modelProvider); err != nil {
-		common.InternalServerError(c, "Failed to create model-provider association: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to create model-provider association: "+err.Error())
 		return
 	}
 
@@ -91,7 +91,7 @@ func CreateModelProvider(c *gin.Context) {
 		}
 	}
 
-	common.Success(c, modelProvider)
+	httpresp.Success(c, modelProvider)
 }
 
 // UpdateModelProvider 更新模型提供商关联。
@@ -99,13 +99,13 @@ func UpdateModelProvider(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 64)
 	if err != nil {
-		common.BadRequest(c, "Invalid ID format")
+		httpresp.BadRequest(c, "Invalid ID format")
 		return
 	}
 
 	var req ModelWithProviderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
 		return
 	}
 	slog.Info("UpdateModelProvider", "req", req)
@@ -118,10 +118,10 @@ func UpdateModelProvider(c *gin.Context) {
 	ctx := c.Request.Context()
 	if _, err := repos().ModelWithProvider.Get(ctx, uint(id)); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			common.NotFound(c, "Model-provider association not found")
+			httpresp.NotFound(c, "Model-provider association not found")
 			return
 		}
-		common.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalServerError(c, "Database error: "+err.Error())
 		return
 	}
 
@@ -139,17 +139,17 @@ func UpdateModelProvider(c *gin.Context) {
 	}
 
 	if err := repos().ModelWithProvider.Update(ctx, uint(id), updates); err != nil {
-		common.InternalServerError(c, "Failed to update model-provider association: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to update model-provider association: "+err.Error())
 		return
 	}
 
 	updatedModelProvider, err := repos().ModelWithProvider.Get(ctx, uint(id))
 	if err != nil {
-		common.InternalServerError(c, "Failed to retrieve updated model-provider association: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to retrieve updated model-provider association: "+err.Error())
 		return
 	}
 
-	common.Success(c, updatedModelProvider)
+	httpresp.Success(c, updatedModelProvider)
 }
 
 // DeleteModelProvider 删除模型提供商关联。
@@ -157,44 +157,44 @@ func DeleteModelProvider(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 64)
 	if err != nil {
-		common.BadRequest(c, "Invalid ID format")
+		httpresp.BadRequest(c, "Invalid ID format")
 		return
 	}
 
 	result, err := repos().ModelWithProvider.Delete(c.Request.Context(), uint(id))
 	if err != nil {
-		common.InternalServerError(c, "Failed to delete model-provider association: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to delete model-provider association: "+err.Error())
 		return
 	}
 
 	if result == 0 {
-		common.NotFound(c, "Model-provider association not found")
+		httpresp.NotFound(c, "Model-provider association not found")
 		return
 	}
 
-	common.Success(c, nil)
+	httpresp.Success(c, nil)
 }
 
 // BatchDeleteModelProviders 批量删除模型提供商关联。
 func BatchDeleteModelProviders(c *gin.Context) {
 	var req BatchDeleteModelProvidersRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
 		return
 	}
 
 	if len(req.IDs) == 0 {
-		common.BadRequest(c, "No IDs provided")
+		httpresp.BadRequest(c, "No IDs provided")
 		return
 	}
 
 	result, err := repos().ModelWithProvider.DeleteByIDs(c.Request.Context(), req.IDs)
 	if err != nil {
-		common.InternalServerError(c, "Failed to delete model-provider associations: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to delete model-provider associations: "+err.Error())
 		return
 	}
 
-	common.Success(c, map[string]interface{}{
+	httpresp.Success(c, map[string]interface{}{
 		"deleted": result,
 	})
 }

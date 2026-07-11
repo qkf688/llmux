@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 )
@@ -17,7 +17,7 @@ type MetricsRes struct {
 func Metrics(c *gin.Context) {
 	days, err := strconv.Atoi(c.Param("days"))
 	if err != nil {
-		common.BadRequest(c, "Invalid days parameter")
+		httpresp.BadRequest(c, "Invalid days parameter")
 		return
 	}
 
@@ -33,11 +33,11 @@ func Metrics(c *gin.Context) {
 	if err := models.DB.WithContext(c.Request.Context()).
 		Raw("SELECT COALESCE(SUM(reqs),0) as reqs, COALESCE(SUM(tokens),0) as tokens FROM `stats_dailies` WHERE `date` >= ?", startDate).
 		Scan(&agg).Error; err != nil {
-		common.InternalServerError(c, "Failed to query metrics: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to query metrics: "+err.Error())
 		return
 	}
 
-	common.Success(c, MetricsRes{
+	httpresp.Success(c, MetricsRes{
 		Reqs:   agg.Reqs,
 		Tokens: agg.Tokens,
 	})
@@ -51,19 +51,19 @@ type Count struct {
 func Counts(c *gin.Context) {
 	results := make([]Count, 0)
 	if err := models.DB.Raw("SELECT name as model,calls as calls FROM `stats_model_totals` ORDER BY `calls` DESC").Scan(&results).Error; err != nil {
-		common.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err.Error())
 		return
 	}
 
-	common.Success(c, results)
+	httpresp.Success(c, results)
 }
 
 func RealModelCounts(c *gin.Context) {
 	results := make([]Count, 0)
 	if err := models.DB.Raw("SELECT name as model,calls as calls FROM `stats_real_model_totals` ORDER BY `calls` DESC").Scan(&results).Error; err != nil {
-		common.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err.Error())
 		return
 	}
 
-	common.Success(c, results)
+	httpresp.Success(c, results)
 }

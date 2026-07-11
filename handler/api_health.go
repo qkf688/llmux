@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/service"
@@ -24,11 +24,11 @@ func RunHealthCheck(c *gin.Context) {
 
 	log, err := service.GetHealthChecker().CheckSingle(ctx, id)
 	if err != nil {
-		common.InternalServerError(c, "Failed to run health check: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to run health check: "+err.Error())
 		return
 	}
 
-	common.Success(c, log)
+	httpresp.Success(c, log)
 }
 
 // RunHealthCheckAll 手动运行所有模型提供商的健康检测
@@ -44,7 +44,7 @@ func RunHealthCheckAll(c *gin.Context) {
 		}
 	}()
 
-	common.Success(c, map[string]string{
+	httpresp.Success(c, map[string]string{
 		"batch_id": batchID,
 		"message":  "Health check started for all model providers",
 	})
@@ -67,14 +67,14 @@ func GetBatchHealthCheckStatus(c *gin.Context) {
 	batchID := c.Param("batchId")
 
 	if batchID == "" {
-		common.BadRequest(c, "batch_id is required")
+		httpresp.BadRequest(c, "batch_id is required")
 		return
 	}
 
 	// 获取所有模型提供商数量
 	totalCount, err := gorm.G[models.ModelWithProvider](models.DB).Count(ctx, "id")
 	if err != nil {
-		common.InternalServerError(c, "Failed to count model providers: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to count model providers: "+err.Error())
 		return
 	}
 
@@ -84,7 +84,7 @@ func GetBatchHealthCheckStatus(c *gin.Context) {
 		Order("checked_at DESC").
 		Find(ctx)
 	if err != nil {
-		common.InternalServerError(c, "Failed to fetch health check logs: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to fetch health check logs: "+err.Error())
 		return
 	}
 
@@ -113,5 +113,5 @@ func GetBatchHealthCheckStatus(c *gin.Context) {
 		Logs:       logs,
 	}
 
-	common.Success(c, status)
+	httpresp.Success(c, status)
 }

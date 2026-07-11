@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/handler/settings"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/service"
@@ -94,7 +94,7 @@ func PreviewAutoAssociate(c *gin.Context) {
 
 	allModels, allProviders, existingAssociations, manualTemplateItems, err := fetchAutoAssociateData(ctx)
 	if err != nil {
-		common.InternalServerError(c, "Failed to "+err.Error())
+		httpresp.InternalServerError(c, "Failed to "+err.Error())
 		return
 	}
 
@@ -117,7 +117,7 @@ func PreviewAutoAssociate(c *gin.Context) {
 		},
 	)
 
-	common.Success(c, previews)
+	httpresp.Success(c, previews)
 }
 
 // AutoAssociateModels 一键添加关联：将提供商模型自动关联到模板匹配的模型（并集规则）。
@@ -126,7 +126,7 @@ func AutoAssociateModels(c *gin.Context) {
 
 	allModels, allProviders, existingAssociations, manualTemplateItems, err := fetchAutoAssociateData(ctx)
 	if err != nil {
-		common.InternalServerError(c, "Failed to "+err.Error())
+		httpresp.InternalServerError(c, "Failed to "+err.Error())
 		return
 	}
 
@@ -159,7 +159,7 @@ func AutoAssociateModels(c *gin.Context) {
 		},
 	)
 
-	common.Success(c, map[string]interface{}{
+	httpresp.Success(c, map[string]interface{}{
 		"added": addedCount,
 	})
 }

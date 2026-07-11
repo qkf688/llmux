@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/handler/autoassoc"
 	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/handler/settings"
@@ -24,11 +24,11 @@ func GetProviders(c *gin.Context) {
 		Type: providerType,
 	})
 	if err != nil {
-		common.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err.Error())
 		return
 	}
 
-	common.Success(c, list)
+	httpresp.Success(c, list)
 }
 
 // CreateProvider 创建提供商。
@@ -41,11 +41,11 @@ func CreateProvider(c *gin.Context) {
 	ctx := c.Request.Context()
 	exists, err := repos().Provider.ExistsByName(ctx, req.Name)
 	if err != nil {
-		common.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalServerError(c, "Database error: "+err.Error())
 		return
 	}
 	if exists {
-		common.BadRequest(c, "Provider already exists")
+		httpresp.BadRequest(c, "Provider already exists")
 		return
 	}
 
@@ -74,13 +74,13 @@ func CreateProvider(c *gin.Context) {
 	}
 
 	if err := repos().Provider.Create(ctx, &provider); err != nil {
-		common.InternalServerError(c, "Failed to create provider: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to create provider: "+err.Error())
 		return
 	}
 
 	go autoassoc.TriggerAutoAssociate(context.Background())
 
-	common.Success(c, provider)
+	httpresp.Success(c, provider)
 }
 
 // UpdateProvider 更新提供商。
@@ -98,10 +98,10 @@ func UpdateProvider(c *gin.Context) {
 	ctx := c.Request.Context()
 	if _, err := repos().Provider.Get(ctx, id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			common.NotFound(c, "Provider not found")
+			httpresp.NotFound(c, "Provider not found")
 			return
 		}
-		common.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalServerError(c, "Database error: "+err.Error())
 		return
 	}
 
@@ -120,20 +120,20 @@ func UpdateProvider(c *gin.Context) {
 	}
 
 	if err := repos().Provider.Update(ctx, id, &updates); err != nil {
-		common.InternalServerError(c, "Failed to update provider: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to update provider: "+err.Error())
 		return
 	}
 
 	updatedProvider, err := repos().Provider.Get(ctx, id)
 	if err != nil {
-		common.InternalServerError(c, "Failed to retrieve updated provider: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to retrieve updated provider: "+err.Error())
 		return
 	}
 
 	go autoassoc.TriggerAutoAssociate(context.Background())
 	go autoassoc.TriggerAutoClean(context.Background())
 
-	common.Success(c, updatedProvider)
+	httpresp.Success(c, updatedProvider)
 }
 
 // DeleteProvider 删除提供商。
@@ -146,7 +146,7 @@ func DeleteProvider(c *gin.Context) {
 	ctx := c.Request.Context()
 	result, err := repos().Provider.Delete(ctx, id)
 	if err != nil {
-		common.InternalServerError(c, "Failed to delete provider: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to delete provider: "+err.Error())
 		return
 	}
 
@@ -155,15 +155,15 @@ func DeleteProvider(c *gin.Context) {
 		go autoassoc.TriggerAutoClean(context.Background())
 	} else {
 		if _, err := repos().ModelWithProvider.DeleteByProviderID(ctx, id); err != nil {
-			common.InternalServerError(c, "Failed to delete provider: "+err.Error())
+			httpresp.InternalServerError(c, "Failed to delete provider: "+err.Error())
 			return
 		}
 	}
 
 	if result == 0 {
-		common.NotFound(c, "Provider not found")
+		httpresp.NotFound(c, "Provider not found")
 		return
 	}
 
-	common.Success(c, nil)
+	httpresp.Success(c, nil)
 }

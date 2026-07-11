@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"reflect"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 )
@@ -28,7 +28,7 @@ func newDirectClientError(message string) error {
 func UpdateSettings(c *gin.Context) {
 	var req UpdateSettingsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
 		return
 	}
 
@@ -51,11 +51,11 @@ func UpdateSettings(c *gin.Context) {
 func handleUpdateSettingsError(c *gin.Context, err error) {
 	var clientErr directClientError
 	if errors.As(err, &clientErr) {
-		common.InternalServerError(c, clientErr.Error())
+		httpresp.InternalServerError(c, clientErr.Error())
 		return
 	}
 
-	common.InternalServerError(c, "Failed to update settings: "+err.Error())
+	httpresp.InternalServerError(c, "Failed to update settings: "+err.Error())
 }
 
 func triggerBatchImportForAutoSave() {

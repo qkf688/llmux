@@ -1,7 +1,7 @@
 package settings
 
 import (
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/gin-gonic/gin"
 )
 
@@ -15,14 +15,14 @@ func GetSystemConfig(c *gin.Context) {
 		"min_weight":            1,
 	}
 
-	common.Success(c, config)
+	httpresp.Success(c, config)
 }
 
 // UpdateSystemConfig 更新系统配置
 func UpdateSystemConfig(c *gin.Context) {
 	var req SystemConfigRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
 		return
 	}
 
@@ -34,5 +34,5 @@ func UpdateSystemConfig(c *gin.Context) {
 		"min_weight":            req.MinWeight,
 	}
 
-	common.Success(c, config)
+	httpresp.Success(c, config)
 }

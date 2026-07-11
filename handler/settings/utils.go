@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/handler/associations"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
@@ -94,7 +94,7 @@ func ResetModelWeights(c *gin.Context) {
 
 	var req modelScopeRequest
 	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
 		return
 	}
 
@@ -111,11 +111,11 @@ func ResetModelWeights(c *gin.Context) {
 	result := db.Where("weight <> ?", defaultWeight).Update("weight", defaultWeight)
 	if result.Error != nil {
 		slog.Error("重置模型权重失败", "error", result.Error)
-		common.InternalServerError(c, "重置模型权重失败: "+result.Error.Error())
+		httpresp.InternalServerError(c, "重置模型权重失败: "+result.Error.Error())
 		return
 	}
 
-	common.Success(c, map[string]interface{}{
+	httpresp.Success(c, map[string]interface{}{
 		"message":        "模型权重已重置为默认值",
 		"timestamp":      time.Now(),
 		"updated":        result.RowsAffected,
@@ -129,7 +129,7 @@ func ResetModelPriorities(c *gin.Context) {
 
 	var req modelScopeRequest
 	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
 		return
 	}
 
@@ -148,11 +148,11 @@ func ResetModelPriorities(c *gin.Context) {
 	result := db.Where("priority <> ?", defaultPriority).Update("priority", defaultPriority)
 	if result.Error != nil {
 		slog.Error("重置模型优先级失败", "error", result.Error)
-		common.InternalServerError(c, "重置模型优先级失败: "+result.Error.Error())
+		httpresp.InternalServerError(c, "重置模型优先级失败: "+result.Error.Error())
 		return
 	}
 
-	common.Success(c, map[string]interface{}{
+	httpresp.Success(c, map[string]interface{}{
 		"message":          "模型优先级已重置为默认值",
 		"timestamp":        time.Now(),
 		"updated":          result.RowsAffected,
@@ -166,7 +166,7 @@ func EnableAllAssociations(c *gin.Context) {
 
 	var req modelScopeRequest
 	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
 		return
 	}
 
@@ -182,11 +182,11 @@ func EnableAllAssociations(c *gin.Context) {
 	result := db.Where("status = ?", false).Update("status", true)
 	if result.Error != nil {
 		slog.Error("启用所有模型关联失败", "error", result.Error)
-		common.InternalServerError(c, "启用所有模型关联失败: "+result.Error.Error())
+		httpresp.InternalServerError(c, "启用所有模型关联失败: "+result.Error.Error())
 		return
 	}
 
-	common.Success(c, map[string]interface{}{
+	httpresp.Success(c, map[string]interface{}{
 		"message":   "所有模型关联已启用",
 		"timestamp": time.Now(),
 		"updated":   result.RowsAffected,

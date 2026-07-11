@@ -3,7 +3,7 @@ package providerapi
 import (
 	"log/slog"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/providers"
 	"github.com/gin-gonic/gin"
 )
@@ -15,13 +15,13 @@ func GetProviderModels(c *gin.Context) {
 
 	providerID, err := parseUintParam(id)
 	if err != nil {
-		common.BadRequest(c, "Invalid ID format")
+		httpresp.BadRequest(c, "Invalid ID format")
 		return
 	}
 
 	provider, err := repos().Provider.Get(c.Request.Context(), providerID)
 	if err != nil {
-		common.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err.Error())
 		return
 	}
 
@@ -36,17 +36,17 @@ func GetProviderModels(c *gin.Context) {
 
 	chatModel, err := providers.New(provider.Type, config, provider.Proxy)
 	if err != nil {
-		common.InternalServerError(c, "Failed to get models: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to get models: "+err.Error())
 		return
 	}
 	modelList, err := chatModel.Models(c.Request.Context())
 	if err != nil {
-		common.NotFound(c, "Failed to get models: "+err.Error())
+		httpresp.NotFound(c, "Failed to get models: "+err.Error())
 		return
 	}
 	// 确保返回的是数组而不是 nil，避免前端白屏
 	if modelList == nil {
 		modelList = []providers.Model{}
 	}
-	common.Success(c, modelList)
+	httpresp.Success(c, modelList)
 }

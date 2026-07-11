@@ -1,7 +1,7 @@
 package modelapi
 
 import (
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -11,29 +11,29 @@ import (
 func BatchDeleteModels(c *gin.Context) {
 	var req BatchDeleteModelsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
 		return
 	}
 	if len(req.IDs) == 0 {
-		common.BadRequest(c, "No IDs provided")
+		httpresp.BadRequest(c, "No IDs provided")
 		return
 	}
 
 	ctx := c.Request.Context()
 	for _, id := range req.IDs {
 		if err := deleteModelAssociations(ctx, id); err != nil {
-			common.InternalServerError(c, "Failed to delete model associations: "+err.Error())
+			httpresp.InternalServerError(c, "Failed to delete model associations: "+err.Error())
 			return
 		}
 	}
 
 	result, err := gorm.G[models.Model](models.DB).Where("id IN ?", req.IDs).Delete(ctx)
 	if err != nil {
-		common.InternalServerError(c, "Failed to delete models: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to delete models: "+err.Error())
 		return
 	}
 
-	common.Success(c, map[string]interface{}{
+	httpresp.Success(c, map[string]interface{}{
 		"deleted": result,
 	})
 }
@@ -42,20 +42,20 @@ func BatchDeleteModels(c *gin.Context) {
 func BatchUpdateModels(c *gin.Context) {
 	var req BatchUpdateModelsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.BadRequest(c, "参数验证失败: "+err.Error())
+		httpresp.BadRequest(c, "参数验证失败: "+err.Error())
 		return
 	}
 
 	if req.MaxRetry == nil && req.TimeOut == nil && req.AutoAssociate == nil {
-		common.BadRequest(c, "至少需要更新一个字段")
+		httpresp.BadRequest(c, "至少需要更新一个字段")
 		return
 	}
 	if req.MaxRetry != nil && *req.MaxRetry < 0 {
-		common.BadRequest(c, "重试次数不能为负数")
+		httpresp.BadRequest(c, "重试次数不能为负数")
 		return
 	}
 	if req.TimeOut != nil && *req.TimeOut < 0 {
-		common.BadRequest(c, "超时时间不能为负数")
+		httpresp.BadRequest(c, "超时时间不能为负数")
 		return
 	}
 
@@ -74,11 +74,11 @@ func BatchUpdateModels(c *gin.Context) {
 		Where("id IN ?", req.IDs).
 		Updates(updates)
 	if result.Error != nil {
-		common.InternalServerError(c, "更新失败: "+result.Error.Error())
+		httpresp.InternalServerError(c, "更新失败: "+result.Error.Error())
 		return
 	}
 
-	common.Success(c, map[string]interface{}{
+	httpresp.Success(c, map[string]interface{}{
 		"updated": result.RowsAffected,
 	})
 }

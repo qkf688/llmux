@@ -1,7 +1,7 @@
 package virtualmodels
 
 import (
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/service"
 	"github.com/gin-gonic/gin"
@@ -16,27 +16,27 @@ func BatchDeleteVirtualModelMapping(c *gin.Context) {
 
 	var req BatchDeleteVirtualModelMappingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
 		return
 	}
 	if len(req.IDs) == 0 {
-		common.BadRequest(c, "No IDs provided")
+		httpresp.BadRequest(c, "No IDs provided")
 		return
 	}
 
 	ctx := c.Request.Context()
 	if _, err := repos().VirtualModel.Get(ctx, id); err != nil {
-		common.NotFound(c, "Virtual model not found")
+		httpresp.NotFound(c, "Virtual model not found")
 		return
 	}
 
 	deleted, err := repos().VirtualModelMapping.BatchDelete(ctx, id, req.IDs)
 	if err != nil {
-		common.InternalServerError(c, "Failed to delete mappings: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to delete mappings: "+err.Error())
 		return
 	}
 
-	common.Success(c, gin.H{"deleted": deleted})
+	httpresp.Success(c, gin.H{"deleted": deleted})
 }
 
 // BatchCreateVirtualModelMapping 批量创建虚拟模型映射。
@@ -48,14 +48,14 @@ func BatchCreateVirtualModelMapping(c *gin.Context) {
 
 	var req BatchVirtualModelMappingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
 		return
 	}
 
 	ctx := c.Request.Context()
 	virtualModel, err := repos().VirtualModel.Get(ctx, id)
 	if err != nil {
-		common.NotFound(c, "Virtual model not found")
+		httpresp.NotFound(c, "Virtual model not found")
 		return
 	}
 
@@ -66,7 +66,7 @@ func BatchCreateVirtualModelMapping(c *gin.Context) {
 
 	existingModels, err := repos().Model.ListByIDs(ctx, realModelIDs)
 	if err != nil {
-		common.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalServerError(c, "Database error: "+err.Error())
 		return
 	}
 
@@ -77,7 +77,7 @@ func BatchCreateVirtualModelMapping(c *gin.Context) {
 
 	existingMappings, err := repos().VirtualModelMapping.ListByVirtualModelAndRealModelIDs(ctx, id, realModelIDs)
 	if err != nil {
-		common.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalServerError(c, "Database error: "+err.Error())
 		return
 	}
 
@@ -144,5 +144,5 @@ func BatchCreateVirtualModelMapping(c *gin.Context) {
 		existingMappingMap[mappingReq.RealModelID] = true
 	}
 
-	common.Success(c, result)
+	httpresp.Success(c, result)
 }

@@ -3,7 +3,7 @@ package modelsynclogs
 import (
 	"strings"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/repository"
 	"github.com/gin-gonic/gin"
@@ -29,16 +29,16 @@ func GetModelSyncLogs(c *gin.Context) {
 	})
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "invalid status:") {
-			common.BadRequest(c, "Invalid status parameter (must be success, error, or unchanged)")
+			httpresp.BadRequest(c, "Invalid status parameter (must be success, error, or unchanged)")
 			return
 		}
-		common.InternalServerError(c, "Failed to get logs: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to get logs: "+err.Error())
 		return
 	}
 
 	page, pageSize = httpx.NormalizePaginationLoose(page, pageSize)
 
-	common.Success(c, map[string]interface{}{
+	httpresp.Success(c, map[string]interface{}{
 		"data": list.Logs,
 		"pagination": map[string]interface{}{
 			"page":        page,
@@ -58,17 +58,17 @@ func DeleteModelSyncLogs(c *gin.Context) {
 		return
 	}
 	if len(req.IDs) == 0 {
-		common.BadRequest(c, "No IDs provided")
+		httpresp.BadRequest(c, "No IDs provided")
 		return
 	}
 
 	deleted, err := repos().ModelSyncLog.HardDeleteByIDs(c.Request.Context(), req.IDs)
 	if err != nil {
-		common.InternalServerError(c, "Failed to delete logs: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to delete logs: "+err.Error())
 		return
 	}
 
-	common.Success(c, map[string]interface{}{
+	httpresp.Success(c, map[string]interface{}{
 		"deleted": deleted,
 	})
 }
@@ -77,11 +77,11 @@ func DeleteModelSyncLogs(c *gin.Context) {
 func ClearModelSyncLogs(c *gin.Context) {
 	deleted, err := repos().ModelSyncLog.HardDeleteAll(c.Request.Context())
 	if err != nil {
-		common.InternalServerError(c, "Failed to clear logs: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to clear logs: "+err.Error())
 		return
 	}
 
-	common.Success(c, map[string]interface{}{
+	httpresp.Success(c, map[string]interface{}{
 		"deleted": deleted,
 	})
 }
@@ -97,11 +97,11 @@ func ClearModelSyncErrorLogs(c *gin.Context) {
 
 	deleted, err := repos().ModelSyncLog.HardDeleteErrors(c.Request.Context(), req.ProviderIDs)
 	if err != nil {
-		common.InternalServerError(c, "Failed to clear error logs: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to clear error logs: "+err.Error())
 		return
 	}
 
-	common.Success(c, map[string]interface{}{
+	httpresp.Success(c, map[string]interface{}{
 		"deleted": deleted,
 	})
 }

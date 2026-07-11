@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/service"
@@ -22,18 +22,18 @@ func SyncProviderModels(c *gin.Context) {
 	syncService := service.NewModelSyncService(models.DB)
 	syncLog, err := syncService.SyncProviderModels(c.Request.Context(), id)
 	if err != nil {
-		common.InternalServerError(c, "Failed to sync models: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to sync models: "+err.Error())
 		return
 	}
 
 	if syncLog == nil {
-		common.Success(c, map[string]interface{}{
+		httpresp.Success(c, map[string]interface{}{
 			"message": "No changes detected",
 		})
 		return
 	}
 
-	common.Success(c, syncLog)
+	httpresp.Success(c, syncLog)
 }
 
 // SyncAllProviders 同步所有启用模型端点的提供商
@@ -43,12 +43,12 @@ func SyncAllProviders(c *gin.Context) {
 
 	logs, err := syncService.SyncAllProviders(ctx)
 	if err != nil {
-		common.InternalServerError(c, "Failed to sync models: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to sync models: "+err.Error())
 		return
 	}
 
 	if len(logs) == 0 {
-		common.Success(c, map[string]interface{}{
+		httpresp.Success(c, map[string]interface{}{
 			"message": "No changes detected",
 		})
 		return
@@ -61,7 +61,7 @@ func SyncAllProviders(c *gin.Context) {
 		removedTotal += log.RemovedCount
 	}
 
-	common.Success(c, map[string]interface{}{
+	httpresp.Success(c, map[string]interface{}{
 		"message":          "Sync completed",
 		"logs":             logs,
 		"synced_providers": len(logs),
@@ -98,7 +98,7 @@ func GetModelSyncStats(c *gin.Context) {
 		Model(&models.Provider{}).
 		Where("model_endpoint IS NULL OR model_endpoint = ?", true).
 		Count(&totalProviders).Error; err != nil {
-		common.InternalServerError(c, "Failed to count providers: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to count providers: "+err.Error())
 		return
 	}
 
@@ -145,7 +145,7 @@ func GetModelSyncStats(c *gin.Context) {
 		Where("provider_id IN (?)", enabledProviderIDs).
 		Order("synced_at DESC").
 		Find(&logs).Error; err != nil {
-		common.InternalServerError(c, "Failed to get sync logs: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to get sync logs: "+err.Error())
 		return
 	}
 
@@ -201,7 +201,7 @@ func GetModelSyncStats(c *gin.Context) {
 		ProvidersNeverSynced: providersNeverSynced,
 	}
 
-	common.Success(c, response)
+	httpresp.Success(c, response)
 }
 
 // GetRecentAddedModels 获取最近新增的模型
@@ -211,9 +211,9 @@ func GetRecentAddedModels(c *gin.Context) {
 	syncService := service.NewModelSyncService(models.DB)
 	result, err := syncService.GetRecentAddedModels(ctx)
 	if err != nil {
-		common.InternalServerError(c, "Failed to get recent added models: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to get recent added models: "+err.Error())
 		return
 	}
 
-	common.Success(c, result)
+	httpresp.Success(c, result)
 }

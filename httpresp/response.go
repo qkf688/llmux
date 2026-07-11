@@ -1,4 +1,4 @@
-package common
+package httpresp
 
 import (
 	"net/http"
@@ -23,7 +23,7 @@ func Success(c *gin.Context, data any) {
 	})
 }
 
-// Success 成功响应
+// SuccessRaw 成功响应（直接返回 data，不包 Response）
 func SuccessRaw(c *gin.Context, data any) {
 	c.JSON(http.StatusOK, data)
 }

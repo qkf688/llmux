@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 )
@@ -102,12 +102,12 @@ func GetDatabaseStats(c *gin.Context) {
 
 	fileInfo, err := os.Stat(dbPath)
 	if os.IsNotExist(err) {
-		common.NotFound(c, "数据库文件不存在")
+		httpresp.NotFound(c, "数据库文件不存在")
 		return
 	}
 	if err != nil {
 		slog.Error("无法访问数据库文件", "error", err, "path", dbPath)
-		common.InternalServerError(c, "无法访问数据库文件")
+		httpresp.InternalServerError(c, "无法访问数据库文件")
 		return
 	}
 
@@ -178,5 +178,5 @@ func GetDatabaseStats(c *gin.Context) {
 		"timestamp":            time.Now(),
 	}
 
-	common.Success(c, stats)
+	httpresp.Success(c, stats)
 }

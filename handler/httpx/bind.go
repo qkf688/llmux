@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/gin-gonic/gin"
 )
 
@@ -20,7 +20,7 @@ func ParsePaginationStrict(c *gin.Context) (page, pageSize int, ok bool) {
 	if pageStr := c.Query("page"); pageStr != "" {
 		parsed, err := strconv.Atoi(pageStr)
 		if err != nil || parsed < 1 {
-			common.BadRequest(c, "Invalid page parameter")
+			httpresp.BadRequest(c, "Invalid page parameter")
 			return 0, 0, false
 		}
 		page = parsed
@@ -30,7 +30,7 @@ func ParsePaginationStrict(c *gin.Context) (page, pageSize int, ok bool) {
 	if pageSizeStr := c.Query("page_size"); pageSizeStr != "" {
 		parsed, err := strconv.Atoi(pageSizeStr)
 		if err != nil || parsed < 1 || parsed > 100 {
-			common.BadRequest(c, "Invalid page_size parameter (must be between 1 and 100)")
+			httpresp.BadRequest(c, "Invalid page_size parameter (must be between 1 and 100)")
 			return 0, 0, false
 		}
 		pageSize = parsed
@@ -64,7 +64,7 @@ func ParseUintParam(c *gin.Context, name string) (id uint, ok bool) {
 	raw := strings.TrimSpace(c.Param(name))
 	v, err := strconv.ParseUint(raw, 10, 64)
 	if err != nil || v == 0 {
-		common.BadRequest(c, "Invalid ID format")
+		httpresp.BadRequest(c, "Invalid ID format")
 		return 0, false
 	}
 	return uint(v), true
@@ -76,7 +76,7 @@ func ParseUintParamAllowZero(c *gin.Context, name string) (id uint, ok bool) {
 	raw := strings.TrimSpace(c.Param(name))
 	v, err := strconv.ParseUint(raw, 10, 64)
 	if err != nil {
-		common.BadRequest(c, "Invalid ID format")
+		httpresp.BadRequest(c, "Invalid ID format")
 		return 0, false
 	}
 	return uint(v), true
@@ -85,7 +85,7 @@ func ParseUintParamAllowZero(c *gin.Context, name string) (id uint, ok bool) {
 // BindJSON 绑定 JSON，失败写 BadRequest。
 func BindJSON(c *gin.Context, dst any) bool {
 	if err := c.ShouldBindJSON(dst); err != nil {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
 		return false
 	}
 	return true
@@ -94,7 +94,7 @@ func BindJSON(c *gin.Context, dst any) bool {
 // BindJSONAllowEOF 绑定 JSON，允许空 body（EOF）；其它错误 BadRequest。
 func BindJSONAllowEOF(c *gin.Context, dst any) bool {
 	if err := c.ShouldBindJSON(dst); err != nil && !errors.Is(err, io.EOF) {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
 		return false
 	}
 	return true

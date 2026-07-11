@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strconv"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -15,7 +15,7 @@ func ClearProviderAssociations(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 64)
 	if err != nil {
-		common.BadRequest(c, "Invalid provider ID format")
+		httpresp.BadRequest(c, "Invalid provider ID format")
 		return
 	}
 
@@ -24,20 +24,20 @@ func ClearProviderAssociations(c *gin.Context) {
 	provider, err := repos().Provider.Get(ctx, uint(id))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			common.NotFound(c, "Provider not found")
+			httpresp.NotFound(c, "Provider not found")
 		} else {
-			common.InternalServerError(c, "Failed to get provider: "+err.Error())
+			httpresp.InternalServerError(c, "Failed to get provider: "+err.Error())
 		}
 		return
 	}
 
 	deleted, err := repos().ModelWithProvider.DeleteByProviderID(ctx, uint(id))
 	if err != nil {
-		common.InternalServerError(c, "Failed to clear associations: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to clear associations: "+err.Error())
 		return
 	}
 
-	common.Success(c, map[string]interface{}{
+	httpresp.Success(c, map[string]interface{}{
 		"provider_id":   id,
 		"provider_name": provider.Name,
 		"deleted":       deleted,

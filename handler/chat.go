@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/consts"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/providers"
@@ -22,7 +22,7 @@ func ModelsHandler(c *gin.Context) {
 	// 获取真实模型
 	llmModels, err := gorm.G[models.Model](models.DB).Find(c.Request.Context())
 	if err != nil {
-		common.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err.Error())
 		return
 	}
 
@@ -39,7 +39,7 @@ func ModelsHandler(c *gin.Context) {
 	// 获取虚拟模型
 	virtualModels, err := gorm.G[models.VirtualModel](models.DB).Find(c.Request.Context())
 	if err != nil {
-		common.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err.Error())
 		return
 	}
 
@@ -53,7 +53,7 @@ func ModelsHandler(c *gin.Context) {
 		})
 	}
 
-	common.SuccessRaw(c, providers.ModelList{
+	httpresp.SuccessRaw(c, providers.ModelList{
 		Object: "list",
 		Data:   modelsList,
 	})
@@ -74,12 +74,12 @@ func Messages(c *gin.Context) {
 func chatHandlerByStyle(c *gin.Context, style string) {
 	beforer, err := service.GetBeforer(style)
 	if err != nil {
-		common.ErrorWithHttpStatus(c, http.StatusBadRequest, http.StatusBadRequest, err.Error())
+		httpresp.ErrorWithHttpStatus(c, http.StatusBadRequest, http.StatusBadRequest, err.Error())
 		return
 	}
 	processer, err := service.GetProcesser(style)
 	if err != nil {
-		common.ErrorWithHttpStatus(c, http.StatusBadRequest, http.StatusBadRequest, err.Error())
+		httpresp.ErrorWithHttpStatus(c, http.StatusBadRequest, http.StatusBadRequest, err.Error())
 		return
 	}
 	chatHandler(c, beforer, processer, style)
@@ -89,21 +89,21 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 	// 读取原始请求体
 	reqBody, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		common.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err.Error())
 		return
 	}
 	c.Request.Body.Close()
 	// 预处理、提取模型参数
 	before, err := preProcessor(reqBody)
 	if err != nil {
-		common.ErrorWithHttpStatus(c, http.StatusBadRequest, http.StatusBadRequest, err.Error())
+		httpresp.ErrorWithHttpStatus(c, http.StatusBadRequest, http.StatusBadRequest, err.Error())
 		return
 	}
 	// 按模型获取可用 provider
 	ctx := c.Request.Context()
 	providersWithMeta, err := service.ProvidersWithMetaBymodelsName(ctx, style, *before)
 	if err != nil {
-		common.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err.Error())
 		return
 	}
 
@@ -118,10 +118,10 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 		var statusCoder interface{ StatusCode() int }
 		if errors.As(err, &statusCoder) {
 			status := statusCoder.StatusCode()
-			common.ErrorWithHttpStatus(c, status, status, err.Error())
+			httpresp.ErrorWithHttpStatus(c, status, status, err.Error())
 			return
 		}
-		common.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err.Error())
 		return
 	}
 	defer res.Body.Close()
@@ -142,7 +142,7 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 	writeHeader(c, ctx, before.Stream, res.Header)
 	if _, err := io.Copy(c.Writer, tee); err != nil {
 		pw.CloseWithError(err)
-		common.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err.Error())
 		return
 	}
 

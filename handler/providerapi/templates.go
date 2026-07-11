@@ -1,7 +1,7 @@
 package providerapi
 
 import (
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/providers"
 	"github.com/gin-gonic/gin"
 )
@@ -16,5 +16,5 @@ func GetProviderTemplates(c *gin.Context) {
 			Template: m.ConfigTemplate,
 		})
 	}
-	common.Success(c, templates)
+	httpresp.Success(c, templates)
 }

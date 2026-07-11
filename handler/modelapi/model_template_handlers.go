@@ -3,7 +3,7 @@ package modelapi
 import (
 	"strings"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -15,13 +15,13 @@ func getModelTemplateData(
 ) (associations []models.ModelWithProvider, manualItems []models.ModelTemplateItem, ok bool) {
 	associations, err := gorm.G[models.ModelWithProvider](models.DB).Where("model_id = ?", modelID).Find(ctx.Request.Context())
 	if err != nil {
-		common.InternalServerError(ctx, "Failed to get associations: "+err.Error())
+		httpresp.InternalServerError(ctx, "Failed to get associations: "+err.Error())
 		return nil, nil, false
 	}
 
 	manualItems, err = gorm.G[models.ModelTemplateItem](models.DB).Where("model_id = ?", modelID).Find(ctx.Request.Context())
 	if err != nil {
-		common.InternalServerError(ctx, "Failed to get template items: "+err.Error())
+		httpresp.InternalServerError(ctx, "Failed to get template items: "+err.Error())
 		return nil, nil, false
 	}
 
@@ -33,7 +33,7 @@ func respondModelTemplate(c *gin.Context, model models.Model, modelID uint64) {
 	if !ok {
 		return
 	}
-	common.Success(c, buildModelTemplateResponse(model, associations, manualItems))
+	httpresp.Success(c, buildModelTemplateResponse(model, associations, manualItems))
 }
 
 // GetModelTemplate 获取某个 ModelID 的模板（Model.Name + 既有关联 ProviderModel + 手动模板项）。
@@ -46,10 +46,10 @@ func GetModelTemplate(c *gin.Context) {
 	model, err := getModelByID(c.Request.Context(), id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			common.NotFound(c, "Model not found")
+			httpresp.NotFound(c, "Model not found")
 			return
 		}
-		common.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalServerError(c, "Database error: "+err.Error())
 		return
 	}
 
@@ -65,22 +65,22 @@ func AddModelTemplateItem(c *gin.Context) {
 
 	var req ModelTemplateItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
 		return
 	}
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
-		common.BadRequest(c, "Name is required")
+		httpresp.BadRequest(c, "Name is required")
 		return
 	}
 
 	model, err := getModelByID(c.Request.Context(), id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			common.NotFound(c, "Model not found")
+			httpresp.NotFound(c, "Model not found")
 			return
 		}
-		common.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalServerError(c, "Database error: "+err.Error())
 		return
 	}
 
@@ -88,7 +88,7 @@ func AddModelTemplateItem(c *gin.Context) {
 		Where("model_id = ? AND name = ?", id, name).
 		Count(c.Request.Context(), "id")
 	if err != nil {
-		common.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalServerError(c, "Database error: "+err.Error())
 		return
 	}
 
@@ -98,7 +98,7 @@ func AddModelTemplateItem(c *gin.Context) {
 			Name:    name,
 		}
 		if err := gorm.G[models.ModelTemplateItem](models.DB).Create(c.Request.Context(), &item); err != nil {
-			common.InternalServerError(c, "Failed to create template item: "+err.Error())
+			httpresp.InternalServerError(c, "Failed to create template item: "+err.Error())
 			return
 		}
 	}
@@ -115,22 +115,22 @@ func DeleteModelTemplateItem(c *gin.Context) {
 
 	var req ModelTemplateItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
 		return
 	}
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
-		common.BadRequest(c, "Name is required")
+		httpresp.BadRequest(c, "Name is required")
 		return
 	}
 
 	model, err := getModelByID(c.Request.Context(), id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			common.NotFound(c, "Model not found")
+			httpresp.NotFound(c, "Model not found")
 			return
 		}
-		common.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalServerError(c, "Database error: "+err.Error())
 		return
 	}
 
@@ -138,7 +138,7 @@ func DeleteModelTemplateItem(c *gin.Context) {
 		Unscoped().
 		Where("model_id = ? AND name = ?", id, name).
 		Delete(&models.ModelTemplateItem{}).Error; err != nil {
-		common.InternalServerError(c, "Failed to delete template item: "+err.Error())
+		httpresp.InternalServerError(c, "Failed to delete template item: "+err.Error())
 		return
 	}
 

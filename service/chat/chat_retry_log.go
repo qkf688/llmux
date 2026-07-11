@@ -3,7 +3,6 @@ package chat
 import (
 	"context"
 	"log/slog"
-	"strconv"
 
 	"github.com/atopos31/llmio/models"
 	"gorm.io/gorm"
@@ -45,28 +44,12 @@ func applyWeightDecay(ctx context.Context, log models.ChatLog, modelWithProvider
 
 // getAutoWeightDecay 获取自动权重衰减开关
 func getAutoWeightDecay(ctx context.Context) bool {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyAutoWeightDecay).
-		First(ctx)
-	if err != nil {
-		return false // 默认关闭
-	}
-	return setting.Value == "true"
+	return models.GetSettingBool(ctx, models.SettingKeyAutoWeightDecay, false)
 }
 
 // getAutoWeightDecayStep 获取自动权重衰减步长
 func getAutoWeightDecayStep(ctx context.Context) int {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyAutoWeightDecayStep).
-		First(ctx)
-	if err != nil {
-		return 1 // 默认步长1
-	}
-	step, err := strconv.Atoi(setting.Value)
-	if err != nil {
-		return 1
-	}
-	return step
+	return models.GetSettingInt(ctx, models.SettingKeyAutoWeightDecayStep, 1, 0)
 }
 
 // applyPriorityDecay 应用优先级衰减
@@ -92,41 +75,15 @@ func applyPriorityDecay(ctx context.Context, log models.ChatLog, modelWithProvid
 
 // getAutoPriorityDecay 获取自动优先级衰减开关
 func getAutoPriorityDecay(ctx context.Context) bool {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyAutoPriorityDecay).
-		First(ctx)
-	if err != nil {
-		return false // 默认关闭
-	}
-	return setting.Value == "true"
+	return models.GetSettingBool(ctx, models.SettingKeyAutoPriorityDecay, false)
 }
 
 // getAutoPriorityDecayStep 获取自动优先级衰减步长
 func getAutoPriorityDecayStep(ctx context.Context) int {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyAutoPriorityDecayStep).
-		First(ctx)
-	if err != nil {
-		return 1 // 默认步长1
-	}
-	step, err := strconv.Atoi(setting.Value)
-	if err != nil {
-		return 1
-	}
-	return step
+	return models.GetSettingInt(ctx, models.SettingKeyAutoPriorityDecayStep, 1, 0)
 }
 
 // getAutoPriorityDecayThreshold 获取自动优先级衰减阈值
 func getAutoPriorityDecayThreshold(ctx context.Context) int {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyAutoPriorityDecayThreshold).
-		First(ctx)
-	if err != nil {
-		return 90 // 默认阈值90
-	}
-	threshold, err := strconv.Atoi(setting.Value)
-	if err != nil {
-		return 90
-	}
-	return threshold
+	return models.GetSettingInt(ctx, models.SettingKeyAutoPriorityDecayThreshold, 90, 0)
 }

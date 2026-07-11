@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"strconv"
 	"time"
 
 	"github.com/atopos31/llmio/common"
@@ -20,39 +19,17 @@ type modelScopeRequest struct {
 
 // GetStrictCapabilityMatch 获取严格能力匹配设置
 func GetStrictCapabilityMatch(ctx context.Context) bool {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyStrictCapabilityMatch).
-		First(ctx)
-	if err != nil {
-		return true // 默认开启
-	}
-	return setting.Value == "true"
+	return models.GetSettingBool(ctx, models.SettingKeyStrictCapabilityMatch, true)
 }
 
 // GetAutoPriorityDecayDefault 获取自动优先级衰减默认值
 func GetAutoPriorityDecayDefault(ctx context.Context) int {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyAutoPriorityDecayDefault).
-		First(ctx)
-	if err != nil {
-		return 100 // 默认优先级100
-	}
-	val, err := strconv.Atoi(setting.Value)
-	if err != nil {
-		return 100
-	}
-	return val
+	return models.GetSettingInt(ctx, models.SettingKeyAutoPriorityDecayDefault, 100, 0)
 }
 
-// GetSettingBool 获取设置的布尔值
+// GetSettingBool 获取设置的布尔值（默认 false）
 func GetSettingBool(ctx context.Context, key string) bool {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", key).
-		First(ctx)
-	if err != nil {
-		return false
-	}
-	return setting.Value == "true"
+	return models.GetSettingBool(ctx, key, false)
 }
 
 // cleanupExcessLogs 清理超出保留条数的日志

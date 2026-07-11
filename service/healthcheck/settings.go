@@ -2,11 +2,9 @@ package healthcheck
 
 import (
 	"context"
-	"strconv"
 	"time"
 
 	"github.com/atopos31/llmio/models"
-	"gorm.io/gorm"
 )
 
 func (h *HealthChecker) isEnabled(ctx context.Context) bool {
@@ -56,22 +54,9 @@ func GetHealthCheckSettings(ctx context.Context) (enabled bool, interval int, fa
 }
 
 func getSettingBool(ctx context.Context, key string, defaultValue bool) bool {
-	setting, err := gorm.G[models.Setting](models.DB).Where("key = ?", key).First(ctx)
-	if err != nil {
-		return defaultValue
-	}
-	return setting.Value == "true"
+	return models.GetSettingBool(ctx, key, defaultValue)
 }
 
 func getSettingInt(ctx context.Context, key string, defaultValue, minValue int) int {
-	setting, err := gorm.G[models.Setting](models.DB).Where("key = ?", key).First(ctx)
-	if err != nil {
-		return defaultValue
-	}
-
-	value, err := strconv.Atoi(setting.Value)
-	if err != nil || value < minValue {
-		return defaultValue
-	}
-	return value
+	return models.GetSettingInt(ctx, key, defaultValue, minValue)
 }

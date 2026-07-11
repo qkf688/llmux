@@ -3,7 +3,6 @@ package chat
 import (
 	"context"
 	"log/slog"
-	"strconv"
 	"time"
 
 	"github.com/atopos31/llmio/models"
@@ -97,15 +96,5 @@ func cleanupLogsIfNeeded() {
 
 // getLogRetentionCount 获取日志保留条数设置
 func getLogRetentionCount(ctx context.Context) int {
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyLogRetentionCount).
-		First(ctx)
-	if err != nil {
-		return 0 // 默认不限制
-	}
-	count, err := strconv.Atoi(setting.Value)
-	if err != nil {
-		return 0
-	}
-	return count
+	return models.GetSettingInt(ctx, models.SettingKeyLogRetentionCount, 0, 0)
 }

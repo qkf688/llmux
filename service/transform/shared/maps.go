@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/atopos31/llmio/models"
-	"gorm.io/gorm"
 )
 
 // GetNestedString supports dotted paths such as "response.id".
@@ -141,28 +140,10 @@ func NormalizeReasoningEffort(ctx context.Context, value string) string {
 }
 
 func getReasoningEffortDefaultValue(ctx context.Context) string {
-	if models.DB == nil {
-		return "low"
-	}
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyReasoningEffortDefaultValue).
-		First(ctx)
-	if err != nil {
-		return "low"
-	}
-	return setting.Value
+	return models.GetSettingString(ctx, models.SettingKeyReasoningEffortDefaultValue, "low")
 }
 
 // GetReasoningEffortMappingEnabled returns whether reasoning_effort mapping is enabled.
 func GetReasoningEffortMappingEnabled(ctx context.Context) bool {
-	if models.DB == nil {
-		return true // default enabled
-	}
-	setting, err := gorm.G[models.Setting](models.DB).
-		Where("key = ?", models.SettingKeyReasoningEffortMappingEnabled).
-		First(ctx)
-	if err != nil {
-		return true // default enabled
-	}
-	return setting.Value == "true"
+	return models.GetSettingBool(ctx, models.SettingKeyReasoningEffortMappingEnabled, true)
 }

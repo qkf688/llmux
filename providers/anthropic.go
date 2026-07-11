@@ -35,6 +35,13 @@ func init() {
 		}
 		return &anthropic, nil
 	})
+	RegisterMetadata(Metadata{
+		Type:            consts.StyleAnthropic,
+		ConfigTemplate:  configTemplateAnthropic,
+		TestBody:        []byte(testBodyAnthropic),
+		StructuredBody:  []byte(structuredBodyAnthropic),
+		HealthCheckBody: []byte(healthCheckBodyAnthropic),
+	})
 }
 
 func (a *Anthropic) BuildReq(ctx context.Context, header http.Header, model string, rawBody []byte) (*http.Request, error) {

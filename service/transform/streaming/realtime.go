@@ -227,35 +227,27 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, provider
 }
 
 func dispatchRealtimeStreamChunk(state *realtimeStreamState, data string) error {
-	switch {
-	case state.providerType == "anthropic" && state.clientType == "openai-res":
-		return handleRealtimeAnthropicToResponses(state, data)
-	case state.providerType == "openai-res" && state.clientType == "anthropic":
-		return handleRealtimeResponsesToAnthropic(state, data)
-	case state.providerType == "openai" && state.clientType == "openai-res":
-		return handleRealtimeOpenAIToResponses(state, data)
-	case state.providerType == "openai-res" && state.clientType == "openai":
-		return handleRealtimeResponsesToOpenAI(state, data)
-	default:
-		// Keep behavior: passthrough. Add observability for unexpected routes.
-		if state.unknownRouteCount < 3 {
-			state.unknownRouteCount++
-			slog.Warn("unknown stream transform route, passthrough",
-				"provider_type", state.providerType,
-				"client_type", state.clientType,
-				"event", state.currentEvent,
-				"line", state.lineCount,
-				"data_length", len(data),
-				"data_preview", func() string {
-					if len(data) > 120 {
-						return data[:120]
-					}
-					return data
-				}(),
-			)
-		}
-		return writeRealtimeData(state, data)
+	if h, ok := lookupRealtimeRoute(state.providerType, state.clientType); ok {
+		return h(state, data)
 	}
+	// Keep behavior: passthrough. Add observability for unexpected routes.
+	if state.unknownRouteCount < 3 {
+		state.unknownRouteCount++
+		slog.Warn("unknown stream transform route, passthrough",
+			"provider_type", state.providerType,
+			"client_type", state.clientType,
+			"event", state.currentEvent,
+			"line", state.lineCount,
+			"data_length", len(data),
+			"data_preview", func() string {
+				if len(data) > 120 {
+					return data[:120]
+				}
+				return data
+			}(),
+		)
+	}
+	return writeRealtimeData(state, data)
 }
 
 func writeRealtimeData(state *realtimeStreamState, data string) error {

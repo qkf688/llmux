@@ -46,51 +46,26 @@ func cleanupLogsIfNeeded() {
 		return // 0 表示不限制
 	}
 
-	// 获取总日志数
-	var total int64
-	// 注意：ChatLog 使用 gorm.Model（包含 DeletedAt）。这里必须使用 Unscoped 统计，确保历史软删记录也会被真正清理，
-	// 否则 UI 看起来只保留了 retentionCount 条，但数据库内仍会堆积软删记录，导致“清空日志”时 deleted 远大于 retentionCount。
-	if err := models.DB.Unscoped().Model(&models.ChatLog{}).Count(&total).Error; err != nil {
-		slog.Error("failed to count logs for cleanup", "error", err)
+	// ChatLog：Unscoped 统计+硬删，先删 ChatIO（与 healthcheck 软删策略不同）
+	deleted, err := models.EnforceRetentionByOldestID(ctx, models.DB, &models.ChatLog{}, retentionCount, models.RetentionDeleteOptions{
+		UnscopedCount:  true,
+		UnscopedDelete: true,
+		BeforeDelete: func(ctx context.Context, ids []uint) error {
+			if err := models.DB.WithContext(ctx).Unscoped().
+				Where("log_id IN ?", ids).
+				Delete(&models.ChatIO{}).Error; err != nil {
+				slog.Error("failed to delete chat io records", "error", err)
+				// 与旧逻辑一致：ChatIO 失败只记日志，不中断主表删除
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		slog.Error("failed to cleanup excess logs", "error", err)
 		return
 	}
-
-	// 如果日志数超过保留条数，删除多余的
-	if int(total) > retentionCount {
-		deleteCount := int(total) - retentionCount
-
-		// 获取需要删除的日志ID（最旧的）
-		var logsToDelete []models.ChatLog
-		if err := models.DB.Unscoped().Model(&models.ChatLog{}).
-			Order("id ASC").
-			Limit(deleteCount).
-			Find(&logsToDelete).Error; err != nil {
-			slog.Error("failed to find logs to delete", "error", err)
-			return
-		}
-
-		// 提取ID列表
-		ids := make([]uint, len(logsToDelete))
-		for i, log := range logsToDelete {
-			ids[i] = log.ID
-		}
-
-		// 删除对应的ChatIO记录（硬删）
-		if err := models.DB.WithContext(ctx).Unscoped().
-			Where("log_id IN ?", ids).
-			Delete(&models.ChatIO{}).Error; err != nil {
-			slog.Error("failed to delete chat io records", "error", err)
-		}
-
-		// 删除日志记录（硬删）
-		if err := models.DB.WithContext(ctx).Unscoped().
-			Where("id IN ?", ids).
-			Delete(&models.ChatLog{}).Error; err != nil {
-			slog.Error("failed to delete logs", "error", err)
-			return
-		}
-
-		slog.Info("auto cleaned up excess logs", "deleted", deleteCount, "retention", retentionCount)
+	if deleted > 0 {
+		slog.Info("auto cleaned up excess logs", "deleted", deleted, "retention", retentionCount)
 	}
 }
 

@@ -6,34 +6,6 @@ type ProviderTemplate struct {
 	Template string `json:"template"`
 }
 
-// 阶段 5 OCP-6 前仍用静态切片；勿在此做自注册。
-var template = []ProviderTemplate{
-	{
-		Type: "openai",
-		Template: `{
-			"base_url": "https://api.openai.com/v1",
-			"api_key": "YOUR_API_KEY"
-		}`,
-	},
-	{
-		Type: "openai-res",
-		Template: `{
-			"base_url": "https://api.openai.com/v1",
-			"api_key": "YOUR_API_KEY"
-		}`,
-	},
-	{
-		Type: "anthropic",
-		Template: `{
-			"base_url": "https://api.anthropic.com/v1",
-			"api_key": "YOUR_API_KEY",
-			"beta": "",
-			"version": "2023-06-01",
-			"auth_type": "x-api-key"
-		}`,
-	},
-}
-
 // ProviderRequest represents the request body for creating/updating a provider.
 type ProviderRequest struct {
 	Name               string `json:"name"`

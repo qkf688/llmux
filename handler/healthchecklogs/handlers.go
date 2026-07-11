@@ -1,9 +1,8 @@
 package healthchecklogs
 
 import (
-	"strconv"
-
 	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/repository"
 	"github.com/gin-gonic/gin"
 )
@@ -14,26 +13,9 @@ func repos() *repository.Repositories {
 
 // GetHealthCheckLogs 获取健康检测日志（支持分页和筛选）。
 func GetHealthCheckLogs(c *gin.Context) {
-	pageStr := c.Query("page")
-	page := 1
-	if pageStr != "" {
-		parsedPage, err := strconv.Atoi(pageStr)
-		if err != nil || parsedPage < 1 {
-			common.BadRequest(c, "Invalid page parameter")
-			return
-		}
-		page = parsedPage
-	}
-
-	pageSizeStr := c.Query("page_size")
-	pageSize := 20
-	if pageSizeStr != "" {
-		parsedPageSize, err := strconv.Atoi(pageSizeStr)
-		if err != nil || parsedPageSize < 1 || parsedPageSize > 100 {
-			common.BadRequest(c, "Invalid page_size parameter (must be between 1 and 100)")
-			return
-		}
-		pageSize = parsedPageSize
+	page, pageSize, ok := httpx.ParsePaginationStrict(c)
+	if !ok {
+		return
 	}
 
 	list, err := repos().HealthCheckLog.List(c.Request.Context(), repository.HealthCheckLogListOptions{

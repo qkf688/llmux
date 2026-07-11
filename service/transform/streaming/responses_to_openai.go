@@ -6,6 +6,10 @@ import (
 	"github.com/atopos31/llmio/service/responses"
 )
 
+func init() {
+	RegisterRealtimeRoute("openai-res", "openai", handleRealtimeResponsesToOpenAI)
+}
+
 func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) error {
 	// [DONE] 被忽略，因为 response.completed 已发送 [DONE]
 	if data == "[DONE]" {

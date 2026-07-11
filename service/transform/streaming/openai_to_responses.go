@@ -6,6 +6,10 @@ import (
 	"github.com/atopos31/llmio/common/maputil"
 )
 
+func init() {
+	RegisterRealtimeRoute("openai", "openai-res", handleRealtimeOpenAIToResponses)
+}
+
 func handleRealtimeOpenAIToResponses(state *realtimeStreamState, data string) error {
 	// OpenAI 的 [DONE] 不需要转换
 	if data == "[DONE]" {

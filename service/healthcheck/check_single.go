@@ -149,16 +149,14 @@ func (h *HealthChecker) saveHealthCheckLog(ctx context.Context, logEntry *models
 }
 
 func chooseTestBody(providerType string) []byte {
-	switch providerType {
-	case consts.StyleOpenAI:
-		return []byte(testOpenAIBody)
-	case consts.StyleAnthropic:
-		return []byte(testAnthropicBody)
-	case consts.StyleOpenAIRes:
-		return []byte(testOpenAIResBody)
-	default:
-		return []byte(testOpenAIBody)
+	// 未知 type 回退 OpenAI body（与 testapi 对未知 type 报错不同，必须保留）。
+	if m, ok := providers.MetadataOf(providerType); ok && len(m.HealthCheckBody) > 0 {
+		return m.HealthCheckBody
 	}
+	if m, ok := providers.MetadataOf(consts.StyleOpenAI); ok && len(m.HealthCheckBody) > 0 {
+		return m.HealthCheckBody
+	}
+	return nil
 }
 
 func buildRequestHeaders(mp *models.ModelWithProvider) http.Header {

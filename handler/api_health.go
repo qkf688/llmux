@@ -3,9 +3,9 @@ package handler
 import (
 	"context"
 	"log/slog"
-	"strconv"
 
 	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/service"
 	"github.com/gin-gonic/gin"
@@ -15,16 +15,14 @@ import (
 
 // RunHealthCheck 手动运行单个模型提供商的健康检测
 func RunHealthCheck(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 64)
-	if err != nil {
-		common.BadRequest(c, "Invalid ID format")
+	id, ok := httpx.ParseUintParamAllowZero(c, "id")
+	if !ok {
 		return
 	}
 
 	ctx := c.Request.Context()
 
-	log, err := service.GetHealthChecker().CheckSingle(ctx, uint(id))
+	log, err := service.GetHealthChecker().CheckSingle(ctx, id)
 	if err != nil {
 		common.InternalServerError(c, "Failed to run health check: "+err.Error())
 		return

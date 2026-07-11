@@ -23,6 +23,10 @@ type openaiBase struct {
 	endpointPath string // 注入差异点：chat/completions 或 responses
 }
 
+// OpenAICompatBaseURL / OpenAICompatAPIKey 实现 OpenAICompat 能力接口（OCP-9）。
+func (o *openaiBase) OpenAICompatBaseURL() string { return o.BaseURL }
+func (o *openaiBase) OpenAICompatAPIKey() string  { return o.APIKey }
+
 func (o *openaiBase) BuildReq(ctx context.Context, header http.Header, model string, rawBody []byte) (*http.Request, error) {
 	body, err := sjson.SetBytes(rawBody, "model", model)
 	if err != nil {

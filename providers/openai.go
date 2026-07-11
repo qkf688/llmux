@@ -23,4 +23,11 @@ func init() {
 		openai.endpointPath = "chat/completions"
 		return &openai, nil
 	})
+	RegisterMetadata(Metadata{
+		Type:            consts.StyleOpenAI,
+		ConfigTemplate:  configTemplateOpenAI,
+		TestBody:        []byte(testBodyOpenAI),
+		StructuredBody:  []byte(structuredBodyOpenAI),
+		HealthCheckBody: []byte(healthCheckBodyOpenAI),
+	})
 }

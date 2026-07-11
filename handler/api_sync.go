@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/service"
 	"github.com/gin-gonic/gin"
@@ -13,15 +14,13 @@ import (
 
 // SyncProviderModels 同步单个提供商的上游模型
 func SyncProviderModels(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 64)
-	if err != nil {
-		common.BadRequest(c, "Invalid ID format")
+	id, ok := httpx.ParseUintParamAllowZero(c, "id")
+	if !ok {
 		return
 	}
 
 	syncService := service.NewModelSyncService(models.DB)
-	syncLog, err := syncService.SyncProviderModels(c.Request.Context(), uint(id))
+	syncLog, err := syncService.SyncProviderModels(c.Request.Context(), id)
 	if err != nil {
 		common.InternalServerError(c, "Failed to sync models: "+err.Error())
 		return

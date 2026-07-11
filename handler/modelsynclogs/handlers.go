@@ -1,12 +1,10 @@
 package modelsynclogs
 
 import (
-	"errors"
-	"io"
-	"strconv"
 	"strings"
 
 	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/repository"
 	"github.com/gin-gonic/gin"
 )
@@ -17,8 +15,8 @@ func repos() *repository.Repositories {
 
 // GetModelSyncLogs 获取模型同步日志列表。
 func GetModelSyncLogs(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	// loose：解析后直接用于 List；响应展示再 Normalize（与现网一致）
+	page, pageSize := httpx.ParsePaginationLoose(c)
 
 	list, err := repos().ModelSyncLog.List(c.Request.Context(), repository.ModelSyncLogListOptions{
 		Filter: repository.ModelSyncLogFilter{
@@ -38,12 +36,7 @@ func GetModelSyncLogs(c *gin.Context) {
 		return
 	}
 
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 20
-	}
+	page, pageSize = httpx.NormalizePaginationLoose(page, pageSize)
 
 	common.Success(c, map[string]interface{}{
 		"data": list.Logs,
@@ -61,8 +54,7 @@ func DeleteModelSyncLogs(c *gin.Context) {
 	var req struct {
 		IDs []uint `json:"ids"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+	if !httpx.BindJSON(c, &req) {
 		return
 	}
 	if len(req.IDs) == 0 {
@@ -99,8 +91,7 @@ func ClearModelSyncErrorLogs(c *gin.Context) {
 	var req struct {
 		ProviderIDs []uint `json:"provider_ids"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+	if !httpx.BindJSONAllowEOF(c, &req) {
 		return
 	}
 

@@ -8,6 +8,10 @@ import (
 	"github.com/atopos31/llmio/service/transform/shared"
 )
 
+func init() {
+	RegisterRealtimeRoute("anthropic", "openai-res", handleRealtimeAnthropicToResponses)
+}
+
 func handleRealtimeAnthropicToResponses(state *realtimeStreamState, data string) error {
 	// Anthropic 不发送 [DONE]，忽略
 	if data == "[DONE]" {

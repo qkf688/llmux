@@ -91,19 +91,9 @@ func TestReactHandler(c *gin.Context) {
 	c.Writer.Flush()
 	start := time.Now()
 
-	switch chatModel.Type {
-	case consts.StyleAnthropic:
-		var final string
-		toolCities, final, checkError = runAnthropicReactTest(ctx, c, httpClient, header, chatModel, providerInstance, scenario)
-		finalText.WriteString(final)
-	default:
-		baseURL, apiKey, supported := openAICompatConfig(providerInstance)
-		if !supported {
-			c.SSEvent("error", fmt.Sprintf("该测试仅支持 OpenAI 兼容接口（%s/%s）或 %s，当前提供商类型: %s", consts.StyleOpenAI, consts.StyleOpenAIRes, consts.StyleAnthropic, chatModel.Type))
-			c.Writer.Flush()
-			return
-		}
-
+	// OCP-9：优先 OpenAICompat 能力接口；否则 anthropic 协议族；禁止 *OpenAI/*OpenAIRes/*Anthropic 类型断言。
+	if compat, ok := providerInstance.(providers.OpenAICompat); ok {
+		baseURL, apiKey := compat.OpenAICompatBaseURL(), compat.OpenAICompatAPIKey()
 		clientOptions := []option.RequestOption{
 			option.WithBaseURL(baseURL),
 			option.WithHTTPClient(httpClient),
@@ -168,6 +158,14 @@ func TestReactHandler(c *gin.Context) {
 			c.SSEvent(content.Cate, res)
 			c.Writer.Flush()
 		}
+	} else if chatModel.Type == consts.StyleAnthropic {
+		var final string
+		toolCities, final, checkError = runAnthropicReactTest(ctx, c, httpClient, header, chatModel, providerInstance, scenario)
+		finalText.WriteString(final)
+	} else {
+		c.SSEvent("error", fmt.Sprintf("该测试仅支持 OpenAI 兼容接口（%s/%s）或 %s，当前提供商类型: %s", consts.StyleOpenAI, consts.StyleOpenAIRes, consts.StyleAnthropic, chatModel.Type))
+		c.Writer.Flush()
+		return
 	}
 
 	if checkError == nil {
@@ -204,22 +202,20 @@ func GetWeather(ctx context.Context, call openai.ChatCompletionChunkChoiceDeltaT
 }
 
 func openAICompatConfig(provider providers.Provider) (baseURL, apiKey string, supported bool) {
-	switch v := provider.(type) {
-	case *providers.OpenAI:
-		return v.BaseURL, v.APIKey, true
-	case *providers.OpenAIRes:
-		return v.BaseURL, v.APIKey, true
-	default:
+	compat, ok := provider.(providers.OpenAICompat)
+	if !ok {
 		return "", "", false
 	}
+	return compat.OpenAICompatBaseURL(), compat.OpenAICompatAPIKey(), true
 }
 
 func runAnthropicReactTest(ctx context.Context, c *gin.Context, httpClient *http.Client, header http.Header, chatModel *ChatModel, providerInstance providers.Provider, scenario reactScenario) ([]string, string, error) {
 	if chatModel.Type != consts.StyleAnthropic {
 		return nil, "", fmt.Errorf("invalid provider type for anthropic runner: %s", chatModel.Type)
 	}
-	if _, ok := providerInstance.(*providers.Anthropic); !ok {
-		return nil, "", fmt.Errorf("invalid provider instance: %T", providerInstance)
+	// 仅依赖 Provider 接口（BuildReq），不强制 *providers.Anthropic 类型断言。
+	if providerInstance == nil {
+		return nil, "", fmt.Errorf("invalid provider instance: nil")
 	}
 
 	tools := []models.UnifiedTool{

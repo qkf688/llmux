@@ -3,10 +3,10 @@ package providerapi
 import (
 	"context"
 	"errors"
-	"strconv"
 
 	"github.com/atopos31/llmio/common"
 	"github.com/atopos31/llmio/handler/autoassoc"
+	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/handler/settings"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/repository"
@@ -34,8 +34,7 @@ func GetProviders(c *gin.Context) {
 // CreateProvider 创建提供商。
 func CreateProvider(c *gin.Context) {
 	var req ProviderRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+	if !httpx.BindJSON(c, &req) {
 		return
 	}
 
@@ -60,11 +59,8 @@ func CreateProvider(c *gin.Context) {
 		modelFilterEnabled = *req.ModelFilterEnabled
 	}
 
-	// AuthType 仅 Anthropic；DRY-16 抽取留给阶段 5
-	var authType *string
-	if req.Type == "anthropic" && req.AuthType != "" {
-		authType = &req.AuthType
-	}
+	// AuthType 仅 Anthropic
+	authType := resolveAuthType(req.Type, req.AuthType)
 
 	provider := models.Provider{
 		Name:               req.Name,
@@ -89,21 +85,18 @@ func CreateProvider(c *gin.Context) {
 
 // UpdateProvider 更新提供商。
 func UpdateProvider(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 64)
-	if err != nil {
-		common.BadRequest(c, "Invalid ID format")
+	id, ok := httpx.ParseUintParamAllowZero(c, "id")
+	if !ok {
 		return
 	}
 
 	var req ProviderRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+	if !httpx.BindJSON(c, &req) {
 		return
 	}
 
 	ctx := c.Request.Context()
-	if _, err := repos().Provider.Get(ctx, uint(id)); err != nil {
+	if _, err := repos().Provider.Get(ctx, id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			common.NotFound(c, "Provider not found")
 			return
@@ -112,10 +105,7 @@ func UpdateProvider(c *gin.Context) {
 		return
 	}
 
-	var authType *string
-	if req.Type == "anthropic" && req.AuthType != "" {
-		authType = &req.AuthType
-	}
+	authType := resolveAuthType(req.Type, req.AuthType)
 
 	updates := models.Provider{
 		Name:               req.Name,
@@ -129,12 +119,12 @@ func UpdateProvider(c *gin.Context) {
 		AuthType:           authType,
 	}
 
-	if err := repos().Provider.Update(ctx, uint(id), &updates); err != nil {
+	if err := repos().Provider.Update(ctx, id, &updates); err != nil {
 		common.InternalServerError(c, "Failed to update provider: "+err.Error())
 		return
 	}
 
-	updatedProvider, err := repos().Provider.Get(ctx, uint(id))
+	updatedProvider, err := repos().Provider.Get(ctx, id)
 	if err != nil {
 		common.InternalServerError(c, "Failed to retrieve updated provider: "+err.Error())
 		return
@@ -148,15 +138,13 @@ func UpdateProvider(c *gin.Context) {
 
 // DeleteProvider 删除提供商。
 func DeleteProvider(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 64)
-	if err != nil {
-		common.BadRequest(c, "Invalid ID format")
+	id, ok := httpx.ParseUintParamAllowZero(c, "id")
+	if !ok {
 		return
 	}
 
 	ctx := c.Request.Context()
-	result, err := repos().Provider.Delete(ctx, uint(id))
+	result, err := repos().Provider.Delete(ctx, id)
 	if err != nil {
 		common.InternalServerError(c, "Failed to delete provider: "+err.Error())
 		return
@@ -166,7 +154,7 @@ func DeleteProvider(c *gin.Context) {
 	if autoClean {
 		go autoassoc.TriggerAutoClean(context.Background())
 	} else {
-		if _, err := repos().ModelWithProvider.DeleteByProviderID(ctx, uint(id)); err != nil {
+		if _, err := repos().ModelWithProvider.DeleteByProviderID(ctx, id); err != nil {
 			common.InternalServerError(c, "Failed to delete provider: "+err.Error())
 			return
 		}

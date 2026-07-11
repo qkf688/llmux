@@ -2,10 +2,10 @@ package logs
 
 import (
 	"errors"
-	"strconv"
 	"strings"
 
 	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/repository"
 	"github.com/gin-gonic/gin"
@@ -14,26 +14,9 @@ import (
 
 // GetRequestLogs 获取最近的请求日志（支持分页和筛选）。
 func GetRequestLogs(c *gin.Context) {
-	pageStr := c.Query("page")
-	page := 1
-	if pageStr != "" {
-		parsedPage, err := strconv.Atoi(pageStr)
-		if err != nil || parsedPage < 1 {
-			common.BadRequest(c, "Invalid page parameter")
-			return
-		}
-		page = parsedPage
-	}
-
-	pageSizeStr := c.Query("page_size")
-	pageSize := 20
-	if pageSizeStr != "" {
-		parsedPageSize, err := strconv.Atoi(pageSizeStr)
-		if err != nil || parsedPageSize < 1 || parsedPageSize > 100 {
-			common.BadRequest(c, "Invalid page_size parameter (must be between 1 and 100)")
-			return
-		}
-		pageSize = parsedPageSize
+	page, pageSize, ok := httpx.ParsePaginationStrict(c)
+	if !ok {
+		return
 	}
 
 	includeRaw := strings.EqualFold(strings.TrimSpace(c.Query("include_raw")), "true")
@@ -69,14 +52,12 @@ func GetRequestLogs(c *gin.Context) {
 
 // GetRequestLogDetail 获取单条请求日志详情。
 func GetRequestLogDetail(c *gin.Context) {
-	idStr := strings.TrimSpace(c.Param("id"))
-	id, err := strconv.ParseUint(idStr, 10, 64)
-	if err != nil || id == 0 {
-		common.BadRequest(c, "Invalid ID format")
+	id, ok := httpx.ParseUintParam(c, "id")
+	if !ok {
 		return
 	}
 
-	log, err := repos().ChatLog.Get(c.Request.Context(), uint(id))
+	log, err := repos().ChatLog.Get(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			common.NotFound(c, "Log not found")
@@ -91,6 +72,5 @@ func GetRequestLogDetail(c *gin.Context) {
 		common.NotFound(c, "Log not found")
 		return
 	}
-
 	common.Success(c, enriched[0])
 }

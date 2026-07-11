@@ -7,6 +7,10 @@ import (
 	"github.com/atopos31/llmio/service/responses"
 )
 
+func init() {
+	RegisterRealtimeRoute("openai-res", "anthropic", handleRealtimeResponsesToAnthropic)
+}
+
 func handleRealtimeResponsesToAnthropic(state *realtimeStreamState, data string) error {
 	// [DONE] 被忽略，因为 response.completed 已发送 message_stop
 	if data == "[DONE]" {

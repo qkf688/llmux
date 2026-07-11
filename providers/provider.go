@@ -26,6 +26,14 @@ type Provider interface {
 	GetProxy() string
 }
 
+// OpenAICompat 标记 OpenAI 兼容协议族（chat/completions 或 responses 风格配置导出）。
+// *OpenAI / *OpenAIRes 实现；*Anthropic 不实现。供 React 测试等走统一能力接口，避免具体类型断言。
+type OpenAICompat interface {
+	Provider
+	OpenAICompatBaseURL() string
+	OpenAICompatAPIKey() string
+}
+
 func buildCustomModels(custom []string) []Model {
 	now := time.Now().Unix()
 	models := make([]Model, 0, len(custom))

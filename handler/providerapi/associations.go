@@ -11,6 +11,7 @@ import (
 
 // ClearProviderAssociations 清除指定提供商的所有模型关联。
 func ClearProviderAssociations(c *gin.Context) {
+	// 错误文案与现网一致：Invalid provider ID format（非通用 Invalid ID format）
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 64)
 	if err != nil {
@@ -39,6 +40,6 @@ func ClearProviderAssociations(c *gin.Context) {
 	common.Success(c, map[string]interface{}{
 		"provider_id":   id,
 		"provider_name": provider.Name,
-		"deleted_count": deleted,
+		"deleted":       deleted,
 	})
 }

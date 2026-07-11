@@ -24,4 +24,11 @@ func init() {
 		openaiRes.endpointPath = "responses"
 		return &openaiRes, nil
 	})
+	RegisterMetadata(Metadata{
+		Type:            consts.StyleOpenAIRes,
+		ConfigTemplate:  configTemplateOpenAIRes,
+		TestBody:        []byte(testBodyOpenAIRes),
+		StructuredBody:  []byte(structuredBodyOpenAIRes),
+		HealthCheckBody: []byte(healthCheckBodyOpenAIRes),
+	})
 }

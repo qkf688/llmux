@@ -2,10 +2,10 @@ package logs
 
 import (
 	"log/slog"
-	"strconv"
 	"strings"
 
 	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/repository"
 	"github.com/gin-gonic/gin"
 )
@@ -17,19 +17,17 @@ type BatchDeleteLogsRequest struct {
 
 // DeleteLog 删除单条日志（先 ChatIO 硬删，再 ChatLog 硬删）。
 func DeleteLog(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 64)
-	if err != nil {
-		common.BadRequest(c, "Invalid ID format")
+	id, ok := httpx.ParseUintParamAllowZero(c, "id")
+	if !ok {
 		return
 	}
 
 	ctx := c.Request.Context()
-	if err := repos().ChatIO.HardDeleteByLogID(ctx, uint(id)); err != nil {
+	if err := repos().ChatIO.HardDeleteByLogID(ctx, id); err != nil {
 		slog.Warn("failed to delete chat io record", "log_id", id, "error", err)
 	}
 
-	affected, err := repos().ChatLog.HardDelete(ctx, uint(id))
+	affected, err := repos().ChatLog.HardDelete(ctx, id)
 	if err != nil {
 		common.InternalServerError(c, "Failed to delete log: "+err.Error())
 		return
@@ -45,8 +43,7 @@ func DeleteLog(c *gin.Context) {
 // BatchDeleteLogs 批量删除日志。
 func BatchDeleteLogs(c *gin.Context) {
 	var req BatchDeleteLogsRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		common.BadRequest(c, "Invalid request body: "+err.Error())
+	if !httpx.BindJSON(c, &req) {
 		return
 	}
 	if len(req.IDs) == 0 {

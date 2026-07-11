@@ -80,103 +80,144 @@ func ScanSSEEvents(reader *bufio.Scanner) iter.Seq[SSEEvent] {
 	}
 }
 
-func ProcesserOpenAI(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
-	// 首字时延
-	var firstChunkTime time.Duration
-	var once sync.Once
+// processerConfig 配置各协议 Processer 的差异点，供 createProcesser 使用。
+type processerConfig struct {
+	// nonStreamUsagePath 非流式模式下 usage 的 gjson 路径（默认 "usage"）。
+	nonStreamUsagePath string
+	// streamDoneTerminator 流式终止符（如 OpenAI 的 "[DONE]"）；空表示无终止符。
+	streamDoneTerminator string
+	// enableErrorCheck 是否启用前 MaxErrorCheckChunks 个 chunk 的错误检查（仅 OpenAI）。
+	enableErrorCheck bool
+	// streamUsageExtract 从流式 chunk 中提取 usage 字符串。
+	// 返回非空字符串表示找到 usage。仅在 usageStr == "" 时调用。
+	streamUsageExtract func(ev SSEEvent) string
+	// parseUsage 将 usage JSON 字符串解析为 models.Usage。
+	parseUsage func(usageStr string) (models.Usage, error)
+}
 
-	var usageStr string
-	var output models.OutputUnion
-
-	scanner := bufio.NewScanner(pr)
-	scanner.Buffer(make([]byte, 0, InitScannerBufferSize), MaxScannerBufferSize)
-	chunkCount := 0
-
-	// 优化3: 预分配切片容量，减少扩容开销
-	if stream {
-		output.OfStringArray = make([]string, 0, DefaultChunkArrayCapacity)
+// createProcesser 根据配置创建一个 Processer，统一 stream/non-stream、首包时间、TPS 逻辑。
+func createProcesser(cfg processerConfig) Processer {
+	if cfg.nonStreamUsagePath == "" {
+		cfg.nonStreamUsagePath = "usage"
 	}
+	return func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
+		var firstChunkTime time.Duration
+		var once sync.Once
 
-	if !stream {
-		for chunk := range ScannerToken(scanner) {
-			if !disablePerformanceTracking {
-				once.Do(func() {
-					firstChunkTime = time.Since(start)
-				})
-			}
+		var usageStr string
+		var output models.OutputUnion
 
-			output.OfString = chunk
-			if !disableTokenCounting {
-				usageStr = gjson.Get(chunk, "usage").String()
-			}
-			break
+		scanner := bufio.NewScanner(pr)
+		scanner.Buffer(make([]byte, 0, InitScannerBufferSize), MaxScannerBufferSize)
+		chunkCount := 0
+
+		if stream {
+			output.OfStringArray = make([]string, 0, DefaultChunkArrayCapacity)
 		}
-	} else {
-		for ev := range ScanSSEEvents(scanner) {
-			if !disablePerformanceTracking {
-				once.Do(func() {
-					firstChunkTime = time.Since(start)
-				})
-			}
 
-			chunk := ev.Data
-			if chunk == "[DONE]" {
+		if !stream {
+			for chunk := range ScannerToken(scanner) {
+				if !disablePerformanceTracking {
+					once.Do(func() {
+						firstChunkTime = time.Since(start)
+					})
+				}
+
+				output.OfString = chunk
+				if !disableTokenCounting {
+					usageStr = gjson.Get(chunk, cfg.nonStreamUsagePath).String()
+				}
 				break
 			}
-
-			// 性能优化：只检查前几个chunk的错误
-			// 大多数错误（认证、限流、参数错误）都在开始阶段返回
-			chunkCount++
-			if chunkCount <= MaxErrorCheckChunks {
-				errStr := gjson.Get(chunk, "error")
-				if errStr.Exists() {
-					return nil, nil, errors.New(errStr.String())
+		} else {
+			for ev := range ScanSSEEvents(scanner) {
+				if !disablePerformanceTracking {
+					once.Do(func() {
+						firstChunkTime = time.Since(start)
+					})
 				}
-			}
 
-			output.OfStringArray = append(output.OfStringArray, chunk)
+				chunk := ev.Data
+				if cfg.streamDoneTerminator != "" && chunk == cfg.streamDoneTerminator {
+					break
+				}
 
-			// 优化1: 只在还没找到usage时才查询，避免重复查询
-			if !disableTokenCounting && usageStr == "" {
-				usage := gjson.Get(chunk, "usage")
-				if usage.Exists() && usage.Get("total_tokens").Int() != 0 {
-					usageStr = usage.String()
+				if cfg.enableErrorCheck {
+					chunkCount++
+					if chunkCount <= MaxErrorCheckChunks {
+						errStr := gjson.Get(chunk, "error")
+						if errStr.Exists() {
+							return nil, nil, errors.New(errStr.String())
+						}
+					}
+				}
+
+				if chunk != "" {
+					output.OfStringArray = append(output.OfStringArray, chunk)
+				}
+
+				if !disableTokenCounting && usageStr == "" && cfg.streamUsageExtract != nil {
+					usageStr = cfg.streamUsageExtract(ev)
 				}
 			}
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, nil, err
-	}
+		if err := scanner.Err(); err != nil {
+			return nil, nil, err
+		}
 
-	// token用量
-	var openaiUsage models.Usage
-	if !disableTokenCounting {
-		usage := []byte(usageStr)
-		if json.Valid(usage) {
-			if err := json.Unmarshal(usage, &openaiUsage); err != nil {
+		var usage models.Usage
+		if !disableTokenCounting {
+			u, err := cfg.parseUsage(usageStr)
+			if err != nil {
 				return nil, nil, err
 			}
+			usage = u
 		}
-	}
 
-	var chunkTime time.Duration
-	var tps float64
-	if !disablePerformanceTracking {
-		chunkTime = time.Since(start) - firstChunkTime
-		// 计算 TPS，避免除零错误
-		if chunkTime.Seconds() > 0 {
-			tps = float64(openaiUsage.TotalTokens) / chunkTime.Seconds()
+		var chunkTime time.Duration
+		var tps float64
+		if !disablePerformanceTracking {
+			chunkTime = time.Since(start) - firstChunkTime
+			if chunkTime.Seconds() > 0 {
+				tps = float64(usage.TotalTokens) / chunkTime.Seconds()
+			}
 		}
-	}
 
-	return &models.ChatLog{
-		FirstChunkTime: firstChunkTime,
-		ChunkTime:      chunkTime,
-		Usage:          openaiUsage,
-		Tps:            tps,
-	}, &output, nil
+		return &models.ChatLog{
+			FirstChunkTime: firstChunkTime,
+			ChunkTime:      chunkTime,
+			Usage:          usage,
+			Tps:            tps,
+		}, &output, nil
+	}
 }
+
+func ProcesserOpenAI(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
+	return processerOpenAI(ctx, pr, stream, start, disablePerformanceTracking, disableTokenCounting)
+}
+
+var processerOpenAI = createProcesser(processerConfig{
+	nonStreamUsagePath:   "usage",
+	streamDoneTerminator: "[DONE]",
+	enableErrorCheck:     true,
+	streamUsageExtract: func(ev SSEEvent) string {
+		usage := gjson.Get(ev.Data, "usage")
+		if usage.Exists() && usage.Get("total_tokens").Int() != 0 {
+			return usage.String()
+		}
+		return ""
+	},
+	parseUsage: func(usageStr string) (models.Usage, error) {
+		var u models.Usage
+		usage := []byte(usageStr)
+		if json.Valid(usage) {
+			if err := json.Unmarshal(usage, &u); err != nil {
+				return models.Usage{}, err
+			}
+		}
+		return u, nil
+	},
+})
 
 type OpenAIResUsage struct {
 	InputTokens        int64              `json:"input_tokens"`
@@ -203,187 +244,67 @@ type AnthropicUsage struct {
 }
 
 func ProcesserOpenAiRes(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
-	// 首字时延
-	var firstChunkTime time.Duration
-	var once sync.Once
+	return processerOpenAiRes(ctx, pr, stream, start, disablePerformanceTracking, disableTokenCounting)
+}
 
-	var usageStr string
-	var output models.OutputUnion
-
-	scanner := bufio.NewScanner(pr)
-	scanner.Buffer(make([]byte, 0, InitScannerBufferSize), MaxScannerBufferSize)
-
-	// 优化: 预分配切片容量，减少扩容开销
-	if stream {
-		output.OfStringArray = make([]string, 0, DefaultChunkArrayCapacity)
-	}
-
-	if !stream {
-		for chunk := range ScannerToken(scanner) {
-			if !disablePerformanceTracking {
-				once.Do(func() {
-					firstChunkTime = time.Since(start)
-				})
-			}
-
-			output.OfString = chunk
-			if !disableTokenCounting {
-				usageStr = gjson.Get(chunk, "usage").String()
-			}
-			break
+var processerOpenAiRes = createProcesser(processerConfig{
+	nonStreamUsagePath: "usage",
+	streamUsageExtract: func(ev SSEEvent) string {
+		if ev.Event == "response.completed" {
+			return gjson.Get(ev.Data, "response.usage").String()
 		}
-	} else {
-		for ev := range ScanSSEEvents(scanner) {
-			if !disablePerformanceTracking {
-				once.Do(func() {
-					firstChunkTime = time.Since(start)
-				})
-			}
-
-			content := ev.Data
-			if content == "" {
-				continue
-			}
-
-			output.OfStringArray = append(output.OfStringArray, content)
-
-			// 优化: 只在特定事件时查询usage，避免重复查询
-			if !disableTokenCounting && usageStr == "" && ev.Event == "response.completed" {
-				usageStr = gjson.Get(content, "response.usage").String()
-			}
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, nil, err
-	}
-
-	var openAIResUsage OpenAIResUsage
-	if !disableTokenCounting {
+		return ""
+	},
+	parseUsage: func(usageStr string) (models.Usage, error) {
+		var u OpenAIResUsage
 		usage := []byte(usageStr)
 		if json.Valid(usage) {
-			if err := json.Unmarshal(usage, &openAIResUsage); err != nil {
-				return nil, nil, err
+			if err := json.Unmarshal(usage, &u); err != nil {
+				return models.Usage{}, err
 			}
 		}
-	}
-
-	var chunkTime time.Duration
-	var tps float64
-	if !disablePerformanceTracking {
-		chunkTime = time.Since(start) - firstChunkTime
-		// 计算 TPS，避免除零错误
-		if chunkTime.Seconds() > 0 {
-			tps = float64(openAIResUsage.TotalTokens) / chunkTime.Seconds()
-		}
-	}
-
-	return &models.ChatLog{
-		FirstChunkTime: firstChunkTime,
-		ChunkTime:      chunkTime,
-		Usage: models.Usage{
-			PromptTokens:     openAIResUsage.InputTokens,
-			CompletionTokens: openAIResUsage.OutputTokens,
-			TotalTokens:      openAIResUsage.TotalTokens,
+		return models.Usage{
+			PromptTokens:     u.InputTokens,
+			CompletionTokens: u.OutputTokens,
+			TotalTokens:      u.TotalTokens,
 			PromptTokensDetails: models.PromptTokensDetails{
-				CachedTokens: openAIResUsage.InputTokensDetails.CachedTokens,
+				CachedTokens: u.InputTokensDetails.CachedTokens,
 			},
-		},
-		Tps: tps,
-	}, &output, nil
-}
+		}, nil
+	},
+})
 
 func ProcesserAnthropic(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
-	// 首字时延
-	var firstChunkTime time.Duration
-	var once sync.Once
+	return processerAnthropic(ctx, pr, stream, start, disablePerformanceTracking, disableTokenCounting)
+}
 
-	var usageStr string
-
-	var output models.OutputUnion
-
-	scanner := bufio.NewScanner(pr)
-	scanner.Buffer(make([]byte, 0, InitScannerBufferSize), MaxScannerBufferSize)
-
-	// 优化: 预分配切片容量，减少扩容开销
-	if stream {
-		output.OfStringArray = make([]string, 0, DefaultChunkArrayCapacity)
-	}
-
-	if !stream {
-		for chunk := range ScannerToken(scanner) {
-			if !disablePerformanceTracking {
-				once.Do(func() {
-					firstChunkTime = time.Since(start)
-				})
-			}
-
-			output.OfString = chunk
-			if !disableTokenCounting {
-				usageStr = gjson.Get(chunk, "usage").String()
-			}
-			break
+var processerAnthropic = createProcesser(processerConfig{
+	nonStreamUsagePath: "usage",
+	streamUsageExtract: func(ev SSEEvent) string {
+		if ev.Event == "message_delta" {
+			return gjson.Get(ev.Data, "usage").String()
 		}
-	} else {
-		for ev := range ScanSSEEvents(scanner) {
-			if !disablePerformanceTracking {
-				once.Do(func() {
-					firstChunkTime = time.Since(start)
-				})
-			}
-
-			content := ev.Data
-			if content == "" {
-				continue
-			}
-
-			output.OfStringArray = append(output.OfStringArray, content)
-
-			// 优化: 只在特定事件时查询usage，避免重复查询
-			if !disableTokenCounting && usageStr == "" && ev.Event == "message_delta" {
-				usageStr = gjson.Get(content, "usage").String()
-			}
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, nil, err
-	}
-
-	var athropicUsage AnthropicUsage
-	if !disableTokenCounting {
+		return ""
+	},
+	parseUsage: func(usageStr string) (models.Usage, error) {
+		var u AnthropicUsage
 		usage := []byte(usageStr)
 		if json.Valid(usage) {
-			if err := json.Unmarshal(usage, &athropicUsage); err != nil {
-				return nil, nil, err
+			if err := json.Unmarshal(usage, &u); err != nil {
+				return models.Usage{}, err
 			}
 		}
-	}
-
-	var chunkTime time.Duration
-	var totalTokens int64
-	var tps float64
-	if !disablePerformanceTracking {
-		chunkTime = time.Since(start) - firstChunkTime
-		totalTokens = athropicUsage.InputTokens + athropicUsage.OutputTokens
-		// 计算 TPS，避免除零错误
-		if chunkTime.Seconds() > 0 {
-			tps = float64(totalTokens) / chunkTime.Seconds()
-		}
-	}
-
-	return &models.ChatLog{
-		FirstChunkTime: firstChunkTime,
-		ChunkTime:      chunkTime,
-		Usage: models.Usage{
-			PromptTokens:     athropicUsage.InputTokens,
-			CompletionTokens: athropicUsage.OutputTokens,
+		totalTokens := u.InputTokens + u.OutputTokens
+		return models.Usage{
+			PromptTokens:     u.InputTokens,
+			CompletionTokens: u.OutputTokens,
 			TotalTokens:      totalTokens,
 			PromptTokensDetails: models.PromptTokensDetails{
-				CachedTokens: athropicUsage.CacheReadInputTokens,
+				CachedTokens: u.CacheReadInputTokens,
 			},
-		},
-		Tps: tps,
-	}, &output, nil
-}
+		}, nil
+	},
+})
 
 func ScannerToken(reader *bufio.Scanner) iter.Seq[string] {
 	return func(yield func(string) bool) {

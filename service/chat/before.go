@@ -20,6 +20,48 @@ type Before struct {
 
 type Beforer func(data []byte) (*Before, error)
 
+// capabilityDetector 配置各协议 Beforer 的差异点，供 detectCapabilities 使用。
+type capabilityDetector struct {
+	imageContentPath string // 查找 image 的数组路径："messages" 或 "input"
+	imageTypeValue   string // image 内容项的 type 值："image_url", "input_image", "image"
+	// structuredOutputCheck 检测是否为 structured output；返回 true 表示是。
+	structuredOutputCheck func(data []byte) bool
+}
+
+// detectCapabilities 提取三个 Beforer 共有的 model/stream/tool/image/structuredOutput 检测逻辑。
+// 返回检测结果和可能被修改的 data（如 OpenAI 的 stream_options 注入由调用方在调用前完成）。
+func detectCapabilities(data []byte, cfg capabilityDetector) (model string, stream bool, toolCall bool, structuredOutput bool, image bool) {
+	model = gjson.GetBytes(data, "model").String()
+	stream = gjson.GetBytes(data, "stream").Bool()
+
+	tools := gjson.GetBytes(data, "tools")
+	if tools.Exists() && len(tools.Array()) != 0 {
+		toolCall = true
+	}
+
+	if cfg.structuredOutputCheck != nil {
+		structuredOutput = cfg.structuredOutputCheck(data)
+	}
+
+	gjson.GetBytes(data, cfg.imageContentPath).ForEach(func(_, value gjson.Result) bool {
+		if image {
+			return false
+		}
+		if value.Get("role").String() == "user" {
+			value.Get("content").ForEach(func(_, value gjson.Result) bool {
+				if value.Get("type").String() == cfg.imageTypeValue {
+					image = true
+					return false
+				}
+				return true
+			})
+		}
+		return true
+	})
+
+	return
+}
+
 func BeforerOpenAI(data []byte) (*Before, error) {
 	model := gjson.GetBytes(data, "model").String()
 	if model == "" {
@@ -36,30 +78,13 @@ func BeforerOpenAI(data []byte) (*Before, error) {
 		}
 		data = newData
 	}
-	var toolCall bool
-	tools := gjson.GetBytes(data, "tools")
-	if tools.Exists() && len(tools.Array()) != 0 {
-		toolCall = true
-	}
-	var structuredOutput bool
-	if gjson.GetBytes(data, "response_format").Exists() {
-		structuredOutput = true
-	}
-	var image bool
-	gjson.GetBytes(data, "messages").ForEach(func(_, value gjson.Result) bool {
-		if image {
-			return false
-		}
-		if value.Get("role").String() == "user" {
-			value.Get("content").ForEach(func(_, value gjson.Result) bool {
-				if value.Get("type").String() == "image_url" {
-					image = true
-					return false
-				}
-				return true
-			})
-		}
-		return true
+
+	_, _, toolCall, structuredOutput, image := detectCapabilities(data, capabilityDetector{
+		imageContentPath: "messages",
+		imageTypeValue:   "image_url",
+		structuredOutputCheck: func(data []byte) bool {
+			return gjson.GetBytes(data, "response_format").Exists()
+		},
 	})
 
 	if err := preprocessopenai.ValidateToolCallFunctionNames(data); err != nil {
@@ -141,31 +166,12 @@ func BeforerOpenAIRes(data []byte) (*Before, error) {
 		data = patched
 	}
 
-	stream := gjson.GetBytes(data, "stream").Bool()
-	var toolCall bool
-	tools := gjson.GetBytes(data, "tools")
-	if tools.Exists() && len(tools.Array()) != 0 {
-		toolCall = true
-	}
-	var structuredOutput bool
-	if gjson.GetBytes(data, "text.format.type").String() == "json_schema" {
-		structuredOutput = true
-	}
-	var image bool
-	gjson.GetBytes(data, "input").ForEach(func(_, value gjson.Result) bool {
-		if image {
-			return false
-		}
-		if value.Get("role").String() == "user" {
-			value.Get("content").ForEach(func(_, value gjson.Result) bool {
-				if value.Get("type").String() == "input_image" {
-					image = true
-					return false
-				}
-				return true
-			})
-		}
-		return true
+	_, stream, toolCall, structuredOutput, image := detectCapabilities(data, capabilityDetector{
+		imageContentPath: "input",
+		imageTypeValue:   "input_image",
+		structuredOutputCheck: func(data []byte) bool {
+			return gjson.GetBytes(data, "text.format.type").String() == "json_schema"
+		},
 	})
 	return &Before{
 		Model:            model,
@@ -182,27 +188,11 @@ func BeforerAnthropic(data []byte) (*Before, error) {
 	if model == "" {
 		return nil, errors.New("model is empty")
 	}
-	stream := gjson.GetBytes(data, "stream").Bool()
-	var toolCall bool
-	tools := gjson.GetBytes(data, "tools")
-	if tools.Exists() && len(tools.Array()) != 0 {
-		toolCall = true
-	}
-	var image bool
-	gjson.GetBytes(data, "messages").ForEach(func(_, value gjson.Result) bool {
-		if image {
-			return false
-		}
-		if value.Get("role").String() == "user" {
-			value.Get("content").ForEach(func(_, value gjson.Result) bool {
-				if value.Get("type").String() == "image" {
-					image = true
-					return false
-				}
-				return true
-			})
-		}
-		return true
+
+	_, stream, toolCall, _, image := detectCapabilities(data, capabilityDetector{
+		imageContentPath:      "messages",
+		imageTypeValue:        "image",
+		structuredOutputCheck: nil, // Anthropic 的 structuredOutput 直接等于 toolCall
 	})
 	return &Before{
 		Model:            model,

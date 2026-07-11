@@ -2,6 +2,7 @@ import { selectSidebarOpen, selectToggleSidebarOpen, useLayoutStore } from "@/st
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { AnimatedOutlet } from "@/components/animated-outlet";
+import type { ReactNode } from "react";
 import {
   FaHome,
   FaCloud,
@@ -19,6 +20,21 @@ import {
 } from "react-icons/fa";
 import { useTheme } from "@/components/theme-provider";
 import { selectClearToken, useAuthStore } from "@/stores/auth";
+import { getNavRoutes } from "./route-config";
+
+/** path → icon：配置不塞 React 节点，映射留在 layout */
+const navIconByPath: Record<string, ReactNode> = {
+  "/": <FaHome />,
+  "/providers": <FaCloud />,
+  "/models": <FaRobot />,
+  "/virtual-models": <FaLayerGroup />,
+  "/model-providers": <FaLink />,
+  "/logs": <FaFileAlt />,
+  "/health-check-logs": <FaHeartbeat />,
+  "/model-sync-logs": <FaSync />,
+  "/database": <FaDatabase />,
+  "/settings": <FaCog />,
+};
 
 export default function Layout() {
   const sidebarOpen = useLayoutStore(selectSidebarOpen);
@@ -33,18 +49,11 @@ export default function Layout() {
     navigate("/login");
   };
 
-  const navItems = [
-    { to: "/", label: "首页", icon: <FaHome /> },
-    { to: "/providers", label: "提供商管理", icon: <FaCloud /> },
-    { to: "/models", label: "模型管理", icon: <FaRobot /> },
-    { to: "/virtual-models", label: "虚拟模型", icon: <FaLayerGroup /> },
-    { to: "/model-providers", label: "模型提供商关联", icon: <FaLink /> },
-    { to: "/logs", label: "请求日志", icon: <FaFileAlt /> },
-    { to: "/health-check-logs", label: "健康检测日志", icon: <FaHeartbeat /> },
-    { to: "/model-sync-logs", label: "模型同步日志", icon: <FaSync /> },
-    { to: "/database", label: "数据库管理", icon: <FaDatabase /> },
-    { to: "/settings", label: "系统设置", icon: <FaCog /> },
-  ];
+  const navItems = getNavRoutes().map((route) => ({
+    to: route.path,
+    label: route.nav.label,
+    icon: navIconByPath[route.path] ?? null,
+  }));
 
   // 侧边栏宽度常量，方便统一管理
   const WIDTH_EXPANDED = "min-w-48";

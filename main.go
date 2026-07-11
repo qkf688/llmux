@@ -14,6 +14,7 @@ import (
 	"github.com/atopos31/llmio/handler"
 	"github.com/atopos31/llmio/middleware"
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/repository"
 	"github.com/atopos31/llmio/service"
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
@@ -23,6 +24,7 @@ import (
 func init() {
 	ctx := context.Background()
 	models.Init(ctx, "./db/llmio.db")
+	repository.SetDefault(repository.New(models.DB))
 	slog.Info("TZ", "time.Local", time.Local.String())
 
 	// 启动健康检测服务

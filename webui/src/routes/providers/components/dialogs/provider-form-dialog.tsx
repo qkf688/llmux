@@ -21,6 +21,7 @@ import { Switch } from "@/components/ui/switch";
 import type { Provider, ProviderTemplate } from "@/lib/api";
 import type { UseFormReturn } from "react-hook-form";
 import type { ProviderFormValues } from "../../form-schema";
+import { getProviderExtraFields } from "../../form-fields";
 import { applyProviderTemplateDefaults } from "../../utils/template-defaults";
 
 interface ProviderFormDialogProps {
@@ -46,6 +47,8 @@ export function ProviderFormDialog({
   toggleShowApiKey,
   onSubmit,
 }: ProviderFormDialogProps) {
+  const extraFields = getProviderExtraFields(watchedType);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] flex flex-col">
@@ -170,7 +173,7 @@ export function ProviderFormDialog({
                             <path
                               strokeLinecap="round"
                               strokeLinejoin="round"
-                              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542 7z"
                             />
                             <circle cx="12" cy="12" r="3" />
                           </svg>
@@ -183,60 +186,40 @@ export function ProviderFormDialog({
               )}
             />
 
-            {/* Anthropic 特有字段 */}
-            {watchedType === "anthropic" && (
-              <>
-                <FormField
-                  control={form.control}
-                  name="version"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Version</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="2023-06-01" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="beta"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Beta（可选）</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="可选的 beta 标识" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="auth_type"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>认证方式</FormLabel>
+            {/* type schema 驱动的额外字段（如 anthropic version/beta/auth_type） */}
+            {extraFields.map((extra) => (
+              <FormField
+                key={extra.name}
+                control={form.control}
+                name={extra.name}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{extra.label}</FormLabel>
+                    {extra.kind === "select" ? (
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="选择认证方式" />
+                            <SelectValue placeholder="请选择" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="x-api-key">x-api-key（Anthropic 官方）</SelectItem>
-                          <SelectItem value="bearer">Authorization: Bearer（兼容第三方）</SelectItem>
+                          {(extra.options ?? []).map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </>
-            )}
+                    ) : (
+                      <FormControl>
+                        <Input {...field} placeholder={extra.placeholder} />
+                      </FormControl>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ))}
 
             <FormField
               control={form.control}
@@ -310,4 +293,3 @@ export function ProviderFormDialog({
     </Dialog>
   );
 }
-

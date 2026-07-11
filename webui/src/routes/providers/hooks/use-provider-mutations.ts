@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { createProvider, updateProvider, type Provider } from "@/lib/api";
 import { providerKeys } from "@/hooks/api/use-providers";
 import { defaultProviderFormValues, type ProviderFormValues } from "../form-schema";
+import { resolveTopLevelAuthType } from "../form-fields";
 import { buildConfigFromForm } from "../utils/config";
 
 type UseProviderMutationsInput = {
@@ -33,7 +34,7 @@ export function useProviderMutations({
           proxy: values.proxy || "",
           model_endpoint: values.model_endpoint,
           model_filter_enabled: values.model_filter_enabled,
-          auth_type: values.type === "anthropic" ? (values.auth_type || "x-api-key") : undefined,
+          auth_type: resolveTopLevelAuthType(values.type, values),
         });
         setOpen(false);
         toast.success(`提供商 ${values.name} 更新成功`);
@@ -58,7 +59,7 @@ export function useProviderMutations({
         proxy: values.proxy || "",
         model_endpoint: values.model_endpoint ?? true,
         model_filter_enabled: values.model_filter_enabled ?? false,
-        auth_type: values.type === "anthropic" ? (values.auth_type || "x-api-key") : undefined,
+        auth_type: resolveTopLevelAuthType(values.type, values),
       });
       setOpen(false);
       toast.success(`提供商 ${values.name} 创建成功`);

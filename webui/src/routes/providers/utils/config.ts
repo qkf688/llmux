@@ -1,5 +1,6 @@
 import type { ProviderFormValues } from "../form-schema";
 import { parseAllModelsFromConfig } from "@/lib/provider-models";
+import { applyExtraFieldsToConfig } from "../form-fields";
 
 type ParsedProviderConfig = {
   base_url: string;
@@ -28,11 +29,7 @@ export function buildConfigFromForm(values: ProviderFormValues): string {
     api_key: values.api_key,
   };
 
-  if (values.type === "anthropic") {
-    baseConfig.beta = values.beta || "";
-    baseConfig.version = values.version || "2023-06-01";
-    baseConfig.auth_type = values.auth_type || "x-api-key";
-  }
+  applyExtraFieldsToConfig(values.type, values, baseConfig);
 
   if (customModels.length > 0) {
     baseConfig.custom_models = customModels;

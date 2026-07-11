@@ -1,6 +1,7 @@
 import type { UseFormReturn } from "react-hook-form";
 import type { ProviderTemplate } from "@/lib/api";
 import type { ProviderFormValues } from "../form-schema";
+import { getExtraFieldDefaultsFromParsed } from "../form-fields";
 import { parseConfigToForm } from "./config";
 
 export function applyProviderTemplateDefaults(
@@ -18,9 +19,13 @@ export function applyProviderTemplateDefaults(
     form.setValue("base_url", parsed.base_url);
   }
 
-  if (type === "anthropic") {
-    form.setValue("version", parsed.version || "2023-06-01");
-    form.setValue("beta", parsed.beta || "");
+  const extras = getExtraFieldDefaultsFromParsed(type, {
+    version: parsed.version,
+    beta: parsed.beta,
+    auth_type: parsed.auth_type,
+  });
+
+  for (const [name, value] of Object.entries(extras)) {
+    form.setValue(name as keyof ProviderFormValues, value);
   }
 }
-

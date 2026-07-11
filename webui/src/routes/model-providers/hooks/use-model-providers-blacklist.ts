@@ -1,9 +1,9 @@
 import { useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { getProviderBlacklist, updateProviderBlacklist, type Provider } from "@/lib/api";
+import type { Updater } from "@/stores/core/updater";
 import type { BlacklistFilter } from "../types";
 
-type Updater<T> = T | ((previous: T) => T);
 type Setter<T> = (value: Updater<T>) => void;
 
 type UseModelProvidersBlacklistInput = {

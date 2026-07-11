@@ -1,13 +1,8 @@
 import { createStore } from "zustand/vanilla";
 import type { ExportType } from "@/lib/api";
+import { type Updater, resolveUpdater } from "@/stores/core/updater";
 import { readDatabasePagePreferences, writeDatabasePagePreferences } from "@/stores/database/persist";
 import type { DatabasePagePreferences, ImportMode, ImportPreviewData } from "@/stores/database/types";
-
-type Updater<T> = T | ((previous: T) => T);
-
-function resolveUpdater<T>(updater: Updater<T>, previous: T): T {
-  return typeof updater === "function" ? (updater as (previous: T) => T)(previous) : updater;
-}
 
 function toggleTypeSelection(types: ExportType[], type: ExportType): ExportType[] {
   return types.includes(type) ? types.filter((item) => item !== type) : [...types, type];

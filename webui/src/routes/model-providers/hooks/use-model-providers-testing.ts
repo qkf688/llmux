@@ -6,6 +6,7 @@ import {
   testModelProviderStructuredOutput,
   type ModelProviderTestResult,
 } from "@/lib/api";
+import type { Updater } from "@/stores/core/updater";
 import type { TestType } from "../types";
 
 type ReactTestResult = {
@@ -15,7 +16,6 @@ type ReactTestResult = {
   error: string | null;
 };
 
-type Updater<T> = T | ((previous: T) => T);
 type Setter<T> = (value: Updater<T>) => void;
 
 type UseModelProvidersTestingInput = {

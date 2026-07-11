@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo } from "react";
 import type { ModelSyncLog } from "@/lib/api";
-
-type Updater<T> = T | ((previous: T) => T);
+import type { Updater } from "@/stores/core/updater";
 
 type UseModelSyncLogsSelectionInput = {
   activeTab: string;

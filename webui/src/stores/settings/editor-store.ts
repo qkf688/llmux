@@ -1,10 +1,5 @@
 import { createStore } from "zustand/vanilla";
-
-type Updater<T> = T | ((previous: T) => T);
-
-function resolveUpdater<T>(updater: Updater<T>, previous: T): T {
-  return typeof updater === "function" ? (updater as (previous: T) => T)(previous) : updater;
-}
+import { type Updater, resolveUpdater } from "@/stores/core/updater";
 
 export type SettingsEditorState<TSettings extends object> = {
   saving: boolean;

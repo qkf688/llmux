@@ -1,13 +1,8 @@
 import { createStore } from "zustand/vanilla";
 import type { Provider } from "@/lib/api";
+import { type Updater, resolveUpdater } from "@/stores/core/updater";
 import { readProvidersPagePreferences, writeProvidersPagePreferences } from "@/stores/providers/persist";
 import { DEFAULT_BATCH_TEST_PROGRESS, type AllModelsTypeFilter, type BatchTestProgress, type ModelTestResult } from "@/stores/providers/types";
-
-type Updater<T> = T | ((previous: T) => T);
-
-function resolveUpdater<T>(updater: Updater<T>, previous: T): T {
-  return typeof updater === "function" ? (updater as (previous: T) => T)(previous) : updater;
-}
 
 export type ProvidersPageState = {
   nameFilter: string;

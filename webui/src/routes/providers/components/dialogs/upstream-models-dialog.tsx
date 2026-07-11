@@ -18,9 +18,9 @@ import {
 } from "@/components/ui/tooltip";
 import Loading from "@/components/loading";
 import type { ProviderModel } from "@/lib/api";
+import type { Updater } from "@/stores/core/updater";
 import type { BatchTestProgress, ModelTestResult } from "../../types";
 
-type Updater<T> = T | ((previous: T) => T);
 type Setter<T> = (value: Updater<T>) => void;
 
 interface UpstreamModelsDialogProps {

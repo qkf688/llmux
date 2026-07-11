@@ -1,5 +1,6 @@
 import { createStore } from "zustand/vanilla";
 import type { ModelWithProvider } from "@/lib/api";
+import { type Updater, resolveUpdater } from "@/stores/core/updater";
 import { readModelProvidersPagePreferences, writeModelProvidersPagePreferences } from "@/stores/model-providers/persist";
 import type {
   AssociationBatchTestResult,
@@ -10,12 +11,6 @@ import type {
   ReactTestResultState,
   TestType,
 } from "@/stores/model-providers/types";
-
-type Updater<T> = T | ((previous: T) => T);
-
-function resolveUpdater<T>(updater: Updater<T>, previous: T): T {
-  return typeof updater === "function" ? (updater as (previous: T) => T)(previous) : updater;
-}
 
 function getInitialBatchTestProgress(): BatchTestProgress {
   return { total: 0, completed: 0, success: 0, failed: 0, testing: 0 };

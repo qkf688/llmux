@@ -1,12 +1,7 @@
 import { createStore } from "zustand/vanilla";
 import type { Model } from "@/lib/api";
+import { type Updater, resolveUpdater } from "@/stores/core/updater";
 import { readModelsPagePreferences, writeModelsPagePreferences } from "@/stores/models/persist";
-
-type Updater<T> = T | ((previous: T) => T);
-
-function resolveUpdater<T>(updater: Updater<T>, previous: T): T {
-  return typeof updater === "function" ? (updater as (previous: T) => T)(previous) : updater;
-}
 
 export type ModelsPageState = {
   batchDeleting: boolean;

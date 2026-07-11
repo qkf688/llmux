@@ -7,9 +7,9 @@ import {
   testModelProvider,
   type ModelWithProvider,
 } from "@/lib/api";
+import type { Updater } from "@/stores/core/updater";
 import type { AssociationBatchTestResult, BatchTestProgress } from "../types";
 
-type Updater<T> = T | ((previous: T) => T);
 type Setter<T> = (value: Updater<T>) => void;
 
 type UseModelProvidersBatchInput = {

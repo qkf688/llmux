@@ -7,10 +7,10 @@ import {
   type Settings,
   type ModelWithProvider,
 } from "@/lib/api";
+import type { Updater } from "@/stores/core/updater";
 import type { FormValues } from "../form-schema";
 import type { ProviderModelSelection } from "../types";
 
-type Updater<T> = T | ((previous: T) => T);
 type Setter<T> = (value: Updater<T>) => void;
 type CreatePayload = Parameters<typeof createModelProvider>[0];
 

@@ -17,6 +17,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { Provider } from "@/lib/api";
+import type { Updater } from "@/stores/core/updater";
 import type { AllModelsTypeFilter, BatchTestProgress, ModelTestResult, UpstreamStatus } from "../../types";
 
 const FILTER_OPTIONS: { readonly key: AllModelsTypeFilter; readonly label: string }[] = [
@@ -25,7 +26,6 @@ const FILTER_OPTIONS: { readonly key: AllModelsTypeFilter; readonly label: strin
   { key: "custom", label: "自定义" },
 ];
 
-type Updater<T> = T | ((previous: T) => T);
 type Setter<T> = (value: Updater<T>) => void;
 
 interface AllModelsDialogProps {

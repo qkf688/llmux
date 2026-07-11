@@ -1,8 +1,8 @@
 import { useCallback } from "react";
+import type { Updater } from "@/stores/core/updater";
 import type { ProviderModelSelection, ProviderModelWithOwner } from "../types";
 import { buildSelectionKey } from "../utils/selection";
 
-type Updater<T> = T | ((previous: T) => T);
 type Setter<T> = (value: Updater<T>) => void;
 
 type UseModelProvidersModelListSelectionInput = {

@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import type { Model } from "@/lib/api";
+import type { Updater } from "@/stores/core/updater";
 import type { FormValues } from "../form-schema";
 
-type Updater<T> = T | ((previous: T) => T);
 type Setter<T> = (value: Updater<T>) => void;
 
 type UseModelProvidersBootstrapInput = {

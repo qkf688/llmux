@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { testProviderModel, type Provider, type ProviderModel } from "@/lib/api";
+import type { Updater } from "@/stores/core/updater";
 import { copyTextDetailed } from "../utils/clipboard";
 import { runConcurrentBatch } from "../utils/batch-test";
 import { DEFAULT_BATCH_TEST_PROGRESS, type BatchTestProgress, type ModelTestResult } from "../types";
-
-type Updater<T> = T | ((previous: T) => T);
 
 type UseProviderModelTestingInput = {
   allModelsProvider: Provider | null;

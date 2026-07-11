@@ -1,13 +1,8 @@
 import { createStore } from "zustand/vanilla";
 import type { VirtualModel, VirtualModelMapping } from "@/lib/api";
+import { type Updater, resolveUpdater } from "@/stores/core/updater";
 import { readVirtualModelsPagePreferences, writeVirtualModelsPagePreferences } from "@/stores/virtual-models/persist";
 import type { VirtualModelsPagePreferences } from "@/stores/virtual-models/types";
-
-type Updater<T> = T | ((previous: T) => T);
-
-function resolveUpdater<T>(updater: Updater<T>, previous: T): T {
-  return typeof updater === "function" ? (updater as (previous: T) => T)(previous) : updater;
-}
 
 type PreferencesState = {
   batchPriority: number;

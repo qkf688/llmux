@@ -4,11 +4,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getProviderModels, getProviders, syncProviderModels, updateProvider, type Provider } from "@/lib/api";
 import { providerKeys } from "@/hooks/api/use-providers";
 import { buildConfigWithModels, parseCustomModelsFromConfig, parseUpstreamModelsFromConfig } from "@/lib/provider-models";
+import type { Updater } from "@/stores/core/updater";
 import type { AllModelsTypeFilter, ModelTestResult, UpstreamStatus } from "../types";
 import { extractAllModels, parseCustomModelsInput } from "../utils/config";
 import { buildAutoActionsDescription, type AutoActionsFlags } from "../utils/auto-actions";
 
-type Updater<T> = T | ((previous: T) => T);
 type Setter<T> = (value: Updater<T>) => void;
 
 type UseAllModelsDialogInput = {

@@ -1,13 +1,8 @@
 import { createStore } from "zustand/vanilla";
 import type { ModelSyncLog } from "@/lib/api";
+import { type Updater, resolveUpdater } from "@/stores/core/updater";
 import { readModelSyncLogsPagePreferences, writeModelSyncLogsPagePreferences } from "@/stores/model-sync-logs/persist";
 import type { ModelSyncTab, ModelSyncLogsPagePreferences } from "@/stores/model-sync-logs/types";
-
-type Updater<T> = T | ((previous: T) => T);
-
-function resolveUpdater<T>(updater: Updater<T>, previous: T): T {
-  return typeof updater === "function" ? (updater as (previous: T) => T)(previous) : updater;
-}
 
 type PreferencesState = {
   activeTab: ModelSyncTab;

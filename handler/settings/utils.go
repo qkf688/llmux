@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/handler/associations"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -81,11 +82,10 @@ func cleanupExcessLogs(retentionCount int) {
 	}
 }
 
-// batchImportExistingAssociations 批量导入现有关联
+// batchImportExistingAssociations 批量导入现有关联到模板。
+// 委托 associations 唯一实现，消除空壳与双实现。
 func batchImportExistingAssociations(ctx context.Context) {
-	// 这里应该实现批量导入的逻辑
-	// 由于原代码中没有具体实现，这里暂时留空
-	slog.Info("batch import of existing associations completed")
+	associations.BatchImportExistingAssociations(ctx)
 }
 
 // ResetModelWeights 重置所有模型权重

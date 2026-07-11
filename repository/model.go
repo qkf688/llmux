@@ -21,6 +21,8 @@ type ModelRepo interface {
 	Update(ctx context.Context, id uint, model *models.Model) error
 	// Delete 根据 ID 删除模型。
 	Delete(ctx context.Context, id uint) (int64, error)
+	// ListByIDs 返回指定 ID 集合中的模型。
+	ListByIDs(ctx context.Context, ids []uint) ([]models.Model, error)
 	// BatchUpdate 批量更新指定 ID 的模型字段。
 	BatchUpdate(ctx context.Context, ids []uint, updates map[string]any) (int64, error)
 }
@@ -69,6 +71,17 @@ func (r *modelRepo) Update(ctx context.Context, id uint, model *models.Model) er
 func (r *modelRepo) Delete(ctx context.Context, id uint) (int64, error) {
 	result := r.db.WithContext(ctx).Delete(&models.Model{}, id)
 	return result.RowsAffected, result.Error
+}
+
+func (r *modelRepo) ListByIDs(ctx context.Context, ids []uint) ([]models.Model, error) {
+	if len(ids) == 0 {
+		return []models.Model{}, nil
+	}
+	var modelsList []models.Model
+	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&modelsList).Error; err != nil {
+		return nil, err
+	}
+	return modelsList, nil
 }
 
 func (r *modelRepo) BatchUpdate(ctx context.Context, ids []uint, updates map[string]any) (int64, error) {

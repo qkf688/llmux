@@ -20,6 +20,10 @@ type Repositories struct {
 	VirtualModel        VirtualModelRepo
 	VirtualModelMapping VirtualModelMappingRepo
 	Setting             SettingRepo
+	ChatLog             ChatLogRepo
+	ChatIO              ChatIORepo
+	HealthCheckLog      HealthCheckLogRepo
+	ModelSyncLog        ModelSyncLogRepo
 }
 
 // New 根据 *gorm.DB 创建所有 Repository 实例。
@@ -34,6 +38,10 @@ func New(db *gorm.DB) *Repositories {
 		VirtualModel:        NewVirtualModelRepo(db),
 		VirtualModelMapping: NewVirtualModelMappingRepo(db),
 		Setting:             NewSettingRepo(db),
+		ChatLog:             NewChatLogRepo(db),
+		ChatIO:              NewChatIORepo(db),
+		HealthCheckLog:      NewHealthCheckLogRepo(db),
+		ModelSyncLog:        NewModelSyncLogRepo(db),
 	}
 }
 

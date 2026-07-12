@@ -22,7 +22,6 @@ import {
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { Provider } from "@/lib/api";
@@ -36,8 +35,14 @@ interface ProvidersDesktopTableProps {
 
   onOpenAllModelsDialog: (provider: Provider) => void | Promise<void>;
   onToggleModelEndpoint: (provider: Provider) => void | Promise<void>;
-  onToggleAssociationTrigger: (provider: Provider, checked: boolean) => void | Promise<void>;
-  onToggleModelFilter: (provider: Provider, checked: boolean) => void | Promise<void>;
+  onToggleAssociationTrigger: (
+    provider: Provider,
+    checked: boolean,
+  ) => void | Promise<void>;
+  onToggleModelFilter: (
+    provider: Provider,
+    checked: boolean,
+  ) => void | Promise<void>;
   onEditProvider: (provider: Provider) => void;
   onOpenModelsDialog: (providerId: number) => void | Promise<void>;
 
@@ -87,7 +92,9 @@ export function ProvidersDesktopTable({
             const allModels = extractAllModels(provider.Config);
             return (
               <TableRow key={provider.ID}>
-                <TableCell className="font-mono text-xs text-muted-foreground">{provider.ID}</TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">
+                  {provider.ID}
+                </TableCell>
                 <TableCell className="font-medium">{provider.Name}</TableCell>
                 <TableCell className="text-sm">{provider.Type}</TableCell>
                 <TableCell>
@@ -123,30 +130,40 @@ export function ProvidersDesktopTable({
                 <TableCell>
                   <Switch
                     checked={!(provider.blacklisted ?? false)}
-                    onCheckedChange={(checked) => onToggleAssociationTrigger(provider, checked)}
+                    onCheckedChange={(checked) =>
+                      onToggleAssociationTrigger(provider, checked)
+                    }
                     disabled={updatingAssociationTrigger[provider.ID]}
                   />
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-2 items-center">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className="flex items-center">
-                            <Switch
-                              checked={provider.ModelFilterEnabled ?? false}
-                              onCheckedChange={(checked) => onToggleModelFilter(provider, checked)}
-                              disabled={updatingFilter[provider.ID]}
-                            />
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent>启用模型过滤</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    <Button variant="outline" size="sm" onClick={() => onEditProvider(provider)}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center">
+                          <Switch
+                            checked={provider.ModelFilterEnabled ?? false}
+                            onCheckedChange={(checked) =>
+                              onToggleModelFilter(provider, checked)
+                            }
+                            disabled={updatingFilter[provider.ID]}
+                          />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>启用模型过滤</TooltipContent>
+                    </Tooltip>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onEditProvider(provider)}
+                    >
                       编辑
                     </Button>
-                    <Button variant="secondary" size="sm" onClick={() => onOpenModelsDialog(provider.ID)}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => onOpenModelsDialog(provider.ID)}
+                    >
                       获取模型
                     </Button>
                     <AlertDialog>
@@ -154,20 +171,28 @@ export function ProvidersDesktopTable({
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => onOpenClearAssociationsDialog(provider.ID)}
+                          onClick={() =>
+                            onOpenClearAssociationsDialog(provider.ID)
+                          }
                         >
                           清除关联
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>确定要清除这个提供商的所有关联吗？</AlertDialogTitle>
+                          <AlertDialogTitle>
+                            确定要清除这个提供商的所有关联吗？
+                          </AlertDialogTitle>
                           <AlertDialogDescription>
                             此操作将删除该提供商下所有的模型关联关系，但不会删除提供商本身。此操作无法撤销。
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogCancel onClick={onCancelClearAssociationsDialog}>取消</AlertDialogCancel>
+                          <AlertDialogCancel
+                            onClick={onCancelClearAssociationsDialog}
+                          >
+                            取消
+                          </AlertDialogCancel>
                           <AlertDialogAction
                             onClick={onHandleClearAssociations}
                             disabled={clearingAssociation}
@@ -180,18 +205,30 @@ export function ProvidersDesktopTable({
                     </AlertDialog>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="sm" onClick={() => onOpenDeleteDialog(provider.ID)}>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => onOpenDeleteDialog(provider.ID)}
+                        >
                           删除
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>确定要删除这个提供商吗？</AlertDialogTitle>
-                          <AlertDialogDescription>此操作无法撤销。这将永久删除该提供商。</AlertDialogDescription>
+                          <AlertDialogTitle>
+                            确定要删除这个提供商吗？
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            此操作无法撤销。这将永久删除该提供商。
+                          </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogCancel onClick={onCancelDeleteDialog}>取消</AlertDialogCancel>
-                          <AlertDialogAction onClick={onHandleDelete}>确认删除</AlertDialogAction>
+                          <AlertDialogCancel onClick={onCancelDeleteDialog}>
+                            取消
+                          </AlertDialogCancel>
+                          <AlertDialogAction onClick={onHandleDelete}>
+                            确认删除
+                          </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
@@ -205,4 +242,3 @@ export function ProvidersDesktopTable({
     </div>
   );
 }
-

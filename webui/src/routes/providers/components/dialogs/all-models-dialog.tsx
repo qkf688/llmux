@@ -13,14 +13,22 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useMemo } from "react";
 import type { Provider } from "@/lib/api";
 import type { Updater } from "@/stores/core/updater";
-import type { AllModelsTypeFilter, BatchTestProgress, ModelTestResult, UpstreamStatus } from "../../types";
+import type {
+  AllModelsTypeFilter,
+  BatchTestProgress,
+  ModelTestResult,
+  UpstreamStatus,
+} from "../../types";
 
-const FILTER_OPTIONS: { readonly key: AllModelsTypeFilter; readonly label: string }[] = [
+const FILTER_OPTIONS: {
+  readonly key: AllModelsTypeFilter;
+  readonly label: string;
+}[] = [
   { key: "all", label: "全部" },
   { key: "upstream", label: "上游" },
   { key: "custom", label: "自定义" },
@@ -110,12 +118,34 @@ export function AllModelsDialog({
   setCustomModelInput,
   handleAddCustomModels,
 }: AllModelsDialogProps) {
+  const selectedSet = useMemo(
+    () => new Set(selectedAllModels),
+    [selectedAllModels],
+  );
+  const testStats = useMemo(() => {
+    let success = 0;
+    let failed = 0;
+    for (const r of Object.values(allModelsTestResults)) {
+      if (r.success === true) success += 1;
+      else if (r.success === false) failed += 1;
+    }
+    return {
+      tested: Object.keys(allModelsTestResults).length,
+      success,
+      failed,
+    };
+  }, [allModelsTestResults]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader className="flex-shrink-0">
-          <DialogTitle>{allModelsProvider?.Name || "当前提供商"}的全部模型</DialogTitle>
-          <DialogDescription>手动维护模型缓存，可添加自定义模型或批量删除不再需要的条目。</DialogDescription>
+          <DialogTitle>
+            {allModelsProvider?.Name || "当前提供商"}的全部模型
+          </DialogTitle>
+          <DialogDescription>
+            手动维护模型缓存，可添加自定义模型或批量删除不再需要的条目。
+          </DialogDescription>
         </DialogHeader>
 
         {/* 上游模型状态提示 */}
@@ -127,7 +157,14 @@ export function AllModelsDialog({
               fill="none"
               viewBox="0 0 24 24"
             >
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
               <path
                 className="opacity-75"
                 fill="currentColor"
@@ -139,15 +176,30 @@ export function AllModelsDialog({
         )}
         {upstreamStatus === "success" && (
           <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-md text-sm text-green-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M5 13l4 4L19 7"
+              />
             </svg>
             已获取 {upstreamModelsList.length} 个上游模型
           </div>
         )}
         {upstreamStatus === "empty" && (
           <div className="flex items-center gap-2 px-3 py-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -160,8 +212,18 @@ export function AllModelsDialog({
         )}
         {upstreamStatus === "error" && (
           <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-md text-sm text-red-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
             获取上游模型失败
           </div>
@@ -173,9 +235,14 @@ export function AllModelsDialog({
               {/* 第一行：标题 + 数量 + 搜索框 */}
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold whitespace-nowrap">模型列表</p>
+                  <p className="text-sm font-semibold whitespace-nowrap">
+                    模型列表
+                  </p>
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {allModelsSearchQuery ? `匹配 ${filteredAllModels.length} / ${allModelsList.length}` : `${allModelsList.length} 个`}
+                    {allModelsSearchQuery.trim() !== "" ||
+                    allModelsTypeFilter !== "all"
+                      ? `匹配 ${filteredAllModels.length} / ${allModelsList.length}`
+                      : `${allModelsList.length} 个`}
                   </span>
                 </div>
                 <Input
@@ -188,7 +255,9 @@ export function AllModelsDialog({
 
               {/* 类型筛选 */}
               <div className="flex items-center gap-1">
-                <span className="text-xs text-muted-foreground mr-1">筛选：</span>
+                <span className="text-xs text-muted-foreground mr-1">
+                  筛选：
+                </span>
                 <div
                   className="inline-flex rounded-md border border-input bg-background"
                   role="radiogroup"
@@ -204,7 +273,9 @@ export function AllModelsDialog({
                         aria-checked={checked}
                         onClick={() => setAllModelsTypeFilter(key)}
                         className={`px-2.5 py-1 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md border-r border-input last:border-r-0 ${
-                          checked ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
+                          checked
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background text-muted-foreground hover:bg-muted"
                         }`}
                       >
                         {label}
@@ -215,17 +286,15 @@ export function AllModelsDialog({
               </div>
 
               {/* 第二行：测试结果统计（条件渲染）*/}
-              {Object.keys(allModelsTestResults).length > 0 && (
+              {testStats.tested > 0 && (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>已测试: {Object.keys(allModelsTestResults).length}</span>
+                  <span>已测试: {testStats.tested}</span>
                   <span className="text-muted-foreground">|</span>
                   <span className="text-green-600">
-                    成功: {Object.values(allModelsTestResults).filter((r) => r.success === true).length}
+                    成功: {testStats.success}
                   </span>
                   <span className="text-muted-foreground">|</span>
-                  <span className="text-red-600">
-                    失败: {Object.values(allModelsTestResults).filter((r) => r.success === false).length}
-                  </span>
+                  <span className="text-red-600">失败: {testStats.failed}</span>
                 </div>
               )}
 
@@ -235,198 +304,287 @@ export function AllModelsDialog({
                   <div className="flex-1">
                     <div className="flex items-center justify-between text-xs text-blue-800 mb-1">
                       <span>
-                        测试进度：{batchTestProgress.completed}/{batchTestProgress.total}
-                        (成功: {batchTestProgress.success}, 失败: {batchTestProgress.failed}, 进行中: {batchTestProgress.testing})
+                        测试进度：{batchTestProgress.completed}/
+                        {batchTestProgress.total}
+                        (成功: {batchTestProgress.success}, 失败:{" "}
+                        {batchTestProgress.failed}, 进行中:{" "}
+                        {batchTestProgress.testing})
                       </span>
-                      <span>{Math.round((batchTestProgress.completed / batchTestProgress.total) * 100)}%</span>
+                      <span>
+                        {Math.round(
+                          (batchTestProgress.completed /
+                            batchTestProgress.total) *
+                            100,
+                        )}
+                        %
+                      </span>
                     </div>
                     <div className="w-full bg-blue-200 rounded-full h-2">
                       <div
                         className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${(batchTestProgress.completed / batchTestProgress.total) * 100}%` }}
+                        style={{
+                          width: `${(batchTestProgress.completed / batchTestProgress.total) * 100}%`,
+                        }}
                       />
                     </div>
                   </div>
-                  <Button variant="outline" size="sm" onClick={handleCancelBatchTest} className="h-7 text-xs">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCancelBatchTest}
+                    className="h-7 text-xs"
+                  >
                     取消
                   </Button>
                 </div>
               )}
 
               <div className="flex items-center gap-1 flex-wrap">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="secondary"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={handleSyncUpstreamModels}
-                        disabled={syncingModels || batchTesting || !allModelsProvider}
-                      >
-                        {syncingModels ? (
-                          <Spinner className="h-4 w-4" />
-                        ) : (
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                            />
-                          </svg>
-                        )}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{syncingModels ? "同步中..." : "同步上游模型"}</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-
-                {/* 批量测试按钮 */}
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="default"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={handleBatchTestAll}
-                        disabled={filteredAllModels.length === 0 || batchTesting || addingModels}
-                      >
-                        {batchTesting ? (
-                          <Spinner className="h-4 w-4" />
-                        ) : (
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-                            />
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        )}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>批量测试所有模型</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="secondary"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={handleBatchTestSelected}
-                        disabled={selectedAllModels.length === 0 || batchTesting || addingModels}
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={handleSyncUpstreamModels}
+                      disabled={
+                        syncingModels || batchTesting || !allModelsProvider
+                      }
+                    >
+                      {syncingModels ? (
+                        <Spinner className="h-4 w-4" />
+                      ) : (
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
                           <path
                             strokeLinecap="round"
                             strokeLinejoin="round"
-                            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                           />
                         </svg>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>批量测试选中的 {selectedAllModels.length} 个模型</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {syncingModels ? "同步中..." : "同步上游模型"}
+                  </TooltipContent>
+                </Tooltip>
+
+                {/* 批量测试按钮 */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="default"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={handleBatchTestAll}
+                      disabled={
+                        filteredAllModels.length === 0 ||
+                        batchTesting ||
+                        addingModels
+                      }
+                    >
+                      {batchTesting ? (
+                        <Spinner className="h-4 w-4" />
+                      ) : (
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                          />
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>批量测试所有模型</TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={handleBatchTestSelected}
+                      disabled={
+                        selectedAllModels.length === 0 ||
+                        batchTesting ||
+                        addingModels
+                      }
+                    >
+                      <svg
+                        className="h-4 w-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                        />
+                      </svg>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    批量测试选中的 {selectedAllModels.length} 个模型
+                  </TooltipContent>
+                </Tooltip>
 
                 {/* 选择成功和失败按钮 */}
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={selectAllSuccessful}
-                        disabled={
-                          Object.values(allModelsTestResults).filter((r) => r.success === true).length === 0 || batchTesting
-                        }
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={selectAllSuccessful}
+                      disabled={testStats.success === 0 || batchTesting}
+                    >
+                      <svg
+                        className="h-4 w-4 text-green-600"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
                       >
-                        <svg className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>选择测试成功的模型</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>选择测试成功的模型</TooltipContent>
+                </Tooltip>
 
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={selectAllFailed}
-                        disabled={
-                          Object.values(allModelsTestResults).filter((r) => r.success === false).length === 0 || batchTesting
-                        }
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={selectAllFailed}
+                      disabled={testStats.failed === 0 || batchTesting}
+                    >
+                      <svg
+                        className="h-4 w-4 text-red-600"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
                       >
-                        <svg className="h-4 w-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>选择测试失败的模型</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={toggleSelectAllModels}
+                      disabled={filteredAllModels.length === 0 || batchTesting}
+                    >
+                      {isAllFilteredSelected ? (
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M6 18L18 6M6 6l12 12"
+                          />
                         </svg>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>选择测试失败的模型</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={toggleSelectAllModels}
-                        disabled={filteredAllModels.length === 0 || batchTesting}
-                      >
-                        {isAllFilteredSelected ? (
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        ) : (
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        )}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{isAllFilteredSelected ? "取消全选" : "全选"}</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={handleRemoveSelectedModels}
-                        disabled={selectedAllModels.length === 0 || addingModels || batchTesting}
-                      >
-                        {addingModels ? (
-                          <Spinner className="h-4 w-4" />
-                        ) : (
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                            />
-                          </svg>
-                        )}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {addingModels ? "删除中..." : `删除所选${selectedAllModels.length > 0 ? `（${selectedAllModels.length}）` : ""}`}
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                      ) : (
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {isAllFilteredSelected ? "取消全选" : "全选"}
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={handleRemoveSelectedModels}
+                      disabled={
+                        selectedAllModels.length === 0 ||
+                        addingModels ||
+                        batchTesting
+                      }
+                    >
+                      {addingModels ? (
+                        <Spinner className="h-4 w-4" />
+                      ) : (
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {addingModels
+                      ? "删除中..."
+                      : `删除所选${selectedAllModels.length > 0 ? `（${selectedAllModels.length}）` : ""}`}
+                  </TooltipContent>
+                </Tooltip>
                 <span
                   className={`text-xs text-muted-foreground ml-1 inline-flex min-w-[64px] justify-end tabular-nums ${selectedAllModels.length > 0 ? "" : "invisible"}`}
                 >
@@ -436,14 +594,25 @@ export function AllModelsDialog({
             </div>
             <div className="border rounded-md flex-1 min-h-0 overflow-y-auto">
               {allModelsList.length === 0 ? (
-                <div className="text-sm text-muted-foreground text-center py-4">暂无缓存模型</div>
+                <div className="text-sm text-muted-foreground text-center py-4">
+                  暂无缓存模型
+                </div>
               ) : filteredAllModels.length === 0 ? (
-                <div className="text-sm text-muted-foreground text-center py-4">没有找到匹配的模型</div>
+                <div className="text-sm text-muted-foreground text-center py-4">
+                  没有找到匹配的模型
+                </div>
               ) : (
                 filteredAllModels.map((model) => {
-                  const checked = selectedAllModels.includes(model);
+                  const checked = selectedSet.has(model);
                   const isUpstream = upstreamSet.has(model.toLowerCase());
                   const testResult = allModelsTestResults[model];
+                  const testTooltip = testResult?.loading
+                    ? "测试中..."
+                    : testResult?.success === true
+                      ? "测试成功"
+                      : testResult?.success === false
+                        ? testResult.error || "测试失败"
+                        : "测试模型可用性";
                   return (
                     <div
                       key={model}
@@ -454,15 +623,21 @@ export function AllModelsDialog({
                           checked={checked}
                           onCheckedChange={(value) => {
                             if (value) {
-                              setSelectedAllModels((prev) => Array.from(new Set([...prev, model])));
+                              setSelectedAllModels((prev) =>
+                                prev.includes(model) ? prev : [...prev, model],
+                              );
                             } else {
-                              setSelectedAllModels((prev) => prev.filter((item) => item !== model));
+                              setSelectedAllModels((prev) =>
+                                prev.filter((item) => item !== model),
+                              );
                             }
                           }}
                           aria-label={`选择模型 ${model}`}
                         />
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="truncate font-mono text-xs">{model}</span>
+                          <span className="truncate font-mono text-xs">
+                            {model}
+                          </span>
                           <span
                             className={`flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${isUpstream ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"}`}
                           >
@@ -471,84 +646,117 @@ export function AllModelsDialog({
                         </div>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                onClick={() => handleTestAllModel(model)}
-                                disabled={!!testResult?.loading || batchTesting}
-                              >
-                                {testResult?.loading ? (
-                                  <Spinner className="h-3.5 w-3.5" />
-                                ) : testResult?.success === true ? (
-                                  <svg className="h-3.5 w-3.5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                  </svg>
-                                ) : testResult?.success === false ? (
-                                  <svg className="h-3.5 w-3.5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                ) : (
-                                  <svg className="h-3.5 w-3.5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
-                                )}
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {testResult?.loading
-                                ? "测试中..."
-                                : testResult?.success === true
-                                  ? "测试成功"
-                                  : testResult?.success === false
-                                    ? testResult.error || "测试失败"
-                                    : "测试模型可用性"}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyModelName(model)}>
-                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => handleTestAllModel(model)}
+                              disabled={!!testResult?.loading || batchTesting}
+                            >
+                              {testResult?.loading ? (
+                                <Spinner className="h-3.5 w-3.5" />
+                              ) : testResult?.success === true ? (
+                                <svg
+                                  className="h-3.5 w-3.5 text-green-600"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                >
                                   <path
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
-                                    d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
+                                    d="M5 13l4 4L19 7"
                                   />
                                 </svg>
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>复制名称</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                                onClick={() => handleRemoveModelFromAll(model)}
-                                disabled={addingModels || batchTesting}
-                              >
-                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              ) : testResult?.success === false ? (
+                                <svg
+                                  className="h-3.5 w-3.5 text-red-500"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                >
                                   <path
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                    d="M6 18L18 6M6 6l12 12"
                                   />
                                 </svg>
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>移除</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                              ) : (
+                                <svg
+                                  className="h-3.5 w-3.5 text-muted-foreground"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                                  />
+                                </svg>
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>{testTooltip}</TooltipContent>
+                        </Tooltip>
+
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => copyModelName(model)}
+                            >
+                              <svg
+                                className="h-3.5 w-3.5"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
+                                />
+                              </svg>
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>复制名称</TooltipContent>
+                        </Tooltip>
+
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                              onClick={() => handleRemoveModelFromAll(model)}
+                              disabled={addingModels || batchTesting}
+                            >
+                              <svg
+                                className="h-3.5 w-3.5"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                />
+                              </svg>
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>移除</TooltipContent>
+                        </Tooltip>
                       </div>
                     </div>
                   );
@@ -563,10 +771,18 @@ export function AllModelsDialog({
                 className="h-16 resize-none flex-1"
               />
               <div className="flex gap-2">
-                <Button size="sm" onClick={handleAddCustomModels} disabled={addingModels || !allModelsProvider || batchTesting}>
+                <Button
+                  size="sm"
+                  onClick={handleAddCustomModels}
+                  disabled={addingModels || !allModelsProvider || batchTesting}
+                >
                   {addingModels ? "提交中..." : "添加"}
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onOpenChange(false)}
+                >
                   关闭
                 </Button>
               </div>

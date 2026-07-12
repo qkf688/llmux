@@ -14,7 +14,6 @@ import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { Provider } from "@/lib/api";
@@ -28,8 +27,14 @@ interface ProvidersMobileListProps {
 
   onOpenAllModelsDialog: (provider: Provider) => void | Promise<void>;
   onToggleModelEndpoint: (provider: Provider) => void | Promise<void>;
-  onToggleAssociationTrigger: (provider: Provider, checked: boolean) => void | Promise<void>;
-  onToggleModelFilter: (provider: Provider, checked: boolean) => void | Promise<void>;
+  onToggleAssociationTrigger: (
+    provider: Provider,
+    checked: boolean,
+  ) => void | Promise<void>;
+  onToggleModelFilter: (
+    provider: Provider,
+    checked: boolean,
+  ) => void | Promise<void>;
   onEditProvider: (provider: Provider) => void;
   onOpenModelsDialog: (providerId: number) => void | Promise<void>;
 
@@ -67,10 +72,14 @@ export function ProvidersMobileList({
         return (
           <div key={provider.ID} className="py-2 space-y-2">
             <div className="min-w-0">
-              <h3 className="font-semibold text-[13px] leading-snug whitespace-normal break-all">{provider.Name}</h3>
+              <h3 className="font-semibold text-[13px] leading-snug whitespace-normal break-all">
+                {provider.Name}
+              </h3>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 pt-0.5 text-[10px] text-muted-foreground leading-tight">
                 <span className="shrink-0">ID: {provider.ID}</span>
-                <span className="shrink-0">类型: {provider.Type || "未知"}</span>
+                <span className="shrink-0">
+                  类型: {provider.Type || "未知"}
+                </span>
               </div>
             </div>
 
@@ -111,28 +120,32 @@ export function ProvidersMobileList({
                 <span className="text-[10px] text-muted-foreground">关联</span>
                 <Switch
                   checked={!(provider.blacklisted ?? false)}
-                  onCheckedChange={(checked) => onToggleAssociationTrigger(provider, checked)}
+                  onCheckedChange={(checked) =>
+                    onToggleAssociationTrigger(provider, checked)
+                  }
                   disabled={updatingAssociationTrigger[provider.ID]}
                   className="scale-75"
                 />
               </div>
 
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-muted-foreground">过滤</span>
-                      <Switch
-                        checked={provider.ModelFilterEnabled ?? false}
-                        onCheckedChange={(checked) => onToggleModelFilter(provider, checked)}
-                        disabled={updatingFilter[provider.ID]}
-                        className="scale-75"
-                      />
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>启用模型过滤</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-muted-foreground">
+                      过滤
+                    </span>
+                    <Switch
+                      checked={provider.ModelFilterEnabled ?? false}
+                      onCheckedChange={(checked) =>
+                        onToggleModelFilter(provider, checked)
+                      }
+                      disabled={updatingFilter[provider.ID]}
+                      className="scale-75"
+                    />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>启用模型过滤</TooltipContent>
+              </Tooltip>
             </div>
 
             <div className="flex flex-wrap justify-end gap-1.5 pt-0.5">
@@ -165,13 +178,19 @@ export function ProvidersMobileList({
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>确定要清除这个提供商的所有关联吗？</AlertDialogTitle>
+                    <AlertDialogTitle>
+                      确定要清除这个提供商的所有关联吗？
+                    </AlertDialogTitle>
                     <AlertDialogDescription>
                       此操作将删除该提供商下所有的模型关联关系，但不会删除提供商本身。此操作无法撤销。
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel onClick={onCancelClearAssociationsDialog}>取消</AlertDialogCancel>
+                    <AlertDialogCancel
+                      onClick={onCancelClearAssociationsDialog}
+                    >
+                      取消
+                    </AlertDialogCancel>
                     <AlertDialogAction
                       onClick={onHandleClearAssociations}
                       disabled={clearingAssociation}
@@ -195,12 +214,20 @@ export function ProvidersMobileList({
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>确定要删除这个提供商吗？</AlertDialogTitle>
-                    <AlertDialogDescription>此操作无法撤销。这将永久删除该提供商。</AlertDialogDescription>
+                    <AlertDialogTitle>
+                      确定要删除这个提供商吗？
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      此操作无法撤销。这将永久删除该提供商。
+                    </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel onClick={onCancelDeleteDialog}>取消</AlertDialogCancel>
-                    <AlertDialogAction onClick={onHandleDelete}>确认删除</AlertDialogAction>
+                    <AlertDialogCancel onClick={onCancelDeleteDialog}>
+                      取消
+                    </AlertDialogCancel>
+                    <AlertDialogAction onClick={onHandleDelete}>
+                      确认删除
+                    </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
@@ -211,4 +238,3 @@ export function ProvidersMobileList({
     </div>
   );
 }
-

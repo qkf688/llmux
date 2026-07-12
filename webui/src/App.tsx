@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { queryClient } from "@/lib/query-client";
 import Loading from "@/components/loading";
 import { Toaster } from "./components/ui/sonner";
@@ -31,50 +32,52 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
-        <ErrorBoundary>
-          <Router>
-            <Routes>
-              {standaloneRoutes.map((route) => {
-                const Page = lazyPages.get(route.path)!;
-                return (
-                  <Route
-                    key={route.path}
-                    path={route.path}
-                    element={
-                      <Suspense fallback={<PageLoader />}>
-                        <Page />
-                      </Suspense>
-                    }
-                  />
-                );
-              })}
-              <Route
-                path="/"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <Layout />
-                  </Suspense>
-                }
-              >
-                {appChildRoutes.map((route) => {
+        <TooltipProvider delayDuration={0}>
+          <ErrorBoundary>
+            <Router>
+              <Routes>
+                {standaloneRoutes.map((route) => {
                   const Page = lazyPages.get(route.path)!;
-                  const element = <Page />;
-                  if (route.index) {
-                    return <Route key={route.path} index element={element} />;
-                  }
                   return (
                     <Route
                       key={route.path}
-                      path={appChildPath(route)}
-                      element={element}
+                      path={route.path}
+                      element={
+                        <Suspense fallback={<PageLoader />}>
+                          <Page />
+                        </Suspense>
+                      }
                     />
                   );
                 })}
-              </Route>
-            </Routes>
-          </Router>
-        </ErrorBoundary>
-        <Toaster richColors position="top-center" />
+                <Route
+                  path="/"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <Layout />
+                    </Suspense>
+                  }
+                >
+                  {appChildRoutes.map((route) => {
+                    const Page = lazyPages.get(route.path)!;
+                    const element = <Page />;
+                    if (route.index) {
+                      return <Route key={route.path} index element={element} />;
+                    }
+                    return (
+                      <Route
+                        key={route.path}
+                        path={appChildPath(route)}
+                        element={element}
+                      />
+                    );
+                  })}
+                </Route>
+              </Routes>
+            </Router>
+          </ErrorBoundary>
+          <Toaster richColors position="top-center" />
+        </TooltipProvider>
       </ThemeProvider>
       {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
     </QueryClientProvider>

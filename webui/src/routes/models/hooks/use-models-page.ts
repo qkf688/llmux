@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { Model } from "@/lib/api";
+import type { Model, Provider } from "@/lib/api";
 import {
   selectModelsBatchDeleteDialogOpen,
   selectModelsBatchSettingsDialogOpen,
@@ -63,14 +63,18 @@ import {
 } from "../utils/provider-models";
 import { calculateSelectedRanges, collectSelectedModels, filterModelsByName } from "../utils/selection";
 
+/** 稳定空数组，避免 `data = []` 在 loading 时每次 render 产生新引用触发 effect 循环 */
+const EMPTY_MODELS: Model[] = [];
+const EMPTY_PROVIDERS: Provider[] = [];
+
 export function useModelsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [togglingIOLog, setTogglingIOLog] = useState<Record<number, boolean>>({});
   const [togglingAutoAssociate, setTogglingAutoAssociate] = useState<Record<number, boolean>>({});
 
-  const { data: models = [], isLoading: loading } = useModels();
-  const { data: providersData = [], isLoading: loadingProviderModels } = useProviders();
+  const { data: models = EMPTY_MODELS, isLoading: loading } = useModels();
+  const { data: providersData = EMPTY_PROVIDERS, isLoading: loadingProviderModels } = useProviders();
 
   const providerModelGroups = useMemo(() => buildProviderModelGroups(providersData), [providersData]);
   const providerModels = useMemo(

@@ -20,10 +20,23 @@ export const buildCollapsedProviderState = (
   previous: Record<number, boolean>
 ): Record<number, boolean> => {
   const next: Record<number, boolean> = {};
+  const nextIds = new Set<number>();
 
   groups.forEach(({ provider }) => {
+    nextIds.add(provider.ID);
     next[provider.ID] = previous[provider.ID] ?? false;
   });
+
+  const previousIds = Object.keys(previous);
+  if (
+    previousIds.length === nextIds.size &&
+    previousIds.every((id) => {
+      const providerId = Number(id);
+      return nextIds.has(providerId) && previous[providerId] === next[providerId];
+    })
+  ) {
+    return previous;
+  }
 
   return next;
 };

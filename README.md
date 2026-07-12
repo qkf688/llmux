@@ -72,8 +72,42 @@ PowerShell（Windows）：
 ```powershell
 $env:TOKEN="your-auth-token"
 go run .
-# 或者（会先构建 webui，再启动服务，并尝试释放 7070 端口）
-.\run.bat
+```
+
+### 日常开发（Windows，推荐）
+
+前后端分离：后端 `7070` + 前端 Vite HMR `5173`（`/api` 代理到后端）。
+
+```powershell
+# 一键双进程（推荐）
+.\dev.bat
+# 或
+.\dev.ps1
+
+# 可选参数
+.\dev.ps1 -NoKillPort      # 不自动释放 7070/5173
+.\dev.ps1 -BackendOnly     # 只起后端
+.\dev.ps1 -FrontendOnly    # 只起前端（需后端已在跑）
+```
+
+手动双终端也可以：
+
+```powershell
+# 终端 1
+go run .
+
+# 终端 2
+cd webui
+pnpm install   # 首次
+pnpm dev
+```
+
+### 整包启动 / 验收内嵌页（Windows）
+
+```powershell
+.\run.bat              # 构建 webui 后 go run，并尝试释放 7070
+.\run.bat --no-build   # 跳过前端构建（使用已有 webui/dist）
+.\build.bat            # 构建 webui + 编译 llmux.exe
 ```
 
 ### 3) 访问 🌐

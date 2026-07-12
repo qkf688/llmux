@@ -44,12 +44,12 @@ func applyWeightDecay(ctx context.Context, log models.ChatLog, modelWithProvider
 
 // getAutoWeightDecay 获取自动权重衰减开关
 func getAutoWeightDecay(ctx context.Context) bool {
-	return models.GetSettingBool(ctx, models.SettingKeyAutoWeightDecay, false)
+	return settingsReader.Bool(ctx, models.SettingKeyAutoWeightDecay, false)
 }
 
 // getAutoWeightDecayStep 获取自动权重衰减步长
 func getAutoWeightDecayStep(ctx context.Context) int {
-	return models.GetSettingInt(ctx, models.SettingKeyAutoWeightDecayStep, 1, 0)
+	return settingsReader.Int(ctx, models.SettingKeyAutoWeightDecayStep, 1, 0)
 }
 
 // applyPriorityDecay 应用优先级衰减
@@ -75,15 +75,15 @@ func applyPriorityDecay(ctx context.Context, log models.ChatLog, modelWithProvid
 
 // getAutoPriorityDecay 获取自动优先级衰减开关
 func getAutoPriorityDecay(ctx context.Context) bool {
-	return models.GetSettingBool(ctx, models.SettingKeyAutoPriorityDecay, false)
+	return settingsReader.Bool(ctx, models.SettingKeyAutoPriorityDecay, false)
 }
 
 // getAutoPriorityDecayStep 获取自动优先级衰减步长
 func getAutoPriorityDecayStep(ctx context.Context) int {
-	return models.GetSettingInt(ctx, models.SettingKeyAutoPriorityDecayStep, 1, 0)
+	return settingsReader.Int(ctx, models.SettingKeyAutoPriorityDecayStep, 1, 0)
 }
 
 // getAutoPriorityDecayThreshold 获取自动优先级衰减阈值
 func getAutoPriorityDecayThreshold(ctx context.Context) int {
-	return models.GetSettingInt(ctx, models.SettingKeyAutoPriorityDecayThreshold, 90, 0)
+	return settingsReader.Int(ctx, models.SettingKeyAutoPriorityDecayThreshold, 90, 0)
 }

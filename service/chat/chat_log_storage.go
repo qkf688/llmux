@@ -71,5 +71,5 @@ func cleanupLogsIfNeeded() {
 
 // getLogRetentionCount 获取日志保留条数设置
 func getLogRetentionCount(ctx context.Context) int {
-	return models.GetSettingInt(ctx, models.SettingKeyLogRetentionCount, 0, 0)
+	return settingsReader.Int(ctx, models.SettingKeyLogRetentionCount, 0, 0)
 }

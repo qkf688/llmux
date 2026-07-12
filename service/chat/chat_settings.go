@@ -8,12 +8,12 @@ import (
 )
 
 func getStrictCapabilityMatch(ctx context.Context) bool {
-	return models.GetSettingBool(ctx, models.SettingKeyStrictCapabilityMatch, false)
+	return settingsReader.Bool(ctx, models.SettingKeyStrictCapabilityMatch, false)
 }
 
 // getLogRawRequestResponse 获取原始请求响应记录选项
 func getLogRawRequestResponse(ctx context.Context) models.RawLogOptions {
-	value := models.GetSettingString(ctx, models.SettingKeyLogRawRequestResponse, "")
+	value := settingsReader.String(ctx, models.SettingKeyLogRawRequestResponse, "")
 	if value == "" {
 		return models.RawLogOptions{} // 默认全部关闭
 	}
@@ -26,35 +26,35 @@ func getLogRawRequestResponse(ctx context.Context) models.RawLogOptions {
 }
 
 func getLogRawRequestResponseErrorsOnly(ctx context.Context) bool {
-	return models.GetSettingBool(ctx, models.SettingKeyLogRawRequestResponseErrorsOnly, false)
+	return settingsReader.Bool(ctx, models.SettingKeyLogRawRequestResponseErrorsOnly, false)
 }
 
 // getDisableAllLogs 获取是否完全关闭日志记录
 func getDisableAllLogs(ctx context.Context) bool {
-	return models.GetSettingBool(ctx, models.SettingKeyDisableAllLogs, false)
+	return settingsReader.Bool(ctx, models.SettingKeyDisableAllLogs, false)
 }
 
 // getDisablePerformanceTracking 获取是否关闭性能追踪
 func getDisablePerformanceTracking(ctx context.Context) bool {
-	return models.GetSettingBool(ctx, models.SettingKeyDisablePerformanceTracking, false)
+	return settingsReader.Bool(ctx, models.SettingKeyDisablePerformanceTracking, false)
 }
 
 // getDisableTokenCounting 获取是否关闭 token 统计
 func getDisableTokenCounting(ctx context.Context) bool {
-	return models.GetSettingBool(ctx, models.SettingKeyDisableTokenCounting, false)
+	return settingsReader.Bool(ctx, models.SettingKeyDisableTokenCounting, false)
 }
 
 // getEnableRequestTrace 获取是否启用请求追踪
 func getEnableRequestTrace(ctx context.Context) bool {
-	return models.GetSettingBool(ctx, models.SettingKeyEnableRequestTrace, true)
+	return settingsReader.Bool(ctx, models.SettingKeyEnableRequestTrace, true)
 }
 
 // GetStripResponseHeaders 获取是否移除不必要的响应头（导出供 handler 使用）
 func GetStripResponseHeaders(ctx context.Context) bool {
-	return models.GetSettingBool(ctx, models.SettingKeyStripResponseHeaders, false)
+	return settingsReader.Bool(ctx, models.SettingKeyStripResponseHeaders, false)
 }
 
 // getEnableFormatConversion 获取是否启用格式转换
 func getEnableFormatConversion(ctx context.Context) bool {
-	return models.GetSettingBool(ctx, models.SettingKeyEnableFormatConversion, true)
+	return settingsReader.Bool(ctx, models.SettingKeyEnableFormatConversion, true)
 }

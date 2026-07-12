@@ -88,27 +88,27 @@ func adjustIntField(
 
 // getAutoWeightIncreaseStep 获取自动权重增加步长
 func getAutoWeightIncreaseStep(ctx context.Context) int {
-	return models.GetSettingInt(ctx, models.SettingKeyAutoWeightIncreaseStep, 1, 1)
+	return settingsReader.Int(ctx, models.SettingKeyAutoWeightIncreaseStep, 1, 1)
 }
 
 // getAutoWeightIncreaseMax 获取自动权重增加上限
 func getAutoWeightIncreaseMax(ctx context.Context) int {
-	return models.GetSettingInt(ctx, models.SettingKeyAutoWeightIncreaseMax, 100, 1)
+	return settingsReader.Int(ctx, models.SettingKeyAutoWeightIncreaseMax, 100, 1)
 }
 
 // getAutoPriorityIncreaseStep 获取自动优先级增加步长
 func getAutoPriorityIncreaseStep(ctx context.Context) int {
-	return models.GetSettingInt(ctx, models.SettingKeyAutoPriorityIncreaseStep, 1, 1)
+	return settingsReader.Int(ctx, models.SettingKeyAutoPriorityIncreaseStep, 1, 1)
 }
 
 // getAutoPriorityIncreaseMax 获取自动优先级增加上限
 func getAutoPriorityIncreaseMax(ctx context.Context) int {
-	return models.GetSettingInt(ctx, models.SettingKeyAutoPriorityIncreaseMax, 100, 0)
+	return settingsReader.Int(ctx, models.SettingKeyAutoPriorityIncreaseMax, 100, 0)
 }
 
 // getAutoSuccessIncrease 获取成功自增开关
 func getAutoSuccessIncrease(ctx context.Context) bool {
-	return models.GetSettingBool(ctx, models.SettingKeyAutoSuccessIncrease, true)
+	return settingsReader.Bool(ctx, models.SettingKeyAutoSuccessIncrease, true)
 }
 
 // applyWeightDecayByModelProviderID 根据配置对指定关联应用权重衰减
@@ -188,25 +188,25 @@ func applyPriorityDecayByModelProviderID(ctx context.Context, modelProviderID ui
 
 // shouldCountHealthCheckSuccess 健康检测成功是否计入成功调用
 func shouldCountHealthCheckSuccess(ctx context.Context) bool {
-	return models.GetSettingBool(ctx, models.SettingKeyHealthCheckCountAsSuccess, true)
+	return settingsReader.Bool(ctx, models.SettingKeyHealthCheckCountAsSuccess, true)
 }
 
 // shouldCountHealthCheckFailure 健康检测失败是否计入失败调用
 func shouldCountHealthCheckFailure(ctx context.Context) bool {
-	return models.GetSettingBool(ctx, models.SettingKeyHealthCheckCountAsFailure, false)
+	return settingsReader.Bool(ctx, models.SettingKeyHealthCheckCountAsFailure, false)
 }
 
 // getAutoPriorityDecayDisableEnabled 获取自动优先级衰减禁用开关
 func getAutoPriorityDecayDisableEnabled(ctx context.Context) bool {
-	return models.GetSettingBool(ctx, models.SettingKeyAutoPriorityDecayDisableEnabled, true)
+	return settingsReader.Bool(ctx, models.SettingKeyAutoPriorityDecayDisableEnabled, true)
 }
 
 func getConsecutiveFailureThreshold(ctx context.Context) int {
-	return models.GetSettingInt(ctx, models.SettingKeyConsecutiveFailureThreshold, 3, 1)
+	return settingsReader.Int(ctx, models.SettingKeyConsecutiveFailureThreshold, 3, 1)
 }
 
 func getConsecutiveFailureDisableEnabled(ctx context.Context) bool {
-	return models.GetSettingBool(ctx, models.SettingKeyConsecutiveFailureDisableEnabled, true)
+	return settingsReader.Bool(ctx, models.SettingKeyConsecutiveFailureDisableEnabled, true)
 }
 
 func incrementConsecutiveFailures(ctx context.Context, modelProviderID uint, providerName, providerModel string) {

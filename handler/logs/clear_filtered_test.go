@@ -1,10 +1,9 @@
-package handler
+package logs
 
 import (
 	"encoding/json"
 	"testing"
 
-	"github.com/atopos31/llmio/handler/logs"
 	"github.com/atopos31/llmio/handler/testsupport"
 	"github.com/atopos31/llmio/models"
 )
@@ -13,7 +12,7 @@ func TestClearFilteredLogs_RequiresFilters(t *testing.T) {
 	testsupport.InitTestDB(t)
 
 	c, w := testsupport.NewTestContext("DELETE", "/logs/clear-filtered")
-	logs.ClearFilteredLogs(c)
+	ClearFilteredLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
@@ -53,7 +52,7 @@ func TestClearFilteredLogs_StatusSuccess(t *testing.T) {
 	}
 
 	c, w := testsupport.NewTestContext("DELETE", "/logs/clear-filtered?status=success")
-	logs.ClearFilteredLogs(c)
+	ClearFilteredLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}

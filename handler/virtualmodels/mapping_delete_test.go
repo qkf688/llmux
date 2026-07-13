@@ -1,4 +1,4 @@
-package handler
+package virtualmodels
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/atopos31/llmio/handler/testsupport"
-	"github.com/atopos31/llmio/handler/virtualmodels"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 )
@@ -39,7 +38,7 @@ func TestDeleteVirtualModelMapping_HardDeleteAllowsRecreate(t *testing.T) {
 		c.Request.Header.Set("Content-Type", "application/json")
 		c.Params = []gin.Param{{Key: "id", Value: strconvUint(virtualModel.ID)}}
 
-		virtualmodels.CreateVirtualModelMapping(c)
+		CreateVirtualModelMapping(c)
 		if w.Code != 200 {
 			t.Fatalf("create mapping status code = %d, want 200, body=%s", w.Code, w.Body.String())
 		}
@@ -67,7 +66,7 @@ func TestDeleteVirtualModelMapping_HardDeleteAllowsRecreate(t *testing.T) {
 			{Key: "mapping_id", Value: strconvUint(mapping.ID)},
 		}
 
-		virtualmodels.DeleteVirtualModelMapping(c)
+		DeleteVirtualModelMapping(c)
 		if w.Code != 200 {
 			t.Fatalf("delete mapping status code = %d, want 200, body=%s", w.Code, w.Body.String())
 		}
@@ -101,7 +100,7 @@ func TestDeleteVirtualModelMapping_HardDeleteAllowsRecreate(t *testing.T) {
 		c.Request.Header.Set("Content-Type", "application/json")
 		c.Params = []gin.Param{{Key: "id", Value: strconvUint(virtualModel.ID)}}
 
-		virtualmodels.CreateVirtualModelMapping(c)
+		CreateVirtualModelMapping(c)
 		if w.Code != 200 {
 			t.Fatalf("recreate mapping status code = %d, want 200, body=%s", w.Code, w.Body.String())
 		}

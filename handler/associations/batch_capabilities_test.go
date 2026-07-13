@@ -1,12 +1,12 @@
-package handler
+package associations
 
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/atopos31/llmio/handler/associations"
 	"github.com/atopos31/llmio/handler/testsupport"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
@@ -21,7 +21,7 @@ func TestBatchUpdateModelProvidersCapabilities_NoIDs_ReturnsEnvelope400(t *testi
 	c.Request = httptest.NewRequest("PATCH", "/model-providers/batch/capabilities", strings.NewReader(`{"ids":[],"tool_call":true}`))
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	associations.BatchUpdateModelProvidersCapabilities(c)
+	BatchUpdateModelProvidersCapabilities(c)
 
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
@@ -48,7 +48,7 @@ func TestBatchUpdateModelProvidersCapabilities_NoFields_ReturnsEnvelope400(t *te
 	c.Request = httptest.NewRequest("PATCH", "/model-providers/batch/capabilities", strings.NewReader(`{"ids":[1]}`))
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	associations.BatchUpdateModelProvidersCapabilities(c)
+	BatchUpdateModelProvidersCapabilities(c)
 
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
@@ -111,7 +111,7 @@ func TestBatchUpdateModelProvidersCapabilities_UpdatesOnlyProvidedFields(t *test
 	)
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	associations.BatchUpdateModelProvidersCapabilities(c)
+	BatchUpdateModelProvidersCapabilities(c)
 
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
@@ -152,4 +152,8 @@ func TestBatchUpdateModelProvidersCapabilities_UpdatesOnlyProvidedFields(t *test
 	if updated2.Image == nil || *updated2.Image != true {
 		t.Fatalf("updated mp2 Image = %v, want true", updated2.Image)
 	}
+}
+
+func strconvUint(v uint) string {
+	return strconv.FormatUint(uint64(v), 10)
 }

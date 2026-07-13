@@ -1,11 +1,10 @@
-package handler
+package logs
 
 import (
 	"encoding/json"
 	"strconv"
 	"testing"
 
-	"github.com/atopos31/llmio/handler/logs"
 	"github.com/atopos31/llmio/handler/testsupport"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
@@ -50,7 +49,7 @@ func TestGetRequestLogs_DefaultOmitRawFields(t *testing.T) {
 	}
 
 	c, w := testsupport.NewTestContext("GET", "/logs?page=1&page_size=20")
-	logs.GetRequestLogs(c)
+	GetRequestLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
@@ -117,7 +116,7 @@ func TestGetRequestLogs_IncludeRawReturnsRawFields(t *testing.T) {
 	}
 
 	c, w := testsupport.NewTestContext("GET", "/logs?page=1&page_size=20&include_raw=true")
-	logs.GetRequestLogs(c)
+	GetRequestLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
@@ -172,7 +171,7 @@ func TestGetRequestLogDetail_ReturnsRawFields(t *testing.T) {
 
 	c, w := testsupport.NewTestContext("GET", "/logs/"+strconv.FormatUint(uint64(log.ID), 10))
 	c.Params = gin.Params{{Key: "id", Value: strconv.FormatUint(uint64(log.ID), 10)}}
-	logs.GetRequestLogDetail(c)
+	GetRequestLogDetail(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
@@ -207,7 +206,7 @@ func TestGetRequestLogDetail_NotFound(t *testing.T) {
 
 	c, w := testsupport.NewTestContext("GET", "/logs/999")
 	c.Params = gin.Params{{Key: "id", Value: "999"}}
-	logs.GetRequestLogDetail(c)
+	GetRequestLogDetail(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}

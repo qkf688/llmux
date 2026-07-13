@@ -1,4 +1,4 @@
-package handler
+package v1
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/consts"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/providers"
 	"github.com/atopos31/llmio/service"

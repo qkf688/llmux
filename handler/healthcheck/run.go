@@ -1,11 +1,11 @@
-package handler
+package healthcheck
 
 import (
 	"context"
 	"log/slog"
 
-	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/handler/httpx"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/service"
 	"github.com/gin-gonic/gin"

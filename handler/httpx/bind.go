@@ -14,7 +14,7 @@ import (
 
 // ParsePaginationStrict 解析 page / page_size。
 // 缺省：page=1, page_size=20；非法值写 BadRequest 并返回 ok=false。
-// 与 logs / healthchecklogs 现网行为一致。
+// 与 logs / healthcheck 现网行为一致。
 func ParsePaginationStrict(c *gin.Context) (page, pageSize int, ok bool) {
 	page = 1
 	if pageStr := c.Query("page"); pageStr != "" {
@@ -38,7 +38,7 @@ func ParsePaginationStrict(c *gin.Context) (page, pageSize int, ok bool) {
 	return page, pageSize, true
 }
 
-// ParsePaginationLoose 解析 page / page_size（modelsynclogs 风格）。
+// ParsePaginationLoose 解析 page / page_size（modelsync 风格）。
 // 缺省 DefaultQuery；非法 page 回落 1；非法 page_size 回落 20（含 >100）。
 // 注意：List 查询使用解析后的原始值，响应中的 page/page_size 才做回落展示——保持现网顺序由调用方决定。
 func ParsePaginationLoose(c *gin.Context) (page, pageSize int) {

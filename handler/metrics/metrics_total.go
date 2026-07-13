@@ -1,4 +1,4 @@
-package handler
+package metrics
 
 import (
 	"errors"
@@ -27,4 +27,3 @@ func MetricsTotal(c *gin.Context) {
 
 	httpresp.Success(c, MetricsRes{Reqs: total.Reqs, Tokens: total.Tokens})
 }
-

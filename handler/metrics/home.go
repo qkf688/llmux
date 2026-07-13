@@ -1,4 +1,4 @@
-package handler
+package metrics
 
 import (
 	"strconv"

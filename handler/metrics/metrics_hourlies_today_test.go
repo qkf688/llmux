@@ -1,15 +1,16 @@
-package handler
+package metrics
 
 import (
 	"encoding/json"
 	"testing"
 	"time"
 
+	"github.com/atopos31/llmio/handler/testsupport"
 	"github.com/atopos31/llmio/models"
 )
 
 func TestMetricsHourliesToday_FillsMissingHours(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	now := time.Now()
 	date := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).Format("2006-01-02")
@@ -24,14 +25,14 @@ func TestMetricsHourliesToday_FillsMissingHours(t *testing.T) {
 		t.Fatalf("create hour 23: %v", err)
 	}
 
-	c, w := newHandlerTestContext("GET", "/metrics/hourlies/today")
+	c, w := testsupport.NewTestContext("GET", "/metrics/hourlies/today")
 	MetricsHourliesToday(c)
 
 	if w.Code != 200 {
 		t.Fatalf("status code=%d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[[]HourlyMetricsRes]
+	var payload testsupport.APIEnvelope[[]HourlyMetricsRes]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}

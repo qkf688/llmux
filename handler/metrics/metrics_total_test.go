@@ -1,24 +1,25 @@
-package handler
+package metrics
 
 import (
 	"encoding/json"
 	"testing"
 
+	"github.com/atopos31/llmio/handler/testsupport"
 	"github.com/atopos31/llmio/models"
 )
 
 func TestMetricsTotal_ReturnsStatsTotalOrZero(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	// No row -> zeros
 	{
-		c, w := newHandlerTestContext("GET", "/metrics/total")
+		c, w := testsupport.NewTestContext("GET", "/metrics/total")
 		MetricsTotal(c)
 		if w.Code != 200 {
 			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 		}
 
-		var payload apiEnvelope[MetricsRes]
+		var payload testsupport.APIEnvelope[MetricsRes]
 		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 			t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 		}
@@ -36,13 +37,13 @@ func TestMetricsTotal_ReturnsStatsTotalOrZero(t *testing.T) {
 			t.Fatalf("create stats total: %v", err)
 		}
 
-		c, w := newHandlerTestContext("GET", "/metrics/total")
+		c, w := testsupport.NewTestContext("GET", "/metrics/total")
 		MetricsTotal(c)
 		if w.Code != 200 {
 			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 		}
 
-		var payload apiEnvelope[MetricsRes]
+		var payload testsupport.APIEnvelope[MetricsRes]
 		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 			t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 		}
@@ -54,4 +55,3 @@ func TestMetricsTotal_ReturnsStatsTotalOrZero(t *testing.T) {
 		}
 	}
 }
-

@@ -7,12 +7,13 @@ import (
 	"testing"
 
 	"github.com/atopos31/llmio/handler/associations"
+	"github.com/atopos31/llmio/handler/testsupport"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 )
 
 func TestBatchUpdateModelProvidersCapabilities_NoIDs_ReturnsEnvelope400(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -26,7 +27,7 @@ func TestBatchUpdateModelProvidersCapabilities_NoIDs_ReturnsEnvelope400(t *testi
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[any]
+	var payload testsupport.APIEnvelope[any]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}
@@ -39,7 +40,7 @@ func TestBatchUpdateModelProvidersCapabilities_NoIDs_ReturnsEnvelope400(t *testi
 }
 
 func TestBatchUpdateModelProvidersCapabilities_NoFields_ReturnsEnvelope400(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -53,7 +54,7 @@ func TestBatchUpdateModelProvidersCapabilities_NoFields_ReturnsEnvelope400(t *te
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[any]
+	var payload testsupport.APIEnvelope[any]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}
@@ -66,7 +67,7 @@ func TestBatchUpdateModelProvidersCapabilities_NoFields_ReturnsEnvelope400(t *te
 }
 
 func TestBatchUpdateModelProvidersCapabilities_UpdatesOnlyProvidedFields(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	toolCallTrue := true
 	structuredTrue := true
@@ -116,7 +117,7 @@ func TestBatchUpdateModelProvidersCapabilities_UpdatesOnlyProvidedFields(t *test
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[map[string]any]
+	var payload testsupport.APIEnvelope[map[string]any]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}
@@ -152,4 +153,3 @@ func TestBatchUpdateModelProvidersCapabilities_UpdatesOnlyProvidedFields(t *test
 		t.Fatalf("updated mp2 Image = %v, want true", updated2.Image)
 	}
 }
-

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"github.com/atopos31/llmio/handler/testsupport"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestUpdateProvider_NotFoundReturnsEnvelope404(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -26,7 +27,7 @@ func TestUpdateProvider_NotFoundReturnsEnvelope404(t *testing.T) {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[any]
+	var payload testsupport.APIEnvelope[any]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}
@@ -37,4 +38,3 @@ func TestUpdateProvider_NotFoundReturnsEnvelope404(t *testing.T) {
 		t.Fatalf("payload message = %q, want %q, body=%s", payload.Message, "Provider not found", w.Body.String())
 	}
 }
-

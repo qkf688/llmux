@@ -1,16 +1,17 @@
-package handler
+package metrics
 
 import (
 	"encoding/json"
 	"testing"
 	"time"
 
+	"github.com/atopos31/llmio/handler/testsupport"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 )
 
 func TestMetricsDailies_ReturnsRowsSinceStartDate(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	now := time.Now()
 	today := now.Format("2006-01-02")
@@ -27,14 +28,14 @@ func TestMetricsDailies_ReturnsRowsSinceStartDate(t *testing.T) {
 		t.Fatalf("create today daily: %v", err)
 	}
 
-	c, w := newHandlerTestContext("GET", "/metrics/dailies/2")
+	c, w := testsupport.NewTestContext("GET", "/metrics/dailies/2")
 	c.Params = gin.Params{{Key: "days", Value: "2"}}
 	MetricsDailies(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[[]DailyMetricsRes]
+	var payload testsupport.APIEnvelope[[]DailyMetricsRes]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}
@@ -54,16 +55,16 @@ func TestMetricsDailies_ReturnsRowsSinceStartDate(t *testing.T) {
 }
 
 func TestMetricsDailies_InvalidDays(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
-	c, w := newHandlerTestContext("GET", "/metrics/dailies/-1")
+	c, w := testsupport.NewTestContext("GET", "/metrics/dailies/-1")
 	c.Params = gin.Params{{Key: "days", Value: "-1"}}
 	MetricsDailies(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[any]
+	var payload testsupport.APIEnvelope[any]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}
@@ -71,4 +72,3 @@ func TestMetricsDailies_InvalidDays(t *testing.T) {
 		t.Fatalf("payload code = %d, want 400, body=%s", payload.Code, w.Body.String())
 	}
 }
-

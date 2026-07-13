@@ -9,13 +9,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/atopos31/llmio/handler/testsupport"
 	"github.com/atopos31/llmio/handler/virtualmodels"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 )
 
 func TestDeleteVirtualModelMapping_HardDeleteAllowsRecreate(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	realModel := models.Model{Name: "mimo-v2-flash"}
 	if err := models.DB.Create(&realModel).Error; err != nil {
@@ -43,7 +44,7 @@ func TestDeleteVirtualModelMapping_HardDeleteAllowsRecreate(t *testing.T) {
 			t.Fatalf("create mapping status code = %d, want 200, body=%s", w.Code, w.Body.String())
 		}
 
-		var payload apiEnvelope[models.VirtualModelMapping]
+		var payload testsupport.APIEnvelope[models.VirtualModelMapping]
 		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 			t.Fatalf("unmarshal create response: %v, body=%s", err, w.Body.String())
 		}
@@ -71,7 +72,7 @@ func TestDeleteVirtualModelMapping_HardDeleteAllowsRecreate(t *testing.T) {
 			t.Fatalf("delete mapping status code = %d, want 200, body=%s", w.Code, w.Body.String())
 		}
 
-		var payload apiEnvelope[any]
+		var payload testsupport.APIEnvelope[any]
 		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 			t.Fatalf("unmarshal delete response: %v, body=%s", err, w.Body.String())
 		}
@@ -104,7 +105,7 @@ func TestDeleteVirtualModelMapping_HardDeleteAllowsRecreate(t *testing.T) {
 		if w.Code != 200 {
 			t.Fatalf("recreate mapping status code = %d, want 200, body=%s", w.Code, w.Body.String())
 		}
-		var payload apiEnvelope[models.VirtualModelMapping]
+		var payload testsupport.APIEnvelope[models.VirtualModelMapping]
 		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 			t.Fatalf("unmarshal recreate response: %v, body=%s", err, w.Body.String())
 		}

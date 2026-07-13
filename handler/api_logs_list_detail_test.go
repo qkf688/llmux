@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/atopos31/llmio/handler/logs"
+	"github.com/atopos31/llmio/handler/testsupport"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 )
@@ -19,7 +20,7 @@ type requestLogsResponse struct {
 }
 
 func TestGetRequestLogs_DefaultOmitRawFields(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	enabled := true
 	virtualModel := models.VirtualModel{Name: "m1", Enabled: &enabled}
@@ -48,13 +49,13 @@ func TestGetRequestLogs_DefaultOmitRawFields(t *testing.T) {
 		t.Fatalf("create log: %v", err)
 	}
 
-	c, w := newHandlerTestContext("GET", "/logs?page=1&page_size=20")
+	c, w := testsupport.NewTestContext("GET", "/logs?page=1&page_size=20")
 	logs.GetRequestLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[requestLogsResponse]
+	var payload testsupport.APIEnvelope[requestLogsResponse]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}
@@ -97,7 +98,7 @@ func TestGetRequestLogs_DefaultOmitRawFields(t *testing.T) {
 }
 
 func TestGetRequestLogs_IncludeRawReturnsRawFields(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	log := models.ChatLog{
 		Name:            "m1",
@@ -115,13 +116,13 @@ func TestGetRequestLogs_IncludeRawReturnsRawFields(t *testing.T) {
 		t.Fatalf("create log: %v", err)
 	}
 
-	c, w := newHandlerTestContext("GET", "/logs?page=1&page_size=20&include_raw=true")
+	c, w := testsupport.NewTestContext("GET", "/logs?page=1&page_size=20&include_raw=true")
 	logs.GetRequestLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[requestLogsResponse]
+	var payload testsupport.APIEnvelope[requestLogsResponse]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}
@@ -151,7 +152,7 @@ func TestGetRequestLogs_IncludeRawReturnsRawFields(t *testing.T) {
 }
 
 func TestGetRequestLogDetail_ReturnsRawFields(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	log := models.ChatLog{
 		Name:            "m1",
@@ -169,14 +170,14 @@ func TestGetRequestLogDetail_ReturnsRawFields(t *testing.T) {
 		t.Fatalf("create log: %v", err)
 	}
 
-	c, w := newHandlerTestContext("GET", "/logs/"+strconv.FormatUint(uint64(log.ID), 10))
+	c, w := testsupport.NewTestContext("GET", "/logs/"+strconv.FormatUint(uint64(log.ID), 10))
 	c.Params = gin.Params{{Key: "id", Value: strconv.FormatUint(uint64(log.ID), 10)}}
 	logs.GetRequestLogDetail(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[map[string]any]
+	var payload testsupport.APIEnvelope[map[string]any]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}
@@ -202,16 +203,16 @@ func TestGetRequestLogDetail_ReturnsRawFields(t *testing.T) {
 }
 
 func TestGetRequestLogDetail_NotFound(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
-	c, w := newHandlerTestContext("GET", "/logs/999")
+	c, w := testsupport.NewTestContext("GET", "/logs/999")
 	c.Params = gin.Params{{Key: "id", Value: "999"}}
 	logs.GetRequestLogDetail(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[any]
+	var payload testsupport.APIEnvelope[any]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}
@@ -219,4 +220,3 @@ func TestGetRequestLogDetail_NotFound(t *testing.T) {
 		t.Fatalf("payload code = %d, want 404, body=%s", payload.Code, w.Body.String())
 	}
 }
-

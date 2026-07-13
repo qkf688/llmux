@@ -5,19 +5,20 @@ import (
 	"testing"
 
 	"github.com/atopos31/llmio/handler/logs"
+	"github.com/atopos31/llmio/handler/testsupport"
 	"github.com/atopos31/llmio/models"
 )
 
 func TestClearFilteredLogs_RequiresFilters(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
-	c, w := newHandlerTestContext("DELETE", "/logs/clear-filtered")
+	c, w := testsupport.NewTestContext("DELETE", "/logs/clear-filtered")
 	logs.ClearFilteredLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[any]
+	var payload testsupport.APIEnvelope[any]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}
@@ -27,7 +28,7 @@ func TestClearFilteredLogs_RequiresFilters(t *testing.T) {
 }
 
 func TestClearFilteredLogs_StatusSuccess(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	chatLogs := []models.ChatLog{
 		{Name: "m1", ProviderName: "p1", ProviderModel: "pm1", Status: "success", Style: "openai"},
@@ -51,13 +52,13 @@ func TestClearFilteredLogs_StatusSuccess(t *testing.T) {
 		t.Fatalf("create chat io: %v", err)
 	}
 
-	c, w := newHandlerTestContext("DELETE", "/logs/clear-filtered?status=success")
+	c, w := testsupport.NewTestContext("DELETE", "/logs/clear-filtered?status=success")
 	logs.ClearFilteredLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[struct {
+	var payload testsupport.APIEnvelope[struct {
 		Deleted int64 `json:"deleted"`
 	}]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {

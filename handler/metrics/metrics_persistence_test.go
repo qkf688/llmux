@@ -1,4 +1,4 @@
-package handler
+package metrics
 
 import (
 	"encoding/json"
@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"github.com/atopos31/llmio/handler/logs"
+	"github.com/atopos31/llmio/handler/testsupport"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 )
 
 func TestMetricsAndCounts_NotAffectedByClearAllLogs(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	today := time.Now().Format("2006-01-02")
 
@@ -37,14 +38,14 @@ func TestMetricsAndCounts_NotAffectedByClearAllLogs(t *testing.T) {
 
 	// metrics before clear
 	{
-		c, w := newHandlerTestContext("GET", "/metrics/use/0")
+		c, w := testsupport.NewTestContext("GET", "/metrics/use/0")
 		c.Params = gin.Params{{Key: "days", Value: "0"}}
 		Metrics(c)
 		if w.Code != 200 {
 			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 		}
 
-		var payload apiEnvelope[MetricsRes]
+		var payload testsupport.APIEnvelope[MetricsRes]
 		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 			t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 		}
@@ -58,12 +59,12 @@ func TestMetricsAndCounts_NotAffectedByClearAllLogs(t *testing.T) {
 
 	// counts before clear
 	{
-		c, w := newHandlerTestContext("GET", "/metrics/counts")
+		c, w := testsupport.NewTestContext("GET", "/metrics/counts")
 		Counts(c)
 		if w.Code != 200 {
 			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 		}
-		var payload apiEnvelope[[]Count]
+		var payload testsupport.APIEnvelope[[]Count]
 		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 			t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 		}
@@ -77,12 +78,12 @@ func TestMetricsAndCounts_NotAffectedByClearAllLogs(t *testing.T) {
 
 	// real model counts before clear
 	{
-		c, w := newHandlerTestContext("GET", "/metrics/real-model-counts")
+		c, w := testsupport.NewTestContext("GET", "/metrics/real-model-counts")
 		RealModelCounts(c)
 		if w.Code != 200 {
 			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 		}
-		var payload apiEnvelope[[]Count]
+		var payload testsupport.APIEnvelope[[]Count]
 		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 			t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 		}
@@ -96,12 +97,12 @@ func TestMetricsAndCounts_NotAffectedByClearAllLogs(t *testing.T) {
 
 	// clear logs
 	{
-		c, w := newHandlerTestContext("DELETE", "/logs/clear")
+		c, w := testsupport.NewTestContext("DELETE", "/logs/clear")
 		logs.ClearAllLogs(c)
 		if w.Code != 200 {
 			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 		}
-		var payload apiEnvelope[map[string]any]
+		var payload testsupport.APIEnvelope[map[string]any]
 		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 			t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 		}
@@ -117,14 +118,14 @@ func TestMetricsAndCounts_NotAffectedByClearAllLogs(t *testing.T) {
 
 	// metrics after clear
 	{
-		c, w := newHandlerTestContext("GET", "/metrics/use/0")
+		c, w := testsupport.NewTestContext("GET", "/metrics/use/0")
 		c.Params = gin.Params{{Key: "days", Value: "0"}}
 		Metrics(c)
 		if w.Code != 200 {
 			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 		}
 
-		var payload apiEnvelope[MetricsRes]
+		var payload testsupport.APIEnvelope[MetricsRes]
 		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 			t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 		}
@@ -138,12 +139,12 @@ func TestMetricsAndCounts_NotAffectedByClearAllLogs(t *testing.T) {
 
 	// counts after clear
 	{
-		c, w := newHandlerTestContext("GET", "/metrics/counts")
+		c, w := testsupport.NewTestContext("GET", "/metrics/counts")
 		Counts(c)
 		if w.Code != 200 {
 			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 		}
-		var payload apiEnvelope[[]Count]
+		var payload testsupport.APIEnvelope[[]Count]
 		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 			t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 		}
@@ -157,12 +158,12 @@ func TestMetricsAndCounts_NotAffectedByClearAllLogs(t *testing.T) {
 
 	// real model counts after clear
 	{
-		c, w := newHandlerTestContext("GET", "/metrics/real-model-counts")
+		c, w := testsupport.NewTestContext("GET", "/metrics/real-model-counts")
 		RealModelCounts(c)
 		if w.Code != 200 {
 			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 		}
-		var payload apiEnvelope[[]Count]
+		var payload testsupport.APIEnvelope[[]Count]
 		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 			t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 		}
@@ -195,13 +196,13 @@ func TestMetricsAndCounts_NotAffectedByClearAllLogs(t *testing.T) {
 
 	// Also sanity-check Metrics with days=30 uses the same source (stats_dailies).
 	{
-		c, w := newHandlerTestContext("GET", "/metrics/use/30")
+		c, w := testsupport.NewTestContext("GET", "/metrics/use/30")
 		c.Params = gin.Params{{Key: "days", Value: strconv.Itoa(30)}}
 		Metrics(c)
 		if w.Code != 200 {
 			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 		}
-		var payload apiEnvelope[MetricsRes]
+		var payload testsupport.APIEnvelope[MetricsRes]
 		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 			t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 		}

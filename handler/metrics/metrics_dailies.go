@@ -1,4 +1,4 @@
-package handler
+package metrics
 
 import (
 	"strconv"
@@ -36,4 +36,3 @@ func MetricsDailies(c *gin.Context) {
 
 	httpresp.Success(c, rows)
 }
-

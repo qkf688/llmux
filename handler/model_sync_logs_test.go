@@ -1,11 +1,9 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -13,17 +11,10 @@ import (
 
 	"github.com/atopos31/llmio/handler/modelsynclogs"
 	"github.com/atopos31/llmio/handler/providerapi"
+	"github.com/atopos31/llmio/handler/testsupport"
 	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/repository"
 	"github.com/gin-gonic/gin"
 )
-
-type apiEnvelope[T any] struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-	Error   string `json:"error,omitempty"`
-	Data    T      `json:"data"`
-}
 
 type modelSyncLogsResponse struct {
 	Data       []models.ModelSyncLog `json:"data"`
@@ -35,31 +26,8 @@ type modelSyncLogsResponse struct {
 	} `json:"pagination"`
 }
 
-func initHandlerTestDB(t *testing.T) {
-	t.Helper()
-	models.Init(context.Background(), filepath.Join(t.TempDir(), "llmio-test.db"))
-	// 与 models.DB 同步默认 Repositories，避免 Default 缓存旧连接
-	repository.SetDefault(repository.New(models.DB))
-	t.Cleanup(func() {
-		repository.SetDefault(nil)
-		sqlDB, err := models.DB.DB()
-		if err != nil {
-			return
-		}
-		_ = sqlDB.Close()
-	})
-}
-
-func newHandlerTestContext(method, path string) (*gin.Context, *httptest.ResponseRecorder) {
-	gin.SetMode(gin.TestMode)
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(method, path, nil)
-	return c, w
-}
-
 func TestGetModelSyncLogs_StatusFilter(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	provider := models.Provider{Name: "p1", Type: "openai"}
 	if err := models.DB.Create(&provider).Error; err != nil {
@@ -95,13 +63,13 @@ func TestGetModelSyncLogs_StatusFilter(t *testing.T) {
 		}
 	}
 
-	c, w := newHandlerTestContext("GET", "/model-sync/logs?status=error&page_size=100")
+	c, w := testsupport.NewTestContext("GET", "/model-sync/logs?status=error&page_size=100")
 	modelsynclogs.GetModelSyncLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[modelSyncLogsResponse]
+	var payload testsupport.APIEnvelope[modelSyncLogsResponse]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}
@@ -119,15 +87,15 @@ func TestGetModelSyncLogs_StatusFilter(t *testing.T) {
 }
 
 func TestGetModelSyncLogs_InvalidStatus(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
-	c, w := newHandlerTestContext("GET", "/model-sync/logs?status=bad")
+	c, w := testsupport.NewTestContext("GET", "/model-sync/logs?status=bad")
 	modelsynclogs.GetModelSyncLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[any]
+	var payload testsupport.APIEnvelope[any]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}
@@ -137,7 +105,7 @@ func TestGetModelSyncLogs_InvalidStatus(t *testing.T) {
 }
 
 func TestClearModelSyncErrorLogs_All(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	provider := models.Provider{Name: "p1", Type: "openai"}
 	if err := models.DB.Create(&provider).Error; err != nil {
@@ -173,13 +141,13 @@ func TestClearModelSyncErrorLogs_All(t *testing.T) {
 		}
 	}
 
-	c, w := newHandlerTestContext("DELETE", "/model-sync/logs/clear-errors")
+	c, w := testsupport.NewTestContext("DELETE", "/model-sync/logs/clear-errors")
 	modelsynclogs.ClearModelSyncErrorLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[struct {
+	var payload testsupport.APIEnvelope[struct {
 		Deleted int64 `json:"deleted"`
 	}]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
@@ -210,7 +178,7 @@ func TestClearModelSyncErrorLogs_All(t *testing.T) {
 }
 
 func TestClearModelSyncErrorLogs_ByProvider(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	p1 := models.Provider{Name: "p1", Type: "openai"}
 	p2 := models.Provider{Name: "p2", Type: "openai"}
@@ -244,7 +212,7 @@ func TestClearModelSyncErrorLogs_ByProvider(t *testing.T) {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[struct {
+	var payload testsupport.APIEnvelope[struct {
 		Deleted int64 `json:"deleted"`
 	}]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
@@ -281,7 +249,7 @@ func TestClearModelSyncErrorLogs_ByProvider(t *testing.T) {
 }
 
 func TestGetProviderModels_ModelEndpointDisabledStillWorks(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/models" {
@@ -304,7 +272,7 @@ func TestGetProviderModels_ModelEndpointDisabledStillWorks(t *testing.T) {
 		t.Fatalf("create provider: %v", err)
 	}
 
-	c, w := newHandlerTestContext("GET", "/providers/models/"+strconv.FormatUint(uint64(provider.ID), 10)+"?source=upstream")
+	c, w := testsupport.NewTestContext("GET", "/providers/models/"+strconv.FormatUint(uint64(provider.ID), 10)+"?source=upstream")
 	c.Params = []gin.Param{{Key: "id", Value: strconv.FormatUint(uint64(provider.ID), 10)}}
 	providerapi.GetProviderModels(c)
 	if w.Code != 200 {
@@ -318,7 +286,7 @@ func TestGetProviderModels_ModelEndpointDisabledStillWorks(t *testing.T) {
 		OwnedBy string `json:"owned_by"`
 	}
 
-	var payload apiEnvelope[[]providerModel]
+	var payload testsupport.APIEnvelope[[]providerModel]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}

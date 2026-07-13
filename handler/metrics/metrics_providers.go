@@ -1,4 +1,4 @@
-package handler
+package metrics
 
 import (
 	"github.com/atopos31/llmio/httpresp"

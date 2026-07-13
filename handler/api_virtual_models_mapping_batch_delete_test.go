@@ -6,13 +6,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/atopos31/llmio/handler/testsupport"
 	"github.com/atopos31/llmio/handler/virtualmodels"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 )
 
 func TestBatchDeleteVirtualModelMapping_EmptyIDs(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	vm := models.VirtualModel{Name: "vm1"}
 	if err := models.DB.Create(&vm).Error; err != nil {
@@ -30,7 +31,7 @@ func TestBatchDeleteVirtualModelMapping_EmptyIDs(t *testing.T) {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[any]
+	var payload testsupport.APIEnvelope[any]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}
@@ -40,7 +41,7 @@ func TestBatchDeleteVirtualModelMapping_EmptyIDs(t *testing.T) {
 }
 
 func TestBatchDeleteVirtualModelMapping_DeletesOnlyWithinVirtualModel(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	realModels := []models.Model{
 		{Name: "m1"},
@@ -88,7 +89,7 @@ func TestBatchDeleteVirtualModelMapping_DeletesOnlyWithinVirtualModel(t *testing
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[struct {
+	var payload testsupport.APIEnvelope[struct {
 		Deleted int64 `json:"deleted"`
 	}]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
@@ -121,4 +122,3 @@ func TestBatchDeleteVirtualModelMapping_DeletesOnlyWithinVirtualModel(t *testing
 		t.Fatalf("remaining vm2 = %d, want 1", remainingVM2)
 	}
 }
-

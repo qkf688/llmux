@@ -1,14 +1,15 @@
-package handler
+package metrics
 
 import (
 	"encoding/json"
 	"testing"
 
+	"github.com/atopos31/llmio/handler/testsupport"
 	"github.com/atopos31/llmio/models"
 )
 
 func TestProviderMetrics_SortsAndComputesRates(t *testing.T) {
-	initHandlerTestDB(t)
+	testsupport.InitTestDB(t)
 
 	p1 := models.Provider{Name: "p1", Type: "openai"}
 	p2 := models.Provider{Name: "p2", Type: "openai"}
@@ -44,13 +45,13 @@ func TestProviderMetrics_SortsAndComputesRates(t *testing.T) {
 		}
 	}
 
-	c, w := newHandlerTestContext("GET", "/metrics/providers")
+	c, w := testsupport.NewTestContext("GET", "/metrics/providers")
 	ProviderMetrics(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[[]ProviderMetricRes]
+	var payload testsupport.APIEnvelope[[]ProviderMetricRes]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}

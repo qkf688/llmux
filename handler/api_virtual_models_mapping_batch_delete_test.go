@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/atopos31/llmio/handler/virtualmodels"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 )
@@ -24,7 +25,7 @@ func TestBatchDeleteVirtualModelMapping_EmptyIDs(t *testing.T) {
 	c.Request.Header.Set("Content-Type", "application/json")
 	c.Params = []gin.Param{{Key: "id", Value: strconvUint(vm.ID)}}
 
-	BatchDeleteVirtualModelMapping(c)
+	virtualmodels.BatchDeleteVirtualModelMapping(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
@@ -82,7 +83,7 @@ func TestBatchDeleteVirtualModelMapping_DeletesOnlyWithinVirtualModel(t *testing
 	c.Request.Header.Set("Content-Type", "application/json")
 	c.Params = []gin.Param{{Key: "id", Value: strconvUint(vm1.ID)}}
 
-	BatchDeleteVirtualModelMapping(c)
+	virtualmodels.BatchDeleteVirtualModelMapping(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}

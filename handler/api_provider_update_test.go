@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/atopos31/llmio/handler/providerapi"
 	"github.com/gin-gonic/gin"
 )
 
@@ -19,7 +20,7 @@ func TestUpdateProvider_NotFoundReturnsEnvelope404(t *testing.T) {
 	c.Request.Header.Set("Content-Type", "application/json")
 	c.Params = []gin.Param{{Key: "id", Value: "999"}}
 
-	UpdateProvider(c)
+	providerapi.UpdateProvider(c)
 
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())

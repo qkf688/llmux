@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/atopos31/llmio/handler/logs"
 	"github.com/atopos31/llmio/models"
 )
 
@@ -11,7 +12,7 @@ func TestClearFilteredLogs_RequiresFilters(t *testing.T) {
 	initHandlerTestDB(t)
 
 	c, w := newHandlerTestContext("DELETE", "/logs/clear-filtered")
-	ClearFilteredLogs(c)
+	logs.ClearFilteredLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
@@ -28,19 +29,19 @@ func TestClearFilteredLogs_RequiresFilters(t *testing.T) {
 func TestClearFilteredLogs_StatusSuccess(t *testing.T) {
 	initHandlerTestDB(t)
 
-	logs := []models.ChatLog{
+	chatLogs := []models.ChatLog{
 		{Name: "m1", ProviderName: "p1", ProviderModel: "pm1", Status: "success", Style: "openai"},
 		{Name: "m1", ProviderName: "p1", ProviderModel: "pm1", Status: "success", Style: "openai"},
 		{Name: "m1", ProviderName: "p1", ProviderModel: "pm1", Status: "error", Style: "openai", Error: "boom"},
 	}
-	for i := range logs {
-		if err := models.DB.Create(&logs[i]).Error; err != nil {
+	for i := range chatLogs {
+		if err := models.DB.Create(&chatLogs[i]).Error; err != nil {
 			t.Fatalf("create log %d: %v", i, err)
 		}
 	}
 
 	chatIO := models.ChatIO{
-		LogId: logs[0].ID,
+		LogId: chatLogs[0].ID,
 		Input: "hi",
 		OutputUnion: models.OutputUnion{
 			OfString: "out",
@@ -51,7 +52,7 @@ func TestClearFilteredLogs_StatusSuccess(t *testing.T) {
 	}
 
 	c, w := newHandlerTestContext("DELETE", "/logs/clear-filtered?status=success")
-	ClearFilteredLogs(c)
+	logs.ClearFilteredLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
@@ -86,7 +87,7 @@ func TestClearFilteredLogs_StatusSuccess(t *testing.T) {
 	}
 
 	var remainingChatIO int64
-	if err := models.DB.Model(&models.ChatIO{}).Where("log_id = ?", logs[0].ID).Count(&remainingChatIO).Error; err != nil {
+	if err := models.DB.Model(&models.ChatIO{}).Where("log_id = ?", chatLogs[0].ID).Count(&remainingChatIO).Error; err != nil {
 		t.Fatalf("count remaining chat io: %v", err)
 	}
 	if remainingChatIO != 0 {

@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/atopos31/llmio/handler/logs"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 )
@@ -48,7 +49,7 @@ func TestGetRequestLogs_DefaultOmitRawFields(t *testing.T) {
 	}
 
 	c, w := newHandlerTestContext("GET", "/logs?page=1&page_size=20")
-	GetRequestLogs(c)
+	logs.GetRequestLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
@@ -115,7 +116,7 @@ func TestGetRequestLogs_IncludeRawReturnsRawFields(t *testing.T) {
 	}
 
 	c, w := newHandlerTestContext("GET", "/logs?page=1&page_size=20&include_raw=true")
-	GetRequestLogs(c)
+	logs.GetRequestLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
@@ -170,7 +171,7 @@ func TestGetRequestLogDetail_ReturnsRawFields(t *testing.T) {
 
 	c, w := newHandlerTestContext("GET", "/logs/"+strconv.FormatUint(uint64(log.ID), 10))
 	c.Params = gin.Params{{Key: "id", Value: strconv.FormatUint(uint64(log.ID), 10)}}
-	GetRequestLogDetail(c)
+	logs.GetRequestLogDetail(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
@@ -205,7 +206,7 @@ func TestGetRequestLogDetail_NotFound(t *testing.T) {
 
 	c, w := newHandlerTestContext("GET", "/logs/999")
 	c.Params = gin.Params{{Key: "id", Value: "999"}}
-	GetRequestLogDetail(c)
+	logs.GetRequestLogDetail(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}

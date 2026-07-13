@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/atopos31/llmio/handler/logs"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 )
@@ -96,7 +97,7 @@ func TestMetricsAndCounts_NotAffectedByClearAllLogs(t *testing.T) {
 	// clear logs
 	{
 		c, w := newHandlerTestContext("DELETE", "/logs/clear")
-		ClearAllLogs(c)
+		logs.ClearAllLogs(c)
 		if w.Code != 200 {
 			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 		}

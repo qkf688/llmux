@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/atopos31/llmio/handler/modelsynclogs"
+	"github.com/atopos31/llmio/handler/providerapi"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/repository"
 	"github.com/gin-gonic/gin"
@@ -94,7 +96,7 @@ func TestGetModelSyncLogs_StatusFilter(t *testing.T) {
 	}
 
 	c, w := newHandlerTestContext("GET", "/model-sync/logs?status=error&page_size=100")
-	GetModelSyncLogs(c)
+	modelsynclogs.GetModelSyncLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
@@ -120,7 +122,7 @@ func TestGetModelSyncLogs_InvalidStatus(t *testing.T) {
 	initHandlerTestDB(t)
 
 	c, w := newHandlerTestContext("GET", "/model-sync/logs?status=bad")
-	GetModelSyncLogs(c)
+	modelsynclogs.GetModelSyncLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
@@ -172,7 +174,7 @@ func TestClearModelSyncErrorLogs_All(t *testing.T) {
 	}
 
 	c, w := newHandlerTestContext("DELETE", "/model-sync/logs/clear-errors")
-	ClearModelSyncErrorLogs(c)
+	modelsynclogs.ClearModelSyncErrorLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
@@ -237,7 +239,7 @@ func TestClearModelSyncErrorLogs_ByProvider(t *testing.T) {
 	c.Request = httptest.NewRequest("DELETE", "/model-sync/logs/clear-errors", strings.NewReader(`{"provider_ids":[`+strconv.FormatUint(uint64(p1.ID), 10)+`]}`))
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	ClearModelSyncErrorLogs(c)
+	modelsynclogs.ClearModelSyncErrorLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
@@ -304,7 +306,7 @@ func TestGetProviderModels_ModelEndpointDisabledStillWorks(t *testing.T) {
 
 	c, w := newHandlerTestContext("GET", "/providers/models/"+strconv.FormatUint(uint64(provider.ID), 10)+"?source=upstream")
 	c.Params = []gin.Param{{Key: "id", Value: strconv.FormatUint(uint64(provider.ID), 10)}}
-	GetProviderModels(c)
+	providerapi.GetProviderModels(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}

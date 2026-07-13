@@ -1,4 +1,4 @@
-package handler
+package modelsync
 
 import (
 	"encoding/json"
@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/atopos31/llmio/handler/modelsynclogs"
 	"github.com/atopos31/llmio/handler/providerapi"
 	"github.com/atopos31/llmio/handler/testsupport"
 	"github.com/atopos31/llmio/models"
@@ -64,7 +63,7 @@ func TestGetModelSyncLogs_StatusFilter(t *testing.T) {
 	}
 
 	c, w := testsupport.NewTestContext("GET", "/model-sync/logs?status=error&page_size=100")
-	modelsynclogs.GetModelSyncLogs(c)
+	GetModelSyncLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
@@ -90,7 +89,7 @@ func TestGetModelSyncLogs_InvalidStatus(t *testing.T) {
 	testsupport.InitTestDB(t)
 
 	c, w := testsupport.NewTestContext("GET", "/model-sync/logs?status=bad")
-	modelsynclogs.GetModelSyncLogs(c)
+	GetModelSyncLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
@@ -142,7 +141,7 @@ func TestClearModelSyncErrorLogs_All(t *testing.T) {
 	}
 
 	c, w := testsupport.NewTestContext("DELETE", "/model-sync/logs/clear-errors")
-	modelsynclogs.ClearModelSyncErrorLogs(c)
+	ClearModelSyncErrorLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
@@ -207,7 +206,7 @@ func TestClearModelSyncErrorLogs_ByProvider(t *testing.T) {
 	c.Request = httptest.NewRequest("DELETE", "/model-sync/logs/clear-errors", strings.NewReader(`{"provider_ids":[`+strconv.FormatUint(uint64(p1.ID), 10)+`]}`))
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	modelsynclogs.ClearModelSyncErrorLogs(c)
+	ClearModelSyncErrorLogs(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}

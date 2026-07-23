@@ -18,6 +18,8 @@ proxy-logger
 .bitfun/
 # local/ 本地文件，不提交
 local/
+# .local/ AI 临时产物（审查报告等），不提交
+.local/
 planning-simple
 nul
 .trae

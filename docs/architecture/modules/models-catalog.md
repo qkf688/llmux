@@ -1,0 +1,47 @@
+# models-catalog 模块
+
+> 本文件描述真实模型目录与模板匹配域。
+> 全局架构见 [README.md](../README.md)；模块间交互见 [interactions.md](../interactions.md)。
+
+## 1. 模块概述
+
+| 属性 | 值 |
+|------|-----|
+| 业务领域 | 真实模型目录、批量配置、自动关联用模板名 |
+| 目录位置 | `handler/modelapi/`；`service/model_template.go`；`repository/model.go`、`model_template_item.go`；实体 `Model`、`ModelTemplateItem` |
+| 主要职责 | 真实模型 CRUD/批量；模板项管理；模板索引匹配供自动关联使用 |
+
+## 2. 职责与边界
+
+- **负责什么**：真实模型生命周期；`ModelTemplateItem`；`TemplateIndex` 匹配逻辑
+- **不负责什么**：`ModelWithProvider` 关联行 CRUD（`associations`）；上游列表同步（`model-sync`）；虚拟模型映射
+- **对外暴露**：`handler/modelapi` REST；`ModelRepo` / `ModelTemplateItemRepo`；`TemplateIndex` / `BuildTemplateIndexFromData`
+- **依赖谁**：`models`、`repository`（部分路径）；设置中的模糊匹配相关键
+
+## 3. 内部结构
+
+```
+handler/modelapi/           # routes, CRUD, batch, template handlers
+service/model_template.go   # TemplateIndex 构建与 Match
+repository/model.go
+repository/model_template_item.go
+models.Model / ModelTemplateItem
+```
+
+## 4. 关键接口契约
+
+| 契约 | 职责 | 定义位置 | 实现方 |
+|------|------|----------|--------|
+| `ModelRepo` | 真实模型持久化与批量更新 | `repository/model.go` | GORM |
+| `ModelTemplateItemRepo` | 模板名条目 | `repository/model_template_item.go` | GORM |
+| `TemplateIndex` | 上游模型名 → 真实模型模板匹配 | `service/model_template.go` | 同文件 |
+| `models.Model` | 真实模型实体（重试、超时、IO 日志、上游标记等） | `models/model.go` | GORM |
+
+## 5. 特殊约定
+
+- 管理端 handler 仍存在直接 `gorm.G` 路径，与 repository 并存（渐进迁移现状）
+- 自动关联消费 `TemplateIndex`，实现落在 `associations`/`autoassoc`，本模块只提供匹配能力
+
+---
+
+*本文档由 Project Architecture Documenter skill 生成，生成日期：2026-07-23*

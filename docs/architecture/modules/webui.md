@@ -1,0 +1,87 @@
+# webui 模块
+
+> 本文件描述管理后台前端 SPA。
+> 全局架构见 [README.md](../README.md)；模块间交互见 [interactions.md](../interactions.md)。
+
+## 1. 模块概述
+
+| 属性 | 值 |
+|------|-----|
+| 业务领域 | 配置与运维可视化（不实现服务端业务规则） |
+| 目录位置 | `webui/`（源码 `webui/src/`；构建 `webui/dist/` 由 Go embed） |
+| 主要职责 | 供应商/模型/关联/虚拟模型/日志/指标/设置/健康与同步日志/数据库管理界面 |
+
+## 2. 职责与边界
+
+- **负责什么**：登录鉴权态 UI；路由与布局；表单与列表；调用 `/api`；服务端状态（TanStack Query）与客户端状态（Zustand）；图表与主题
+- **不负责什么**：任何后端业务规则、选路、协议转换、持久化
+- **对外暴露**：浏览器 SPA 路径（见 `route-config.ts`）；构建产物供 `main` embed
+- **依赖谁**：后端 `/api`（开发态 Vite 代理到 `7070`）
+
+## 3. 内部结构
+
+```
+webui/src/
+├── main.tsx / App.tsx
+├── routes/                 # 页面 + route-config.ts + layout
+│   ├── providers|models|virtual-models|model-providers|...
+│   └── settings/
+├── components/             # ui/、charts/、共享组件
+├── lib/api/                # core client + modules（catalog/logs/system）
+├── hooks/                  # 含 hooks/api 查询封装
+├── stores/                 # Zustand（含 core/updater）
+└── test/
+```
+
+页面文件夹常见形态：
+
+```
+routes/<page>/
+├── index.tsx
+├── hooks/use-*-page.ts
+├── components/sections|dialogs/
+├── schemas/ / types/ / utils/
+```
+
+各子目录职责：
+- `routes/`：按业务页拆分；`route-config.ts` 为 path/layout/nav 单一数据源
+- `lib/api/`：HTTP 客户端与领域 API 函数
+- `stores/`：客户端状态；`Updater` 统一更新模式
+- `components/ui/`：Radix + Tailwind 基础组件
+
+## 4. 关键接口契约
+
+| 契约 | 职责 | 定义位置 | 实现方 |
+|------|------|----------|--------|
+| `appRoutes` / `route-config` | 路由与侧栏配置 | `webui/src/routes/route-config.ts` | `App.tsx` / `layout.tsx` 消费 |
+| `fetchWithAuth` / `apiRequest` | 带鉴权信封请求 | `webui/src/lib/api/core/client.ts` | 各 api modules |
+| API modules | 按域封装 REST | `webui/src/lib/api/modules/**` | 页面 hooks 调用 |
+| `Updater` | store 统一更新接口 | `webui/src/stores/core/updater.ts` | 各 store |
+
+## 5. 特殊约定
+
+- 新增页面：新目录 + `route-config.ts` 追加一项；`App`/`layout` 自动派生
+- API 信封：`{ code, message, data }`，`code !== 200` 抛错；401 跳转 `/login`
+- 路径别名：`@` → `src/`
+- 修改前端后需重新 `pnpm run build`（或 `make webui`）才能进入 embed 二进制
+- **边界现状**：页面以 API 编排为主；仍可能复制服务端默认策略（如关联表单 `weight`/`priority` 硬编码后再被 settings 覆盖）——与「不实现业务规则」的目标尚有缺口
+- **DRY 现状**：日志类分页 UI、部分 Provider 视图类型在 routes/stores 间存在重复定义
+
+### 页面 ↔ 后端域映射
+
+| 前端路由 | 后端域 |
+|----------|--------|
+| `/providers` | providers |
+| `/models` | models-catalog |
+| `/model-providers` | associations |
+| `/virtual-models` | virtual-models |
+| `/logs`, `/logs/:id/chat-io` | logs-metrics |
+| `/health-check-logs` | health-check |
+| `/model-sync-logs` | model-sync |
+| `/settings` | settings |
+| `/database` | system-ops（database/importexport） |
+| `/` home | logs-metrics metrics |
+
+---
+
+*本文档由 Project Architecture Documenter skill 生成，生成日期：2026-07-23；同日审查回写。*

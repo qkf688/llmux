@@ -1,0 +1,973 @@
+llmux/
+├── balancer
+│   └── balancer.go
+├── common
+│   ├── maputil
+│   │   ├── maputil.go
+│   │   └── maputil_test.go
+│   ├── sse
+│   ├── dataurl.go
+│   └── dataurl_test.go
+├── consts
+│   └── consts.go
+├── docs
+│   ├── architecture
+│   │   ├── modules
+│   │   │   ├── associations.md
+│   │   │   ├── chat-gateway.md
+│   │   │   ├── health-check.md
+│   │   │   ├── logs-metrics.md
+│   │   │   ├── model-sync.md
+│   │   │   ├── models-catalog.md
+│   │   │   ├── protocol-transform.md
+│   │   │   ├── providers.md
+│   │   │   ├── settings.md
+│   │   │   ├── system-ops.md
+│   │   │   ├── virtual-models.md
+│   │   │   └── webui.md
+│   │   ├── conventions.md
+│   │   ├── dir-tree.txt
+│   │   ├── interactions.md
+│   │   └── README.md
+│   ├── dev
+│   │   └── plans
+│   │       └── 2026-03-13-request-logs-list-detail-split-design.md
+│   ├── plans
+│   │   ├── 2026-02-03-auto-save-template-on-delete.md
+│   │   ├── 2026-02-04-batch-update-models-design.md
+│   │   ├── 2026-02-04-database-export-design.md
+│   │   ├── 2026-02-10-model-catalog-redesign.md
+│   │   ├── 2026-02-18-model-sync-recent-added-models-design.md
+│   │   ├── 2026-02-18-tag-input-mobile-friendly.md
+│   │   ├── 2026-02-18-tag-input-redesign.md
+│   │   ├── 2026-02-19-model-sync-logs-null-fix-design.md
+│   │   ├── 2026-02-19-model-sync-logs-null-fix.md
+│   │   ├── 2026-02-19-move-format-conversion-to-general-design.md
+│   │   ├── 2026-02-19-move-format-conversion-to-general.md
+│   │   ├── 2026-02-19-reasoning-effort-mapping-design.md
+│   │   ├── 2026-02-19-reasoning-effort-mapping.md
+│   │   ├── 2026-02-28-provider-blacklist.md
+│   │   └── 2026-03-11-request-logs-clear-filtered-design.md
+│   ├── API_PARAMETERS.md
+│   ├── provider-blacklist-implementation-summary.md
+│   └── virtual-models-guide.md
+├── handler
+│   ├── associations
+│   │   ├── batch_capabilities_test.go
+│   │   ├── capabilities.go
+│   │   ├── crud.go
+│   │   ├── health.go
+│   │   ├── repos.go
+│   │   ├── routes.go
+│   │   ├── status.go
+│   │   ├── template.go
+│   │   └── types.go
+│   ├── autoassoc
+│   │   ├── associate.go
+│   │   ├── clean.go
+│   │   ├── routes.go
+│   │   ├── shared.go
+│   │   ├── shared_test.go
+│   │   └── types.go
+│   ├── database
+│   │   ├── export.go
+│   │   ├── routes.go
+│   │   ├── stats.go
+│   │   └── vacuum.go
+│   ├── healthcheck
+│   │   ├── handlers.go
+│   │   └── run.go
+│   ├── httpx
+│   │   └── bind.go
+│   ├── importexport
+│   │   ├── export.go
+│   │   ├── import.go
+│   │   ├── importer.go
+│   │   ├── importer_test.go
+│   │   └── routes.go
+│   ├── logs
+│   │   ├── chat_io.go
+│   │   ├── chat_log_delete.go
+│   │   ├── chat_log_list.go
+│   │   ├── clear_filtered_test.go
+│   │   ├── enrich.go
+│   │   ├── list_detail_test.go
+│   │   ├── repos.go
+│   │   └── routes.go
+│   ├── metrics
+│   │   ├── home.go
+│   │   ├── metrics_dailies.go
+│   │   ├── metrics_dailies_test.go
+│   │   ├── metrics_hourlies_today.go
+│   │   ├── metrics_hourlies_today_test.go
+│   │   ├── metrics_persistence_test.go
+│   │   ├── metrics_providers.go
+│   │   ├── metrics_providers_test.go
+│   │   ├── metrics_total.go
+│   │   ├── metrics_total_test.go
+│   │   └── routes.go
+│   ├── modelapi
+│   │   ├── helpers.go
+│   │   ├── model_batch.go
+│   │   ├── model_crud.go
+│   │   ├── model_template_handlers.go
+│   │   ├── routes.go
+│   │   ├── template_builders.go
+│   │   ├── template_builders_test.go
+│   │   ├── types_requests.go
+│   │   └── types_template.go
+│   ├── modelsync
+│   │   ├── handlers.go
+│   │   ├── logs_test.go
+│   │   ├── routes.go
+│   │   └── sync.go
+│   ├── providerapi
+│   │   ├── associations.go
+│   │   ├── blacklist.go
+│   │   ├── config.go
+│   │   ├── crud.go
+│   │   ├── helpers.go
+│   │   ├── models_upstream.go
+│   │   ├── repos.go
+│   │   ├── routes.go
+│   │   ├── templates.go
+│   │   ├── types.go
+│   │   └── update_test.go
+│   ├── settings
+│   │   ├── health.go
+│   │   ├── index.go
+│   │   ├── routes.go
+│   │   ├── settings_get.go
+│   │   ├── settings_get_test.go
+│   │   ├── settings_update.go
+│   │   ├── system.go
+│   │   ├── types.go
+│   │   ├── utils.go
+│   │   └── utils_test.go
+│   ├── testapi
+│   │   ├── errors.go
+│   │   ├── errors_test.go
+│   │   ├── fixtures.go
+│   │   ├── fixtures_test.go
+│   │   ├── models.go
+│   │   ├── models_test.go
+│   │   ├── provider_handlers.go
+│   │   ├── react_handler.go
+│   │   ├── react_handler_test.go
+│   │   ├── routes.go
+│   │   ├── structured_output.go
+│   │   ├── structured_output_handler.go
+│   │   └── structured_output_test.go
+│   ├── testsupport
+│   │   ├── context.go
+│   │   ├── db.go
+│   │   └── envelope.go
+│   ├── v1
+│   │   ├── chat.go
+│   │   └── chat_handler_test.go
+│   ├── virtualmodels
+│   │   ├── crud.go
+│   │   ├── mapping_batch.go
+│   │   ├── mapping_batch_delete_test.go
+│   │   ├── mapping_delete_test.go
+│   │   ├── mappings.go
+│   │   ├── repos.go
+│   │   ├── routes.go
+│   │   ├── stats.go
+│   │   └── types.go
+│   ├── register.go
+│   ├── register_health.go
+│   ├── register_metrics.go
+│   ├── register_modelsync.go
+│   ├── register_v1.go
+│   └── repos.go
+├── httpresp
+│   └── response.go
+├── local
+│   ├── 历史
+│   │   └── 2026-7-12
+│   │       ├── done.md
+│   │       └── 问题.md
+│   ├── 架构文档
+│   │   ├── 格式转换架构图.md
+│   │   └── 项目架构文档.md
+│   ├── 目前任务
+│   │   ├── done.md
+│   │   ├── next-do.md
+│   │   └── plan.md
+│   ├── 问题文档
+│   │   └── 架构审查问题清单.md
+│   ├── 用户需求.md
+│   └── 项目经历.txt
+├── middleware
+│   └── auth.go
+├── models
+│   ├── unified
+│   │   ├── message.go
+│   │   ├── message_test.go
+│   │   ├── polymorphic.go
+│   │   ├── polymorphic_test.go
+│   │   ├── request.go
+│   │   ├── request_test.go
+│   │   ├── tool_call_ids.go
+│   │   ├── tool_call_ids_test.go
+│   │   └── tooling.go
+│   ├── init.go
+│   ├── migrate.go
+│   ├── model.go
+│   ├── retention.go
+│   ├── retention_test.go
+│   ├── seed.go
+│   ├── setting_convert.go
+│   ├── setting_reader.go
+│   ├── setting_schema.go
+│   └── unified.go
+├── providers
+│   ├── anthropic.go
+│   ├── cache.go
+│   ├── cache_test.go
+│   ├── meta.go
+│   ├── meta_bodies.go
+│   ├── meta_test.go
+│   ├── openai.go
+│   ├── openai_base.go
+│   ├── openai_res.go
+│   ├── provider.go
+│   └── provider_test.go
+├── repository
+│   ├── chat_log.go
+│   ├── chat_log_test.go
+│   ├── health_check_log.go
+│   ├── model.go
+│   ├── model_sync_log.go
+│   ├── model_template_item.go
+│   ├── model_with_provider.go
+│   ├── model_with_provider_test.go
+│   ├── provider.go
+│   ├── provider_test.go
+│   ├── repository.go
+│   ├── setting.go
+│   ├── virtual_model.go
+│   └── virtual_model_test.go
+├── service
+│   ├── anthropic
+│   │   ├── helpers.go
+│   │   ├── request_inbound.go
+│   │   ├── request_outbound.go
+│   │   ├── response_inbound.go
+│   │   ├── response_outbound.go
+│   │   ├── system.go
+│   │   └── transform_test.go
+│   ├── chat
+│   │   ├── preprocess
+│   │   │   └── openai
+│   │   │       ├── message_content.go
+│   │   │       ├── message_content_test.go
+│   │   │       ├── responses_input_names.go
+│   │   │       ├── responses_input_names_test.go
+│   │   │       ├── tool_call_function_names.go
+│   │   │       ├── tool_call_function_names_test.go
+│   │   │       ├── tool_call_ids.go
+│   │   │       └── tool_call_ids_test.go
+│   │   ├── adjustment.go
+│   │   ├── before.go
+│   │   ├── chat_attempt.go
+│   │   ├── chat_attempt_test.go
+│   │   ├── chat_balance.go
+│   │   ├── chat_balance_virtual.go
+│   │   ├── chat_balance_virtual_skip_log_test.go
+│   │   ├── chat_log_storage.go
+│   │   ├── chat_log_storage_retention_test.go
+│   │   ├── chat_provider_lookup.go
+│   │   ├── chat_provider_meta.go
+│   │   ├── chat_provider_meta_virtual_test.go
+│   │   ├── chat_record.go
+│   │   ├── chat_record_errors_only_test.go
+│   │   ├── chat_record_persist.go
+│   │   ├── chat_record_raw.go
+│   │   ├── chat_retry_log.go
+│   │   ├── chat_settings.go
+│   │   ├── client_request_error.go
+│   │   ├── healthcheck_hooks.go
+│   │   ├── process.go
+│   │   ├── registry.go
+│   │   ├── registry_test.go
+│   │   ├── settings_reader.go
+│   │   ├── stats.go
+│   │   └── stats_test.go
+│   ├── chatcore
+│   │   ├── headers.go
+│   │   ├── headers_test.go
+│   │   ├── selection.go
+│   │   └── selection_test.go
+│   ├── healthcheck
+│   │   ├── check_batch.go
+│   │   ├── check_single.go
+│   │   ├── checker.go
+│   │   ├── result.go
+│   │   ├── retention.go
+│   │   ├── settings.go
+│   │   └── types.go
+│   ├── modelsync
+│   │   ├── actions.go
+│   │   ├── auto_sync.go
+│   │   ├── cleanup.go
+│   │   ├── config.go
+│   │   ├── config_test.go
+│   │   ├── filter.go
+│   │   ├── service.go
+│   │   ├── service_test.go
+│   │   ├── settings.go
+│   │   ├── sync_batch.go
+│   │   └── sync_provider.go
+│   ├── responses
+│   │   ├── transform_request.go
+│   │   ├── transform_request_test.go
+│   │   ├── transform_response_codec.go
+│   │   ├── transform_response_codec_test.go
+│   │   ├── transform_to_responses.go
+│   │   ├── transform_to_responses_test.go
+│   │   ├── types_request.go
+│   │   └── types_response.go
+│   ├── settings
+│   │   ├── converter.go
+│   │   ├── converter_test.go
+│   │   ├── reader.go
+│   │   └── store.go
+│   ├── transform
+│   │   ├── anthropic
+│   │   │   └── adapter.go
+│   │   ├── openai
+│   │   │   ├── request.go
+│   │   │   ├── request_test.go
+│   │   │   ├── request_types.go
+│   │   │   ├── response.go
+│   │   │   ├── response_test.go
+│   │   │   └── tool_calls_test.go
+│   │   ├── responses
+│   │   │   └── adapter.go
+│   │   ├── shared
+│   │   │   └── maps.go
+│   │   ├── streaming
+│   │   │   ├── anthropic_to_responses.go
+│   │   │   ├── legacy.go
+│   │   │   ├── meta_test.go
+│   │   │   ├── openai_to_responses.go
+│   │   │   ├── realtime.go
+│   │   │   ├── realtime_io.go
+│   │   │   ├── realtime_routes.go
+│   │   │   ├── realtime_routes_test.go
+│   │   │   ├── responses_stream_test.go
+│   │   │   ├── responses_to_anthropic.go
+│   │   │   ├── responses_to_openai.go
+│   │   │   └── sse_config.go
+│   │   ├── testdata
+│   │   │   └── golden
+│   │   │       ├── request
+│   │   │       │   ├── in
+│   │   │       │   │   ├── anthropic.json
+│   │   │       │   │   ├── openai-res.json
+│   │   │       │   │   └── openai.json
+│   │   │       │   └── out
+│   │   │       │       ├── anthropic_to_openai-res.json
+│   │   │       │       ├── anthropic_to_openai.json
+│   │   │       │       ├── openai-res_to_anthropic.json
+│   │   │       │       ├── openai-res_to_openai.json
+│   │   │       │       ├── openai_to_anthropic.json
+│   │   │       │       └── openai_to_openai-res.json
+│   │   │       ├── response
+│   │   │       │   ├── in
+│   │   │       │   │   ├── anthropic.json
+│   │   │       │   │   ├── openai-res.json
+│   │   │       │   │   └── openai.json
+│   │   │       │   └── out
+│   │   │       │       ├── anthropic_to_openai-res.json
+│   │   │       │       ├── anthropic_to_openai.json
+│   │   │       │       ├── openai-res_to_anthropic.json
+│   │   │       │       ├── openai-res_to_openai.json
+│   │   │       │       ├── openai_to_anthropic.json
+│   │   │       │       └── openai_to_openai-res.json
+│   │   │       └── stream
+│   │   │           ├── in
+│   │   │           │   ├── anthropic.sse
+│   │   │           │   ├── openai-res.sse
+│   │   │           │   ├── openai-res__tool_mm.sse
+│   │   │           │   └── openai.sse
+│   │   │           └── out
+│   │   │               ├── anthropic_to_openai-res.sse
+│   │   │               ├── anthropic_to_openai.sse
+│   │   │               ├── openai-res_to_anthropic.sse
+│   │   │               ├── openai-res_to_anthropic__tool_mm.sse
+│   │   │               ├── openai-res_to_openai.sse
+│   │   │               ├── openai-res_to_openai__tool_mm.sse
+│   │   │               ├── openai_to_anthropic.sse
+│   │   │               └── openai_to_openai-res.sse
+│   │   ├── adapter.go
+│   │   ├── adapters_register.go
+│   │   ├── compat.go
+│   │   ├── golden_test.go
+│   │   ├── transform_provider_response.go
+│   │   ├── transform_provider_response_test.go
+│   │   ├── transform_responses_test.go
+│   │   ├── transformer.go
+│   │   ├── transformer_test.go
+│   │   ├── types_thinking.go
+│   │   ├── validation.go
+│   │   └── validation_test.go
+│   ├── virtualmodel
+│   │   ├── candidate_pool.go
+│   │   ├── errors.go
+│   │   ├── priority_selector.go
+│   │   ├── random_selector.go
+│   │   ├── round_robin.go
+│   │   ├── round_robin_selector.go
+│   │   ├── select_helpers.go
+│   │   ├── select_ordered.go
+│   │   ├── select_single.go
+│   │   ├── selector.go
+│   │   ├── selector_test.go
+│   │   ├── service.go
+│   │   ├── stats.go
+│   │   ├── types.go
+│   │   ├── validation.go
+│   │   └── weighted_random.go
+│   ├── chat_facade.go
+│   ├── healthcheck.go
+│   ├── model_sync.go
+│   ├── model_sync_auto_actions.go
+│   ├── model_template.go
+│   ├── model_template_test.go
+│   ├── transform_facade.go
+│   ├── transform_responses_types.go
+│   ├── virtual_model.go
+│   └── virtual_model_test.go
+├── webui
+│   ├── src
+│   │   ├── assets
+│   │   │   ├── logo-dark.svg
+│   │   │   ├── logo-light.svg
+│   │   │   ├── logo.svg
+│   │   │   └── react.svg
+│   │   ├── components
+│   │   │   ├── charts
+│   │   │   │   ├── activity-heatmap.tsx
+│   │   │   │   ├── bar-chart.tsx
+│   │   │   │   ├── model-ranking.tsx
+│   │   │   │   ├── pie-chart.tsx
+│   │   │   │   ├── provider-ranking.tsx
+│   │   │   │   └── trend-card.tsx
+│   │   │   ├── ui
+│   │   │   │   ├── alert-dialog.tsx
+│   │   │   │   ├── badge.tsx
+│   │   │   │   ├── button.tsx
+│   │   │   │   ├── card.tsx
+│   │   │   │   ├── chart.tsx
+│   │   │   │   ├── checkbox.tsx
+│   │   │   │   ├── dialog.tsx
+│   │   │   │   ├── dropdown-menu.tsx
+│   │   │   │   ├── form.tsx
+│   │   │   │   ├── input.tsx
+│   │   │   │   ├── label.tsx
+│   │   │   │   ├── radio-group.tsx
+│   │   │   │   ├── select.tsx
+│   │   │   │   ├── sonner.tsx
+│   │   │   │   ├── spinner.tsx
+│   │   │   │   ├── switch.tsx
+│   │   │   │   ├── table.tsx
+│   │   │   │   ├── tabs.tsx
+│   │   │   │   ├── tag-input.tsx
+│   │   │   │   ├── textarea.tsx
+│   │   │   │   └── tooltip.tsx
+│   │   │   ├── animated-outlet.tsx
+│   │   │   ├── error-boundary.tsx
+│   │   │   ├── expandable-error.tsx
+│   │   │   ├── health-check-result-dialog.tsx
+│   │   │   ├── loading.tsx
+│   │   │   └── theme-provider.tsx
+│   │   ├── hooks
+│   │   │   └── api
+│   │   │       ├── index.ts
+│   │   │       ├── use-database.ts
+│   │   │       ├── use-health-check-logs.ts
+│   │   │       ├── use-home.ts
+│   │   │       ├── use-logs.ts
+│   │   │       ├── use-model-providers.ts
+│   │   │       ├── use-model-sync-logs.ts
+│   │   │       ├── use-models.ts
+│   │   │       ├── use-providers.ts
+│   │   │       └── use-virtual-models.ts
+│   │   ├── lib
+│   │   │   ├── api
+│   │   │   │   ├── core
+│   │   │   │   │   ├── client.ts
+│   │   │   │   │   └── download.ts
+│   │   │   │   ├── modules
+│   │   │   │   │   ├── catalog
+│   │   │   │   │   │   ├── model-providers.ts
+│   │   │   │   │   │   ├── models.ts
+│   │   │   │   │   │   ├── providers.ts
+│   │   │   │   │   │   └── virtual-models.ts
+│   │   │   │   │   ├── logs
+│   │   │   │   │   │   └── chat-logs.ts
+│   │   │   │   │   └── system
+│   │   │   │   │       ├── database.ts
+│   │   │   │   │       ├── health-check.ts
+│   │   │   │   │       ├── import-export.ts
+│   │   │   │   │       ├── metrics.ts
+│   │   │   │   │       ├── model-sync.ts
+│   │   │   │   │       ├── settings.ts
+│   │   │   │   │       └── system.ts
+│   │   │   │   └── index.ts
+│   │   │   ├── api.ts
+│   │   │   ├── errors.test.ts
+│   │   │   ├── errors.ts
+│   │   │   ├── formatters.test.ts
+│   │   │   ├── formatters.ts
+│   │   │   ├── provider-models.test.ts
+│   │   │   ├── provider-models.ts
+│   │   │   ├── query-client.ts
+│   │   │   └── utils.ts
+│   │   ├── routes
+│   │   │   ├── database
+│   │   │   │   ├── components
+│   │   │   │   │   ├── dialogs
+│   │   │   │   │   │   ├── export-config-dialog.tsx
+│   │   │   │   │   │   ├── export-database-dialog.tsx
+│   │   │   │   │   │   ├── import-config-dialog.tsx
+│   │   │   │   │   │   └── vacuum-dialog.tsx
+│   │   │   │   │   ├── sections
+│   │   │   │   │   │   ├── database-error-state.tsx
+│   │   │   │   │   │   ├── database-header.tsx
+│   │   │   │   │   │   ├── database-info-card.tsx
+│   │   │   │   │   │   ├── database-loading-state.tsx
+│   │   │   │   │   │   ├── database-stats-cards.tsx
+│   │   │   │   │   │   └── table-stats-card.tsx
+│   │   │   │   │   └── shared
+│   │   │   │   │       ├── export-type-checkbox-group.tsx
+│   │   │   │   │       └── import-preview-panel.tsx
+│   │   │   │   ├── hooks
+│   │   │   │   │   └── use-database-page.ts
+│   │   │   │   ├── types
+│   │   │   │   │   └── index.ts
+│   │   │   │   ├── utils
+│   │   │   │   │   ├── import-preview.ts
+│   │   │   │   │   └── import-result.ts
+│   │   │   │   └── index.tsx
+│   │   │   ├── health-check-logs
+│   │   │   │   ├── components
+│   │   │   │   │   ├── dialogs
+│   │   │   │   │   │   ├── clear-health-check-logs-dialog.tsx
+│   │   │   │   │   │   └── health-check-log-detail-dialog.tsx
+│   │   │   │   │   ├── sections
+│   │   │   │   │   │   ├── list
+│   │   │   │   │   │   │   ├── health-check-logs-desktop-table.tsx
+│   │   │   │   │   │   │   ├── health-check-logs-list-section.tsx
+│   │   │   │   │   │   │   └── health-check-logs-mobile-list.tsx
+│   │   │   │   │   │   ├── health-check-banner.tsx
+│   │   │   │   │   │   ├── health-check-filters.tsx
+│   │   │   │   │   │   ├── health-check-header.tsx
+│   │   │   │   │   │   └── health-check-pagination.tsx
+│   │   │   │   │   └── shared
+│   │   │   │   │       └── detail-card.tsx
+│   │   │   │   ├── hooks
+│   │   │   │   │   └── use-health-check-logs-page.ts
+│   │   │   │   ├── types
+│   │   │   │   │   └── index.ts
+│   │   │   │   ├── utils
+│   │   │   │   │   ├── filters.ts
+│   │   │   │   │   ├── formatters.ts
+│   │   │   │   │   └── storage.ts
+│   │   │   │   └── index.tsx
+│   │   │   ├── logs
+│   │   │   │   ├── components
+│   │   │   │   │   ├── dialogs
+│   │   │   │   │   │   ├── confirmations
+│   │   │   │   │   │   │   ├── batch-delete-logs-dialog.tsx
+│   │   │   │   │   │   │   ├── clear-all-logs-dialog.tsx
+│   │   │   │   │   │   │   ├── clear-filtered-logs-dialog.tsx
+│   │   │   │   │   │   │   └── delete-log-dialog.tsx
+│   │   │   │   │   │   └── detail
+│   │   │   │   │   │       ├── detail-card.tsx
+│   │   │   │   │   │       ├── export-log-dialog.tsx
+│   │   │   │   │   │       ├── log-detail-dialog.tsx
+│   │   │   │   │   │       └── request-response-section.tsx
+│   │   │   │   │   └── sections
+│   │   │   │   │       ├── list
+│   │   │   │   │       │   ├── logs-desktop-table.tsx
+│   │   │   │   │       │   ├── logs-list-section.tsx
+│   │   │   │   │       │   └── logs-mobile-list.tsx
+│   │   │   │   │       ├── logs-filters.tsx
+│   │   │   │   │       ├── logs-header.tsx
+│   │   │   │   │       └── logs-pagination.tsx
+│   │   │   │   ├── hooks
+│   │   │   │   │   ├── use-logs-actions.ts
+│   │   │   │   │   ├── use-logs-page.ts
+│   │   │   │   │   └── use-logs-selection.ts
+│   │   │   │   ├── types
+│   │   │   │   │   └── index.ts
+│   │   │   │   ├── utils
+│   │   │   │   │   ├── export-log.test.ts
+│   │   │   │   │   ├── export-log.ts
+│   │   │   │   │   └── formatters.ts
+│   │   │   │   └── index.tsx
+│   │   │   ├── model-providers
+│   │   │   │   ├── components
+│   │   │   │   │   ├── dialogs
+│   │   │   │   │   │   ├── association-form-dialog.tsx
+│   │   │   │   │   │   ├── batch-action-sheet.tsx
+│   │   │   │   │   │   ├── batch-capabilities-dialog.tsx
+│   │   │   │   │   │   ├── batch-delete-dialog.tsx
+│   │   │   │   │   │   ├── blacklist-dialog.tsx
+│   │   │   │   │   │   ├── model-list-dialog.tsx
+│   │   │   │   │   │   ├── preview-dialog.tsx
+│   │   │   │   │   │   ├── template-editor-dialog.tsx
+│   │   │   │   │   │   └── test-dialog.tsx
+│   │   │   │   │   ├── sections
+│   │   │   │   │   │   ├── associations
+│   │   │   │   │   │   │   ├── association-list-section.tsx
+│   │   │   │   │   │   │   ├── desktop-association-table.tsx
+│   │   │   │   │   │   │   └── mobile-association-list.tsx
+│   │   │   │   │   │   ├── association-filter-panel.tsx
+│   │   │   │   │   │   ├── batch-test-progress-card.tsx
+│   │   │   │   │   │   └── operation-scope-toolbar.tsx
+│   │   │   │   │   └── shared
+│   │   │   │   │       ├── capability-badges.tsx
+│   │   │   │   │       ├── mobile-info-item.tsx
+│   │   │   │   │       └── status-bars.tsx
+│   │   │   │   ├── hooks
+│   │   │   │   │   ├── use-model-providers-association-dialog.ts
+│   │   │   │   │   ├── use-model-providers-association-filters.ts
+│   │   │   │   │   ├── use-model-providers-association-form.ts
+│   │   │   │   │   ├── use-model-providers-association-mutations.ts
+│   │   │   │   │   ├── use-model-providers-association-status-toggle.ts
+│   │   │   │   │   ├── use-model-providers-association-status.ts
+│   │   │   │   │   ├── use-model-providers-associations-data.ts
+│   │   │   │   │   ├── use-model-providers-batch.ts
+│   │   │   │   │   ├── use-model-providers-blacklist.ts
+│   │   │   │   │   ├── use-model-providers-bootstrap.ts
+│   │   │   │   │   ├── use-model-providers-model-change.ts
+│   │   │   │   │   ├── use-model-providers-model-list-selection.ts
+│   │   │   │   │   ├── use-model-providers-model-list-visibility.ts
+│   │   │   │   │   ├── use-model-providers-operation-scope.ts
+│   │   │   │   │   ├── use-model-providers-page-actions.ts
+│   │   │   │   │   ├── use-model-providers-page-dialog-props.ts
+│   │   │   │   │   ├── use-model-providers-page-local-state.ts
+│   │   │   │   │   ├── use-model-providers-page-section-props.ts
+│   │   │   │   │   ├── use-model-providers-page-store.ts
+│   │   │   │   │   ├── use-model-providers-page.ts
+│   │   │   │   │   ├── use-model-providers-preview.ts
+│   │   │   │   │   ├── use-model-providers-template-editor.ts
+│   │   │   │   │   └── use-model-providers-testing.ts
+│   │   │   │   ├── utils
+│   │   │   │   │   ├── payload.ts
+│   │   │   │   │   └── selection.ts
+│   │   │   │   ├── form-schema.ts
+│   │   │   │   ├── index.tsx
+│   │   │   │   └── types.ts
+│   │   │   ├── model-sync-logs
+│   │   │   │   ├── components
+│   │   │   │   │   ├── dialogs
+│   │   │   │   │   │   ├── clear-logs-dialog.tsx
+│   │   │   │   │   │   └── model-sync-detail-dialog.tsx
+│   │   │   │   │   ├── sections
+│   │   │   │   │   │   ├── logs
+│   │   │   │   │   │   │   ├── logs-actions-bar.tsx
+│   │   │   │   │   │   │   ├── logs-list-section.tsx
+│   │   │   │   │   │   │   ├── logs-mobile-list.tsx
+│   │   │   │   │   │   │   ├── logs-pagination.tsx
+│   │   │   │   │   │   │   └── logs-table-desktop.tsx
+│   │   │   │   │   │   ├── recent
+│   │   │   │   │   │   │   ├── recent-errors-section.tsx
+│   │   │   │   │   │   │   └── recent-models-section.tsx
+│   │   │   │   │   │   ├── model-sync-header.tsx
+│   │   │   │   │   │   ├── model-sync-stats-strip.tsx
+│   │   │   │   │   │   └── model-sync-tabs.tsx
+│   │   │   │   │   └── shared
+│   │   │   │   │       └── status-badge.tsx
+│   │   │   │   ├── hooks
+│   │   │   │   │   ├── use-model-sync-logs-actions.ts
+│   │   │   │   │   ├── use-model-sync-logs-page.ts
+│   │   │   │   │   └── use-model-sync-logs-selection.ts
+│   │   │   │   ├── types
+│   │   │   │   │   └── index.ts
+│   │   │   │   ├── utils
+│   │   │   │   │   ├── error-parser.ts
+│   │   │   │   │   └── formatters.ts
+│   │   │   │   └── index.tsx
+│   │   │   ├── models
+│   │   │   │   ├── components
+│   │   │   │   │   ├── dialogs
+│   │   │   │   │   │   ├── batch-delete-dialog.tsx
+│   │   │   │   │   │   ├── batch-settings-dialog.tsx
+│   │   │   │   │   │   ├── model-delete-dialog.tsx
+│   │   │   │   │   │   ├── model-form-dialog.tsx
+│   │   │   │   │   │   └── model-picker-dialog.tsx
+│   │   │   │   │   └── sections
+│   │   │   │   │       ├── models-desktop-table.tsx
+│   │   │   │   │       ├── models-list-section.tsx
+│   │   │   │   │       ├── models-mobile-list.tsx
+│   │   │   │   │       └── models-toolbar.tsx
+│   │   │   │   ├── hooks
+│   │   │   │   │   └── use-models-page.ts
+│   │   │   │   ├── schemas
+│   │   │   │   │   └── forms.ts
+│   │   │   │   ├── types
+│   │   │   │   │   └── index.ts
+│   │   │   │   ├── utils
+│   │   │   │   │   ├── form-values.ts
+│   │   │   │   │   ├── model-update-payload.ts
+│   │   │   │   │   ├── provider-models.ts
+│   │   │   │   │   └── selection.ts
+│   │   │   │   └── index.tsx
+│   │   │   ├── providers
+│   │   │   │   ├── components
+│   │   │   │   │   ├── dialogs
+│   │   │   │   │   │   ├── all-models-dialog.tsx
+│   │   │   │   │   │   ├── provider-form-dialog.tsx
+│   │   │   │   │   │   └── upstream-models-dialog.tsx
+│   │   │   │   │   └── sections
+│   │   │   │   │       ├── providers-desktop-table.tsx
+│   │   │   │   │       ├── providers-list-section.tsx
+│   │   │   │   │       ├── providers-mobile-list.tsx
+│   │   │   │   │       └── providers-toolbar.tsx
+│   │   │   │   ├── hooks
+│   │   │   │   │   ├── use-all-models-dialog.ts
+│   │   │   │   │   ├── use-provider-danger-actions.ts
+│   │   │   │   │   ├── use-provider-dialog.ts
+│   │   │   │   │   ├── use-provider-model-testing.ts
+│   │   │   │   │   ├── use-provider-mutations.ts
+│   │   │   │   │   ├── use-provider-switch-actions.ts
+│   │   │   │   │   ├── use-provider-sync-actions.ts
+│   │   │   │   │   ├── use-providers-page.ts
+│   │   │   │   │   └── use-upstream-models-dialog.ts
+│   │   │   │   ├── utils
+│   │   │   │   │   ├── auto-actions.ts
+│   │   │   │   │   ├── batch-test.ts
+│   │   │   │   │   ├── clipboard.test.ts
+│   │   │   │   │   ├── clipboard.ts
+│   │   │   │   │   ├── config.ts
+│   │   │   │   │   ├── filters.ts
+│   │   │   │   │   ├── provider-models.ts
+│   │   │   │   │   └── template-defaults.ts
+│   │   │   │   ├── form-fields.ts
+│   │   │   │   ├── form-schema.ts
+│   │   │   │   ├── index.tsx
+│   │   │   │   └── types.ts
+│   │   │   ├── settings
+│   │   │   │   ├── balancer
+│   │   │   │   │   ├── components
+│   │   │   │   │   │   ├── sections
+│   │   │   │   │   │   │   ├── auto-priority-decay-card.tsx
+│   │   │   │   │   │   │   ├── auto-success-increase-card.tsx
+│   │   │   │   │   │   │   ├── auto-weight-decay-card.tsx
+│   │   │   │   │   │   │   └── consecutive-failure-disable-card.tsx
+│   │   │   │   │   │   └── shared
+│   │   │   │   │   │       └── balancer-settings-header.tsx
+│   │   │   │   │   ├── hooks
+│   │   │   │   │   │   └── use-balancer-settings-form.ts
+│   │   │   │   │   └── types
+│   │   │   │   │       └── index.ts
+│   │   │   │   ├── health-check
+│   │   │   │   │   ├── components
+│   │   │   │   │   │   ├── sections
+│   │   │   │   │   │   │   ├── basic-settings-card.tsx
+│   │   │   │   │   │   │   ├── failure-handling-card.tsx
+│   │   │   │   │   │   │   └── invocation-count-policy-card.tsx
+│   │   │   │   │   │   └── shared
+│   │   │   │   │   │       └── health-check-settings-header.tsx
+│   │   │   │   │   ├── hooks
+│   │   │   │   │   │   └── use-health-check-settings-form.ts
+│   │   │   │   │   └── types
+│   │   │   │   │       └── index.ts
+│   │   │   │   ├── hooks
+│   │   │   │   │   ├── create-settings-form-hook.ts
+│   │   │   │   │   └── use-settings-editor-sync.ts
+│   │   │   │   ├── logs
+│   │   │   │   │   ├── components
+│   │   │   │   │   │   ├── sections
+│   │   │   │   │   │   │   ├── logs-configuration-card.tsx
+│   │   │   │   │   │   │   ├── performance-optimization-card.tsx
+│   │   │   │   │   │   │   └── raw-request-response-section.tsx
+│   │   │   │   │   │   └── shared
+│   │   │   │   │   │       └── logs-settings-header.tsx
+│   │   │   │   │   ├── hooks
+│   │   │   │   │   │   └── use-logs-settings-form.ts
+│   │   │   │   │   └── types
+│   │   │   │   │       └── index.ts
+│   │   │   │   ├── routing
+│   │   │   │   │   ├── components
+│   │   │   │   │   │   ├── sections
+│   │   │   │   │   │   │   ├── capability-matching-card.tsx
+│   │   │   │   │   │   │   ├── format-conversion-card.tsx
+│   │   │   │   │   │   │   ├── model-association-automation-card.tsx
+│   │   │   │   │   │   │   ├── model-sync-card.tsx
+│   │   │   │   │   │   │   ├── parameter-mapping-card.tsx
+│   │   │   │   │   │   │   └── template-fuzzy-match-card.tsx
+│   │   │   │   │   │   └── shared
+│   │   │   │   │   │       └── routing-settings-header.tsx
+│   │   │   │   │   ├── hooks
+│   │   │   │   │   │   └── use-routing-settings-form.ts
+│   │   │   │   │   ├── types
+│   │   │   │   │   │   └── index.ts
+│   │   │   │   │   ├── utils
+│   │   │   │   │   │   └── sanitize-routing-settings.ts
+│   │   │   │   │   └── index.tsx
+│   │   │   │   ├── balancer-settings.tsx
+│   │   │   │   ├── health-check-settings.tsx
+│   │   │   │   ├── logs-settings.tsx
+│   │   │   │   └── routing-settings.tsx
+│   │   │   ├── virtual-models
+│   │   │   │   ├── components
+│   │   │   │   │   ├── dialogs
+│   │   │   │   │   │   ├── blacklist
+│   │   │   │   │   │   │   ├── blacklist-management-dialog.tsx
+│   │   │   │   │   │   │   └── provider-selector-dialog.tsx
+│   │   │   │   │   │   ├── mappings
+│   │   │   │   │   │   │   ├── batch-delete-mappings-dialog.tsx
+│   │   │   │   │   │   │   ├── mapping-batch-dialog.tsx
+│   │   │   │   │   │   │   ├── mapping-form-dialog.tsx
+│   │   │   │   │   │   │   └── mapping-management-dialog.tsx
+│   │   │   │   │   │   ├── virtual-model-delete-dialog.tsx
+│   │   │   │   │   │   └── virtual-model-form-dialog.tsx
+│   │   │   │   │   └── sections
+│   │   │   │   │       ├── virtual-models-header.tsx
+│   │   │   │   │       └── virtual-models-table.tsx
+│   │   │   │   ├── hooks
+│   │   │   │   │   ├── use-virtual-models-blacklist.ts
+│   │   │   │   │   ├── use-virtual-models-bootstrap.ts
+│   │   │   │   │   ├── use-virtual-models-mappings.ts
+│   │   │   │   │   ├── use-virtual-models-model-actions.ts
+│   │   │   │   │   └── use-virtual-models-page.ts
+│   │   │   │   ├── schemas
+│   │   │   │   │   └── forms.ts
+│   │   │   │   ├── types
+│   │   │   │   │   └── index.ts
+│   │   │   │   ├── utils
+│   │   │   │   │   └── strategy.ts
+│   │   │   │   └── index.tsx
+│   │   │   ├── home.tsx
+│   │   │   ├── layout.tsx
+│   │   │   ├── log-chat.tsx
+│   │   │   ├── login.tsx
+│   │   │   ├── model-providers.tsx
+│   │   │   ├── models.tsx
+│   │   │   ├── providers.tsx
+│   │   │   ├── route-config.ts
+│   │   │   ├── settings.tsx
+│   │   │   └── virtual-models.tsx
+│   │   ├── stores
+│   │   │   ├── auth
+│   │   │   │   ├── auth-store.ts
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── selectors.ts
+│   │   │   │   ├── token-storage.ts
+│   │   │   │   └── use-auth-store.ts
+│   │   │   ├── core
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── storage.ts
+│   │   │   │   └── updater.ts
+│   │   │   ├── database
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── page-store.ts
+│   │   │   │   ├── persist.ts
+│   │   │   │   ├── selectors.ts
+│   │   │   │   ├── types.ts
+│   │   │   │   └── use-database-page-store.ts
+│   │   │   ├── health-check-logs
+│   │   │   │   ├── batch-store.ts
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── page-store.ts
+│   │   │   │   ├── persist.ts
+│   │   │   │   ├── selectors.ts
+│   │   │   │   ├── types.ts
+│   │   │   │   ├── use-health-check-batch-store.ts
+│   │   │   │   └── use-health-check-logs-page-store.ts
+│   │   │   ├── logs
+│   │   │   │   ├── filters.ts
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── page-store.ts
+│   │   │   │   ├── persist.ts
+│   │   │   │   ├── selectors.ts
+│   │   │   │   ├── types.ts
+│   │   │   │   └── use-logs-page-store.ts
+│   │   │   ├── model-providers
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── page-store.ts
+│   │   │   │   ├── persist.ts
+│   │   │   │   ├── selectors.ts
+│   │   │   │   ├── types.ts
+│   │   │   │   └── use-model-providers-page-store.ts
+│   │   │   ├── model-sync-logs
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── page-store.ts
+│   │   │   │   ├── persist.ts
+│   │   │   │   ├── selectors.ts
+│   │   │   │   ├── types.ts
+│   │   │   │   └── use-model-sync-logs-page-store.ts
+│   │   │   ├── models
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── page-store.ts
+│   │   │   │   ├── persist.ts
+│   │   │   │   ├── selectors.ts
+│   │   │   │   ├── types.ts
+│   │   │   │   └── use-models-page-store.ts
+│   │   │   ├── providers
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── page-store.ts
+│   │   │   │   ├── persist.ts
+│   │   │   │   ├── selectors.ts
+│   │   │   │   ├── types.ts
+│   │   │   │   └── use-providers-page-store.ts
+│   │   │   ├── settings
+│   │   │   │   ├── editor-store.ts
+│   │   │   │   ├── editors.ts
+│   │   │   │   ├── index.ts
+│   │   │   │   └── use-settings-store.ts
+│   │   │   ├── ui
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── layout-store.ts
+│   │   │   │   ├── selectors.ts
+│   │   │   │   └── use-layout-store.ts
+│   │   │   └── virtual-models
+│   │   │       ├── index.ts
+│   │   │       ├── page-store.ts
+│   │   │       ├── persist.ts
+│   │   │       ├── selectors.ts
+│   │   │       ├── types.ts
+│   │   │       └── use-virtual-models-page-store.ts
+│   │   ├── test
+│   │   │   └── setup.ts
+│   │   ├── App.css
+│   │   ├── App.tsx
+│   │   ├── index.css
+│   │   ├── main.tsx
+│   │   └── vite-env.d.ts
+│   ├── components.json
+│   ├── eslint.config.js
+│   ├── index.html
+│   ├── package.json
+│   ├── pnpm-workspace.yaml
+│   ├── README.md
+│   ├── tailwind.config.ts
+│   ├── tsconfig.app.json
+│   ├── tsconfig.json
+│   ├── tsconfig.node.json
+│   ├── tsconfig.tsbuildinfo
+│   └── vite.config.ts
+├── AGENTS.md
+├── build.bat
+├── CLAUDE.md
+├── dev.bat
+├── dev.ps1
+├── docker
+├── docker-build-push.bat
+├── docker-compose.yml
+├── Dockerfile
+├── go.mod
+├── go.sum
+├── LICENSE
+├── main.go
+├── makefile
+├── nul
+├── README.md
+└── run.bat

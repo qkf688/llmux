@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/service/chatstats"
 	"gorm.io/gorm"
 )
 
@@ -34,7 +35,7 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 				}
 			}
 
-			if statErr := recordProviderStats(ctx, providerName, false, 0, 0); statErr != nil {
+			if statErr := chatstats.RecordProviderStats(ctx, providerName, false, 0, 0); statErr != nil {
 				slog.Warn("failed to record provider stats on processer error", "error", statErr)
 			}
 			return err
@@ -43,12 +44,12 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 		logUpdate := *log
 
 		// 统计独立于日志存储：即使关闭日志记录（logId==0），也要写入 tokens 统计。
-		if err := recordTokenStats(ctx, reqStart, logUpdate.Usage.TotalTokens); err != nil {
+		if err := chatstats.RecordTokenStats(ctx, reqStart, logUpdate.Usage.TotalTokens); err != nil {
 			slog.Warn("failed to record token stats", "error", err)
 		}
 
 		responseTimeMs := int64(logUpdate.FirstChunkTime.Milliseconds())
-		if statErr := recordProviderStats(ctx, providerName, true, responseTimeMs, logUpdate.Usage.TotalTokens); statErr != nil {
+		if statErr := chatstats.RecordProviderStats(ctx, providerName, true, responseTimeMs, logUpdate.Usage.TotalTokens); statErr != nil {
 			slog.Warn("failed to record provider stats", "error", statErr)
 		}
 

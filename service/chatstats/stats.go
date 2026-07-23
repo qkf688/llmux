@@ -1,4 +1,4 @@
-package chat
+package chatstats
 
 import (
 	"context"
@@ -9,7 +9,8 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-func recordRequestStats(ctx context.Context, at time.Time, modelName string) error {
+// RecordRequestStats 累加请求次数（total/daily/hourly）及可选模型维度 calls。
+func RecordRequestStats(ctx context.Context, at time.Time, modelName string) error {
 	db := models.DB.WithContext(ctx)
 	now := time.Now()
 	date := at.Format("2006-01-02")
@@ -38,7 +39,8 @@ func recordRequestStats(ctx context.Context, at time.Time, modelName string) err
 	return nil
 }
 
-func recordRealModelRequestStats(ctx context.Context, at time.Time, realModelName string) error {
+// RecordRealModelRequestStats 累加真实模型维度 calls。
+func RecordRealModelRequestStats(ctx context.Context, at time.Time, realModelName string) error {
 	if realModelName == "" {
 		return nil
 	}
@@ -59,7 +61,8 @@ func recordRealModelRequestStats(ctx context.Context, at time.Time, realModelNam
 	return nil
 }
 
-func recordProviderStats(ctx context.Context, providerName string, success bool, responseTimeMs int64, tokens int64) error {
+// RecordProviderStats 累加供应商维度请求/成功失败/token/响应时间。
+func RecordProviderStats(ctx context.Context, providerName string, success bool, responseTimeMs int64, tokens int64) error {
 	if providerName == "" {
 		return nil
 	}
@@ -113,7 +116,8 @@ func recordProviderStats(ctx context.Context, providerName string, success bool,
 	return nil
 }
 
-func recordTokenStats(ctx context.Context, at time.Time, tokens int64) error {
+// RecordTokenStats 累加 token 次数（total/daily/hourly）。
+func RecordTokenStats(ctx context.Context, at time.Time, tokens int64) error {
 	if tokens <= 0 {
 		return nil
 	}

@@ -89,4 +89,3 @@ func TestCleanupLogsIfNeeded_HardDeletesSoftDeletedBeyondRetention(t *testing.T)
 		t.Fatalf("chat io total = %d, want 100", ioTotal)
 	}
 }
-

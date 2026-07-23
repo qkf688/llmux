@@ -16,8 +16,10 @@ import (
 	"github.com/atopos31/llmio/consts"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/providers"
+	"github.com/atopos31/llmio/service/adjustment"
 	preprocessopenai "github.com/atopos31/llmio/service/chat/preprocess/openai"
 	"github.com/atopos31/llmio/service/chatcore"
+	"github.com/atopos31/llmio/service/chatstats"
 	"github.com/atopos31/llmio/service/transform"
 	"gorm.io/gorm"
 )
@@ -85,7 +87,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 			return singleProviderAttemptResult{FatalErr: bodyErr}
 		}
 		retryLog <- logEntry.WithError(fmt.Errorf("transform request error: %v", bodyErr))
-		if err := recordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
+		if err := chatstats.RecordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
 			slog.Warn("failed to record provider stats", "provider", input.Provider.Name, "error", err)
 		}
 		return singleProviderAttemptResult{RemoveWeight: true}
@@ -97,7 +99,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 	req, err := input.ChatModel.BuildReq(reqCtx, header, input.ModelWithProvider.ProviderModel, requestBody)
 	if err != nil {
 		retryLog <- logEntry.WithError(err)
-		if err := recordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
+		if err := chatstats.RecordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
 			slog.Warn("failed to record provider stats", "provider", input.Provider.Name, "error", err)
 		}
 		return singleProviderAttemptResult{RemoveWeight: true}
@@ -123,7 +125,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		}
 		updateChatLogByID(input.Ctx, logID, errorUpdate, "failed to update log status")
 		applyProviderFailureAdjustments(input.Ctx, input.ModelWithProvider.ID, input.Provider.Name, input.ModelWithProvider.ProviderModel)
-		if err := recordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
+		if err := chatstats.RecordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
 			slog.Warn("failed to record provider stats", "provider", input.Provider.Name, "error", err)
 		}
 		return singleProviderAttemptResult{RemoveWeight: true, RemovePriority: true}
@@ -162,7 +164,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 			}
 			updateChatLogByID(input.Ctx, logID, errorUpdate, "failed to update log status")
 			applyProviderFailureAdjustments(input.Ctx, input.ModelWithProvider.ID, input.Provider.Name, input.ModelWithProvider.ProviderModel)
-			if err := recordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
+			if err := chatstats.RecordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
 				slog.Warn("failed to record provider stats", "provider", input.Provider.Name, "error", err)
 			}
 			res.Body.Close()
@@ -175,8 +177,8 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 
 	updateRequestAndResponseLog(input.Ctx, logID, logRawOptions, logSnapshot, res.Header, rawResponseBodyStr)
 
-	resetConsecutiveFailures(input.Ctx, input.ModelWithProvider.ID)
-	applySuccessAdjustments(input.Ctx, input.ModelWithProvider.ID)
+	adjustment.ResetConsecutiveFailures(input.Ctx, input.ModelWithProvider.ID)
+	adjustment.ApplySuccessAdjustments(input.Ctx, input.ModelWithProvider.ID)
 	return singleProviderAttemptResult{
 		Response: res,
 		LogID:    logID,
@@ -303,7 +305,7 @@ func handleNonOKProviderResponse(
 
 	updateChatLogByID(ctx, logID, errorUpdate, "failed to update log status")
 	applyProviderFailureAdjustments(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
-	if err := recordProviderStats(context.Background(), provider.Name, false, 0, 0); err != nil {
+	if err := chatstats.RecordProviderStats(context.Background(), provider.Name, false, 0, 0); err != nil {
 		slog.Warn("failed to record provider stats", "provider", provider.Name, "error", err)
 	}
 	res.Body.Close()
@@ -373,9 +375,9 @@ func updateRequestAndResponseLog(
 }
 
 func applyProviderFailureAdjustments(ctx context.Context, modelProviderID uint, providerName, providerModel string) {
-	incrementConsecutiveFailures(ctx, modelProviderID, providerName, providerModel)
-	applyWeightDecayByModelProviderID(ctx, modelProviderID, providerName, providerModel)
-	applyPriorityDecayByModelProviderID(ctx, modelProviderID, providerName, providerModel)
+	adjustment.IncrementConsecutiveFailures(ctx, modelProviderID, providerName, providerModel)
+	adjustment.ApplyWeightDecayByModelProviderID(ctx, modelProviderID, providerName, providerModel)
+	adjustment.ApplyPriorityDecayByModelProviderID(ctx, modelProviderID, providerName, providerModel)
 }
 
 func updateChatLogByID(ctx context.Context, logID uint, update models.ChatLog, errorMsg string) {

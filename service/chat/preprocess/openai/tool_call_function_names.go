@@ -75,4 +75,3 @@ func ValidateToolCallFunctionNames(body []byte) error {
 
 	return nil
 }
-

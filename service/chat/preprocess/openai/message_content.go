@@ -71,4 +71,3 @@ func FillMissingMessageContent(body []byte) ([]byte, bool, error) {
 	}
 	return updated, true, nil
 }
-

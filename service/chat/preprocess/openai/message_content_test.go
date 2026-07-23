@@ -122,4 +122,3 @@ func TestFillMissingMessageContent_ParseErrorIsNonBreaking(t *testing.T) {
 		t.Fatalf("expected unchanged body")
 	}
 }
-

@@ -30,8 +30,8 @@ main → service.NewModelSyncService(...).StartAutoSync(ctx)  # 定时模型同�
 跨 service 包的副作用通过 Hook 接口注入，避免循环依赖。契约由**调用方包**定义，实现侧包级注入。
 
 ```
-healthcheck → AdjustmentHooks → service/chat 调整权重/优先级
-  （关联 Status / ConsecutiveFailures 仍由 healthcheck 直接写库）
+healthcheck → AdjustmentHooks → service/adjustment 调整权重/优先级
+  （关联 Status / ConsecutiveFailures 仍由 healthcheck 直接写库；hooks 由 adjustment init 注入）
 modelsync   → ActionHooks     → service/autoassoc.Associate / CleanInvalid
   （HTTP / provider CRUD 同走 service/autoassoc，见 associations 模块）
 ```

@@ -75,8 +75,8 @@ func TestValidateToolCallFunctionNames(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "invalid json is non-blocking",
-			body: []byte(`{"model":"m","messages":[`),
+			name:    "invalid json is non-blocking",
+			body:    []byte(`{"model":"m","messages":[`),
 			wantErr: false,
 		},
 	}

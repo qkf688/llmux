@@ -93,8 +93,8 @@ make webui            # cd webui && pnpm install && pnpm run build
 | 改模型-供应商关联 / 自动关联 / 能力标志 | `service/autoassoc/`、`service/autoassoc_facade.go`、`handler/autoassoc/`（HTTP 薄层）、`handler/associations/`、`repository/model_with_provider.go`、`service/model_template.go` | [modules/associations.md](docs/architecture/modules/associations.md) |
 | 改真实模型目录 / 模板 | `handler/modelapi/`、`repository/model.go`、`repository/model_template_item.go`、`service/model_template.go` | [modules/models-catalog.md](docs/architecture/modules/models-catalog.md) |
 | 改模型同步 / 同步后动作 | `service/modelsync/`、`service/model_sync.go`（ActionHooks → autoassoc）、`handler/modelsync/`、`repository/model_sync_log.go` | [modules/model-sync.md](docs/architecture/modules/model-sync.md) |
-| 改健康检查 / 关联启停 / 权重衰减 Hook | `service/healthcheck/`、`service/healthcheck.go`、`handler/healthcheck/`、`service/chat/adjustment.go`（AdjustmentHooks）、`repository/health_check_log.go` | [modules/health-check.md](docs/architecture/modules/health-check.md) |
-| 改请求日志 / 仪表盘指标 / 保留策略 | `handler/logs/`、`handler/metrics/`、`service/chat` 的 record/stats、`repository/chat_log.go`、`models/retention.go` | [modules/logs-metrics.md](docs/architecture/modules/logs-metrics.md) |
+| 改健康检查 / 关联启停 / 权重衰减 Hook | `service/healthcheck/`、`service/healthcheck.go`、`handler/healthcheck/`、`service/adjustment/`（AdjustmentHooks 注入 + 权重/优先级算法）、`repository/health_check_log.go` | [modules/health-check.md](docs/architecture/modules/health-check.md) |
+| 改请求日志 / 仪表盘指标 / 保留策略 | `handler/logs/`、`handler/metrics/`、`service/chat` 的 record/落库编排、`service/chatstats/`、`repository/chat_log.go`、`models/retention.go` | [modules/logs-metrics.md](docs/architecture/modules/logs-metrics.md) |
 | 改系统设置项 | `models/setting_schema.go`、`handler/settings/`、`service/settings/`、`repository/setting.go`、前端 `webui/src/routes/settings/` + `lib/api` settings 模块 | [modules/settings.md](docs/architecture/modules/settings.md) |
 | 新增管理 API 域 | `handler/<domain>/routes.go` + 实现、`handler/register.go` 的 `RegisterAll` 一行挂接、可选 `service/` + `repository/`、前端 `lib/api` + 页面 | [modules/system-ops.md](docs/architecture/modules/system-ops.md) |
 | 新增 / 改管理后台页面 | `webui/src/routes/<page>/`、`webui/src/routes/route-config.ts`、`webui/src/lib/api/modules/**`、必要时 `stores/` | [modules/webui.md](docs/architecture/modules/webui.md) |
@@ -209,7 +209,7 @@ make webui            # cd webui && pnpm install && pnpm run build
 
 - HTTP 接入在 `handler/*`；上游适配在 `providers/`；协议字段转换在 `service/transform/`（及 anthropic/responses）；**禁止**在 handler 写上游 HTTP 细节或在 providers 写选路重试。
 - 虚拟模型**只**解析虚拟→真实（第一层 LB）；**禁止**在 virtualmodel 包发起上游调用或做真实→供应商选路。
-- healthcheck **禁止**直接 import chat 内部调整函数；权重/优先级调整**必须**经 `AdjustmentHooks`。
+- healthcheck **禁止**直接 import `service/adjustment` 或 chat 内部调整函数；权重/优先级调整**必须**经 `AdjustmentHooks`（实现侧在 `service/adjustment` 包级注入）。
 - modelsync 同步后副作用**必须**经 `ActionHooks`；**禁止** modelsync 硬依赖 `handler/autoassoc` 包。
 - `system-ops` 是横切合集文档桶：**禁止**把新业务规则继续堆进 common / main / 无主 handler。
 - webui **禁止**实现服务端选路/协议转换/持久化规则；页面只做 API 编排与展示（已知缺口：默认 weight/priority 等前端硬编码——新增时不要扩大此类复制）。

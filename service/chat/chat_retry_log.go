@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/service/adjustment"
 	"gorm.io/gorm"
 )
 
@@ -23,8 +24,8 @@ func RecordRetryLog(ctx context.Context, retryLog chan models.ChatLog, modelWith
 
 // applyWeightDecay 应用权重衰减
 func applyWeightDecay(ctx context.Context, log models.ChatLog, modelWithProviderMap map[uint]models.ModelWithProvider) {
-	// 检查是否开启自动权重衰减
-	if !getAutoWeightDecay(ctx) {
+	// 关闭时直接返回，避免扫 map / 查 Provider 的多余开销。
+	if !adjustment.AutoWeightDecayEnabled(ctx) {
 		return
 	}
 
@@ -36,26 +37,16 @@ func applyWeightDecay(ctx context.Context, log models.ChatLog, modelWithProvider
 			continue
 		}
 		if provider.Name == log.ProviderName && mwp.ProviderModel == log.ProviderModel {
-			applyWeightDecayByModelProviderID(ctx, id, log.ProviderName, log.ProviderModel)
+			adjustment.ApplyWeightDecayByModelProviderID(ctx, id, log.ProviderName, log.ProviderModel)
 			break
 		}
 	}
-}
-
-// getAutoWeightDecay 获取自动权重衰减开关
-func getAutoWeightDecay(ctx context.Context) bool {
-	return settingsReader.Bool(ctx, models.SettingKeyAutoWeightDecay, false)
-}
-
-// getAutoWeightDecayStep 获取自动权重衰减步长
-func getAutoWeightDecayStep(ctx context.Context) int {
-	return settingsReader.Int(ctx, models.SettingKeyAutoWeightDecayStep, 1, 0)
 }
 
 // applyPriorityDecay 应用优先级衰减
 func applyPriorityDecay(ctx context.Context, log models.ChatLog, modelWithProviderMap map[uint]models.ModelWithProvider) {
-	// 检查是否开启自动优先级衰减
-	if !getAutoPriorityDecay(ctx) {
+	// 关闭时直接返回，避免扫 map / 查 Provider 的多余开销。
+	if !adjustment.AutoPriorityDecayEnabled(ctx) {
 		return
 	}
 
@@ -67,23 +58,8 @@ func applyPriorityDecay(ctx context.Context, log models.ChatLog, modelWithProvid
 			continue
 		}
 		if provider.Name == log.ProviderName && mwp.ProviderModel == log.ProviderModel {
-			applyPriorityDecayByModelProviderID(ctx, id, log.ProviderName, log.ProviderModel)
+			adjustment.ApplyPriorityDecayByModelProviderID(ctx, id, log.ProviderName, log.ProviderModel)
 			break
 		}
 	}
-}
-
-// getAutoPriorityDecay 获取自动优先级衰减开关
-func getAutoPriorityDecay(ctx context.Context) bool {
-	return settingsReader.Bool(ctx, models.SettingKeyAutoPriorityDecay, false)
-}
-
-// getAutoPriorityDecayStep 获取自动优先级衰减步长
-func getAutoPriorityDecayStep(ctx context.Context) int {
-	return settingsReader.Int(ctx, models.SettingKeyAutoPriorityDecayStep, 1, 0)
-}
-
-// getAutoPriorityDecayThreshold 获取自动优先级衰减阈值
-func getAutoPriorityDecayThreshold(ctx context.Context) int {
-	return settingsReader.Int(ctx, models.SettingKeyAutoPriorityDecayThreshold, 90, 0)
 }

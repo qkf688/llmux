@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/service/chatstats"
 	"gorm.io/gorm"
 )
 
 func SaveChatLog(ctx context.Context, log models.ChatLog) (uint, error) {
 	// 统计应独立于日志存储：即使关闭日志记录，也要更新仪表盘统计。
-	if err := recordRequestStats(ctx, time.Now(), log.Name); err != nil {
+	if err := chatstats.RecordRequestStats(ctx, time.Now(), log.Name); err != nil {
 		slog.Warn("failed to record request stats", "error", err)
 	}
 	// 真实模型统计：优先用 RealModelName，异常路径回退到 Name。
@@ -19,7 +20,7 @@ func SaveChatLog(ctx context.Context, log models.ChatLog) (uint, error) {
 	if realModelName == "" {
 		realModelName = log.Name
 	}
-	if err := recordRealModelRequestStats(ctx, time.Now(), realModelName); err != nil {
+	if err := chatstats.RecordRealModelRequestStats(ctx, time.Now(), realModelName); err != nil {
 		slog.Warn("failed to record real model request stats", "error", err)
 	}
 

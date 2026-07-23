@@ -1,4 +1,4 @@
-package chat
+package adjustment
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// applySuccessAdjustments 在成功调用后尝试提升权重与优先级
-func applySuccessAdjustments(ctx context.Context, modelProviderID uint) {
+// ApplySuccessAdjustments 在成功调用后尝试提升权重与优先级。
+func ApplySuccessAdjustments(ctx context.Context, modelProviderID uint) {
 	if !getAutoSuccessIncrease(ctx) {
 		return
 	}
@@ -43,7 +43,7 @@ func adjustIntField(
 	modelProviderID uint,
 	getStep func(context.Context) int,
 	getMax func(context.Context) int,
-	fieldName string,   // "weight" 或 "priority"
+	fieldName string, // "weight" 或 "priority"
 	logFieldName string, // "old_weight" 或 "old_priority"
 	maxDisabled func(int) bool,
 ) {
@@ -86,33 +86,28 @@ func adjustIntField(
 	slog.Info(fieldName+" increased after success", "id", modelProviderID, logFieldName, currentValue, "new_"+fieldName, newValue)
 }
 
-// getAutoWeightIncreaseStep 获取自动权重增加步长
 func getAutoWeightIncreaseStep(ctx context.Context) int {
 	return settingsReader.Int(ctx, models.SettingKeyAutoWeightIncreaseStep, 1, 1)
 }
 
-// getAutoWeightIncreaseMax 获取自动权重增加上限
 func getAutoWeightIncreaseMax(ctx context.Context) int {
 	return settingsReader.Int(ctx, models.SettingKeyAutoWeightIncreaseMax, 100, 1)
 }
 
-// getAutoPriorityIncreaseStep 获取自动优先级增加步长
 func getAutoPriorityIncreaseStep(ctx context.Context) int {
 	return settingsReader.Int(ctx, models.SettingKeyAutoPriorityIncreaseStep, 1, 1)
 }
 
-// getAutoPriorityIncreaseMax 获取自动优先级增加上限
 func getAutoPriorityIncreaseMax(ctx context.Context) int {
 	return settingsReader.Int(ctx, models.SettingKeyAutoPriorityIncreaseMax, 100, 0)
 }
 
-// getAutoSuccessIncrease 获取成功自增开关
 func getAutoSuccessIncrease(ctx context.Context) bool {
 	return settingsReader.Bool(ctx, models.SettingKeyAutoSuccessIncrease, true)
 }
 
-// applyWeightDecayByModelProviderID 根据配置对指定关联应用权重衰减
-func applyWeightDecayByModelProviderID(ctx context.Context, modelProviderID uint, providerName, providerModel string) {
+// ApplyWeightDecayByModelProviderID 根据配置对指定关联应用权重衰减。
+func ApplyWeightDecayByModelProviderID(ctx context.Context, modelProviderID uint, providerName, providerModel string) {
 	if !getAutoWeightDecay(ctx) {
 		return
 	}
@@ -141,8 +136,8 @@ func applyWeightDecayByModelProviderID(ctx context.Context, modelProviderID uint
 	slog.Info("weight decay applied", "provider", providerName, "model", providerModel, "id", modelProviderID, "old_weight", mp.Weight, "new_weight", newWeight)
 }
 
-// applyPriorityDecayByModelProviderID 根据配置对指定关联应用优先级衰减
-func applyPriorityDecayByModelProviderID(ctx context.Context, modelProviderID uint, providerName, providerModel string) {
+// ApplyPriorityDecayByModelProviderID 根据配置对指定关联应用优先级衰减。
+func ApplyPriorityDecayByModelProviderID(ctx context.Context, modelProviderID uint, providerName, providerModel string) {
 	if !getAutoPriorityDecay(ctx) {
 		return
 	}
@@ -186,19 +181,48 @@ func applyPriorityDecayByModelProviderID(ctx context.Context, modelProviderID ui
 	}
 }
 
-// shouldCountHealthCheckSuccess 健康检测成功是否计入成功调用
-func shouldCountHealthCheckSuccess(ctx context.Context) bool {
+// ShouldCountHealthCheckSuccess 健康检测成功是否计入成功调用。
+func ShouldCountHealthCheckSuccess(ctx context.Context) bool {
 	return settingsReader.Bool(ctx, models.SettingKeyHealthCheckCountAsSuccess, true)
 }
 
-// shouldCountHealthCheckFailure 健康检测失败是否计入失败调用
-func shouldCountHealthCheckFailure(ctx context.Context) bool {
+// ShouldCountHealthCheckFailure 健康检测失败是否计入失败调用。
+func ShouldCountHealthCheckFailure(ctx context.Context) bool {
 	return settingsReader.Bool(ctx, models.SettingKeyHealthCheckCountAsFailure, false)
 }
 
-// getAutoPriorityDecayDisableEnabled 获取自动优先级衰减禁用开关
 func getAutoPriorityDecayDisableEnabled(ctx context.Context) bool {
 	return settingsReader.Bool(ctx, models.SettingKeyAutoPriorityDecayDisableEnabled, true)
+}
+
+// AutoWeightDecayEnabled 返回是否开启自动权重衰减（编排层可先短路再扫候选）。
+func AutoWeightDecayEnabled(ctx context.Context) bool {
+	return settingsReader.Bool(ctx, models.SettingKeyAutoWeightDecay, false)
+}
+
+func getAutoWeightDecay(ctx context.Context) bool {
+	return AutoWeightDecayEnabled(ctx)
+}
+
+func getAutoWeightDecayStep(ctx context.Context) int {
+	return settingsReader.Int(ctx, models.SettingKeyAutoWeightDecayStep, 1, 0)
+}
+
+// AutoPriorityDecayEnabled 返回是否开启自动优先级衰减（编排层可先短路再扫候选）。
+func AutoPriorityDecayEnabled(ctx context.Context) bool {
+	return settingsReader.Bool(ctx, models.SettingKeyAutoPriorityDecay, false)
+}
+
+func getAutoPriorityDecay(ctx context.Context) bool {
+	return AutoPriorityDecayEnabled(ctx)
+}
+
+func getAutoPriorityDecayStep(ctx context.Context) int {
+	return settingsReader.Int(ctx, models.SettingKeyAutoPriorityDecayStep, 1, 0)
+}
+
+func getAutoPriorityDecayThreshold(ctx context.Context) int {
+	return settingsReader.Int(ctx, models.SettingKeyAutoPriorityDecayThreshold, 90, 0)
 }
 
 func getConsecutiveFailureThreshold(ctx context.Context) int {
@@ -209,7 +233,8 @@ func getConsecutiveFailureDisableEnabled(ctx context.Context) bool {
 	return settingsReader.Bool(ctx, models.SettingKeyConsecutiveFailureDisableEnabled, true)
 }
 
-func incrementConsecutiveFailures(ctx context.Context, modelProviderID uint, providerName, providerModel string) {
+// IncrementConsecutiveFailures 累加连续失败次数，达阈值时可选自动禁用关联。
+func IncrementConsecutiveFailures(ctx context.Context, modelProviderID uint, providerName, providerModel string) {
 	if !getConsecutiveFailureDisableEnabled(ctx) {
 		return
 	}
@@ -240,7 +265,8 @@ func incrementConsecutiveFailures(ctx context.Context, modelProviderID uint, pro
 	}
 }
 
-func resetConsecutiveFailures(ctx context.Context, modelProviderID uint) {
+// ResetConsecutiveFailures 成功调用后将连续失败计数清零。
+func ResetConsecutiveFailures(ctx context.Context, modelProviderID uint) {
 	if _, err := gorm.G[models.ModelWithProvider](models.DB).
 		Where("id = ? AND consecutive_failures != 0", modelProviderID).
 		Update(ctx, "consecutive_failures", 0); err != nil {

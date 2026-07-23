@@ -34,9 +34,9 @@ LLMux 是多供应商 LLM API 网关/代理：对外提供 OpenAI / Anthropic �
   - 默认仓储绑定：`main` → `repository.SetDefault`；`service` 根包门面是 **兼容 re-export**，非第二套业务实现
 - **SRP 落地点**：
   - HTTP 在 `handler/*`；上游适配在 `providers/`；协议转换在 `transform/`
-  - **`service/chat` 现状是编排聚合包**（选路/重试 + 日志 IO + Stats + 权重调整 + style 注册），变更原因偏多
+  - **`service/chat` 为编排核心**（选路/重试 + 日志落库编排 + style 注册）；**Stats 在 `service/chatstats`，权重调整在 `service/adjustment`**
   - 虚拟模型只解析「虚拟→真实」，不发起上游调用
-  - 健康检查：权重/优先级经 Hook 回调 chat；**关联 Status/连续失败仍由 healthcheck 直接更新**
+  - 健康检查：权重/优先级经 Hook 回调 `service/adjustment`；**关联 Status/连续失败仍由 healthcheck 直接更新**
 - **DRY 落地点**：
   - 协议中枢：`models/unified/` 为主；**部分响应类型仍在 `models/unified.go`**
   - 设置元数据：`setting_schema.go` 为默认值/解析主源；**热读存在多路径**（models getter / settings.Reader / 部分业务包自读）
@@ -55,7 +55,8 @@ LLMux 是多供应商 LLM API 网关/代理：对外提供 OpenAI / Anthropic �
 - `handler` → `httpresp` / `handler/httpx` / `middleware`
 - `service` → `providers`（上游请求构造与模型列表）
 - `service` → `models`（实体、设置读、统一协议类型）
-- `service/chat` → `service/transform`、`service/virtualmodel`、`service/chatcore`、`balancer`
+- `service/chat` → `service/transform`、`service/virtualmodel`、`service/chatcore`、`service/chatstats`、`service/adjustment`、`balancer`
+- `service/adjustment` → `service/healthcheck`（仅 `init` 注入 `AdjustmentHooks`，无反向业务依赖）
 - `service/transform` → `models/unified`、`service/anthropic`、`service/responses`
 - `repository` → `models`（GORM 实体与 `models.DB`）
 - `providers` → `consts`（及少量 `common` 工具）
@@ -101,7 +102,7 @@ LLMux 是多供应商 LLM API 网关/代理：对外提供 OpenAI / Anthropic �
 
 | 模块 | 业务领域 | 详情文件 |
 |------|----------|----------|
-| `chat-gateway` | LLM 代理 / 选路 / 重试 / 日志写入（编排聚合包） | [modules/chat-gateway.md](modules/chat-gateway.md) |
+| `chat-gateway` | LLM 代理 / 选路 / 重试 / 日志写入（编排核心 + chatstats/adjustment 旁路） | [modules/chat-gateway.md](modules/chat-gateway.md) |
 | `protocol-transform` | 协议互转与统一模型 | [modules/protocol-transform.md](modules/protocol-transform.md) |
 | `providers` | 供应商适配与元数据 | [modules/providers.md](modules/providers.md) |
 | `models-catalog` | 真实模型目录与模板 | [modules/models-catalog.md](modules/models-catalog.md) |

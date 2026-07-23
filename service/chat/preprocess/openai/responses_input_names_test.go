@@ -89,4 +89,3 @@ func TestStripEmptyResponsesInputNames_NoChangeWhenNameMissingOrNonEmpty(t *test
 		t.Fatalf("expected body unchanged")
 	}
 }
-

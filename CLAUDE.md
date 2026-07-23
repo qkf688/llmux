@@ -276,5 +276,4 @@ webui/
 ## 相关文档
 
 - `README.md`: 项目介绍和快速开始
-- `docs/virtual-models-guide.md`: 虚拟模型详细指南
 - `AGENTS.md`: Agent 相关文档（如果存在）

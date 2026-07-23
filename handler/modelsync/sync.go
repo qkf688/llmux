@@ -19,7 +19,7 @@ func SyncProviderModels(c *gin.Context) {
 		return
 	}
 
-	syncService := service.NewModelSyncService(models.DB)
+	syncService := service.NewModelSyncService(models.DB, nil)
 	syncLog, err := syncService.SyncProviderModels(c.Request.Context(), id)
 	if err != nil {
 		httpresp.InternalServerError(c, "Failed to sync models: "+err.Error())
@@ -39,7 +39,7 @@ func SyncProviderModels(c *gin.Context) {
 // SyncAllProviders 同步所有启用模型端点的提供商
 func SyncAllProviders(c *gin.Context) {
 	ctx := c.Request.Context()
-	syncService := service.NewModelSyncService(models.DB)
+	syncService := service.NewModelSyncService(models.DB, nil)
 
 	logs, err := syncService.SyncAllProviders(ctx)
 	if err != nil {
@@ -208,7 +208,7 @@ func GetModelSyncStats(c *gin.Context) {
 func GetRecentAddedModels(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	syncService := service.NewModelSyncService(models.DB)
+	syncService := service.NewModelSyncService(models.DB, nil)
 	result, err := syncService.GetRecentAddedModels(ctx)
 	if err != nil {
 		httpresp.InternalServerError(c, "Failed to get recent added models: "+err.Error())

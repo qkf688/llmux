@@ -90,9 +90,9 @@ make webui            # cd webui && pnpm install && pnpm run build
 | 新增 / 修改客户端协议 style（OpenAI / Anthropic / Responses） | `service/chat/registry.go` + `before.go` / `process.go`、`service/transform/`（adapter + streaming）、`handler/register_v1.go`、`consts/consts.go`、`models/unified/` | [modules/protocol-transform.md](docs/architecture/modules/protocol-transform.md)、[modules/chat-gateway.md](docs/architecture/modules/chat-gateway.md) |
 | 新增 / 修改上游供应商 type | `providers/`（实现 + `init` 中 `Register`/`RegisterMetadata`）、`handler/providerapi/`、grep 外围 type 分支（providerapi / testapi / chat 预处理） | [modules/providers.md](docs/architecture/modules/providers.md) |
 | 改虚拟模型策略 / 映射 / 第一层 LB | `service/virtualmodel/`（`selector.go`、`*_selector.go`、`service.go`）、`handler/virtualmodels/`、`repository/virtual_model.go`、前端 `webui/src/routes/virtual-models/` | [modules/virtual-models.md](docs/architecture/modules/virtual-models.md)、[docs/virtual-models-guide.md](docs/virtual-models-guide.md) |
-| 改模型-供应商关联 / 自动关联 / 能力标志 | `handler/associations/`、`handler/autoassoc/`、`repository/model_with_provider.go`、`service/model_template.go`、`service/model_sync_auto_actions.go`（同步后 Hook 轨） | [modules/associations.md](docs/architecture/modules/associations.md) |
+| 改模型-供应商关联 / 自动关联 / 能力标志 | `service/autoassoc/`、`service/autoassoc_facade.go`、`handler/autoassoc/`（HTTP 薄层）、`handler/associations/`、`repository/model_with_provider.go`、`service/model_template.go` | [modules/associations.md](docs/architecture/modules/associations.md) |
 | 改真实模型目录 / 模板 | `handler/modelapi/`、`repository/model.go`、`repository/model_template_item.go`、`service/model_template.go` | [modules/models-catalog.md](docs/architecture/modules/models-catalog.md) |
-| 改模型同步 / 同步后动作 | `service/modelsync/`、`service/model_sync.go`、`service/model_sync_auto_actions.go`、`handler/modelsync/`、`repository/model_sync_log.go` | [modules/model-sync.md](docs/architecture/modules/model-sync.md) |
+| 改模型同步 / 同步后动作 | `service/modelsync/`、`service/model_sync.go`（ActionHooks → autoassoc）、`handler/modelsync/`、`repository/model_sync_log.go` | [modules/model-sync.md](docs/architecture/modules/model-sync.md) |
 | 改健康检查 / 关联启停 / 权重衰减 Hook | `service/healthcheck/`、`service/healthcheck.go`、`handler/healthcheck/`、`service/chat/adjustment.go`（AdjustmentHooks）、`repository/health_check_log.go` | [modules/health-check.md](docs/architecture/modules/health-check.md) |
 | 改请求日志 / 仪表盘指标 / 保留策略 | `handler/logs/`、`handler/metrics/`、`service/chat` 的 record/stats、`repository/chat_log.go`、`models/retention.go` | [modules/logs-metrics.md](docs/architecture/modules/logs-metrics.md) |
 | 改系统设置项 | `models/setting_schema.go`、`handler/settings/`、`service/settings/`、`repository/setting.go`、前端 `webui/src/routes/settings/` + `lib/api` settings 模块 | [modules/settings.md](docs/architecture/modules/settings.md) |
@@ -298,7 +298,7 @@ webui/src/components/ui/  # 基础 UI
 - 跨 2 个以上业务域使用的逻辑 → 提取到上表共享位置，**禁止**复制粘贴到多个 handler/service。
 - 共享层**只能**被上层引用，**禁止**依赖 `handler` / 具体业务 `service` 子包。
 - 协议转换**必须**经统一模型中枢，**禁止**每对协议手写双向转换。
-- 自动关联存在双轨（`handler/autoassoc` vs `model_sync_auto_actions`）：修改关联规则时**必须**两侧对齐或收敛到单一实现，**禁止**只改一条轨。
+- 自动关联业务**必须**落在 `service/autoassoc`；HTTP / provider CRUD / modelsync ActionHooks 只调该服务。**禁止**在 handler 或 model_sync 门面再复制一套关联/清理循环。
 - 前端：分页/表格/日志类 UI 优先复用已有组件与 hooks；**禁止**在 routes 间复制同构大段 JSX/类型。
 - service 根包门面只做 re-export：**禁止**在门面文件堆积业务分支。
 
@@ -344,7 +344,7 @@ webui/src/components/ui/  # 基础 UI
 - [ ] 新管理页面：`route-config.ts` 已追加；API 在 `lib/api/modules`
 - [ ] 依赖方向：无 `repository`→`service`、`providers`→`handler` 等违规 import（可用 go list / 代码审查）
 - [ ] 跨域副作用：healthcheck/modelsync 未直接 import 对方内部函数，而是走 Hook
-- [ ] 自动关联规则变更：`handler/autoassoc` 与 `model_sync_auto_actions` 已对齐或说明收敛方案
+- [ ] 自动关联规则变更：只改 `service/autoassoc`；handler / modelsync hooks 无重复业务逻辑
 - [ ] HTTP 错误/成功响应走 `httpresp`；未引入第二套响应信封
 - [ ] 日志为 `slog`；错误带上下文返回
 - [ ] 命名符合第 3.1 节（Go snake_case 文件名、JSON snake_case、前端 kebab-case 路由目录等）

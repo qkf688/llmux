@@ -13,6 +13,8 @@ type ModelTemplateItemRepo interface {
 	CountByModelIDAndName(ctx context.Context, modelID uint, name string) (int64, error)
 	// Create 创建模板项。
 	Create(ctx context.Context, item *models.ModelTemplateItem) error
+	// ListAll 返回全部模板项。
+	ListAll(ctx context.Context) ([]models.ModelTemplateItem, error)
 	// ListByModelID 返回指定模型的全部模板项。
 	ListByModelID(ctx context.Context, modelID uint) ([]models.ModelTemplateItem, error)
 	// DeleteByModelIDAndNameUnscoped 硬删指定模型下的同名模板项。
@@ -38,6 +40,14 @@ func (r *modelTemplateItemRepo) CountByModelIDAndName(ctx context.Context, model
 
 func (r *modelTemplateItemRepo) Create(ctx context.Context, item *models.ModelTemplateItem) error {
 	return r.db.WithContext(ctx).Create(item).Error
+}
+
+func (r *modelTemplateItemRepo) ListAll(ctx context.Context) ([]models.ModelTemplateItem, error) {
+	var items []models.ModelTemplateItem
+	if err := r.db.WithContext(ctx).Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (r *modelTemplateItemRepo) ListByModelID(ctx context.Context, modelID uint) ([]models.ModelTemplateItem, error) {

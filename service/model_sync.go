@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/service/autoassoc"
 	"github.com/atopos31/llmio/service/modelsync"
 	"gorm.io/gorm"
 )
@@ -21,11 +23,35 @@ type AddedModel = modelsync.AddedModel
 type RecentAddedModelsResponse = modelsync.RecentAddedModelsResponse
 
 // NewModelSyncService 创建模型同步服务实例。
-func NewModelSyncService(db *gorm.DB) *ModelSyncService {
+// auto 为 nil 时使用 GetAutoAssocService() 默认单例。
+// 同步后 ActionHooks 委托统一 autoassoc 服务，避免与 handler 双轨实现。
+func NewModelSyncService(db *gorm.DB, auto *autoassoc.Service) *ModelSyncService {
+	if auto == nil {
+		auto = GetAutoAssocService()
+	}
 	svc := &ModelSyncService{db: db}
 	svc.core = modelsync.NewService(db, modelsync.ActionHooks{
-		AutoAssociate:            svc.autoAssociateModels,
-		CleanInvalidAssociations: svc.cleanInvalidAssociations,
+		AutoAssociate: func(ctx context.Context) {
+			// 开关已在 modelsync.triggerAutoActions 检查；此处直接执行业务。
+			added, err := auto.Associate(ctx)
+			if err != nil {
+				slog.Error("auto-associate failed", "error", err, "added", added)
+				return
+			}
+			if added > 0 {
+				slog.Info("auto-associated models", "count", added)
+			}
+		},
+		CleanInvalidAssociations: func(ctx context.Context) {
+			removed, err := auto.CleanInvalid(ctx)
+			if err != nil {
+				slog.Error("auto-clean failed", "error", err, "removed", removed)
+				return
+			}
+			if removed > 0 {
+				slog.Info("auto-cleaned invalid associations", "count", removed)
+			}
+		},
 	})
 	return svc
 }

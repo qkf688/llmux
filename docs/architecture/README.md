@@ -82,8 +82,8 @@ LLMux 是多供应商 LLM API 网关/代理：对外提供 OpenAI / Anthropic �
 
 ### 现状备注（依赖事实）
 
-- 目标分层是 `handler → service → repository → models`，但 **service 侧 chat/healthcheck/modelsync/virtualmodel 仍大量直连 `models.DB`**；部分 handler（如 modelapi、metrics、autoassoc、v1）也存在 `gorm.G` 直连。`repository` 是渐进落地的抽象，不是全路径强制边界。
-- 自动关联存在 **handler/autoassoc 与 modelsync ActionHooks 实现双轨**（见 associations 模块）。
+- 目标分层是 `handler → service → repository → models`，但 **service 侧 chat/healthcheck/modelsync/virtualmodel 仍大量直连 `models.DB`**；部分 handler（如 modelapi、metrics、v1）也存在 `gorm.G` 直连。`service/autoassoc` 已走 repository。`repository` 是渐进落地的抽象，不是全路径强制边界。
+- 自动关联已收敛为 **`service/autoassoc` 单一入口**；handler HTTP 与 modelsync ActionHooks 均委托该服务（见 associations 模块）。
 - 文档描述以**当前代码结构**为准，不以理想重构目标替代现状。
 
 ### 扩展最小改动集（现状，非理想）

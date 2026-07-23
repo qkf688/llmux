@@ -47,20 +47,7 @@ func isProviderBlacklisted(provider models.Provider) bool {
 	return provider.Blacklisted != nil && *provider.Blacklisted
 }
 
-func newDefaultAssociation(modelID, providerID uint, providerModel string, defaultPriority int) models.ModelWithProvider {
-	trueVal := true
-	falseVal := false
-	return models.ModelWithProvider{
-		ModelID:          modelID,
-		ProviderModel:    providerModel,
-		ProviderID:       providerID,
-		ToolCall:         &trueVal,
-		StructuredOutput: &falseVal,
-		Image:            &falseVal,
-		WithHeader:       &falseVal,
-		Status:           &trueVal,
-		CustomerHeaders:  map[string]string{},
-		Weight:           5,
-		Priority:         defaultPriority,
-	}
+// allowsAutoAssociate 模型级开关：nil 或 true 允许；显式 false 跳过。
+func allowsAutoAssociate(model models.Model) bool {
+	return model.AutoAssociate == nil || *model.AutoAssociate
 }

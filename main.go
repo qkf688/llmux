@@ -45,7 +45,7 @@ func main() {
 func startBackgroundServices(ctx context.Context) {
 	go service.GetHealthChecker().Start(ctx)
 
-	syncService := service.NewModelSyncService(models.DB)
+	syncService := service.NewModelSyncService(models.DB, nil)
 	syncService.StartAutoSync(ctx)
 }
 

@@ -32,8 +32,8 @@ main → service.NewModelSyncService(...).StartAutoSync(ctx)  # 定时模型同�
 ```
 healthcheck → AdjustmentHooks → service/chat 调整权重/优先级
   （关联 Status / ConsecutiveFailures 仍由 healthcheck 直接写库）
-modelsync   → ActionHooks     → 自动关联 / 清理无效关联
-  （与 handler/autoassoc 存在并行实现路径，见 associations 模块）
+modelsync   → ActionHooks     → service/autoassoc.Associate / CleanInvalid
+  （HTTP / provider CRUD 同走 service/autoassoc，见 associations 模块）
 ```
 
 ## 4. 注册表扩展（OCP）

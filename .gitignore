@@ -27,3 +27,5 @@ nul
 .pnpm-store/
 .kilo/
 webui/tsconfig.tsbuildinfo
+
+.vscode

@@ -21,6 +21,8 @@ local/
 # .local/ AI 临时产物（审查报告等），不提交
 .local/
 planning-simple
+# .plan/ plan skill 产物，不提交
+.plan/
 nul
 .trae
 .gomodcache

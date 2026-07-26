@@ -1,0 +1,77 @@
+package openai
+
+import (
+	"encoding/json"
+
+	"github.com/atopos31/llmio/models"
+)
+
+func parseOpenAIChatStop(raw json.RawMessage) *models.UnifiedStop {
+	if len(raw) == 0 || isOpenAINullRaw(raw) {
+		return nil
+	}
+	stop := &models.UnifiedStop{}
+	if value, ok := rawOpenAIString(raw); ok {
+		stop.Single = &value
+		return stop
+	}
+	var values openAIStringSeq
+	if err := json.Unmarshal(raw, &values); err == nil && values.Set {
+		stop.Multiple = values.Value
+		return stop
+	}
+	return stop
+}
+
+func parseOpenAIChatResponseFormat(raw json.RawMessage) *models.UnifiedResponseFormat {
+	var rf openAIChatResponseFormat
+	if !decodeOpenAIChatObject(raw, &rf) {
+		return nil
+	}
+	return &models.UnifiedResponseFormat{
+		Type:       rf.Type.Value,
+		JSONSchema: rf.JSONSchema,
+	}
+}
+
+func parseOpenAIChatToolChoice(raw json.RawMessage) *models.UnifiedToolChoice {
+	if len(raw) == 0 || isOpenAINullRaw(raw) {
+		return nil
+	}
+	choice := &models.UnifiedToolChoice{}
+	if value, ok := rawOpenAIString(raw); ok {
+		choice.StringValue = &value
+		return choice
+	}
+
+	var obj openAIChatToolChoiceObject
+	if !decodeOpenAIChatObject(raw, &obj) {
+		return choice
+	}
+	unifiedObj := models.UnifiedToolChoiceObject{Type: obj.Type.Value}
+	var fn openAIChatToolChoiceFunction
+	if decodeOpenAIChatObject(obj.Function, &fn) {
+		unifiedObj.Function = &models.UnifiedToolChoiceFunction{Name: fn.Name.Value}
+	}
+	choice.ObjectValue = &unifiedObj
+	return choice
+}
+
+func parseOpenAIChatStreamOptions(raw json.RawMessage) *models.UnifiedStreamOptions {
+	var streamOptions openAIChatStreamOptions
+	if !decodeOpenAIChatObject(raw, &streamOptions) {
+		return nil
+	}
+	return &models.UnifiedStreamOptions{IncludeUsage: streamOptions.IncludeUsage.Value}
+}
+
+func parseOpenAIChatAudio(raw json.RawMessage) *models.UnifiedAudio {
+	var audio openAIChatAudio
+	if !decodeOpenAIChatObject(raw, &audio) {
+		return nil
+	}
+	return &models.UnifiedAudio{
+		Voice:  audio.Voice.Value,
+		Format: audio.Format.Value,
+	}
+}

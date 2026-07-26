@@ -73,6 +73,43 @@ func TestChatLogRepo_ListAndHardDeleteFiltered(t *testing.T) {
 	}
 }
 
+// TestChatLogRepo_HardDeleteFilteredRejectsEmptyFilter 回归：空筛选会让子查询退化成
+// 「全表 id」，把条件清理变成清空 chat_logs + chat_ios。守卫此前只在 handler 里，
+// 仓储作为可复用 API 是裸的。
+func TestChatLogRepo_HardDeleteFilteredRejectsEmptyFilter(t *testing.T) {
+	ctx := context.Background()
+	db := newLogTestDB(t)
+	repo := NewChatLogRepo(db)
+
+	keep := models.ChatLog{Name: "m1", ProviderName: "p1", Status: "success", Style: "openai"}
+	if err := db.Create(&keep).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.ChatIO{LogId: keep.ID, Input: "in"}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	for _, filter := range []ChatLogFilter{
+		{},
+		{Status: "   "}, // 空白字符不构成条件
+	} {
+		deleted, err := repo.HardDeleteFiltered(ctx, filter)
+		if !errors.Is(err, ErrEmptyChatLogFilter) {
+			t.Fatalf("filter %#v: err = %v, want ErrEmptyChatLogFilter", filter, err)
+		}
+		if deleted != 0 {
+			t.Fatalf("filter %#v: deleted = %d, want 0", filter, deleted)
+		}
+	}
+
+	var logCount, ioCount int64
+	db.Unscoped().Model(&models.ChatLog{}).Count(&logCount)
+	db.Unscoped().Model(&models.ChatIO{}).Count(&ioCount)
+	if logCount != 1 || ioCount != 1 {
+		t.Fatalf("rows after rejected deletes: logs=%d ios=%d, want 1/1", logCount, ioCount)
+	}
+}
+
 func TestChatIORepo_GetByLogID(t *testing.T) {
 	ctx := context.Background()
 	db := newLogTestDB(t)

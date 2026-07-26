@@ -95,7 +95,7 @@ func ClearFilteredLogs(c *gin.Context) {
 		UserAgent:    strings.TrimSpace(c.Query("user_agent")),
 	}
 
-	if filter.ProviderName == "" && filter.Name == "" && filter.Status == "" && filter.Style == "" && filter.UserAgent == "" {
+	if filter.IsEmpty() {
 		httpresp.BadRequest(c, "At least one filter parameter is required")
 		return
 	}

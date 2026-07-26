@@ -2,12 +2,18 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 
 	"github.com/atopos31/llmio/models"
 	"gorm.io/gorm"
 )
+
+// ErrEmptyChatLogFilter 表示条件清理收到了空筛选。
+// 单独成错而非静默返回 0：静默会被调用方读成「没有匹配行」，
+// 而实际是「没给条件」——两者的正确处置完全不同。
+var ErrEmptyChatLogFilter = errors.New("repository: chat log filter must have at least one condition")
 
 // ChatLogFilter 请求日志列表/条件清理筛选（对齐现网 query）。
 type ChatLogFilter struct {
@@ -16,6 +22,16 @@ type ChatLogFilter struct {
 	Status       string
 	Style        string
 	UserAgent    string
+}
+
+// IsEmpty 报告是否一个筛选条件都没有（空白字符不算条件）。
+// 用于区分「按条件清理」与「清空全表」——后者必须走显式的 HardDeleteAll。
+func (f ChatLogFilter) IsEmpty() bool {
+	return strings.TrimSpace(f.ProviderName) == "" &&
+		strings.TrimSpace(f.Name) == "" &&
+		strings.TrimSpace(f.Status) == "" &&
+		strings.TrimSpace(f.Style) == "" &&
+		strings.TrimSpace(f.UserAgent) == ""
 }
 
 // ChatLogListOptions 列表查询选项。
@@ -55,6 +71,7 @@ type ChatLogRepo interface {
 	// HardDeleteAll 硬删全部日志。
 	HardDeleteAll(ctx context.Context) (int64, error)
 	// HardDeleteFiltered 事务内：先硬删匹配筛选的 ChatIO，再硬删 ChatLog。
+	// filter 必须至少带一个条件，否则返回 ErrEmptyChatLogFilter（清空全表请用 HardDeleteAll）。
 	HardDeleteFiltered(ctx context.Context, filter ChatLogFilter) (int64, error)
 	// EnforceRetention 保留最新 retention 条，超出部分连同其 ChatIO 一并硬删。
 	// retention<=0 时不清理。返回实际删除的日志条数。
@@ -239,6 +256,12 @@ func (r *chatLogRepo) HardDeleteAll(ctx context.Context) (int64, error) {
 }
 
 func (r *chatLogRepo) HardDeleteFiltered(ctx context.Context, filter ChatLogFilter) (int64, error) {
+	// 空筛选会让子查询退化成「全表 id」，把条件清理变成清空全表。
+	// 清空全表是 HardDeleteAll 的语义，必须由调用方显式选择。
+	if filter.IsEmpty() {
+		return 0, ErrEmptyChatLogFilter
+	}
+
 	var deleted int64
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		subQuery := applyChatLogFilter(tx.Model(&models.ChatLog{}).Select("id"), filter)

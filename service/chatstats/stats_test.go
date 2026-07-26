@@ -7,12 +7,16 @@ import (
 	"time"
 
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/repository"
 )
 
 func initStatsTestDB(t *testing.T) {
 	t.Helper()
 	models.Init(context.Background(), filepath.Join(t.TempDir(), "llmio-test.db"))
+	// 与 models.DB 同步默认 Repositories，避免 Default 缓存上一个用例的连接
+	repository.SetDefault(repository.New(models.DB))
 	t.Cleanup(func() {
+		repository.SetDefault(nil)
 		sqlDB, err := models.DB.DB()
 		if err != nil {
 			return
@@ -41,10 +45,10 @@ func TestRecordRequestStatsAndTokenStats_UpdatesHourly(t *testing.T) {
 		t.Fatalf("RecordTokenStats again: %v", err)
 	}
 
-	if err := RecordRealModelRequestStats(context.Background(), at, "rm1"); err != nil {
+	if err := RecordRealModelRequestStats(context.Background(), "rm1"); err != nil {
 		t.Fatalf("RecordRealModelRequestStats: %v", err)
 	}
-	if err := RecordRealModelRequestStats(context.Background(), at, "rm1"); err != nil {
+	if err := RecordRealModelRequestStats(context.Background(), "rm1"); err != nil {
 		t.Fatalf("RecordRealModelRequestStats again: %v", err)
 	}
 

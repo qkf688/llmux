@@ -24,6 +24,7 @@ type Repositories struct {
 	ChatIO              ChatIORepo
 	HealthCheckLog      HealthCheckLogRepo
 	ModelSyncLog        ModelSyncLogRepo
+	Stats               StatsRepo
 }
 
 // New 根据 *gorm.DB 创建所有 Repository 实例。
@@ -42,6 +43,7 @@ func New(db *gorm.DB) *Repositories {
 		ChatIO:              NewChatIORepo(db),
 		HealthCheckLog:      NewHealthCheckLogRepo(db),
 		ModelSyncLog:        NewModelSyncLogRepo(db),
+		Stats:               NewStatsRepo(db),
 	}
 }
 
@@ -54,7 +56,7 @@ func (r *Repositories) RunInTx(ctx context.Context, fn func(txRepos *Repositorie
 }
 
 var (
-	defaultMu   sync.RWMutex
+	defaultMu    sync.RWMutex
 	defaultRepos *Repositories
 )
 

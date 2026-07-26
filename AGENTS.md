@@ -136,7 +136,7 @@ make webui            # cd webui && pnpm install && pnpm run build
 
 - 业务路由**只**经 `handler.RegisterAll` 挂接；子包 `Register*` 只挂叶子路由，**禁止**在 `main.go` 写业务路由明细。
 - `service/` 根包门面（`*_facade.go` 等）是**兼容 re-export / 装配**，不是第二套业务实现；新逻辑写在子包（`service/chat` 等）。
-- 数据访问**必须**经 `repository.*Repo`；`repository.SetDefault` 在 `main` 绑定，包内经 `repos()`（`repos.go`）取默认聚合根。chat / chatstats 之外的聊天主路径、healthcheck / adjustment / autoassoc / modelsync / modelapi 已完成迁移；存量直连（metrics、settings、v1、database、importexport、chatstats、virtualmodel）**不作为新代码模板**，改到哪儿顺手迁到哪儿。
+- 数据访问**必须**经 `repository.*Repo`；`repository.SetDefault` 在 `main` 绑定，包内经 `repos()`（`repos.go`）取默认聚合根。聊天主路径、chatstats / metrics、healthcheck / adjustment / autoassoc / modelsync / modelapi 已完成迁移；存量直连（settings、v1、database、importexport、virtualmodel）**不作为新代码模板**，改到哪儿顺手迁到哪儿。
 - 跨 service 副作用用 Hook 接口（`AdjustmentHooks`、`ActionHooks`），契约由**调用方包**定义，实现侧包级注入，**禁止**为副作用制造循环 import。
 
 **前端**

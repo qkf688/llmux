@@ -63,7 +63,7 @@ balancer/                   # 加权随机纯算法
 ## 5. 特殊约定
 
 - **扩展最小改动集（现状）**：style 注册 `Beforer`/`Processer` + `register_v1` 路由 + transform 适配/流路由 + `consts`；不在 `main.go` 写业务路由
-- **数据访问**：统一经 `repos()`（`service/chat/repos.go` → `repository.Default()`），**禁止**直连 `models.DB`/`gorm.G`；旁路包 `chatstats` 因统计表尚无 Repo 仍直连
+- **数据访问**：统一经 `repos()`（`service/chat/repos.go` → `repository.Default()`），**禁止**直连 `models.DB`/`gorm.G`；旁路包 `chatstats` 同样经 `repos().Stats`（`repository.StatsRepo`）
 - **职责拆分（现状）**：选路/重试/协议/日志落库编排仍在 `service/chat`；Stats 在 `chatstats`；权重调整在 `adjustment`。改统计策略与改选路策略不再同文件碰撞；日志 IO 存储仍可后续下沉
 - 虚拟模型路径：先由 `virtualmodel` 产出有序真实模型，再在真实模型层做 provider 级选路（两层 LB）
 - `service/chat_facade.go` 为兼容 re-export，不是第二实现

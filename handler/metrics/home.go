@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/atopos31/llmio/httpresp"
-	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 )
 
@@ -21,25 +20,15 @@ func Metrics(c *gin.Context) {
 		return
 	}
 
-	now := time.Now()
-	year, month, day := now.Date()
-	startDate := time.Date(year, month, day, 0, 0, 0, 0, now.Location()).AddDate(0, 0, -days).Format("2006-01-02")
-
-	type metricsAgg struct {
-		Reqs   int64 `gorm:"column:reqs"`
-		Tokens int64 `gorm:"column:tokens"`
-	}
-	var agg metricsAgg
-	if err := models.DB.WithContext(c.Request.Context()).
-		Raw("SELECT COALESCE(SUM(reqs),0) as reqs, COALESCE(SUM(tokens),0) as tokens FROM `stats_dailies` WHERE `date` >= ?", startDate).
-		Scan(&agg).Error; err != nil {
+	sum, err := repos().Stats.SumDailiesSince(c.Request.Context(), startOfDaysAgo(time.Now(), days))
+	if err != nil {
 		httpresp.InternalServerError(c, "Failed to query metrics: "+err.Error())
 		return
 	}
 
 	httpresp.Success(c, MetricsRes{
-		Reqs:   agg.Reqs,
-		Tokens: agg.Tokens,
+		Reqs:   sum.Reqs,
+		Tokens: sum.Tokens,
 	})
 }
 
@@ -49,20 +38,30 @@ type Count struct {
 }
 
 func Counts(c *gin.Context) {
-	results := make([]Count, 0)
-	if err := models.DB.Raw("SELECT name as model,calls as calls FROM `stats_model_totals` ORDER BY `calls` DESC").Scan(&results).Error; err != nil {
+	rows, err := repos().Stats.ListModelCallsDesc(c.Request.Context())
+	if err != nil {
 		httpresp.InternalServerError(c, err.Error())
 		return
+	}
+
+	results := make([]Count, 0, len(rows))
+	for _, row := range rows {
+		results = append(results, Count{Model: row.Name, Calls: row.Calls})
 	}
 
 	httpresp.Success(c, results)
 }
 
 func RealModelCounts(c *gin.Context) {
-	results := make([]Count, 0)
-	if err := models.DB.Raw("SELECT name as model,calls as calls FROM `stats_real_model_totals` ORDER BY `calls` DESC").Scan(&results).Error; err != nil {
+	rows, err := repos().Stats.ListRealModelCallsDesc(c.Request.Context())
+	if err != nil {
 		httpresp.InternalServerError(c, err.Error())
 		return
+	}
+
+	results := make([]Count, 0, len(rows))
+	for _, row := range rows {
+		results = append(results, Count{Model: row.Name, Calls: row.Calls})
 	}
 
 	httpresp.Success(c, results)

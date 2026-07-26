@@ -19,7 +19,7 @@ func SaveChatLog(ctx context.Context, log models.ChatLog) (uint, error) {
 	if realModelName == "" {
 		realModelName = log.Name
 	}
-	if err := chatstats.RecordRealModelRequestStats(ctx, time.Now(), realModelName); err != nil {
+	if err := chatstats.RecordRealModelRequestStats(ctx, realModelName); err != nil {
 		slog.Warn("failed to record real model request stats", "error", err)
 	}
 

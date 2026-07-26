@@ -29,7 +29,7 @@ LLMux 是多供应商 LLM API 网关/代理：对外提供 OpenAI / Anthropic �
   - 新管理 API 域 = 新 `handler/*` 子包 + **修改** `handler.RegisterAll` 挂接（禁止写进 `main.go`）
 - **DIP 落地点**：
   - `providers.Provider` / `OpenAICompat`、`virtualmodel.Selector`、`transform.FormatAdapter`、`chat.Beforer`/`Processer` 为真实抽象
-  - `repository.*Repo` 接口存在；**管理端 CRUD 与 chat/healthcheck/adjustment/modelsync/modelapi 主路径已走仓储**；metrics、settings、v1、virtualmodel 等仍有 `models.DB` 直连（渐进落地）
+  - `repository.*Repo` 接口存在；**管理端 CRUD 与 chat/chatstats/metrics/healthcheck/adjustment/modelsync/modelapi 主路径已走仓储**；settings、v1、virtualmodel 等仍有 `models.DB` 直连（渐进落地）
   - 跨域副作用：`healthcheck.AdjustmentHooks`、`modelsync.ActionHooks`（调用方定义契约；实现为包级注入，非构造 DI）
   - 默认仓储绑定：`main` → `repository.SetDefault`；`service` 根包门面是 **兼容 re-export**，非第二套业务实现
 - **SRP 落地点**：
@@ -83,7 +83,7 @@ LLMux 是多供应商 LLM API 网关/代理：对外提供 OpenAI / Anthropic �
 
 ### 现状备注（依赖事实）
 
-- 目标分层是 `handler → service → repository → models`。**`service/chat`、`service/chatstats` 除外的聊天主路径、`service/healthcheck`、`service/adjustment`、`service/autoassoc`、`service/modelsync`、`handler/modelapi` 已全部经 `repository.*Repo` 访问持久层**；存量直连集中在 `handler/metrics`、`handler/settings`、`handler/v1`、`handler/database`、`handler/importexport`、`service/chatstats`（统计表尚无 Repo）与 `service/virtualmodel`（构造持 `*gorm.DB`）。`repository` 是渐进落地的抽象，不是全路径强制边界。
+- 目标分层是 `handler → service → repository → models`。**聊天主路径（`service/chat`、`service/chatstats`）、`handler/metrics`、`service/healthcheck`、`service/adjustment`、`service/autoassoc`、`service/modelsync`、`handler/modelapi` 已全部经 `repository.*Repo` 访问持久层**；存量直连集中在 `handler/settings`、`handler/v1`、`handler/database`、`handler/importexport` 与 `service/virtualmodel`（构造持 `*gorm.DB`）。`repository` 是渐进落地的抽象，不是全路径强制边界。
 - 自动关联已收敛为 **`service/autoassoc` 单一入口**；handler HTTP 与 modelsync ActionHooks 均委托该服务（见 associations 模块）。
 - 文档描述以**当前代码结构**为准，不以理想重构目标替代现状。
 

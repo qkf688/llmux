@@ -2,7 +2,6 @@ package metrics
 
 import (
 	"github.com/atopos31/llmio/httpresp"
-	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 )
 
@@ -19,10 +18,8 @@ type ProviderMetricRes struct {
 
 func ProviderMetrics(c *gin.Context) {
 	// 从供应商统计表直接读取，不再依赖 chat_logs 聚合
-	rows := make([]models.StatsProviderTotal, 0)
-	if err := models.DB.WithContext(c.Request.Context()).
-		Order("total_requests DESC").
-		Find(&rows).Error; err != nil {
+	rows, err := repos().Stats.ListProviderTotalsDesc(c.Request.Context())
+	if err != nil {
 		httpresp.InternalServerError(c, "Failed to query provider metrics: "+err.Error())
 		return
 	}

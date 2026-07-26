@@ -15,25 +15,19 @@ type HourlyMetricsRes struct {
 }
 
 func MetricsHourliesToday(c *gin.Context) {
-	now := time.Now()
-	year, month, day := now.Date()
-	startOfToday := time.Date(year, month, day, 0, 0, 0, 0, now.Location())
-	dateStr := startOfToday.Format("2006-01-02")
-
-	type hourlyRow struct {
-		Hour   int   `gorm:"column:hour"`
-		Reqs   int64 `gorm:"column:reqs"`
-		Tokens int64 `gorm:"column:tokens"`
-	}
-	rows := make([]hourlyRow, 0)
-	if err := models.DB.WithContext(c.Request.Context()).
-		Raw("SELECT `hour` as hour, COALESCE(reqs,0) as reqs, COALESCE(tokens,0) as tokens FROM `stats_hourlies` WHERE `date` = ? ORDER BY `hour` ASC", dateStr).
-		Scan(&rows).Error; err != nil {
+	rows, err := repos().Stats.ListHourliesByDate(c.Request.Context(), startOfDay(time.Now()))
+	if err != nil {
 		httpresp.InternalServerError(c, "Failed to query hourly metrics: "+err.Error())
 		return
 	}
 
-	rowMap := make(map[int]hourlyRow, len(rows))
+	httpresp.Success(c, fillFullDay(rows))
+}
+
+// fillFullDay 把稀疏的小时统计补齐为 0-23 共 24 项，缺失小时以零值填充。
+// 纯函数：前端图表要求整日刻度完整，该补零属展示逻辑，不下沉仓储。
+func fillFullDay(rows []models.StatsHourly) []HourlyMetricsRes {
+	rowMap := make(map[int]models.StatsHourly, len(rows))
 	for _, r := range rows {
 		if r.Hour < 0 || r.Hour > 23 {
 			continue
@@ -42,14 +36,9 @@ func MetricsHourliesToday(c *gin.Context) {
 	}
 
 	result := make([]HourlyMetricsRes, 0, 24)
-	for hour := 0; hour < 24; hour++ {
-		row, ok := rowMap[hour]
-		if !ok {
-			result = append(result, HourlyMetricsRes{Hour: hour, Reqs: 0, Tokens: 0})
-			continue
-		}
+	for hour := range 24 {
+		row := rowMap[hour] // 缺失时为零值，Reqs/Tokens 即 0
 		result = append(result, HourlyMetricsRes{Hour: hour, Reqs: row.Reqs, Tokens: row.Tokens})
 	}
-
-	httpresp.Success(c, result)
+	return result
 }

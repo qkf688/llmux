@@ -148,9 +148,12 @@ func FromUnified(unified *models.UnifiedRequest) ([]byte, error) {
 			"role": msg.Role,
 		}
 		if msg.Content != nil {
-			// 阶段 3: 处理多模态内容
-			if parts, ok := msg.Content.([]models.UnifiedMessageContentPart); ok {
-				// 多模态内容
+			// tool 消息的 content 只接受字符串：Chat API 不认 tool 轮里的 image_url 块，
+			// 直接铺开会被上游判 400。多模态工具结果在此降级为纯文本 + 占位符。
+			if msg.Role == "tool" {
+				msgMap["content"] = msg.GetContentAsStringWithPlaceholders()
+			} else if parts, ok := msg.Content.([]models.UnifiedMessageContentPart); ok {
+				// 阶段 3: 处理多模态内容
 				contentArray := make([]interface{}, 0, len(parts))
 				for _, part := range parts {
 					partMap := map[string]interface{}{

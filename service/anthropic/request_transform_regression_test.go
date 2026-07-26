@@ -7,7 +7,7 @@ import (
 	"github.com/atopos31/llmio/models"
 )
 
-// 本文件是请求侧协议不变量的回归断言，对应 .local/next-do.md 的待办 26 / 27。
+// 本文件是请求侧协议不变量的回归断言，对应 .local/next-do.md 的待办 26 / 27 / 28。
 
 // decodeAnthropicMessages 把 TransformFromUnified 的输出解回消息数组。
 func decodeAnthropicMessages(t *testing.T, unified *models.UnifiedRequest) []map[string]interface{} {
@@ -106,6 +106,142 @@ func TestTransformFromUnified_ToolCallsKeepStringContent(t *testing.T) {
 	got := contentBlockTypes(t, messages[0])
 	if len(got) != 2 || got[0] != "text" || got[1] != "tool_use" {
 		t.Fatalf("content 块类型应为 [text tool_use]，实际 %v", got)
+	}
+}
+
+// 待办 28：tool_result 的图片块必须保留到统一格式，不能被压成纯文本。
+// computer-use / 截图类工具的结果全是图片块，压成文本后 content 变空串，部分上游判 400。
+func TestTransformToUnified_ToolResultKeepsImageBlocks(t *testing.T) {
+	raw := []byte(`{
+		"model":"claude-3-5-sonnet",
+		"max_tokens":1024,
+		"messages":[
+			{"role":"user","content":[
+				{"type":"tool_result","tool_use_id":"toolu_1","content":[
+					{"type":"text","text":"截图如下"},
+					{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AAAA"}}
+				]}
+			]}
+		]
+	}`)
+
+	unified, err := TransformToUnified(raw)
+	if err != nil {
+		t.Fatalf("TransformToUnified 失败: %v", err)
+	}
+	if len(unified.Messages) != 1 {
+		t.Fatalf("应产出 1 条 tool 消息，实际 %d", len(unified.Messages))
+	}
+
+	toolMsg := unified.Messages[0]
+	if toolMsg.Role != "tool" || toolMsg.ToolCallID != "toolu_1" {
+		t.Fatalf("tool 消息元信息错误: %#v", toolMsg)
+	}
+
+	parts, ok := toolMsg.Content.([]models.UnifiedMessageContentPart)
+	if !ok {
+		t.Fatalf("含图片的 tool_result 应保留为块数组，实际 %#v", toolMsg.Content)
+	}
+	if len(parts) != 2 || parts[0].Type != "text" || parts[1].Type != "image_url" {
+		t.Fatalf("块类型应为 [text image_url]，实际 %#v", parts)
+	}
+	if parts[1].ImageURL == nil || parts[1].ImageURL.URL != "data:image/png;base64,AAAA" {
+		t.Fatalf("图片未还原为 data URL: %#v", parts[1].ImageURL)
+	}
+}
+
+// 待办 28 的形态守护：全 text 的 tool_result 仍降级为 string，不引入无谓的形态变化。
+func TestTransformToUnified_TextOnlyToolResultStaysString(t *testing.T) {
+	raw := []byte(`{
+		"model":"claude-3-5-sonnet",
+		"max_tokens":1024,
+		"messages":[
+			{"role":"user","content":[
+				{"type":"tool_result","tool_use_id":"toolu_1","content":[
+					{"type":"text","text":"42"}
+				]}
+			]}
+		]
+	}`)
+
+	unified, err := TransformToUnified(raw)
+	if err != nil {
+		t.Fatalf("TransformToUnified 失败: %v", err)
+	}
+	if len(unified.Messages) != 1 {
+		t.Fatalf("应产出 1 条 tool 消息，实际 %d", len(unified.Messages))
+	}
+	if content, ok := unified.Messages[0].Content.(string); !ok || content != "42" {
+		t.Fatalf("纯文本 tool_result 应保持 string，实际 %#v", unified.Messages[0].Content)
+	}
+}
+
+// 待办 28：Anthropic 原生支持块数组形式的 tool_result，出站不得把图片丢掉。
+func TestTransformFromUnified_ToolResultKeepsImageBlocks(t *testing.T) {
+	text := "截图如下"
+	unified := &models.UnifiedRequest{
+		Model: "claude-3-5-sonnet",
+		Messages: []models.UnifiedMessage{
+			{
+				Role:       "tool",
+				ToolCallID: "toolu_1",
+				Content: []models.UnifiedMessageContentPart{
+					{Type: "text", Text: &text},
+					{Type: "image_url", ImageURL: &models.UnifiedImageURL{URL: "data:image/png;base64,AAAA"}},
+				},
+			},
+		},
+	}
+
+	messages := decodeAnthropicMessages(t, unified)
+	if len(messages) != 1 {
+		t.Fatalf("应产出 1 条消息，实际 %d", len(messages))
+	}
+
+	blocks, ok := messages[0]["content"].([]interface{})
+	if !ok || len(blocks) != 1 {
+		t.Fatalf("content 应是单个 tool_result 块，实际 %#v", messages[0]["content"])
+	}
+	toolResult, _ := blocks[0].(map[string]interface{})
+	if toolResult["type"] != "tool_result" || toolResult["tool_use_id"] != "toolu_1" {
+		t.Fatalf("tool_result 元信息错误: %#v", toolResult)
+	}
+
+	inner, ok := toolResult["content"].([]interface{})
+	if !ok {
+		t.Fatalf("含图片的 tool_result content 应是块数组，实际 %#v", toolResult["content"])
+	}
+	if len(inner) != 2 {
+		t.Fatalf("tool_result 应含 2 个块，实际 %d", len(inner))
+	}
+	first, _ := inner[0].(map[string]interface{})
+	second, _ := inner[1].(map[string]interface{})
+	if first["type"] != "text" || first["text"] != "截图如下" {
+		t.Fatalf("首块应为原文本，实际 %#v", first)
+	}
+	if second["type"] != "image" {
+		t.Fatalf("次块应为 image，实际 %#v", second)
+	}
+	source, _ := second["source"].(map[string]interface{})
+	if source["type"] != "base64" || source["media_type"] != "image/png" || source["data"] != "AAAA" {
+		t.Fatalf("图片 source 还原错误: %#v", source)
+	}
+}
+
+// 待办 28 的形态守护：string content 的 tool 消息仍输出 string，不变成块数组。
+func TestTransformFromUnified_TextToolResultStaysString(t *testing.T) {
+	unified := &models.UnifiedRequest{
+		Model: "claude-3-5-sonnet",
+		Messages: []models.UnifiedMessage{
+			{Role: "tool", ToolCallID: "toolu_1", Content: "42"},
+		},
+	}
+
+	messages := decodeAnthropicMessages(t, unified)
+	blocks := messages[0]["content"].([]interface{})
+	toolResult := blocks[0].(map[string]interface{})
+	if content, ok := toolResult["content"].(string); !ok || content != "42" {
+		t.Fatalf("纯文本 tool_result 应保持 string，实际 %#v", toolResult["content"])
 	}
 }
 

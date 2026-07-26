@@ -250,73 +250,16 @@ func parseMessageContentAndToolResults(raw interface{}) (content interface{}, to
 			continue
 		}
 
-		switch maputil.String(itemMap, "type") {
-		case "text":
-			text := maputil.String(itemMap, "text")
-			if text == "" {
-				// Some callers use "content" for text blocks.
-				text = maputil.String(itemMap, "content")
-			}
-			if text == "" {
-				continue
-			}
-
-			part := models.UnifiedMessageContentPart{
-				Type: "text",
-				Text: &text,
-			}
-			part.CacheControl = parseCacheControl(itemMap["cache_control"])
-			parts = append(parts, part)
-
-		case "image":
-			source, ok := asMap(itemMap["source"])
-			if !ok {
-				continue
-			}
-
-			var url string
-			switch maputil.String(source, "type") {
-			case "base64":
-				mediaType := maputil.String(source, "media_type")
-				data := maputil.String(source, "data")
-				if mediaType == "" || data == "" {
-					continue
-				}
-				url = fmt.Sprintf("data:%s;base64,%s", mediaType, data)
-			case "url":
-				url = maputil.String(source, "url")
-			}
-			if url == "" {
-				continue
-			}
-
-			part := models.UnifiedMessageContentPart{
-				Type: "image_url",
-				ImageURL: &models.UnifiedImageURL{
-					URL: url,
-				},
-			}
-			part.CacheControl = parseCacheControl(itemMap["cache_control"])
-			parts = append(parts, part)
-
-		case "tool_result":
+		if maputil.String(itemMap, "type") == "tool_result" {
 			toolUseID := maputil.String(itemMap, "tool_use_id")
 			if toolUseID == "" {
 				continue
 			}
 
-			toolContent := ""
-			switch v := itemMap["content"].(type) {
-			case string:
-				toolContent = v
-			case []interface{}:
-				toolContent = extractTextFromContentBlocks(v)
-			}
-
 			toolMsg := models.UnifiedMessage{
 				Role:         "tool",
 				ToolCallID:   toolUseID,
-				Content:      toolContent,
+				Content:      parseToolResultContent(itemMap["content"]),
 				CacheControl: parseCacheControl(itemMap["cache_control"]),
 			}
 			if isErr, ok := itemMap["is_error"].(bool); ok {
@@ -324,36 +267,111 @@ func parseMessageContentAndToolResults(raw interface{}) (content interface{}, to
 			}
 
 			toolResultMessages = append(toolResultMessages, toolMsg)
-		}
-	}
-
-	if len(parts) == 0 {
-		return nil, toolResultMessages
-	}
-
-	if len(parts) == 1 && parts[0].Type == "text" && parts[0].Text != nil && parts[0].CacheControl == nil {
-		return *parts[0].Text, toolResultMessages
-	}
-
-	return parts, toolResultMessages
-}
-
-func extractTextFromContentBlocks(items []interface{}) string {
-	var b strings.Builder
-	for _, item := range items {
-		itemMap, ok := asMap(item)
-		if !ok || maputil.String(itemMap, "type") != "text" {
 			continue
 		}
 
+		if part, ok := parseTextOrImageBlock(itemMap); ok {
+			parts = append(parts, part)
+		}
+	}
+
+	return collapseContentParts(parts), toolResultMessages
+}
+
+// parseToolResultContent 解析 tool_result 的 content。
+//
+// 曾经这里只留 text 块，而 computer-use / 截图类工具的结果整条都是图片块，
+// 于是 content 变成空串，部分上游据此判 400。现在图片块一并保留，
+// 由各出站适配器决定是原样透传（Anthropic 原生支持块数组）还是降级为占位文本。
+func parseToolResultContent(raw interface{}) interface{} {
+	switch v := raw.(type) {
+	case string:
+		return v
+	case []interface{}:
+		parts := make([]models.UnifiedMessageContentPart, 0, len(v))
+		for _, item := range v {
+			itemMap, ok := asMap(item)
+			if !ok {
+				continue
+			}
+			if part, ok := parseTextOrImageBlock(itemMap); ok {
+				parts = append(parts, part)
+			}
+		}
+
+		if content := collapseContentParts(parts); content != nil {
+			return content
+		}
+		return ""
+	default:
+		return ""
+	}
+}
+
+// collapseContentParts 把内容块收敛成统一格式的 Content 形态：
+// 单个无缓存标记的文本块降级为 string，其余保持块数组，空则为 nil。
+func collapseContentParts(parts []models.UnifiedMessageContentPart) interface{} {
+	if len(parts) == 0 {
+		return nil
+	}
+	if len(parts) == 1 && parts[0].Type == "text" && parts[0].Text != nil && parts[0].CacheControl == nil {
+		return *parts[0].Text
+	}
+	return parts
+}
+
+// parseTextOrImageBlock 解析单个 text / image 块，供消息内容与 tool_result 共用。
+func parseTextOrImageBlock(itemMap map[string]interface{}) (models.UnifiedMessageContentPart, bool) {
+	switch maputil.String(itemMap, "type") {
+	case "text":
 		text := maputil.String(itemMap, "text")
 		if text == "" {
+			// Some callers use "content" for text blocks.
 			text = maputil.String(itemMap, "content")
 		}
 		if text == "" {
-			continue
+			return models.UnifiedMessageContentPart{}, false
 		}
-		b.WriteString(text)
+
+		part := models.UnifiedMessageContentPart{
+			Type: "text",
+			Text: &text,
+		}
+		part.CacheControl = parseCacheControl(itemMap["cache_control"])
+		return part, true
+
+	case "image":
+		source, ok := asMap(itemMap["source"])
+		if !ok {
+			return models.UnifiedMessageContentPart{}, false
+		}
+
+		var url string
+		switch maputil.String(source, "type") {
+		case "base64":
+			mediaType := maputil.String(source, "media_type")
+			data := maputil.String(source, "data")
+			if mediaType == "" || data == "" {
+				return models.UnifiedMessageContentPart{}, false
+			}
+			url = fmt.Sprintf("data:%s;base64,%s", mediaType, data)
+		case "url":
+			url = maputil.String(source, "url")
+		}
+		if url == "" {
+			return models.UnifiedMessageContentPart{}, false
+		}
+
+		part := models.UnifiedMessageContentPart{
+			Type: "image_url",
+			ImageURL: &models.UnifiedImageURL{
+				URL: url,
+			},
+		}
+		part.CacheControl = parseCacheControl(itemMap["cache_control"])
+		return part, true
+
+	default:
+		return models.UnifiedMessageContentPart{}, false
 	}
-	return b.String()
 }

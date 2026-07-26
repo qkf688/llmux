@@ -58,6 +58,44 @@ func TestUnifiedMessageContentHelpers(t *testing.T) {
 	}
 }
 
+// 待办 28：不支持多模态 tool 结果的上游需要一个纯文本降级，
+// 且不能把「只有截图的 tool_result」降级成空串——空 content 会被部分上游判 400。
+func TestUnifiedMessageGetContentAsStringWithPlaceholders(t *testing.T) {
+	msg := UnifiedMessage{}
+	if got := msg.GetContentAsStringWithPlaceholders(); got != "" {
+		t.Fatalf("空内容应降级为空串，实际 %q", got)
+	}
+
+	msg.SetContentString("plain")
+	if got := msg.GetContentAsStringWithPlaceholders(); got != "plain" {
+		t.Fatalf("string 内容应原样返回，实际 %q", got)
+	}
+
+	text := "截图如下"
+	msg.SetContentParts([]UnifiedMessageContentPart{
+		{Type: "text", Text: &text},
+		{Type: "image_url", ImageURL: &UnifiedImageURL{URL: "data:image/png;base64,AAAA"}},
+	})
+	if got := msg.GetContentAsStringWithPlaceholders(); got != "截图如下[image]" {
+		t.Fatalf("文本与占位符应按顺序混排，实际 %q", got)
+	}
+
+	msg.SetContentParts([]UnifiedMessageContentPart{
+		{Type: "image_url", ImageURL: &UnifiedImageURL{URL: "data:image/png;base64,AAAA"}},
+	})
+	if got := msg.GetContentAsStringWithPlaceholders(); got != "[image]" {
+		t.Fatalf("纯图片内容不得降级为空串，实际 %q", got)
+	}
+
+	msg.SetContentParts([]UnifiedMessageContentPart{
+		{Type: "input_audio", InputAudio: &UnifiedInputAudio{Data: "AAAA", Format: "wav"}},
+		{Type: "video_url"},
+	})
+	if got := msg.GetContentAsStringWithPlaceholders(); got != "[audio][video_url]" {
+		t.Fatalf("未知块应按类型名生成占位符，实际 %q", got)
+	}
+}
+
 func ptrMessageString(v string) *string {
 	return &v
 }

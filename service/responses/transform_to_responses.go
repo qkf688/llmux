@@ -149,18 +149,20 @@ func convertMessagesToInput(messages []models.UnifiedMessage, arrayInputs *bool)
 				}
 			}
 		case "tool":
-			if content, ok := msg.Content.(string); ok {
-				callID := msg.ToolCallID
-				var callIDPtr *string
-				if callID != "" {
-					callIDPtr = &callID
-				}
-				items = append(items, ResponsesItem{
-					Type:   "function_call_output",
-					CallID: callIDPtr,
-					Output: &content,
-				})
+			// function_call_output.output 只接受字符串，多模态工具结果在此降级为
+			// 纯文本 + 占位符。此前的 `msg.Content.(string)` 守卫会把整条工具结果丢弃，
+			// 上游看到的对话里凭空少一轮。
+			content := msg.GetContentAsStringWithPlaceholders()
+			callID := msg.ToolCallID
+			var callIDPtr *string
+			if callID != "" {
+				callIDPtr = &callID
 			}
+			items = append(items, ResponsesItem{
+				Type:   "function_call_output",
+				CallID: callIDPtr,
+				Output: &content,
+			})
 		}
 	}
 

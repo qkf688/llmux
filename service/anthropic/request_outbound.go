@@ -109,18 +109,13 @@ func buildMessages(unified *models.UnifiedRequest, req map[string]interface{}) [
 		}
 
 		if msg.Role == "tool" {
-			contentStr := ""
-			if content, ok := msg.Content.(string); ok {
-				contentStr = content
-			}
-
 			messages = append(messages, map[string]interface{}{
 				"role": "user",
 				"content": []interface{}{
 					map[string]interface{}{
 						"type":        "tool_result",
 						"tool_use_id": msg.ToolCallID,
-						"content":     contentStr,
+						"content":     buildToolResultContent(msg),
 					},
 				},
 			})
@@ -143,6 +138,28 @@ func buildMessages(unified *models.UnifiedRequest, req map[string]interface{}) [
 	}
 
 	return messages
+}
+
+// buildToolResultContent 组装 tool_result 的 content。
+//
+// Anthropic 原生支持块数组形式的 tool_result，所以多模态工具结果（如 computer-use 截图）
+// 在这条路径上是原样保真的；string 内容保持 string，不引入无谓的形态变化。
+func buildToolResultContent(msg models.UnifiedMessage) interface{} {
+	parts, ok := msg.Content.([]models.UnifiedMessageContentPart)
+	if !ok {
+		if str, ok := msg.Content.(string); ok {
+			return str
+		}
+		return ""
+	}
+
+	if blocks := buildContentParts(parts); len(blocks) > 0 {
+		return blocks
+	}
+
+	// Anthropic 不认的块（如音频）会被 buildContentParts 全部滤掉，
+	// 此时退回带占位符的纯文本，避免产出空 tool_result 被上游判 400。
+	return msg.GetContentAsStringWithPlaceholders()
 }
 
 func buildContentParts(parts []models.UnifiedMessageContentPart) []interface{} {

@@ -66,6 +66,49 @@ func (m *UnifiedMessage) GetContentAsString() string {
 	return ""
 }
 
+// GetContentAsStringWithPlaceholders 为不支持多模态内容的场景提供纯文本降级。
+//
+// 与 GetContentAsString 的区别：非文本块不是被静默丢弃，而是留下一个按类型命名的占位符。
+// 这是给 tool 消息用的——OpenAI Chat 的 tool content 与 Responses 的
+// function_call_output.output 都只接受字符串，而 computer-use / 截图类工具的结果
+// 常常整条都是图片块，直接丢弃会得到空 content，部分上游据此判 400。
+func (m *UnifiedMessage) GetContentAsStringWithPlaceholders() string {
+	if str, ok := m.Content.(string); ok {
+		return str
+	}
+
+	parts, ok := m.Content.([]UnifiedMessageContentPart)
+	if !ok {
+		return ""
+	}
+
+	segments := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part.Type == "text" {
+			if part.Text != nil {
+				segments = append(segments, *part.Text)
+			}
+			continue
+		}
+		segments = append(segments, contentPartPlaceholder(part.Type))
+	}
+	return joinStrings(segments, "")
+}
+
+// contentPartPlaceholder 生成非文本块的占位标记。
+func contentPartPlaceholder(partType string) string {
+	switch partType {
+	case "image_url", "image":
+		return "[image]"
+	case "input_audio", "audio":
+		return "[audio]"
+	case "":
+		return "[content]"
+	default:
+		return "[" + partType + "]"
+	}
+}
+
 // GetContentParts 获取多模态内容部分。
 func (m *UnifiedMessage) GetContentParts() []UnifiedMessageContentPart {
 	if m.Content == nil {

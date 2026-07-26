@@ -25,13 +25,12 @@ type VirtualModelRepo interface {
 	Create(ctx context.Context, vm *models.VirtualModel) error
 	// Update 根据 ID 更新虚拟模型。
 	Update(ctx context.Context, id uint, vm *models.VirtualModel) error
-	// Delete 根据 ID 软删除虚拟模型。
+	// Delete 根据 ID 硬删虚拟模型（Name 唯一索引不含 deleted_at，软删残留会挡同名重建）。
 	Delete(ctx context.Context, id uint) (int64, error)
 }
 
 // VirtualModelMappingRepo 封装 VirtualModelMapping 实体的数据访问。
-// 删除类方法一律 Unscoped 硬删（唯一索引 + 重建语义要求），
-// 例外：DeleteByRealModelID 为软删，对齐级联删模型的现网语义。
+// 删除类方法一律 Unscoped 硬删（唯一索引 + 重建语义要求）。
 type VirtualModelMappingRepo interface {
 	// ListByVirtualModel 返回指定虚拟模型的所有映射。
 	ListByVirtualModel(ctx context.Context, virtualModelID uint) ([]models.VirtualModelMapping, error)
@@ -55,7 +54,7 @@ type VirtualModelMappingRepo interface {
 	BatchDelete(ctx context.Context, virtualModelID uint, ids []uint) (int64, error)
 	// HardDeleteByVirtualModelID 硬删指定虚拟模型下的全部映射。
 	HardDeleteByVirtualModelID(ctx context.Context, virtualModelID uint) (int64, error)
-	// DeleteByRealModelID 软删指向指定真实模型的全部映射（对齐级联删模型的现网语义）。
+	// DeleteByRealModelID 硬删指向指定真实模型的全部映射。
 	DeleteByRealModelID(ctx context.Context, realModelID uint) (int64, error)
 }
 
@@ -132,7 +131,7 @@ func (r *virtualModelRepo) Update(ctx context.Context, id uint, vm *models.Virtu
 }
 
 func (r *virtualModelRepo) Delete(ctx context.Context, id uint) (int64, error) {
-	result := r.db.WithContext(ctx).Delete(&models.VirtualModel{}, id)
+	result := r.db.WithContext(ctx).Unscoped().Delete(&models.VirtualModel{}, id)
 	return result.RowsAffected, result.Error
 }
 
@@ -227,7 +226,7 @@ func (r *virtualModelMappingRepo) HardDeleteByVirtualModelID(ctx context.Context
 }
 
 func (r *virtualModelMappingRepo) DeleteByRealModelID(ctx context.Context, realModelID uint) (int64, error) {
-	result := r.db.WithContext(ctx).
+	result := r.db.WithContext(ctx).Unscoped().
 		Where("real_model_id = ?", realModelID).
 		Delete(&models.VirtualModelMapping{})
 	return result.RowsAffected, result.Error

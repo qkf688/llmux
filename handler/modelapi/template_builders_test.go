@@ -1,49 +1,10 @@
 package modelapi
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/atopos31/llmio/models"
 )
-
-func TestIsUniqueConstraintError(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{
-			name: "nil",
-			err:  nil,
-			want: false,
-		},
-		{
-			name: "sqlite unique",
-			err:  errors.New("UNIQUE constraint failed: model_template_items.model_id, model_template_items.name"),
-			want: true,
-		},
-		{
-			name: "postgres duplicate key",
-			err:  errors.New(`duplicate key value violates unique constraint "idx_model_template_item"`),
-			want: true,
-		},
-		{
-			name: "other error",
-			err:  errors.New("timeout"),
-			want: false,
-		},
-	}
-
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			if got := isUniqueConstraintError(tc.err); got != tc.want {
-				t.Fatalf("isUniqueConstraintError() = %v, want %v", got, tc.want)
-			}
-		})
-	}
-}
 
 func TestBuildModelTemplateResponse(t *testing.T) {
 	model := models.Model{

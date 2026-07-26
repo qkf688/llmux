@@ -7,14 +7,6 @@ import (
 	"github.com/atopos31/llmio/models"
 )
 
-func isUniqueConstraintError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "UNIQUE constraint failed") || strings.Contains(msg, "duplicate key")
-}
-
 func buildModelTemplateResponse(
 	model models.Model,
 	associations []models.ModelWithProvider,

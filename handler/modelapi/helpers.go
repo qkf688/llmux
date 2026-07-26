@@ -26,7 +26,7 @@ func deleteModelAssociations(ctx context.Context, id uint) error {
 	if _, err := r.ModelWithProvider.DeleteByModelID(ctx, id); err != nil {
 		return err
 	}
-	if _, err := r.ModelTemplateItem.DeleteByModelID(ctx, id); err != nil {
+	if _, err := r.ModelTemplateItem.DeleteByModelIDUnscoped(ctx, id); err != nil {
 		return err
 	}
 	if _, err := r.VirtualModelMapping.DeleteByRealModelID(ctx, id); err != nil {

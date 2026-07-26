@@ -29,7 +29,7 @@ func migrate(ctx context.Context) {
 	); err != nil {
 		panic(err)
 	}
-	cleanupVirtualModelMappingSoftDeletes(ctx)
+	purgeSoftDeleted(ctx, &VirtualModelMapping{}, &ModelTemplateItem{}, &VirtualModel{}, &Setting{})
 	cleanupSoftDeletedModels(ctx)
 	// 兼容性考虑
 	if _, err := gorm.G[ModelWithProvider](DB).Where("status IS NULL").Update(ctx, "status", true); err != nil {
@@ -42,12 +42,17 @@ func migrate(ctx context.Context) {
 	}
 }
 
-func cleanupVirtualModelMappingSoftDeletes(ctx context.Context) {
-	if err := DB.WithContext(ctx).
-		Unscoped().
-		Where("deleted_at IS NOT NULL").
-		Delete(&VirtualModelMapping{}).Error; err != nil {
-		panic(err)
+// purgeSoftDeleted 物理清除历史软删残留行。
+// 这些表的唯一索引不含 deleted_at，残留行不可见却会挡住同 key 重建；
+// 其级联清理已改为 Unscoped 硬删，此处只负责抹掉改动前遗留的数据。
+func purgeSoftDeleted(ctx context.Context, dests ...any) {
+	for _, dest := range dests {
+		if err := DB.WithContext(ctx).
+			Unscoped().
+			Where("deleted_at IS NOT NULL").
+			Delete(dest).Error; err != nil {
+			panic(err)
+		}
 	}
 }
 

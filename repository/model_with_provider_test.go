@@ -157,6 +157,53 @@ func TestModelTemplateItemRepo_CountCreateListHardDelete(t *testing.T) {
 	}
 }
 
+func TestModelTemplateItemRepo_DeleteByModelIDUnscopedAllowsRecreate(t *testing.T) {
+	ctx := context.Background()
+	db := newAssocTestDB(t)
+	repo := NewModelTemplateItemRepo(db)
+
+	for _, name := range []string{"gpt-4", "gpt-4o"} {
+		if err := repo.Create(ctx, &models.ModelTemplateItem{ModelID: 1, Name: name}); err != nil {
+			t.Fatalf("Create %s: %v", name, err)
+		}
+	}
+	// 他模型的模板项不应被误删
+	if err := repo.Create(ctx, &models.ModelTemplateItem{ModelID: 2, Name: "gpt-4"}); err != nil {
+		t.Fatalf("Create other model item: %v", err)
+	}
+
+	deleted, err := repo.DeleteByModelIDUnscoped(ctx, 1)
+	if err != nil {
+		t.Fatalf("DeleteByModelIDUnscoped: %v", err)
+	}
+	if deleted != 2 {
+		t.Errorf("deleted = %d, want 2", deleted)
+	}
+
+	var leftover int64
+	if err := db.Unscoped().Model(&models.ModelTemplateItem{}).
+		Where("model_id = ?", 1).Count(&leftover).Error; err != nil {
+		t.Fatalf("count leftover: %v", err)
+	}
+	if leftover != 0 {
+		t.Fatalf("hard count after delete = %d, want 0", leftover)
+	}
+
+	var others int64
+	if err := db.Model(&models.ModelTemplateItem{}).
+		Where("model_id = ?", 2).Count(&others).Error; err != nil {
+		t.Fatalf("count others: %v", err)
+	}
+	if others != 1 {
+		t.Fatalf("other model items = %d, want 1", others)
+	}
+
+	// 硬删后可重建（unique index 不含 deleted_at）
+	if err := repo.Create(ctx, &models.ModelTemplateItem{ModelID: 1, Name: "gpt-4"}); err != nil {
+		t.Fatalf("recreate after hard delete: %v", err)
+	}
+}
+
 func TestRepositories_RunInTx_Rollback(t *testing.T) {
 	ctx := context.Background()
 	db := newAssocTestDB(t)

@@ -74,6 +74,100 @@ func TestVirtualModelMappingRepo_HardDeleteAllowsRecreate(t *testing.T) {
 	}
 }
 
+func TestVirtualModelRepo_DeleteAllowsRecreateSameName(t *testing.T) {
+	ctx := context.Background()
+	db := newVMTestDB(t)
+	repo := NewVirtualModelRepo(db)
+
+	vm := &models.VirtualModel{Name: "vm-x", Strategy: "priority"}
+	if err := repo.Create(ctx, vm); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	affected, err := repo.Delete(ctx, vm.ID)
+	if err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if affected != 1 {
+		t.Fatalf("affected = %d, want 1", affected)
+	}
+
+	var leftover int64
+	if err := db.Unscoped().Model(&models.VirtualModel{}).
+		Where("name = ?", "vm-x").Count(&leftover).Error; err != nil {
+		t.Fatalf("count leftover: %v", err)
+	}
+	if leftover != 0 {
+		t.Fatalf("hard count after delete = %d, want 0", leftover)
+	}
+
+	// Name 唯一索引不含 deleted_at：软删残留会让同名重建撞 UNIQUE
+	if err := repo.Create(ctx, &models.VirtualModel{Name: "vm-x", Strategy: "priority"}); err != nil {
+		t.Fatalf("recreate with same name: %v", err)
+	}
+}
+
+func TestVirtualModelMappingRepo_DeleteByRealModelIDAllowsRecreate(t *testing.T) {
+	ctx := context.Background()
+	db := newVMTestDB(t)
+	vmRepo := NewVirtualModelRepo(db)
+	mapRepo := NewVirtualModelMappingRepo(db)
+
+	enabled := true
+	var vmIDs []uint
+	for _, name := range []string{"vm1", "vm2"} {
+		vm := &models.VirtualModel{Name: name, Strategy: "priority"}
+		if err := vmRepo.Create(ctx, vm); err != nil {
+			t.Fatalf("Create VM %s: %v", name, err)
+		}
+		vmIDs = append(vmIDs, vm.ID)
+		if err := mapRepo.Create(ctx, &models.VirtualModelMapping{
+			VirtualModelID: vm.ID, RealModelID: 10, Priority: 1, Weight: 5, Enabled: &enabled,
+		}); err != nil {
+			t.Fatalf("Create mapping for %s: %v", name, err)
+		}
+	}
+	// 指向其他真实模型的映射不应被误删
+	if err := mapRepo.Create(ctx, &models.VirtualModelMapping{
+		VirtualModelID: vmIDs[0], RealModelID: 20, Priority: 1, Weight: 5, Enabled: &enabled,
+	}); err != nil {
+		t.Fatalf("Create mapping for other real model: %v", err)
+	}
+
+	affected, err := mapRepo.DeleteByRealModelID(ctx, 10)
+	if err != nil {
+		t.Fatalf("DeleteByRealModelID: %v", err)
+	}
+	if affected != 2 {
+		t.Errorf("affected = %d, want 2", affected)
+	}
+
+	var leftover int64
+	if err := db.Unscoped().Model(&models.VirtualModelMapping{}).
+		Where("real_model_id = ?", 10).Count(&leftover).Error; err != nil {
+		t.Fatalf("count leftover: %v", err)
+	}
+	if leftover != 0 {
+		t.Fatalf("hard count after delete = %d, want 0", leftover)
+	}
+
+	var others int64
+	if err := db.Model(&models.VirtualModelMapping{}).
+		Where("real_model_id = ?", 20).Count(&others).Error; err != nil {
+		t.Fatalf("count others: %v", err)
+	}
+	if others != 1 {
+		t.Fatalf("other real model mappings = %d, want 1", others)
+	}
+
+	// 硬删后可重建（unique index 不含 deleted_at）
+	if err := mapRepo.Create(ctx, &models.VirtualModelMapping{
+		VirtualModelID: vmIDs[0], RealModelID: 10, Priority: 1, Weight: 5, Enabled: &enabled,
+	}); err != nil {
+		t.Fatalf("recreate after hard delete: %v", err)
+	}
+}
+
 func TestVirtualModelMappingRepo_HardDeleteByVirtualModelID(t *testing.T) {
 	ctx := context.Background()
 	db := newVMTestDB(t)

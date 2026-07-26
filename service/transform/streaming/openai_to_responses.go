@@ -77,9 +77,20 @@ func handleRealtimeOpenAIToResponses(state *realtimeStreamState, data string) er
 	return nil
 }
 
+// ensureMessageOutputIndex 惰性给 message 项分配 output_index。
+// 分配而非写死 0，是为了让 reasoning / function_call 能拿到互不重叠的 index。
+func ensureMessageOutputIndex(state *realtimeStreamState) int {
+	if !state.hasMessageOutputIndex {
+		state.messageOutputIndex = state.responsesOutput.alloc()
+		state.hasMessageOutputIndex = true
+	}
+	return state.messageOutputIndex
+}
+
 func startOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]interface{}, role string) error {
 	state.responseID = maputil.String(chunk, "id")
 	state.itemID = "msg_" + state.responseID
+	msgIndex := ensureMessageOutputIndex(state)
 
 	responseCreated := map[string]interface{}{
 		"type":            "response.created",
@@ -116,7 +127,7 @@ func startOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]i
 	itemAdded := map[string]interface{}{
 		"type":            "response.output_item.added",
 		"sequence_number": nextRealtimeSequence(state),
-		"output_index":    0,
+		"output_index":    msgIndex,
 		"item": map[string]interface{}{
 			"id":      state.itemID,
 			"type":    "message",
@@ -132,7 +143,7 @@ func startOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]i
 	contentPartAdded := map[string]interface{}{
 		"type":            "response.content_part.added",
 		"sequence_number": nextRealtimeSequence(state),
-		"output_index":    0,
+		"output_index":    msgIndex,
 		"item_id":         state.itemID,
 		"content_index":   0,
 		"part": map[string]interface{}{
@@ -148,7 +159,8 @@ func emitOpenAIToResponsesReasoningDelta(state *realtimeStreamState, reasoningCo
 	if !state.hasReasoningItem {
 		state.hasReasoningItem = true
 		state.reasoningItemID = "reasoning_" + state.responseID
-		state.reasoningOutputIndex = 0
+		// 独立分配：写死 0 会与 message 项的 output_index 撞车。
+		state.reasoningOutputIndex = state.responsesOutput.alloc()
 
 		reasoningItemAdded := map[string]interface{}{
 			"type":            "response.output_item.added",
@@ -203,18 +215,24 @@ func emitOpenAIToResponsesToolCalls(state *realtimeStreamState, toolCalls []inte
 			continue
 		}
 
+		toolCallIndex := int(maputil.Float64(toolCall, "index"))
+		outputIndex := getOrAllocResponsesOutputIndexForToolCall(state, toolCallIndex)
+
 		// 首包含 id/name 时，发送 output_item.added 事件
 		if id := maputil.String(toolCall, "id"); id != "" {
+			item := map[string]interface{}{
+				"type":      "function_call",
+				"id":        id,
+				"call_id":   id,
+				"name":      maputil.String(function, "name"),
+				"arguments": "",
+			}
+			state.responsesOutput.set(outputIndex, item)
+
 			itemAdded := map[string]interface{}{
 				"type":         "response.output_item.added",
-				"output_index": int(maputil.Float64(toolCall, "index")),
-				"item": map[string]interface{}{
-					"type":      "function_call",
-					"id":        id,
-					"call_id":   id,
-					"name":      maputil.String(function, "name"),
-					"arguments": "",
-				},
+				"output_index": outputIndex,
+				"item":         item,
 			}
 			if err := writeRealtimeEventJSONData(state, "response.output_item.added", itemAdded); err != nil {
 				return err
@@ -223,9 +241,11 @@ func emitOpenAIToResponsesToolCalls(state *realtimeStreamState, toolCalls []inte
 
 		// 参数增量
 		if args := maputil.String(function, "arguments"); args != "" {
+			state.responsesOutput.appendArguments(outputIndex, args)
+
 			argsDelta := map[string]interface{}{
 				"type":         "response.function_call_arguments.delta",
-				"output_index": int(maputil.Float64(toolCall, "index")),
+				"output_index": outputIndex,
 				"delta":        args,
 			}
 			if err := writeRealtimeEventJSONData(state, "response.function_call_arguments.delta", argsDelta); err != nil {
@@ -237,7 +257,23 @@ func emitOpenAIToResponsesToolCalls(state *realtimeStreamState, toolCalls []inte
 	return nil
 }
 
+// getOrAllocResponsesOutputIndexForToolCall 把 OpenAI 的 tool_call index（从 0 起）
+// 映射到一个独立的 Responses output_index，避开 message / reasoning 项已占用的 index。
+func getOrAllocResponsesOutputIndexForToolCall(state *realtimeStreamState, toolCallIndex int) int {
+	if state.openAIToolCallIndexToResponsesOutputIndex == nil {
+		state.openAIToolCallIndexToResponsesOutputIndex = map[int]int{}
+	}
+	if idx, ok := state.openAIToolCallIndexToResponsesOutputIndex[toolCallIndex]; ok {
+		return idx
+	}
+	idx := state.responsesOutput.alloc()
+	state.openAIToolCallIndexToResponsesOutputIndex[toolCallIndex] = idx
+	return idx
+}
+
 func finishOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]interface{}, finishReason string) error {
+	msgIndex := ensureMessageOutputIndex(state)
+
 	// 如果有 reasoning 内容，发送 reasoning 完成事件
 	if state.hasReasoningItem && state.accumulatedReasoning != "" {
 		reasoningTextDone := map[string]interface{}{
@@ -266,12 +302,24 @@ func finishOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]
 		if err := writeRealtimeOrderedData(state, reasoningPartDone); err != nil {
 			return err
 		}
+
+		state.responsesOutput.set(state.reasoningOutputIndex, map[string]interface{}{
+			"id":   state.reasoningItemID,
+			"type": "reasoning",
+			"summary": []map[string]interface{}{
+				{
+					"type": "summary_text",
+					"text": state.accumulatedReasoning,
+				},
+			},
+			"status": "completed",
+		})
 	}
 
 	outputTextDone := map[string]interface{}{
 		"type":            "response.output_text.done",
 		"sequence_number": nextRealtimeSequence(state),
-		"output_index":    0,
+		"output_index":    msgIndex,
 		"item_id":         state.itemID,
 		"content_index":   0,
 		"text":            state.accumulatedText,
@@ -283,7 +331,7 @@ func finishOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]
 	contentPartDone := map[string]interface{}{
 		"type":            "response.content_part.done",
 		"sequence_number": nextRealtimeSequence(state),
-		"output_index":    0,
+		"output_index":    msgIndex,
 		"item_id":         state.itemID,
 		"content_index":   0,
 		"part": map[string]interface{}{
@@ -317,17 +365,20 @@ func finishOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]
 		}, outputItems...)
 	}
 
+	messageItem := map[string]interface{}{
+		"id":      state.itemID,
+		"type":    "message",
+		"role":    "assistant",
+		"content": outputItems,
+		"status":  "completed",
+	}
+	state.responsesOutput.set(msgIndex, messageItem)
+
 	outputItemDone := map[string]interface{}{
 		"type":            "response.output_item.done",
 		"sequence_number": nextRealtimeSequence(state),
-		"output_index":    0,
-		"item": map[string]interface{}{
-			"id":      state.itemID,
-			"type":    "message",
-			"role":    "assistant",
-			"content": outputItems,
-			"status":  "completed",
-		},
+		"output_index":    msgIndex,
+		"item":            messageItem,
 	}
 	if err := writeRealtimeOrderedData(state, outputItemDone); err != nil {
 		return err
@@ -347,7 +398,8 @@ func finishOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]
 			"model":      maputil.String(chunk, "model"),
 			"created_at": int(maputil.Float64(chunk, "created")),
 			"status":     status,
-			"output":     []interface{}{},
+			// 必须是真实产出：下游靠扫这个数组里有没有 function_call 判定 finish_reason。
+			"output": state.responsesOutput.snapshot(),
 		},
 	}
 

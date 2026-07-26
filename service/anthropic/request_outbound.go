@@ -14,7 +14,9 @@ func TransformFromUnified(unified *models.UnifiedRequest) ([]byte, error) {
 		return nil, errors.New("unified request cannot be nil")
 	}
 
+	reasoning := snapshotReasoning(unified.Messages)
 	unified = unified.SanitizedForProvider()
+	restoreReasoning(unified.Messages, reasoning)
 
 	req := map[string]interface{}{
 		"model":    unified.Model,
@@ -135,20 +137,7 @@ func buildMessages(unified *models.UnifiedRequest, req map[string]interface{}) [
 			}
 		}
 
-		if msg.Content != nil {
-			if parts, ok := msg.Content.([]models.UnifiedMessageContentPart); ok {
-				contentArray := buildContentParts(parts)
-				if len(contentArray) > 0 {
-					msgMap["content"] = contentArray
-				}
-			} else {
-				msgMap["content"] = msg.Content
-			}
-		}
-
-		if len(msg.ToolCalls) > 0 {
-			msgMap["content"] = buildToolUseContent(msg)
-		}
+		setMessageContent(msgMap, msg)
 
 		messages = append(messages, msgMap)
 	}
@@ -208,17 +197,125 @@ func buildContentParts(parts []models.UnifiedMessageContentPart) []interface{} {
 	return contentArray
 }
 
-func buildToolUseContent(msg models.UnifiedMessage) []interface{} {
-	contentArray := make([]interface{}, 0, len(msg.ToolCalls)+1)
+type messageReasoning struct {
+	content   *string
+	signature *string
+}
 
-	if contentStr, ok := msg.Content.(string); ok && contentStr != "" {
-		contentArray = append(contentArray, map[string]interface{}{
-			"type": "text",
-			"text": contentStr,
-		})
+// snapshotReasoning 在 SanitizedForProvider 之前留存各消息的推理内容。
+//
+// SanitizedForProvider 会调 ClearHelpFields 抹掉 Reasoning* 三个字段——
+// 对多数上游这是对的（响应侧产生的辅助信息不该回灌给上游），
+// 但 Anthropic 的扩展思考要求 assistant 轮原样带回 thinking 与 signature，
+// 否则多轮会话被 400 拒绝。故在此处单独留存，sanitize 之后再写回。
+func snapshotReasoning(messages []models.UnifiedMessage) []messageReasoning {
+	if len(messages) == 0 {
+		return nil
 	}
 
-	for _, toolCall := range msg.ToolCalls {
+	snapshot := make([]messageReasoning, len(messages))
+	for i := range messages {
+		if text := messages[i].GetReasoningContent(); text != "" {
+			snapshot[i].content = &text
+		}
+		snapshot[i].signature = messages[i].ReasoningSignature
+	}
+	return snapshot
+}
+
+func restoreReasoning(messages []models.UnifiedMessage, snapshot []messageReasoning) {
+	if len(snapshot) != len(messages) {
+		return
+	}
+	for i := range messages {
+		messages[i].ReasoningContent = snapshot[i].content
+		messages[i].ReasoningSignature = snapshot[i].signature
+	}
+}
+
+// setMessageContent 组装一条消息的 content。
+//
+// thinking / 原有内容 / tool_use 三者是叠加关系而非互相覆盖：
+//   - 曾经 ToolCalls 非空时无条件覆盖 content，assistant 轮的文本与图片会静默消失；
+//   - 开启扩展思考的多轮会话里 assistant 轮必须带回 thinking 块，
+//     否则上游报 400 Expected "thinking" or "redacted_thinking"。
+func setMessageContent(msgMap map[string]interface{}, msg models.UnifiedMessage) {
+	thinking := buildThinkingBlock(msg)
+	toolUse := buildToolUseBlocks(msg.ToolCalls)
+
+	// 两者都没有时保持原样透传，不改变既有形态（含 string content 与未知负载）。
+	if thinking == nil && len(toolUse) == 0 {
+		if msg.Content == nil {
+			return
+		}
+		if parts, ok := msg.Content.([]models.UnifiedMessageContentPart); ok {
+			if contentArray := buildContentParts(parts); len(contentArray) > 0 {
+				msgMap["content"] = contentArray
+			}
+			return
+		}
+		msgMap["content"] = msg.Content
+		return
+	}
+
+	contentArray := make([]interface{}, 0, len(toolUse)+2)
+	if thinking != nil {
+		contentArray = append(contentArray, thinking)
+	}
+	contentArray = append(contentArray, buildMessageContentBlocks(msg.Content)...)
+	contentArray = append(contentArray, toolUse...)
+
+	if len(contentArray) > 0 {
+		msgMap["content"] = contentArray
+	}
+}
+
+// buildMessageContentBlocks 把 string 与 []UnifiedMessageContentPart 两种内容形态
+// 统一成 Anthropic content 块数组。
+func buildMessageContentBlocks(content interface{}) []interface{} {
+	switch v := content.(type) {
+	case string:
+		if v == "" {
+			return nil
+		}
+		return []interface{}{
+			map[string]interface{}{
+				"type": "text",
+				"text": v,
+			},
+		}
+	case []models.UnifiedMessageContentPart:
+		return buildContentParts(v)
+	default:
+		return nil
+	}
+}
+
+// buildThinkingBlock 按响应侧同一套约定（ReasoningContent + ReasoningSignature）
+// 还原 thinking 块；无推理内容时返回 nil。
+func buildThinkingBlock(msg models.UnifiedMessage) map[string]interface{} {
+	reasoning := msg.GetReasoningContent()
+	if reasoning == "" {
+		return nil
+	}
+
+	thinking := map[string]interface{}{
+		"type":     "thinking",
+		"thinking": reasoning,
+	}
+	if msg.ReasoningSignature != nil && *msg.ReasoningSignature != "" {
+		thinking["signature"] = *msg.ReasoningSignature
+	}
+	return thinking
+}
+
+func buildToolUseBlocks(toolCalls []models.UnifiedToolCall) []interface{} {
+	if len(toolCalls) == 0 {
+		return nil
+	}
+
+	blocks := make([]interface{}, 0, len(toolCalls))
+	for _, toolCall := range toolCalls {
 		args := map[string]interface{}{}
 		if toolCall.Function.Arguments != "" {
 			if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
@@ -226,15 +323,14 @@ func buildToolUseContent(msg models.UnifiedMessage) []interface{} {
 			}
 		}
 
-		contentArray = append(contentArray, map[string]interface{}{
+		blocks = append(blocks, map[string]interface{}{
 			"type":  "tool_use",
 			"id":    toolCall.ID,
 			"name":  toolCall.Function.Name,
 			"input": args,
 		})
 	}
-
-	return contentArray
+	return blocks
 }
 
 func buildTools(tools []models.UnifiedTool) []interface{} {

@@ -110,6 +110,13 @@ func parseMessages(raw interface{}) []models.UnifiedMessage {
 		}
 		msg.CacheControl = parseCacheControl(msgMap["cache_control"])
 
+		if reasoning, signature := parseReasoning(msgMap["content"]); reasoning != "" {
+			msg.ReasoningContent = &reasoning
+			if signature != "" {
+				msg.ReasoningSignature = &signature
+			}
+		}
+
 		// tool_result blocks are mapped to OpenAI-style tool messages to enable cross-format conversion.
 		if len(toolResultMessages) > 0 {
 			messages = append(messages, toolResultMessages...)
@@ -186,6 +193,38 @@ func parseToolCalls(rawContent interface{}) []models.UnifiedToolCall {
 	}
 
 	return toolCalls
+}
+
+// parseReasoning 提取 assistant 轮的 thinking 块（含 signature）。
+//
+// parseMessageContentAndToolResults 的 switch 只认 text/image/tool_result，
+// thinking 块会连同 signature 一起被丢掉；而 thinking 请求参数仍照常透传给上游，
+// 于是「扩展思考 + 工具调用」的多轮会话必然收到
+// 400 Expected "thinking" or "redacted_thinking"。
+//
+// 字段沿用响应侧的同一套约定（ReasoningContent + ReasoningSignature）。
+// 注意：redacted_thinking 的 data 是不透明密文，与 thinking 文本共用一个字段会损坏内容，
+// 因此这里不处理——需要统一格式补独立字段后另行支持。
+func parseReasoning(rawContent interface{}) (text string, signature string) {
+	content, ok := asSlice(rawContent)
+	if !ok {
+		return "", ""
+	}
+
+	var b strings.Builder
+	for _, item := range content {
+		itemMap, ok := asMap(item)
+		if !ok || maputil.String(itemMap, "type") != "thinking" {
+			continue
+		}
+
+		b.WriteString(maputil.String(itemMap, "thinking"))
+		if sig := maputil.String(itemMap, "signature"); sig != "" {
+			signature = sig
+		}
+	}
+
+	return b.String(), signature
 }
 
 func parseMessageContentAndToolResults(raw interface{}) (content interface{}, toolResultMessages []models.UnifiedMessage) {

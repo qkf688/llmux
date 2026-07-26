@@ -135,7 +135,34 @@ func handleAnthropicToResponsesContentBlockStart(state *realtimeStreamState, chu
 		return nil
 	}
 
+	if blockType == "tool_use" {
+		// 工具调用块：必须映射成 function_call item 并透传 id/name，
+		// 落进下面的通用分支会被包成 type="message"，id 与 name 一起丢掉。
+		toolID := maputil.String(contentBlock, "id")
+		item := map[string]interface{}{
+			"type":      "function_call",
+			"id":        toolID,
+			"call_id":   toolID,
+			"name":      maputil.String(contentBlock, "name"),
+			"arguments": "",
+		}
+		state.responsesOutput.set(blockIndex, item)
+
+		toolItemAdded := map[string]interface{}{
+			"type":            "response.output_item.added",
+			"sequence_number": nextRealtimeSequence(state),
+			"output_index":    blockIndex,
+			"item":            item,
+		}
+		return writeRealtimeOrderedData(state, toolItemAdded)
+	}
+
 	// 处理普通文本类型的 content block
+	if !state.hasMessageOutputIndex {
+		state.messageOutputIndex = blockIndex
+		state.hasMessageOutputIndex = true
+	}
+
 	itemAdded := map[string]interface{}{
 		"type":            "response.output_item.added",
 		"sequence_number": nextRealtimeSequence(state),
@@ -217,10 +244,13 @@ func handleAnthropicToResponsesContentBlockDelta(state *realtimeStreamState, chu
 		if partialJSON == "" {
 			return nil
 		}
+		blockIndex := int(maputil.Float64(chunk, "index"))
+		state.responsesOutput.appendArguments(blockIndex, partialJSON)
+
 		argsDelta := map[string]interface{}{
 			"type":            "response.function_call_arguments.delta",
 			"sequence_number": nextRealtimeSequence(state),
-			"output_index":    int(maputil.Float64(chunk, "index")),
+			"output_index":    blockIndex,
 			"delta":           partialJSON,
 		}
 		return writeRealtimeOrderedData(state, argsDelta)
@@ -278,12 +308,26 @@ func handleAnthropicToResponsesMessageDelta(state *realtimeStreamState, chunk ma
 		if err := writeRealtimeOrderedData(state, reasoningItemDone); err != nil {
 			return err
 		}
+
+		state.responsesOutput.set(state.reasoningOutputIndex, map[string]interface{}{
+			"id":   state.reasoningItemID,
+			"type": "reasoning",
+			"summary": []map[string]interface{}{
+				{
+					"type": "summary_text",
+					"text": state.accumulatedReasoning,
+				},
+			},
+			"status": "completed",
+		})
 	}
+
+	msgIndex := state.messageOutputIndex
 
 	outputTextDone := map[string]interface{}{
 		"type":            "response.output_text.done",
 		"sequence_number": nextRealtimeSequence(state),
-		"output_index":    0,
+		"output_index":    msgIndex,
 		"item_id":         state.itemID,
 		"content_index":   0,
 		"text":            state.accumulatedText,
@@ -295,7 +339,7 @@ func handleAnthropicToResponsesMessageDelta(state *realtimeStreamState, chunk ma
 	contentPartDone := map[string]interface{}{
 		"type":            "response.content_part.done",
 		"sequence_number": nextRealtimeSequence(state),
-		"output_index":    0,
+		"output_index":    msgIndex,
 		"item_id":         state.itemID,
 		"content_index":   0,
 		"part": map[string]interface{}{
@@ -329,17 +373,24 @@ func handleAnthropicToResponsesMessageDelta(state *realtimeStreamState, chunk ma
 		}, contentItems...)
 	}
 
+	messageItem := map[string]interface{}{
+		"id":      state.itemID,
+		"type":    "message",
+		"role":    "assistant",
+		"content": contentItems,
+		"status":  "completed",
+	}
+	// 只有真的出现过文本块才记入 output：否则纯 tool_use 的流会把
+	// index 0 上的 function_call 覆盖掉。
+	if state.hasMessageOutputIndex {
+		state.responsesOutput.set(msgIndex, messageItem)
+	}
+
 	outputItemDone := map[string]interface{}{
 		"type":            "response.output_item.done",
 		"sequence_number": nextRealtimeSequence(state),
-		"output_index":    0,
-		"item": map[string]interface{}{
-			"id":      state.itemID,
-			"type":    "message",
-			"role":    "assistant",
-			"content": contentItems,
-			"status":  "completed",
-		},
+		"output_index":    msgIndex,
+		"item":            messageItem,
 	}
 	if err := writeRealtimeOrderedData(state, outputItemDone); err != nil {
 		return err
@@ -360,8 +411,9 @@ func handleAnthropicToResponsesMessageDelta(state *realtimeStreamState, chunk ma
 			"id":         state.responseID,
 			"model":      shared.GetNestedString(chunk, "message.model"),
 			"created_at": 0,
-			"output":     []interface{}{},
-			"status":     status,
+			// 必须是真实产出：下游靠扫这个数组里有没有 function_call 判定 finish_reason。
+			"output": state.responsesOutput.snapshot(),
+			"status": status,
 		},
 	}
 

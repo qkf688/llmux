@@ -29,14 +29,7 @@ func FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
 			reasoning := choice.Message.GetReasoningContent()
 			adjustedContent := stripReasoningPrefix(choice.Message.Content, reasoning)
 
-			if reasoning != "" {
-				thinking := map[string]interface{}{
-					"type":     "thinking",
-					"thinking": reasoning,
-				}
-				if choice.Message.ReasoningSignature != nil && *choice.Message.ReasoningSignature != "" {
-					thinking["signature"] = *choice.Message.ReasoningSignature
-				}
+			if thinking := buildThinkingBlock(*choice.Message); thinking != nil {
 				content = append(content, thinking)
 			}
 

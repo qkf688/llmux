@@ -85,30 +85,30 @@ func handleResponsesToAnthropicOutputItemAddedEvent(state *realtimeStreamState, 
 		return err
 	}
 
-	blockStart := map[string]interface{}{
-		"type":  "content_block_start",
-		"index": blockIndex,
-		"content_block": map[string]interface{}{
-			"type": itemType,
-		},
+	// 映射 Responses item 类型 → Anthropic content_block 类型。
+	// 未知类型一律降级为 text：Anthropic 只认 text/thinking/tool_use/image 等固定几种，
+	// 把 Responses 的 item 类型（如 "message"）原样透出会产出非法 content_block。
+	contentBlock := map[string]interface{}{
+		"type": "text",
+		"text": "",
 	}
-
-	// 映射 Responses 类型 → Anthropic 类型
-	if itemType == "function_call" {
-		blockStart["content_block"] = map[string]interface{}{
+	switch itemType {
+	case "function_call":
+		contentBlock = map[string]interface{}{
 			"type": "tool_use",
 			"id":   ev.Item.ID,
 			"name": derefString(ev.Item.Name),
 		}
-	} else if itemType == "reasoning" {
-		blockStart["content_block"] = map[string]interface{}{
+	case "reasoning":
+		contentBlock = map[string]interface{}{
 			"type": "thinking",
 		}
-	} else if itemType == "output_text" || itemType == "text" {
-		blockStart["content_block"] = map[string]interface{}{
-			"type": "text",
-			"text": "",
-		}
+	}
+
+	blockStart := map[string]interface{}{
+		"type":          "content_block_start",
+		"index":         blockIndex,
+		"content_block": contentBlock,
 	}
 
 	if err := writeRealtimeEventJSONData(state, "content_block_start", blockStart); err != nil {

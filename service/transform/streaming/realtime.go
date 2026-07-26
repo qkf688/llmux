@@ -31,10 +31,19 @@ type realtimeStreamState struct {
 	openAIToolCallNextIndex                   int
 	responsesOutputIndexToOpenAIToolCallIndex map[int]int
 
+	// OpenAI Chat -> Responses: map OpenAI tool_call index to Responses output_index.
+	// OpenAI 的 tool_call index 从 0 起，与 message 项的 output_index 会撞车，必须另行分配。
+	openAIToolCallIndexToResponsesOutputIndex map[int]int
+
 	unknownRouteCount int
 
 	responseID string
 	itemID     string
+
+	// Responses 侧已产出的 output item，供 response.completed 的 output 数组使用。
+	responsesOutput       responsesOutputItems
+	messageOutputIndex    int
+	hasMessageOutputIndex bool
 
 	reasoningItemID      string
 	hasReasoningItem     bool

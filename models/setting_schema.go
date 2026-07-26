@@ -101,6 +101,18 @@ func buildSettingSchemas() map[string]SettingSchema {
 		{Key: SettingKeyDisableAllLogs, Field: "DisableAllLogs", Type: SettingTypeBool, Default: false, Category: "log"},
 
 		// 健康检查
+		// 注意：Field 用 HealthCheck 前缀，避免与通用设置 DTO 的同名字段（如 LogRetentionCount）
+		// 在 SettingSchemaForField 的全局按名查找中互相覆盖。
+		// 这些键由 handler/settings/health.go 单独更新，不参与 UpdateSettingsRequest 的反射遍历，
+		// 但必须在此声明——seed 只遍历 SettingSchemas，缺席就不会建行，
+		// 而健康检测的更新是 UPDATE-only（行不存在时静默 no-op）。
+		{Key: SettingKeyHealthCheckEnabled, Field: "HealthCheckEnabled", Type: SettingTypeBool, Default: false, Category: "health"},
+		{Key: SettingKeyHealthCheckInterval, Field: "HealthCheckInterval", Type: SettingTypeInt, Default: 60, Category: "health", Min: intPtr(1)},
+		{Key: SettingKeyHealthCheckFailureThreshold, Field: "HealthCheckFailureThreshold", Type: SettingTypeInt, Default: 3, Category: "health", Min: intPtr(1)},
+		{Key: SettingKeyHealthCheckFailureDisableEnabled, Field: "HealthCheckFailureDisableEnabled", Type: SettingTypeBool, Default: true, Category: "health"},
+		{Key: SettingKeyHealthCheckAutoEnable, Field: "HealthCheckAutoEnable", Type: SettingTypeBool, Default: false, Category: "health"},
+		{Key: SettingKeyHealthCheckLogRetentionCount, Field: "HealthCheckLogRetentionCount", Type: SettingTypeInt, Default: 100, Category: "health", Min: intPtr(0)},
+		{Key: SettingKeyHealthCheckCheckDisabledOnly, Field: "HealthCheckCheckDisabledOnly", Type: SettingTypeBool, Default: false, Category: "health"},
 		{Key: SettingKeyHealthCheckCountAsSuccess, Field: "CountHealthCheckAsSuccess", Type: SettingTypeBool, Default: true, Category: "health"},
 		{Key: SettingKeyHealthCheckCountAsFailure, Field: "CountHealthCheckAsFailure", Type: SettingTypeBool, Default: false, Category: "health"},
 

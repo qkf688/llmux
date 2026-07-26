@@ -58,7 +58,9 @@ func handleUpdateSettingsError(c *gin.Context, err error) {
 	httpresp.InternalServerError(c, "Failed to update settings: "+err.Error())
 }
 
-func triggerBatchImportForAutoSave() {
+// triggerBatchImportForAutoSave 是「首次开启自动保存模板」的副作用出口。
+// 声明为变量以便测试替换（异步 goroutine 无法直接断言）。
+var triggerBatchImportForAutoSave = func() {
 	go batchImportExistingAssociations(context.Background())
 }
 
@@ -66,6 +68,11 @@ func triggerBatchImportForAutoSave() {
 // 新增设置项只需在 models.SettingSchemas 中声明，无需再修改此处或 section updater。
 func updateSettingsFromRequest(ctx context.Context, req *UpdateSettingsRequest) error {
 	normalizeUpdateSettingsRequest(req)
+
+	store := settingStore()
+	// 必须在写循环之前取旧值：循环会把新值落库，之后再读只能读到新值，
+	// 「首次开启」这个跳变条件就永远不成立了。
+	oldAutoSave := store.GetBool(ctx, models.SettingKeyAutoSaveTemplateOnAssociate)
 
 	v := reflect.ValueOf(req).Elem()
 	t := v.Type()
@@ -80,13 +87,12 @@ func updateSettingsFromRequest(ctx context.Context, req *UpdateSettingsRequest) 
 		if err := validateSettingValue(schema, value); err != nil {
 			return newDirectClientError(err.Error())
 		}
-		if err := settingStore.SetTyped(ctx, schema.Key, value); err != nil {
+		if err := store.SetTyped(ctx, schema.Key, value); err != nil {
 			return err
 		}
 	}
 
-	// 副作用：开启 auto_save_template_on_associate 时触发批量导入
-	oldAutoSave := settingStore.GetBool(ctx, models.SettingKeyAutoSaveTemplateOnAssociate)
+	// 副作用：auto_save_template_on_associate 从关闭切到开启时触发批量导入
 	if !oldAutoSave && req.AutoSaveTemplateOnAssociate {
 		triggerBatchImportForAutoSave()
 		slog.Info("triggered batch import of existing associations")

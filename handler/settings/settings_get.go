@@ -10,7 +10,12 @@ import (
 	"gorm.io/gorm"
 )
 
-var settingStore = settings.NewStore(models.DB)
+// settingStore 返回默认 settings.Store。
+// 必须函数式懒取：包级变量初始化早于 main 里的 models.Init，
+// 提前捕获 models.DB 会永久持有 nil。
+func settingStore() *settings.Store {
+	return settings.Default()
+}
 
 // SchemaForSettingKey 是 models.SettingSchemaForKey 的本地别名，便于测试替换。
 var SchemaForSettingKey = models.SettingSchemaForKey

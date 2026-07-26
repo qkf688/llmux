@@ -24,10 +24,15 @@ func initHealthCheckTestDB(t *testing.T) {
 	})
 }
 
+// setSetting 覆盖指定设置项。必须是 upsert：健康检测各键已在 SettingSchemas 中声明，
+// models.Init 的 seed 会先建好行，直接 Create 会撞 settings.key 唯一索引。
 func setSetting(t *testing.T, key, value string) {
 	t.Helper()
-	if err := models.DB.Create(&models.Setting{Key: key, Value: value}).Error; err != nil {
-		t.Fatalf("create setting %s: %v", key, err)
+	if err := models.DB.
+		Where("key = ?", key).
+		Assign(&models.Setting{Key: key, Value: value}).
+		FirstOrCreate(&models.Setting{}).Error; err != nil {
+		t.Fatalf("set setting %s: %v", key, err)
 	}
 }
 

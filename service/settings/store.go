@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/atopos31/llmio/models"
 	"gorm.io/gorm"
@@ -17,6 +18,40 @@ type Store struct {
 // NewStore 创建 Store。
 func NewStore(db *gorm.DB) *Store {
 	return &Store{db: db}
+}
+
+var (
+	defaultMu    sync.RWMutex
+	defaultStore *Store
+)
+
+// SetDefault 覆盖包级默认 Store（测试可注入独立库）。
+func SetDefault(s *Store) {
+	defaultMu.Lock()
+	defer defaultMu.Unlock()
+	defaultStore = s
+}
+
+// Default 返回包级默认 Store。
+// 未显式 SetDefault 时，在 models.DB 已初始化的前提下懒创建 ——
+// 包级变量初始化早于 models.Init，此处不能提前捕获 models.DB。
+func Default() *Store {
+	defaultMu.RLock()
+	s := defaultStore
+	defaultMu.RUnlock()
+	if s != nil {
+		return s
+	}
+
+	defaultMu.Lock()
+	defer defaultMu.Unlock()
+	if defaultStore == nil {
+		if models.DB == nil {
+			panic("settings: models.DB is nil; call models.Init before settings.Default")
+		}
+		defaultStore = NewStore(models.DB)
+	}
+	return defaultStore
 }
 
 // GetValue 获取指定 key 的字符串值；若数据库中不存在则返回 schema 默认值序列化后的字符串。

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/service/settings"
 	"github.com/gin-gonic/gin"
 )
 
@@ -34,7 +35,10 @@ type enableAssociationsResponse struct {
 func initTestDB(t *testing.T) {
 	t.Helper()
 	models.Init(context.Background(), filepath.Join(t.TempDir(), "llmio-test.db"))
+	// 与 models.DB 同步默认 Store，避免 settings.Default() 缓存上一个用例的连接
+	settings.SetDefault(settings.NewStore(models.DB))
 	t.Cleanup(func() {
+		settings.SetDefault(nil)
 		sqlDB, err := models.DB.DB()
 		if err != nil {
 			return

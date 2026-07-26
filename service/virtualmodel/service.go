@@ -33,6 +33,12 @@ func NewService(db *gorm.DB) *Service {
 	return serviceInstance
 }
 
+// Default 返回绑定默认数据库连接的虚拟模型服务单例。
+// 供不应感知 *gorm.DB 装配细节的调用方（如聊天主路径）使用。
+func Default() *Service {
+	return NewService(models.DB)
+}
+
 // ResetSingletonForTest 重置单例（仅用于测试）。
 func ResetSingletonForTest() {
 	serviceInstance = nil

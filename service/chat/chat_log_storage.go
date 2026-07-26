@@ -7,7 +7,6 @@ import (
 
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/service/chatstats"
-	"gorm.io/gorm"
 )
 
 func SaveChatLog(ctx context.Context, log models.ChatLog) (uint, error) {
@@ -29,7 +28,7 @@ func SaveChatLog(ctx context.Context, log models.ChatLog) (uint, error) {
 		return 0, nil // 返回0表示不记录日志
 	}
 
-	if err := gorm.G[models.ChatLog](models.DB).Create(ctx, &log); err != nil {
+	if err := repos().ChatLog.Create(ctx, &log); err != nil {
 		return 0, err
 	}
 	// 异步执行日志清理，避免阻塞主流程
@@ -47,20 +46,7 @@ func cleanupLogsIfNeeded() {
 		return // 0 表示不限制
 	}
 
-	// ChatLog：Unscoped 统计+硬删，先删 ChatIO（与 healthcheck 软删策略不同）
-	deleted, err := models.EnforceRetentionByOldestID(ctx, models.DB, &models.ChatLog{}, retentionCount, models.RetentionDeleteOptions{
-		UnscopedCount:  true,
-		UnscopedDelete: true,
-		BeforeDelete: func(ctx context.Context, ids []uint) error {
-			if err := models.DB.WithContext(ctx).Unscoped().
-				Where("log_id IN ?", ids).
-				Delete(&models.ChatIO{}).Error; err != nil {
-				slog.Error("failed to delete chat io records", "error", err)
-				// 与旧逻辑一致：ChatIO 失败只记日志，不中断主表删除
-			}
-			return nil
-		},
-	})
+	deleted, err := repos().ChatLog.EnforceRetention(ctx, retentionCount)
 	if err != nil {
 		slog.Error("failed to cleanup excess logs", "error", err)
 		return

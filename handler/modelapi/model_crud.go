@@ -6,12 +6,11 @@ import (
 	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // GetModels 获取所有模型列表。
 func GetModels(c *gin.Context) {
-	modelsList, err := gorm.G[models.Model](models.DB).Find(c.Request.Context())
+	modelsList, err := repos().Model.List(c.Request.Context())
 	if err != nil {
 		httpresp.InternalServerError(c, err.Error())
 		return
@@ -28,12 +27,12 @@ func CreateModel(c *gin.Context) {
 		return
 	}
 
-	count, err := gorm.G[models.Model](models.DB).Where("name = ?", req.Name).Count(c.Request.Context(), "id")
+	exists, err := repos().Model.ExistsByName(c.Request.Context(), req.Name)
 	if err != nil {
 		httpresp.InternalServerError(c, "Database error: "+err.Error())
 		return
 	}
-	if count > 0 {
+	if exists {
 		httpresp.BadRequest(c, fmt.Sprintf("Model: %s already exists", req.Name))
 		return
 	}
@@ -46,7 +45,7 @@ func CreateModel(c *gin.Context) {
 		IOLog:         &req.IOLog,
 		AutoAssociate: req.AutoAssociate,
 	}
-	if err := gorm.G[models.Model](models.DB).Create(c.Request.Context(), &model); err != nil {
+	if err := repos().Model.Create(c.Request.Context(), &model); err != nil {
 		httpresp.InternalServerError(c, "Failed to create model: "+err.Error())
 		return
 	}
@@ -67,13 +66,7 @@ func UpdateModel(c *gin.Context) {
 		return
 	}
 
-	_, err := getModelByID(c.Request.Context(), id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			httpresp.NotFound(c, "Model not found")
-			return
-		}
-		httpresp.InternalServerError(c, "Database error: "+err.Error())
+	if _, ok := loadModelOrRespond(c, id); !ok {
 		return
 	}
 
@@ -85,7 +78,7 @@ func UpdateModel(c *gin.Context) {
 		IOLog:         &req.IOLog,
 		AutoAssociate: req.AutoAssociate,
 	}
-	if _, err := gorm.G[models.Model](models.DB).Where("id = ?", id).Updates(c.Request.Context(), updates); err != nil {
+	if err := repos().Model.Update(c.Request.Context(), id, &updates); err != nil {
 		httpresp.InternalServerError(c, "Failed to update model: "+err.Error())
 		return
 	}
@@ -107,12 +100,12 @@ func DeleteModel(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	if err := deleteModelAssociations(ctx, uint(id)); err != nil {
+	if err := deleteModelAssociations(ctx, id); err != nil {
 		httpresp.InternalServerError(c, "Failed to delete model associations: "+err.Error())
 		return
 	}
 
-	result, err := gorm.G[models.Model](models.DB).Where("id = ?", id).Delete(ctx)
+	result, err := repos().Model.Delete(ctx, id)
 	if err != nil {
 		httpresp.InternalServerError(c, "Failed to delete model: "+err.Error())
 		return

@@ -136,7 +136,7 @@ make webui            # cd webui && pnpm install && pnpm run build
 
 - 业务路由**只**经 `handler.RegisterAll` 挂接；子包 `Register*` 只挂叶子路由，**禁止**在 `main.go` 写业务路由明细。
 - `service/` 根包门面（`*_facade.go` 等）是**兼容 re-export / 装配**，不是第二套业务实现；新逻辑写在子包（`service/chat` 等）。
-- 管理端 CRUD 优先走 `repository.*Repo`；`repository.SetDefault` 在 `main` 绑定。chat / healthcheck / modelsync / virtualmodel 现状仍可直连 `models.DB`——**新增代码优先仓储，不扩大直连面**。
+- 数据访问**必须**经 `repository.*Repo`；`repository.SetDefault` 在 `main` 绑定，包内经 `repos()`（`repos.go`）取默认聚合根。chat / chatstats 之外的聊天主路径、healthcheck / adjustment / autoassoc / modelsync / modelapi 已完成迁移；存量直连（metrics、settings、v1、database、importexport、chatstats、virtualmodel）**不作为新代码模板**，改到哪儿顺手迁到哪儿。
 - 跨 service 副作用用 Hook 接口（`AdjustmentHooks`、`ActionHooks`），契约由**调用方包**定义，实现侧包级注入，**禁止**为副作用制造循环 import。
 
 **前端**
@@ -220,7 +220,7 @@ make webui            # cd webui && pnpm install && pnpm run build
 - OpenAI 兼容供应商**优先**嵌入 `openaiBase` 并配置 `endpointPath`，**禁止**复制一整套 BuildReq。
 - 管理端 JSON 绑定优先 `handler/httpx`；响应**必须** `httpresp`。
 - 跨 2 个以上域复用的纯逻辑**必须**下沉到 `common/` 或既有 shared 子包，且 shared **禁止**反向依赖业务包。
-- 新增数据访问：**优先** `repository` 接口；**禁止**在新代码中无必要地扩大 `models.DB` / `gorm.G` 直连（存量直连不作为新代码模板）。
+- 新增数据访问：**必须**走 `repository` 接口；**禁止**在新代码中新增 `models.DB` / `gorm.G` 直连（存量直连不作为新代码模板）。
 
 ## 5. 扩展指南（OCP）
 

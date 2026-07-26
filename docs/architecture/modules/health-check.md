@@ -13,10 +13,10 @@
 
 ## 2. 职责与边界
 
-- **负责什么**：`HealthChecker` 单例调度；单条/批量检查；**结果处理中直接更新关联 Status/连续失败**；经 Hook 触发权重/优先级调整；健康日志与保留；健康相关设置读取
+- **负责什么**：`HealthChecker` 单例调度；单条/批量检查；结果处理中经 `ModelWithProviderRepo` 更新关联 Status/连续失败；经 Hook 触发权重/优先级调整；健康日志与保留；健康相关设置读取
 - **不负责什么**：通用 chat 代理路径；**权重/优先级衰减算法本体**（`AdjustmentHooks` → `service/adjustment`）；供应商 CRUD
 - **对外暴露**：`GetHealthChecker()`、`Start`/`Stop`/`Restart`、`GetHealthCheckSettings`、`AdjustmentHooks`；管理端 run/logs API
-- **依赖谁**：`models`（含直连写关联行）、`providers.Metadata`（HealthCheckBody）、settings 键；入口由 `main` 启动
+- **依赖谁**：`repository`（关联读写、健康日志、保留清理，经 `repos()`）、`models`（实体/设置键）、`providers.Metadata`（HealthCheckBody）；入口由 `main` 启动
 
 ## 3. 内部结构
 

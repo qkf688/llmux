@@ -32,13 +32,12 @@ type ProvidersWithMeta struct {
 
 func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Before) (*ProvidersWithMeta, error) {
 	// 首先检查是否是虚拟模型
-	virtualModel, err := gorm.G[models.VirtualModel](models.DB).Where("name = ? AND enabled = ?", before.Model, true).First(ctx)
+	virtualModel, err := repos().VirtualModel.GetEnabledByName(ctx, before.Model)
 	if err == nil {
 		// 是虚拟模型，使用虚拟模型服务获取有序的真实模型列表
 		slog.Info("request virtual model", "virtual_model", virtualModel.Name, "strategy", virtualModel.Strategy)
 
-		virtualModelService := virtualmodel.NewService(models.DB)
-		orderedModels, err := virtualModelService.SelectRealModelsOrdered(ctx, &virtualModel)
+		orderedModels, err := virtualmodel.Default().SelectRealModelsOrdered(ctx, virtualModel)
 		if err != nil {
 			if _, err := SaveChatLog(ctx, models.ChatLog{
 				Name: before.Model,
@@ -97,7 +96,7 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 	}
 
 	// 不是虚拟模型，按原有逻辑处理真实模型
-	model, err := gorm.G[models.Model](models.DB).Where("name = ?", before.Model).First(ctx)
+	model, err := repos().Model.GetByName(ctx, before.Model)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			if _, err := SaveChatLog(ctx, models.ChatLog{

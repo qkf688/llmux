@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/atopos31/llmio/models"
@@ -33,8 +34,16 @@ type ChatLogListResult struct {
 
 // ChatLogRepo 封装 ChatLog 数据访问。
 type ChatLogRepo interface {
+	// Create 创建日志，成功后 log.ID 被回填。
+	Create(ctx context.Context, log *models.ChatLog) error
 	// Get 根据 ID 获取日志（含大字段）。
 	Get(ctx context.Context, id uint) (*models.ChatLog, error)
+	// GetStatus 仅取日志状态字段。
+	GetStatus(ctx context.Context, id uint) (string, error)
+	// UpdateByID 按结构体更新日志（GORM Updates：零值字段不写入），返回受影响行数。
+	UpdateByID(ctx context.Context, id uint, update models.ChatLog) (int64, error)
+	// ClearRawFields 清空日志的 5 个 raw 请求/响应字段。
+	ClearRawFields(ctx context.Context, id uint) error
 	// List 分页筛选列表。
 	List(ctx context.Context, opts ChatLogListOptions) (*ChatLogListResult, error)
 	// DistinctUserAgents 返回非空去重 user_agent。
@@ -47,10 +56,15 @@ type ChatLogRepo interface {
 	HardDeleteAll(ctx context.Context) (int64, error)
 	// HardDeleteFiltered 事务内：先硬删匹配筛选的 ChatIO，再硬删 ChatLog。
 	HardDeleteFiltered(ctx context.Context, filter ChatLogFilter) (int64, error)
+	// EnforceRetention 保留最新 retention 条，超出部分连同其 ChatIO 一并硬删。
+	// retention<=0 时不清理。返回实际删除的日志条数。
+	EnforceRetention(ctx context.Context, retention int) (int, error)
 }
 
 // ChatIORepo 封装 ChatIO 数据访问。
 type ChatIORepo interface {
+	// Create 创建 ChatIO。
+	Create(ctx context.Context, row *models.ChatIO) error
 	// GetByLogID 按 log_id 获取。
 	GetByLogID(ctx context.Context, logID uint) (*models.ChatIO, error)
 	// HardDeleteByLogID 硬删指定 log 的 ChatIO。
@@ -104,12 +118,44 @@ func applyChatLogFilter(query *gorm.DB, filter ChatLogFilter) *gorm.DB {
 	return query
 }
 
+func (r *chatLogRepo) Create(ctx context.Context, log *models.ChatLog) error {
+	return r.db.WithContext(ctx).Create(log).Error
+}
+
 func (r *chatLogRepo) Get(ctx context.Context, id uint) (*models.ChatLog, error) {
 	var log models.ChatLog
 	if err := r.db.WithContext(ctx).First(&log, id).Error; err != nil {
 		return nil, err
 	}
 	return &log, nil
+}
+
+func (r *chatLogRepo) GetStatus(ctx context.Context, id uint) (string, error) {
+	var log models.ChatLog
+	if err := r.db.WithContext(ctx).Model(&models.ChatLog{}).
+		Select("status").
+		Where("id = ?", id).
+		Take(&log).Error; err != nil {
+		return "", err
+	}
+	return log.Status, nil
+}
+
+func (r *chatLogRepo) UpdateByID(ctx context.Context, id uint, update models.ChatLog) (int64, error) {
+	result := r.db.WithContext(ctx).Model(&models.ChatLog{}).Where("id = ?", id).Updates(update)
+	return result.RowsAffected, result.Error
+}
+
+func (r *chatLogRepo) ClearRawFields(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).Model(&models.ChatLog{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"request_headers":   "",
+			"request_body":      "",
+			"response_headers":  "",
+			"response_body":     "",
+			"raw_response_body": "",
+		}).Error
 }
 
 func (r *chatLogRepo) List(ctx context.Context, opts ChatLogListOptions) (*ChatLogListResult, error) {
@@ -213,6 +259,27 @@ func (r *chatLogRepo) HardDeleteFiltered(ctx context.Context, filter ChatLogFilt
 		return nil
 	})
 	return deleted, err
+}
+
+func (r *chatLogRepo) EnforceRetention(ctx context.Context, retention int) (int, error) {
+	// ChatLog：Unscoped 统计 + 硬删，先删 ChatIO（与 HealthCheckLog 的软删策略不同）。
+	return models.EnforceRetentionByOldestID(ctx, r.db, &models.ChatLog{}, retention, models.RetentionDeleteOptions{
+		UnscopedCount:  true,
+		UnscopedDelete: true,
+		BeforeDelete: func(ctx context.Context, ids []uint) error {
+			if err := r.db.WithContext(ctx).Unscoped().
+				Where("log_id IN ?", ids).
+				Delete(&models.ChatIO{}).Error; err != nil {
+				slog.Error("failed to delete chat io records", "error", err)
+				// 与旧逻辑一致：ChatIO 失败只记日志，不中断主表删除
+			}
+			return nil
+		},
+	})
+}
+
+func (r *chatIORepo) Create(ctx context.Context, row *models.ChatIO) error {
+	return r.db.WithContext(ctx).Create(row).Error
 }
 
 func (r *chatIORepo) GetByLogID(ctx context.Context, logID uint) (*models.ChatIO, error) {

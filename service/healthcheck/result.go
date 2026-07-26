@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/atopos31/llmio/models"
-	"gorm.io/gorm"
 )
 
 // AdjustmentHooks 注入健康检测后对权重/优先级的调整逻辑。
@@ -42,9 +41,8 @@ func (h *HealthChecker) handleCheckResult(ctx context.Context, mp *models.ModelW
 
 		if autoEnable && (mp.Status == nil || !*mp.Status) {
 			trueVal := true
-			if _, err := gorm.G[models.ModelWithProvider](models.DB).
-				Where("id = ?", mp.ID).
-				Updates(ctx, models.ModelWithProvider{Status: &trueVal, ConsecutiveFailures: 0}); err != nil {
+			if err := repos().ModelWithProvider.Update(ctx, mp.ID,
+				models.ModelWithProvider{Status: &trueVal, ConsecutiveFailures: 0}); err != nil {
 				slog.Error("failed to enable model provider after health check success", "id", mp.ID, "error", err)
 			} else {
 				slog.Info("model provider auto-enabled after health check success", "id", mp.ID)
@@ -66,9 +64,8 @@ func (h *HealthChecker) handleCheckResult(ctx context.Context, mp *models.ModelW
 
 	if failureDisableEnabled && failCount >= failureThreshold && (mp.Status == nil || *mp.Status) {
 		falseVal := false
-		if _, err := gorm.G[models.ModelWithProvider](models.DB).
-			Where("id = ?", mp.ID).
-			Updates(ctx, models.ModelWithProvider{Status: &falseVal}); err != nil {
+		if err := repos().ModelWithProvider.Update(ctx, mp.ID,
+			models.ModelWithProvider{Status: &falseVal}); err != nil {
 			slog.Error("failed to disable model provider after health check failures", "id", mp.ID, "error", err)
 		} else {
 			slog.Warn("model provider auto-disabled after health check failures", "id", mp.ID, "fail_count", failCount)
@@ -77,11 +74,7 @@ func (h *HealthChecker) handleCheckResult(ctx context.Context, mp *models.ModelW
 }
 
 func (h *HealthChecker) getConsecutiveFailures(ctx context.Context, mpID uint) (int, error) {
-	logs, err := gorm.G[models.HealthCheckLog](models.DB).
-		Where("model_provider_id = ?", mpID).
-		Order("checked_at DESC").
-		Limit(10).
-		Find(ctx)
+	logs, err := repos().HealthCheckLog.ListRecentByModelProviderID(ctx, mpID, 10)
 	if err != nil {
 		return 0, err
 	}

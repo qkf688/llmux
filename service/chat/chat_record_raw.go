@@ -3,8 +3,6 @@ package chat
 import (
 	"context"
 	"log/slog"
-
-	"github.com/atopos31/llmio/models"
 )
 
 // maybeClearRawOnSuccess 实现「仅保留错误日志的原始请求响应」策略：
@@ -16,28 +14,12 @@ func maybeClearRawOnSuccess(ctx context.Context, logId uint, errorsOnly bool, ra
 		return
 	}
 
-	var current models.ChatLog
-	if err := models.DB.WithContext(ctx).
-		Model(&models.ChatLog{}).
-		Select("status").
-		Where("id = ?", logId).
-		Take(&current).Error; err == nil && current.Status != "error" {
-		if err := clearChatLogRawRequestResponseFields(ctx, logId); err != nil {
-			slog.Error("failed to clear raw request/response fields", "log_id", logId, "error", err)
-		}
+	status, err := repos().ChatLog.GetStatus(ctx, logId)
+	if err != nil || status == "error" {
+		return
 	}
-}
 
-// clearChatLogRawRequestResponseFields 将指定日志的 5 个 raw 字段置空。
-func clearChatLogRawRequestResponseFields(ctx context.Context, logID uint) error {
-	return models.DB.WithContext(ctx).
-		Model(&models.ChatLog{}).
-		Where("id = ?", logID).
-		Updates(map[string]interface{}{
-			"request_headers":   "",
-			"request_body":      "",
-			"response_headers":  "",
-			"response_body":     "",
-			"raw_response_body": "",
-		}).Error
+	if err := repos().ChatLog.ClearRawFields(ctx, logId); err != nil {
+		slog.Error("failed to clear raw request/response fields", "log_id", logId, "error", err)
+	}
 }

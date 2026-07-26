@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	"github.com/atopos31/llmio/models"
-	"gorm.io/gorm"
 )
 
 func (h *HealthChecker) checkAll() {
@@ -43,17 +42,12 @@ func (h *HealthChecker) CheckAllWithBatch(ctx context.Context, batchID string) e
 func (h *HealthChecker) listModelProvidersForCheck(ctx context.Context) ([]models.ModelWithProvider, bool, error) {
 	checkDisabledOnly := h.getCheckDisabledOnly(ctx)
 
-	var (
-		modelProviders []models.ModelWithProvider
-		err            error
-	)
-
+	var status *bool
 	if checkDisabledOnly {
 		falseVal := false
-		modelProviders, err = gorm.G[models.ModelWithProvider](models.DB).Where("status = ?", &falseVal).Find(ctx)
-	} else {
-		modelProviders, err = gorm.G[models.ModelWithProvider](models.DB).Find(ctx)
+		status = &falseVal
 	}
 
+	modelProviders, err := repos().ModelWithProvider.ListByStatus(ctx, status)
 	return modelProviders, checkDisabledOnly, err
 }

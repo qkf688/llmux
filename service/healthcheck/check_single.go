@@ -10,7 +10,6 @@ import (
 	"github.com/atopos31/llmio/consts"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/providers"
-	"gorm.io/gorm"
 )
 
 func (h *HealthChecker) checkOne(ctx context.Context, mp *models.ModelWithProvider) {
@@ -52,20 +51,20 @@ func (h *HealthChecker) CheckSingle(ctx context.Context, mpID uint) (*models.Hea
 
 // CheckSingleWithBatch 手动检测单个模型提供商（支持 batchID）。
 func (h *HealthChecker) CheckSingleWithBatch(ctx context.Context, mpID uint, batchID string) (*models.HealthCheckLog, error) {
-	mp, err := gorm.G[models.ModelWithProvider](models.DB).Where("id = ?", mpID).First(ctx)
+	mp, err := repos().ModelWithProvider.Get(ctx, mpID)
 	if err != nil {
 		return nil, err
 	}
 
-	provider, model, err := getProviderAndModel(ctx, &mp)
+	provider, model, err := getProviderAndModel(ctx, mp)
 	if err != nil {
 		return nil, err
 	}
 
 	start := time.Now()
-	checkErr := h.doCheck(ctx, provider, &mp)
+	checkErr := h.doCheck(ctx, provider, mp)
 	responseTime := time.Since(start).Milliseconds()
-	logEntry := buildHealthCheckLog(batchID, &mp, provider.Name, model.Name, responseTime)
+	logEntry := buildHealthCheckLog(batchID, mp, provider.Name, model.Name, responseTime)
 
 	if checkErr != nil {
 		logEntry.Status = "error"
@@ -78,7 +77,7 @@ func (h *HealthChecker) CheckSingleWithBatch(ctx context.Context, mpID uint, bat
 		return nil, err
 	}
 
-	h.handleCheckResult(ctx, &mp, provider.Name, checkErr == nil)
+	h.handleCheckResult(ctx, mp, provider.Name, checkErr == nil)
 	return &logEntry, nil
 }
 
@@ -112,19 +111,19 @@ func (h *HealthChecker) doCheck(ctx context.Context, provider *models.Provider, 
 }
 
 func getProviderAndModel(ctx context.Context, mp *models.ModelWithProvider) (*models.Provider, *models.Model, error) {
-	provider, err := gorm.G[models.Provider](models.DB).Where("id = ?", mp.ProviderID).First(ctx)
+	provider, err := repos().Provider.Get(ctx, mp.ProviderID)
 	if err != nil {
 		slog.Error("failed to get provider for health check", "provider_id", mp.ProviderID, "error", err)
 		return nil, nil, err
 	}
 
-	model, err := gorm.G[models.Model](models.DB).Where("id = ?", mp.ModelID).First(ctx)
+	model, err := repos().Model.Get(ctx, mp.ModelID)
 	if err != nil {
 		slog.Error("failed to get model for health check", "model_id", mp.ModelID, "error", err)
 		return nil, nil, err
 	}
 
-	return &provider, &model, nil
+	return provider, model, nil
 }
 
 func buildHealthCheckLog(batchID string, mp *models.ModelWithProvider, providerName, modelName string, responseTime int64) models.HealthCheckLog {
@@ -140,7 +139,7 @@ func buildHealthCheckLog(batchID string, mp *models.ModelWithProvider, providerN
 }
 
 func (h *HealthChecker) saveHealthCheckLog(ctx context.Context, logEntry *models.HealthCheckLog) error {
-	if err := gorm.G[models.HealthCheckLog](models.DB).Create(ctx, logEntry); err != nil {
+	if err := repos().HealthCheckLog.Create(ctx, logEntry); err != nil {
 		return err
 	}
 

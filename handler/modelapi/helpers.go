@@ -6,35 +6,30 @@ import (
 	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
-func parseModelIDParam(c *gin.Context) (uint64, bool) {
-	id, ok := httpx.ParseUintParamAllowZero(c, "id")
-	if !ok {
-		return 0, false
+func parseModelIDParam(c *gin.Context) (uint, bool) {
+	return httpx.ParseUintParamAllowZero(c, "id")
+}
+
+func getModelByID(ctx context.Context, id uint) (models.Model, error) {
+	model, err := repos().Model.Get(ctx, id)
+	if err != nil {
+		return models.Model{}, err
 	}
-	return uint64(id), true
+	return *model, nil
 }
 
-func getModelByID(ctx context.Context, id uint64) (models.Model, error) {
-	return gorm.G[models.Model](models.DB).Where("id = ?", id).First(ctx)
-}
-
+// deleteModelAssociations 级联清理模型的下游引用：关联、模板项、虚拟模型映射。
 func deleteModelAssociations(ctx context.Context, id uint) error {
-	if err := models.DB.WithContext(ctx).
-		Where("model_id = ?", id).
-		Delete(&models.ModelWithProvider{}).Error; err != nil {
+	r := repos()
+	if _, err := r.ModelWithProvider.DeleteByModelID(ctx, id); err != nil {
 		return err
 	}
-	if err := models.DB.WithContext(ctx).
-		Where("model_id = ?", id).
-		Delete(&models.ModelTemplateItem{}).Error; err != nil {
+	if _, err := r.ModelTemplateItem.DeleteByModelID(ctx, id); err != nil {
 		return err
 	}
-	if err := models.DB.WithContext(ctx).
-		Where("real_model_id = ?", id).
-		Delete(&models.VirtualModelMapping{}).Error; err != nil {
+	if _, err := r.VirtualModelMapping.DeleteByRealModelID(ctx, id); err != nil {
 		return err
 	}
 	return nil

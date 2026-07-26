@@ -17,7 +17,7 @@
 - **负责什么**：按协议 style 解析请求；解析模型名（真实/虚拟）；能力匹配；选择 `ModelWithProvider`；执行上游 HTTP（含重试）；流式/非流式处理；编排写入 `ChatLog`/`ChatIO`（经 chat 内 record 路径）与统计（经 `chatstats`）；失败/成功时触发权重/优先级调整（经 `adjustment`）；健康检查 `AdjustmentHooks` 由 `adjustment` 包级注入
 - **不负责什么**：协议字段级互转细节（`protocol-transform`）；供应商 CRUD（`providers` 管理端）；关联/虚拟模型配置 CRUD；健康检查与模型同步调度；stats/权重算法本体（旁路包）
 - **对外暴露**：`service` 门面中的 `Beforer`/`Processer`/`ProvidersWithMetaBymodelsName`/`BalanceChat`/`RecordLog` 等；`handler/v1` 的 `/v1/models`、`/chat/completions`、`/responses`、`/messages`
-- **依赖谁**：`providers`、`protocol-transform`、`virtual-models`、`models`（多直连 DB）、`balancer`/`chatcore`、`chatstats`、`adjustment`、`consts`
+- **依赖谁**：`providers`、`protocol-transform`、`virtual-models`、`repository`（持久层唯一入口）、`models`（实体/设置）、`balancer`/`chatcore`、`chatstats`、`adjustment`、`consts`
 
 ## 3. 内部结构
 
@@ -63,7 +63,7 @@ balancer/                   # 加权随机纯算法
 ## 5. 特殊约定
 
 - **扩展最小改动集（现状）**：style 注册 `Beforer`/`Processer` + `register_v1` 路由 + transform 适配/流路由 + `consts`；不在 `main.go` 写业务路由
-- **数据访问**：主要直连 `models.DB`/`gorm.G`，不强制走 `repository`（DIP 未在本路径落地）
+- **数据访问**：统一经 `repos()`（`service/chat/repos.go` → `repository.Default()`），**禁止**直连 `models.DB`/`gorm.G`；旁路包 `chatstats` 因统计表尚无 Repo 仍直连
 - **职责拆分（现状）**：选路/重试/协议/日志落库编排仍在 `service/chat`；Stats 在 `chatstats`；权重调整在 `adjustment`。改统计策略与改选路策略不再同文件碰撞；日志 IO 存储仍可后续下沉
 - 虚拟模型路径：先由 `virtualmodel` 产出有序真实模型，再在真实模型层做 provider 级选路（两层 LB）
 - `service/chat_facade.go` 为兼容 re-export，不是第二实现

@@ -39,7 +39,7 @@ models.Model / ModelTemplateItem
 
 ## 5. 特殊约定
 
-- 管理端 handler 仍存在直接 `gorm.G` 路径，与 repository 并存（渐进迁移现状）
+- `handler/modelapi` 统一经 `repos()` 访问持久层（模型 CRUD、批量、模板项、级联清理），**禁止**新增 `gorm.G` 直连
 - 自动关联消费 `TemplateIndex`，实现落在 `service/autoassoc`，本模块只提供匹配能力
 
 ---

@@ -58,6 +58,9 @@
 | GORM 实体 | 导出结构体，表名由 GORM 约定 | `Provider`, `ModelWithProvider`, `ChatLog` |
 | 仓储接口 | `XxxRepo` | `ProviderRepo`, `ChatLogRepo` |
 | 聚合根入口 | `Repositories` + `Default`/`SetDefault` | `repository.New(models.DB)` |
+| 包内仓储访问器 | 每包一个 `repos.go`，导出未公开的 `repos()` | `service/chat/repos.go`, `handler/modelapi/repos.go` |
+| 仓储方法命名 | `List*`/`Get*`/`Exists*`/`Count*`/`Create`/`Update*`/`Delete*`；硬删以 `Unscoped` 结尾或在注释标明 | `ListEnabledByModelID`, `DeleteByModelIDAndNameUnscoped` |
+| 测试中的仓储绑定 | `models.Init` 后必须 `repository.SetDefault(repository.New(models.DB))`，清理时置 `nil` | `handler/testsupport.InitTestDB` |
 
 ---
 

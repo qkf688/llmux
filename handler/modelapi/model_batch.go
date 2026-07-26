@@ -2,9 +2,7 @@ package modelapi
 
 import (
 	"github.com/atopos31/llmio/httpresp"
-	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // BatchDeleteModels 批量删除模型。
@@ -27,7 +25,7 @@ func BatchDeleteModels(c *gin.Context) {
 		}
 	}
 
-	result, err := gorm.G[models.Model](models.DB).Where("id IN ?", req.IDs).Delete(ctx)
+	result, err := repos().Model.DeleteByIDs(ctx, req.IDs)
 	if err != nil {
 		httpresp.InternalServerError(c, "Failed to delete models: "+err.Error())
 		return
@@ -59,7 +57,7 @@ func BatchUpdateModels(c *gin.Context) {
 		return
 	}
 
-	updates := make(map[string]interface{})
+	updates := make(map[string]any)
 	if req.MaxRetry != nil {
 		updates["max_retry"] = *req.MaxRetry
 	}
@@ -70,15 +68,13 @@ func BatchUpdateModels(c *gin.Context) {
 		updates["auto_associate"] = req.AutoAssociate
 	}
 
-	result := models.DB.Model(&models.Model{}).
-		Where("id IN ?", req.IDs).
-		Updates(updates)
-	if result.Error != nil {
-		httpresp.InternalServerError(c, "更新失败: "+result.Error.Error())
+	updated, err := repos().Model.BatchUpdate(c.Request.Context(), req.IDs, updates)
+	if err != nil {
+		httpresp.InternalServerError(c, "更新失败: "+err.Error())
 		return
 	}
 
 	httpresp.Success(c, map[string]interface{}{
-		"updated": result.RowsAffected,
+		"updated": updated,
 	})
 }

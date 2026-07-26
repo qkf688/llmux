@@ -4,33 +4,26 @@ import (
 	"context"
 
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/repository"
 	"github.com/samber/lo"
-	"gorm.io/gorm"
 )
 
 func queryEnabledModelProviders(ctx context.Context, modelID uint, before Before) ([]models.ModelWithProvider, error) {
-	modelWithProviderChain := gorm.G[models.ModelWithProvider](models.DB).
-		Where("model_id = ? AND status = ?", modelID, true)
-
+	var caps repository.ModelCapabilityFilter
 	if getStrictCapabilityMatch(ctx) {
-		if before.toolCall {
-			modelWithProviderChain = modelWithProviderChain.Where("tool_call = ?", true)
-		}
-		if before.structuredOutput {
-			modelWithProviderChain = modelWithProviderChain.Where("structured_output = ?", true)
-		}
-		if before.image {
-			modelWithProviderChain = modelWithProviderChain.Where("image = ?", true)
+		caps = repository.ModelCapabilityFilter{
+			ToolCall:         before.toolCall,
+			StructuredOutput: before.structuredOutput,
+			Image:            before.image,
 		}
 	}
 
-	return modelWithProviderChain.Find(ctx)
+	return repos().ModelWithProvider.ListEnabledByModelID(ctx, modelID, caps)
 }
 
 func buildProviderMapByModelProviders(ctx context.Context, modelWithProviders []models.ModelWithProvider) (map[uint]models.Provider, error) {
-	providersList, err := gorm.G[models.Provider](models.DB).
-		Where("id IN ?", lo.Map(modelWithProviders, func(mp models.ModelWithProvider, _ int) uint { return mp.ProviderID })).
-		Find(ctx)
+	providerIDs := lo.Map(modelWithProviders, func(mp models.ModelWithProvider, _ int) uint { return mp.ProviderID })
+	providersList, err := repos().Provider.ListByIDs(ctx, providerIDs)
 	if err != nil {
 		return nil, err
 	}

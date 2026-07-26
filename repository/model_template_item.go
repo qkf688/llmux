@@ -19,6 +19,8 @@ type ModelTemplateItemRepo interface {
 	ListByModelID(ctx context.Context, modelID uint) ([]models.ModelTemplateItem, error)
 	// DeleteByModelIDAndNameUnscoped 硬删指定模型下的同名模板项。
 	DeleteByModelIDAndNameUnscoped(ctx context.Context, modelID uint, name string) (int64, error)
+	// DeleteByModelID 软删指定模型下的全部模板项（对齐级联删模型的现网语义）。
+	DeleteByModelID(ctx context.Context, modelID uint) (int64, error)
 }
 
 // NewModelTemplateItemRepo 创建 ModelTemplateItemRepo 实现。
@@ -61,6 +63,13 @@ func (r *modelTemplateItemRepo) ListByModelID(ctx context.Context, modelID uint)
 func (r *modelTemplateItemRepo) DeleteByModelIDAndNameUnscoped(ctx context.Context, modelID uint, name string) (int64, error) {
 	result := r.db.WithContext(ctx).Unscoped().
 		Where("model_id = ? AND name = ?", modelID, name).
+		Delete(&models.ModelTemplateItem{})
+	return result.RowsAffected, result.Error
+}
+
+func (r *modelTemplateItemRepo) DeleteByModelID(ctx context.Context, modelID uint) (int64, error) {
+	result := r.db.WithContext(ctx).
+		Where("model_id = ?", modelID).
 		Delete(&models.ModelTemplateItem{})
 	return result.RowsAffected, result.Error
 }

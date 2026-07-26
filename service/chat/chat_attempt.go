@@ -21,7 +21,6 @@ import (
 	"github.com/atopos31/llmio/service/chatcore"
 	"github.com/atopos31/llmio/service/chatstats"
 	"github.com/atopos31/llmio/service/transform"
-	"gorm.io/gorm"
 )
 
 type singleProviderAttemptInput struct {
@@ -381,7 +380,7 @@ func applyProviderFailureAdjustments(ctx context.Context, modelProviderID uint, 
 }
 
 func updateChatLogByID(ctx context.Context, logID uint, update models.ChatLog, errorMsg string) {
-	if _, err := gorm.G[models.ChatLog](models.DB).Where("id = ?", logID).Updates(ctx, update); err != nil {
+	if _, err := repos().ChatLog.UpdateByID(ctx, logID, update); err != nil {
 		slog.Error(errorMsg, "error", err)
 	}
 }

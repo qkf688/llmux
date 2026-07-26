@@ -15,6 +15,8 @@ type VirtualModelRepo interface {
 	Get(ctx context.Context, id uint) (*models.VirtualModel, error)
 	// GetByName 根据名称获取虚拟模型。
 	GetByName(ctx context.Context, name string) (*models.VirtualModel, error)
+	// GetEnabledByName 根据名称获取启用中的虚拟模型（聊天主路径的模型解析入口）。
+	GetEnabledByName(ctx context.Context, name string) (*models.VirtualModel, error)
 	// ExistsByName 判断指定名称是否存在。
 	ExistsByName(ctx context.Context, name string) (bool, error)
 	// ExistsByNameExceptID 判断名称是否被其他 ID 占用。
@@ -28,7 +30,8 @@ type VirtualModelRepo interface {
 }
 
 // VirtualModelMappingRepo 封装 VirtualModelMapping 实体的数据访问。
-// 删除类方法一律 Unscoped 硬删（唯一索引 + 重建语义要求）。
+// 删除类方法一律 Unscoped 硬删（唯一索引 + 重建语义要求），
+// 例外：DeleteByRealModelID 为软删，对齐级联删模型的现网语义。
 type VirtualModelMappingRepo interface {
 	// ListByVirtualModel 返回指定虚拟模型的所有映射。
 	ListByVirtualModel(ctx context.Context, virtualModelID uint) ([]models.VirtualModelMapping, error)
@@ -52,6 +55,8 @@ type VirtualModelMappingRepo interface {
 	BatchDelete(ctx context.Context, virtualModelID uint, ids []uint) (int64, error)
 	// HardDeleteByVirtualModelID 硬删指定虚拟模型下的全部映射。
 	HardDeleteByVirtualModelID(ctx context.Context, virtualModelID uint) (int64, error)
+	// DeleteByRealModelID 软删指向指定真实模型的全部映射（对齐级联删模型的现网语义）。
+	DeleteByRealModelID(ctx context.Context, realModelID uint) (int64, error)
 }
 
 // NewVirtualModelRepo 创建 VirtualModelRepo 实现。
@@ -87,6 +92,14 @@ func (r *virtualModelRepo) Get(ctx context.Context, id uint) (*models.VirtualMod
 func (r *virtualModelRepo) GetByName(ctx context.Context, name string) (*models.VirtualModel, error) {
 	var vm models.VirtualModel
 	if err := r.db.WithContext(ctx).Where("name = ?", name).First(&vm).Error; err != nil {
+		return nil, err
+	}
+	return &vm, nil
+}
+
+func (r *virtualModelRepo) GetEnabledByName(ctx context.Context, name string) (*models.VirtualModel, error) {
+	var vm models.VirtualModel
+	if err := r.db.WithContext(ctx).Where("name = ? AND enabled = ?", name, true).First(&vm).Error; err != nil {
 		return nil, err
 	}
 	return &vm, nil
@@ -209,6 +222,13 @@ func (r *virtualModelMappingRepo) BatchDelete(ctx context.Context, virtualModelI
 func (r *virtualModelMappingRepo) HardDeleteByVirtualModelID(ctx context.Context, virtualModelID uint) (int64, error) {
 	result := r.db.WithContext(ctx).Unscoped().
 		Where("virtual_model_id = ?", virtualModelID).
+		Delete(&models.VirtualModelMapping{})
+	return result.RowsAffected, result.Error
+}
+
+func (r *virtualModelMappingRepo) DeleteByRealModelID(ctx context.Context, realModelID uint) (int64, error) {
+	result := r.db.WithContext(ctx).
+		Where("real_model_id = ?", realModelID).
 		Delete(&models.VirtualModelMapping{})
 	return result.RowsAffected, result.Error
 }

@@ -16,7 +16,7 @@
 - **负责什么**：`ChatLog`/`ChatIO` 读删与清理；metrics 聚合查询；user-agents 等辅助查询；保留策略 `EnforceRetentionByOldestID`
 - **不负责什么**：健康检查日志、模型同步日志（各自域）；发起 LLM 调用；模型/供应商配置
 - **对外暴露**：`/api/logs*`、`/api/metrics*` 等 REST；`ChatLogRepo`/`ChatIORepo`
-- **依赖谁**：`repository`（日志路径）；metrics 部分直读 `models.DB`；写入侧：日志落库编排在 `service/chat`，Stats 累加在 `service/chatstats`（由 chat 触发）
+- **依赖谁**：`repository`（日志读写、保留清理，含 `ChatLogRepo.EnforceRetention`）；metrics 部分仍直读 `models.DB`；写入侧：日志落库编排在 `service/chat`（经 `repos()`），Stats 累加在 `service/chatstats`（统计表尚无 Repo，仍直连）
 
 ## 3. 内部结构
 

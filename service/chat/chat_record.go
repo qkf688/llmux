@@ -9,7 +9,6 @@ import (
 
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/service/chatstats"
-	"gorm.io/gorm"
 )
 
 // RecordLog 是后处理编排器：processer 解析 → stats 统计 → 日志落库 → raw 字段清理。
@@ -27,7 +26,7 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 		if err != nil {
 			slog.Error("processer error", "log_id", logId, "error", err)
 			if logId != 0 {
-				if _, updateErr := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, models.ChatLog{
+				if _, updateErr := repos().ChatLog.UpdateByID(ctx, logId, models.ChatLog{
 					Status: "error",
 					Error:  fmt.Sprintf("processer error: %v", err),
 				}); updateErr != nil {

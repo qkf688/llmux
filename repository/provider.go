@@ -11,6 +11,8 @@ import (
 type ProviderRepo interface {
 	// List 返回符合条件的 Provider 列表；filter 为零值时返回全部。
 	List(ctx context.Context, filter ProviderFilter) ([]models.Provider, error)
+	// ListByIDs 返回指定 ID 集合中的 Provider。
+	ListByIDs(ctx context.Context, ids []uint) ([]models.Provider, error)
 	// Get 根据 ID 获取 Provider。
 	Get(ctx context.Context, id uint) (*models.Provider, error)
 	// GetByName 根据名称获取 Provider。
@@ -61,6 +63,17 @@ func (r *providerRepo) List(ctx context.Context, filter ProviderFilter) ([]model
 
 	var providers []models.Provider
 	if err := query.Find(&providers).Error; err != nil {
+		return nil, err
+	}
+	return providers, nil
+}
+
+func (r *providerRepo) ListByIDs(ctx context.Context, ids []uint) ([]models.Provider, error) {
+	if len(ids) == 0 {
+		return []models.Provider{}, nil
+	}
+	var providers []models.Provider
+	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&providers).Error; err != nil {
 		return nil, err
 	}
 	return providers, nil

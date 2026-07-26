@@ -78,7 +78,7 @@ VirtualModel.Strategy、ModelWithProvider.Weight/Priority/Status
 main → models.Init + repository.SetDefault
 handler → service 门面（chat_facade / transform_facade / virtual_model / healthcheck / model_sync）
   # 门面 = 兼容 re-export / 装配，不是第二套业务逻辑
-handler → repository.Default()（repos.go）  # 与 models.DB 直连并存
+handler → repository.Default()（repos.go）  # service 侧 chat/healthcheck/adjustment 亦同；存量 models.DB 直连并存
 ```
 
 ---

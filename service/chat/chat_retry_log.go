@@ -6,7 +6,7 @@ import (
 
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/service/adjustment"
-	"gorm.io/gorm"
+	"github.com/samber/lo"
 )
 
 func RecordRetryLog(ctx context.Context, retryLog chan models.ChatLog, modelWithProviderMap map[uint]models.ModelWithProvider) {
@@ -29,17 +29,8 @@ func applyWeightDecay(ctx context.Context, log models.ChatLog, modelWithProvider
 		return
 	}
 
-	// 查找对应的 ModelWithProvider
-	for id, mwp := range modelWithProviderMap {
-		// 获取供应商信息以匹配日志
-		provider, err := gorm.G[models.Provider](models.DB).Where("id = ?", mwp.ProviderID).First(ctx)
-		if err != nil {
-			continue
-		}
-		if provider.Name == log.ProviderName && mwp.ProviderModel == log.ProviderModel {
-			adjustment.ApplyWeightDecayByModelProviderID(ctx, id, log.ProviderName, log.ProviderModel)
-			break
-		}
+	if id, ok := findModelProviderIDByLog(ctx, log, modelWithProviderMap); ok {
+		adjustment.ApplyWeightDecayByModelProviderID(ctx, id, log.ProviderName, log.ProviderModel)
 	}
 }
 
@@ -50,16 +41,28 @@ func applyPriorityDecay(ctx context.Context, log models.ChatLog, modelWithProvid
 		return
 	}
 
-	// 查找对应的 ModelWithProvider
+	if id, ok := findModelProviderIDByLog(ctx, log, modelWithProviderMap); ok {
+		adjustment.ApplyPriorityDecayByModelProviderID(ctx, id, log.ProviderName, log.ProviderModel)
+	}
+}
+
+// findModelProviderIDByLog 用日志中的 (provider_name, provider_model) 反查候选集里对应的关联 ID。
+// 关联只记录 provider_id，需一次性批量取回 Provider 名称后比对，避免逐条查库。
+func findModelProviderIDByLog(ctx context.Context, log models.ChatLog, modelWithProviderMap map[uint]models.ModelWithProvider) (uint, bool) {
+	providerIDs := lo.Uniq(lo.Map(lo.Values(modelWithProviderMap), func(mp models.ModelWithProvider, _ int) uint {
+		return mp.ProviderID
+	}))
+	providers, err := repos().Provider.ListByIDs(ctx, providerIDs)
+	if err != nil {
+		slog.Error("failed to load providers for decay matching", "error", err)
+		return 0, false
+	}
+	providerNameByID := lo.SliceToMap(providers, func(p models.Provider) (uint, string) { return p.ID, p.Name })
+
 	for id, mwp := range modelWithProviderMap {
-		// 获取供应商信息以匹配日志
-		provider, err := gorm.G[models.Provider](models.DB).Where("id = ?", mwp.ProviderID).First(ctx)
-		if err != nil {
-			continue
-		}
-		if provider.Name == log.ProviderName && mwp.ProviderModel == log.ProviderModel {
-			adjustment.ApplyPriorityDecayByModelProviderID(ctx, id, log.ProviderName, log.ProviderModel)
-			break
+		if providerNameByID[mwp.ProviderID] == log.ProviderName && mwp.ProviderModel == log.ProviderModel {
+			return id, true
 		}
 	}
+	return 0, false
 }

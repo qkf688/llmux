@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	"github.com/atopos31/llmio/models"
-	"gorm.io/gorm"
 )
 
 // ApplySuccessAdjustments 在成功调用后尝试提升权重与优先级。
@@ -53,7 +52,7 @@ func adjustIntField(
 		return
 	}
 
-	mp, err := gorm.G[models.ModelWithProvider](models.DB).Where("id = ?", modelProviderID).First(ctx)
+	mp, err := repos().ModelWithProvider.Get(ctx, modelProviderID)
 	if err != nil {
 		return
 	}
@@ -76,9 +75,7 @@ func adjustIntField(
 		return
 	}
 
-	if _, err := gorm.G[models.ModelWithProvider](models.DB).
-		Where("id = ?", modelProviderID).
-		Update(ctx, fieldName, newValue); err != nil {
+	if _, err := repos().ModelWithProvider.UpdateFields(ctx, modelProviderID, map[string]any{fieldName: newValue}); err != nil {
 		slog.Error("update "+fieldName+" increase error", "error", err, "id", modelProviderID)
 		return
 	}
@@ -113,7 +110,7 @@ func ApplyWeightDecayByModelProviderID(ctx context.Context, modelProviderID uint
 	}
 
 	decayStep := getAutoWeightDecayStep(ctx)
-	mp, err := gorm.G[models.ModelWithProvider](models.DB).Where("id = ?", modelProviderID).First(ctx)
+	mp, err := repos().ModelWithProvider.Get(ctx, modelProviderID)
 	if err != nil {
 		return
 	}
@@ -126,9 +123,7 @@ func ApplyWeightDecayByModelProviderID(ctx context.Context, modelProviderID uint
 		return
 	}
 
-	if _, err := gorm.G[models.ModelWithProvider](models.DB).
-		Where("id = ?", modelProviderID).
-		Update(ctx, "weight", newWeight); err != nil {
+	if _, err := repos().ModelWithProvider.UpdateFields(ctx, modelProviderID, map[string]any{"weight": newWeight}); err != nil {
 		slog.Error("update weight error", "error", err, "id", modelProviderID)
 		return
 	}
@@ -146,7 +141,7 @@ func ApplyPriorityDecayByModelProviderID(ctx context.Context, modelProviderID ui
 	threshold := getAutoPriorityDecayThreshold(ctx)
 	disableEnabled := getAutoPriorityDecayDisableEnabled(ctx)
 
-	mp, err := gorm.G[models.ModelWithProvider](models.DB).Where("id = ?", modelProviderID).First(ctx)
+	mp, err := repos().ModelWithProvider.Get(ctx, modelProviderID)
 	if err != nil {
 		return
 	}
@@ -159,9 +154,7 @@ func ApplyPriorityDecayByModelProviderID(ctx context.Context, modelProviderID ui
 		return
 	}
 
-	if _, err := gorm.G[models.ModelWithProvider](models.DB).
-		Where("id = ?", modelProviderID).
-		Update(ctx, "priority", newPriority); err != nil {
+	if _, err := repos().ModelWithProvider.UpdateFields(ctx, modelProviderID, map[string]any{"priority": newPriority}); err != nil {
 		slog.Error("update priority error", "error", err, "id", modelProviderID)
 		return
 	}
@@ -171,9 +164,8 @@ func ApplyPriorityDecayByModelProviderID(ctx context.Context, modelProviderID ui
 	// 只有在启用自动禁用功能时才执行禁用操作
 	if disableEnabled && newPriority <= threshold {
 		falseVal := false
-		if _, err := gorm.G[models.ModelWithProvider](models.DB).
-			Where("id = ?", modelProviderID).
-			Updates(ctx, models.ModelWithProvider{Status: &falseVal}); err != nil {
+		if err := repos().ModelWithProvider.Update(ctx, modelProviderID,
+			models.ModelWithProvider{Status: &falseVal}); err != nil {
 			slog.Error("auto disable model provider error", "error", err, "id", modelProviderID)
 		} else {
 			slog.Warn("model provider auto disabled due to low priority", "provider", providerName, "model", providerModel, "priority", newPriority, "threshold", threshold)
@@ -240,7 +232,7 @@ func IncrementConsecutiveFailures(ctx context.Context, modelProviderID uint, pro
 	}
 
 	threshold := getConsecutiveFailureThreshold(ctx)
-	mp, err := gorm.G[models.ModelWithProvider](models.DB).Where("id = ?", modelProviderID).First(ctx)
+	mp, err := repos().ModelWithProvider.Get(ctx, modelProviderID)
 	if err != nil {
 		return
 	}
@@ -253,9 +245,7 @@ func IncrementConsecutiveFailures(ctx context.Context, modelProviderID uint, pro
 		updates.Status = &falseVal
 	}
 
-	if _, err := gorm.G[models.ModelWithProvider](models.DB).
-		Where("id = ?", modelProviderID).
-		Updates(ctx, updates); err != nil {
+	if err := repos().ModelWithProvider.Update(ctx, modelProviderID, updates); err != nil {
 		slog.Error("update consecutive failure count error", "error", err, "id", modelProviderID)
 		return
 	}
@@ -267,9 +257,7 @@ func IncrementConsecutiveFailures(ctx context.Context, modelProviderID uint, pro
 
 // ResetConsecutiveFailures 成功调用后将连续失败计数清零。
 func ResetConsecutiveFailures(ctx context.Context, modelProviderID uint) {
-	if _, err := gorm.G[models.ModelWithProvider](models.DB).
-		Where("id = ? AND consecutive_failures != 0", modelProviderID).
-		Update(ctx, "consecutive_failures", 0); err != nil {
+	if _, err := repos().ModelWithProvider.ResetConsecutiveFailures(ctx, modelProviderID); err != nil {
 		slog.Error("reset consecutive failure count error", "error", err, "id", modelProviderID)
 	}
 }

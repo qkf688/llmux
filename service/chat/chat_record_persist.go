@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	"github.com/atopos31/llmio/models"
-	"gorm.io/gorm"
 )
 
 // persistChatLog 负责响应后处理中的 IO 落库：
@@ -19,7 +18,7 @@ func persistChatLog(ctx context.Context, logId uint, logUpdate models.ChatLog, b
 		applyResponseBodyToLog(&logUpdate, output)
 	}
 
-	if _, err := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, logUpdate); err != nil {
+	if _, err := repos().ChatLog.UpdateByID(ctx, logId, logUpdate); err != nil {
 		slog.Error("failed to update log", "log_id", logId, "error", err)
 		return err
 	}
@@ -60,7 +59,7 @@ func createChatIO(ctx context.Context, logId uint, input []byte, output *models.
 	if output == nil {
 		output = &models.OutputUnion{}
 	}
-	if err := gorm.G[models.ChatIO](models.DB).Create(ctx, &models.ChatIO{
+	if err := repos().ChatIO.Create(ctx, &models.ChatIO{
 		Input:       string(input),
 		LogId:       logId,
 		OutputUnion: *output,

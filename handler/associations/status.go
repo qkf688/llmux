@@ -5,10 +5,20 @@ import (
 	"strconv"
 
 	"github.com/atopos31/llmio/httpresp"
-	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+// statusUpdateFields 构造状态切换要写入的列。
+// 启用时一并把连续失败计数清零，否则关联恢复后再失败一次就会立刻达阈值被重新禁用。
+// 必须用列名 map：结构体 Updates 会把 consecutive_failures 的 0 当零值跳过。
+func statusUpdateFields(enabled bool) map[string]any {
+	fields := map[string]any{"status": enabled}
+	if enabled {
+		fields["consecutive_failures"] = 0
+	}
+	return fields
+}
 
 // UpdateModelProviderStatus 切换模型提供商关联启用状态。
 func UpdateModelProviderStatus(c *gin.Context) {
@@ -37,14 +47,7 @@ func UpdateModelProviderStatus(c *gin.Context) {
 	}
 
 	status := req.Status
-	updates := models.ModelWithProvider{
-		Status: &status,
-	}
-	if status {
-		updates.ConsecutiveFailures = 0
-	}
-
-	if err := repos().ModelWithProvider.Update(ctx, uint(id), updates); err != nil {
+	if _, err := repos().ModelWithProvider.UpdateFields(ctx, uint(id), statusUpdateFields(status)); err != nil {
 		httpresp.InternalServerError(c, "Failed to update status: "+err.Error())
 		return
 	}
@@ -66,15 +69,7 @@ func BatchUpdateModelProvidersStatus(c *gin.Context) {
 		return
 	}
 
-	status := req.Status
-	updates := models.ModelWithProvider{
-		Status: &status,
-	}
-	if status {
-		updates.ConsecutiveFailures = 0
-	}
-
-	result, err := repos().ModelWithProvider.UpdateByIDs(c.Request.Context(), req.IDs, updates)
+	result, err := repos().ModelWithProvider.UpdateFieldsByIDs(c.Request.Context(), req.IDs, statusUpdateFields(req.Status))
 	if err != nil {
 		httpresp.InternalServerError(c, "Failed to update status: "+err.Error())
 		return

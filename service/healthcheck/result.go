@@ -40,9 +40,12 @@ func (h *HealthChecker) handleCheckResult(ctx context.Context, mp *models.ModelW
 		}
 
 		if autoEnable && (mp.Status == nil || !*mp.Status) {
-			trueVal := true
-			if err := repos().ModelWithProvider.Update(ctx, mp.ID,
-				models.ModelWithProvider{Status: &trueVal, ConsecutiveFailures: 0}); err != nil {
+			// 必须走 UpdateFields：结构体 Updates 会把 consecutive_failures 的 0 当零值跳过，
+			// 计数不清零会让关联恢复后再失败一次就立刻被重新禁用。
+			if _, err := repos().ModelWithProvider.UpdateFields(ctx, mp.ID, map[string]any{
+				"status":               true,
+				"consecutive_failures": 0,
+			}); err != nil {
 				slog.Error("failed to enable model provider after health check success", "id", mp.ID, "error", err)
 			} else {
 				slog.Info("model provider auto-enabled after health check success", "id", mp.ID)

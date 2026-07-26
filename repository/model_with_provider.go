@@ -39,8 +39,10 @@ type ModelWithProviderRepo interface {
 	Delete(ctx context.Context, id uint) (int64, error)
 	// DeleteByIDs 批量删除关联，返回受影响行数。
 	DeleteByIDs(ctx context.Context, ids []uint) (int64, error)
-	// UpdateByIDs 批量更新关联字段，返回受影响行数。
+	// UpdateByIDs 批量更新关联字段（GORM Updates：结构体零值字段不写入），返回受影响行数。
 	UpdateByIDs(ctx context.Context, ids []uint, updates models.ModelWithProvider) (int64, error)
+	// UpdateFieldsByIDs 按列名批量更新关联（可写入零值），返回受影响行数。
+	UpdateFieldsByIDs(ctx context.Context, ids []uint, fields map[string]any) (int64, error)
 	// DeleteByProviderID 删除指定供应商下的全部关联，返回受影响行数。
 	DeleteByProviderID(ctx context.Context, providerID uint) (int64, error)
 	// DeleteByModelID 删除指定模型下的全部关联，返回受影响行数。
@@ -153,6 +155,14 @@ func (r *modelWithProviderRepo) UpdateByIDs(ctx context.Context, ids []uint, upd
 		return 0, nil
 	}
 	result := r.db.WithContext(ctx).Model(&models.ModelWithProvider{}).Where("id IN ?", ids).Updates(updates)
+	return result.RowsAffected, result.Error
+}
+
+func (r *modelWithProviderRepo) UpdateFieldsByIDs(ctx context.Context, ids []uint, fields map[string]any) (int64, error) {
+	if len(ids) == 0 || len(fields) == 0 {
+		return 0, nil
+	}
+	result := r.db.WithContext(ctx).Model(&models.ModelWithProvider{}).Where("id IN ?", ids).Updates(fields)
 	return result.RowsAffected, result.Error
 }
 

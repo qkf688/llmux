@@ -40,6 +40,6 @@ func ClearProviderAssociations(c *gin.Context) {
 	httpresp.Success(c, map[string]interface{}{
 		"provider_id":   id,
 		"provider_name": provider.Name,
-		"deleted":       deleted,
+		"deleted_count": deleted,
 	})
 }

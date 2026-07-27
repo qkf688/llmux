@@ -69,6 +69,7 @@ func getDatabaseTableStats() ([]tableStat, int64) {
 		{name: "stats_hourlies", displayName: "小时统计", model: &models.StatsHourly{}},
 		{name: "stats_model_totals", displayName: "模型统计", model: &models.StatsModelTotal{}},
 		{name: "stats_real_model_totals", displayName: "真实模型统计", model: &models.StatsRealModelTotal{}},
+		{name: "stats_provider_totals", displayName: "供应商统计", model: &models.StatsProviderTotal{}},
 		{name: "settings", displayName: "系统设置", model: &models.Setting{}},
 		{name: "health_check_logs", displayName: "健康检测日志", model: &models.HealthCheckLog{}},
 		{name: "model_sync_logs", displayName: "模型同步日志", model: &models.ModelSyncLog{}},

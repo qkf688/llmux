@@ -35,7 +35,7 @@ type UseVirtualModelsMappingsInput = {
   mappingForm: UseFormReturn<MappingFormValues>;
   defaults: VirtualModelsBatchDefaults;
   getRealModelName: (modelId: number) => string;
-  refreshMappings: (vm?: VirtualModel | null) => Promise<void>;
+  refreshMappings: (vm?: VirtualModel) => Promise<void>;
   setCurrentVirtualModel: VirtualModelsPageState["setCurrentVirtualModel"];
   setMappingsDialogOpen: VirtualModelsPageState["setMappingsDialogOpen"];
   setMappingFormDialogOpen: VirtualModelsPageState["setMappingFormDialogOpen"];

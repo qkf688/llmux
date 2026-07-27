@@ -24,13 +24,10 @@ export function useModelProvidersAssociationsData({
 
   const fetchModelProviders = useCallback(
     async (modelId: number) => {
-      // refetchQueries 等最新数据回来；不要用渲染期闭包里的旧 modelProviders
+      // 只触发 query refetch；状态同步交给上方 effect（query 回流后自动调 loadProviderStatus）
       await queryClient.refetchQueries({ queryKey: modelProviderKeys.list(modelId) });
-      const latest =
-        queryClient.getQueryData<ModelWithProvider[]>(modelProviderKeys.list(modelId)) ?? [];
-      await loadProviderStatus(latest, modelId);
     },
-    [queryClient, loadProviderStatus],
+    [queryClient],
   );
 
   const setModelProviders = useCallback(

@@ -1,3 +1,5 @@
+import { Eye, EyeOff } from "lucide-react";
+import type { UseFormReturn } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,8 +21,6 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import type { Provider, ProviderTemplate } from "@/lib/api";
-import { Eye, EyeOff } from "lucide-react";
-import type { UseFormReturn } from "react-hook-form";
 import type { ProviderFormValues } from "../../form-schema";
 import { getProviderExtraFields } from "../../form-fields";
 import { applyProviderTemplateDefaults } from "../../utils/template-defaults";

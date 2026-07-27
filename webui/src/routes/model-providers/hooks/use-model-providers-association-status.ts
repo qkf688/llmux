@@ -10,10 +10,10 @@ export function useModelProvidersAssociationStatus(models: Model[]) {
   const loadProviderStatus = useCallback(
     async (providers: ModelWithProvider[], modelId: number) => {
       const selectedModel = models.find((model) => model.ID === modelId);
-      if (!selectedModel) return;
-
+      // 即使找不到 model 也先 reset，避免上一个 model 的 providerStatus 残留
       setProviderStatus({});
       setHealthStatus({});
+      if (!selectedModel) return;
 
       const newStatus: ProviderStatusState = {};
       const newHealthStatus: ProviderStatusState = {};

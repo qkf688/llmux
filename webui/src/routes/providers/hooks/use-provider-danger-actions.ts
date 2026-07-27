@@ -74,7 +74,7 @@ export function useProviderDangerActions({
       const result = await clearProviderAssociations(clearAssociationId);
       setClearAssociationId(null);
       toast.success(`提供商 ${targetProvider?.Name ?? clearAssociationId} 的关联已清除`, {
-        description: `共清除了 ${result.deleted_count} 个模型关联`,
+        description: `共清除了 ${result.deleted} 个模型关联`,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

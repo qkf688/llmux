@@ -117,8 +117,8 @@ export async function testProviderModel(providerId: number, model: string): Prom
 
 export async function clearProviderAssociations(
   providerId: number
-): Promise<{ provider_id: number; provider_name: string; deleted_count: number }> {
-  return apiRequest<{ provider_id: number; provider_name: string; deleted_count: number }>(
+): Promise<{ provider_id: number; provider_name: string; deleted: number }> {
+  return apiRequest<{ provider_id: number; provider_name: string; deleted: number }>(
     `/providers/${providerId}/associations`,
     {
       method: "DELETE",

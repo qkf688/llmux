@@ -144,7 +144,7 @@ export function useVirtualModelsPage() {
 
   // 可显式传入 vm，避免 setCurrentVirtualModel 同 tick 内仍读到闭包旧值
   const refreshMappings = useCallback(
-    async (vm?: VirtualModel | null) => {
+    async (vm?: VirtualModel) => {
       const target = vm ?? currentVirtualModel;
       if (target) {
         await queryClient.invalidateQueries({ queryKey: virtualModelKeys.mappings(target.ID) });

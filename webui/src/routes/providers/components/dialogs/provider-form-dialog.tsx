@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import type { Provider, ProviderTemplate } from "@/lib/api";
+import { Eye, EyeOff } from "lucide-react";
 import type { UseFormReturn } from "react-hook-form";
 import type { ProviderFormValues } from "../../form-schema";
 import { getProviderExtraFields } from "../../form-fields";
@@ -147,36 +148,9 @@ export function ProviderFormDialog({
                         aria-label={showApiKey ? "隐藏 API Key" : "显示 API Key"}
                       >
                         {showApiKey ? (
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            className="h-4 w-4"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M3 3l18 18M9.88 9.88A3 3 0 0114.12 14.12M10.73 5.08A9.53 9.53 0 0112 5c5 0 9 4.5 9 7s-4 7-9 7a9.53 9.53 0 01-1.27-.08M6.61 6.61C4.13 8.2 3 10 3 12c0 2.5 4 7 9 7a9.35 9.35 0 003.39-.64"
-                            />
-                          </svg>
+                          <EyeOff className="h-4 w-4" />
                         ) : (
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            className="h-4 w-4"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542 7z"
-                            />
-                            <circle cx="12" cy="12" r="3" />
-                          </svg>
+                          <Eye className="h-4 w-4" />
                         )}
                       </Button>
                     </div>

@@ -58,6 +58,7 @@ import {
 import { useVirtualModels, useVMMappings, virtualModelKeys } from "@/hooks/api/use-virtual-models";
 import { useModels } from "@/hooks/api/use-models";
 import { useProviders } from "@/hooks/api/use-providers";
+import type { VirtualModel } from "@/lib/api";
 import { useVirtualModelsBootstrap } from "./use-virtual-models-bootstrap";
 import { useVirtualModelsBlacklist } from "./use-virtual-models-blacklist";
 import { useVirtualModelsMappings } from "./use-virtual-models-mappings";
@@ -141,11 +142,16 @@ export function useVirtualModelsPage() {
   const { data: mappingsData } = useVMMappings(currentVirtualModel?.ID ?? null);
   const mappings = mappingsData ?? [];
 
-  const refreshMappings = useCallback(async () => {
-    if (currentVirtualModel) {
-      await queryClient.invalidateQueries({ queryKey: virtualModelKeys.mappings(currentVirtualModel.ID) });
-    }
-  }, [queryClient, currentVirtualModel]);
+  // 可显式传入 vm，避免 setCurrentVirtualModel 同 tick 内仍读到闭包旧值
+  const refreshMappings = useCallback(
+    async (vm?: VirtualModel | null) => {
+      const target = vm ?? currentVirtualModel;
+      if (target) {
+        await queryClient.invalidateQueries({ queryKey: virtualModelKeys.mappings(target.ID) });
+      }
+    },
+    [queryClient, currentVirtualModel],
+  );
 
   const loading = virtualModelsLoading || modelsLoading || providersLoading;
 

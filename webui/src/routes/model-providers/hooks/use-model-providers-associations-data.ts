@@ -15,18 +15,22 @@ export function useModelProvidersAssociationsData({
   const queryClient = useQueryClient();
   const { data: modelProviders = [] } = useModelProvidersQuery(selectedModelId);
 
+  // 列表变空时也要刷新状态，避免删除最后一个关联后 providerStatus 残留
   useEffect(() => {
-    if (modelProviders.length > 0 && selectedModelId !== null) {
+    if (selectedModelId !== null) {
       void loadProviderStatus(modelProviders, selectedModelId);
     }
   }, [modelProviders, selectedModelId, loadProviderStatus]);
 
   const fetchModelProviders = useCallback(
     async (modelId: number) => {
-      await queryClient.invalidateQueries({ queryKey: modelProviderKeys.list(modelId) });
-      void loadProviderStatus(modelProviders, modelId);
+      // refetchQueries 等最新数据回来；不要用渲染期闭包里的旧 modelProviders
+      await queryClient.refetchQueries({ queryKey: modelProviderKeys.list(modelId) });
+      const latest =
+        queryClient.getQueryData<ModelWithProvider[]>(modelProviderKeys.list(modelId)) ?? [];
+      await loadProviderStatus(latest, modelId);
     },
-    [queryClient, loadProviderStatus, modelProviders],
+    [queryClient, loadProviderStatus],
   );
 
   const setModelProviders = useCallback(

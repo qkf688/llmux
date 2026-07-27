@@ -35,7 +35,7 @@ type UseVirtualModelsMappingsInput = {
   mappingForm: UseFormReturn<MappingFormValues>;
   defaults: VirtualModelsBatchDefaults;
   getRealModelName: (modelId: number) => string;
-  refreshMappings: () => Promise<void>;
+  refreshMappings: (vm?: VirtualModel | null) => Promise<void>;
   setCurrentVirtualModel: VirtualModelsPageState["setCurrentVirtualModel"];
   setMappingsDialogOpen: VirtualModelsPageState["setMappingsDialogOpen"];
   setMappingFormDialogOpen: VirtualModelsPageState["setMappingFormDialogOpen"];
@@ -107,13 +107,9 @@ export function useVirtualModelsMappings({
     setMappingSearchQuery("");
     setSelectedMappingIds(() => new Set<number>());
     setMappingBatchDeleteDialogOpen(false);
-    try {
-      await refreshMappings();
-      setMappingsDialogOpen(true);
-    } catch (error) {
-      const message = toErrorMessage(error);
-      toast.error(`获取映射失败: ${message}`);
-    }
+    // 显式传入刚选中的 model，避免闭包仍指向上一个 currentVirtualModel
+    await refreshMappings(model);
+    setMappingsDialogOpen(true);
   };
 
   const handleMappingsDialogOpenChange = (open: boolean) => {

@@ -7,6 +7,7 @@ import (
 	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/repository"
 	"github.com/atopos31/llmio/service"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -89,15 +90,13 @@ func GetModelSyncStats(c *gin.Context) {
 
 	// 获取所有提供商数量（启用模型端点的）
 	var totalProviders int64
-	enabledProviderIDs := models.DB.WithContext(ctx).
-		Model(&models.Provider{}).
-		Select("id").
-		Where("model_endpoint IS NULL OR model_endpoint = ?", true)
+	enabledProviderIDs := repository.WhereModelEndpointEnabled(
+		models.DB.WithContext(ctx).Model(&models.Provider{}).Select("id"),
+	)
 
-	if err := models.DB.WithContext(ctx).
-		Model(&models.Provider{}).
-		Where("model_endpoint IS NULL OR model_endpoint = ?", true).
-		Count(&totalProviders).Error; err != nil {
+	if err := repository.WhereModelEndpointEnabled(
+		models.DB.WithContext(ctx).Model(&models.Provider{}),
+	).Count(&totalProviders).Error; err != nil {
 		httpresp.InternalServerError(c, "Failed to count providers: "+err.Error())
 		return
 	}

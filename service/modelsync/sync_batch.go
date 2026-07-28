@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/repository"
 	"gorm.io/gorm"
 )
 
@@ -16,8 +17,7 @@ func (s *Service) SyncAllProviders(ctx context.Context) ([]*models.ModelSyncLog,
 	batchID := fmt.Sprintf("%d", time.Now().Unix())
 
 	var providers []models.Provider
-	if err := s.db.WithContext(ctx).
-		Where("model_endpoint IS NULL OR model_endpoint = ?", true).
+	if err := repository.WhereModelEndpointEnabled(s.db.WithContext(ctx)).
 		Find(&providers).Error; err != nil {
 		return nil, err
 	}

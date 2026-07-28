@@ -9,12 +9,16 @@ import (
 
 type Provider struct {
 	gorm.Model
-	Name               string
-	Type               string
-	Config             string
-	Console            string  // 控制台地址
-	Proxy              string  // 代理地址
-	ModelEndpoint      *bool   // 是否启用获取模型列表能力（用于对外“模型端点”与自动同步筛选），默认true
+	Name          string
+	Type          string
+	Config        string
+	Console       string // 控制台地址
+	Proxy         string // 代理地址
+	ModelEndpoint *bool  // 是否启用获取模型列表能力（用于对外“模型端点”与自动同步筛选），默认true
+	// SQL NULL 契约：该字段无 gorm default tag，历史行落库为 NULL。
+	// 语义上 NULL 视为 true（启用）。全仓所有查询必须经 repository.WhereModelEndpointEnabled /
+	// WhereModelEndpointMatches，写法 `model_endpoint IS NULL OR model_endpoint = ?`，
+	// 禁止直接 `model_endpoint = ?`（会漏掉 NULL 行）。新增依赖此字段的查询请勿另起 inline 写法。
 	ModelFilterEnabled *bool   // 是否启用模型过滤（按规则过滤上游模型）
 	AuthType           *string // 认证方式：x-api-key（默认）或 bearer，仅用于 Anthropic 类型
 	Blacklisted        *bool   `gorm:"default:false" json:"blacklisted"` // 是否拉黑（拉黑后不参与自动关联）

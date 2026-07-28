@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/repository"
 	"gorm.io/gorm"
 )
 
@@ -38,10 +39,9 @@ func (s *Service) checkAndSync(ctx context.Context) {
 	}
 
 	var lastLog models.ModelSyncLog
-	enabledProviderIDs := s.db.WithContext(ctx).
-		Model(&models.Provider{}).
-		Select("id").
-		Where("model_endpoint IS NULL OR model_endpoint = ?", true)
+	enabledProviderIDs := repository.WhereModelEndpointEnabled(
+		s.db.WithContext(ctx).Model(&models.Provider{}).Select("id"),
+	)
 
 	if err := s.db.WithContext(ctx).
 		Where("provider_id IN (?)", enabledProviderIDs).

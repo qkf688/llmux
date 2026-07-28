@@ -128,7 +128,7 @@ func balanceChatVirtual(ctx context.Context, start time.Time, style string, befo
 			if result.Success {
 				sel, _ := virtualmodel.GetSelector(providersWithMeta.VirtualStrategy)
 				if sel.RequiresAdvanceOnSuccess() {
-					virtualmodel.Default().UpdateRoundRobinIndex(providersWithMeta.VirtualModelID)
+					virtualmodel.Default().UpdateRoundRobinIndex(providersWithMeta.VirtualModelID, len(providersWithMeta.OrderedRealModels))
 				}
 				close(retryLog)
 				slog.Info("virtual model request succeeded", "virtual_model", providersWithMeta.VirtualModelName, "real_model", realModel.Name, "provider", provider.Name)

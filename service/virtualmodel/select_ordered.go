@@ -45,6 +45,10 @@ func (s *Service) selectOrderedByRoundRobin(virtualModelID uint, mappings []mode
 	for i := 0; i < len(mappings); i++ {
 		idx := (currentIndex + i) % len(mappings)
 		mapping := mappings[idx]
+		// loadCandidatePool 已保证每个 mapping 的 model 都存在于 modelByID，
+		// 此 continue 当前是死分支。若未来新增跳过条件（临时熔断等），
+		// len(ordered) 将小于 len(mappings)，需同步检查 UpdateRoundRobinIndex
+		// 的取模基数（当前由调用方传 len(OrderedRealModels)）。
 		model, ok := findModelByID(mapping.RealModelID, modelByID)
 		if !ok {
 			continue

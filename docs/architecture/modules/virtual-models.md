@@ -27,7 +27,7 @@ service/virtualmodel/
 ├── service.go
 ├── selector.go            # 注册表
 ├── priority_selector.go
-├── round_robin_selector.go
+├── round_robin_selector.go # round_robin 薄包装 + round_robin.go（index 推进）
 ├── random_selector.go
 ├── candidate_pool.go / validation.go / stats.go
 repository/virtual_model.go
@@ -45,6 +45,7 @@ repository/virtual_model.go
 ## 5. 特殊约定
 
 - 两层负载均衡：虚拟→真实（本模块）+ 真实→供应商（chatcore/balancer）
+- **round_robin index 推进基数**：`UpdateRoundRobinIndex(vmID, candidateCount)` 的 `candidateCount` 必须是 `loadCandidatePool` 过滤后的候选池长度（由调用方 `chat_balance_virtual` 传 `len(OrderedRealModels)`），不能用全量启用映射数，否则黑名单/缺失模型会导致取模基数与选路时不一致
 - **扩展最小改动集（现状）**：新增 `*_selector.go` + `RegisterSelector` 即可挂进分发；但现有 priority/round_robin/random 多为 **薄包装转发 `Service.selectBy*`**，新算法常仍要改 Service 方法；前端策略白名单（如 forms schema）需同步
 - 用户向操作说明见 [docs/virtual-models-guide.md](../../virtual-models-guide.md)
 

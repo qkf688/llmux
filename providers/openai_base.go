@@ -20,7 +20,7 @@ type openaiBase struct {
 	APIKey       string   `json:"api_key"`
 	CustomModels []string `json:"custom_models"`
 	Proxy        string   `json:"proxy"`
-	endpointPath string // 注入差异点：chat/completions 或 responses
+	endpointPath string   // 注入差异点：chat/completions 或 responses
 }
 
 // OpenAICompatBaseURL / OpenAICompatAPIKey 实现 OpenAICompat 能力接口（OCP-9）。

@@ -4,8 +4,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/handler/httpx"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/repository"
 	"github.com/gin-gonic/gin"

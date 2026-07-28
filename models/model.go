@@ -27,9 +27,9 @@ type AnthropicConfig struct {
 }
 
 type Model struct {
-	ID        uint `gorm:"primarykey"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID            uint `gorm:"primarykey"`
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 	Name          string
 	Remark        string
 	MaxRetry      int   // 重试次数限制
@@ -181,8 +181,8 @@ type StatsProviderTotal struct {
 	SuccessCount        int64     `json:"success_count"`
 	FailureCount        int64     `json:"failure_count"`
 	TotalTokens         int64     `json:"total_tokens"`
-	AvgResponseTime     int64     `json:"avg_response_time"`      // 累计响应时间（用于计算平均值）
-	ResponseTimeSamples int64     `json:"response_time_samples"`  // 有响应时间的样本数（仅成功且有耗时时自增），读侧用它做分母
+	AvgResponseTime     int64     `json:"avg_response_time"`     // 累计响应时间（用于计算平均值）
+	ResponseTimeSamples int64     `json:"response_time_samples"` // 有响应时间的样本数（仅成功且有耗时时自增），读侧用它做分母
 	CreatedAt           time.Time `json:"created_at"`
 	UpdatedAt           time.Time `json:"updated_at"`
 }

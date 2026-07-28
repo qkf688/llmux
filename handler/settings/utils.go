@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/handler/associations"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"

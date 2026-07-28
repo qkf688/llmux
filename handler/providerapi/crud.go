@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 
-	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/handler/autoassoc"
 	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/handler/settings"
+	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/repository"
 	"github.com/gin-gonic/gin"

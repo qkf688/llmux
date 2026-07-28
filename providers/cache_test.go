@@ -53,4 +53,3 @@ func TestGetClientWithProxy_EmptyOrInvalidProxyReusesEnvClient(t *testing.T) {
 		t.Fatal("expected invalid proxy to fall back and reuse env client")
 	}
 }
-

@@ -5,15 +5,15 @@ import "sync"
 // Metadata 描述某类 provider 的静态元数据（模板、探针请求体等）。
 // 由各 provider 在 init() 中 RegisterMetadata，供 handler/healthcheck 查询，避免 type switch。
 type Metadata struct {
-	Type           string
-	ConfigTemplate string // OCP-6：配置 JSON 模板
-	TestBody       []byte // OCP-7：连通性测试体；未知 type 由调用方决定 error 或回退
-	StructuredBody []byte // OCP-7：结构化输出测试体
+	Type            string
+	ConfigTemplate  string // OCP-6：配置 JSON 模板
+	TestBody        []byte // OCP-7：连通性测试体；未知 type 由调用方决定 error 或回退
+	StructuredBody  []byte // OCP-7：结构化输出测试体
 	HealthCheckBody []byte // OCP-8：健康检查体（可与 TestBody 不同；未知 type 回退 openai）
 }
 
 var (
-	metadataMu   sync.RWMutex
+	metadataMu     sync.RWMutex
 	metadataByType = make(map[string]Metadata)
 	// metadataOrder 保持稳定展示顺序：openai → openai-res → anthropic
 	metadataOrder []string

@@ -230,11 +230,12 @@ func emitOpenAIToResponsesToolCalls(state *realtimeStreamState, toolCalls []inte
 			state.responsesOutput.set(outputIndex, item)
 
 			itemAdded := map[string]interface{}{
-				"type":         "response.output_item.added",
-				"output_index": outputIndex,
-				"item":         item,
+				"type":            "response.output_item.added",
+				"sequence_number": nextRealtimeSequence(state),
+				"output_index":    outputIndex,
+				"item":            item,
 			}
-			if err := writeRealtimeEventJSONData(state, "response.output_item.added", itemAdded); err != nil {
+			if err := writeRealtimeOrderedData(state, itemAdded); err != nil {
 				return err
 			}
 		}
@@ -244,11 +245,12 @@ func emitOpenAIToResponsesToolCalls(state *realtimeStreamState, toolCalls []inte
 			state.responsesOutput.appendArguments(outputIndex, args)
 
 			argsDelta := map[string]interface{}{
-				"type":         "response.function_call_arguments.delta",
-				"output_index": outputIndex,
-				"delta":        args,
+				"type":            "response.function_call_arguments.delta",
+				"sequence_number": nextRealtimeSequence(state),
+				"output_index":    outputIndex,
+				"delta":           args,
 			}
-			if err := writeRealtimeEventJSONData(state, "response.function_call_arguments.delta", argsDelta); err != nil {
+			if err := writeRealtimeOrderedData(state, argsDelta); err != nil {
 				return err
 			}
 		}

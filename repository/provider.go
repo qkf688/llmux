@@ -7,6 +7,23 @@ import (
 	"gorm.io/gorm"
 )
 
+// WhereModelEndpointEnabled 给 query 加「model_endpoint 启用」过滤：
+// NULL 行视为 true（历史默认值，字段无 default tag），与全仓 modelsync 路径一致。
+// 抽出此 helper 是因为该过滤原本在 4 处 inline 复制（DRY）。
+func WhereModelEndpointEnabled(query *gorm.DB) *gorm.DB {
+	return query.Where("model_endpoint IS NULL OR model_endpoint = ?", true)
+}
+
+// WhereModelEndpointMatches 给 query 加「model_endpoint 与目标值匹配」过滤：
+// NULL 行视为 true（历史默认值），因此传入 &true 会命中 NULL + true 两类行。
+// 与 WhereModelEndpointEnabled 共享同一语义，便于上层复用（DRY）。
+func WhereModelEndpointMatches(query *gorm.DB, want *bool) *gorm.DB {
+	if want == nil {
+		return query
+	}
+	return query.Where("model_endpoint IS NULL OR model_endpoint = ?", *want)
+}
+
 // ProviderRepo 封装 Provider 实体的数据访问。
 type ProviderRepo interface {
 	// List 返回符合条件的 Provider 列表；filter 为零值时返回全部。
@@ -58,7 +75,9 @@ func (r *providerRepo) List(ctx context.Context, filter ProviderFilter) ([]model
 		query = query.Where("blacklisted = ?", *filter.Blacklisted)
 	}
 	if filter.ModelEndpoint != nil {
-		query = query.Where("model_endpoint = ?", *filter.ModelEndpoint)
+		// 历史行 model_endpoint 为 NULL（字段无 default tag），语义为「默认 true」。
+		// helper 统一封装 NULL+值匹配，避免 4 处 inline 复制（DRY）。
+		query = WhereModelEndpointMatches(query, filter.ModelEndpoint)
 	}
 
 	var providers []models.Provider

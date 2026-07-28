@@ -103,6 +103,41 @@ func TestProviderRepo_List_FilterByType(t *testing.T) {
 	}
 }
 
+func TestProviderRepo_List_FilterByModelEndpoint_NullRowsMatchTrue(t *testing.T) {
+	// 历史行的 ModelEndpoint 是 NULL（字段无 default tag），语义为「默认 true」。
+	// 修复前 `model_endpoint = ?` 会漏掉所有 NULL 行；修复后 `IS NULL OR = ?` 应命中 NULL + =true 两类行。
+	// 全仓 4 处 modelsync caller 都只传 &true 拉可同步供应商；&false 的语义没有 caller 也没定义，不在断言范围。
+	ctx := context.Background()
+	db := newTestDB(t)
+	repo := NewProviderRepo(db)
+
+	trueVal := true
+	providers := []*models.Provider{
+		{Name: "p-true", Type: "openai", Config: `{}`, ModelEndpoint: &trueVal},
+		{Name: "p-null", Type: "openai", Config: `{}`}, // ModelEndpoint 未设置 → NULL
+	}
+	for _, p := range providers {
+		if err := repo.Create(ctx, p); err != nil {
+			t.Fatalf("Create error: %v", err)
+		}
+	}
+
+	listTrue, err := repo.List(ctx, ProviderFilter{ModelEndpoint: &trueVal})
+	if err != nil {
+		t.Fatalf("List true error: %v", err)
+	}
+	if len(listTrue) != 2 {
+		t.Fatalf("ModelEndpoint=true 命中 %d 行 (p-true + p-null)，want 2", len(listTrue))
+	}
+	gotNames := map[string]bool{}
+	for _, p := range listTrue {
+		gotNames[p.Name] = true
+	}
+	if !gotNames["p-true"] || !gotNames["p-null"] {
+		t.Errorf("命中集合 = %v, want 含 p-true 与 p-null", gotNames)
+	}
+}
+
 func TestProviderRepo_UpdateBlacklist(t *testing.T) {
 	ctx := context.Background()
 	repo := NewProviderRepo(newTestDB(t))

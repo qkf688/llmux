@@ -313,6 +313,98 @@ func TestInvariant_OpenAIOut_ToolCallSurvivesAnthropicUpstream(t *testing.T) {
 	}
 }
 
+// fixtureAnthropicToolUseOnlyStream 是「纯 tool_use」的 anthropic 上游（无任何文本块），
+// 用于覆盖待办 45：anthropic→responses 不应在没有文本块时发 message 类型的 done 事件。
+const fixtureAnthropicToolUseOnlyStream = `event: message_start
+data: {"type":"message_start","message":{"id":"msg_toolonly","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"usage":{"input_tokens":5,"output_tokens":0}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_x","name":"fn","input":{}}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{}"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"input_tokens":5,"output_tokens":3}}
+
+event: message_stop
+data: {"type":"message_stop"}
+
+`
+
+// TestInvariant_ResponsesOut_PureToolUseNoMessageDone 覆盖待办 45：
+// anthropic→responses 纯 tool_use 流不应发 message 类型的 done 事件
+// （output_text.done / content_part.done / output_item.done[message]）。
+// 这些事件在纯 tool_use 流下：(a) 事件流冗余，(b) 会让 messageOutputIndex=0
+// 与 blockIndex=0 的 function_call 撞车。reasoning 路径独立不受影响。
+func TestInvariant_ResponsesOut_PureToolUseNoMessageDone(t *testing.T) {
+	t.Parallel()
+
+	events := runRealtimeTransform(t, fixtureAnthropicToolUseOnlyStream, "anthropic", "openai-res")
+
+	forbidden := map[string]bool{
+		"response.output_text.done":  true,
+		"response.content_part.done": true,
+	}
+	gotFunctionCallAdded := false
+	for _, ev := range events {
+		typ := ev.typ()
+		if forbidden[typ] {
+			t.Errorf("纯 tool_use 流不应发 %s，实际事件: %v", typ, ev.data)
+		}
+		if typ == "response.output_item.added" {
+			if item, ok := ev.data["item"].(map[string]interface{}); ok {
+				if t2, _ := item["type"].(string); t2 == "function_call" {
+					gotFunctionCallAdded = true
+				}
+				if t2, _ := item["type"].(string); t2 == "message" {
+					t.Errorf("纯 tool_use 流不应出现 message 类型的 output_item.added: %v", ev.data)
+				}
+			}
+		}
+		if typ == "response.output_item.done" {
+			if item, ok := ev.data["item"].(map[string]interface{}); ok {
+				if t2, _ := item["type"].(string); t2 == "message" {
+					t.Errorf("纯 tool_use 流不应出现 message 类型的 output_item.done: %v", ev.data)
+				}
+			}
+		}
+	}
+	if !gotFunctionCallAdded {
+		t.Error("应至少发一次 function_call 类型的 output_item.added")
+	}
+}
+
+// TestInvariant_ResponsesOut_SequenceNumberMonotonic 覆盖待办 43：
+// openai→responses 流式 tool 事件必须带 sequence_number，且全程单调递增（严格 Responses 客户端要求）。
+// 修复前 `emitOpenAIToResponsesToolCalls` 用 writeRealtimeEventJSONData 直发，不走 nextRealtimeSequence。
+func TestInvariant_ResponsesOut_SequenceNumberMonotonic(t *testing.T) {
+	t.Parallel()
+
+	events := runRealtimeTransform(t, fixtureOpenAIToolCallStream, "openai", "openai-res")
+
+	var lastSeq = -1
+	for i, ev := range events {
+		seqRaw, ok := ev.data["sequence_number"]
+		if !ok {
+			t.Errorf("事件 #%d (%s) 缺 sequence_number 字段: %v", i, ev.typ(), ev.data)
+			continue
+		}
+		seq, ok := seqRaw.(float64)
+		if !ok {
+			t.Errorf("事件 #%d (%s) sequence_number 不是数字: %v", i, ev.typ(), seqRaw)
+			continue
+		}
+		if int(seq) < lastSeq {
+			t.Errorf("事件 #%d (%s) sequence_number=%d 早于前一个 %d，不单调", i, ev.typ(), int(seq), lastSeq)
+		}
+		lastSeq = int(seq)
+	}
+}
+
 // --- helpers ---
 
 type sseEvent struct {

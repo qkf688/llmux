@@ -322,6 +322,69 @@ func handleAnthropicToResponsesMessageDelta(state *realtimeStreamState, chunk ma
 		})
 	}
 
+	// 只有真的出现过文本块才发 message 类型 done 事件：纯 tool_use 流不应再带
+	// output_text.done / content_part.done / output_item.done(message)，否则
+	// messageOutputIndex=0 会与 blockIndex=0 的 function_call 撞车，
+	// 且事件流本身冗余。reasoning 路径在上面已独立发完，与这里互不影响。
+	if err := emitMessageStreamFinalization(state); err != nil {
+		return err
+	}
+
+	status := "completed"
+	if delta, ok := chunk["delta"].(map[string]interface{}); ok {
+		if reason := maputil.String(delta, "stop_reason"); reason != "" && reason == "max_tokens" {
+			status = "incomplete"
+		}
+	}
+
+	responseCompleted := map[string]interface{}{
+		"type":            "response.completed",
+		"sequence_number": nextRealtimeSequence(state),
+		"response": map[string]interface{}{
+			"object":     "response",
+			"id":         state.responseID,
+			"model":      shared.GetNestedString(chunk, "message.model"),
+			"created_at": 0,
+			// 必须是真实产出：下游靠扫这个数组里有没有 function_call 判定 finish_reason。
+			"output": state.responsesOutput.snapshot(),
+			"status": status,
+		},
+	}
+
+	// 添加 usage 信息
+	if usage, ok := chunk["usage"].(map[string]interface{}); ok {
+		usageMap := map[string]interface{}{
+			"input_tokens":  int(maputil.Float64(usage, "input_tokens")),
+			"output_tokens": int(maputil.Float64(usage, "output_tokens")),
+			"total_tokens":  int(maputil.Float64(usage, "input_tokens") + maputil.Float64(usage, "output_tokens")),
+		}
+		// 添加 input_tokens_details
+		if inputTokens := int(maputil.Float64(usage, "input_tokens")); inputTokens > 0 {
+			usageMap["input_tokens_details"] = map[string]interface{}{
+				"cached_tokens": 0,
+			}
+		}
+		// 添加 output_tokens_details
+		if outputTokens := int(maputil.Float64(usage, "output_tokens")); outputTokens > 0 {
+			usageMap["output_tokens_details"] = map[string]interface{}{
+				"reasoning_tokens": 0,
+			}
+		}
+		responseCompleted["response"].(map[string]interface{})["usage"] = usageMap
+	}
+
+	return writeRealtimeOrderedData(state, responseCompleted)
+}
+
+// emitMessageStreamFinalization 发出 message 类型 content 块的收尾事件集：
+// output_text.done → content_part.done → output_item.done(message)。
+// 仅在 hasMessageOutputIndex 为真时执行，纯 tool_use 流不会进入此分支。
+// 抽出的理由：原逻辑嵌在 handleAnthropicToResponsesMessageDelta 中导致该函数 80→130 行膨胀；
+// 独立函数后 reasoning 路径与 message 路径边界更清晰（SRP），便于复用与单测。
+func emitMessageStreamFinalization(state *realtimeStreamState) error {
+	if !state.hasMessageOutputIndex {
+		return nil
+	}
 	msgIndex := state.messageOutputIndex
 
 	outputTextDone := map[string]interface{}{
@@ -382,9 +445,7 @@ func handleAnthropicToResponsesMessageDelta(state *realtimeStreamState, chunk ma
 	}
 	// 只有真的出现过文本块才记入 output：否则纯 tool_use 的流会把
 	// index 0 上的 function_call 覆盖掉。
-	if state.hasMessageOutputIndex {
-		state.responsesOutput.set(msgIndex, messageItem)
-	}
+	state.responsesOutput.set(msgIndex, messageItem)
 
 	outputItemDone := map[string]interface{}{
 		"type":            "response.output_item.done",
@@ -392,52 +453,5 @@ func handleAnthropicToResponsesMessageDelta(state *realtimeStreamState, chunk ma
 		"output_index":    msgIndex,
 		"item":            messageItem,
 	}
-	if err := writeRealtimeOrderedData(state, outputItemDone); err != nil {
-		return err
-	}
-
-	status := "completed"
-	if delta, ok := chunk["delta"].(map[string]interface{}); ok {
-		if reason := maputil.String(delta, "stop_reason"); reason != "" && reason == "max_tokens" {
-			status = "incomplete"
-		}
-	}
-
-	responseCompleted := map[string]interface{}{
-		"type":            "response.completed",
-		"sequence_number": nextRealtimeSequence(state),
-		"response": map[string]interface{}{
-			"object":     "response",
-			"id":         state.responseID,
-			"model":      shared.GetNestedString(chunk, "message.model"),
-			"created_at": 0,
-			// 必须是真实产出：下游靠扫这个数组里有没有 function_call 判定 finish_reason。
-			"output": state.responsesOutput.snapshot(),
-			"status": status,
-		},
-	}
-
-	// 添加 usage 信息
-	if usage, ok := chunk["usage"].(map[string]interface{}); ok {
-		usageMap := map[string]interface{}{
-			"input_tokens":  int(maputil.Float64(usage, "input_tokens")),
-			"output_tokens": int(maputil.Float64(usage, "output_tokens")),
-			"total_tokens":  int(maputil.Float64(usage, "input_tokens") + maputil.Float64(usage, "output_tokens")),
-		}
-		// 添加 input_tokens_details
-		if inputTokens := int(maputil.Float64(usage, "input_tokens")); inputTokens > 0 {
-			usageMap["input_tokens_details"] = map[string]interface{}{
-				"cached_tokens": 0,
-			}
-		}
-		// 添加 output_tokens_details
-		if outputTokens := int(maputil.Float64(usage, "output_tokens")); outputTokens > 0 {
-			usageMap["output_tokens_details"] = map[string]interface{}{
-				"reasoning_tokens": 0,
-			}
-		}
-		responseCompleted["response"].(map[string]interface{})["usage"] = usageMap
-	}
-
-	return writeRealtimeOrderedData(state, responseCompleted)
+	return writeRealtimeOrderedData(state, outputItemDone)
 }

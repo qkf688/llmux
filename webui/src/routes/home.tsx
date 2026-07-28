@@ -122,13 +122,14 @@ export default function Home() {
   const dbStats = results[7].data ?? null;
   const providerMetrics = results[8].data ?? [];
 
-  const loading = results.some((r) => r.isPending);
+  // KPI 查询（索引 0,1,2,7）loading 时才阻塞整页；图表查询（索引 3,4,5,6,8）渐进填充
+  const kpiLoading = results[0].isPending || results[1].isPending || results[2].isPending || results[7].isPending;
 
   const dbUsagePercent = dbStats && dbStats.page_count > 0
     ? ((dbStats.page_count - dbStats.free_pages) / dbStats.page_count) * 100
     : 0;
 
-  if (loading) return <Loading message="加载系统概览" />;
+  if (kpiLoading) return <Loading message="加载系统概览" />;
 
   const compactCountFormatter = (value: number) => {
     const formatted = formatCompactCount(value);

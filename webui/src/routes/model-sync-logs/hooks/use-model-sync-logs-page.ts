@@ -129,6 +129,7 @@ export function useModelSyncLogsPage() {
     setPage,
     setSelectedErrorProviders,
     setTogglingProviderIds,
+    providersById,
   });
 
   const openDetailLog = (log: ModelSyncLog) => {

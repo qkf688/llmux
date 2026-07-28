@@ -12,6 +12,7 @@ import {
   useToggleProviderModelEndpointMutation,
 } from "@/hooks/api";
 import type { ModelSyncLogsPageState } from "@/stores/model-sync-logs";
+import type { Provider } from "@/lib/api";
 
 type UseModelSyncLogsActionsInput = {
   refreshTimerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
@@ -24,6 +25,7 @@ type UseModelSyncLogsActionsInput = {
   setPage: ModelSyncLogsPageState["setPage"];
   setSelectedErrorProviders: ModelSyncLogsPageState["setSelectedErrorProviders"];
   setTogglingProviderIds: ModelSyncLogsPageState["setTogglingProviderIds"];
+  providersById: Record<number, Provider | undefined>;
 };
 
 export function useModelSyncLogsActions({
@@ -37,6 +39,7 @@ export function useModelSyncLogsActions({
   setPage,
   setSelectedErrorProviders,
   setTogglingProviderIds,
+  providersById,
 }: UseModelSyncLogsActionsInput) {
   const queryClient = useQueryClient();
   const syncAllMutation = useSyncAllProvidersMutation();
@@ -131,12 +134,17 @@ export function useModelSyncLogsActions({
   const handleToggleProviderModelEndpoint = useCallback(
     async (providerId: number, enabled: boolean) => {
       setTogglingProviderIds((previous) => new Set(previous).add(providerId));
+      const providerName = providersById[providerId]?.Name ?? "未知提供商";
       try {
         await toggleEndpointMutation.mutateAsync({ providerId, enabled });
-        toast.success(`模型端点已${enabled ? "开启" : "关闭"}`);
+        toast.success(`${providerName} 模型端点已${enabled ? "开启" : "关闭"}`);
       } catch (error) {
         const message = toErrorMessage(error);
-        toast.error(`更新提供商失败: ${message}`);
+        if (message.includes("Provider not found")) {
+          toast.error(`${providerName} 提供商已删除`);
+        } else {
+          toast.error(`更新提供商失败: ${message}`);
+        }
       } finally {
         setTogglingProviderIds((previous) => {
           const next = new Set(previous);
@@ -145,7 +153,7 @@ export function useModelSyncLogsActions({
         });
       }
     },
-    [setTogglingProviderIds, toggleEndpointMutation]
+    [setTogglingProviderIds, toggleEndpointMutation, providersById]
   );
 
   const syncing = syncAllMutation.isPending;

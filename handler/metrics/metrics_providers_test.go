@@ -23,20 +23,22 @@ func TestProviderMetrics_SortsAndComputesRates(t *testing.T) {
 	// 直接写入供应商统计表（模拟请求完成后的增量更新）
 	stats := []models.StatsProviderTotal{
 		{
-			ProviderName:    p1.Name,
-			TotalRequests:   3,
-			SuccessCount:    2,
-			FailureCount:    1,
-			TotalTokens:     30,
-			AvgResponseTime: 600, // 累计响应时间 (100ms + 300ms + 200ms) = 600ms
+			ProviderName:        p1.Name,
+			TotalRequests:       3,
+			SuccessCount:        2,
+			FailureCount:        1,
+			TotalTokens:         30,
+			AvgResponseTime:     600, // 累计响应时间（2 次成功：100ms + 500ms）
+			ResponseTimeSamples: 2,   // 只有成功请求有耗时，失败请求不计入
 		},
 		{
-			ProviderName:    p2.Name,
-			TotalRequests:   2,
-			SuccessCount:    2,
-			FailureCount:    0,
-			TotalTokens:     12,
-			AvgResponseTime: 200, // 累计响应时间 (50ms + 150ms) = 200ms
+			ProviderName:        p2.Name,
+			TotalRequests:       2,
+			SuccessCount:        2,
+			FailureCount:        0,
+			TotalTokens:         12,
+			AvgResponseTime:     200, // 累计响应时间（2 次成功：50ms + 150ms）
+			ResponseTimeSamples: 2,
 		},
 	}
 	for i := range stats {
@@ -79,8 +81,9 @@ func TestProviderMetrics_SortsAndComputesRates(t *testing.T) {
 		t.Fatalf("p2 success/failure = %d/%d, want 2/0", payload.Data[1].SuccessCount, payload.Data[1].FailureCount)
 	}
 
-	// Avg response time: p1 avg=600/3=200ms; p2 avg=200/2=100ms.
-	wantP1 := int64(200)
+	// Avg response time: 分母用 ResponseTimeSamples（仅有耗时的样本数）。
+	// p1: 600/2=300ms（2 次成功，1 次失败无耗时）；p2: 200/2=100ms。
+	wantP1 := int64(300)
 	wantP2 := int64(100)
 	if payload.Data[0].AvgResponseTime != wantP1 {
 		t.Fatalf("p1 avg_response_time=%d, want %d", payload.Data[0].AvgResponseTime, wantP1)

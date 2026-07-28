@@ -67,3 +67,29 @@ func TestUpdateSettingsFromRequest_AutoSaveOldValueReadBeforeWrite(t *testing.T)
 		t.Error("batch import was not triggered on false -> true transition")
 	}
 }
+
+// TestUpdateSettingsFromRequest_ValidationFailureLeavesNoPartialWrites 回归：
+// 旧实现边校验边写，校验到后面的字段失败时，前面已通过校验的字段已落库，
+// 留下半更新状态。新实现先全量校验、再事务内写入，校验失败时不应有任何字段被改。
+func TestUpdateSettingsFromRequest_ValidationFailureLeavesNoPartialWrites(t *testing.T) {
+	initTestDB(t)
+	ctx := context.Background()
+
+	// 模拟客户端只发 {"disable_all_logs": true}：其余 int 字段为零值，
+	// AutoWeightDecayDefault=0 违反 Min=1 约束。
+	req := &UpdateSettingsRequest{
+		DisableAllLogs: true,
+		// AutoWeightDecayDefault 留零值 → 校验失败
+	}
+
+	err := updateSettingsFromRequest(ctx, req)
+	if err == nil {
+		t.Fatal("expected validation error for AutoWeightDecayDefault=0, got nil")
+	}
+
+	// 关键断言：校验失败不应写入任何字段，DisableAllLogs 应回到默认值 false。
+	store := settingStore()
+	if got := store.GetBool(ctx, models.SettingKeyDisableAllLogs); got {
+		t.Errorf("DisableAllLogs was partially written (got true, want false): validation failure should not leave any writes")
+	}
+}

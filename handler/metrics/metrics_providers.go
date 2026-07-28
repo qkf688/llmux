@@ -30,7 +30,11 @@ func ProviderMetrics(c *gin.Context) {
 		avgResponseTime := int64(0)
 		if row.TotalRequests > 0 {
 			successRate = float64(row.SuccessCount) / float64(row.TotalRequests)
-			avgResponseTime = row.AvgResponseTime / row.TotalRequests
+		}
+		// 均值分母用 ResponseTimeSamples（仅有耗时的样本数），而非 TotalRequests（含失败），
+		// 否则失败请求越多，平均响应时间看起来越快。
+		if row.ResponseTimeSamples > 0 {
+			avgResponseTime = row.AvgResponseTime / row.ResponseTimeSamples
 		}
 		res = append(res, ProviderMetricRes{
 			ProviderID:      0, // 统计表不存储 provider_id，前端通过名称匹配

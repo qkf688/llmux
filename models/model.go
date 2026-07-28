@@ -176,14 +176,15 @@ type StatsRealModelTotal struct {
 
 // StatsProviderTotal 供应商调用统计（全量累计）
 type StatsProviderTotal struct {
-	ProviderName    string    `gorm:"primaryKey;type:varchar(255)" json:"provider_name"`
-	TotalRequests   int64     `json:"total_requests"`
-	SuccessCount    int64     `json:"success_count"`
-	FailureCount    int64     `json:"failure_count"`
-	TotalTokens     int64     `json:"total_tokens"`
-	AvgResponseTime int64     `json:"avg_response_time"` // 累计响应时间（用于计算平均值）
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ProviderName        string    `gorm:"primaryKey;type:varchar(255)" json:"provider_name"`
+	TotalRequests       int64     `json:"total_requests"`
+	SuccessCount        int64     `json:"success_count"`
+	FailureCount        int64     `json:"failure_count"`
+	TotalTokens         int64     `json:"total_tokens"`
+	AvgResponseTime     int64     `json:"avg_response_time"`      // 累计响应时间（用于计算平均值）
+	ResponseTimeSamples int64     `json:"response_time_samples"`  // 有响应时间的样本数（仅成功且有耗时时自增），读侧用它做分母
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 type PromptTokensDetails struct {

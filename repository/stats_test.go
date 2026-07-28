@@ -175,6 +175,10 @@ func TestStatsRepo_AddProviderStats(t *testing.T) {
 	if p1.TotalTokens != 20 || p1.AvgResponseTime != 400 {
 		t.Fatalf("p1 tokens/cumulative-rt = %d/%d, want 20/400", p1.TotalTokens, p1.AvgResponseTime)
 	}
+	// 只有 2 次成功请求有耗时，失败请求不计入样本数。
+	if p1.ResponseTimeSamples != 2 {
+		t.Fatalf("p1 response_time_samples = %d, want 2 (only successful requests with response time)", p1.ResponseTimeSamples)
+	}
 }
 
 func TestStatsRepo_ReadsFilterByDate(t *testing.T) {

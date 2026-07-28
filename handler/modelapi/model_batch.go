@@ -2,6 +2,7 @@ package modelapi
 
 import (
 	"github.com/atopos31/llmio/httpresp"
+	"github.com/atopos31/llmio/repository"
 	"github.com/gin-gonic/gin"
 )
 
@@ -18,14 +19,21 @@ func BatchDeleteModels(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	for _, id := range req.IDs {
-		if err := deleteModelAssociations(ctx, id); err != nil {
-			httpresp.InternalServerError(c, "Failed to delete model associations: "+err.Error())
-			return
+	r := repos()
+	var result int64
+	err := r.RunInTx(ctx, func(tx *repository.Repositories) error {
+		for _, id := range req.IDs {
+			if err := deleteModelAssociations(ctx, tx, id); err != nil {
+				return err
+			}
 		}
-	}
-
-	result, err := repos().Model.DeleteByIDs(ctx, req.IDs)
+		affected, err := tx.Model.DeleteByIDs(ctx, req.IDs)
+		if err != nil {
+			return err
+		}
+		result = affected
+		return nil
+	})
 	if err != nil {
 		httpresp.InternalServerError(c, "Failed to delete models: "+err.Error())
 		return

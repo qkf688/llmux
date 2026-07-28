@@ -5,6 +5,7 @@ import (
 
 	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/repository"
 	"github.com/gin-gonic/gin"
 )
 
@@ -21,8 +22,8 @@ func getModelByID(ctx context.Context, id uint) (models.Model, error) {
 }
 
 // deleteModelAssociations 级联清理模型的下游引用：关联、模板项、虚拟模型映射。
-func deleteModelAssociations(ctx context.Context, id uint) error {
-	r := repos()
+// 接受 *Repositories 参数以便在调用方的事务内执行（参见 Repositories.RunInTx）。
+func deleteModelAssociations(ctx context.Context, r *repository.Repositories, id uint) error {
 	if _, err := r.ModelWithProvider.DeleteByModelID(ctx, id); err != nil {
 		return err
 	}

@@ -5,6 +5,7 @@ import (
 
 	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/repository"
 	"github.com/gin-gonic/gin"
 )
 
@@ -102,12 +103,19 @@ func DeleteModel(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	if err := deleteModelAssociations(ctx, id); err != nil {
-		httpresp.InternalServerError(c, "Failed to delete model associations: "+err.Error())
-		return
-	}
-
-	result, err := repos().Model.Delete(ctx, id)
+	r := repos()
+	var result int64
+	err := r.RunInTx(ctx, func(tx *repository.Repositories) error {
+		if err := deleteModelAssociations(ctx, tx, id); err != nil {
+			return err
+		}
+		affected, err := tx.Model.Delete(ctx, id)
+		if err != nil {
+			return err
+		}
+		result = affected
+		return nil
+	})
 	if err != nil {
 		httpresp.InternalServerError(c, "Failed to delete model: "+err.Error())
 		return

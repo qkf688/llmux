@@ -174,6 +174,14 @@ func (s *Store) Set(ctx context.Context, key, value string) error {
 		FirstOrCreate(&models.Setting{}).Error
 }
 
+// RunInTx 在同一事务中执行 fn；fn 收到的 Store 绑定事务 db。
+// 失败回滚，成功提交。用于多字段原子写入。
+func (s *Store) RunInTx(ctx context.Context, fn func(txStore *Store) error) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return fn(NewStore(tx))
+	})
+}
+
 // SetTyped 根据 schema 类型序列化并设置值。
 func (s *Store) SetTyped(ctx context.Context, key string, value any) error {
 	schema, ok := models.SettingSchemaForKey(key)

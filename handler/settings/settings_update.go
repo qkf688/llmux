@@ -9,6 +9,7 @@ import (
 
 	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
+	"github.com/atopos31/llmio/service/settings"
 	"github.com/gin-gonic/gin"
 )
 
@@ -66,6 +67,9 @@ var triggerBatchImportForAutoSave = func() {
 
 // updateSettingsFromRequest 根据 SettingSchema 反射遍历 UpdateSettingsRequest 字段并写入数据库。
 // 新增设置项只需在 models.SettingSchemas 中声明，无需再修改此处或 section updater。
+//
+// 校验和写入分两遍执行：先全量校验所有字段，任一失败立即返回且不写库；
+// 校验通过后在事务内统一写入，中途失败自动回滚，避免半更新状态。
 func updateSettingsFromRequest(ctx context.Context, req *UpdateSettingsRequest) error {
 	normalizeUpdateSettingsRequest(req)
 
@@ -77,6 +81,12 @@ func updateSettingsFromRequest(ctx context.Context, req *UpdateSettingsRequest) 
 	v := reflect.ValueOf(req).Elem()
 	t := v.Type()
 
+	// 第一遍：全量校验，不写库。任一字段校验失败立即返回，避免部分字段已写入。
+	type fieldUpdate struct {
+		schema models.SettingSchema
+		value  any
+	}
+	var updates []fieldUpdate
 	for i := 0; i < v.NumField(); i++ {
 		field := t.Field(i)
 		schema, ok := models.SettingSchemaForField(field.Name)
@@ -87,12 +97,23 @@ func updateSettingsFromRequest(ctx context.Context, req *UpdateSettingsRequest) 
 		if err := validateSettingValue(schema, value); err != nil {
 			return newDirectClientError(err.Error())
 		}
-		if err := store.SetTyped(ctx, schema.Key, value); err != nil {
-			return err
+		updates = append(updates, fieldUpdate{schema: schema, value: value})
+	}
+
+	// 第二遍：在事务内统一写入。中途失败自动回滚，不会留下半更新状态。
+	if err := store.RunInTx(ctx, func(txStore *settings.Store) error {
+		for _, u := range updates {
+			if err := txStore.SetTyped(ctx, u.schema.Key, u.value); err != nil {
+				return err
+			}
 		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	// 副作用：auto_save_template_on_associate 从关闭切到开启时触发批量导入
+	// 在事务提交后触发，不在事务内执行异步操作。
 	if !oldAutoSave && req.AutoSaveTemplateOnAssociate {
 		triggerBatchImportForAutoSave()
 		slog.Info("triggered batch import of existing associations")

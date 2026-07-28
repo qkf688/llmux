@@ -185,21 +185,26 @@ func (r *statsRepo) AddProviderStats(ctx context.Context, d ProviderStatsDelta) 
 	if d.Tokens > 0 {
 		updates["total_tokens"] = gorm.Expr("total_tokens + ?", d.Tokens)
 	}
+	var responseTimeSamples int64
 	if d.ResponseTimeMs > 0 {
-		// AvgResponseTime 存的是累计耗时，均值由读侧除以 TotalRequests 得到。
+		// AvgResponseTime 存的是累计耗时，均值由读侧除以 ResponseTimeSamples 得到。
+		// 只有实际有耗时的请求才计入样本，避免失败请求（ResponseTimeMs=0）稀释均值。
 		updates["avg_response_time"] = gorm.Expr("avg_response_time + ?", d.ResponseTimeMs)
+		updates["response_time_samples"] = gorm.Expr("response_time_samples + 1")
+		responseTimeSamples = 1
 	}
 
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "provider_name"}},
 		DoUpdates: clause.Assignments(updates),
 	}).Create(&models.StatsProviderTotal{
-		ProviderName:    d.ProviderName,
-		TotalRequests:   1,
-		SuccessCount:    successCount,
-		FailureCount:    failureCount,
-		TotalTokens:     max(d.Tokens, 0),
-		AvgResponseTime: max(d.ResponseTimeMs, 0),
+		ProviderName:        d.ProviderName,
+		TotalRequests:       1,
+		SuccessCount:        successCount,
+		FailureCount:        failureCount,
+		TotalTokens:         max(d.Tokens, 0),
+		AvgResponseTime:     max(d.ResponseTimeMs, 0),
+		ResponseTimeSamples: responseTimeSamples,
 	}).Error
 }
 

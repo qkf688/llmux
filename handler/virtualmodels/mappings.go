@@ -114,23 +114,28 @@ func UpdateVirtualModelMapping(c *gin.Context) {
 		return
 	}
 
-	mapping, err := repos().VirtualModelMapping.GetByVirtualModelAndID(ctx, id, mappingID)
-	if err != nil {
+	if _, err := repos().VirtualModelMapping.GetByVirtualModelAndID(ctx, id, mappingID); err != nil {
 		httpresp.NotFound(c, "Mapping not found")
 		return
 	}
 
-	enabled := req.Enabled
-	mapping.Priority = req.Priority
-	mapping.Weight = req.Weight
-	mapping.Enabled = &enabled
-
-	if err := repos().VirtualModelMapping.Update(ctx, mappingID, mapping); err != nil {
+	updates := map[string]any{
+		"priority": req.Priority,
+		"weight":   req.Weight,
+		"enabled":  req.Enabled,
+	}
+	if _, err := repos().VirtualModelMapping.UpdateFields(ctx, mappingID, updates); err != nil {
 		httpresp.InternalServerError(c, "Failed to update mapping: "+err.Error())
 		return
 	}
 
-	httpresp.Success(c, mapping)
+	// 重读返回最新 DB 值
+	updatedMapping, err := repos().VirtualModelMapping.GetByVirtualModelAndID(ctx, id, mappingID)
+	if err != nil {
+		httpresp.InternalServerError(c, "Failed to retrieve updated mapping: "+err.Error())
+		return
+	}
+	httpresp.Success(c, updatedMapping)
 }
 
 // DeleteVirtualModelMapping 删除虚拟模型映射（硬删）。

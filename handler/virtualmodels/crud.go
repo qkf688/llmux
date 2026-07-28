@@ -107,22 +107,27 @@ func UpdateVirtualModel(c *gin.Context) {
 		}
 	}
 
-	enabled := req.Enabled
-	ioLog := req.IOLog
-	virtualModel.Name = req.Name
-	virtualModel.Description = req.Description
-	virtualModel.Strategy = req.Strategy
-	virtualModel.MaxRetry = req.MaxRetry
-	virtualModel.TimeOut = req.TimeOut
-	virtualModel.IOLog = &ioLog
-	virtualModel.Enabled = &enabled
-
-	if err := repos().VirtualModel.Update(ctx, id, virtualModel); err != nil {
+	updates := map[string]any{
+		"name":        req.Name,
+		"description": req.Description,
+		"strategy":    req.Strategy,
+		"max_retry":   req.MaxRetry,
+		"time_out":    req.TimeOut,
+		"io_log":      req.IOLog,
+		"enabled":     req.Enabled,
+	}
+	if _, err := repos().VirtualModel.UpdateFields(ctx, id, updates); err != nil {
 		httpresp.InternalServerError(c, "Failed to update virtual model: "+err.Error())
 		return
 	}
 
-	httpresp.Success(c, virtualModel)
+	// 重读返回最新 DB 值，避免本地 struct 与 DB 偏离
+	updatedVM, err := repos().VirtualModel.Get(ctx, id)
+	if err != nil {
+		httpresp.InternalServerError(c, "Failed to retrieve updated virtual model: "+err.Error())
+		return
+	}
+	httpresp.Success(c, updatedVM)
 }
 
 // DeleteVirtualModel 删除虚拟模型（映射硬删，VM 本体软删）。

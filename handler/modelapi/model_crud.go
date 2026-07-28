@@ -70,15 +70,17 @@ func UpdateModel(c *gin.Context) {
 		return
 	}
 
-	updates := models.Model{
-		Name:          req.Name,
-		Remark:        req.Remark,
-		MaxRetry:      req.MaxRetry,
-		TimeOut:       req.TimeOut,
-		IOLog:         &req.IOLog,
-		AutoAssociate: req.AutoAssociate,
+	updates := map[string]any{
+		"name":      req.Name,
+		"remark":    req.Remark,
+		"max_retry": req.MaxRetry,
+		"time_out":  req.TimeOut,
+		"io_log":    req.IOLog,
 	}
-	if err := repos().Model.Update(c.Request.Context(), id, &updates); err != nil {
+	if req.AutoAssociate != nil {
+		updates["auto_associate"] = *req.AutoAssociate
+	}
+	if _, err := repos().Model.UpdateFields(c.Request.Context(), id, updates); err != nil {
 		httpresp.InternalServerError(c, "Failed to update model: "+err.Error())
 		return
 	}

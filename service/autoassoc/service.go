@@ -57,7 +57,30 @@ func (s *Service) settingInt(ctx context.Context, key string, defaultValue, minV
 	return n
 }
 
-// PreviewAssociate 预览将要创建的缺失关联（尊重 Model.AutoAssociate、跳过黑名单与已存在 key）。
+// Result 是 Associate / CleanInvalid 的执行结果。
+// Success = 成功创建（Associate）或成功删除（CleanInvalid）的条数；
+// Failed = 逐条写库失败数。部分失败不作为 error 返回，仅通过 Failed 字段观测。
+type Result struct {
+	Success int
+	Failed  int
+}
+
+// LogResult 统一记录 Associate / CleanInvalid 的执行结果，消除 Trigger* 与 ActionHooks 闭包间的日志样板重复。
+func LogResult(label string, result Result, err error) {
+	if err != nil {
+		slog.Error(label+" failed", "error", err)
+		return
+	}
+	if result.Success > 0 {
+		slog.Info(label, "count", result.Success)
+	}
+	if result.Failed > 0 {
+		slog.Warn(label+" partial failure", "failed", result.Failed)
+	}
+}
+
+// PreviewAssociate 预览将要创建的缺失关联（跳过黑名单与已存在 key）。
+// 手动预览不尊重 Model.AutoAssociate——用户关掉自动关联只应拦住后台同步，不应隐藏手动入口。
 func (s *Service) PreviewAssociate(ctx context.Context) ([]Preview, error) {
 	data, err := s.fetchAssociateData(ctx)
 	if err != nil {
@@ -65,7 +88,7 @@ func (s *Service) PreviewAssociate(ctx context.Context) ([]Preview, error) {
 	}
 
 	previews := make([]Preview, 0)
-	s.forEachMissingAssociation(ctx, data, nil, func(candidate associationCandidate, _ string, _ map[string]bool) {
+	s.forEachMissingAssociation(ctx, data, nil, nil, func(candidate associationCandidate, _ string, _ map[string]bool) {
 		previews = append(previews, Preview{
 			ModelID:       candidate.ModelID,
 			ModelName:     candidate.ModelName,
@@ -77,22 +100,35 @@ func (s *Service) PreviewAssociate(ctx context.Context) ([]Preview, error) {
 	return previews, nil
 }
 
-// Associate 执行自动关联，返回成功创建条数。不检查全局开关（由调用方决定是否触发）。
-// 若存在写库失败，返回已成功条数与 error（部分失败可观测）。
-func (s *Service) Associate(ctx context.Context) (int, error) {
+// skipAutoAssociate 是自动关联路径的模型级跳过谓词。
+var skipAutoAssociate = func(m models.Model) bool { return !allowsAutoAssociate(m) }
+
+// Associate 执行自动关联（尊重 Model.AutoAssociate），返回执行结果。
+// 不检查全局开关（由调用方决定是否触发）。部分失败不返回 error，仅通过 Result.Failed 观测。
+func (s *Service) Associate(ctx context.Context) (Result, error) {
+	return s.associate(ctx, skipAutoAssociate)
+}
+
+// AssociateAll 执行手动关联（绕过 Model.AutoAssociate 门控），返回执行结果。
+// 供 HTTP 手动「一键关联」入口使用——用户关掉自动关联只应拦住后台同步，不应封锁手动操作。
+func (s *Service) AssociateAll(ctx context.Context) (Result, error) {
+	return s.associate(ctx, nil)
+}
+
+func (s *Service) associate(ctx context.Context, skip func(models.Model) bool) (Result, error) {
 	data, err := s.fetchAssociateData(ctx)
 	if err != nil {
-		return 0, err
+		return Result{}, err
 	}
 
 	defaultPriority := s.settingInt(ctx, models.SettingKeyAutoPriorityDecayDefault, DefaultPriorityFallback, 0)
-	addedCount := 0
-	failedCount := 0
+	result := Result{}
 	repos := s.repositories()
 
 	s.forEachMissingAssociation(
 		ctx,
 		data,
+		skip,
 		func(provider models.Provider, err error) {
 			slog.Warn("failed to get provider models", "provider", provider.Name, "error", err)
 		},
@@ -104,7 +140,7 @@ func (s *Service) Associate(ctx context.Context) (int, error) {
 				defaultPriority,
 			)
 			if err := repos.ModelWithProvider.Create(ctx, &newAssoc); err != nil {
-				failedCount++
+				result.Failed++
 				slog.Warn("failed to create association",
 					"model", candidate.ModelName,
 					"provider", candidate.ProviderName,
@@ -113,14 +149,11 @@ func (s *Service) Associate(ctx context.Context) (int, error) {
 				return
 			}
 			existingMap[key] = true
-			addedCount++
+			result.Success++
 		},
 	)
 
-	if failedCount > 0 {
-		return addedCount, fmt.Errorf("auto-associate: %d created, %d failed", addedCount, failedCount)
-	}
-	return addedCount, nil
+	return result, nil
 }
 
 // TriggerAssociateIfEnabled 若全局开关开启则执行 Associate（供 provider CRUD / 旁路使用）。
@@ -130,15 +163,8 @@ func (s *Service) TriggerAssociateIfEnabled(ctx context.Context) {
 		return
 	}
 	slog.Info("auto-associate triggered")
-
-	addedCount, err := s.Associate(ctx)
-	if err != nil {
-		slog.Error("auto-associate failed", "error", err, "added", addedCount)
-		return
-	}
-	if addedCount > 0 {
-		slog.Info("auto-associated models", "count", addedCount)
-	}
+	result, err := s.Associate(ctx)
+	LogResult("auto-associated models", result, err)
 }
 
 // PreviewClean 预览将要删除的无效关联。
@@ -170,16 +196,15 @@ func (s *Service) PreviewClean(ctx context.Context) ([]Preview, error) {
 	return previews, nil
 }
 
-// CleanInvalid 清理无效关联，返回成功删除条数。不检查全局开关。
-// 若存在删除失败，返回已成功条数与 error。
-func (s *Service) CleanInvalid(ctx context.Context) (int, error) {
+// CleanInvalid 清理无效关联，返回执行结果。不检查全局开关。
+// 部分失败不返回 error，仅通过 Result.Failed 观测。
+func (s *Service) CleanInvalid(ctx context.Context) (Result, error) {
 	data, err := s.fetchCleanData(ctx, false)
 	if err != nil {
-		return 0, err
+		return Result{}, err
 	}
 
-	removedCount := 0
-	failedCount := 0
+	result := Result{}
 	repos := s.repositories()
 	s.forEachInvalidAssociation(
 		ctx,
@@ -189,17 +214,14 @@ func (s *Service) CleanInvalid(ctx context.Context) (int, error) {
 		},
 		func(assoc models.ModelWithProvider, _ *models.Provider) {
 			if _, err := repos.ModelWithProvider.Delete(ctx, assoc.ID); err != nil {
-				failedCount++
+				result.Failed++
 				slog.Warn("failed to delete invalid association", "id", assoc.ID, "error", err)
 				return
 			}
-			removedCount++
+			result.Success++
 		},
 	)
-	if failedCount > 0 {
-		return removedCount, fmt.Errorf("auto-clean: %d removed, %d failed", removedCount, failedCount)
-	}
-	return removedCount, nil
+	return result, nil
 }
 
 // TriggerCleanIfEnabled 若全局开关开启则执行 CleanInvalid。
@@ -209,15 +231,8 @@ func (s *Service) TriggerCleanIfEnabled(ctx context.Context) {
 		return
 	}
 	slog.Info("auto-clean triggered")
-
-	removedCount, err := s.CleanInvalid(ctx)
-	if err != nil {
-		slog.Error("auto-clean failed", "error", err, "removed", removedCount)
-		return
-	}
-	if removedCount > 0 {
-		slog.Info("auto-cleaned invalid associations", "count", removedCount)
-	}
+	result, err := s.CleanInvalid(ctx)
+	LogResult("auto-cleaned invalid associations", result, err)
 }
 
 type associateData struct {
@@ -292,6 +307,7 @@ func (s *Service) fetchCleanData(ctx context.Context, includeModels bool) (clean
 func (s *Service) forEachMissingAssociation(
 	ctx context.Context,
 	data associateData,
+	skip func(models.Model) bool,
 	onProviderModelsError func(provider models.Provider, err error),
 	visit func(candidate associationCandidate, key string, existingMap map[string]bool),
 ) {
@@ -319,7 +335,7 @@ func (s *Service) forEachMissingAssociation(
 				if !ok {
 					continue
 				}
-				if !allowsAutoAssociate(model) {
+				if skip != nil && skip(model) {
 					continue
 				}
 

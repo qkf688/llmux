@@ -19,8 +19,10 @@ type ModelRepo interface {
 	ExistsByName(ctx context.Context, name string) (bool, error)
 	// Create 创建模型。
 	Create(ctx context.Context, model *models.Model) error
-	// Update 根据 ID 更新模型。
+	// Update 根据 ID 更新模型（GORM Updates：结构体零值字段不写入）。
 	Update(ctx context.Context, id uint, model *models.Model) error
+	// UpdateFields 按列名更新指定模型（可写入零值），返回受影响行数。
+	UpdateFields(ctx context.Context, id uint, fields map[string]any) (int64, error)
 	// Delete 根据 ID 删除模型。
 	Delete(ctx context.Context, id uint) (int64, error)
 	// DeleteByIDs 批量删除模型，返回受影响行数。
@@ -78,6 +80,14 @@ func (r *modelRepo) Create(ctx context.Context, model *models.Model) error {
 
 func (r *modelRepo) Update(ctx context.Context, id uint, model *models.Model) error {
 	return r.db.WithContext(ctx).Model(&models.Model{}).Where("id = ?", id).Updates(model).Error
+}
+
+func (r *modelRepo) UpdateFields(ctx context.Context, id uint, fields map[string]any) (int64, error) {
+	if len(fields) == 0 {
+		return 0, nil
+	}
+	result := r.db.WithContext(ctx).Model(&models.Model{}).Where("id = ?", id).Updates(fields)
+	return result.RowsAffected, result.Error
 }
 
 func (r *modelRepo) Delete(ctx context.Context, id uint) (int64, error) {

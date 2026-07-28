@@ -58,10 +58,18 @@ export function useModelProvidersPreview({
       setExecuting(true);
       if (previewType === "associate") {
         const result = await autoAssociateModels();
-        toast.success(`成功添加 ${result.added} 个关联`);
+        if (result.failed > 0) {
+          toast.warning(`成功添加 ${result.added} 个关联，${result.failed} 个失败`);
+        } else {
+          toast.success(`成功添加 ${result.added} 个关联`);
+        }
       } else {
         const result = await cleanInvalidAssociations();
-        toast.success(`成功清除 ${result.removed} 个无效关联`);
+        if (result.failed > 0) {
+          toast.warning(`成功清除 ${result.removed} 个无效关联，${result.failed} 个失败`);
+        } else {
+          toast.success(`成功清除 ${result.removed} 个无效关联`);
+        }
       }
       setPreviewDialogOpen(false);
       if (selectedModelId) {

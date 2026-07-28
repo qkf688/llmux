@@ -35,6 +35,16 @@ type ModelWithProviderRepo interface {
 	UpdateFields(ctx context.Context, id uint, fields map[string]any) (int64, error)
 	// ResetConsecutiveFailures 将非零的连续失败计数清零，返回受影响行数。
 	ResetConsecutiveFailures(ctx context.Context, id uint) (int64, error)
+	// IncrementConsecutiveFailures 原子自增连续失败计数（UPDATE consecutive_failures = consecutive_failures + 1），返回受影响行数。
+	IncrementConsecutiveFailures(ctx context.Context, id uint) (int64, error)
+	// IncreaseWeight 原子自增 weight（带上限钳制：已超上限则不变，否则 MIN(weight+step, max)），返回受影响行数。
+	IncreaseWeight(ctx context.Context, id uint, step, max int) (int64, error)
+	// IncreasePriority 原子自增 priority（带上限钳制：已超上限则不变，否则 MIN(priority+step, max)），返回受影响行数。
+	IncreasePriority(ctx context.Context, id uint, step, max int) (int64, error)
+	// DecayWeight 原子自减 weight（带下限钳制：已在下限则不变，否则 MAX(weight-step, floor)），返回受影响行数。
+	DecayWeight(ctx context.Context, id uint, step, floor int) (int64, error)
+	// DecayPriority 原子自减 priority（带下限钳制：已在下限则不变，否则 MAX(priority-step, floor)），返回受影响行数。
+	DecayPriority(ctx context.Context, id uint, step, floor int) (int64, error)
 	// Delete 根据 ID 删除关联，返回受影响行数。
 	Delete(ctx context.Context, id uint) (int64, error)
 	// DeleteByIDs 批量删除关联，返回受影响行数。
@@ -134,6 +144,41 @@ func (r *modelWithProviderRepo) ResetConsecutiveFailures(ctx context.Context, id
 	result := r.db.WithContext(ctx).Model(&models.ModelWithProvider{}).
 		Where("id = ? AND consecutive_failures != 0", id).
 		Update("consecutive_failures", 0)
+	return result.RowsAffected, result.Error
+}
+
+func (r *modelWithProviderRepo) IncrementConsecutiveFailures(ctx context.Context, id uint) (int64, error) {
+	result := r.db.WithContext(ctx).Model(&models.ModelWithProvider{}).
+		Where("id = ?", id).
+		Update("consecutive_failures", gorm.Expr("consecutive_failures + 1"))
+	return result.RowsAffected, result.Error
+}
+
+func (r *modelWithProviderRepo) IncreaseWeight(ctx context.Context, id uint, step, max int) (int64, error) {
+	result := r.db.WithContext(ctx).Model(&models.ModelWithProvider{}).
+		Where("id = ? AND weight < ?", id, max).
+		Update("weight", gorm.Expr("MIN(weight + ?, ?)", step, max))
+	return result.RowsAffected, result.Error
+}
+
+func (r *modelWithProviderRepo) IncreasePriority(ctx context.Context, id uint, step, max int) (int64, error) {
+	result := r.db.WithContext(ctx).Model(&models.ModelWithProvider{}).
+		Where("id = ? AND priority < ?", id, max).
+		Update("priority", gorm.Expr("MIN(priority + ?, ?)", step, max))
+	return result.RowsAffected, result.Error
+}
+
+func (r *modelWithProviderRepo) DecayWeight(ctx context.Context, id uint, step, floor int) (int64, error) {
+	result := r.db.WithContext(ctx).Model(&models.ModelWithProvider{}).
+		Where("id = ? AND weight > ?", id, floor).
+		Update("weight", gorm.Expr("MAX(weight - ?, ?)", step, floor))
+	return result.RowsAffected, result.Error
+}
+
+func (r *modelWithProviderRepo) DecayPriority(ctx context.Context, id uint, step, floor int) (int64, error) {
+	result := r.db.WithContext(ctx).Model(&models.ModelWithProvider{}).
+		Where("id = ? AND priority > ?", id, floor).
+		Update("priority", gorm.Expr("MAX(priority - ?, ?)", step, floor))
 	return result.RowsAffected, result.Error
 }
 

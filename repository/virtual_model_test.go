@@ -232,3 +232,76 @@ func TestVirtualModelRepo_ExistsByName(t *testing.T) {
 		t.Fatalf("Get missing: %v", err)
 	}
 }
+
+// UpdateFields 必须能写入零值（GORM 结构体 Updates 会跳过零值）。
+func TestVirtualModelRepo_UpdateFields_WritesZeroValues(t *testing.T) {
+	ctx := context.Background()
+	db := newVMTestDB(t)
+	repo := NewVirtualModelRepo(db)
+
+	enabled := true
+	vm := &models.VirtualModel{Name: "vm-zero", Description: "desc", MaxRetry: 5, TimeOut: 30, Enabled: &enabled}
+	if err := repo.Create(ctx, vm); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// 清空 Description，MaxRetry/TimeOut 设 0
+	updates := map[string]any{
+		"description": "",
+		"max_retry":   0,
+		"time_out":    0,
+	}
+	if _, err := repo.UpdateFields(ctx, vm.ID, updates); err != nil {
+		t.Fatalf("UpdateFields: %v", err)
+	}
+
+	got, err := repo.Get(ctx, vm.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Description != "" {
+		t.Fatalf("Description = %q, want empty", got.Description)
+	}
+	if got.MaxRetry != 0 {
+		t.Fatalf("MaxRetry = %d, want 0", got.MaxRetry)
+	}
+	if got.TimeOut != 0 {
+		t.Fatalf("TimeOut = %d, want 0", got.TimeOut)
+	}
+}
+
+func TestVirtualModelMappingRepo_UpdateFields_WritesZeroPriority(t *testing.T) {
+	ctx := context.Background()
+	db := newVMTestDB(t)
+	vmRepo := NewVirtualModelRepo(db)
+	mapRepo := NewVirtualModelMappingRepo(db)
+
+	vm := &models.VirtualModel{Name: "vm-mp"}
+	if err := vmRepo.Create(ctx, vm); err != nil {
+		t.Fatalf("Create VM: %v", err)
+	}
+	enabled := true
+	mapping := &models.VirtualModelMapping{
+		VirtualModelID: vm.ID, RealModelID: 10, Priority: 5, Weight: 3, Enabled: &enabled,
+	}
+	if err := mapRepo.Create(ctx, mapping); err != nil {
+		t.Fatalf("Create mapping: %v", err)
+	}
+
+	// Priority=0, Weight=0 是合法零值，必须能写入
+	updates := map[string]any{"priority": 0, "weight": 0}
+	if _, err := mapRepo.UpdateFields(ctx, mapping.ID, updates); err != nil {
+		t.Fatalf("UpdateFields: %v", err)
+	}
+
+	got, err := mapRepo.Get(ctx, mapping.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Priority != 0 {
+		t.Fatalf("Priority = %d, want 0", got.Priority)
+	}
+	if got.Weight != 0 {
+		t.Fatalf("Weight = %d, want 0", got.Weight)
+	}
+}

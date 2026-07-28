@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/service/autoassoc"
@@ -33,24 +32,12 @@ func NewModelSyncService(db *gorm.DB, auto *autoassoc.Service) *ModelSyncService
 	svc.core = modelsync.NewService(db, modelsync.ActionHooks{
 		AutoAssociate: func(ctx context.Context) {
 			// 开关已在 modelsync.triggerAutoActions 检查；此处直接执行业务。
-			added, err := auto.Associate(ctx)
-			if err != nil {
-				slog.Error("auto-associate failed", "error", err, "added", added)
-				return
-			}
-			if added > 0 {
-				slog.Info("auto-associated models", "count", added)
-			}
+			result, err := auto.Associate(ctx)
+			autoassoc.LogResult("auto-associated models", result, err)
 		},
 		CleanInvalidAssociations: func(ctx context.Context) {
-			removed, err := auto.CleanInvalid(ctx)
-			if err != nil {
-				slog.Error("auto-clean failed", "error", err, "removed", removed)
-				return
-			}
-			if removed > 0 {
-				slog.Info("auto-cleaned invalid associations", "count", removed)
-			}
+			result, err := auto.CleanInvalid(ctx)
+			autoassoc.LogResult("auto-cleaned invalid associations", result, err)
 		},
 	})
 	return svc

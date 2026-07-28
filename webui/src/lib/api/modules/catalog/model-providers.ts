@@ -152,8 +152,8 @@ export async function previewAutoAssociate(): Promise<AssociationPreview[]> {
   return apiRequest<AssociationPreview[]>("/model-providers/auto-associate/preview");
 }
 
-export async function autoAssociateModels(): Promise<{ added: number }> {
-  return apiRequest<{ added: number }>("/model-providers/auto-associate", {
+export async function autoAssociateModels(): Promise<{ added: number; failed: number }> {
+  return apiRequest<{ added: number; failed: number }>("/model-providers/auto-associate", {
     method: "POST",
   });
 }
@@ -173,8 +173,8 @@ export async function previewCleanInvalid(): Promise<AssociationPreview[]> {
   return apiRequest<AssociationPreview[]>("/model-providers/clean-invalid/preview");
 }
 
-export async function cleanInvalidAssociations(): Promise<{ removed: number }> {
-  return apiRequest<{ removed: number }>("/model-providers/clean-invalid", {
+export async function cleanInvalidAssociations(): Promise<{ removed: number; failed: number }> {
+  return apiRequest<{ removed: number; failed: number }>("/model-providers/clean-invalid", {
     method: "POST",
   });
 }

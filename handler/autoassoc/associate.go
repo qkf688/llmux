@@ -20,16 +20,18 @@ func PreviewAutoAssociate(c *gin.Context) {
 	httpresp.Success(c, previews)
 }
 
-// AutoAssociateModels 一键添加关联：将提供商模型自动关联到模板匹配的模型（并集规则）。
+// AutoAssociateModels 手动批量关联（绕过 Model.AutoAssociate 门控）。
+// 部分失败仍返回 200 + 计数，前端可展示部分成功结果。
 func AutoAssociateModels(c *gin.Context) {
-	addedCount, err := service.GetAutoAssocService().Associate(c.Request.Context())
+	result, err := service.GetAutoAssocService().AssociateAll(c.Request.Context())
 	if err != nil {
-		slog.Error("auto-associate failed", "error", err, "added", addedCount)
+		slog.Error("auto-associate failed", "error", err)
 		httpresp.InternalServerError(c, "failed to auto associate models")
 		return
 	}
 	httpresp.Success(c, map[string]interface{}{
-		"added": addedCount,
+		"added":  result.Success,
+		"failed": result.Failed,
 	})
 }
 

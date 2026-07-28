@@ -2,6 +2,7 @@ package autoassoc
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/atopos31/llmio/models"
@@ -119,12 +120,12 @@ func TestAssociate_SkipsExistingBlacklistAndDisabledModel(t *testing.T) {
 	}
 	svc := newTestService(t, db, matcher)
 
-	added, err := svc.Associate(ctx)
+	result, err := svc.Associate(ctx)
 	if err != nil {
 		t.Fatalf("Associate: %v", err)
 	}
-	if added != 1 {
-		t.Fatalf("added = %d, want 1 (only extra)", added)
+	if result.Success != 1 {
+		t.Fatalf("added = %d, want 1 (only extra)", result.Success)
 	}
 
 	all, err := repos.ModelWithProvider.ListAll(ctx)
@@ -155,8 +156,13 @@ func TestAssociate_SkipsExistingBlacklistAndDisabledModel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PreviewAssociate: %v", err)
 	}
-	if len(previews) != 0 {
-		t.Fatalf("preview len = %d, want 0", len(previews))
+	// Preview bypasses Model.AutoAssociate: "blocked" (model 2, AutoAssociate=false)
+	// was skipped by Associate but should appear in preview.
+	if len(previews) != 1 {
+		t.Fatalf("preview len = %d, want 1 (blocked, AutoAssociate=false)", len(previews))
+	}
+	if previews[0].ProviderModel != "blocked" {
+		t.Fatalf("preview[0] = %q, want blocked", previews[0].ProviderModel)
 	}
 }
 
@@ -179,12 +185,12 @@ func TestAssociate_UsesPrioritySetting(t *testing.T) {
 	}
 
 	svc := newTestService(t, db, staticMatcher{"gpt-4o": {1}})
-	added, err := svc.Associate(ctx)
+	result, err := svc.Associate(ctx)
 	if err != nil {
 		t.Fatalf("Associate: %v", err)
 	}
-	if added != 1 {
-		t.Fatalf("added = %d, want 1", added)
+	if result.Success != 1 {
+		t.Fatalf("added = %d, want 1", result.Success)
 	}
 	all, err := repos.ModelWithProvider.ListAll(ctx)
 	if err != nil {
@@ -222,12 +228,12 @@ func TestCleanInvalid_DeletesMissingProviderAndModel(t *testing.T) {
 	}
 
 	svc := newTestService(t, db, staticMatcher{})
-	removed, err := svc.CleanInvalid(ctx)
+	result, err := svc.CleanInvalid(ctx)
 	if err != nil {
 		t.Fatalf("CleanInvalid: %v", err)
 	}
-	if removed != 2 {
-		t.Fatalf("removed = %d, want 2", removed)
+	if result.Success != 2 {
+		t.Fatalf("removed = %d, want 2", result.Success)
 	}
 
 	all, err := repos.ModelWithProvider.ListAll(ctx)
@@ -264,13 +270,13 @@ func TestCleanInvalid_SkipsWhenProviderModelsUnreadable(t *testing.T) {
 	}
 
 	svc := newTestService(t, db, staticMatcher{})
-	removed, err := svc.CleanInvalid(ctx)
+	result, err := svc.CleanInvalid(ctx)
 	if err != nil {
 		t.Fatalf("CleanInvalid: %v", err)
 	}
 	// empty model list from bad config => treated as missing provider model
-	if removed != 1 {
-		t.Fatalf("removed = %d, want 1 (empty list from bad config)", removed)
+	if result.Success != 1 {
+		t.Fatalf("removed = %d, want 1 (empty list from bad config)", result.Success)
 	}
 }
 
@@ -358,4 +364,96 @@ func TestSharedHelpers(t *testing.T) {
 	if allowsAutoAssociate(models.Model{AutoAssociate: boolPtr(false)}) {
 		t.Fatal("false should deny")
 	}
+}
+
+// AssociateAll 绕过 Model.AutoAssociate 门控——手动关联不应被模型级开关拦截。
+func TestAssociateAll_BypassesModelSwitch(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	repos := repository.New(db)
+
+	// model with AutoAssociate=false
+	if err := repos.Model.Create(ctx, &models.Model{ID: 1, Name: "gpt-4o", AutoAssociate: boolPtr(false)}); err != nil {
+		t.Fatalf("create model: %v", err)
+	}
+	if err := repos.Provider.Create(ctx, &models.Provider{
+		Name: "p1", Type: "openai",
+		Config: `{"upstream_models":["gpt-4o"]}`,
+	}); err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+
+	svc := newTestService(t, db, staticMatcher{"gpt-4o": {1}})
+
+	// Associate (automatic path) should skip model with AutoAssociate=false
+	result, err := svc.Associate(ctx)
+	if err != nil {
+		t.Fatalf("Associate: %v", err)
+	}
+	if result.Success != 0 {
+		t.Fatalf("Associate added = %d, want 0 (AutoAssociate=false)", result.Success)
+	}
+
+	// AssociateAll (manual path) should bypass the switch
+	result, err = svc.AssociateAll(ctx)
+	if err != nil {
+		t.Fatalf("AssociateAll: %v", err)
+	}
+	if result.Success != 1 {
+		t.Fatalf("AssociateAll added = %d, want 1 (bypassed switch)", result.Success)
+	}
+}
+
+// 部分失败时不应返回 error，仅通过 Result.Failed 观测（Bug 30 回归）。
+func TestAssociate_PartialFailureReturnsCountNoError(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	repos := repository.New(db)
+
+	if err := repos.Model.Create(ctx, &models.Model{ID: 1, Name: "gpt-4o"}); err != nil {
+		t.Fatalf("create model: %v", err)
+	}
+	// 两个 provider 都 serve "gpt-4o"，匹配同一 model → 两次 Create 都会失败
+	for _, p := range []string{"p1", "p2"} {
+		if err := repos.Provider.Create(ctx, &models.Provider{
+			Name: p, Type: "openai",
+			Config: `{"upstream_models":["gpt-4o"]}`,
+		}); err != nil {
+			t.Fatalf("create provider %s: %v", p, err)
+		}
+	}
+
+	// 用包装 repo 使 Create 恒失败
+	repos.ModelWithProvider = &failingCreateMWPRepo{
+		ModelWithProviderRepo: repos.ModelWithProvider,
+		err:                   fmt.Errorf("simulated create failure"),
+	}
+	svc := NewService(repos, func(
+		_ []models.Model,
+		_ []models.ModelWithProvider,
+		_ []models.ModelTemplateItem,
+	) NameMatcher {
+		return staticMatcher{"gpt-4o": {1}}
+	})
+
+	result, err := svc.AssociateAll(ctx)
+	if err != nil {
+		t.Fatalf("AssociateAll should not return error on partial failure, got: %v", err)
+	}
+	if result.Success != 0 {
+		t.Fatalf("Success = %d, want 0 (all creates failed)", result.Success)
+	}
+	if result.Failed != 2 {
+		t.Fatalf("Failed = %d, want 2 (two providers, both failed)", result.Failed)
+	}
+}
+
+// failingCreateMWPRepo 包装 ModelWithProviderRepo，使 Create 恒失败。用于部分失败测试。
+type failingCreateMWPRepo struct {
+	repository.ModelWithProviderRepo
+	err error
+}
+
+func (r *failingCreateMWPRepo) Create(ctx context.Context, assoc *models.ModelWithProvider) error {
+	return r.err
 }

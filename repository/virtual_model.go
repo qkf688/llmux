@@ -23,8 +23,10 @@ type VirtualModelRepo interface {
 	ExistsByNameExceptID(ctx context.Context, name string, exceptID uint) (bool, error)
 	// Create 创建虚拟模型。
 	Create(ctx context.Context, vm *models.VirtualModel) error
-	// Update 根据 ID 更新虚拟模型。
+	// Update 根据 ID 更新虚拟模型（GORM Updates：结构体零值字段不写入）。
 	Update(ctx context.Context, id uint, vm *models.VirtualModel) error
+	// UpdateFields 按列名更新指定虚拟模型（可写入零值），返回受影响行数。
+	UpdateFields(ctx context.Context, id uint, fields map[string]any) (int64, error)
 	// Delete 根据 ID 硬删虚拟模型（Name 唯一索引不含 deleted_at，软删残留会挡同名重建）。
 	Delete(ctx context.Context, id uint) (int64, error)
 }
@@ -44,8 +46,10 @@ type VirtualModelMappingRepo interface {
 	CountByPair(ctx context.Context, virtualModelID, realModelID uint) (int64, error)
 	// Create 创建映射。
 	Create(ctx context.Context, mapping *models.VirtualModelMapping) error
-	// Update 根据 ID 更新映射。
+	// Update 根据 ID 更新映射（GORM Updates：结构体零值字段不写入）。
 	Update(ctx context.Context, id uint, mapping *models.VirtualModelMapping) error
+	// UpdateFields 按列名更新指定映射（可写入零值），返回受影响行数。
+	UpdateFields(ctx context.Context, id uint, fields map[string]any) (int64, error)
 	// Delete 硬删指定 ID 的映射。
 	Delete(ctx context.Context, id uint) (int64, error)
 	// DeleteByVirtualModelAndID 硬删指定 VM 下的单条映射。
@@ -130,6 +134,14 @@ func (r *virtualModelRepo) Update(ctx context.Context, id uint, vm *models.Virtu
 	return r.db.WithContext(ctx).Model(&models.VirtualModel{}).Where("id = ?", id).Updates(vm).Error
 }
 
+func (r *virtualModelRepo) UpdateFields(ctx context.Context, id uint, fields map[string]any) (int64, error) {
+	if len(fields) == 0 {
+		return 0, nil
+	}
+	result := r.db.WithContext(ctx).Model(&models.VirtualModel{}).Where("id = ?", id).Updates(fields)
+	return result.RowsAffected, result.Error
+}
+
 func (r *virtualModelRepo) Delete(ctx context.Context, id uint) (int64, error) {
 	result := r.db.WithContext(ctx).Unscoped().Delete(&models.VirtualModel{}, id)
 	return result.RowsAffected, result.Error
@@ -194,6 +206,14 @@ func (r *virtualModelMappingRepo) Create(ctx context.Context, mapping *models.Vi
 
 func (r *virtualModelMappingRepo) Update(ctx context.Context, id uint, mapping *models.VirtualModelMapping) error {
 	return r.db.WithContext(ctx).Model(&models.VirtualModelMapping{}).Where("id = ?", id).Updates(mapping).Error
+}
+
+func (r *virtualModelMappingRepo) UpdateFields(ctx context.Context, id uint, fields map[string]any) (int64, error) {
+	if len(fields) == 0 {
+		return 0, nil
+	}
+	result := r.db.WithContext(ctx).Model(&models.VirtualModelMapping{}).Where("id = ?", id).Updates(fields)
+	return result.RowsAffected, result.Error
 }
 
 func (r *virtualModelMappingRepo) Delete(ctx context.Context, id uint) (int64, error) {

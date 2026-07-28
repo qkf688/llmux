@@ -21,7 +21,8 @@ func ApplySuccessAdjustments(ctx context.Context, modelProviderID uint) {
 func applyWeightIncreaseByID(ctx context.Context, modelProviderID uint) {
 	adjustIntField(ctx, modelProviderID,
 		getAutoWeightIncreaseStep, getAutoWeightIncreaseMax,
-		"weight", "old_weight",
+		repos().ModelWithProvider.IncreaseWeight,
+		"weight",
 		func(max int) bool { return max <= 0 }, // 权重 max=0 也表示禁用
 	)
 }
@@ -30,20 +31,22 @@ func applyWeightIncreaseByID(ctx context.Context, modelProviderID uint) {
 func applyPriorityIncreaseByID(ctx context.Context, modelProviderID uint) {
 	adjustIntField(ctx, modelProviderID,
 		getAutoPriorityIncreaseStep, getAutoPriorityIncreaseMax,
-		"priority", "old_priority",
+		repos().ModelWithProvider.IncreasePriority,
+		"priority",
 		func(max int) bool { return max < 0 }, // 优先级 max=0 是有效值（表示不允许增加）
 	)
 }
 
-// adjustIntField 泛化权重/优先级提升逻辑。
+// adjustIntField 泛化权重/优先级提升逻辑（原子操作，无读改写竞态）。
+// increase 是 repo 的类型化原子方法，service 不依赖列名细节（DIP）。
 // maxDisabled 判断 max 是否表示禁用：权重 max<=0 禁用，优先级 max<0 禁用。
 func adjustIntField(
 	ctx context.Context,
 	modelProviderID uint,
 	getStep func(context.Context) int,
 	getMax func(context.Context) int,
-	fieldName string, // "weight" 或 "priority"
-	logFieldName string, // "old_weight" 或 "old_priority"
+	increase func(context.Context, uint, int, int) (int64, error),
+	label string,
 	maxDisabled func(int) bool,
 ) {
 	step := getStep(ctx)
@@ -52,35 +55,14 @@ func adjustIntField(
 		return
 	}
 
-	mp, err := repos().ModelWithProvider.Get(ctx, modelProviderID)
+	affected, err := increase(ctx, modelProviderID, step, max)
 	if err != nil {
+		slog.Error(label+" increase error", "error", err, "id", modelProviderID)
 		return
 	}
-
-	currentValue := mp.Weight
-	if fieldName == "priority" {
-		currentValue = mp.Priority
+	if affected > 0 {
+		slog.Info(label+" increased after success", "id", modelProviderID, "step", step, "max", max)
 	}
-
-	if max < currentValue {
-		max = currentValue
-	}
-
-	newValue := currentValue + step
-	if newValue > max {
-		newValue = max
-	}
-
-	if newValue == currentValue {
-		return
-	}
-
-	if _, err := repos().ModelWithProvider.UpdateFields(ctx, modelProviderID, map[string]any{fieldName: newValue}); err != nil {
-		slog.Error("update "+fieldName+" increase error", "error", err, "id", modelProviderID)
-		return
-	}
-
-	slog.Info(fieldName+" increased after success", "id", modelProviderID, logFieldName, currentValue, "new_"+fieldName, newValue)
 }
 
 func getAutoWeightIncreaseStep(ctx context.Context) int {
@@ -103,35 +85,24 @@ func getAutoSuccessIncrease(ctx context.Context) bool {
 	return settingsReader.Bool(ctx, models.SettingKeyAutoSuccessIncrease, true)
 }
 
-// ApplyWeightDecayByModelProviderID 根据配置对指定关联应用权重衰减。
+// ApplyWeightDecayByModelProviderID 根据配置对指定关联应用权重衰减（原子操作，无读改写竞态）。
 func ApplyWeightDecayByModelProviderID(ctx context.Context, modelProviderID uint, providerName, providerModel string) {
 	if !getAutoWeightDecay(ctx) {
 		return
 	}
 
 	decayStep := getAutoWeightDecayStep(ctx)
-	mp, err := repos().ModelWithProvider.Get(ctx, modelProviderID)
+	affected, err := repos().ModelWithProvider.DecayWeight(ctx, modelProviderID, decayStep, 1)
 	if err != nil {
-		return
-	}
-
-	newWeight := mp.Weight - decayStep
-	if newWeight < 1 {
-		newWeight = 1
-	}
-	if newWeight == mp.Weight {
-		return
-	}
-
-	if _, err := repos().ModelWithProvider.UpdateFields(ctx, modelProviderID, map[string]any{"weight": newWeight}); err != nil {
 		slog.Error("update weight error", "error", err, "id", modelProviderID)
 		return
 	}
-
-	slog.Info("weight decay applied", "provider", providerName, "model", providerModel, "id", modelProviderID, "old_weight", mp.Weight, "new_weight", newWeight)
+	if affected > 0 {
+		slog.Info("weight decay applied", "provider", providerName, "model", providerModel, "id", modelProviderID, "step", decayStep)
+	}
 }
 
-// ApplyPriorityDecayByModelProviderID 根据配置对指定关联应用优先级衰减。
+// ApplyPriorityDecayByModelProviderID 根据配置对指定关联应用优先级衰减（原子操作，无读改写竞态）。
 func ApplyPriorityDecayByModelProviderID(ctx context.Context, modelProviderID uint, providerName, providerModel string) {
 	if !getAutoPriorityDecay(ctx) {
 		return
@@ -141,34 +112,29 @@ func ApplyPriorityDecayByModelProviderID(ctx context.Context, modelProviderID ui
 	threshold := getAutoPriorityDecayThreshold(ctx)
 	disableEnabled := getAutoPriorityDecayDisableEnabled(ctx)
 
-	mp, err := repos().ModelWithProvider.Get(ctx, modelProviderID)
+	affected, err := repos().ModelWithProvider.DecayPriority(ctx, modelProviderID, decayStep, 0)
 	if err != nil {
-		return
-	}
-
-	newPriority := mp.Priority - decayStep
-	if newPriority < 0 {
-		newPriority = 0
-	}
-	if newPriority == mp.Priority {
-		return
-	}
-
-	if _, err := repos().ModelWithProvider.UpdateFields(ctx, modelProviderID, map[string]any{"priority": newPriority}); err != nil {
 		slog.Error("update priority error", "error", err, "id", modelProviderID)
 		return
 	}
+	if affected > 0 {
+		slog.Info("priority decay applied", "provider", providerName, "model", providerModel, "id", modelProviderID, "step", decayStep)
+	}
 
-	slog.Info("priority decay applied", "provider", providerName, "model", providerModel, "id", modelProviderID, "old_priority", mp.Priority, "new_priority", newPriority)
-
-	// 只有在启用自动禁用功能时才执行禁用操作
-	if disableEnabled && newPriority <= threshold {
-		falseVal := false
-		if err := repos().ModelWithProvider.Update(ctx, modelProviderID,
-			models.ModelWithProvider{Status: &falseVal}); err != nil {
+	// 原子衰减后重读当前值，判断是否需要禁用
+	if !disableEnabled {
+		return
+	}
+	mp, err := repos().ModelWithProvider.Get(ctx, modelProviderID)
+	if err != nil {
+		slog.Error("re-read model provider after priority decay", "error", err, "id", modelProviderID)
+		return
+	}
+	if mp.Priority <= threshold && (mp.Status == nil || *mp.Status) {
+		if _, err := repos().ModelWithProvider.UpdateFields(ctx, modelProviderID, map[string]any{"status": false}); err != nil {
 			slog.Error("auto disable model provider error", "error", err, "id", modelProviderID)
 		} else {
-			slog.Warn("model provider auto disabled due to low priority", "provider", providerName, "model", providerModel, "priority", newPriority, "threshold", threshold)
+			slog.Warn("model provider auto disabled due to low priority", "provider", providerName, "model", providerModel, "id", modelProviderID, "priority", mp.Priority, "threshold", threshold)
 		}
 	}
 }
@@ -225,33 +191,33 @@ func getConsecutiveFailureDisableEnabled(ctx context.Context) bool {
 	return settingsReader.Bool(ctx, models.SettingKeyConsecutiveFailureDisableEnabled, true)
 }
 
-// IncrementConsecutiveFailures 累加连续失败次数，达阈值时可选自动禁用关联。
+// IncrementConsecutiveFailures 原子自增连续失败次数。达阈值时若启用自动禁用则禁用关联。
+// 计数始终自增（数据列维护不寄生于策略开关）；仅 disable-check 受 ConsecutiveFailureDisableEnabled 门控。
 func IncrementConsecutiveFailures(ctx context.Context, modelProviderID uint, providerName, providerModel string) {
+	// 原子自增，无读改写竞态
+	if _, err := repos().ModelWithProvider.IncrementConsecutiveFailures(ctx, modelProviderID); err != nil {
+		slog.Error("increment consecutive failure count error", "error", err, "id", modelProviderID)
+		return
+	}
+
 	if !getConsecutiveFailureDisableEnabled(ctx) {
 		return
 	}
 
 	threshold := getConsecutiveFailureThreshold(ctx)
+
+	// 重读当前值判断是否需要禁用（禁用操作幂等，竞态无害）
 	mp, err := repos().ModelWithProvider.Get(ctx, modelProviderID)
 	if err != nil {
+		slog.Error("re-read model provider after failure increment", "error", err, "id", modelProviderID)
 		return
 	}
-
-	newCount := mp.ConsecutiveFailures + 1
-	updates := models.ModelWithProvider{ConsecutiveFailures: newCount}
-	shouldDisable := newCount >= threshold && (mp.Status == nil || *mp.Status)
-	if shouldDisable {
-		falseVal := false
-		updates.Status = &falseVal
-	}
-
-	if err := repos().ModelWithProvider.Update(ctx, modelProviderID, updates); err != nil {
-		slog.Error("update consecutive failure count error", "error", err, "id", modelProviderID)
-		return
-	}
-
-	if shouldDisable {
-		slog.Warn("model provider auto disabled due to consecutive failures", "provider", providerName, "model", providerModel, "id", modelProviderID, "fail_count", newCount, "threshold", threshold)
+	if mp.ConsecutiveFailures >= threshold && (mp.Status == nil || *mp.Status) {
+		if _, err := repos().ModelWithProvider.UpdateFields(ctx, modelProviderID, map[string]any{"status": false}); err != nil {
+			slog.Error("auto disable model provider error", "error", err, "id", modelProviderID)
+		} else {
+			slog.Warn("model provider auto disabled due to consecutive failures", "provider", providerName, "model", providerModel, "id", modelProviderID, "fail_count", mp.ConsecutiveFailures, "threshold", threshold)
+		}
 	}
 }
 

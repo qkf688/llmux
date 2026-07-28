@@ -3,6 +3,7 @@ package adjustment
 import (
 	"context"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/atopos31/llmio/models"
@@ -205,5 +206,61 @@ func TestAutoDecayEnabled_ReflectsSettings(t *testing.T) {
 	}
 	if AutoPriorityDecayEnabled(context.Background()) {
 		t.Fatal("AutoPriorityDecayEnabled = true, want false")
+	}
+}
+
+// 并发自增不应丢失计数——旧实现读改写会互相覆盖，10 并发只记 1。
+func TestIncrementConsecutiveFailures_ConcurrentNoLostUpdates(t *testing.T) {
+	initAdjustmentTestDB(t)
+	useSettings(t, mapReader{
+		bools: map[string]bool{
+			models.SettingKeyConsecutiveFailureDisableEnabled: true,
+		},
+		ints: map[string]int{
+			models.SettingKeyConsecutiveFailureThreshold: 100, // 高阈值避免禁用干扰计数验证
+		},
+	})
+
+	trueVal := true
+	mp := createModelProvider(t, 10, 100, 0, &trueVal)
+
+	var wg sync.WaitGroup
+	const N = 10
+	for i := 0; i < N; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			IncrementConsecutiveFailures(context.Background(), mp.ID, "p", "pm")
+		}()
+	}
+	wg.Wait()
+
+	got := loadModelProvider(t, mp.ID)
+	if got.ConsecutiveFailures != N {
+		t.Fatalf("consecutive_failures = %d, want %d (no lost updates)", got.ConsecutiveFailures, N)
+	}
+}
+
+// 计数始终自增——即使 auto-disable 关闭，consecutive_failures 也应累加（数据列不寄生于策略开关）。
+func TestIncrementConsecutiveFailures_IncrementsEvenWhenDisableOff(t *testing.T) {
+	initAdjustmentTestDB(t)
+	useSettings(t, mapReader{
+		bools: map[string]bool{
+			models.SettingKeyConsecutiveFailureDisableEnabled: false,
+		},
+	})
+
+	trueVal := true
+	mp := createModelProvider(t, 10, 100, 0, &trueVal)
+
+	IncrementConsecutiveFailures(context.Background(), mp.ID, "p", "pm")
+	IncrementConsecutiveFailures(context.Background(), mp.ID, "p", "pm")
+
+	got := loadModelProvider(t, mp.ID)
+	if got.ConsecutiveFailures != 2 {
+		t.Fatalf("consecutive_failures = %d, want 2 (counter should increment even when disable is off)", got.ConsecutiveFailures)
+	}
+	if got.Status == nil || !*got.Status {
+		t.Fatalf("status should remain enabled when disable is off, got %v", got.Status)
 	}
 }

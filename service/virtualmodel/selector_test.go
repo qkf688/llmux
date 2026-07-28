@@ -13,9 +13,9 @@ func TestRegisterSelector_DuplicatePanics(t *testing.T) {
 
 func TestGetSelector_KnownStrategies(t *testing.T) {
 	cases := []struct {
-		strategy      string
-		wantAdvance   bool
-		wantFound     bool
+		strategy    string
+		wantAdvance bool
+		wantFound   bool
 	}{
 		{"priority", false, true},
 		{"round_robin", true, true},

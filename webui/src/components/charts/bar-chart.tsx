@@ -1,6 +1,6 @@
 "use client"
 
-import { Bar, BarChart, CartesianGrid, LabelList, XAxis, YAxis } from "recharts"
+import { Bar, BarChart, CartesianGrid, LabelList, XAxis, YAxis, type LabelProps } from "recharts"
 
 import {
   Card,
@@ -65,8 +65,8 @@ export function ModelRankingChart({ data }: ModelRankingChartProps) {
   const chartData = generateChartData(data)
   const chartConfig = generateChartConfig(data)
 
-  const renderModelLabel = (props: any) => {
-    const { x, y, width, height, value } = props ?? {}
+  const renderModelLabel = (props: LabelProps) => {
+    const { x, y, width, height, value } = props
     if (typeof value !== "string") return null
     if (typeof x !== "number" || typeof y !== "number" || typeof width !== "number" || typeof height !== "number") return null
     if (width <= 0 || height <= 0) return null

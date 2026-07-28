@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { Bot, MessageSquare } from "lucide-react";
 import type { DailyMetricsData } from "@/lib/api";
@@ -222,8 +222,8 @@ export function ActivityHeatmapCard({
             gridTemplateRows: "repeat(7, var(--cell))",
             gridAutoFlow: "column",
             gap: "4px",
-            ["--cell" as any]: `${cellPx}px`,
-          }}
+            "--cell": `${cellPx}px`,
+          } as CSSProperties}
         >
           {days.map((day) => {
             if (day.isFuture) {

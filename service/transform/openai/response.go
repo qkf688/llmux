@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 
-	"github.com/atopos31/llmio/common/maputil"
 	"github.com/atopos31/llmio/models"
 )
 
@@ -173,60 +172,6 @@ func parseOpenAIResponseToolCalls(tcs []openAIToolCall) []models.UnifiedToolCall
 				Arguments: normalizeOpenAIToolCallArguments(tc.Function.Arguments),
 			},
 		})
-	}
-	return toolCalls
-}
-
-// parseOpenAIToolCalls parses tool_calls from an OpenAI Chat Completions request message.
-// This is used by request-side transformers and intentionally keeps the permissive `map[string]interface{}` parsing.
-func parseOpenAIToolCalls(msgMap map[string]interface{}) []models.UnifiedToolCall {
-	var toolCalls []models.UnifiedToolCall
-	if tcs, ok := msgMap["tool_calls"].([]interface{}); ok {
-		for _, tc := range tcs {
-			tcMap, ok := tc.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			funcMap, ok := tcMap["function"].(map[string]interface{})
-			if !ok {
-				continue
-			}
-
-			argsStr := "{}"
-			if rawArgs, ok := funcMap["arguments"]; ok && rawArgs != nil {
-				switch v := rawArgs.(type) {
-				case string:
-					if v != "" {
-						argsStr = v
-					}
-				case map[string]interface{}:
-					if b, err := json.Marshal(v); err == nil && len(b) > 0 && string(b) != "null" {
-						argsStr = string(b)
-					}
-				case []interface{}:
-					if b, err := json.Marshal(v); err == nil && len(b) > 0 && string(b) != "null" {
-						argsStr = string(b)
-					}
-				case json.RawMessage:
-					if len(v) > 0 && string(v) != "null" {
-						argsStr = string(v)
-					}
-				case []byte:
-					if len(v) > 0 && string(v) != "null" {
-						argsStr = string(v)
-					}
-				}
-			}
-
-			toolCalls = append(toolCalls, models.UnifiedToolCall{
-				ID:   maputil.String(tcMap, "id"),
-				Type: maputil.String(tcMap, "type"),
-				Function: models.UnifiedToolCallFunction{
-					Name:      maputil.String(funcMap, "name"),
-					Arguments: argsStr,
-				},
-			})
-		}
 	}
 	return toolCalls
 }

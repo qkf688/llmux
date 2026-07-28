@@ -7,8 +7,10 @@ import (
 	"github.com/atopos31/llmio/models"
 )
 
+// getStrictCapabilityMatch 读取严格能力匹配设置。
+// 默认值与 setting schema 一致（true），避免与 handler/settings.GetStrictCapabilityMatch 反向默认导致行为分叉。
 func getStrictCapabilityMatch(ctx context.Context) bool {
-	return settingsReader.Bool(ctx, models.SettingKeyStrictCapabilityMatch, false)
+	return settingsReader.Bool(ctx, models.SettingKeyStrictCapabilityMatch, true)
 }
 
 // getLogRawRequestResponse 获取原始请求响应记录选项

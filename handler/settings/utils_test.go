@@ -107,8 +107,8 @@ func TestResetModelWeights(t *testing.T) {
 	if payload.Code != 200 {
 		t.Fatalf("payload code = %d, want 200, body=%s", payload.Code, w.Body.String())
 	}
-	if payload.Data.DefaultWeight != 5 {
-		t.Fatalf("default_weight = %d, want 5", payload.Data.DefaultWeight)
+	if payload.Data.DefaultWeight != 100 {
+		t.Fatalf("default_weight = %d, want 100 (schema default)", payload.Data.DefaultWeight)
 	}
 	if payload.Data.Updated != 1 {
 		t.Fatalf("updated = %d, want 1", payload.Data.Updated)
@@ -118,8 +118,8 @@ func TestResetModelWeights(t *testing.T) {
 	if err := models.DB.Unscoped().First(&gotActive, active.ID).Error; err != nil {
 		t.Fatalf("load active association: %v", err)
 	}
-	if gotActive.Weight != 5 {
-		t.Fatalf("active weight = %d, want 5", gotActive.Weight)
+	if gotActive.Weight != 100 {
+		t.Fatalf("active weight = %d, want 100 (schema default)", gotActive.Weight)
 	}
 
 	var gotDeleted models.ModelWithProvider

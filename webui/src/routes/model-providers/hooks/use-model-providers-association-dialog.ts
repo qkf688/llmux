@@ -49,8 +49,10 @@ export function useModelProvidersAssociationDialog({
   const openCreateDialog = () => {
     setEditingAssociation(null);
     setSelectedProviderModels([]);
-    const defaultWeight = settings?.auto_weight_decay_default || 5;
-    const defaultPriority = settings?.auto_priority_decay_default || 10;
+    // 默认值取自 setting schema（与 models/setting_schema.go 同步），
+    // fallback 与 schema 默认一致：100 / 100。settings 加载完成后即被真实值覆盖。
+    const defaultWeight = settings?.auto_weight_decay_default || 100;
+    const defaultPriority = settings?.auto_priority_decay_default || 100;
     form.reset({
       model_id: selectedModelId || 0,
       provider_name: "",

@@ -50,11 +50,11 @@ func newTestService(t *testing.T, db *gorm.DB, matcher NameMatcher) *Service {
 func boolPtr(v bool) *bool { return &v }
 
 func TestNewDefaultAssociation(t *testing.T) {
-	assoc := NewDefaultAssociation(10, 20, "gpt-4.1", 8)
+	assoc := NewDefaultAssociation(10, 20, "gpt-4.1", DefaultWeightFallback, 8)
 	if assoc.ModelID != 10 || assoc.ProviderID != 20 || assoc.ProviderModel != "gpt-4.1" {
 		t.Fatalf("unexpected identity: %#v", assoc)
 	}
-	if assoc.Priority != 8 || assoc.Weight != DefaultWeight {
+	if assoc.Priority != 8 || assoc.Weight != DefaultWeightFallback {
 		t.Fatalf("priority/weight = %d/%d", assoc.Priority, assoc.Weight)
 	}
 	if assoc.ToolCall == nil || !*assoc.ToolCall {
@@ -148,8 +148,8 @@ func TestAssociate_SkipsExistingBlacklistAndDisabledModel(t *testing.T) {
 	if extra.Priority != DefaultPriorityFallback {
 		t.Fatalf("extra.Priority = %d, want %d", extra.Priority, DefaultPriorityFallback)
 	}
-	if extra.Weight != DefaultWeight {
-		t.Fatalf("extra.Weight = %d, want %d", extra.Weight, DefaultWeight)
+	if extra.Weight != DefaultWeightFallback {
+		t.Fatalf("extra.Weight = %d, want %d", extra.Weight, DefaultWeightFallback)
 	}
 
 	previews, err := svc.PreviewAssociate(ctx)
@@ -198,6 +198,44 @@ func TestAssociate_UsesPrioritySetting(t *testing.T) {
 	}
 	if len(all) != 1 || all[0].Priority != 42 {
 		t.Fatalf("priority = %#v", all)
+	}
+}
+
+// TestAssociate_UsesWeightSetting 验证 schema 真值经 DB → service 贯通到关联行的 Weight 字段。
+// 与 TestAssociate_UsesPrioritySetting 对称：seed 一个不等于 DefaultWeightFallback 的值，
+// 断言新建关联的 Weight 等于 seed 值——证明不是直接返回 Fallback 常量。
+func TestAssociate_UsesWeightSetting(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	repos := repository.New(db)
+
+	if err := repos.Model.Create(ctx, &models.Model{ID: 1, Name: "gpt-4o"}); err != nil {
+		t.Fatalf("create model: %v", err)
+	}
+	if err := repos.Provider.Create(ctx, &models.Provider{
+		Name: "p1", Type: "openai",
+		Config: `{"upstream_models":["gpt-4o"]}`,
+	}); err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	if err := repos.Setting.SetInt(ctx, models.SettingKeyAutoWeightDecayDefault, 77); err != nil {
+		t.Fatalf("set weight: %v", err)
+	}
+
+	svc := newTestService(t, db, staticMatcher{"gpt-4o": {1}})
+	result, err := svc.Associate(ctx)
+	if err != nil {
+		t.Fatalf("Associate: %v", err)
+	}
+	if result.Success != 1 {
+		t.Fatalf("added = %d, want 1", result.Success)
+	}
+	all, err := repos.ModelWithProvider.ListAll(ctx)
+	if err != nil {
+		t.Fatalf("ListAll: %v", err)
+	}
+	if len(all) != 1 || all[0].Weight != 77 {
+		t.Fatalf("weight = %#v, want 77 (schema-seeded value, not fallback %d)", all, DefaultWeightFallback)
 	}
 }
 

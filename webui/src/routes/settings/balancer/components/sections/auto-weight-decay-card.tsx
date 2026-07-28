@@ -42,9 +42,9 @@ export function AutoWeightDecayCard({ localSettings, updateLocalSettings }: Bala
             type="number"
             min={1}
             max={1000}
-            value={localSettings?.auto_weight_decay_default ?? 5}
+            value={localSettings?.auto_weight_decay_default ?? 100}
             onChange={(e) => {
-              updateLocalSettings({ auto_weight_decay_default: parseInt(e.target.value) || 5 });
+              updateLocalSettings({ auto_weight_decay_default: parseInt(e.target.value) || 100 });
             }}
             className="w-32"
           />

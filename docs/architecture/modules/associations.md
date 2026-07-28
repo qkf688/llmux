@@ -50,7 +50,7 @@ models.ModelWithProvider
 - 规则权威：
   - 尊重 `Model.AutoAssociate`（`false` 跳过）
   - 跳过 `Provider.Blacklisted`
-  - 默认 `Weight=5`，`Priority` 读 `SettingKeyAutoPriorityDecayDefault`（schema 默认 100）
+  - 默认 `Weight` 读 `SettingKeyAutoWeightDecayDefault`、`Priority` 读 `SettingKeyAutoPriorityDecayDefault`（schema 默认 100/100；缺失/非法回退到 `DefaultWeightFallback`/`DefaultPriorityFallback` 常量，由调用方 `service.associate` 传入 `NewDefaultAssociation`）
   - 无效关联：provider 不存在，或 `ProviderModel` 不在 Config 的 upstream/custom 列表；拉列表失败则不删
 
 ---

@@ -23,6 +23,11 @@ func GetStrictCapabilityMatch(ctx context.Context) bool {
 	return models.GetSettingBool(ctx, models.SettingKeyStrictCapabilityMatch, true)
 }
 
+// GetAutoWeightDecayDefault 获取自动权重衰减默认值（重置权重时使用，与 setting schema 同源）。
+func GetAutoWeightDecayDefault(ctx context.Context) int {
+	return models.GetSettingInt(ctx, models.SettingKeyAutoWeightDecayDefault, 100, 0)
+}
+
 // GetAutoPriorityDecayDefault 获取自动优先级衰减默认值
 func GetAutoPriorityDecayDefault(ctx context.Context) int {
 	return models.GetSettingInt(ctx, models.SettingKeyAutoPriorityDecayDefault, 100, 0)
@@ -98,7 +103,8 @@ func ResetModelWeights(c *gin.Context) {
 		return
 	}
 
-	const defaultWeight = 5
+	// 默认权重来自 setting schema（与 ResetModelPriorities 同源），避免硬编码漂移。
+	defaultWeight := GetAutoWeightDecayDefault(ctx)
 	db := models.DB.WithContext(ctx).Model(&models.ModelWithProvider{})
 	if req.ModelID != nil {
 		db = db.Where("model_id = ?", *req.ModelID)

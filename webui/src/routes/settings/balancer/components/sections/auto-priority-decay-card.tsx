@@ -42,9 +42,9 @@ export function AutoPriorityDecayCard({ localSettings, updateLocalSettings }: Ba
             type="number"
             min={1}
             max={1000}
-            value={localSettings?.auto_priority_decay_default ?? 10}
+            value={localSettings?.auto_priority_decay_default ?? 100}
             onChange={(e) => {
-              updateLocalSettings({ auto_priority_decay_default: parseInt(e.target.value) || 10 });
+              updateLocalSettings({ auto_priority_decay_default: parseInt(e.target.value) || 100 });
             }}
             className="w-32"
           />

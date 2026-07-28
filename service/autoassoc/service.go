@@ -122,6 +122,7 @@ func (s *Service) associate(ctx context.Context, skip func(models.Model) bool) (
 	}
 
 	defaultPriority := s.settingInt(ctx, models.SettingKeyAutoPriorityDecayDefault, DefaultPriorityFallback, 0)
+	defaultWeight := s.settingInt(ctx, models.SettingKeyAutoWeightDecayDefault, DefaultWeightFallback, 0)
 	result := Result{}
 	repos := s.repositories()
 
@@ -137,6 +138,7 @@ func (s *Service) associate(ctx context.Context, skip func(models.Model) bool) (
 				candidate.ModelID,
 				candidate.ProviderID,
 				candidate.ProviderModel,
+				defaultWeight,
 				defaultPriority,
 			)
 			if err := repos.ModelWithProvider.Create(ctx, &newAssoc); err != nil {

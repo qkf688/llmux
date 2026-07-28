@@ -96,8 +96,9 @@ export function useModelProvidersAssociationMutations({
         structured_output: false,
         image: false,
         with_header: false,
-        weight: settings?.auto_weight_decay_default || 5,
-        priority: settings?.auto_priority_decay_default || 10,
+        // 默认值取自 setting schema（与 models/setting_schema.go 同步），fallback = 100。
+        weight: settings?.auto_weight_decay_default || 100,
+        priority: settings?.auto_priority_decay_default || 100,
         customer_headers: [],
       });
       setSelectedProviderModels([]);

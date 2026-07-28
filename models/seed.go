@@ -36,10 +36,12 @@ func initDefaultSettings(ctx context.Context) {
 	}
 }
 
-// initPriorityField 初始化优先级字段，为现有记录设置默认优先级
+// initPriorityField 初始化优先级字段，为现有记录设置默认优先级。
+// 默认值来自 setting schema（与 handler/settings.ResetModelPriorities 同源），
+// 保证种子回填与重置值一致，避免硬编码漂移。
 func initPriorityField(ctx context.Context) {
-	// 为 priority 为 0 的记录设置默认优先级 10
-	if _, err := gorm.G[ModelWithProvider](DB).Where("priority = 0 OR priority IS NULL").Update(ctx, "priority", 10); err != nil {
+	defaultPriority := GetSettingInt(ctx, SettingKeyAutoPriorityDecayDefault, 100, 0)
+	if _, err := gorm.G[ModelWithProvider](DB).Where("priority = 0 OR priority IS NULL").Update(ctx, "priority", defaultPriority); err != nil {
 		panic(err)
 	}
 }

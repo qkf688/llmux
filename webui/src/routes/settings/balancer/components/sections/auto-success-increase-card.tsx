@@ -59,9 +59,9 @@ export function AutoSuccessIncreaseCard({ localSettings, updateLocalSettings }: 
             type="number"
             min={1}
             max={10000}
-            value={localSettings?.auto_weight_increase_max ?? 5}
+            value={localSettings?.auto_weight_increase_max ?? 100}
             onChange={(e) => {
-              updateLocalSettings({ auto_weight_increase_max: parseInt(e.target.value) || 5 });
+              updateLocalSettings({ auto_weight_increase_max: parseInt(e.target.value) || 100 });
             }}
             className="w-32"
             disabled={!localSettings?.auto_success_increase}
@@ -97,9 +97,11 @@ export function AutoSuccessIncreaseCard({ localSettings, updateLocalSettings }: 
             type="number"
             min={0}
             max={10000}
-            value={localSettings?.auto_priority_increase_max ?? 10}
+            value={localSettings?.auto_priority_increase_max ?? 100}
             onChange={(e) => {
-              updateLocalSettings({ auto_priority_increase_max: parseInt(e.target.value) || 10 });
+              // 显式判空处理 NaN（空输入），保留合法的 0（schema Min=0 允许，语义=禁用自增）。
+              const v = parseInt(e.target.value);
+              updateLocalSettings({ auto_priority_increase_max: Number.isNaN(v) ? 100 : v });
             }}
             className="w-32"
             disabled={!localSettings?.auto_success_increase}

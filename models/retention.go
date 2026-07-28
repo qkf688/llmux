@@ -13,8 +13,10 @@ type RetentionDeleteOptions struct {
 	UnscopedCount bool
 	// UnscopedDelete 为 true 时主表 Delete 使用 Unscoped（硬删）；false 为普通 Delete（软删）。
 	UnscopedDelete bool
-	// BeforeDelete 在删除主表前调用（如先删 ChatIO）。
-	BeforeDelete func(ctx context.Context, ids []uint) error
+	// BeforeDelete 在删除主表前调用（如先删 ChatIO），与主表删除在同一事务内执行。
+	// tx 为事务句柄，回调内必须用 tx 操作子表，否则不在事务内。
+	// 返回 error 会回滚整个事务（主表不删），避免产生孤儿子表行。
+	BeforeDelete func(ctx context.Context, tx *gorm.DB, ids []uint) error
 }
 
 // EnforceRetentionByOldestID 通用「count → 超限 → 取最旧 N 条 id → 删除」骨架。
@@ -60,17 +62,19 @@ func EnforceRetentionByOldestID(
 		return 0, nil
 	}
 
-	if opt.BeforeDelete != nil {
-		if err := opt.BeforeDelete(ctx, ids); err != nil {
-			return 0, err
+	// BeforeDelete + 主表删除在同一事务内，保证子表删除失败时主表回滚，不产生孤儿子表行。
+	if err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if opt.BeforeDelete != nil {
+			if err := opt.BeforeDelete(ctx, tx, ids); err != nil {
+				return err
+			}
 		}
-	}
-
-	delDB := db.WithContext(ctx)
-	if opt.UnscopedDelete {
-		delDB = delDB.Unscoped()
-	}
-	if err := delDB.Where("id IN ?", ids).Delete(model).Error; err != nil {
+		delDB := tx
+		if opt.UnscopedDelete {
+			delDB = delDB.Unscoped()
+		}
+		return delDB.Where("id IN ?", ids).Delete(model).Error
+	}); err != nil {
 		return 0, err
 	}
 	return len(ids), nil

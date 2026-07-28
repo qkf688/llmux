@@ -101,7 +101,7 @@ func TestEnforceRetentionByOldestID_BeforeDelete(t *testing.T) {
 	_, err := EnforceRetentionByOldestID(ctx, db, &retentionProbe{}, 2, RetentionDeleteOptions{
 		UnscopedDelete: true,
 		UnscopedCount:  true,
-		BeforeDelete: func(_ context.Context, ids []uint) error {
+		BeforeDelete: func(_ context.Context, _ *gorm.DB, ids []uint) error {
 			seen = append(seen, ids...)
 			return nil
 		},
@@ -119,5 +119,35 @@ func TestEnforceRetentionByOldestID_ZeroRetention(t *testing.T) {
 	n, err := EnforceRetentionByOldestID(context.Background(), db, &retentionProbe{}, 0, RetentionDeleteOptions{})
 	if err != nil || n != 0 {
 		t.Fatalf("n=%d err=%v", n, err)
+	}
+}
+
+// BeforeDelete 返回 error 时主表删除应回滚，不产生孤儿（待办 12 核心回归保护）。
+func TestEnforceRetentionByOldestID_BeforeDeleteErrorRollback(t *testing.T) {
+	db := setupRetentionDB(t)
+	ctx := context.Background()
+	for i := 0; i < 4; i++ {
+		if err := db.Create(&retentionProbe{Name: "x"}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	simulatedErr := fmt.Errorf("simulated child delete failure")
+	_, err := EnforceRetentionByOldestID(ctx, db, &retentionProbe{}, 2, RetentionDeleteOptions{
+		UnscopedDelete: true,
+		UnscopedCount:  true,
+		BeforeDelete: func(_ context.Context, _ *gorm.DB, _ []uint) error {
+			return simulatedErr
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error from BeforeDelete, got nil")
+	}
+	// 主表应未删，4 条全在
+	var total int64
+	if err := db.Unscoped().Model(&retentionProbe{}).Count(&total).Error; err != nil {
+		t.Fatal(err)
+	}
+	if total != 4 {
+		t.Fatalf("unscoped total = %d, want 4 (main table should rollback)", total)
 	}
 }

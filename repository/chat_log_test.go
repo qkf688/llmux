@@ -32,7 +32,6 @@ func TestChatLogRepo_ListAndHardDeleteFiltered(t *testing.T) {
 	ctx := context.Background()
 	db := newLogTestDB(t)
 	chatRepo := NewChatLogRepo(db)
-	ioRepo := NewChatIORepo(db)
 
 	log1 := models.ChatLog{Name: "m1", ProviderName: "p1", Status: "success", Style: "openai"}
 	log2 := models.ChatLog{Name: "m1", ProviderName: "p1", Status: "error", Style: "openai"}
@@ -42,7 +41,6 @@ func TestChatLogRepo_ListAndHardDeleteFiltered(t *testing.T) {
 	if err := db.Create(&log2).Error; err != nil {
 		t.Fatal(err)
 	}
-	_ = ioRepo // silence if unused after create
 	if err := db.Create(&models.ChatIO{LogId: log1.ID, Input: "in"}).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -145,6 +143,53 @@ func TestHealthCheckLogRepo_ListAndClear(t *testing.T) {
 	n, err := repo.HardDeleteAll(ctx)
 	if err != nil || n != 1 {
 		t.Fatalf("HardDeleteAll: n=%d err=%v", n, err)
+	}
+}
+
+// TestChatLogRepo_EnforceRetentionDeletesChatIO 端到端验证保留策略事务：
+// 删 ChatLog 时对应 ChatIO 同步删除，不产生孤儿（待办 12 回归保护）。
+func TestChatLogRepo_EnforceRetentionDeletesChatIO(t *testing.T) {
+	ctx := context.Background()
+	db := newLogTestDB(t)
+	chatRepo := NewChatLogRepo(db)
+
+	// 建 4 条 ChatLog，每条配 1 条 ChatIO
+	for i := 0; i < 4; i++ {
+		log := models.ChatLog{Name: "m", ProviderName: "p", Status: "success", Style: "openai"}
+		if err := db.Create(&log).Error; err != nil {
+			t.Fatal(err)
+		}
+		if err := db.Create(&models.ChatIO{LogId: log.ID, Input: "in"}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// retention=2 → 删最旧 2 条（id 1,2），保留 id 3,4
+	deleted, err := chatRepo.EnforceRetention(ctx, 2)
+	if err != nil {
+		t.Fatalf("EnforceRetention: %v", err)
+	}
+	if deleted != 2 {
+		t.Fatalf("deleted = %d, want 2", deleted)
+	}
+
+	var logCount, ioCount int64
+	db.Unscoped().Model(&models.ChatLog{}).Count(&logCount)
+	db.Unscoped().Model(&models.ChatIO{}).Count(&ioCount)
+	if logCount != 2 {
+		t.Fatalf("chat_log remaining = %d, want 2", logCount)
+	}
+	if ioCount != 2 {
+		t.Fatalf("chat_io remaining = %d, want 2 (no orphans)", ioCount)
+	}
+
+	// 残留 ChatIO 的 log_id 必须指向存活的 ChatLog，不能是已删的
+	var orphanCount int64
+	db.Unscoped().Model(&models.ChatIO{}).
+		Where("log_id NOT IN (?)", db.Unscoped().Model(&models.ChatLog{}).Select("id")).
+		Count(&orphanCount)
+	if orphanCount != 0 {
+		t.Fatalf("orphan chat_io = %d, want 0", orphanCount)
 	}
 }
 

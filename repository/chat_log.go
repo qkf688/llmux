@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"strings"
 
 	"github.com/atopos31/llmio/models"
@@ -286,17 +285,14 @@ func (r *chatLogRepo) HardDeleteFiltered(ctx context.Context, filter ChatLogFilt
 
 func (r *chatLogRepo) EnforceRetention(ctx context.Context, retention int) (int, error) {
 	// ChatLog：Unscoped 统计 + 硬删，先删 ChatIO（与 HealthCheckLog 的软删策略不同）。
+	// ChatIO 删除与主表删除在同一事务内，失败回滚主表，避免产生孤儿 ChatIO 行。
 	return models.EnforceRetentionByOldestID(ctx, r.db, &models.ChatLog{}, retention, models.RetentionDeleteOptions{
 		UnscopedCount:  true,
 		UnscopedDelete: true,
-		BeforeDelete: func(ctx context.Context, ids []uint) error {
-			if err := r.db.WithContext(ctx).Unscoped().
+		BeforeDelete: func(ctx context.Context, tx *gorm.DB, ids []uint) error {
+			return tx.Unscoped().
 				Where("log_id IN ?", ids).
-				Delete(&models.ChatIO{}).Error; err != nil {
-				slog.Error("failed to delete chat io records", "error", err)
-				// 与旧逻辑一致：ChatIO 失败只记日志，不中断主表删除
-			}
-			return nil
+				Delete(&models.ChatIO{}).Error
 		},
 	})
 }

@@ -1,6 +1,7 @@
 package virtualmodels
 
 import (
+	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/service"
@@ -9,7 +10,7 @@ import (
 
 // GetVirtualModelStats 获取虚拟模型统计信息。
 func GetVirtualModelStats(c *gin.Context) {
-	id, ok := parseIDParam(c, "id")
+	id, ok := httpx.ParseUintParamAllowZero(c, "id")
 	if !ok {
 		return
 	}

@@ -2,8 +2,8 @@ package virtualmodels
 
 import (
 	"errors"
-	"strconv"
 
+	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
@@ -69,7 +69,7 @@ func CreateVirtualModel(c *gin.Context) {
 
 // UpdateVirtualModel 更新虚拟模型。
 func UpdateVirtualModel(c *gin.Context) {
-	id, ok := parseIDParam(c, "id")
+	id, ok := httpx.ParseUintParamAllowZero(c, "id")
 	if !ok {
 		return
 	}
@@ -132,7 +132,7 @@ func UpdateVirtualModel(c *gin.Context) {
 
 // DeleteVirtualModel 删除虚拟模型（映射硬删，VM 本体软删）。
 func DeleteVirtualModel(c *gin.Context) {
-	id, ok := parseIDParam(c, "id")
+	id, ok := httpx.ParseUintParamAllowZero(c, "id")
 	if !ok {
 		return
 	}
@@ -154,14 +154,4 @@ func DeleteVirtualModel(c *gin.Context) {
 	}
 
 	httpresp.Success(c, gin.H{"message": "Virtual model deleted successfully"})
-}
-
-func parseIDParam(c *gin.Context, key string) (uint, bool) {
-	raw := c.Param(key)
-	v, err := strconv.ParseUint(raw, 10, 64)
-	if err != nil {
-		// 与旧 gorm Where("id = ?", string) 一致：非法 id 走 not found 路径
-		return 0, true
-	}
-	return uint(v), true
 }

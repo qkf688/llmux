@@ -3,6 +3,7 @@ package virtualmodels
 import (
 	"errors"
 
+	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/service"
@@ -12,7 +13,7 @@ import (
 
 // GetVirtualModelMappings 获取虚拟模型的映射关系。
 func GetVirtualModelMappings(c *gin.Context) {
-	id, ok := parseIDParam(c, "id")
+	id, ok := httpx.ParseUintParamAllowZero(c, "id")
 	if !ok {
 		return
 	}
@@ -34,7 +35,7 @@ func GetVirtualModelMappings(c *gin.Context) {
 
 // CreateVirtualModelMapping 创建虚拟模型映射。
 func CreateVirtualModelMapping(c *gin.Context) {
-	id, ok := parseIDParam(c, "id")
+	id, ok := httpx.ParseUintParamAllowZero(c, "id")
 	if !ok {
 		return
 	}
@@ -93,11 +94,11 @@ func CreateVirtualModelMapping(c *gin.Context) {
 
 // UpdateVirtualModelMapping 更新虚拟模型映射。
 func UpdateVirtualModelMapping(c *gin.Context) {
-	id, ok := parseIDParam(c, "id")
+	id, ok := httpx.ParseUintParamAllowZero(c, "id")
 	if !ok {
 		return
 	}
-	mappingID, ok := parseIDParam(c, "mapping_id")
+	mappingID, ok := httpx.ParseUintParamAllowZero(c, "mapping_id")
 	if !ok {
 		return
 	}
@@ -140,11 +141,11 @@ func UpdateVirtualModelMapping(c *gin.Context) {
 
 // DeleteVirtualModelMapping 删除虚拟模型映射（硬删）。
 func DeleteVirtualModelMapping(c *gin.Context) {
-	id, ok := parseIDParam(c, "id")
+	id, ok := httpx.ParseUintParamAllowZero(c, "id")
 	if !ok {
 		return
 	}
-	mappingID, ok := parseIDParam(c, "mapping_id")
+	mappingID, ok := httpx.ParseUintParamAllowZero(c, "mapping_id")
 	if !ok {
 		return
 	}
@@ -157,7 +158,7 @@ func DeleteVirtualModelMapping(c *gin.Context) {
 
 	if _, err := repos().VirtualModelMapping.GetByVirtualModelAndID(ctx, id, mappingID); err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			httpresp.NotFound(c, "Mapping not found")
+			httpresp.InternalServerError(c, "Database error: "+err.Error())
 			return
 		}
 		httpresp.NotFound(c, "Mapping not found")

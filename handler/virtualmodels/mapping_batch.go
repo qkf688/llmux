@@ -1,6 +1,7 @@
 package virtualmodels
 
 import (
+	"github.com/atopos31/llmio/handler/httpx"
 	"github.com/atopos31/llmio/httpresp"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/service"
@@ -9,7 +10,7 @@ import (
 
 // BatchDeleteVirtualModelMapping 批量删除虚拟模型映射（硬删）。
 func BatchDeleteVirtualModelMapping(c *gin.Context) {
-	id, ok := parseIDParam(c, "id")
+	id, ok := httpx.ParseUintParamAllowZero(c, "id")
 	if !ok {
 		return
 	}
@@ -41,7 +42,7 @@ func BatchDeleteVirtualModelMapping(c *gin.Context) {
 
 // BatchCreateVirtualModelMapping 批量创建虚拟模型映射。
 func BatchCreateVirtualModelMapping(c *gin.Context) {
-	id, ok := parseIDParam(c, "id")
+	id, ok := httpx.ParseUintParamAllowZero(c, "id")
 	if !ok {
 		return
 	}

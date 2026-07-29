@@ -85,12 +85,14 @@ type ResponsesItem struct {
 	Annotations []ResponsesAnnotation `json:"annotations,omitempty"`
 
 	// function_call
-	Name      *string               `json:"name,omitempty"`
-	Arguments *string               `json:"arguments,omitempty"`
-	CallID    *string               `json:"call_id,omitempty"`
-	Status    *string               `json:"status,omitempty"`
-	Output    *string               `json:"output,omitempty"`
-	Options   *ResponsesTextOptions `json:"options,omitempty"`
+	Name      *string `json:"name,omitempty"`
+	Arguments *string `json:"arguments,omitempty"`
+	CallID    *string `json:"call_id,omitempty"`
+	Status    *string `json:"status,omitempty"`
+	// Output 支持 string（纯文本，老上游兼容）或 []map[string]interface{}（多模态，
+	// input_text/input_image 数组形式，OpenAI Responses 协议规范）。
+	Output  interface{}           `json:"output,omitempty"`
+	Options *ResponsesTextOptions `json:"options,omitempty"`
 
 	// Cherry Studio / octopus compatibility: role-based format
 	Role    string      `json:"role,omitempty"`

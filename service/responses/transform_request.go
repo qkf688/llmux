@@ -218,8 +218,21 @@ func convertInputToMessages(input ResponsesInput) ([]models.UnifiedMessage, stri
 		case "function_call_output":
 			if item.Output != nil {
 				msg := models.UnifiedMessage{
-					Role:    "tool",
-					Content: *item.Output,
+					Role: "tool",
+				}
+				switch v := item.Output.(type) {
+				case string:
+					msg.Content = v
+				case []interface{}:
+					if content, ok := parsePartsToUnifiedContent(v); ok {
+						msg.Content = content
+					} else {
+						// 数组形式但解析失败，降级为空串避免整条丢弃
+						msg.Content = ""
+					}
+				default:
+					// 未知类型降级为空串，避免泄漏内部结构
+					msg.Content = ""
 				}
 				if item.CallID != nil {
 					msg.ToolCallID = *item.CallID

@@ -149,20 +149,33 @@ func convertMessagesToInput(messages []models.UnifiedMessage, arrayInputs *bool)
 				}
 			}
 		case "tool":
-			// function_call_output.output 只接受字符串，多模态工具结果在此降级为
-			// 纯文本 + 占位符。此前的 `msg.Content.(string)` 守卫会把整条工具结果丢弃，
-			// 上游看到的对话里凭空少一轮。
-			content := msg.GetContentAsStringWithPlaceholders()
+			// function_call_output.output 支持 string（纯文本，老上游兼容）
+			// 或 input_text/input_image 数组（多模态，OpenAI Responses 协议规范）。
 			callID := msg.ToolCallID
 			var callIDPtr *string
 			if callID != "" {
 				callIDPtr = &callID
 			}
-			items = append(items, ResponsesItem{
+			item := ResponsesItem{
 				Type:   "function_call_output",
 				CallID: callIDPtr,
-				Output: &content,
-			})
+			}
+			switch content := msg.Content.(type) {
+			case string:
+				item.Output = content
+			case []models.UnifiedMessageContentPart:
+				if arr := unifiedPartsToToolOutput(content); arr != nil {
+					item.Output = arr
+				} else {
+					// 块数组但无有效块，降级为占位符避免空 output
+					placeholder := msg.GetContentAsStringWithPlaceholders()
+					item.Output = placeholder
+				}
+			default:
+				// 未知 content 类型降级为文本 + 占位符
+				item.Output = msg.GetContentAsStringWithPlaceholders()
+			}
+			items = append(items, item)
 		}
 	}
 

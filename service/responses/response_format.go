@@ -44,16 +44,36 @@ func FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
 					continue
 				}
 				callID := choice.Message.ToolCallID
-				out := choice.Message.GetContentAsString()
-				if strings.TrimSpace(out) == "" {
-					continue
-				}
-				outputText := out
-				output = append(output, ResponsesItem{
+				item := ResponsesItem{
 					Type:   "function_call_output",
 					CallID: &callID,
-					Output: &outputText,
-				})
+				}
+				switch content := choice.Message.Content.(type) {
+				case string:
+					if strings.TrimSpace(content) == "" {
+						continue
+					}
+					item.Output = content
+				case []models.UnifiedMessageContentPart:
+					arr := unifiedPartsToToolOutput(content)
+					if arr == nil {
+						// 无有效块，降级为占位符避免空 output
+						fallback := choice.Message.GetContentAsStringWithPlaceholders()
+						if strings.TrimSpace(fallback) == "" {
+							continue
+						}
+						item.Output = fallback
+					} else {
+						item.Output = arr
+					}
+				default:
+					fallback := choice.Message.GetContentAsStringWithPlaceholders()
+					if strings.TrimSpace(fallback) == "" {
+						continue
+					}
+					item.Output = fallback
+				}
+				output = append(output, item)
 				continue
 			}
 

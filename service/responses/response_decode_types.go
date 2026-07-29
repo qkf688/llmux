@@ -14,17 +14,18 @@ type responsesResponseDecode struct {
 }
 
 type responsesItemDecode struct {
-	ID        string                      `json:"id,omitempty"`
-	Type      string                      `json:"type"`
-	Role      string                      `json:"role,omitempty"`
-	Text      *string                     `json:"text,omitempty"`
-	Name      *string                     `json:"name,omitempty"`
-	Arguments *string                     `json:"arguments,omitempty"`
-	CallID    *string                     `json:"call_id,omitempty"`
-	Output    *string                     `json:"output,omitempty"`
-	Summary   []ResponsesReasoningSummary `json:"summary,omitempty"`
-	Content   json.RawMessage             `json:"content,omitempty"`
-	Error     *ResponsesError             `json:"error,omitempty"`
+	ID        string  `json:"id,omitempty"`
+	Type      string  `json:"type"`
+	Role      string  `json:"role,omitempty"`
+	Text      *string `json:"text,omitempty"`
+	Name      *string `json:"name,omitempty"`
+	Arguments *string `json:"arguments,omitempty"`
+	CallID    *string `json:"call_id,omitempty"`
+	// Output 支持 string 或 []interface{}（多模态 input_text/input_image 数组）。
+	Output  interface{}                 `json:"output,omitempty"`
+	Summary []ResponsesReasoningSummary `json:"summary,omitempty"`
+	Content json.RawMessage             `json:"content,omitempty"`
+	Error   *ResponsesError             `json:"error,omitempty"`
 }
 
 type responsesContentItem struct {

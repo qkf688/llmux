@@ -89,11 +89,30 @@ func ParseResponse(body []byte) (*models.UnifiedResponse, error) {
 					toolCalls = append(toolCalls, tc)
 				}
 			case "function_call_output":
-				if item.Output != nil && strings.TrimSpace(*item.Output) != "" {
-					if toolOutputContent != "" {
-						toolOutputContent += "\n\n"
+				if item.Output != nil {
+					switch v := item.Output.(type) {
+					case string:
+						if strings.TrimSpace(v) != "" {
+							if toolOutputContent != "" {
+								toolOutputContent += "\n\n"
+							}
+							toolOutputContent += v
+						}
+					case []interface{}:
+						if parts, ok := parsePartsToUnifiedContent(v); ok {
+							switch p := parts.(type) {
+							case string:
+								if strings.TrimSpace(p) != "" {
+									if toolOutputContent != "" {
+										toolOutputContent += "\n\n"
+									}
+									toolOutputContent += p
+								}
+							case []models.UnifiedMessageContentPart:
+								contentParts = append(contentParts, p...)
+							}
+						}
 					}
-					toolOutputContent += *item.Output
 				}
 			case "error":
 				if item.Error != nil {

@@ -303,3 +303,59 @@ func TestTransform_ThinkingBlockSurvivesRoundTrip(t *testing.T) {
 		t.Errorf("thinking signature 丢失: %#v", thinking["signature"])
 	}
 }
+
+// 待办 44：redacted_thinking.data 是不透明密文，必须与 thinking 文本分开保存并原样回灌。
+func TestTransform_RedactedThinkingBlockSurvivesRoundTrip(t *testing.T) {
+	const opaqueData = "EmwKAhgBEgyu3v+0/opaque=="
+	raw := []byte(`{
+		"model":"claude-3-5-sonnet",
+		"max_tokens":1024,
+		"thinking":{"type":"enabled","budget_tokens":20000},
+		"messages":[
+			{"role":"user","content":"北京天气如何"},
+			{"role":"assistant","content":[
+				{"type":"redacted_thinking","data":"` + opaqueData + `"},
+				{"type":"text","text":"我查一下。"},
+				{"type":"tool_use","id":"toolu_1","name":"get_weather","input":{"location":"Beijing"}}
+			]}
+		]
+	}`)
+
+	unified, err := TransformToUnified(raw)
+	if err != nil {
+		t.Fatalf("TransformToUnified 失败: %v", err)
+	}
+	if len(unified.Messages) != 2 {
+		t.Fatalf("应解析出 2 条消息，实际 %d", len(unified.Messages))
+	}
+
+	encoded, err := json.Marshal(unified.Messages[1])
+	if err != nil {
+		t.Fatalf("序列化统一消息失败: %v", err)
+	}
+	var messageFields map[string]interface{}
+	if err := json.Unmarshal(encoded, &messageFields); err != nil {
+		t.Fatalf("解析统一消息失败: %v", err)
+	}
+	if messageFields["redacted_thinking_data"] != opaqueData {
+		t.Fatalf("统一消息未独立保留 redacted_thinking.data: %#v", messageFields)
+	}
+
+	messages := decodeAnthropicMessages(t, unified)
+	got := contentBlockTypes(t, messages[1])
+	want := []string{"redacted_thinking", "text", "tool_use"}
+	if len(got) != len(want) {
+		t.Fatalf("assistant content 块类型应为 %v，实际 %v", want, got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("assistant content 块类型应为 %v，实际 %v", want, got)
+		}
+	}
+
+	blocks := messages[1]["content"].([]interface{})
+	redacted := blocks[0].(map[string]interface{})
+	if redacted["data"] != opaqueData {
+		t.Fatalf("redacted_thinking.data 被改写: %#v", redacted["data"])
+	}
+}

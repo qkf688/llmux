@@ -35,7 +35,7 @@ func ParseResponse(body []byte) (*models.UnifiedResponse, error) {
 	content, _ := parseMessageContentAndToolResults(resp["content"])
 	toolCalls := parseToolCalls(resp["content"])
 
-	reasoningText, reasoningSig := extractThinking(resp["content"])
+	reasoningText, reasoningSig, redactedData := extractThinking(resp["content"])
 	if reasoningText != "" {
 		switch v := content.(type) {
 		case string:
@@ -72,6 +72,9 @@ func ParseResponse(body []byte) (*models.UnifiedResponse, error) {
 	if reasoningSig != "" {
 		message.ReasoningSignature = &reasoningSig
 	}
+	if redactedData != "" {
+		message.RedactedThinkingData = &redactedData
+	}
 
 	unified.Choices = []models.UnifiedChoice{{
 		Index:        0,
@@ -90,10 +93,10 @@ func ParseResponse(body []byte) (*models.UnifiedResponse, error) {
 	return unified, nil
 }
 
-func extractThinking(raw interface{}) (thinking string, signature string) {
+func extractThinking(raw interface{}) (thinking string, signature string, redactedData string) {
 	items, ok := asSlice(raw)
 	if !ok {
-		return "", ""
+		return "", "", ""
 	}
 
 	for _, item := range items {
@@ -101,15 +104,16 @@ func extractThinking(raw interface{}) (thinking string, signature string) {
 		if !ok {
 			continue
 		}
-		if maputil.String(itemMap, "type") != "thinking" {
-			continue
-		}
-		thinking = maputil.String(itemMap, "thinking")
-		signature = maputil.String(itemMap, "signature")
-		if thinking != "" || signature != "" {
-			return thinking, signature
+		switch maputil.String(itemMap, "type") {
+		case "thinking":
+			thinking = maputil.String(itemMap, "thinking")
+			signature = maputil.String(itemMap, "signature")
+		case "redacted_thinking":
+			if redactedData == "" {
+				redactedData = maputil.String(itemMap, "data")
+			}
 		}
 	}
 
-	return "", ""
+	return thinking, signature, redactedData
 }

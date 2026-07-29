@@ -441,6 +441,65 @@ func TestParseResponse_MapsThinkingAndMultimodalContent(t *testing.T) {
 	}
 }
 
+func TestResponse_RedactedThinkingBlockSurvivesRoundTrip(t *testing.T) {
+	const opaqueData = "EmwKAhgBEgyu3v+0/opaque=="
+	raw := []byte(`{
+		"id":"msg_redacted",
+		"model":"claude-3-5-sonnet",
+		"stop_reason":"tool_use",
+		"content":[
+			{"type":"redacted_thinking","data":"` + opaqueData + `"},
+			{"type":"text","text":"我查一下。"},
+			{"type":"tool_use","id":"tool_1","name":"calc","input":{"x":1}}
+		],
+		"usage":{"input_tokens":10,"output_tokens":20}
+	}`)
+
+	unified, err := ParseResponse(raw)
+	if err != nil {
+		t.Fatalf("ParseResponse returned error: %v", err)
+	}
+	if len(unified.Choices) != 1 || unified.Choices[0].Message == nil {
+		t.Fatalf("expected one choice with message, got %+v", unified.Choices)
+	}
+
+	encoded, err := json.Marshal(unified.Choices[0].Message)
+	if err != nil {
+		t.Fatalf("marshal unified message failed: %v", err)
+	}
+	var messageFields map[string]interface{}
+	if err := json.Unmarshal(encoded, &messageFields); err != nil {
+		t.Fatalf("unmarshal unified message failed: %v", err)
+	}
+	if messageFields["redacted_thinking_data"] != opaqueData {
+		t.Fatalf("redacted thinking data not preserved: %#v", messageFields)
+	}
+
+	body, err := FormatResponse(unified)
+	if err != nil {
+		t.Fatalf("FormatResponse returned error: %v", err)
+	}
+	var resp map[string]interface{}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("unmarshal result failed: %v", err)
+	}
+	content, ok := resp["content"].([]interface{})
+	if !ok || len(content) != 3 {
+		t.Fatalf("expected redacted/text/tool blocks, got %#v", resp["content"])
+	}
+	wantTypes := []string{"redacted_thinking", "text", "tool_use"}
+	for i, want := range wantTypes {
+		block, ok := content[i].(map[string]interface{})
+		if !ok || block["type"] != want {
+			t.Fatalf("content block types should be %v, got %#v", wantTypes, content)
+		}
+	}
+	redacted := content[0].(map[string]interface{})
+	if redacted["data"] != opaqueData {
+		t.Fatalf("redacted thinking data changed: %#v", redacted["data"])
+	}
+}
+
 func TestFormatResponse_MapsContentPartsAndThinking(t *testing.T) {
 	reasoning := "plan"
 	signature := "sig"

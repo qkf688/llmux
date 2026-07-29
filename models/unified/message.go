@@ -9,10 +9,12 @@ type UnifiedMessage struct {
 
 	CacheControl *CacheControl `json:"cache_control,omitempty"`
 
-	// Extended Thinking 支持
-	ReasoningContent   *string `json:"reasoning_content,omitempty"`
-	Reasoning          *string `json:"reasoning,omitempty"`
-	ReasoningSignature *string `json:"reasoning_signature,omitempty"`
+	// Extended Thinking 支持。RedactedThinkingData 是 Anthropic 不透明密文，
+	// 必须与可读 reasoning 文本分开保存，禁止解析或改写。
+	ReasoningContent     *string `json:"reasoning_content,omitempty"`
+	Reasoning            *string `json:"reasoning,omitempty"`
+	ReasoningSignature   *string `json:"reasoning_signature,omitempty"`
+	RedactedThinkingData *string `json:"redacted_thinking_data,omitempty"`
 
 	// 帮助字段
 	MessageIndex    *int    `json:"-"`
@@ -25,6 +27,7 @@ func (m *UnifiedMessage) ClearHelpFields() {
 	m.ReasoningContent = nil
 	m.Reasoning = nil
 	m.ReasoningSignature = nil
+	m.RedactedThinkingData = nil
 	m.MessageIndex = nil
 	m.ToolCallName = nil
 	m.ToolCallIsError = nil

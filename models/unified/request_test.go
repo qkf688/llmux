@@ -107,13 +107,14 @@ func TestUnifiedRequestClearHelpFields(t *testing.T) {
 		},
 		Messages: []UnifiedMessage{
 			{
-				Role:               "assistant",
-				Reasoning:          ptrString("r"),
-				ReasoningContent:   ptrString("rc"),
-				ReasoningSignature: ptrString("rs"),
-				MessageIndex:       &index,
-				ToolCallName:       &callName,
-				ToolCallIsError:    &isErr,
+				Role:                 "assistant",
+				Reasoning:            ptrString("r"),
+				ReasoningContent:     ptrString("rc"),
+				ReasoningSignature:   ptrString("rs"),
+				RedactedThinkingData: ptrString("opaque"),
+				MessageIndex:         &index,
+				ToolCallName:         &callName,
+				ToolCallIsError:      &isErr,
 			},
 		},
 	}
@@ -124,7 +125,7 @@ func TestUnifiedRequestClearHelpFields(t *testing.T) {
 		t.Fatalf("request helper fields should be cleared")
 	}
 	msg := req.Messages[0]
-	if msg.Reasoning != nil || msg.ReasoningContent != nil || msg.ReasoningSignature != nil || msg.MessageIndex != nil || msg.ToolCallName != nil || msg.ToolCallIsError != nil {
+	if msg.Reasoning != nil || msg.ReasoningContent != nil || msg.ReasoningSignature != nil || msg.RedactedThinkingData != nil || msg.MessageIndex != nil || msg.ToolCallName != nil || msg.ToolCallIsError != nil {
 		t.Fatalf("message helper fields should be cleared")
 	}
 }
@@ -145,13 +146,14 @@ func TestUnifiedRequestSanitizedForProvider(t *testing.T) {
 		},
 		Messages: []UnifiedMessage{
 			{
-				Role:               "assistant",
-				Reasoning:          ptrString("r"),
-				ReasoningContent:   ptrString("rc"),
-				ReasoningSignature: ptrString("rs"),
-				MessageIndex:       &index,
-				ToolCallName:       &callName,
-				ToolCallIsError:    &isErr,
+				Role:                 "assistant",
+				Reasoning:            ptrString("r"),
+				ReasoningContent:     ptrString("rc"),
+				ReasoningSignature:   ptrString("rs"),
+				RedactedThinkingData: ptrString("opaque"),
+				MessageIndex:         &index,
+				ToolCallName:         &callName,
+				ToolCallIsError:      &isErr,
 			},
 		},
 	}
@@ -166,7 +168,7 @@ func TestUnifiedRequestSanitizedForProvider(t *testing.T) {
 		t.Fatalf("original request should not be modified")
 	}
 	origMsg := req.Messages[0]
-	if origMsg.Reasoning == nil || origMsg.ReasoningContent == nil || origMsg.ReasoningSignature == nil || origMsg.MessageIndex == nil || origMsg.ToolCallName == nil || origMsg.ToolCallIsError == nil {
+	if origMsg.Reasoning == nil || origMsg.ReasoningContent == nil || origMsg.ReasoningSignature == nil || origMsg.RedactedThinkingData == nil || origMsg.MessageIndex == nil || origMsg.ToolCallName == nil || origMsg.ToolCallIsError == nil {
 		t.Fatalf("original message should not be modified")
 	}
 
@@ -178,7 +180,7 @@ func TestUnifiedRequestSanitizedForProvider(t *testing.T) {
 		t.Fatalf("sanitized system parts should be preserved")
 	}
 	msg := sanitized.Messages[0]
-	if msg.Reasoning != nil || msg.ReasoningContent != nil || msg.ReasoningSignature != nil || msg.MessageIndex != nil || msg.ToolCallName != nil || msg.ToolCallIsError != nil {
+	if msg.Reasoning != nil || msg.ReasoningContent != nil || msg.ReasoningSignature != nil || msg.RedactedThinkingData != nil || msg.MessageIndex != nil || msg.ToolCallName != nil || msg.ToolCallIsError != nil {
 		t.Fatalf("sanitized message helper fields should be cleared")
 	}
 

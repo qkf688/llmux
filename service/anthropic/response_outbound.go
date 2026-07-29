@@ -32,6 +32,9 @@ func FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
 			if thinking := buildThinkingBlock(*choice.Message); thinking != nil {
 				content = append(content, thinking)
 			}
+			if redactedThinking := buildRedactedThinkingBlock(*choice.Message); redactedThinking != nil {
+				content = append(content, redactedThinking)
+			}
 
 			if parts, ok := adjustedContent.([]models.UnifiedMessageContentPart); ok {
 				content = append(content, buildContentParts(parts)...)

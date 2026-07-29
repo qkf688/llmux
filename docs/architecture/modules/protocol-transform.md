@@ -46,7 +46,7 @@ models/
 | `TransformerManager` | 请求/响应转换编排 | `service/transform/` | `service/transform` |
 | `RegisterAdapter` | 注册协议适配器 | `service/transform/` | `adapters_register.go` |
 | `RegisterRealtimeRoute` | 注册实时流协议组合 | `service/transform/streaming/` | 各路由实现 |
-| `UnifiedRequest` / `UnifiedResponse` | 协议中枢类型 | `models/unified/` 与 `models/unified.go`（响应等部分类型仍在门面文件） | 被转换器读写 |
+| `UnifiedRequest` / `UnifiedResponse` | 协议中枢类型；`UnifiedMessage.RedactedThinkingData` 独立保存 Anthropic `redacted_thinking.data` 不透明密文，不与 reasoning 文本混用 | `models/unified/` 与 `models/unified.go`（响应等部分类型仍在门面文件） | 被转换器读写 |
 
 ## 5. 特殊约定
 

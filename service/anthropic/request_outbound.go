@@ -215,8 +215,9 @@ func buildContentParts(parts []models.UnifiedMessageContentPart) []interface{} {
 }
 
 type messageReasoning struct {
-	content   *string
-	signature *string
+	content      *string
+	signature    *string
+	redactedData *string
 }
 
 // snapshotReasoning 在 SanitizedForProvider 之前留存各消息的推理内容。
@@ -236,6 +237,7 @@ func snapshotReasoning(messages []models.UnifiedMessage) []messageReasoning {
 			snapshot[i].content = &text
 		}
 		snapshot[i].signature = messages[i].ReasoningSignature
+		snapshot[i].redactedData = messages[i].RedactedThinkingData
 	}
 	return snapshot
 }
@@ -247,21 +249,23 @@ func restoreReasoning(messages []models.UnifiedMessage, snapshot []messageReason
 	for i := range messages {
 		messages[i].ReasoningContent = snapshot[i].content
 		messages[i].ReasoningSignature = snapshot[i].signature
+		messages[i].RedactedThinkingData = snapshot[i].redactedData
 	}
 }
 
 // setMessageContent 组装一条消息的 content。
 //
-// thinking / 原有内容 / tool_use 三者是叠加关系而非互相覆盖：
+// thinking / redacted_thinking / 原有内容 / tool_use 是叠加关系而非互相覆盖：
 //   - 曾经 ToolCalls 非空时无条件覆盖 content，assistant 轮的文本与图片会静默消失；
 //   - 开启扩展思考的多轮会话里 assistant 轮必须带回 thinking 块，
 //     否则上游报 400 Expected "thinking" or "redacted_thinking"。
 func setMessageContent(msgMap map[string]interface{}, msg models.UnifiedMessage) {
 	thinking := buildThinkingBlock(msg)
+	redactedThinking := buildRedactedThinkingBlock(msg)
 	toolUse := buildToolUseBlocks(msg.ToolCalls)
 
-	// 两者都没有时保持原样透传，不改变既有形态（含 string content 与未知负载）。
-	if thinking == nil && len(toolUse) == 0 {
+	// 三者都没有时保持原样透传，不改变既有形态（含 string content 与未知负载）。
+	if thinking == nil && redactedThinking == nil && len(toolUse) == 0 {
 		if msg.Content == nil {
 			return
 		}
@@ -275,9 +279,12 @@ func setMessageContent(msgMap map[string]interface{}, msg models.UnifiedMessage)
 		return
 	}
 
-	contentArray := make([]interface{}, 0, len(toolUse)+2)
+	contentArray := make([]interface{}, 0, len(toolUse)+3)
 	if thinking != nil {
 		contentArray = append(contentArray, thinking)
+	}
+	if redactedThinking != nil {
+		contentArray = append(contentArray, redactedThinking)
 	}
 	contentArray = append(contentArray, buildMessageContentBlocks(msg.Content)...)
 	contentArray = append(contentArray, toolUse...)
@@ -324,6 +331,17 @@ func buildThinkingBlock(msg models.UnifiedMessage) map[string]interface{} {
 		thinking["signature"] = *msg.ReasoningSignature
 	}
 	return thinking
+}
+
+// buildRedactedThinkingBlock 原样还原 Anthropic 不透明思考密文。
+func buildRedactedThinkingBlock(msg models.UnifiedMessage) map[string]interface{} {
+	if msg.RedactedThinkingData == nil || *msg.RedactedThinkingData == "" {
+		return nil
+	}
+	return map[string]interface{}{
+		"type": "redacted_thinking",
+		"data": *msg.RedactedThinkingData,
+	}
 }
 
 func buildToolUseBlocks(toolCalls []models.UnifiedToolCall) []interface{} {

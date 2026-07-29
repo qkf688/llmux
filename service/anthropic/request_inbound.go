@@ -110,11 +110,15 @@ func parseMessages(raw interface{}) []models.UnifiedMessage {
 		}
 		msg.CacheControl = parseCacheControl(msgMap["cache_control"])
 
-		if reasoning, signature := parseReasoning(msgMap["content"]); reasoning != "" {
+		reasoning, signature, redactedData := parseReasoning(msgMap["content"])
+		if reasoning != "" {
 			msg.ReasoningContent = &reasoning
 			if signature != "" {
 				msg.ReasoningSignature = &signature
 			}
+		}
+		if redactedData != "" {
+			msg.RedactedThinkingData = &redactedData
 		}
 
 		// tool_result blocks are mapped to OpenAI-style tool messages to enable cross-format conversion.
@@ -195,36 +199,38 @@ func parseToolCalls(rawContent interface{}) []models.UnifiedToolCall {
 	return toolCalls
 }
 
-// parseReasoning 提取 assistant 轮的 thinking 块（含 signature）。
+// parseReasoning 提取 assistant 轮的 thinking 与 redacted_thinking 块。
 //
-// parseMessageContentAndToolResults 的 switch 只认 text/image/tool_result，
-// thinking 块会连同 signature 一起被丢掉；而 thinking 请求参数仍照常透传给上游，
-// 于是「扩展思考 + 工具调用」的多轮会话必然收到
-// 400 Expected "thinking" or "redacted_thinking"。
-//
-// 字段沿用响应侧的同一套约定（ReasoningContent + ReasoningSignature）。
-// 注意：redacted_thinking 的 data 是不透明密文，与 thinking 文本共用一个字段会损坏内容，
-// 因此这里不处理——需要统一格式补独立字段后另行支持。
-func parseReasoning(rawContent interface{}) (text string, signature string) {
+// thinking 的可读文本与 signature 使用既有 reasoning 字段；redacted_thinking.data
+// 是不透明密文，必须放入独立字段，禁止与文本拼接或尝试解析。统一模型当前
+// 只保留一个 redacted_thinking 块；若收到多个，保留第一个非空 data。
+func parseReasoning(rawContent interface{}) (text string, signature string, redactedData string) {
 	content, ok := asSlice(rawContent)
 	if !ok {
-		return "", ""
+		return "", "", ""
 	}
 
 	var b strings.Builder
 	for _, item := range content {
 		itemMap, ok := asMap(item)
-		if !ok || maputil.String(itemMap, "type") != "thinking" {
+		if !ok {
 			continue
 		}
 
-		b.WriteString(maputil.String(itemMap, "thinking"))
-		if sig := maputil.String(itemMap, "signature"); sig != "" {
-			signature = sig
+		switch maputil.String(itemMap, "type") {
+		case "thinking":
+			b.WriteString(maputil.String(itemMap, "thinking"))
+			if sig := maputil.String(itemMap, "signature"); sig != "" {
+				signature = sig
+			}
+		case "redacted_thinking":
+			if redactedData == "" {
+				redactedData = maputil.String(itemMap, "data")
+			}
 		}
 	}
 
-	return b.String(), signature
+	return b.String(), signature, redactedData
 }
 
 func parseMessageContentAndToolResults(raw interface{}) (content interface{}, toolResultMessages []models.UnifiedMessage) {

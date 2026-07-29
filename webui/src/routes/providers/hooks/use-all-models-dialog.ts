@@ -14,7 +14,7 @@ import {
   parseCustomModelsFromConfig,
   parseUpstreamModelsFromConfig,
 } from "@/lib/provider-models";
-import type { Updater } from "@/stores/core/updater";
+import type { Setter, Updater } from "@/stores/core/updater";
 import type {
   AllModelsTypeFilter,
   ModelTestResult,
@@ -25,8 +25,6 @@ import {
   buildAutoActionsDescription,
   type AutoActionsFlags,
 } from "../utils/auto-actions";
-
-type Setter<T> = (value: Updater<T>) => void;
 
 type UseAllModelsDialogInput = {
   allModelsProvider: Provider | null;

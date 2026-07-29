@@ -40,14 +40,16 @@ routes/<page>/
 ├── index.tsx
 ├── hooks/use-*-page.ts
 ├── components/sections|dialogs/
+├── components/shared/          # 页面级共享 UI（跨 dialog/section 复用）
 ├── schemas/ / types/ / utils/
 ```
 
 各子目录职责：
 - `routes/`：按业务页拆分；`route-config.ts` 为 path/layout/nav 单一数据源
 - `lib/api/`：HTTP 客户端与领域 API 函数
-- `stores/`：客户端状态；`Updater` 统一更新模式
+- `stores/`：客户端状态；`Updater` / `Setter` 统一更新模式
 - `components/ui/`：Radix + Tailwind 基础组件
+- `components/shared/`：页面级共享展示组件（如 providers 的批量测试 UI）；不上提到 `components/ui/`（YAGNI，仅模块内复用）
 
 ## 4. 关键接口契约
 
@@ -56,7 +58,7 @@ routes/<page>/
 | `appRoutes` / `route-config` | 路由与侧栏配置 | `webui/src/routes/route-config.ts` | `App.tsx` / `layout.tsx` 消费 |
 | `fetchWithAuth` / `apiRequest` | 带鉴权信封请求 | `webui/src/lib/api/core/client.ts` | 各 api modules |
 | API modules | 按域封装 REST | `webui/src/lib/api/modules/**` | 页面 hooks 调用 |
-| `Updater` | store 统一更新接口 | `webui/src/stores/core/updater.ts` | 各 store |
+| `Updater` / `Setter` | store 统一更新接口 | `webui/src/stores/core/updater.ts` | 各 store / hooks / 组件 props |
 
 ## 5. 特殊约定
 

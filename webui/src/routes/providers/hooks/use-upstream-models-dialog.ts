@@ -2,11 +2,9 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { getProviderModels, type Provider, type ProviderModel } from "@/lib/api";
 import { parseCustomModelsFromConfig, parseUpstreamModelsFromConfig } from "@/lib/provider-models";
-import type { Updater } from "@/stores/core/updater";
+import type { Setter } from "@/stores/core/updater";
 import { buildAutoActionsDescription, type AutoActionsFlags } from "../utils/auto-actions";
 import { getAllModelsForProvider } from "../utils/provider-models";
-
-type Setter<T> = (value: Updater<T>) => void;
 
 type UseUpstreamModelsDialogInput = {
   providers: Provider[];

@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { buildAssociationPayload } from "../utils/payload";
 import { useModelProvidersAssociationDialog } from "./use-model-providers-association-dialog";
 import { useModelProvidersAssociationMutations } from "./use-model-providers-association-mutations";
@@ -8,10 +9,8 @@ import { useModelProvidersModelListVisibility } from "./use-model-providers-mode
 import { useModelProvidersBatch } from "./use-model-providers-batch";
 import { useModelProvidersBlacklist } from "./use-model-providers-blacklist";
 import { useModelProvidersBootstrap } from "./use-model-providers-bootstrap";
-import { useModelProvidersModelChange } from "./use-model-providers-model-change";
 import { useModelProvidersOperationScope } from "./use-model-providers-operation-scope";
 import { useModelProvidersAssociationStatus } from "./use-model-providers-association-status";
-import { useModelProvidersPageActions } from "./use-model-providers-page-actions";
 import { useModelProvidersModelListSelection } from "./use-model-providers-model-list-selection";
 import { useModelProvidersPreview } from "./use-model-providers-preview";
 import { useModelProvidersPageSectionProps } from "./use-model-providers-page-section-props";
@@ -22,117 +21,22 @@ import { useModelProvidersAssociationForm } from "./use-model-providers-associat
 import { useModelProvidersPageLocalState } from "./use-model-providers-page-local-state";
 import { useModelProvidersPageStoreState } from "./use-model-providers-page-store";
 
+/**
+ * Model providers 页面 composition root：按依赖顺序调用领域 hook，
+ * 组成上下文对象交装配器，返回 10 组 props bag。不保留扁平字段透传。
+ */
 export function useModelProvidersPage() {
-  const {
-    models,
-    providers,
-    searchParams,
-    setSearchParams,
-    selectedModelId,
-    setSelectedModelId,
-    statusUpdating,
-    setStatusUpdating,
-    statusError,
-    setStatusError,
-    providerModelGroups,
-    providerModels,
-    settings,
-    loading: dataLoading,
-  } = useModelProvidersPageLocalState();
+  // 派生数据
+  const localState = useModelProvidersPageLocalState();
+  const { models, providers, searchParams, setSearchParams, selectedModelId, setSelectedModelId, setStatusUpdating, statusError, setStatusError, providerModelGroups, loading: dataLoading } = localState;
 
-  const { providerStatus, healthStatus, loadProviderStatus } = useModelProvidersAssociationStatus(models);
+  const store = useModelProvidersPageStoreState();
+  const { resetTransient, selectedAssociationIds, setSelectedAssociationIds, selectedProviderModels, setSelectedProviderModels, setCollapsedProviders, setTemplateEditorOpen, setAssociationTestResults, setSelectedStatusFilter, deleteId, setDeleteId, operationScope, isSubmitting, setIsSubmitting, editingAssociation, setEditingAssociation, setOpen, associationTestResults } = store;
 
-  const {
-    open,
-    setOpen,
-    editingAssociation,
-    setEditingAssociation,
-    deleteId,
-    setDeleteId,
-    testDialogOpen,
-    setTestDialogOpen,
-    selectedTestId,
-    setSelectedTestId,
-    testType,
-    setTestType,
-    reactTestResult,
-    setReactTestResult,
-    isSubmitting,
-    setIsSubmitting,
-    modelListDialogOpen,
-    setModelListDialogOpen,
-    modelSearchKeyword,
-    setModelSearchKeyword,
-    selectedProviderModels,
-    setSelectedProviderModels,
-    selectedAssociationIds,
-    setSelectedAssociationIds,
-    collapsedProviders,
-    setCollapsedProviders,
-    batchDeleteDialogOpen,
-    setBatchDeleteDialogOpen,
-    batchDeleting,
-    setBatchDeleting,
-    batchUpdatingStatus,
-    setBatchUpdatingStatus,
-    batchActionSheetOpen,
-    setBatchActionSheetOpen,
-    batchCapabilitiesDialogOpen,
-    setBatchCapabilitiesDialogOpen,
-    batchUpdatingCapabilities,
-    setBatchUpdatingCapabilities,
-    searchKeyword,
-    setSearchKeyword,
-    selectedProviderType,
-    setSelectedProviderType,
-    selectedProviderFilter,
-    setSelectedProviderFilter,
-    selectedStatusFilter,
-    setSelectedStatusFilter,
-    operationScope,
-    setOperationScope,
-    filterPanelOpen,
-    setFilterPanelOpen,
-    previewDialogOpen,
-    setPreviewDialogOpen,
-    previewType,
-    setPreviewType,
-    executing,
-    setExecuting,
-    templateEditorOpen,
-    setTemplateEditorOpen,
-    templateLoading,
-    setTemplateLoading,
-    templateNewItem,
-    setTemplateNewItem,
-    resettingWeights,
-    setResettingWeights,
-    resettingPriorities,
-    setResettingPriorities,
-    enablingAssociations,
-    setEnablingAssociations,
-    batchTesting,
-    setBatchTesting,
-    batchTestProgress,
-    setBatchTestProgress,
-    associationTestResults,
-    setAssociationTestResults,
-    blacklistDialogOpen,
-    setBlacklistDialogOpen,
-    blacklistedIds,
-    setBlacklistedIds,
-    blacklistLoading,
-    setBlacklistLoading,
-    blacklistSaving,
-    setBlacklistSaving,
-    blacklistSearchTerm,
-    setBlacklistSearchTerm,
-    blacklistFilter,
-    setBlacklistFilter,
-    resetTransient,
-  } = useModelProvidersPageStoreState();
+  const associationStatus = useModelProvidersAssociationStatus(models);
+  const { loadProviderStatus } = associationStatus;
 
-  const { form, headerFields, appendHeader, removeHeader } = useModelProvidersAssociationForm();
+  const form = useModelProvidersAssociationForm();
 
   useModelProvidersBootstrap({
     models,
@@ -141,47 +45,45 @@ export function useModelProvidersPage() {
     setSelectedModelId,
     searchParams,
     setSearchParams,
-    setFormModelId: (value) => form.setValue("model_id", value),
+    setFormModelId: (value) => form.form.setValue("model_id", value),
   });
 
-  const { filteredProviders, openBlacklistDialog, cancelBlacklistDialog, handleSaveBlacklist, handleToggleBlacklist } =
-    useModelProvidersBlacklist({
-      providers,
-      blacklistDialogOpen,
-      setBlacklistDialogOpen,
-      blacklistedIds,
-      setBlacklistedIds,
-      setBlacklistLoading,
-      setBlacklistSaving,
-      blacklistSearchTerm,
-      setBlacklistSearchTerm,
-      blacklistFilter,
-      setBlacklistFilter,
-    });
+  const blacklist = useModelProvidersBlacklist({
+    providers,
+    blacklistDialogOpen: store.blacklistDialogOpen,
+    setBlacklistDialogOpen: store.setBlacklistDialogOpen,
+    blacklistedIds: store.blacklistedIds,
+    setBlacklistedIds: store.setBlacklistedIds,
+    setBlacklistLoading: store.setBlacklistLoading,
+    setBlacklistSaving: store.setBlacklistSaving,
+    blacklistSearchTerm: store.blacklistSearchTerm,
+    setBlacklistSearchTerm: store.setBlacklistSearchTerm,
+    blacklistFilter: store.blacklistFilter,
+    setBlacklistFilter: store.setBlacklistFilter,
+  });
 
-  const { templateData, handleToggleTemplateEditor, handleAddTemplateItem, handleDeleteTemplateItem } =
-    useModelProvidersTemplateEditor({
-      templateEditorOpen,
-      setTemplateEditorOpen,
-      setTemplateLoading,
-      selectedModelId,
-      templateNewItem,
-      setTemplateNewItem,
-    });
+  const templateEditor = useModelProvidersTemplateEditor({
+    templateEditorOpen: store.templateEditorOpen,
+    setTemplateEditorOpen: store.setTemplateEditorOpen,
+    setTemplateLoading: store.setTemplateLoading,
+    selectedModelId,
+    templateNewItem: store.templateNewItem,
+    setTemplateNewItem: store.setTemplateNewItem,
+  });
 
   const buildPayload = buildAssociationPayload;
 
-  const { modelProviders, setModelProviders, fetchModelProviders } = useModelProvidersAssociationsData({
+  const associationsData = useModelProvidersAssociationsData({
     selectedModelId,
     loadProviderStatus,
   });
 
-  const { handleCreate, handleUpdate, handleDelete } = useModelProvidersAssociationMutations({
-    form,
+  const mutations = useModelProvidersAssociationMutations({
+    form: form.form,
     buildPayload,
     selectedModelId,
-    settings,
-    fetchModelProviders,
+    settings: localState.settings,
+    fetchModelProviders: associationsData.fetchModelProviders,
     isSubmitting,
     setIsSubmitting,
     selectedProviderModels,
@@ -193,334 +95,168 @@ export function useModelProvidersPage() {
     setDeleteId,
   });
 
-  const { handleStatusToggle } = useModelProvidersAssociationStatusToggle({
-    setModelProviders,
+  const statusToggle = useModelProvidersAssociationStatusToggle({
+    setModelProviders: associationsData.setModelProviders,
     setStatusUpdating,
     setStatusError,
   });
 
-  const { testResults, structuredTestResults, handleTest, dialogClose, executeTestNow } = useModelProvidersTesting({
-    setTestDialogOpen,
-    setSelectedTestId,
-    setTestType,
-    setReactTestResult,
-    selectedTestId,
-    testType,
+  const testing = useModelProvidersTesting({
+    setTestDialogOpen: store.setTestDialogOpen,
+    setSelectedTestId: store.setSelectedTestId,
+    setTestType: store.setTestType,
+    setReactTestResult: store.setReactTestResult,
+    selectedTestId: store.selectedTestId,
+    testType: store.testType,
   });
 
-  const { openEditDialog, openCreateDialog } = useModelProvidersAssociationDialog({
-    form,
-    settings,
+  const associationDialog = useModelProvidersAssociationDialog({
+    form: form.form,
+    settings: localState.settings,
     selectedModelId,
     setOpen,
     setEditingAssociation,
     setSelectedProviderModels,
   });
 
-  const { handleModelChange } = useModelProvidersModelChange({
-    searchParams,
-    setSearchParams,
-    setSelectedModelId,
-    clearSelectedAssociationIds: () => setSelectedAssociationIds([]),
-    clearSelectedProviderModels: () => setSelectedProviderModels([]),
-    closeTemplateEditor: () => setTemplateEditorOpen(false),
-    resetAssociationTestResults: () => setAssociationTestResults({}),
-    resetSelectedStatusFilter: () => setSelectedStatusFilter("all"),
-    form,
-  });
+  // 内联：原 useModelProvidersModelChange（单个 useCallback，无独立 state）
+  const handleModelChange = useCallback(
+    (modelId: string) => {
+      const id = parseInt(modelId);
+      setSelectedModelId(id);
+      setSelectedAssociationIds([]); // 切换模型时清空选择
+      setSelectedProviderModels([]);
+      setTemplateEditorOpen(false);
+      setAssociationTestResults({}); // 切换模型时清空测试结果
+      setSelectedStatusFilter("all"); // 切换模型时重置启用状态筛选器
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("modelId", id.toString());
+      setSearchParams(nextParams);
+      form.form.setValue("model_id", id);
+    },
+    [form.form, searchParams, setSearchParams, setSelectedModelId, setSelectedAssociationIds, setSelectedProviderModels, setTemplateEditorOpen, setAssociationTestResults, setSelectedStatusFilter]
+  );
 
-  const {
-    providerTypes,
-    filteredModelProviders,
-    hasAssociationFilter,
-    activeFilterCount,
-    isAllAssociationsSelected,
-    isPartialAssociationsSelected,
-  } = useModelProvidersAssociationFilters({
-    modelProviders,
+  const filters = useModelProvidersAssociationFilters({
+    modelProviders: associationsData.modelProviders,
     providers,
-    selectedProviderType,
-    selectedProviderFilter,
-    selectedStatusFilter,
-    searchKeyword,
+    selectedProviderType: store.selectedProviderType,
+    selectedProviderFilter: store.selectedProviderFilter,
+    selectedStatusFilter: store.selectedStatusFilter,
+    searchKeyword: store.searchKeyword,
     selectedAssociationIds,
   });
 
-  const { existingAssociationKeys, visibleProviderGroups, visibleAvailableModels, visibleExistingCount, selectedKeys } =
-    useModelProvidersModelListVisibility({
-      control: form.control,
-      providerModelGroups,
-      modelSearchKeyword,
-      modelProviders,
-      selectedProviderModels,
-    });
+  const modelListVisibility = useModelProvidersModelListVisibility({
+    control: form.form.control,
+    providerModelGroups,
+    modelSearchKeyword: store.modelSearchKeyword,
+    modelProviders: associationsData.modelProviders,
+    selectedProviderModels,
+  });
+
   const selectedModel = models.find((model) => model.ID === selectedModelId) || null;
   const isGlobalScope = operationScope === "all";
-
   const shouldShowInitialLoading = dataLoading && models.length === 0 && providers.length === 0;
 
-  const { handleResetWeights, handleResetPriorities, handleEnableAssociations } = useModelProvidersOperationScope({
+  const operationScopeHook = useModelProvidersOperationScope({
     selectedModelId,
     isGlobalScope,
-    fetchModelProviders,
-    setResettingWeights,
-    setResettingPriorities,
-    setEnablingAssociations,
+    fetchModelProviders: associationsData.fetchModelProviders,
+    setResettingWeights: store.setResettingWeights,
+    setResettingPriorities: store.setResettingPriorities,
+    setEnablingAssociations: store.setEnablingAssociations,
   });
 
-  const { previewData, handleAutoAssociate, handleCleanInvalid, executePreviewAction } = useModelProvidersPreview({
+  const preview = useModelProvidersPreview({
     selectedModelId,
-    previewType,
-    setPreviewType,
-    setPreviewDialogOpen,
-    setExecuting,
-    fetchModelProviders,
+    previewType: store.previewType,
+    setPreviewType: store.setPreviewType,
+    setPreviewDialogOpen: store.setPreviewDialogOpen,
+    setExecuting: store.setExecuting,
+    fetchModelProviders: associationsData.fetchModelProviders,
   });
 
-  const {
-    handleSelectAllAssociations,
-    handleSelectOneAssociation,
-    handleBatchDeleteAssociations,
-    handleBatchUpdateStatus,
-    handleBatchUpdateCapabilities,
-    handleBatchTestAll,
-    handleBatchTestSelected,
-    handleCancelBatchTest,
-    selectAllSuccessful,
-    selectAllFailed,
-    clearBatchTestResults,
-  } = useModelProvidersBatch({
+  const batch = useModelProvidersBatch({
     selectedModelId,
-    fetchModelProviders,
-    filteredModelProviders,
+    fetchModelProviders: associationsData.fetchModelProviders,
+    filteredModelProviders: filters.filteredModelProviders,
     selectedAssociationIds,
     setSelectedAssociationIds,
-    setModelProviders,
-    setBatchDeleteDialogOpen,
-    setBatchDeleting,
-    setBatchUpdatingStatus,
-    setBatchCapabilitiesDialogOpen,
-    setBatchUpdatingCapabilities,
-    setBatchTesting,
-    setBatchTestProgress,
+    setModelProviders: associationsData.setModelProviders,
+    setBatchDeleteDialogOpen: store.setBatchDeleteDialogOpen,
+    setBatchDeleting: store.setBatchDeleting,
+    setBatchUpdatingStatus: store.setBatchUpdatingStatus,
+    setBatchCapabilitiesDialogOpen: store.setBatchCapabilitiesDialogOpen,
+    setBatchUpdatingCapabilities: store.setBatchUpdatingCapabilities,
+    setBatchTesting: store.setBatchTesting,
+    setBatchTestProgress: store.setBatchTestProgress,
     associationTestResults,
     setAssociationTestResults,
   });
 
-  const {
-    openModelListDialog,
-    clearSelectedProviderModels,
-    removeSelectedProviderModel,
-    handleProviderChange,
-    selectAllVisibleAvailable,
-    clearModelListSelection,
-    toggleModelSelection,
-  } = useModelProvidersModelListSelection({
-    setModelSearchKeyword,
-    setModelListDialogOpen,
+  const modelListSelection = useModelProvidersModelListSelection({
+    setModelSearchKeyword: store.setModelSearchKeyword,
+    setModelListDialogOpen: store.setModelListDialogOpen,
     setSelectedProviderModels,
-    visibleAvailableModels,
+    visibleAvailableModels: modelListVisibility.visibleAvailableModels,
   });
 
-  const {
-    openDeleteDialog,
-    toggleProviderCollapse,
-    refreshStatus,
-    handleDeleteDialogChange,
-    confirmPreviewAction,
-    addTemplateItem,
-    deleteTemplateItem,
-  } = useModelProvidersPageActions({
-    selectedModelId,
-    modelProviders,
-    setDeleteId,
-    setCollapsedProviders,
-    loadProviderStatus,
-    executePreviewAction,
-    handleAddTemplateItem,
-    handleDeleteTemplateItem,
-  });
+  // 内联：原 useModelProvidersPageActions（纯转发，无 state/effect）
+  const openDeleteDialog = (id: number) => setDeleteId(id);
+  const toggleProviderCollapse = (providerId: number) =>
+    setCollapsedProviders((prev) => ({ ...prev, [providerId]: !prev[providerId] }));
+  const refreshStatus = () => {
+    if (selectedModelId) {
+      void loadProviderStatus(associationsData.modelProviders, selectedModelId);
+    }
+  };
+  const handleDeleteDialogChange = (openValue: boolean) => {
+    if (!openValue) {
+      setDeleteId(null);
+    }
+  };
+  const confirmPreviewAction = () => {
+    void preview.executePreviewAction();
+  };
+  const addTemplateItem = () => {
+    void templateEditor.handleAddTemplateItem();
+  };
+  const deleteTemplateItem = (name: string) => {
+    void templateEditor.handleDeleteTemplateItem(name);
+  };
 
-  const { operationScopeToolbarProps, associationFilterPanelProps, batchTestProgressCardProps, associationListSectionProps } =
-    useModelProvidersPageSectionProps({
-      operationScope,
-      onOperationScopeChange: setOperationScope,
-      selectedModelName: isGlobalScope ? "全部" : (selectedModel?.Name ?? "未选择"),
-      selectedModelId,
-      resettingWeights,
-      resettingPriorities,
-      enablingAssociations,
-      onResetWeights: handleResetWeights,
-      onResetPriorities: handleResetPriorities,
-      onEnableAssociations: handleEnableAssociations,
-
-      filterPanelOpen,
-      onFilterPanelOpenChange: setFilterPanelOpen,
-      activeFilterCount,
-      models,
-      onModelChange: handleModelChange,
-      selectedProviderType,
-      onSelectedProviderTypeChange: setSelectedProviderType,
-      selectedProviderFilter,
-      onSelectedProviderFilterChange: setSelectedProviderFilter,
-      selectedStatusFilter,
-      onSelectedStatusFilterChange: setSelectedStatusFilter,
-      searchKeyword,
-      onSearchKeywordChange: setSearchKeyword,
-      providers,
-      providerTypes,
-      selectedAssociationCount: selectedAssociationIds.length,
-      batchUpdatingStatus,
-      batchActionSheetOpen,
-      onBatchActionSheetOpenChange: setBatchActionSheetOpen,
-      batchCapabilitiesDialogOpen,
-      onBatchCapabilitiesDialogOpenChange: setBatchCapabilitiesDialogOpen,
-      batchUpdatingCapabilities,
-      onBatchUpdateCapabilities: handleBatchUpdateCapabilities,
-      batchTesting,
-      filteredAssociationCount: filteredModelProviders.length,
-      associationTestResults,
-      batchDeleteDialogOpen,
-      onBatchDeleteDialogOpenChange: setBatchDeleteDialogOpen,
-      batchDeleting,
-      onBatchDeleteConfirm: handleBatchDeleteAssociations,
-      onBatchUpdateStatus: handleBatchUpdateStatus,
-      onBatchTestSelected: handleBatchTestSelected,
-      onBatchTestAll: handleBatchTestAll,
-      onSelectAllSuccessful: selectAllSuccessful,
-      onSelectAllFailed: selectAllFailed,
-      onToggleTemplateEditor: handleToggleTemplateEditor,
-      onOpenBlacklistDialog: openBlacklistDialog,
-      onAutoAssociate: handleAutoAssociate,
-      onCleanInvalid: handleCleanInvalid,
-      onOpenCreateDialog: openCreateDialog,
-
-      batchTestProgress,
-      onCancelBatchTest: handleCancelBatchTest,
-      onClearBatchTestResults: clearBatchTestResults,
-
-      loading: dataLoading,
-      hasAssociationFilter,
-      associations: filteredModelProviders,
-      selectedAssociationIds,
-      isAllSelected: isAllAssociationsSelected,
-      isPartialSelected: isPartialAssociationsSelected,
-      providerStatus,
-      healthStatus,
-      statusUpdating,
-      deleteId,
-      onSelectAll: handleSelectAllAssociations,
-      onSelectOne: handleSelectOneAssociation,
-      onRefreshStatus: refreshStatus,
-      onToggleStatus: handleStatusToggle,
-      onEdit: openEditDialog,
-      onOpenDelete: openDeleteDialog,
-      onDeleteDialogChange: handleDeleteDialogChange,
-      onDeleteConfirm: handleDelete,
-      onTest: handleTest,
-    });
-
-  const {
-    blacklistDialogProps,
-    templateEditorDialogProps,
-    associationFormDialogProps,
-    testDialogProps,
-    modelListDialogProps,
-    previewDialogProps,
-  } = useModelProvidersPageDialogProps({
-    blacklistDialogOpen,
-    onBlacklistDialogOpenChange: setBlacklistDialogOpen,
-    providers,
-    filteredProviders,
-    blacklistedIds,
-    blacklistLoading,
-    blacklistSaving,
-    blacklistSearchTerm,
-    blacklistFilter,
-    onBlacklistSearchTermChange: setBlacklistSearchTerm,
-    onBlacklistFilterChange: setBlacklistFilter,
-    onToggleBlacklist: handleToggleBlacklist,
-    onSaveBlacklist: handleSaveBlacklist,
-    onCancelBlacklist: cancelBlacklistDialog,
-
-    templateEditorOpen,
-    onTemplateEditorOpenChange: setTemplateEditorOpen,
-    selectedModelId,
-    templateLoading,
-    templateData,
-    templateNewItem,
-    onTemplateNewItemChange: setTemplateNewItem,
-    onAddTemplateItem: addTemplateItem,
-    onDeleteTemplateItem: deleteTemplateItem,
-
-    associationFormOpen: open,
-    onAssociationFormOpenChange: setOpen,
-    editingAssociation,
+  const ctx = {
+    localState,
+    store,
+    associationStatus,
+    filters,
+    modelListVisibility,
     form,
-    models,
-    providersForForm: providers,
-    selectedProviderModels,
-    isSubmitting,
-    headerFields,
-    appendHeader,
-    removeHeader,
-    onSubmitCreate: handleCreate,
-    onSubmitUpdate: handleUpdate,
-    onOpenModelListDialog: openModelListDialog,
-    onClearSelectedProviderModels: clearSelectedProviderModels,
-    onRemoveSelectedProviderModel: removeSelectedProviderModel,
-    onProviderChange: handleProviderChange,
+    blacklist,
+    templateEditor,
+    mutations,
+    statusToggle,
+    operationScope: operationScopeHook,
+    preview,
+    modelChange: { handleModelChange },
+    testing,
+    batch,
+    pageActions: { openDeleteDialog, toggleProviderCollapse, refreshStatus, handleDeleteDialogChange, confirmPreviewAction, addTemplateItem, deleteTemplateItem },
+    associationDialog,
+    modelListSelection,
+    selectedModel,
+    isGlobalScope,
+    shouldShowInitialLoading,
+  };
 
-    testDialogOpen,
-    onTestDialogOpenChange: setTestDialogOpen,
-    testType,
-    onTestTypeChange: setTestType,
-    selectedTestId,
-    testResults,
-    structuredTestResults,
-    reactTestResult,
-    onCloseTestDialog: dialogClose,
-    onExecuteTestNow: executeTestNow,
-
-    modelListDialogOpen,
-    onModelListDialogOpenChange: setModelListDialogOpen,
-    modelSearchKeyword,
-    onModelSearchKeywordChange: setModelSearchKeyword,
-    loadingProviderModels: dataLoading,
-    providerModels,
-    visibleProviderGroups,
-    visibleAvailableModels,
-    visibleExistingCount,
-    selectedProviderModelsForList: selectedProviderModels,
-    selectedKeys,
-    existingAssociationKeys,
-    collapsedProviders,
-    onToggleProviderCollapse: toggleProviderCollapse,
-    onSelectAllVisibleAvailable: selectAllVisibleAvailable,
-    onClearModelListSelection: clearModelListSelection,
-    onToggleModelSelection: toggleModelSelection,
-
-    previewDialogOpen,
-    onPreviewDialogOpenChange: setPreviewDialogOpen,
-    previewType,
-    previewData,
-    executing,
-    onConfirmPreview: confirmPreviewAction,
-  });
+  const sections = useModelProvidersPageSectionProps(ctx);
+  const dialogs = useModelProvidersPageDialogProps(ctx);
 
   return {
     shouldShowInitialLoading,
     statusError,
-    operationScopeToolbarProps,
-    associationFilterPanelProps,
-    batchTestProgressCardProps,
-    associationListSectionProps,
-    blacklistDialogProps,
-    templateEditorDialogProps,
-    associationFormDialogProps,
-    testDialogProps,
-    modelListDialogProps,
-    previewDialogProps,
+    ...sections,
+    ...dialogs,
   };
 }
-

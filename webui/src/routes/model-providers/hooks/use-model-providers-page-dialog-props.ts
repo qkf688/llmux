@@ -1,198 +1,101 @@
-import type { FieldArrayWithId, UseFormReturn } from "react-hook-form";
-import type {
-  AssociationPreview,
-  Model,
-  ModelProviderTestResult,
-  ModelTemplate,
-  ModelWithProvider,
-  Provider,
-} from "@/lib/api";
-import type { FormValues } from "../form-schema";
-import type {
-  BlacklistFilter,
-  ProviderModelGroup,
-  ProviderModelSelection,
-  ProviderModelWithOwner,
-  TestType,
-} from "../types";
+import type { DialogPropsContext } from "./use-model-providers-page-context";
 
-type UseModelProvidersPageDialogPropsInput = {
-  // Blacklist dialog
-  blacklistDialogOpen: boolean;
-  onBlacklistDialogOpenChange: (open: boolean) => void;
-  providers: Provider[];
-  filteredProviders: Provider[];
-  blacklistedIds: number[];
-  blacklistLoading: boolean;
-  blacklistSaving: boolean;
-  blacklistSearchTerm: string;
-  blacklistFilter: BlacklistFilter;
-  onBlacklistSearchTermChange: (value: string) => void;
-  onBlacklistFilterChange: (value: BlacklistFilter) => void;
-  onToggleBlacklist: (providerId: number, checked: boolean) => void;
-  onSaveBlacklist: () => void;
-  onCancelBlacklist: () => void;
+/**
+ * Dialog props 装配：把上下文对象组装成 6 组对话框 props。
+ * 入参为上下文对象（学 models 的 ReturnType 模式），不再接收 80+ 扁平字段。
+ */
+export function useModelProvidersPageDialogProps(ctx: DialogPropsContext) {
+  const { store, localState, form, blacklist, templateEditor, mutations, testing, modelListVisibility, modelListSelection, preview, pageActions } = ctx;
 
-  // Template editor dialog
-  templateEditorOpen: boolean;
-  onTemplateEditorOpenChange: (open: boolean) => void;
-  selectedModelId: number | null;
-  templateLoading: boolean;
-  templateData: ModelTemplate | null;
-  templateNewItem: string;
-  onTemplateNewItemChange: (value: string) => void;
-  onAddTemplateItem: () => void;
-  onDeleteTemplateItem: (name: string) => void;
-
-  // Association form dialog
-  associationFormOpen: boolean;
-  onAssociationFormOpenChange: (open: boolean) => void;
-  editingAssociation: ModelWithProvider | null;
-  form: UseFormReturn<FormValues>;
-  models: Model[];
-  providersForForm: Provider[];
-  selectedProviderModels: ProviderModelSelection[];
-  isSubmitting: boolean;
-  headerFields: FieldArrayWithId<FormValues, "customer_headers", "id">[];
-  appendHeader: (value: { key: string; value: string }) => void;
-  removeHeader: (index: number) => void;
-  onSubmitCreate: (values: FormValues) => Promise<void>;
-  onSubmitUpdate: (values: FormValues) => Promise<void>;
-  onOpenModelListDialog: () => void;
-  onClearSelectedProviderModels: () => void;
-  onRemoveSelectedProviderModel: (selectionKey: string) => void;
-  onProviderChange: () => void;
-
-  // Test dialog
-  testDialogOpen: boolean;
-  onTestDialogOpenChange: (open: boolean) => void;
-  testType: TestType;
-  onTestTypeChange: (value: TestType) => void;
-  selectedTestId: number | null;
-  testResults: Record<number, { loading: boolean; result: ModelProviderTestResult | null }>;
-  structuredTestResults: Record<number, { loading: boolean; result: ModelProviderTestResult | null }>;
-  reactTestResult: { loading: boolean; messages: string; success: boolean | null; error: string | null };
-  onCloseTestDialog: () => void;
-  onExecuteTestNow: () => void;
-
-  // Model list dialog
-  modelListDialogOpen: boolean;
-  onModelListDialogOpenChange: (open: boolean) => void;
-  modelSearchKeyword: string;
-  onModelSearchKeywordChange: (value: string) => void;
-  loadingProviderModels: boolean;
-  providerModels: ProviderModelWithOwner[];
-  visibleProviderGroups: ProviderModelGroup[];
-  visibleAvailableModels: ProviderModelWithOwner[];
-  visibleExistingCount: number;
-  selectedProviderModelsForList: ProviderModelSelection[];
-  selectedKeys: Set<string>;
-  existingAssociationKeys: Set<string>;
-  collapsedProviders: Record<number, boolean>;
-  onToggleProviderCollapse: (providerId: number) => void;
-  onSelectAllVisibleAvailable: () => void;
-  onClearModelListSelection: () => void;
-  onToggleModelSelection: (model: ProviderModelWithOwner, checked: boolean, selectionKey: string) => void;
-
-  // Preview dialog
-  previewDialogOpen: boolean;
-  onPreviewDialogOpenChange: (open: boolean) => void;
-  previewType: "associate" | "clean";
-  previewData: AssociationPreview[];
-  executing: boolean;
-  onConfirmPreview: () => void;
-};
-
-export function useModelProvidersPageDialogProps(input: UseModelProvidersPageDialogPropsInput) {
   const blacklistDialogProps = {
-    open: input.blacklistDialogOpen,
-    onOpenChange: input.onBlacklistDialogOpenChange,
-    providers: input.providers,
-    filteredProviders: input.filteredProviders,
-    blacklistedIds: input.blacklistedIds,
-    loading: input.blacklistLoading,
-    saving: input.blacklistSaving,
-    searchTerm: input.blacklistSearchTerm,
-    filter: input.blacklistFilter,
-    onSearchTermChange: input.onBlacklistSearchTermChange,
-    onFilterChange: input.onBlacklistFilterChange,
-    onToggle: input.onToggleBlacklist,
-    onSave: input.onSaveBlacklist,
-    onCancel: input.onCancelBlacklist,
+    open: store.blacklistDialogOpen,
+    onOpenChange: store.setBlacklistDialogOpen,
+    providers: localState.providers,
+    filteredProviders: blacklist.filteredProviders,
+    blacklistedIds: store.blacklistedIds,
+    loading: store.blacklistLoading,
+    saving: store.blacklistSaving,
+    searchTerm: store.blacklistSearchTerm,
+    filter: store.blacklistFilter,
+    onSearchTermChange: store.setBlacklistSearchTerm,
+    onFilterChange: store.setBlacklistFilter,
+    onToggle: blacklist.handleToggleBlacklist,
+    onSave: blacklist.handleSaveBlacklist,
+    onCancel: blacklist.cancelBlacklistDialog,
   };
 
   const templateEditorDialogProps = {
-    open: input.templateEditorOpen,
-    onOpenChange: input.onTemplateEditorOpenChange,
-    selectedModelId: input.selectedModelId,
-    loading: input.templateLoading,
-    templateData: input.templateData,
-    newItem: input.templateNewItem,
-    onNewItemChange: input.onTemplateNewItemChange,
-    onAdd: input.onAddTemplateItem,
-    onDelete: input.onDeleteTemplateItem,
+    open: store.templateEditorOpen,
+    onOpenChange: store.setTemplateEditorOpen,
+    selectedModelId: localState.selectedModelId,
+    loading: store.templateLoading,
+    templateData: templateEditor.templateData,
+    newItem: store.templateNewItem,
+    onNewItemChange: store.setTemplateNewItem,
+    onAdd: pageActions.addTemplateItem,
+    onDelete: pageActions.deleteTemplateItem,
   };
 
   const associationFormDialogProps = {
-    open: input.associationFormOpen,
-    onOpenChange: input.onAssociationFormOpenChange,
-    editingAssociation: input.editingAssociation,
-    form: input.form,
-    models: input.models,
-    providers: input.providersForForm,
-    selectedProviderModels: input.selectedProviderModels,
-    isSubmitting: input.isSubmitting,
-    headerFields: input.headerFields,
-    appendHeader: input.appendHeader,
-    removeHeader: input.removeHeader,
-    onSubmitCreate: input.onSubmitCreate,
-    onSubmitUpdate: input.onSubmitUpdate,
-    onOpenModelListDialog: input.onOpenModelListDialog,
-    onClearSelectedProviderModels: input.onClearSelectedProviderModels,
-    onRemoveSelectedProviderModel: input.onRemoveSelectedProviderModel,
-    onProviderChange: input.onProviderChange,
+    open: store.open,
+    onOpenChange: store.setOpen,
+    editingAssociation: store.editingAssociation,
+    form: form.form,
+    models: localState.models,
+    providers: localState.providers,
+    selectedProviderModels: store.selectedProviderModels,
+    isSubmitting: store.isSubmitting,
+    headerFields: form.headerFields,
+    appendHeader: form.appendHeader,
+    removeHeader: form.removeHeader,
+    onSubmitCreate: mutations.handleCreate,
+    onSubmitUpdate: mutations.handleUpdate,
+    onOpenModelListDialog: modelListSelection.openModelListDialog,
+    onClearSelectedProviderModels: modelListSelection.clearSelectedProviderModels,
+    onRemoveSelectedProviderModel: modelListSelection.removeSelectedProviderModel,
+    onProviderChange: modelListSelection.handleProviderChange,
   };
 
   const testDialogProps = {
-    open: input.testDialogOpen,
-    onOpenChange: input.onTestDialogOpenChange,
-    testType: input.testType,
-    onTestTypeChange: input.onTestTypeChange,
-    selectedTestId: input.selectedTestId,
-    testResults: input.testResults,
-    structuredTestResults: input.structuredTestResults,
-    reactTestResult: input.reactTestResult,
-    onClose: input.onCloseTestDialog,
-    onExecute: input.onExecuteTestNow,
+    open: store.testDialogOpen,
+    onOpenChange: store.setTestDialogOpen,
+    testType: store.testType,
+    onTestTypeChange: store.setTestType,
+    selectedTestId: store.selectedTestId,
+    testResults: testing.testResults,
+    structuredTestResults: testing.structuredTestResults,
+    reactTestResult: store.reactTestResult,
+    onClose: testing.dialogClose,
+    onExecute: testing.executeTestNow,
   };
 
   const modelListDialogProps = {
-    open: input.modelListDialogOpen,
-    onOpenChange: input.onModelListDialogOpenChange,
-    modelSearchKeyword: input.modelSearchKeyword,
-    onModelSearchKeywordChange: input.onModelSearchKeywordChange,
-    loadingProviderModels: input.loadingProviderModels,
-    providerModels: input.providerModels,
-    visibleProviderGroups: input.visibleProviderGroups,
-    visibleAvailableModels: input.visibleAvailableModels,
-    visibleExistingCount: input.visibleExistingCount,
-    selectedProviderModels: input.selectedProviderModelsForList,
-    selectedKeys: input.selectedKeys,
-    existingAssociationKeys: input.existingAssociationKeys,
-    collapsedProviders: input.collapsedProviders,
-    onToggleProviderCollapse: input.onToggleProviderCollapse,
-    onSelectAllVisibleAvailable: input.onSelectAllVisibleAvailable,
-    onClearSelection: input.onClearModelListSelection,
-    onToggleModelSelection: input.onToggleModelSelection,
+    open: store.modelListDialogOpen,
+    onOpenChange: store.setModelListDialogOpen,
+    modelSearchKeyword: store.modelSearchKeyword,
+    onModelSearchKeywordChange: store.setModelSearchKeyword,
+    loadingProviderModels: localState.loading,
+    providerModels: localState.providerModels,
+    visibleProviderGroups: modelListVisibility.visibleProviderGroups,
+    visibleAvailableModels: modelListVisibility.visibleAvailableModels,
+    visibleExistingCount: modelListVisibility.visibleExistingCount,
+    selectedProviderModels: store.selectedProviderModels,
+    selectedKeys: modelListVisibility.selectedKeys,
+    existingAssociationKeys: modelListVisibility.existingAssociationKeys,
+    collapsedProviders: store.collapsedProviders,
+    onToggleProviderCollapse: pageActions.toggleProviderCollapse,
+    onSelectAllVisibleAvailable: modelListSelection.selectAllVisibleAvailable,
+    onClearSelection: modelListSelection.clearModelListSelection,
+    onToggleModelSelection: modelListSelection.toggleModelSelection,
   };
 
   const previewDialogProps = {
-    open: input.previewDialogOpen,
-    onOpenChange: input.onPreviewDialogOpenChange,
-    type: input.previewType,
-    data: input.previewData,
-    executing: input.executing,
-    onConfirm: input.onConfirmPreview,
+    open: store.previewDialogOpen,
+    onOpenChange: store.setPreviewDialogOpen,
+    type: store.previewType,
+    data: preview.previewData,
+    executing: store.executing,
+    onConfirm: pageActions.confirmPreviewAction,
   };
 
   return {
@@ -204,4 +107,3 @@ export function useModelProvidersPageDialogProps(input: UseModelProvidersPageDia
     previewDialogProps,
   };
 }
-

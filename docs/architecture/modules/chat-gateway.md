@@ -30,8 +30,9 @@ service/
 │   ├── before.go           # 请求前处理
 │   ├── process.go          # 响应/SSE 处理
 │   ├── chat_balance*.go    # 选路与虚拟模型故障转移
-│   ├── chat_attempt.go     # 单次上游尝试
-│   ├── chat_record*.go     # 日志后处理编排
+│   ├── chat_attempt*.go    # 单次上游尝试（types/request/log/error 按职责拆分）
+│   ├── chat_record*.go     # 日志后处理编排与 raw 清理
+│   ├── chat_provider_meta.go # 供应商元数据装配 + 模型-供应商查询
 │   ├── chat_log_storage.go # ChatLog 落库与保留
 │   └── preprocess/openai/  # OpenAI 预处理
 ├── chatstats/              # 请求/token/供应商统计写入（叶子）

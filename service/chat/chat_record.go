@@ -12,7 +12,7 @@ import (
 )
 
 // RecordLog 是后处理编排器：processer 解析 → stats 统计 → 日志落库 → raw 字段清理。
-// 各关注点的实现分散在 stats.go / chat_record_persist.go / chat_record_raw.go，
+// 各关注点的实现分散在 stats.go / chat_record_persist.go（含 raw 清理），
 // 本函数仅负责按正确顺序串联并处理错误传播。
 func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, processer Processer, logId uint, before Before, ioLog bool, providerName string) {
 	recordFunc := func() error {

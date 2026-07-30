@@ -182,6 +182,11 @@ make webui            # cd webui && pnpm install && pnpm run build
 - 前端测试：Vitest + Testing Library + jsdom（`pnpm test`）。
 - 出现 bug：**先写回归测试再修**（Go 侧至少一测；前端至少相关 build/lint 冒烟）。
 
+### 3.6 Git 提交
+
+- commit message **禁止**添加任何 AI 署名（`Generated with Devin`、`Co-Authored-By: Devin` 等）。
+- 提交信息聚焦「为什么」，简洁描述改动目的。
+
 ## 4. 架构纪律（硬性）
 
 > 语气：禁止 / 必须。与架构总览「设计原则落地」「禁止的依赖」一致。

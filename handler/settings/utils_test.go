@@ -1,22 +1,12 @@
 package settings
 
 import (
-	"context"
 	"encoding/json"
-	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
+	"github.com/atopos31/llmio/handler/testsupport"
 	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/service/settings"
-	"github.com/gin-gonic/gin"
 )
-
-type apiEnvelope[T any] struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-	Data    T      `json:"data"`
-}
 
 type resetWeightsResponse struct {
 	Updated       int64 `json:"updated"`
@@ -32,31 +22,8 @@ type enableAssociationsResponse struct {
 	Updated int64 `json:"updated"`
 }
 
-func initTestDB(t *testing.T) {
-	t.Helper()
-	models.Init(context.Background(), filepath.Join(t.TempDir(), "llmio-test.db"))
-	// 与 models.DB 同步默认 Store，避免 settings.Default() 缓存上一个用例的连接
-	settings.SetDefault(settings.NewStore(models.DB))
-	t.Cleanup(func() {
-		settings.SetDefault(nil)
-		sqlDB, err := models.DB.DB()
-		if err != nil {
-			return
-		}
-		_ = sqlDB.Close()
-	})
-}
-
-func newTestContext(method, path string) (*gin.Context, *httptest.ResponseRecorder) {
-	gin.SetMode(gin.TestMode)
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(method, path, nil)
-	return c, w
-}
-
 func TestResetModelWeights(t *testing.T) {
-	initTestDB(t)
+	testsupport.InitTestDB(t)
 
 	provider := models.Provider{Name: "p1", Type: "openai"}
 	if err := models.DB.Create(&provider).Error; err != nil {
@@ -94,13 +61,13 @@ func TestResetModelWeights(t *testing.T) {
 		t.Fatalf("soft delete association: %v", err)
 	}
 
-	c, w := newTestContext("POST", "/settings/reset-weights")
+	c, w := testsupport.NewTestContext("POST", "/settings/reset-weights")
 	ResetModelWeights(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[resetWeightsResponse]
+	var payload testsupport.APIEnvelope[resetWeightsResponse]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}
@@ -132,7 +99,7 @@ func TestResetModelWeights(t *testing.T) {
 }
 
 func TestResetModelPriorities(t *testing.T) {
-	initTestDB(t)
+	testsupport.InitTestDB(t)
 
 	if err := models.DB.Model(&models.Setting{}).
 		Where("key = ?", models.SettingKeyAutoPriorityDecayDefault).
@@ -176,13 +143,13 @@ func TestResetModelPriorities(t *testing.T) {
 		t.Fatalf("soft delete association: %v", err)
 	}
 
-	c, w := newTestContext("POST", "/settings/reset-priorities")
+	c, w := testsupport.NewTestContext("POST", "/settings/reset-priorities")
 	ResetModelPriorities(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[resetPrioritiesResponse]
+	var payload testsupport.APIEnvelope[resetPrioritiesResponse]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}
@@ -214,7 +181,7 @@ func TestResetModelPriorities(t *testing.T) {
 }
 
 func TestEnableAllAssociations(t *testing.T) {
-	initTestDB(t)
+	testsupport.InitTestDB(t)
 
 	provider := models.Provider{Name: "p1", Type: "openai"}
 	if err := models.DB.Create(&provider).Error; err != nil {
@@ -252,13 +219,13 @@ func TestEnableAllAssociations(t *testing.T) {
 		t.Fatalf("soft delete association: %v", err)
 	}
 
-	c, w := newTestContext("POST", "/settings/enable-all-associations")
+	c, w := testsupport.NewTestContext("POST", "/settings/enable-all-associations")
 	EnableAllAssociations(c)
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
 
-	var payload apiEnvelope[enableAssociationsResponse]
+	var payload testsupport.APIEnvelope[enableAssociationsResponse]
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
 	}
@@ -287,7 +254,7 @@ func TestEnableAllAssociations(t *testing.T) {
 }
 
 func TestCleanupExcessLogs_HardDeletesSoftDeletedBeyondRetention(t *testing.T) {
-	initTestDB(t)
+	testsupport.InitTestDB(t)
 
 	logs := make([]models.ChatLog, 200)
 	for i := range logs {

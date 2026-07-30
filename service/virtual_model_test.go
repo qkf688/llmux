@@ -2,8 +2,8 @@ package service
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
+	"github.com/atopos31/llmio/service/internal/testutil"
 	"testing"
 	"time"
 
@@ -17,18 +17,6 @@ func resetVirtualModelServiceSingleton() {
 	virtualmodel.ResetSingletonForTest()
 }
 
-func configureSQLiteForSingleConn(t *testing.T, db *gorm.DB) *sql.DB {
-	t.Helper()
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatalf("failed to get sql.DB: %v", err)
-	}
-	// sqlite 内存库在多连接下会出现表不可见问题，测试强制单连接。
-	sqlDB.SetMaxOpenConns(1)
-	sqlDB.SetMaxIdleConns(1)
-	return sqlDB
-}
-
 // setupTestDB 创建测试数据库
 func setupTestDB(t *testing.T) *gorm.DB {
 	resetVirtualModelServiceSingleton()
@@ -38,7 +26,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("failed to connect database: %v", err)
 	}
-	sqlDB := configureSQLiteForSingleConn(t, db)
+	sqlDB := testutil.ConfigureSQLiteForSingleConn(t, db)
 	t.Cleanup(func() {
 		_ = sqlDB.Close()
 	})

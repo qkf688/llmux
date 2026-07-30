@@ -2,9 +2,9 @@ package modelsync
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/atopos31/llmio/service/internal/testutil"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -25,7 +25,7 @@ func setupModelSyncTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("failed to open sqlite db: %v", err)
 	}
 
-	sqlDB := configureModelSyncSQLite(t, db)
+	sqlDB := testutil.ConfigureSQLiteForSingleConn(t, db)
 	t.Cleanup(func() {
 		_ = sqlDB.Close()
 	})
@@ -39,18 +39,6 @@ func setupModelSyncTestDB(t *testing.T) *gorm.DB {
 	}
 
 	return db
-}
-
-func configureModelSyncSQLite(t *testing.T, db *gorm.DB) *sql.DB {
-	t.Helper()
-
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatalf("failed to get sql.DB: %v", err)
-	}
-	sqlDB.SetMaxOpenConns(1)
-	sqlDB.SetMaxIdleConns(1)
-	return sqlDB
 }
 
 func TestSyncProviderModels_ModelEndpointDisabledStillSyncs(t *testing.T) {

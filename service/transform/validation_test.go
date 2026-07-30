@@ -369,10 +369,3 @@ func TestRepairUnifiedRequest(t *testing.T) {
 }
 
 // Helper functions
-func floatPtr(f float64) *float64 {
-	return &f
-}
-
-func int64Ptr(i int64) *int64 {
-	return &i
-}

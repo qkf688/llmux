@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/atopos31/llmio/handler/testsupport"
 	"github.com/atopos31/llmio/models"
 )
 
@@ -11,7 +12,7 @@ import (
 // `settings.NewStore(models.DB)`，在 models.Init 之前求值，永久持有 nil *gorm.DB，
 // 于是任何设置保存都在 SetTyped 处空指针 panic（被 gin Recovery 兜成 500）。
 func TestUpdateSettingsFromRequest_PersistsValues(t *testing.T) {
-	initTestDB(t)
+	testsupport.InitTestDB(t)
 	ctx := context.Background()
 
 	req := &UpdateSettingsRequest{}
@@ -40,7 +41,7 @@ func TestUpdateSettingsFromRequest_PersistsValues(t *testing.T) {
 // oldAutoSave 曾在写循环之后才读，此时新值已落库，
 // 「从关闭切到开启」这个跳变条件恒为 false，批量导入永远不触发。
 func TestUpdateSettingsFromRequest_AutoSaveOldValueReadBeforeWrite(t *testing.T) {
-	initTestDB(t)
+	testsupport.InitTestDB(t)
 	ctx := context.Background()
 
 	store := settingStore()
@@ -72,7 +73,7 @@ func TestUpdateSettingsFromRequest_AutoSaveOldValueReadBeforeWrite(t *testing.T)
 // 旧实现边校验边写，校验到后面的字段失败时，前面已通过校验的字段已落库，
 // 留下半更新状态。新实现先全量校验、再事务内写入，校验失败时不应有任何字段被改。
 func TestUpdateSettingsFromRequest_ValidationFailureLeavesNoPartialWrites(t *testing.T) {
-	initTestDB(t)
+	testsupport.InitTestDB(t)
 	ctx := context.Background()
 
 	// 模拟客户端只发 {"disable_all_logs": true}：其余 int 字段为零值，

@@ -24,6 +24,12 @@
 handler/associations/     # CRUD、status、capabilities、health 视图
 handler/autoassoc/        # HTTP 预览/执行 + Trigger* 薄封装
 service/autoassoc/        # 统一 Associate / CleanInvalid 业务
+  ├── service.go            # Service 聚合根 + 构造 + setting/Result/LogResult + 公共入口（Preview/Associate/Trigger*）
+  ├── associate.go          # Associate 路径（associate / fetchAssociateData / forEachMissingAssociation / skipAutoAssociate）
+  ├── clean.go              # CleanInvalid 路径（CleanInvalid / fetchCleanData / forEachInvalidAssociation）
+  ├── shared.go             # 共享 helpers（key/index/blacklist/allows）
+  ├── defaults.go           # Fallback 常量 + NewDefaultAssociation
+  └── types.go              # Preview / associationCandidate / NameMatcher / BuildIndexFunc
 service/autoassoc_facade.go  # GetAutoAssocService / NewAutoAssocService
 repository/model_with_provider.go
 models.ModelWithProvider

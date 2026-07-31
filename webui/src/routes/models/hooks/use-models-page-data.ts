@@ -2,7 +2,7 @@
  * Models 页面数据层：API 查询 + store 状态读取 + 派生数据计算。
  */
 import { useMemo } from "react";
-import type { Model, Provider } from "@/lib/api";
+import { EMPTY_MODELS, EMPTY_PROVIDERS } from "@/lib/empty-constants";
 import {
   selectModelsBatchDeleteDialogOpen,
   selectModelsBatchSettingsDialogOpen,
@@ -36,10 +36,6 @@ import {
   filterProviderGroups,
 } from "../utils/provider-models";
 import { filterModelsByName } from "../utils/selection";
-
-/** 稳定空数组，避免 `data = []` 在 loading 时每次 render 产生新引用触发 effect 循环 */
-const EMPTY_MODELS: Model[] = [];
-const EMPTY_PROVIDERS: Provider[] = [];
 
 export function useModelsPageData() {
   const { data: models = EMPTY_MODELS, isLoading: loading } = useModels();

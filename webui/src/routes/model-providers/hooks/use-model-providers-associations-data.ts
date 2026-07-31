@@ -1,10 +1,8 @@
 import { useCallback, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ModelWithProvider } from "@/lib/api";
+import { EMPTY_MODEL_PROVIDERS } from "@/lib/empty-constants";
 import { useModelProvidersQuery, modelProviderKeys } from "@/hooks/api/use-model-providers";
-
-/** 稳定空数组，避免 `data = []` 在 loading 时每次 render 产生新引用触发 effect 循环 */
-const EMPTY_MODEL_PROVIDERS: ModelWithProvider[] = [];
 
 type UseModelProvidersAssociationsDataInput = {
   selectedModelId: number | null;

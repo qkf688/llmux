@@ -1,8 +1,8 @@
 "use client";
 
-import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Fragment, memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { Bot, MessageSquare } from "lucide-react";
+import { Activity, Bot, MessageSquare } from "lucide-react";
 import type { DailyMetricsData } from "@/lib/api";
 import { formatCompactCount } from "@/lib/formatters";
 
@@ -19,10 +19,53 @@ const LEVELS = [
   { min: 1, level: 1 },
 ] as const;
 
+const LEGEND_LEVELS = [0, ...LEVELS.map((l) => l.level)] as const;
+
 function getActivityLevel(value: number): number {
   if (value <= 0) return 0;
   return LEVELS.find((l) => value >= l.min)?.level ?? 1;
 }
+
+// 格子与图例共用同一色阶：比例由 LEVELS 档数推导，加档位时无需两处同步
+function getLevelColor(level: number): string {
+  if (level <= 0) return "var(--muted)";
+  const stepPercent = 100 / LEVELS.length;
+  return `color-mix(in oklch, var(--primary) ${level * stepPercent}%, var(--muted))`;
+}
+
+type TooltipState = {
+  day: ActivityDay;
+  x: number;
+  y: number;
+  source: "hover" | "focus";
+};
+
+type HeatmapCellProps = {
+  day: ActivityDay;
+  onShowTooltip: (day: ActivityDay, element: HTMLElement, source: TooltipState["source"]) => void;
+  onHideTooltip: (day: ActivityDay, source: TooltipState["source"], relatedTarget: EventTarget | null) => void;
+};
+
+const HeatmapCell = memo(function HeatmapCell({ day, onShowTooltip, onHideTooltip }: HeatmapCellProps) {
+  const rawValue = day.stat?.reqs ?? 0;
+  const level = getActivityLevel(rawValue);
+  const ariaLabel = day.stat
+    ? `${day.dateStr}，请求 ${day.stat.reqs.toLocaleString()}，Token ${day.stat.tokens.toLocaleString()}`
+    : day.dateStr;
+
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      className="cursor-pointer rounded-sm border-0 bg-transparent p-0 ring-1 ring-border/20 transition-[transform,box-shadow] duration-150 origin-top hover:scale-150 hover:ring-primary/30 focus-visible:scale-150 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/50"
+      onMouseEnter={(e) => onShowTooltip(day, e.currentTarget, "hover")}
+      onMouseLeave={(e) => onHideTooltip(day, "hover", e.relatedTarget)}
+      onFocus={(e) => onShowTooltip(day, e.currentTarget, "focus")}
+      onBlur={(e) => onHideTooltip(day, "focus", e.relatedTarget)}
+      style={{ backgroundColor: getLevelColor(level) }}
+    />
+  );
+});
 
 function formatDateYYYYMMDD(date: Date): string {
   const y = date.getFullYear();
@@ -50,7 +93,7 @@ export function ActivityHeatmapCard({
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [maskImage, setMaskImage] = useState("none");
-  const [tooltip, setTooltip] = useState<{ day: ActivityDay; x: number; y: number; visible: boolean } | null>(null);
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [cellPx, setCellPx] = useState(14);
 
   const dayMap = useMemo(() => {
@@ -148,6 +191,30 @@ export function ActivityHeatmapCard({
     return () => observer.disconnect();
   }, []);
 
+  const isInsideGrid = useCallback((target: EventTarget | null) => {
+    return target instanceof Node && !!scrollRef.current?.contains(target);
+  }, []);
+
+  const showTooltipFor = useCallback(
+    (day: ActivityDay, element: HTMLElement, source: TooltipState["source"]) => {
+      const rect = element.getBoundingClientRect();
+      setTooltip({ day, x: rect.left + rect.width / 2, y: rect.top, source });
+    },
+    []
+  );
+
+  // 隐藏时区分来源：键盘焦点仍在网格内则不隐藏，避免鼠标离开误隐藏仍聚焦的格子 tooltip
+  const hideTooltip = useCallback(
+    (day: ActivityDay, source: TooltipState["source"], relatedTarget: EventTarget | null) => {
+      setTooltip((prev) => {
+        if (!prev || prev.source !== source || prev.day.dateStr !== day.dateStr) return prev;
+        if (source === "focus" && isInsideGrid(relatedTarget)) return prev;
+        return null;
+      });
+    },
+    [isInsideGrid]
+  );
+
   const renderTooltip = () => {
     if (!tooltip || typeof document === "undefined") return null;
 
@@ -172,9 +239,9 @@ export function ActivityHeatmapCard({
     const reqs = formatCompactCount(stat?.reqs);
     const tokens = formatCompactCount(stat?.tokens);
 
-  return createPortal(
+    return createPortal(
       <div
-        className={`fixed z-50 w-fit min-w-max text-sm bg-background text-foreground border rounded-3xl p-3 transition-opacity duration-500 pointer-events-none ${tooltip.visible ? "opacity-100" : "opacity-0"}`}
+        className="fixed z-50 w-fit min-w-max text-sm bg-background text-foreground border rounded-3xl p-3 pointer-events-none"
         style={{
           left: tooltip.x,
           top: tooltip.y,
@@ -229,22 +296,12 @@ export function ActivityHeatmapCard({
             if (day.isFuture) {
               return <div key={day.dateStr} />;
             }
-
-            const rawValue = day.stat?.reqs ?? 0;
-            const level = getActivityLevel(rawValue);
-            const backgroundColor =
-              level === 0 ? "var(--muted)" : `color-mix(in oklch, var(--primary) ${level * 25}%, var(--muted))`;
-
             return (
-              <div
+              <HeatmapCell
                 key={day.dateStr}
-                className="rounded-sm transition-all cursor-pointer hover:scale-150"
-                onMouseEnter={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  setTooltip({ day, x: rect.left + rect.width / 2, y: rect.top, visible: true });
-                }}
-                onMouseLeave={() => setTooltip((prev) => (prev ? { ...prev, visible: false } : null))}
-                style={{ backgroundColor }}
+                day={day}
+                onShowTooltip={showTooltipFor}
+                onHideTooltip={hideTooltip}
               />
             );
           })}
@@ -254,8 +311,31 @@ export function ActivityHeatmapCard({
   );
 
   return (
-    <div className="rounded-3xl bg-card border text-card-foreground custom-shadow">
-      {cardContent}
+    <div className="rounded-3xl bg-card border text-card-foreground custom-shadow p-4">
+      <div className="mb-3 flex items-center gap-2.5">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <Activity className="h-4 w-4" />
+        </div>
+        <div>
+          <h3 className="text-base font-semibold leading-tight">活跃度</h3>
+          <p className="text-xs text-muted-foreground sm:text-sm">近一年每日请求量分布</p>
+        </div>
+      </div>
+      <div className="rounded-lg border bg-card p-3.5">
+        {cardContent}
+      </div>
+      <div className="mt-3 flex items-center justify-end gap-1.5 px-2 text-xs text-muted-foreground">
+        <span>少</span>
+        {LEGEND_LEVELS.map((level) => (
+          <div
+            key={level}
+            aria-hidden="true"
+            className="h-3 w-3 rounded-sm ring-1 ring-border/20"
+            style={{ backgroundColor: getLevelColor(level) }}
+          />
+        ))}
+        <span>多</span>
+      </div>
       {renderTooltip()}
     </div>
   );

@@ -3,9 +3,10 @@ package transform
 import (
 	"context"
 	"encoding/json"
-	"github.com/atopos31/llmio/models"
+	"strings"
 	"testing"
 
+	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/service/responses"
 )
 
@@ -132,7 +133,7 @@ func TestTransformUnifiedToOpenAI_EmptyMessages(t *testing.T) {
 	}
 
 	expectedError := "messages cannot be empty"
-	if !contains(err.Error(), expectedError) {
+	if !strings.Contains(err.Error(), expectedError) {
 		t.Errorf("错误消息应包含 '%s'，实际: %s", expectedError, err.Error())
 	}
 }
@@ -199,7 +200,7 @@ func TestResponsesToOpenAI_EmptyInput(t *testing.T) {
 	}
 
 	expectedError := "messages cannot be empty"
-	if !contains(err.Error(), expectedError) {
+	if !strings.Contains(err.Error(), expectedError) {
 		t.Errorf("错误消息应包含 '%s'，实际: %s", expectedError, err.Error())
 	}
 }
@@ -250,11 +251,6 @@ func TestResponsesToOpenAI_CherryStudioFormat(t *testing.T) {
 		t.Fatal("转换后 messages 为空")
 	}
 
-	t.Logf("Messages count: %d", len(unified.Messages))
-	for i, msg := range unified.Messages {
-		t.Logf("Message %d: role=%s, content=%v", i, msg.Role, msg.Content)
-	}
-
 	// 转换为 OpenAI 格式
 	openaiBytes, err := TransformUnifiedToOpenAI(unified)
 	if err != nil {
@@ -270,8 +266,6 @@ func TestResponsesToOpenAI_CherryStudioFormat(t *testing.T) {
 	if !ok || len(messages) == 0 {
 		t.Fatal("OpenAI 请求的 messages 为空")
 	}
-
-	t.Logf("OpenAI messages count: %d", len(messages))
 }
 
 func TestTransformResponsesToUnified_MapsToolChoiceTextFormatAndMetadata(t *testing.T) {
@@ -525,5 +519,3 @@ func TestResponsesResponse_OutputTextAnnotationsAlwaysArray(t *testing.T) {
 
 	_ = annotations // 允许长度为 0，只验证字段存在且类型为数组
 }
-
-// 辅助函数：检查字符串是否包含子串

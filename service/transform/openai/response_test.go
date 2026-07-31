@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 func TestParseResponse_MultipleChoicesAndUsageDetails(t *testing.T) {

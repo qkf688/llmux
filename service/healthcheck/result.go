@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 // AdjustmentHooks 注入健康检测后对权重/优先级的调整逻辑。

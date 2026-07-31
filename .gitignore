@@ -1,7 +1,7 @@
 .openmcp
 .claude
-llmio.db
-llmio
+llmux.db
+llmux
 api.md
 todo.md
 db
@@ -11,8 +11,8 @@ CLAUDE.md
 .gopath
 test.txt
 test_stream.bat
-llmio-test.exe
-llmio.exe~
+llmux-test.exe
+llmux.exe~
 proxy-logger
 # BitFun snapshot data - auto managed
 .bitfun/

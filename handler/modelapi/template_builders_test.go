@@ -3,7 +3,7 @@ package modelapi
 import (
 	"testing"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 func TestBuildModelTemplateResponse(t *testing.T) {

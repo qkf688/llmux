@@ -4,12 +4,12 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/atopos31/llmio/handler/httpx"
-	"github.com/atopos31/llmio/httpresp"
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/service"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/qkf688/llmux/handler/httpx"
+	"github.com/qkf688/llmux/httpresp"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service"
 	"gorm.io/gorm"
 )
 

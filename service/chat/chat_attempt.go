@@ -9,11 +9,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/service/adjustment"
-	"github.com/atopos31/llmio/service/chatcore"
-	"github.com/atopos31/llmio/service/chatstats"
-	"github.com/atopos31/llmio/service/transform"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/adjustment"
+	"github.com/qkf688/llmux/service/chatcore"
+	"github.com/qkf688/llmux/service/chatstats"
+	"github.com/qkf688/llmux/service/transform"
 )
 
 func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog chan<- models.ChatLog) singleProviderAttemptResult {

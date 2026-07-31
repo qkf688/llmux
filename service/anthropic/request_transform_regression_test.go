@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 // 本文件是请求侧协议不变量的回归断言，对应 .local/next-do.md 的待办 26 / 27 / 28。

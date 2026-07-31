@@ -3,7 +3,7 @@ package chat
 import (
 	"testing"
 
-	"github.com/atopos31/llmio/consts"
+	"github.com/qkf688/llmux/consts"
 )
 
 func TestRegistry_GetBeforer_KnownStyles(t *testing.T) {

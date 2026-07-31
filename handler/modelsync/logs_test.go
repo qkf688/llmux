@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/atopos31/llmio/handler/testsupport"
-	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/handler/testsupport"
+	"github.com/qkf688/llmux/models"
 )
 
 type modelSyncLogsResponse struct {
@@ -244,4 +244,3 @@ func TestClearModelSyncErrorLogs_ByProvider(t *testing.T) {
 		t.Fatalf("remaining p2 errors = %d, want 1", remainingP2)
 	}
 }
-

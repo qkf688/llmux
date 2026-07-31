@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/providers"
-	"github.com/atopos31/llmio/service/chatcore"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/providers"
+	"github.com/qkf688/llmux/service/chatcore"
 )
 
 func BalanceChat(ctx context.Context, start time.Time, style string, before Before, providersWithMeta ProvidersWithMeta, reqMeta models.ReqMeta) (*http.Response, uint, string, error) {

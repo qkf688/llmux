@@ -1,6 +1,6 @@
 package adjustment
 
-import "github.com/atopos31/llmio/service/healthcheck"
+import "github.com/qkf688/llmux/service/healthcheck"
 
 func init() {
 	healthcheck.SetAdjustmentHooks(healthcheck.AdjustmentHooks{

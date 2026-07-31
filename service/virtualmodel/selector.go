@@ -3,7 +3,7 @@ package virtualmodel
 import (
 	"context"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 // SelectionContext 传递给 Selector 的上下文信息。

@@ -8,9 +8,9 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/service/adjustment"
-	"github.com/atopos31/llmio/service/chatstats"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/adjustment"
+	"github.com/qkf688/llmux/service/chatstats"
 )
 
 func handleNonOKProviderResponse(

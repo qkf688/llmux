@@ -1,6 +1,6 @@
 package models
 
-import unifiedmodel "github.com/atopos31/llmio/models/unified"
+import unifiedmodel "github.com/qkf688/llmux/models/unified"
 
 // Unified request/message/tooling 类型（兼容层）。
 type UnifiedRequest = unifiedmodel.UnifiedRequest

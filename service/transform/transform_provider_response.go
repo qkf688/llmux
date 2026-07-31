@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/atopos31/llmio/service/transform/streaming"
+	"github.com/qkf688/llmux/service/transform/streaming"
 )
 
 func TransformProviderResponse(response *http.Response, providerType, clientType string) (*http.Response, error) {

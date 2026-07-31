@@ -7,7 +7,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/atopos31/llmio/consts"
+	"github.com/qkf688/llmux/consts"
 	"github.com/tidwall/gjson"
 )
 

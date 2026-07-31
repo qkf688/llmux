@@ -40,7 +40,7 @@ export async function exportConfig(types: ExportType[]): Promise<void> {
     throw new Error(`Export failed: ${response.status} ${response.statusText}`);
   }
 
-  const fallbackName = `llmio-config-${types.join("-")}-${new Date()
+  const fallbackName = `llmux-config-${types.join("-")}-${new Date()
     .toISOString()
     .slice(0, 19)
     .replace(/:/g, "-")}.json`;
@@ -65,7 +65,7 @@ export async function exportDatabase(): Promise<void> {
 
   const filename = extractFilenameFromContentDisposition(
     response.headers.get("Content-Disposition"),
-    "llmio_backup.db"
+    "llmux_backup.db"
   );
 
   const blob = await response.blob();

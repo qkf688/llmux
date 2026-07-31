@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 func captureRequestLogSnapshot(options models.RawLogOptions, requestHeader http.Header, requestBody []byte) requestLogSnapshot {

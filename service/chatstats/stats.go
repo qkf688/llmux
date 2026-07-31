@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/atopos31/llmio/repository"
+	"github.com/qkf688/llmux/repository"
 )
 
 // RecordRequestStats 累加请求次数（total/daily/hourly）及可选模型维度 calls。

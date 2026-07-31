@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 func TestToString_FromString_RoundTrip(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/atopos31/llmio/service"
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/service"
 )
 
 func TestChatHandler_PreprocessError_ReturnsHTTP400(t *testing.T) {

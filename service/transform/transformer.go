@@ -6,7 +6,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 // 阶段 3: 多模态内容支持类型定义

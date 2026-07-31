@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 
-	"github.com/atopos31/llmio/handler/autoassoc"
-	"github.com/atopos31/llmio/handler/httpx"
-	"github.com/atopos31/llmio/handler/settings"
-	"github.com/atopos31/llmio/httpresp"
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/repository"
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/handler/autoassoc"
+	"github.com/qkf688/llmux/handler/httpx"
+	"github.com/qkf688/llmux/handler/settings"
+	"github.com/qkf688/llmux/httpresp"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/repository"
 	"gorm.io/gorm"
 )
 

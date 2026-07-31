@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/atopos31/llmio/handler/testsupport"
-	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/handler/testsupport"
+	"github.com/qkf688/llmux/models"
 )
 
 func TestDeleteVirtualModelMapping_HardDeleteAllowsRecreate(t *testing.T) {
@@ -116,7 +116,7 @@ func TestDeleteVirtualModelMapping_HardDeleteAllowsRecreate(t *testing.T) {
 
 func TestModelsInit_CleansSoftDeletedVirtualModelMappings(t *testing.T) {
 	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "llmio-test.db")
+	dbPath := filepath.Join(tmpDir, "llmux-test.db")
 
 	models.Init(context.Background(), dbPath)
 	{

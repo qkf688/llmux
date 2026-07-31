@@ -4,8 +4,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/repository"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/repository"
 )
 
 // SaveProviderModelToTemplate 将 ProviderModel 保存到模板项（幂等：已存在则跳过）。

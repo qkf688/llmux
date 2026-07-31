@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	"sort"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/repository"
-	"github.com/atopos31/llmio/service/virtualmodel"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/repository"
+	"github.com/qkf688/llmux/service/virtualmodel"
 	"github.com/samber/lo"
 	"gorm.io/gorm"
 )

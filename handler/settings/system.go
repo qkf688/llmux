@@ -1,8 +1,8 @@
 package settings
 
 import (
-	"github.com/atopos31/llmio/httpresp"
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/httpresp"
 )
 
 // GetSystemConfig 获取系统配置

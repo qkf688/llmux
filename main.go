@@ -11,18 +11,18 @@ import (
 	"time"
 	_ "time/tzdata"
 
-	"github.com/atopos31/llmio/handler"
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/repository"
-	"github.com/atopos31/llmio/service"
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/handler"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/repository"
+	"github.com/qkf688/llmux/service"
 	_ "golang.org/x/crypto/x509roots/fallback"
 )
 
 func init() {
 	ctx := context.Background()
-	models.Init(ctx, "./db/llmio.db")
+	models.Init(ctx, "./db/llmux.db")
 	repository.SetDefault(repository.New(models.DB))
 	slog.Info("TZ", "time.Local", time.Local.String())
 }

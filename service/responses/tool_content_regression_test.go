@@ -3,7 +3,7 @@ package responses
 import (
 	"testing"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 // 本文件对应 .local/next-do.md 的待办 46。

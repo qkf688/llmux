@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/atopos31/llmio/providers"
 	"github.com/atopos31/nsxno/react"
 	"github.com/gin-gonic/gin"
 	"github.com/openai/openai-go/v2"
 	"github.com/openai/openai-go/v2/option"
+	"github.com/qkf688/llmux/providers"
 	"github.com/tidwall/gjson"
 )
 

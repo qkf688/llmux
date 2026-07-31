@@ -7,9 +7,9 @@ import (
 	"net/http/httptrace"
 	"time"
 
-	"github.com/atopos31/llmio/consts"
-	preprocessopenai "github.com/atopos31/llmio/service/chat/preprocess/openai"
-	"github.com/atopos31/llmio/service/transform"
+	"github.com/qkf688/llmux/consts"
+	preprocessopenai "github.com/qkf688/llmux/service/chat/preprocess/openai"
+	"github.com/qkf688/llmux/service/transform"
 )
 
 func withOptionalRequestTrace(ctx context.Context) context.Context {

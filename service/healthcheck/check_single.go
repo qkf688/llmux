@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/atopos31/llmio/consts"
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/providers"
+	"github.com/qkf688/llmux/consts"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/providers"
 )
 
 func (h *HealthChecker) checkOne(ctx context.Context, mp *models.ModelWithProvider) {

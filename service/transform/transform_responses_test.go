@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/service/responses"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/responses"
 )
 
 // TestTransformResponsesToUnified_EmptyInput 测试空 input 的情况

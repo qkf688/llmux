@@ -3,12 +3,12 @@ package service
 import (
 	"context"
 	"fmt"
-	"github.com/atopos31/llmio/service/internal/testutil"
+	"github.com/qkf688/llmux/service/internal/testutil"
 	"testing"
 	"time"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/service/virtualmodel"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/virtualmodel"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )

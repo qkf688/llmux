@@ -1,7 +1,7 @@
 package responses
 
 import (
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 // unifiedPartsToToolOutput 把统一模型的多模态内容块转换为 Responses

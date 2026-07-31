@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/atopos31/llmio/httpresp"
-	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/httpresp"
+	"github.com/qkf688/llmux/models"
 )
 
 // ExportConfig 导出系统配置为 JSON。
@@ -51,7 +51,7 @@ func ExportConfig(c *gin.Context) {
 	}
 
 	timestamp := time.Now().Format("20060102_150405")
-	filename := fmt.Sprintf("llmio_config_%s.json", timestamp)
+	filename := fmt.Sprintf("llmux_config_%s.json", timestamp)
 
 	c.Header("Content-Description", "File Transfer")
 	c.Header("Content-Transfer-Encoding", "binary")

@@ -3,7 +3,7 @@ package modelsync
 import (
 	"context"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 // triggerAutoActions 触发自动关联和清理操作。

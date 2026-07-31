@@ -6,9 +6,9 @@ import (
 	"io"
 	"log/slog"
 
-	"github.com/atopos31/llmio/httpresp"
-	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/httpresp"
+	"github.com/qkf688/llmux/models"
 )
 
 // ImportConfig 导入系统配置（整段同一事务；半残写入语义原样保留）。

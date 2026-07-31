@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 // ApplySuccessAdjustments 在成功调用后尝试提升权重与优先级。

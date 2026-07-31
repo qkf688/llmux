@@ -1,6 +1,6 @@
 package service
 
-import "github.com/atopos31/llmio/service/responses"
+import "github.com/qkf688/llmux/service/responses"
 
 // Responses API 类型（兼容层）。
 type ResponsesRequest = responses.ResponsesRequest

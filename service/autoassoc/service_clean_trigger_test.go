@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/repository"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/repository"
 )
 
 func TestCleanInvalid_DeletesMissingProviderAndModel(t *testing.T) {

@@ -1,6 +1,6 @@
 package handler
 
-import "github.com/atopos31/llmio/repository"
+import "github.com/qkf688/llmux/repository"
 
 // Repos 返回默认 *repository.Repositories。
 // 子包拆分后生产路径优先走此入口（或子包内等价的 repository.Default()），

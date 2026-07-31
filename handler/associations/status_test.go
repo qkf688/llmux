@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/atopos31/llmio/handler/testsupport"
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/repository"
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/handler/testsupport"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/repository"
 )
 
 func createDisabledAssoc(t *testing.T, failures int) models.ModelWithProvider {

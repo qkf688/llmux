@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/atopos31/llmio/handler/testsupport"
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/handler/testsupport"
+	"github.com/qkf688/llmux/models"
 )
 
 // TestUpdateSettingsFromRequest_PersistsValues 回归：settingStore 曾是包级变量

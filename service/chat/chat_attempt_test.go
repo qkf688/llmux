@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/atopos31/llmio/consts"
+	"github.com/qkf688/llmux/consts"
 )
 
 func TestApplyProviderSelectionResult_ReduceWeight(t *testing.T) {

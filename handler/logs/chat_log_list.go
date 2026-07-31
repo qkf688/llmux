@@ -4,11 +4,11 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/atopos31/llmio/handler/httpx"
-	"github.com/atopos31/llmio/httpresp"
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/repository"
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/handler/httpx"
+	"github.com/qkf688/llmux/httpresp"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/repository"
 	"gorm.io/gorm"
 )
 

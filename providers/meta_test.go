@@ -3,7 +3,7 @@ package providers
 import (
 	"testing"
 
-	"github.com/atopos31/llmio/consts"
+	"github.com/qkf688/llmux/consts"
 )
 
 func TestMetadata_RegisteredTypes(t *testing.T) {

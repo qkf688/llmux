@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/service/virtualmodel"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/virtualmodel"
 )
 
 func TestBalanceChatVirtual_NoProvidersForRealModel_WritesSkipLog(t *testing.T) {

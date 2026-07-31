@@ -3,10 +3,10 @@ package transform
 import (
 	"context"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/service/transform/anthropic"
-	"github.com/atopos31/llmio/service/transform/openai"
-	"github.com/atopos31/llmio/service/transform/responses"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/transform/anthropic"
+	"github.com/qkf688/llmux/service/transform/openai"
+	"github.com/qkf688/llmux/service/transform/responses"
 )
 
 // 包外兼容函数（service/transform_facade 与测试依赖）。实现直连子包，调用链 ≤ 一层委托。

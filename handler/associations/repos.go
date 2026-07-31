@@ -1,6 +1,6 @@
 package associations
 
-import "github.com/atopos31/llmio/repository"
+import "github.com/qkf688/llmux/repository"
 
 func repos() *repository.Repositories {
 	return repository.Default()

@@ -1,7 +1,7 @@
 package settings
 
 import (
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 // SystemConfigRequest represents the request body for updating system configuration

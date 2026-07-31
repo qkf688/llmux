@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/providers"
-	"github.com/atopos31/llmio/service/chatcore"
-	"github.com/atopos31/llmio/service/virtualmodel"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/providers"
+	"github.com/qkf688/llmux/service/chatcore"
+	"github.com/qkf688/llmux/service/virtualmodel"
 	"github.com/samber/lo"
 )
 

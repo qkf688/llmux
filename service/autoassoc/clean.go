@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/repository"
-	"github.com/atopos31/llmio/service/modelsync"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/repository"
+	"github.com/qkf688/llmux/service/modelsync"
 )
 
 // CleanInvalid 清理无效关联，返回执行结果。不检查全局开关。

@@ -4,4 +4,4 @@
 - 启动前端开发：`cd webui && pnpm install && pnpm run dev`。
 - 前端构建/冒烟：`cd webui && pnpm run build`（或 `pnpm run preview`）。
 - Docker 本地运行：`docker-compose up -d`；构建镜像：`docker build -t llmux .`。
-- 运行可执行文件：`./llmio.exe`（需设置 TOKEN）。
+- 运行可执行文件：`./llmux.exe`（需设置 TOKEN）。

@@ -42,9 +42,9 @@
 | 形态 | 全栈（Go API 网关 + React 管理后台；`webui/dist` 由 Go `//go:embed`） |
 | 架构 | 技术分层 + 业务子包拆分；扩展点用注册表（providers / chat style / transform / virtualmodel selector） |
 | 设计原则 | SRP / OCP / DRY / DIP（落地细节见架构总览第 2 节） |
-| 路径别名 | 前端 `@` → `webui/src/`（`vite.config.ts` + `tsconfig*.json`）；Go 无路径别名，用 module path `github.com/atopos31/llmio/...` |
+| 路径别名 | 前端 `@` → `webui/src/`（`vite.config.ts` + `tsconfig*.json`）；Go 无路径别名，用 module path `github.com/qkf688/llmux/...` |
 | 默认端口 | 后端 `7070`；前端 dev `5173`（代理 `/api` → `localhost:7070`） |
-| 数据库 | SQLite `./db/llmio.db`；启动时 GORM AutoMigrate |
+| 数据库 | SQLite `./db/llmux.db`；启动时 GORM AutoMigrate |
 
 ### 常用命令
 
@@ -149,7 +149,7 @@ make webui            # cd webui && pnpm install && pnpm run build
 
 **Go**
 
-- 使用 module path：`github.com/atopos31/llmio/...`。
+- 使用 module path：`github.com/qkf688/llmux/...`。
 - 分层依赖见第 4 节；下层包**禁止** import 上层业务包。
 - handler 优先依赖 `service` 门面与 `repository`，避免深挖 `service/chat` 内部未导出细节（除非同域扩展）。
 

@@ -3,7 +3,7 @@ package settings
 import (
 	"context"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 // Reader 是热路径只读配置接口，语义与 models.GetSetting* 完全对齐：

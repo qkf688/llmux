@@ -3,7 +3,7 @@ package testapi
 import (
 	"errors"
 
-	"github.com/atopos31/llmio/providers"
+	"github.com/qkf688/llmux/providers"
 )
 
 var errInvalidProviderType = errors.New("invalid provider type")

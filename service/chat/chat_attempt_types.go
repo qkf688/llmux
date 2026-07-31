@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/providers"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/providers"
 )
 
 type singleProviderAttemptInput struct {

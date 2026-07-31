@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/atopos31/llmio/consts"
+	"github.com/qkf688/llmux/consts"
 )
 
 func TestExtractStructuredOutputJSON_OpenAI(t *testing.T) {

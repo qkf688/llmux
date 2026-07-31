@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/service/chatstats"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/chatstats"
 )
 
 // RecordLog 是后处理编排器：processer 解析 → stats 统计 → 日志落库 → raw 字段清理。

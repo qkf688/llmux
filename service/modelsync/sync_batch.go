@@ -7,8 +7,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/repository"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/repository"
 	"gorm.io/gorm"
 )
 

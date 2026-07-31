@@ -4,8 +4,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/service/adjustment"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/adjustment"
 	"github.com/samber/lo"
 )
 

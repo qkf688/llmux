@@ -5,9 +5,9 @@ package responses
 import (
 	"context"
 
-	"github.com/atopos31/llmio/models"
-	upstream "github.com/atopos31/llmio/service/responses"
-	"github.com/atopos31/llmio/service/transform/shared"
+	"github.com/qkf688/llmux/models"
+	upstream "github.com/qkf688/llmux/service/responses"
+	"github.com/qkf688/llmux/service/transform/shared"
 )
 
 // ToUnified converts a Responses API request body into the unified request representation.

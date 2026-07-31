@@ -3,9 +3,9 @@ package anthropic
 import (
 	"encoding/json"
 	"errors"
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 
-	"github.com/atopos31/llmio/common"
+	"github.com/qkf688/llmux/common"
 )
 
 // TransformFromUnified 将统一请求格式转换为 Anthropic 请求格式。

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 	"gorm.io/gorm"
 )
 

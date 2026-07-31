@@ -3,7 +3,7 @@ package chat
 import (
 	"testing"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 func TestCleanupLogsIfNeeded_HardDeletesSoftDeletedBeyondRetention(t *testing.T) {

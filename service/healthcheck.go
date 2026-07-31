@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	"github.com/atopos31/llmio/service/healthcheck"
+	"github.com/qkf688/llmux/service/healthcheck"
 )
 
 // HealthChecker 健康检测服务（兼容层）。

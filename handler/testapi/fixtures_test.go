@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/atopos31/llmio/consts"
+	"github.com/qkf688/llmux/consts"
 )
 
 func TestBuildTestBody(t *testing.T) {

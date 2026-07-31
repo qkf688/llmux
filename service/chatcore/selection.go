@@ -3,7 +3,7 @@ package chatcore
 import (
 	"fmt"
 
-	"github.com/atopos31/llmio/balancer"
+	"github.com/qkf688/llmux/balancer"
 )
 
 // SelectByPriorityAndWeight 根据优先级和权重选择供应商。

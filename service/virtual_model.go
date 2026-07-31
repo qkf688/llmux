@@ -1,7 +1,7 @@
 package service
 
 import (
-	"github.com/atopos31/llmio/service/virtualmodel"
+	"github.com/qkf688/llmux/service/virtualmodel"
 	"gorm.io/gorm"
 )
 

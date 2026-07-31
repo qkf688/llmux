@@ -1,7 +1,7 @@
 package chat
 
 import (
-	"github.com/atopos31/llmio/service/settings"
+	"github.com/qkf688/llmux/service/settings"
 )
 
 // settingsReader 是 chat 包的配置读取入口。

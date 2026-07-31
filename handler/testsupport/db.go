@@ -5,15 +5,15 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/repository"
-	"github.com/atopos31/llmio/service/settings"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/repository"
+	"github.com/qkf688/llmux/service/settings"
 )
 
 // InitTestDB 初始化临时 SQLite，并同步 repository.Default，测试结束自动清理。
 func InitTestDB(t *testing.T) {
 	t.Helper()
-	models.Init(context.Background(), filepath.Join(t.TempDir(), "llmio-test.db"))
+	models.Init(context.Background(), filepath.Join(t.TempDir(), "llmux-test.db"))
 	// 与 models.DB 同步默认 Repositories，避免 Default 缓存旧连接
 	repository.SetDefault(repository.New(models.DB))
 	settings.SetDefault(settings.NewStore(models.DB))

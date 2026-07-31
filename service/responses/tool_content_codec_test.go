@@ -3,7 +3,7 @@ package responses
 import (
 	"testing"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 // 本文件测试 function_call_output 多模态 output 的编解码 helper 与往返保真。

@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 // persistChatLog 负责响应后处理中的 IO 落库：

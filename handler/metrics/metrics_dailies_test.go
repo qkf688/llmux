@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/atopos31/llmio/handler/testsupport"
-	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/handler/testsupport"
+	"github.com/qkf688/llmux/models"
 )
 
 func TestMetricsDailies_ReturnsRowsSinceStartDate(t *testing.T) {

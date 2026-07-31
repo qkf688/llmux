@@ -1,6 +1,6 @@
 package virtualmodels
 
-import "github.com/atopos31/llmio/models"
+import "github.com/qkf688/llmux/models"
 
 // VirtualModelRequest 虚拟模型请求结构。
 type VirtualModelRequest struct {

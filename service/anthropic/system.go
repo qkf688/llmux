@@ -1,10 +1,10 @@
 package anthropic
 
 import (
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 	"strings"
 
-	"github.com/atopos31/llmio/common/maputil"
+	"github.com/qkf688/llmux/common/maputil"
 )
 
 // parseSystem parses Anthropic's "system" field, which can be either a string or an array of text blocks.

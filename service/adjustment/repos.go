@@ -1,6 +1,6 @@
 package adjustment
 
-import "github.com/atopos31/llmio/repository"
+import "github.com/qkf688/llmux/repository"
 
 // repos 返回默认 *repository.Repositories。
 // 权重/优先级/连续失败调整统一经此入口访问持久层，禁止再直连 models.DB。

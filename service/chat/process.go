@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/atopos31/llmio/consts"
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/consts"
+	"github.com/qkf688/llmux/models"
 	"github.com/tidwall/gjson"
 )
 

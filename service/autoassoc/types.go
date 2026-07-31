@@ -1,6 +1,6 @@
 package autoassoc
 
-import "github.com/atopos31/llmio/models"
+import "github.com/qkf688/llmux/models"
 
 // Preview 关联预览信息（创建或清理候选）。
 type Preview struct {

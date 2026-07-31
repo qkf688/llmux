@@ -4,9 +4,9 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/atopos31/llmio/httpresp"
-	"github.com/atopos31/llmio/service"
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/httpresp"
+	"github.com/qkf688/llmux/service"
 )
 
 // PreviewAutoAssociate 预览将要添加的关联。

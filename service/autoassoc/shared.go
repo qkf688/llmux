@@ -3,7 +3,7 @@ package autoassoc
 import (
 	"fmt"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 func buildAssociationKey(modelID, providerID uint, providerModel string) string {

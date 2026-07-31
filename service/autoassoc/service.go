@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"strconv"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/repository"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/repository"
 )
 
 // Service 自动关联与无效关联清理的统一入口。

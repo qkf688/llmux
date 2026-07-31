@@ -10,11 +10,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/atopos31/llmio/consts"
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/providers"
-	anthropicsvc "github.com/atopos31/llmio/service/anthropic"
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/consts"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/providers"
+	anthropicsvc "github.com/qkf688/llmux/service/anthropic"
 )
 
 func runAnthropicReactTest(ctx context.Context, c *gin.Context, httpClient *http.Client, header http.Header, chatModel *ChatModel, providerInstance providers.Provider, scenario reactScenario) ([]string, string, error) {

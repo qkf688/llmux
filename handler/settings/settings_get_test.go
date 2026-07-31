@@ -3,7 +3,7 @@ package settings
 import (
 	"testing"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 func TestDefaultSettingsResponse(t *testing.T) {

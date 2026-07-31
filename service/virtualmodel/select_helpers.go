@@ -1,6 +1,6 @@
 package virtualmodel
 
-import "github.com/atopos31/llmio/models"
+import "github.com/qkf688/llmux/models"
 
 // buildOrderedRealModel 从 mapping 和 model 构建 OrderedRealModel。
 // select_ordered.go 中 3 个策略函数均使用此函数，消除重复构建逻辑。

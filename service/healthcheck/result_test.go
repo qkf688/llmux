@@ -5,13 +5,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/repository"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/repository"
 )
 
 func initHealthCheckTestDB(t *testing.T) {
 	t.Helper()
-	models.Init(context.Background(), filepath.Join(t.TempDir(), "llmio-test.db"))
+	models.Init(context.Background(), filepath.Join(t.TempDir(), "llmux-test.db"))
 	// 与 models.DB 同步默认 Repositories，避免 Default 缓存上一个用例的连接
 	repository.SetDefault(repository.New(models.DB))
 	t.Cleanup(func() {

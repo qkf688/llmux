@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/service/chatstats"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/chatstats"
 )
 
 func SaveChatLog(ctx context.Context, log models.ChatLog) (uint, error) {

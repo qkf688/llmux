@@ -30,7 +30,7 @@ func TestSettingSchemaFieldsUnique(t *testing.T) {
 // 缺席的键不会建行；而健康检测设置的更新是 UPDATE-only，
 // 行不存在时静默 no-op（返回 200 但存不进去）。
 func TestSeedCreatesAllSchemaKeys(t *testing.T) {
-	Init(context.Background(), filepath.Join(t.TempDir(), "llmio-test.db"))
+	Init(context.Background(), filepath.Join(t.TempDir(), "llmux-test.db"))
 	t.Cleanup(func() {
 		if sqlDB, err := DB.DB(); err == nil {
 			_ = sqlDB.Close()

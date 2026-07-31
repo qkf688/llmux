@@ -3,7 +3,7 @@ package service
 import (
 	"testing"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 func TestTemplateIndexMatch_UnionAndCaseSensitive(t *testing.T) {

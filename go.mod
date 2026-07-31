@@ -1,4 +1,4 @@
-module github.com/atopos31/llmio
+module github.com/qkf688/llmux
 
 go 1.25.0
 

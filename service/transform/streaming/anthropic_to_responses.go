@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/atopos31/llmio/common/maputil"
-	"github.com/atopos31/llmio/service/transform/shared"
+	"github.com/qkf688/llmux/common/maputil"
+	"github.com/qkf688/llmux/service/transform/shared"
 )
 
 func init() {

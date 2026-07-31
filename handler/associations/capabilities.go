@@ -1,9 +1,9 @@
 package associations
 
 import (
-	"github.com/atopos31/llmio/httpresp"
-	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/httpresp"
+	"github.com/qkf688/llmux/models"
 )
 
 // BatchUpdateModelProvidersCapabilities 批量更新模型提供商关联能力字段。

@@ -3,9 +3,9 @@ package service
 import (
 	"sync"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/repository"
-	"github.com/atopos31/llmio/service/autoassoc"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/repository"
+	"github.com/qkf688/llmux/service/autoassoc"
 )
 
 var (

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/providers"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/providers"
 	"gorm.io/gorm"
 )
 

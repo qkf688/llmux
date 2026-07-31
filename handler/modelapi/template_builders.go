@@ -4,7 +4,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 func buildModelTemplateResponse(

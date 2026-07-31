@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/service/virtualmodel"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/virtualmodel"
 )
 
 func TestProvidersWithMetaBymodelsName_VirtualModel_FirstRealModelNoProvider_DoesNotError(t *testing.T) {

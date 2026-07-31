@@ -3,10 +3,10 @@ package transform
 import (
 	"context"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/service/transform/anthropic"
-	"github.com/atopos31/llmio/service/transform/openai"
-	"github.com/atopos31/llmio/service/transform/responses"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/transform/anthropic"
+	"github.com/qkf688/llmux/service/transform/openai"
+	"github.com/qkf688/llmux/service/transform/responses"
 )
 
 // funcAdapter 用函数字段实现 FormatAdapter，减少三份薄 struct 样板。

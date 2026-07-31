@@ -3,10 +3,10 @@ package anthropic
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 	"strings"
 
-	"github.com/atopos31/llmio/common/maputil"
+	"github.com/qkf688/llmux/common/maputil"
 )
 
 // TransformToUnified 将 Anthropic 请求格式转换为统一格式。

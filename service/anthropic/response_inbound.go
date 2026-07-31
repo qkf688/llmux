@@ -3,9 +3,9 @@ package anthropic
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 
-	"github.com/atopos31/llmio/common/maputil"
+	"github.com/qkf688/llmux/common/maputil"
 )
 
 // ParseResponse 将 Anthropic 响应格式转换为统一格式。

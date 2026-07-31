@@ -7,10 +7,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/atopos31/llmio/handler/associations"
-	"github.com/atopos31/llmio/httpresp"
-	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/handler/associations"
+	"github.com/qkf688/llmux/httpresp"
+	"github.com/qkf688/llmux/models"
 	"gorm.io/gorm"
 )
 

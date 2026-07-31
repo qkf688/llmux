@@ -1,6 +1,6 @@
 package autoassoc
 
-import "github.com/atopos31/llmio/models"
+import "github.com/qkf688/llmux/models"
 
 // DefaultWeightFallback 设置缺失/非法时的默认权重（与 setting schema 一致）。
 const DefaultWeightFallback = 100

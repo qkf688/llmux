@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/service/chat"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/chat"
 )
 
 type Before = chat.Before

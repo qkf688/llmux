@@ -1,9 +1,9 @@
 package handler
 
 import (
-	v1 "github.com/atopos31/llmio/handler/v1"
-	"github.com/atopos31/llmio/middleware"
 	"github.com/gin-gonic/gin"
+	v1 "github.com/qkf688/llmux/handler/v1"
+	"github.com/qkf688/llmux/middleware"
 )
 
 // RegisterV1 注册 /v1 协议路由（OpenAI / Anthropic）。

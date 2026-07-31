@@ -3,10 +3,10 @@ package modelapi
 import (
 	"context"
 
-	"github.com/atopos31/llmio/handler/httpx"
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/repository"
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/handler/httpx"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/repository"
 )
 
 func parseModelIDParam(c *gin.Context) (uint, bool) {

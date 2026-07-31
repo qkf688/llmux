@@ -3,8 +3,8 @@ package logs
 import (
 	"strconv"
 
-	"github.com/atopos31/llmio/httpresp"
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/httpresp"
 )
 
 // GetChatIO 查询指定日志的输入输出记录。

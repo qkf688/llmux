@@ -4,14 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/atopos31/llmio/service/internal/testutil"
+	"github.com/qkf688/llmux/service/internal/testutil"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
 	"time"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )

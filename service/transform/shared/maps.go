@@ -9,7 +9,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 // GetNestedString supports dotted paths such as "response.id".

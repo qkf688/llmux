@@ -3,8 +3,8 @@ package streaming
 import (
 	"encoding/json"
 
-	"github.com/atopos31/llmio/common"
-	"github.com/atopos31/llmio/service/responses"
+	"github.com/qkf688/llmux/common"
+	"github.com/qkf688/llmux/service/responses"
 )
 
 func init() {

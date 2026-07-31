@@ -1,7 +1,7 @@
 package settings
 
 import (
-	"github.com/atopos31/llmio/models"
+	"github.com/qkf688/llmux/models"
 )
 
 // ToString 将任意类型的值按 SettingType 序列化为字符串。

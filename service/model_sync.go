@@ -3,9 +3,9 @@ package service
 import (
 	"context"
 
-	"github.com/atopos31/llmio/models"
-	"github.com/atopos31/llmio/service/autoassoc"
-	"github.com/atopos31/llmio/service/modelsync"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/autoassoc"
+	"github.com/qkf688/llmux/service/modelsync"
 	"gorm.io/gorm"
 )
 

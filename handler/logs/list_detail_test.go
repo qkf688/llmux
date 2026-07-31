@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/atopos31/llmio/handler/testsupport"
-	"github.com/atopos31/llmio/models"
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/handler/testsupport"
+	"github.com/qkf688/llmux/models"
 )
 
 type requestLogsResponse struct {

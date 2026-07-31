@@ -3,6 +3,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { ModelWithProvider } from "@/lib/api";
 import { useModelProvidersQuery, modelProviderKeys } from "@/hooks/api/use-model-providers";
 
+/** 稳定空数组，避免 `data = []` 在 loading 时每次 render 产生新引用触发 effect 循环 */
+const EMPTY_MODEL_PROVIDERS: ModelWithProvider[] = [];
+
 type UseModelProvidersAssociationsDataInput = {
   selectedModelId: number | null;
   loadProviderStatus: (providers: ModelWithProvider[], modelId: number) => Promise<void>;
@@ -13,7 +16,8 @@ export function useModelProvidersAssociationsData({
   loadProviderStatus,
 }: UseModelProvidersAssociationsDataInput) {
   const queryClient = useQueryClient();
-  const { data: modelProviders = [] } = useModelProvidersQuery(selectedModelId);
+  const { data } = useModelProvidersQuery(selectedModelId);
+  const modelProviders = data ?? EMPTY_MODEL_PROVIDERS;
 
   // 列表变空时也要刷新状态，避免删除最后一个关联后 providerStatus 残留
   useEffect(() => {

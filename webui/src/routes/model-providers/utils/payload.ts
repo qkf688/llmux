@@ -25,7 +25,8 @@ export const buildAssociationPayload = (
     with_header: values.with_header,
     customer_headers: headers,
     weight: values.weight,
-    priority: values.priority
+    priority: values.priority,
+    max_tokens: values.max_tokens ?? 0,
   };
 };
 

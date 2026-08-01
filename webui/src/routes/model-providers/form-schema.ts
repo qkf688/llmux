@@ -15,6 +15,7 @@ export const formSchema = z.object({
   with_header: z.boolean(),
   weight: z.number().positive({ message: "权重必须大于0" }),
   priority: z.number().min(0, { message: "优先级必须大于等于0" }),
+  max_tokens: z.number().int().min(0, { message: "max_tokens 上限必须大于等于0" }).optional(),
   customer_headers: z.array(headerPairSchema).default([]),
 });
 

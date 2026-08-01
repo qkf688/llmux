@@ -13,6 +13,7 @@ export interface ModelWithProvider {
   Status: boolean | null;
   Weight: number;
   Priority: number;
+  MaxTokens: number | null;
 }
 
 export interface AssociationPreview {
@@ -68,6 +69,7 @@ export async function createModelProvider(association: {
   customer_headers: Record<string, string>;
   weight: number;
   priority?: number;
+  max_tokens?: number;
 }): Promise<ModelWithProvider> {
   return apiRequest<ModelWithProvider>("/model-providers", {
     method: "POST",
@@ -88,6 +90,7 @@ export async function updateModelProvider(
     customer_headers?: Record<string, string>;
     weight?: number;
     priority?: number;
+    max_tokens?: number;
   }
 ): Promise<ModelWithProvider> {
   return apiRequest<ModelWithProvider>(`/model-providers/${id}`, {

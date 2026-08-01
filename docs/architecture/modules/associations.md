@@ -44,6 +44,10 @@ models.ModelWithProvider
 | `autoassoc.Service` | 预览/执行自动关联与清理；带开关的 Trigger* | `service/autoassoc/` | 同包 |
 | HTTP associate/clean | 绑定 JSON 与 `httpresp` | `handler/autoassoc/` | 调 `GetAutoAssocService` |
 
+### `ModelWithProvider` 字段约定（路由相关）
+
+- `MaxTokens *int`：发给上游前的 `max_tokens`（及 OpenAI 新名 `max_completion_tokens`）裁剪上限。`nil`/`0`/负数 = 不限，原样透传；`>0` 时超过此值会被裁剪到此上限。用于兜底客户端（如 Cursor）发超大 `max_tokens` 触发上游 400。裁剪在 `service/chat` 的 `buildRequestBodyForProvider` 中执行，passthrough 与 transform 两条路径均生效。
+
 ## 5. 特殊约定
 
 - chat 与 healthcheck 将关联行视为选路与启停的数据源；本模块是配置写入口

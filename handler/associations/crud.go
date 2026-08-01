@@ -72,6 +72,7 @@ func CreateModelProvider(c *gin.Context) {
 		CustomerHeaders:  customerHeaders,
 		Weight:           req.Weight,
 		Priority:         priority,
+		MaxTokens:        req.MaxTokens,
 	}
 
 	defaultStatus := true
@@ -136,6 +137,7 @@ func UpdateModelProvider(c *gin.Context) {
 		CustomerHeaders:  customerHeaders,
 		Weight:           req.Weight,
 		Priority:         req.Priority,
+		MaxTokens:        req.MaxTokens,
 	}
 
 	if err := repos().ModelWithProvider.Update(ctx, uint(id), updates); err != nil {

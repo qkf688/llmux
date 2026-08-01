@@ -41,6 +41,7 @@ export function useModelProvidersAssociationDialog({
       with_header: association.WithHeader,
       weight: association.Weight,
       priority: association.Priority ?? 100,
+      max_tokens: association.MaxTokens ?? 0,
       customer_headers: headerPairs.length ? headerPairs : [],
     });
     setOpen(true);
@@ -63,6 +64,7 @@ export function useModelProvidersAssociationDialog({
       with_header: false,
       weight: defaultWeight,
       priority: defaultPriority,
+      max_tokens: 0,
       customer_headers: [],
     });
     setOpen(true);

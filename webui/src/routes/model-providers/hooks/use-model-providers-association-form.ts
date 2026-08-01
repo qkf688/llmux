@@ -15,6 +15,7 @@ export function useModelProvidersAssociationForm() {
       with_header: false,
       weight: 5,
       priority: 10,
+      max_tokens: 0,
       customer_headers: [],
     },
   });

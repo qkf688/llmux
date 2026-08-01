@@ -370,6 +370,26 @@ export function AssociationFormDialog({
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="max_tokens"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>max_tokens 上限 (0=不限，超过此值会被裁剪)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="0=不限"
+                        value={field.value ?? 0}
+                        onChange={(event) => field.onChange(parseInt(event.target.value, 10) || 0)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
 
             <DialogFooter>

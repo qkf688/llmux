@@ -56,7 +56,8 @@ type ModelWithProvider struct {
 	CustomerHeaders     map[string]string `gorm:"serializer:json"` // 自定义headers
 	Weight              int
 	Priority            int // 优先级，值越高越优先选择
-	ConsecutiveFailures int // 连续调用失败次数
+	MaxTokens           *int // max_tokens 上限，nil=不限；超过则裁剪到此值，避免客户端发超大值触发上游 400
+	ConsecutiveFailures int  // 连续调用失败次数
 }
 
 // ModelTemplateItem 模型模板条目：用于将 provider_model 映射到 ModelID（区分大小写、去重）

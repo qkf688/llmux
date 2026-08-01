@@ -26,6 +26,7 @@ const buildBaseLog = (): ChatLog => ({
   completion_tokens_details: { reasoning_tokens: 2, audio_tokens: 0 },
   RequestHeaders: "{\"x\": \"y\"}",
   RequestBody: "{\"input\": \"hi\"}",
+  RawRequestBody: "{\"raw\": \"client\"}",
   ResponseHeaders: "{\"ok\": true}",
   ResponseBody: "{\"output\": \"hello\"}",
   RawResponseBody: "{\"output\": \"hello\"}",
@@ -56,6 +57,7 @@ describe("buildChatLogExportPayload", () => {
       request: {
         headers: "{\"x\": \"y\"}",
         body: "{\"input\": \"hi\"}",
+        raw_body: "{\"raw\": \"client\"}",
       },
       response: {
         headers: "{\"ok\": true}",
@@ -79,6 +81,7 @@ describe("buildChatLogExportPayload", () => {
       request: {
         headers: "{\"x\": \"y\"}",
         body: "{\"input\": \"hi\"}",
+        raw_body: "{\"raw\": \"client\"}",
       },
     });
   });

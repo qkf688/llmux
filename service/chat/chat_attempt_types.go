@@ -37,4 +37,5 @@ type singleProviderAttemptResult struct {
 type requestLogSnapshot struct {
 	RequestHeadersJSON []byte
 	RequestBodyStr     string
+	RawRequestBodyStr  string
 }

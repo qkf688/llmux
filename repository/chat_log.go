@@ -57,7 +57,7 @@ type ChatLogRepo interface {
 	GetStatus(ctx context.Context, id uint) (string, error)
 	// UpdateByID 按结构体更新日志（GORM Updates：零值字段不写入），返回受影响行数。
 	UpdateByID(ctx context.Context, id uint, update models.ChatLog) (int64, error)
-	// ClearRawFields 清空日志的 5 个 raw 请求/响应字段。
+	// ClearRawFields 清空日志的 6 个 raw 请求/响应字段。
 	ClearRawFields(ctx context.Context, id uint) error
 	// List 分页筛选列表。
 	List(ctx context.Context, opts ChatLogListOptions) (*ChatLogListResult, error)
@@ -168,6 +168,7 @@ func (r *chatLogRepo) ClearRawFields(ctx context.Context, id uint) error {
 		Updates(map[string]any{
 			"request_headers":   "",
 			"request_body":      "",
+			"raw_request_body":  "",
 			"response_headers":  "",
 			"response_body":     "",
 			"raw_response_body": "",

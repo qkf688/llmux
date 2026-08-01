@@ -14,7 +14,7 @@ const EXPORT_SECTION_OPTIONS: Array<{
   { key: "error", label: "错误信息", description: "仅当该字段存在时导出" },
   { key: "performance", label: "性能指标", description: "代理耗时/首包耗时/完成耗时/TPS" },
   { key: "tokens", label: "Token 使用", description: "prompt/completion/total 及 details" },
-  { key: "request", label: "请求内容", description: "请求头/请求体（需要加载详情）" },
+  { key: "request", label: "请求内容", description: "请求头/请求体/原始请求体（需要加载详情）" },
   { key: "response", label: "响应内容", description: "响应头/响应体/原始响应体（需要加载详情）" },
 ];
 

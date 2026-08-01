@@ -12,9 +12,9 @@ import (
 	"github.com/qkf688/llmux/models"
 )
 
-func captureRequestLogSnapshot(options models.RawLogOptions, requestHeader http.Header, requestBody []byte) requestLogSnapshot {
+func captureRequestLogSnapshot(options models.RawLogOptions, requestHeader http.Header, requestBody []byte, rawRequestBody []byte) requestLogSnapshot {
 	snapshot := requestLogSnapshot{}
-	if !options.RequestHeaders && !options.RequestBody {
+	if !options.RequestHeaders && !options.RequestBody && !options.RawRequestBody {
 		return snapshot
 	}
 
@@ -29,6 +29,10 @@ func captureRequestLogSnapshot(options models.RawLogOptions, requestHeader http.
 
 	if options.RequestBody {
 		snapshot.RequestBodyStr = string(requestBody)
+	}
+
+	if options.RawRequestBody {
+		snapshot.RawRequestBodyStr = string(rawRequestBody)
 	}
 
 	return snapshot
@@ -64,7 +68,7 @@ func updateRequestAndResponseLog(
 	responseHeader http.Header,
 	rawResponseBodyStr string,
 ) {
-	if !logRawOptions.RequestHeaders && !logRawOptions.RequestBody && !logRawOptions.ResponseHeaders && !logRawOptions.RawResponseBody {
+	if !logRawOptions.RequestHeaders && !logRawOptions.RequestBody && !logRawOptions.RawRequestBody && !logRawOptions.ResponseHeaders && !logRawOptions.RawResponseBody {
 		return
 	}
 
@@ -84,6 +88,9 @@ func updateRequestAndResponseLog(
 	}
 	if logRawOptions.RequestBody {
 		updateData.RequestBody = logSnapshot.RequestBodyStr
+	}
+	if logRawOptions.RawRequestBody {
+		updateData.RawRequestBody = logSnapshot.RawRequestBodyStr
 	}
 	if logRawOptions.RawResponseBody && rawResponseBodyStr != "" {
 		updateData.RawResponseBody = rawResponseBodyStr

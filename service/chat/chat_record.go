@@ -60,7 +60,7 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 		// 读取 raw 日志开关，决定是否拼装响应体与后续清理。
 		logRawOptions := getLogRawRequestResponse(ctx)
 		logRawErrorsOnly := getLogRawRequestResponseErrorsOnly(ctx)
-		rawLogEnabled := logRawOptions.RequestHeaders || logRawOptions.RequestBody || logRawOptions.ResponseHeaders || logRawOptions.ResponseBody || logRawOptions.RawResponseBody
+		rawLogEnabled := logRawOptions.RequestHeaders || logRawOptions.RequestBody || logRawOptions.RawRequestBody || logRawOptions.ResponseHeaders || logRawOptions.ResponseBody || logRawOptions.RawResponseBody
 
 		// IO 落库：更新 ChatLog + 可选写 ChatIO。
 		if err := persistChatLog(ctx, logId, logUpdate, before, output, ioLog, logRawOptions); err != nil {

@@ -48,6 +48,7 @@ func buildEnrichedChatLog(log models.ChatLog, enrich chatLogEnrichResult, includ
 	if includeRaw {
 		enrichedLog["RequestHeaders"] = log.RequestHeaders
 		enrichedLog["RequestBody"] = log.RequestBody
+		enrichedLog["RawRequestBody"] = log.RawRequestBody
 		enrichedLog["ResponseHeaders"] = log.ResponseHeaders
 		enrichedLog["ResponseBody"] = log.ResponseBody
 		enrichedLog["RawResponseBody"] = log.RawResponseBody

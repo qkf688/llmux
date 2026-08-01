@@ -113,7 +113,8 @@ type ChatLog struct {
 
 	// 原始请求和响应内容
 	RequestHeaders  string // 请求头JSON字符串
-	RequestBody     string // 请求体
+	RequestBody     string // 请求体（转换后，发给上游的）
+	RawRequestBody  string // 原始请求体（转换前，客户端发来的）
 	ResponseHeaders string // 响应头JSON字符串
 	ResponseBody    string // 响应体（转换后）
 	RawResponseBody string // 原始响应体（转换前）
@@ -230,7 +231,8 @@ type Setting struct {
 // RawLogOptions 原始日志记录选项
 type RawLogOptions struct {
 	RequestHeaders  bool `json:"request_headers"`   // 记录请求头
-	RequestBody     bool `json:"request_body"`      // 记录请求体
+	RequestBody     bool `json:"request_body"`      // 记录请求体（转换后）
+	RawRequestBody  bool `json:"raw_request_body"`  // 记录原始请求体（转换前）
 	ResponseHeaders bool `json:"response_headers"`  // 记录响应头
 	ResponseBody    bool `json:"response_body"`     // 记录响应体
 	RawResponseBody bool `json:"raw_response_body"` // 记录原始响应体（转换前）

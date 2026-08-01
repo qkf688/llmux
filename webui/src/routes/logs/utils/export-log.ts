@@ -46,6 +46,7 @@ export type ChatLogExportPayload = {
   request?: {
     headers: string | null;
     body: string | null;
+    raw_body: string | null;
   };
   response?: {
     headers: string | null;
@@ -107,6 +108,7 @@ export function buildChatLogExportPayload(log: ChatLog, sections: ChatLogExportS
     payload.request = {
       headers: toNullableString(log.RequestHeaders),
       body: toNullableString(log.RequestBody),
+      raw_body: toNullableString(log.RawRequestBody),
     };
   }
 

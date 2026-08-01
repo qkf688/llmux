@@ -32,7 +32,7 @@ func handleNonOKProviderResponse(
 		Error:  fmt.Sprintf("status: %d, body: %s", res.StatusCode, string(byteBody)),
 	}
 
-	if logRawOptions.RequestHeaders || logRawOptions.RequestBody || logRawOptions.ResponseHeaders || logRawOptions.RawResponseBody {
+	if logRawOptions.RequestHeaders || logRawOptions.RequestBody || logRawOptions.RawRequestBody || logRawOptions.ResponseHeaders || logRawOptions.RawResponseBody {
 		if logRawOptions.ResponseHeaders {
 			responseHeadersJSON, marshalErr := json.Marshal(res.Header)
 			if marshalErr != nil {
@@ -46,6 +46,9 @@ func handleNonOKProviderResponse(
 		}
 		if logRawOptions.RequestBody {
 			errorUpdate.RequestBody = logSnapshot.RequestBodyStr
+		}
+		if logRawOptions.RawRequestBody {
+			errorUpdate.RawRequestBody = logSnapshot.RawRequestBodyStr
 		}
 		if logRawOptions.RawResponseBody {
 			errorUpdate.RawResponseBody = string(byteBody)

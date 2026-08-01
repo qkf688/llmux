@@ -31,7 +31,7 @@ export function RequestResponseSection({
   }
 
   const hasRequestResponseContent = Boolean(
-    log.RequestHeaders || log.RequestBody || log.ResponseHeaders || log.RawResponseBody || log.ResponseBody
+    log.RequestHeaders || log.RequestBody || log.RawRequestBody || log.ResponseHeaders || log.RawResponseBody || log.ResponseBody
   );
 
   if (!hasRequestResponseContent) {
@@ -83,12 +83,23 @@ export function RequestResponseSection({
           </div>
         )}
 
-        {log.RequestBody && (
-          <div className="rounded-md border bg-muted/20 p-2 space-y-1 sm:p-3">
-            <p className="text-[11px] text-muted-foreground uppercase tracking-wide">
-              请求体 ({formatByteLength(log.RequestBody)})
+        {log.RawRequestBody && (
+          <div className="rounded-md border bg-blue-50 dark:bg-blue-950/20 p-2 space-y-1 sm:p-3">
+            <p className="text-[11px] text-blue-700 dark:text-blue-400 uppercase tracking-wide">
+              {log.RequestBody ? "原始请求体 - 转换前" : "请求体"} ({formatByteLength(log.RawRequestBody)})
             </p>
-            <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
+            <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-blue-900 dark:text-blue-200">
+              {log.RawRequestBody}
+            </pre>
+          </div>
+        )}
+
+        {log.RequestBody && (
+          <div className="rounded-md border bg-green-50 dark:bg-green-950/20 p-2 space-y-1 sm:p-3">
+            <p className="text-[11px] text-green-700 dark:text-green-400 uppercase tracking-wide">
+              {log.RawRequestBody ? "请求体 - 转换后" : "请求体"} ({formatByteLength(log.RequestBody)})
+            </p>
+            <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-green-900 dark:text-green-200">
               {log.RequestBody}
             </pre>
           </div>

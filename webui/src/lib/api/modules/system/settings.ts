@@ -3,6 +3,7 @@ import { apiRequest } from "../../core/client";
 export interface RawLogOptions {
   request_headers: boolean;
   request_body: boolean;
+  raw_request_body: boolean;
   response_headers: boolean;
   response_body: boolean;
   raw_response_body: boolean;

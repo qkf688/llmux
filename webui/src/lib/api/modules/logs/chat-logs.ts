@@ -34,6 +34,7 @@ export interface ChatLog {
   completion_tokens_details: CompletionTokensDetails;
   RequestHeaders?: string;
   RequestBody?: string;
+  RawRequestBody?: string;
   ResponseHeaders?: string;
   ResponseBody?: string;
   RawResponseBody?: string;

@@ -11,6 +11,7 @@ function buildRawRequestResponseUpdates(
       ...localSettings?.log_raw_request_response,
       request_headers: localSettings?.log_raw_request_response?.request_headers ?? false,
       request_body: localSettings?.log_raw_request_response?.request_body ?? false,
+      raw_request_body: localSettings?.log_raw_request_response?.raw_request_body ?? false,
       response_headers: localSettings?.log_raw_request_response?.response_headers ?? false,
       response_body: localSettings?.log_raw_request_response?.response_body ?? false,
       raw_response_body: localSettings?.log_raw_request_response?.raw_response_body ?? false,
@@ -71,13 +72,29 @@ export function RawRequestResponseSection({ localSettings, updateLocalSettings }
             <Label htmlFor="log-request-body" className="text-xs md:text-sm font-medium">
               请求体
             </Label>
-            <p className="text-xs text-muted-foreground">记录客户端发送的请求体内容（JSON、参数等）</p>
+            <p className="text-xs text-muted-foreground">记录发给上游的请求体（协议转换后的）</p>
           </div>
           <Switch
             id="log-request-body"
             checked={localSettings?.log_raw_request_response?.request_body ?? false}
             onCheckedChange={(checked) => {
               updateLocalSettings(buildRawRequestResponseUpdates(localSettings, { request_body: checked }));
+            }}
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <Label htmlFor="log-raw-request-body" className="text-xs md:text-sm font-medium">
+              原始请求体
+            </Label>
+            <p className="text-xs text-muted-foreground">记录客户端发来的原始请求体（协议转换前的，用于调试格式转换问题）</p>
+          </div>
+          <Switch
+            id="log-raw-request-body"
+            checked={localSettings?.log_raw_request_response?.raw_request_body ?? false}
+            onCheckedChange={(checked) => {
+              updateLocalSettings(buildRawRequestResponseUpdates(localSettings, { raw_request_body: checked }));
             }}
           />
         </div>

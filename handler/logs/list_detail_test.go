@@ -40,6 +40,7 @@ func TestGetRequestLogs_DefaultOmitRawFields(t *testing.T) {
 		Style:           "anthropic",
 		RequestHeaders:  `{"x":"y"}`,
 		RequestBody:     `{"hello":"world"}`,
+		RawRequestBody:  `{"raw":"client"}`,
 		ResponseHeaders: `{"a":"b"}`,
 		ResponseBody:    `{"ok":true}`,
 		RawResponseBody: `{"raw":true}`,
@@ -71,6 +72,9 @@ func TestGetRequestLogs_DefaultOmitRawFields(t *testing.T) {
 	}
 	if _, ok := item["RequestBody"]; ok {
 		t.Fatalf("expected RequestBody omitted in list response")
+	}
+	if _, ok := item["RawRequestBody"]; ok {
+		t.Fatalf("expected RawRequestBody omitted in list response")
 	}
 	if _, ok := item["ResponseHeaders"]; ok {
 		t.Fatalf("expected ResponseHeaders omitted in list response")
@@ -107,6 +111,7 @@ func TestGetRequestLogs_IncludeRawReturnsRawFields(t *testing.T) {
 		Style:           "openai",
 		RequestHeaders:  `{"x":"y"}`,
 		RequestBody:     `{"hello":"world"}`,
+		RawRequestBody:  `{"raw":"client"}`,
 		ResponseHeaders: `{"a":"b"}`,
 		ResponseBody:    `{"ok":true}`,
 		RawResponseBody: `{"raw":true}`,
@@ -139,6 +144,9 @@ func TestGetRequestLogs_IncludeRawReturnsRawFields(t *testing.T) {
 	if item["RequestBody"] != log.RequestBody {
 		t.Fatalf("RequestBody = %v, want %v", item["RequestBody"], log.RequestBody)
 	}
+	if item["RawRequestBody"] != log.RawRequestBody {
+		t.Fatalf("RawRequestBody = %v, want %v", item["RawRequestBody"], log.RawRequestBody)
+	}
 	if item["ResponseHeaders"] != log.ResponseHeaders {
 		t.Fatalf("ResponseHeaders = %v, want %v", item["ResponseHeaders"], log.ResponseHeaders)
 	}
@@ -161,6 +169,7 @@ func TestGetRequestLogDetail_ReturnsRawFields(t *testing.T) {
 		Style:           "openai",
 		RequestHeaders:  `{"x":"y"}`,
 		RequestBody:     `{"hello":"world"}`,
+		RawRequestBody:  `{"raw":"client"}`,
 		ResponseHeaders: `{"a":"b"}`,
 		ResponseBody:    `{"ok":true}`,
 		RawResponseBody: `{"raw":true}`,
@@ -189,6 +198,9 @@ func TestGetRequestLogDetail_ReturnsRawFields(t *testing.T) {
 	}
 	if payload.Data["RequestBody"] != log.RequestBody {
 		t.Fatalf("RequestBody = %v, want %v", payload.Data["RequestBody"], log.RequestBody)
+	}
+	if payload.Data["RawRequestBody"] != log.RawRequestBody {
+		t.Fatalf("RawRequestBody = %v, want %v", payload.Data["RawRequestBody"], log.RawRequestBody)
 	}
 	if payload.Data["ResponseHeaders"] != log.ResponseHeaders {
 		t.Fatalf("ResponseHeaders = %v, want %v", payload.Data["ResponseHeaders"], log.ResponseHeaders)

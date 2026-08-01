@@ -15,6 +15,7 @@ import {
 const needsLogDetail = (log: ChatLog) =>
   log.RequestHeaders === undefined &&
   log.RequestBody === undefined &&
+  log.RawRequestBody === undefined &&
   log.ResponseHeaders === undefined &&
   log.ResponseBody === undefined &&
   log.RawResponseBody === undefined;

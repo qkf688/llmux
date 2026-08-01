@@ -56,7 +56,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 	}
 
 	logRawOptions := getLogRawRequestResponse(input.Ctx)
-	logSnapshot := captureRequestLogSnapshot(logRawOptions, input.ReqMeta.Header, requestBody)
+	logSnapshot := captureRequestLogSnapshot(logRawOptions, input.ReqMeta.Header, requestBody, input.Before.raw)
 
 	req, err := input.ChatModel.BuildReq(reqCtx, header, input.ModelWithProvider.ProviderModel, requestBody)
 	if err != nil {
@@ -84,6 +84,9 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		}
 		if logRawOptions.RequestBody {
 			errorUpdate.RequestBody = logSnapshot.RequestBodyStr
+		}
+		if logRawOptions.RawRequestBody {
+			errorUpdate.RawRequestBody = logSnapshot.RawRequestBodyStr
 		}
 		updateChatLogByID(input.Ctx, logID, errorUpdate, "failed to update log status")
 		applyProviderFailureAdjustments(input.Ctx, input.ModelWithProvider.ID, input.Provider.Name, input.ModelWithProvider.ProviderModel)
@@ -120,6 +123,9 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 			}
 			if logRawOptions.RequestBody {
 				errorUpdate.RequestBody = logSnapshot.RequestBodyStr
+			}
+			if logRawOptions.RawRequestBody {
+				errorUpdate.RawRequestBody = logSnapshot.RawRequestBodyStr
 			}
 			if logRawOptions.RawResponseBody && rawResponseBodyStr != "" {
 				errorUpdate.RawResponseBody = rawResponseBodyStr

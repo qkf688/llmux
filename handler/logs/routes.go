@@ -7,6 +7,7 @@ import "github.com/gin-gonic/gin"
 func Register(rg gin.IRoutes) {
 	rg.GET("/logs", GetRequestLogs)
 	rg.GET("/logs/:id", GetRequestLogDetail)
+	rg.GET("/logs/:id/diff", GetRequestLogDiff)
 	rg.GET("/logs/:id/chat-io", GetChatIO)
 	rg.DELETE("/logs/batch", BatchDeleteLogs)
 	rg.DELETE("/logs/clear", ClearAllLogs)

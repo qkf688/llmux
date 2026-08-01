@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { formatCompactCount } from "@/lib/formatters";
 import type { DailyMetricsData, HourlyMetricsData } from "@/lib/api";
@@ -45,41 +46,6 @@ function nextPeriod(period: ChartPeriod): ChartPeriod {
   const currentIndex = periods.indexOf(period);
   const nextIndex = (currentIndex + 1) % periods.length;
   return periods[nextIndex];
-}
-
-function AnimatedNumber({
-  value,
-  duration = 900,
-}: {
-  value: number;
-  duration?: number;
-}) {
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    let startTime: number | null = null;
-
-    const animate = (timestamp: number) => {
-      if (!startTime) startTime = timestamp;
-      const progress = timestamp - startTime;
-      const ratio = Math.min(progress / duration, 1);
-      const next = ratio * value;
-      setCount(next);
-      if (progress < duration) {
-        requestAnimationFrame(animate);
-      }
-    };
-
-    requestAnimationFrame(animate);
-  }, [value, duration]);
-
-  const formatted = formatCompactCount(count);
-  return (
-    <span className="tabular-nums">
-      {formatted.value}
-      <span className="ml-0.5 text-sm text-muted-foreground">{formatted.unit}</span>
-    </span>
-  );
 }
 
 export function TrendCard({
@@ -161,7 +127,7 @@ export function TrendCard({
   };
 
   return (
-    <div className="rounded-3xl bg-card border pt-4 pb-0 text-card-foreground custom-shadow">
+    <div className="rounded-3xl bg-card border pt-4 pb-0 text-card-foreground shadow-3xl hover-border">
       <div className="px-4 pb-2 space-y-2">
         <div className="flex justify-between items-center">
           <h3 className="font-semibold text-base">趋势</h3>

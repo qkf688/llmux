@@ -30,4 +30,8 @@ nul
 .kilo/
 webui/tsconfig.tsbuildinfo
 
+# Playwright MCP 验证产物（截图/日志），不提交
+.playwright-mcp/
+ui-home-light.png
+
 .vscode

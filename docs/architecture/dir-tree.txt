@@ -65,6 +65,7 @@ llmux/
         ├── hooks
         │   └── api
         ├── lib
+        │   ├── animations
         │   └── api
         ├── routes
         │   ├── database

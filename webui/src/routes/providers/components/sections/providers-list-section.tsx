@@ -48,7 +48,7 @@ export function ProvidersListSection({
   onHandleDelete,
 }: ProvidersListSectionProps) {
   return (
-    <div className="flex-1 min-h-0 border rounded-md bg-background shadow-sm">
+    <div className="flex-1 min-h-0 border rounded-xl bg-background shadow-sm">
       {loading ? (
         <div className="flex h-full items-center justify-center">
           <Loading message="加载提供商列表" />

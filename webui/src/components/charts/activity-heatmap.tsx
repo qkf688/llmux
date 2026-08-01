@@ -311,7 +311,7 @@ export function ActivityHeatmapCard({
   );
 
   return (
-    <div className="rounded-3xl bg-card border text-card-foreground custom-shadow p-4">
+    <div className="rounded-3xl bg-card border text-card-foreground shadow-3xl p-4 hover-border">
       <div className="mb-3 flex items-center gap-2.5">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
           <Activity className="h-4 w-4" />

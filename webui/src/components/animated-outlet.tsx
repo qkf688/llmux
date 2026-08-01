@@ -1,32 +1,8 @@
-import { AnimatePresence, motion } from "motion/react";
-import { Suspense, useEffect, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { Suspense } from "react";
 import { useLocation, useOutlet } from "react-router-dom";
 import Loading from "@/components/loading";
-
-function usePrefersReducedMotion() {
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const handleChange = () => setPrefersReducedMotion(mediaQuery.matches);
-
-    handleChange();
-
-    if (typeof mediaQuery.addEventListener === "function") {
-      mediaQuery.addEventListener("change", handleChange);
-      return () => mediaQuery.removeEventListener("change", handleChange);
-    }
-
-    mediaQuery.addListener(handleChange);
-    return () => mediaQuery.removeListener(handleChange);
-  }, []);
-
-  return prefersReducedMotion;
-}
+import { EASING } from "@/lib/animations/fluid-transitions";
 
 function ContentFallback() {
   return (
@@ -39,11 +15,12 @@ function ContentFallback() {
 export function AnimatedOutlet() {
   const location = useLocation();
   const outlet = useOutlet();
-  const prefersReducedMotion = usePrefersReducedMotion();
+  // 与 home / AnimatedNumber 统一走 motion 的 useReducedMotion（静态快照，运行中切换系统设置不实时响应）
+  const prefersReducedMotion = useReducedMotion();
 
   const transition = prefersReducedMotion
     ? { duration: 0 }
-    : { duration: 0.18, ease: [0.2, 0, 0, 1] as const };
+    : { duration: 0.18, ease: EASING.easeOutExpo };
   const initial = prefersReducedMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 6 };
   const animate = { opacity: 1, y: 0 };
   const exit = prefersReducedMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -6 };

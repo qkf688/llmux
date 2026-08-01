@@ -27,6 +27,7 @@ webui/src/
 │   ├── providers|models|virtual-models|model-providers|...
 │   └── settings/
 ├── components/             # ui/、charts/、共享组件
+├── lib/animations/         # 动效 token 单一来源（EASING / NUMBER_ANIMATION_MS）
 ├── lib/api/                # core client + modules（catalog/logs/system）
 ├── hooks/                  # 含 hooks/api 查询封装
 ├── stores/                 # Zustand（含 core/updater）
@@ -46,6 +47,7 @@ routes/<page>/
 
 各子目录职责：
 - `routes/`：按业务页拆分；`route-config.ts` 为 path/layout/nav 单一数据源
+- `lib/animations/`：动效 token 单一来源（缓动曲线/动画时长）；新增动效优先引用，禁止组件散落魔法缓动值
 - `lib/api/`：HTTP 客户端与领域 API 函数
 - `stores/`：客户端状态；`Updater` / `Setter` 统一更新模式
 - `components/ui/`：Radix + Tailwind 基础组件

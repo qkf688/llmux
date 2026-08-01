@@ -1,13 +1,15 @@
 "use client"
 
 import type { ComponentType, ReactNode } from "react";
-import { useState, useEffect, Suspense, lazy } from "react";
-import { motion } from "motion/react";
+import { Suspense, lazy } from "react";
+import { motion, useReducedMotion } from "motion/react";
 import { Activity, BarChart3, Bot, CalendarDays, Database, HardDrive, MessageSquare } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 import Loading from "@/components/loading";
 import { useHomeMetrics } from "@/hooks/api/use-home";
 import { formatCompactCount } from "@/lib/formatters";
+import { EASING } from "@/lib/animations/fluid-transitions";
 
 // 懒加载图表组件
 const ModelRankingList = lazy(() => import("@/components/charts/model-ranking").then(module => ({ default: module.ModelRankingList })));
@@ -15,42 +17,20 @@ const ProviderRankCard = lazy(() => import("@/components/charts/provider-ranking
 const ActivityHeatmapCard = lazy(() => import("@/components/charts/activity-heatmap").then(module => ({ default: module.ActivityHeatmapCard })));
 const TrendCard = lazy(() => import("@/components/charts/trend-card").then(module => ({ default: module.TrendCard })));
 
-type AnimatedMetricValueProps = {
+// home 数字展示样式约定：大数字 + 单位（复用共享数字滚动组件）
+const AnimatedMetric = ({
+  value,
+  formatter,
+}: {
   value: number;
-  duration?: number;
   formatter?: (value: number) => { value: string; unit?: string };
-};
-
-const AnimatedMetricValue = ({ value, duration = 900, formatter }: AnimatedMetricValueProps) => {
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    let startTime: number | null = null;
-    const animateCount = (timestamp: number) => {
-      if (!startTime) startTime = timestamp;
-      const progress = timestamp - startTime;
-      const progressRatio = Math.min(progress / duration, 1);
-      const currentValue = progressRatio * value;
-      
-      setCount(currentValue);
-      
-      if (progress < duration) {
-        requestAnimationFrame(animateCount);
-      }
-    };
-    
-    requestAnimationFrame(animateCount);
-  }, [value, duration]);
-
-  const formatted = formatter ? formatter(count) : { value: Math.round(count).toLocaleString(), unit: "" };
-
-  return (
-    <div className="flex items-baseline gap-1 tabular-nums">
-      <div className="text-xl sm:text-2xl font-semibold leading-none">{formatted.value}</div>
-      {formatted.unit ? <div className="text-xs text-muted-foreground leading-none">{formatted.unit}</div> : null}
-    </div>
-  );
-};
+}) => (
+  <AnimatedNumber
+    value={value}
+    formatter={formatter}
+    className="text-xl sm:text-2xl font-semibold leading-none"
+  />
+);
 
 type IconComponent = ComponentType<{ className?: string }>;
 
@@ -65,22 +45,28 @@ function TopMetricCard({
   headerIcon: IconComponent;
   children: ReactNode;
 }) {
+  // 系统开启"减少动态"时跳过入场动画（motion 由 JS 驱动，CSS 兜底拦不住）
+  const shouldReduceMotion = useReducedMotion();
+
   return (
+    // motion 入场后会在元素上残留内联 transform，会覆盖 hover-lift 的 CSS hover 变换，
+    // 因此卡片样式与 hover 微交互放在内层非 motion 的 div 上，motion.section 只做入场动画载体。
     <motion.section
-      className="rounded-3xl bg-card border p-5 text-card-foreground flex flex-row items-center gap-4 custom-shadow"
-      initial={{ opacity: 0, y: 20, filter: "blur(8px)" }}
+      initial={shouldReduceMotion ? false : { opacity: 0, y: 20, filter: "blur(8px)" }}
       animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-      transition={{
-        duration: 0.5,
-        ease: [0.2, 0, 0, 1] as const,
-        delay: index * 0.08,
-      }}
+      transition={
+        shouldReduceMotion
+          ? { duration: 0 }
+          : { duration: 0.5, ease: EASING.easeOutExpo, delay: index * 0.08 }
+      }
     >
-      <div className="flex flex-col items-center justify-center gap-3 border-r border-border/50 pr-4 py-1 self-stretch">
-        <HeaderIcon className="w-4 h-4" />
-        <h3 className="font-medium text-sm [writing-mode:vertical-lr]">{title}</h3>
+      <div className="rounded-3xl bg-card border p-5 text-card-foreground flex flex-row items-center gap-4 shadow-3xl hover-lift hover-border">
+        <div className="flex flex-col items-center justify-center gap-3 border-r border-border/50 pr-4 py-1 self-stretch">
+          <HeaderIcon className="w-4 h-4" />
+          <h3 className="font-medium text-sm [writing-mode:vertical-lr]">{title}</h3>
+        </div>
+        <div className="flex flex-col gap-4 flex-1 min-w-0">{children}</div>
       </div>
-      <div className="flex flex-col gap-4 flex-1 min-w-0">{children}</div>
     </motion.section>
   );
 }
@@ -150,28 +136,28 @@ export default function Home() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <TopMetricCard index={0} title="今日" headerIcon={Activity}>
           <MetricItem icon={MessageSquare} label="请求" toneClassName="bg-primary/10 text-primary">
-            <AnimatedMetricValue value={todayMetrics.reqs} formatter={compactCountFormatter} />
+            <AnimatedMetric value={todayMetrics.reqs} formatter={compactCountFormatter} />
           </MetricItem>
           <MetricItem icon={Bot} label="Tokens" toneClassName="bg-[color:var(--chart-1)]/10 text-[color:var(--chart-1)]">
-            <AnimatedMetricValue value={todayMetrics.tokens} formatter={compactCountFormatter} />
+            <AnimatedMetric value={todayMetrics.tokens} formatter={compactCountFormatter} />
           </MetricItem>
         </TopMetricCard>
 
         <TopMetricCard index={1} title="本月" headerIcon={CalendarDays}>
           <MetricItem icon={MessageSquare} label="请求" toneClassName="bg-[color:var(--chart-6)]/10 text-[color:var(--chart-6)]">
-            <AnimatedMetricValue value={totalMetrics.reqs} formatter={compactCountFormatter} />
+            <AnimatedMetric value={totalMetrics.reqs} formatter={compactCountFormatter} />
           </MetricItem>
           <MetricItem icon={Bot} label="Tokens" toneClassName="bg-[color:var(--chart-2)]/10 text-[color:var(--chart-2)]">
-            <AnimatedMetricValue value={totalMetrics.tokens} formatter={compactCountFormatter} />
+            <AnimatedMetric value={totalMetrics.tokens} formatter={compactCountFormatter} />
           </MetricItem>
         </TopMetricCard>
 
         <TopMetricCard index={2} title="全部" headerIcon={BarChart3}>
           <MetricItem icon={MessageSquare} label="请求" toneClassName="bg-[color:var(--chart-9)]/10 text-[color:var(--chart-9)]">
-            <AnimatedMetricValue value={allMetrics.reqs} formatter={compactCountFormatter} />
+            <AnimatedMetric value={allMetrics.reqs} formatter={compactCountFormatter} />
           </MetricItem>
           <MetricItem icon={Bot} label="Tokens" toneClassName="bg-[color:var(--chart-10)]/10 text-[color:var(--chart-10)]">
-            <AnimatedMetricValue value={allMetrics.tokens} formatter={compactCountFormatter} />
+            <AnimatedMetric value={allMetrics.tokens} formatter={compactCountFormatter} />
           </MetricItem>
         </TopMetricCard>
 
@@ -182,7 +168,7 @@ export default function Home() {
             </div>
           </MetricItem>
           <MetricItem icon={HardDrive} label="使用率" toneClassName="bg-[color:var(--chart-4)]/10 text-[color:var(--chart-4)]">
-            <AnimatedMetricValue
+            <AnimatedMetric
               value={dbUsagePercent}
               formatter={(v) => ({ value: v.toFixed(1), unit: "%" })}
             />
@@ -201,7 +187,7 @@ export default function Home() {
       </div>}>
         <TrendCard dailyData={dailyMetrics} hourlyData={hourlyMetrics} />
       </Suspense>
-	        
+
       <Card className="py-4 gap-3 sm:py-6 sm:gap-6">
         <CardHeader className="px-3 sm:px-6">
           <CardTitle className="text-sm font-medium sm:text-base">模型数据分析</CardTitle>

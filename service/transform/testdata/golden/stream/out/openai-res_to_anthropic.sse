@@ -1,5 +1,5 @@
 event: message_start
-data: {"message":{"content":[],"id":"resp_123","model":"","role":"assistant","type":"message","usage":{"input_tokens":0,"output_tokens":0}},"type":"message_start"}
+data: {"message":{"content":[],"id":"resp_123","model":"","role":"assistant","type":"message","usage":{"input_tokens":1,"output_tokens":1}},"type":"message_start"}
 
 event: content_block_start
 data: {"content_block":{"text":"","type":"text"},"index":0,"type":"content_block_start"}

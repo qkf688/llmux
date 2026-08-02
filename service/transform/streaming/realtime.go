@@ -27,8 +27,8 @@ type realtimeStreamState struct {
 	// rawAccumulator 可选地累积上游原始 SSE 字节流（含 data: 前缀和 \n\n 分隔），
 	// 供日志记录 RawResponseBody 用。nil 时不累积（非日志场景避免内存开销）。
 	// 仅在转换 goroutine 内写入；goroutine 结束（pipe Close）后调用方才读取，无并发。
-	rawAccumulator      *strings.Builder
-	rawAccumulatorFull  bool
+	rawAccumulator     *strings.Builder
+	rawAccumulatorFull bool
 
 	// OpenAI Chat streaming meta (used when the output format is OpenAI Chat).
 	openAIID                                  string

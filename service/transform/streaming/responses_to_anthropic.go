@@ -63,6 +63,15 @@ func handleResponsesToAnthropicCreatedEvent(state *realtimeStreamState, ev *resp
 		modelName = ev.Response.Model
 	}
 
+	// usage：首个 chunk 自带 usage 时用真实值，否则兜底 1/1。
+	// 写死 0/0 会让依赖 message_start.usage.input_tokens 做早期计费的客户端拿到 0 误判。
+	// 真实 token 统计仍以 message_delta.usage 为准（completed 事件带最终值）。
+	inputTokens, outputTokens := 1, 1
+	if ev.Response != nil && ev.Response.Usage != nil {
+		inputTokens = int(ev.Response.Usage.InputTokens)
+		outputTokens = int(ev.Response.Usage.OutputTokens)
+	}
+
 	messageStart := map[string]interface{}{
 		"type": "message_start",
 		"message": map[string]interface{}{
@@ -72,8 +81,8 @@ func handleResponsesToAnthropicCreatedEvent(state *realtimeStreamState, ev *resp
 			"content": []interface{}{},
 			"model":   modelName,
 			"usage": map[string]interface{}{
-				"input_tokens":  0,
-				"output_tokens": 0,
+				"input_tokens":  inputTokens,
+				"output_tokens": outputTokens,
 			},
 		},
 	}
@@ -85,6 +94,17 @@ func handleResponsesToAnthropicOutputItemAddedEvent(state *realtimeStreamState, 
 		return nil
 	}
 	itemType := ev.Item.Type
+
+	// message 是容器型 item（content 数组为空，正文由后续 output_text.delta 逐条送达）。
+	// 若在此处急切开 text content_block，遇到推理模型 reasoning 先于 content 到达时，
+	// reasoning 的 output_item.added 会把这个尚未收到任何文本的空 text block 提前 stop，
+	// 导致后续正文 text_delta 全发到已关闭的 block 上（log-33 bug）。
+	// 因此 message 只预留 output_index → block_index 映射，text block 改由第一个
+	// output_text.delta 惰性开启（见 ensureAnthropicTextBlockStarted）。
+	if itemType == "message" {
+		getOrAllocAnthropicBlockIndex(state, ev.OutputIndex)
+		return nil
+	}
 
 	blockIndex := getOrAllocAnthropicBlockIndex(state, ev.OutputIndex)
 	if err := closeAnthropicActiveBlockIfNeeded(state, blockIndex); err != nil {
@@ -124,15 +144,48 @@ func handleResponsesToAnthropicOutputItemAddedEvent(state *realtimeStreamState, 
 	return nil
 }
 
+// ensureAnthropicTextBlockStarted 惰性开启 text content_block：
+// 若该 block 尚未开启（message item 只预留了映射，未发 content_block_start），
+// 先关闭当前 active block（如 thinking），再发 content_block_start(text)。
+// 若该 block 已是 active，直接返回（已开启）。
+func ensureAnthropicTextBlockStarted(state *realtimeStreamState, blockIndex int) error {
+	if state.anthropicActiveBlockIndex == blockIndex {
+		return nil
+	}
+	if err := closeAnthropicActiveBlockIfNeeded(state, blockIndex); err != nil {
+		return err
+	}
+	blockStart := map[string]interface{}{
+		"type":  "content_block_start",
+		"index": blockIndex,
+		"content_block": map[string]interface{}{
+			"type": "text",
+			"text": "",
+		},
+	}
+	if err := writeRealtimeEventJSONData(state, "content_block_start", blockStart); err != nil {
+		return err
+	}
+	state.anthropicActiveBlockIndex = blockIndex
+	return nil
+}
+
 func handleResponsesToAnthropicOutputTextDeltaEvent(state *realtimeStreamState, ev *responses.ResponsesStreamEvent) error {
 	delta := ev.Delta
 	if delta == "" {
 		return nil
 	}
 
+	// text block 惰性开启：message item 的 output_item.added 只预留映射，
+	// 第一个 output_text.delta 到达时才发 content_block_start(text)。
+	blockIndex := getOrAllocAnthropicBlockIndex(state, ev.OutputIndex)
+	if err := ensureAnthropicTextBlockStarted(state, blockIndex); err != nil {
+		return err
+	}
+
 	contentDelta := map[string]interface{}{
 		"type":  "content_block_delta",
-		"index": getAnthropicBlockIndex(state, ev.OutputIndex),
+		"index": blockIndex,
 		"delta": map[string]interface{}{
 			"type": "text_delta",
 			"text": delta,

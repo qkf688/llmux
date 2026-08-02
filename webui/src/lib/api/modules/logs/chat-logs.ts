@@ -109,22 +109,6 @@ export async function getLogDetail(logId: number): Promise<ChatLog> {
   return apiRequest<ChatLog>(`/logs/${logId}`);
 }
 
-export interface DiffEntry {
-  path: string;
-  raw: unknown;
-  after: unknown;
-}
-
-export interface DiffResult {
-  lost_fields: DiffEntry[];
-  added_fields: DiffEntry[];
-  changed_values: DiffEntry[];
-}
-
-export async function getLogDiff(logId: number): Promise<DiffResult> {
-  return apiRequest<DiffResult>(`/logs/${logId}/diff`);
-}
-
 export async function getChatIO(logId: number): Promise<ChatIO> {
   return apiRequest<ChatIO>(`/logs/${logId}/chat-io`);
 }

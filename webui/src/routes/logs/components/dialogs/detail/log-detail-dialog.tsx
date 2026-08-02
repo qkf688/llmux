@@ -10,7 +10,6 @@ import {
 } from "../../../utils/formatters";
 import { DetailCard } from "./detail-card";
 import { RequestResponseSection } from "./request-response-section";
-import { TransformDiffSection } from "./transform-diff-section";
 import type { ChatLogExportSections } from "../../../utils/export-log";
 
 type LogDetailDialogProps = {
@@ -142,8 +141,6 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDet
               loading={detailLoading}
               onExportLog={onExportLog}
             />
-
-            <TransformDiffSection log={detailLog} />
 
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">性能指标</p>

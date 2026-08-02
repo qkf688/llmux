@@ -21,11 +21,10 @@
 ## 3. 内部结构
 
 ```
-handler/logs/          # 列表、详情、diff、chat-io、删除、enrich
+handler/logs/          # 列表、详情、chat-io、删除、enrich
 handler/metrics/       # dashboard 计数与时序
 service/chat/*record* / chat_log_storage.go  # 日志落库编排
 service/chatstats/     # Stats* 写入组合（叶子包，经 StatsRepo）
-common/jsondiff.go     # 纯 JSON 深度 diff 工具（供 logs diff handler 调用）
 repository/chat_log.go
 repository/stats.go    # 六张 Stats* 表的 upsert 与聚合读
 models.ChatLog / ChatIO / Stats*

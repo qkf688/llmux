@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/qkf688/llmux/models"
@@ -14,7 +15,10 @@ import (
 // RecordLog 是后处理编排器：processer 解析 → stats 统计 → 日志落库 → raw 字段清理。
 // 各关注点的实现分散在 stats.go / chat_record_persist.go（含 raw 清理），
 // 本函数仅负责按正确顺序串联并处理错误传播。
-func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, processer Processer, logId uint, before Before, ioLog bool, providerName string) {
+//
+// rawAccumulator 携带流式响应的原始 SSE 累积体（流结束后已写满），供写入 RawResponseBody；
+// 非流式或未开启记录时为 nil。
+func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, processer Processer, logId uint, before Before, ioLog bool, providerName string, rawAccumulator *strings.Builder) {
 	recordFunc := func() error {
 		defer reader.Close()
 
@@ -61,6 +65,12 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 		logRawOptions := getLogRawRequestResponse(ctx)
 		logRawErrorsOnly := getLogRawRequestResponseErrorsOnly(ctx)
 		rawLogEnabled := logRawOptions.RequestHeaders || logRawOptions.RequestBody || logRawOptions.RawRequestBody || logRawOptions.ResponseHeaders || logRawOptions.ResponseBody || logRawOptions.RawResponseBody
+
+		// 流式响应的原始 body 由转换层累积器提供（非流式已在 chat_attempt 层写入）。
+		// goroutine 已结束（processer 读到 EOF = 流结束），此处读取累积器无并发。
+		if logRawOptions.RawResponseBody && rawAccumulator != nil && logUpdate.RawResponseBody == "" {
+			logUpdate.RawResponseBody = rawAccumulator.String()
+		}
 
 		// IO 落库：更新 ChatLog + 可选写 ChatIO。
 		if err := persistChatLog(ctx, logId, logUpdate, before, output, ioLog, logRawOptions); err != nil {

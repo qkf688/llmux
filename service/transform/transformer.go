@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/qkf688/llmux/models"
 )
@@ -97,7 +98,7 @@ func (tm *TransformerManager) ProcessRequest(ctx context.Context, rawBody []byte
 }
 
 // ProcessResponse 处理响应转换
-func (tm *TransformerManager) ProcessResponse(response *http.Response) (*http.Response, error) {
+func (tm *TransformerManager) ProcessResponse(response *http.Response, rawAccumulator *strings.Builder) (*http.Response, error) {
 	// 上游供应商格式 -> 统一格式 -> 客户端格式
-	return TransformProviderResponse(response, tm.providerType, tm.clientType)
+	return TransformProviderResponse(response, tm.providerType, tm.clientType, rawAccumulator)
 }

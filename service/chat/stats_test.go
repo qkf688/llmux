@@ -74,7 +74,7 @@ func TestDisableAllLogs_StillUpdatesStats(t *testing.T) {
 		return &models.ChatLog{Usage: models.Usage{TotalTokens: 123}}, &models.OutputUnion{OfString: `{"ok":true}`}, nil
 	}
 
-	RecordLog(context.Background(), time.Now(), io.NopCloser(strings.NewReader("x")), proc, 0, Before{Stream: false, raw: []byte(`{}`)}, false, "p1")
+	RecordLog(context.Background(), time.Now(), io.NopCloser(strings.NewReader("x")), proc, 0, Before{Stream: false, raw: []byte(`{}`)}, false, "p1", nil)
 
 	var afterDaily models.StatsDaily
 	if err := models.DB.First(&afterDaily, "date = ?", today).Error; err != nil {

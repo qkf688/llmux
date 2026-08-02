@@ -57,6 +57,12 @@ func handleResponsesToAnthropicCreatedEvent(state *realtimeStreamState, ev *resp
 		responseID = ev.ResponseID
 	}
 
+	// model 透传上游返回值，没有时用空字符串（Anthropic 客户端可容忍缺省）。
+	modelName := ""
+	if ev.Response != nil {
+		modelName = ev.Response.Model
+	}
+
 	messageStart := map[string]interface{}{
 		"type": "message_start",
 		"message": map[string]interface{}{
@@ -64,7 +70,7 @@ func handleResponsesToAnthropicCreatedEvent(state *realtimeStreamState, ev *resp
 			"type":    "message",
 			"role":    "assistant",
 			"content": []interface{}{},
-			"model":   "responses-api",
+			"model":   modelName,
 			"usage": map[string]interface{}{
 				"input_tokens":  0,
 				"output_tokens": 0,

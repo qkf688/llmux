@@ -31,7 +31,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","object":"respons
 		Body: io.NopCloser(strings.NewReader(responsesStream)),
 	}
 
-	result, err := TransformResponseRealtime(response, "openai-res", "openai")
+	result, err := TransformResponseRealtime(response, "openai-res", "openai", nil)
 	if err != nil {
 		t.Fatalf("转换失败: %v", err)
 	}
@@ -118,7 +118,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","object":"respons
 		Body: io.NopCloser(strings.NewReader(responsesStream)),
 	}
 
-	result, err := TransformResponseRealtime(response, "openai-res", "openai")
+	result, err := TransformResponseRealtime(response, "openai-res", "openai", nil)
 	if err != nil {
 		t.Fatalf("转换失败: %v", err)
 	}
@@ -176,7 +176,7 @@ data: {"type":"message_stop"}
 		Body: io.NopCloser(strings.NewReader(anthropicStream)),
 	}
 
-	result, err := TransformResponseRealtime(response, "anthropic", "openai")
+	result, err := TransformResponseRealtime(response, "anthropic", "openai", nil)
 	if err != nil {
 		t.Fatalf("转换失败: %v", err)
 	}
@@ -260,7 +260,7 @@ data: [DONE]
 		Body: io.NopCloser(strings.NewReader(openaiStream)),
 	}
 
-	result, err := TransformResponseRealtime(response, "openai", "anthropic")
+	result, err := TransformResponseRealtime(response, "openai", "anthropic", nil)
 	if err != nil {
 		t.Fatalf("转换失败: %v", err)
 	}

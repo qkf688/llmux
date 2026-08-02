@@ -69,7 +69,7 @@ func TestGolden_ResponseConversions(t *testing.T) {
 						Body: io.NopCloser(bytes.NewReader(in)),
 					}
 
-					outResp, err := TransformProviderResponse(resp, from, to)
+					outResp, err := TransformProviderResponse(resp, from, to, nil)
 					if err != nil {
 						t.Fatalf("TransformProviderResponse(%s->%s) failed: %v", from, to, err)
 					}
@@ -152,7 +152,7 @@ func TestGolden_StreamConversions(t *testing.T) {
 							Body: io.NopCloser(bytes.NewReader(c.in)),
 						}
 
-						outResp, err := TransformProviderResponse(resp, from, to)
+						outResp, err := TransformProviderResponse(resp, from, to, nil)
 						if err != nil {
 							t.Fatalf("TransformProviderResponse(%s->%s) failed: %v", from, to, err)
 						}

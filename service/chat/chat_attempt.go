@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/qkf688/llmux/models"
@@ -102,9 +103,16 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 
 	rawResponseBodyStr := captureRawResponseBody(logRawOptions, res)
 
+	// 流式响应的原始 body 不能在入口读取（会阻塞流），改用累积器在转换 goroutine 内旁路记录。
+	// 仅在需要转换且开启了 RawResponseBody 记录时创建累积器。
+	var rawAccumulator *strings.Builder
+	if logRawOptions.RawResponseBody && rawResponseBodyStr == "" {
+		rawAccumulator = &strings.Builder{}
+	}
+
 	if input.Style != input.Provider.Type {
 		tm := transform.NewTransformerManager(input.Style, input.Provider.Type)
-		convertedRes, err := tm.ProcessResponse(res)
+		convertedRes, err := tm.ProcessResponse(res, rawAccumulator)
 		if err != nil {
 			errorUpdate := models.ChatLog{
 				Status: "error",
@@ -148,8 +156,9 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 	adjustment.ResetConsecutiveFailures(input.Ctx, input.ModelWithProvider.ID)
 	adjustment.ApplySuccessAdjustments(input.Ctx, input.ModelWithProvider.ID)
 	return singleProviderAttemptResult{
-		Response: res,
-		LogID:    logID,
-		Success:  true,
+		Response:       res,
+		LogID:          logID,
+		Success:        true,
+		RawAccumulator: rawAccumulator,
 	}
 }

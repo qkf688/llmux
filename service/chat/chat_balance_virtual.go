@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/qkf688/llmux/models"
@@ -15,7 +16,7 @@ import (
 	"github.com/samber/lo"
 )
 
-func balanceChatVirtual(ctx context.Context, start time.Time, style string, before Before, providersWithMeta ProvidersWithMeta, reqMeta models.ReqMeta) (*http.Response, uint, string, error) {
+func balanceChatVirtual(ctx context.Context, start time.Time, style string, before Before, providersWithMeta ProvidersWithMeta, reqMeta models.ReqMeta) (*http.Response, uint, string, *strings.Builder, error) {
 	slog.Info("virtual model request", "virtual_model", providersWithMeta.VirtualModelName, "strategy", providersWithMeta.VirtualStrategy, "real_models_count", len(providersWithMeta.OrderedRealModels))
 
 	globalTimer := time.NewTimer(time.Second * time.Duration(providersWithMeta.TimeOut))
@@ -24,9 +25,9 @@ func balanceChatVirtual(ctx context.Context, start time.Time, style string, befo
 	for modelIndex, orderedModel := range providersWithMeta.OrderedRealModels {
 		select {
 		case <-ctx.Done():
-			return nil, 0, "", ctx.Err()
+			return nil, 0, "", nil, ctx.Err()
 		case <-globalTimer.C:
-			return nil, 0, "", errors.New("virtual model global timeout")
+			return nil, 0, "", nil, errors.New("virtual model global timeout")
 		default:
 		}
 
@@ -76,10 +77,10 @@ func balanceChatVirtual(ctx context.Context, start time.Time, style string, befo
 			select {
 			case <-ctx.Done():
 				close(retryLog)
-				return nil, 0, "", ctx.Err()
+				return nil, 0, "", nil, ctx.Err()
 			case <-globalTimer.C:
 				close(retryLog)
-				return nil, 0, "", errors.New("virtual model global timeout")
+				return nil, 0, "", nil, errors.New("virtual model global timeout")
 			default:
 			}
 
@@ -123,7 +124,7 @@ func balanceChatVirtual(ctx context.Context, start time.Time, style string, befo
 
 			if result.FatalErr != nil {
 				close(retryLog)
-				return nil, 0, "", result.FatalErr
+				return nil, 0, "", nil, result.FatalErr
 			}
 			if result.Success {
 				sel, _ := virtualmodel.GetSelector(providersWithMeta.VirtualStrategy)
@@ -132,7 +133,7 @@ func balanceChatVirtual(ctx context.Context, start time.Time, style string, befo
 				}
 				close(retryLog)
 				slog.Info("virtual model request succeeded", "virtual_model", providersWithMeta.VirtualModelName, "real_model", realModel.Name, "provider", provider.Name)
-				return result.Response, result.LogID, provider.Name, nil
+				return result.Response, result.LogID, provider.Name, result.RawAccumulator, nil
 			}
 
 			applyProviderSelectionResult(weightItems, priorityItems, *id, result)
@@ -142,5 +143,5 @@ func balanceChatVirtual(ctx context.Context, start time.Time, style string, befo
 		slog.Warn("all providers exhausted for real model, trying next", "real_model", realModel.Name)
 	}
 
-	return nil, 0, "", errors.New("all real models exhausted for virtual model")
+	return nil, 0, "", nil, errors.New("all real models exhausted for virtual model")
 }

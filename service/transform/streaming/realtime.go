@@ -24,6 +24,12 @@ type realtimeStreamState struct {
 	accumulatedText      string
 	accumulatedReasoning string
 
+	// rawAccumulator 可选地累积上游原始 SSE 字节流（含 data: 前缀和 \n\n 分隔），
+	// 供日志记录 RawResponseBody 用。nil 时不累积（非日志场景避免内存开销）。
+	// 仅在转换 goroutine 内写入；goroutine 结束（pipe Close）后调用方才读取，无并发。
+	rawAccumulator      *strings.Builder
+	rawAccumulatorFull  bool
+
 	// OpenAI Chat streaming meta (used when the output format is OpenAI Chat).
 	openAIID                                  string
 	openAIModel                               string
@@ -57,20 +63,22 @@ type realtimeStreamState struct {
 
 // TransformResponseRealtime performs real-time streaming response conversion
 // directly from the response Body reader.
-func TransformResponseRealtime(response *http.Response, providerType, clientType string) (*http.Response, error) {
+//
+// rawAccumulator 可选地累积上游原始 SSE 字节流；nil 时不累积。
+func TransformResponseRealtime(response *http.Response, providerType, clientType string, rawAccumulator *strings.Builder) (*http.Response, error) {
 	// Reduce N×N streaming conversions to N+N by routing through OpenAI Responses
 	// streaming format when neither side is already using it.
 	//
 	// provider -> openai-res (canonical) -> client
 	if providerType != "openai-res" && clientType != "openai-res" {
-		return transformResponseRealtimeViaResponses(response, providerType, clientType)
+		return transformResponseRealtimeViaResponses(response, providerType, clientType, rawAccumulator)
 	}
 
 	pr, pw := io.Pipe()
 
 	go func() {
 		defer response.Body.Close()
-		err := transformStreamBodyRealtime(response.Body, pw, providerType, clientType)
+		err := transformStreamBodyRealtime(response.Body, pw, providerType, clientType, rawAccumulator)
 		if err != nil {
 			pw.CloseWithError(err)
 			return
@@ -92,14 +100,15 @@ func TransformResponseRealtime(response *http.Response, providerType, clientType
 	return newResponse, nil
 }
 
-func transformResponseRealtimeViaResponses(response *http.Response, providerType, clientType string) (*http.Response, error) {
+func transformResponseRealtimeViaResponses(response *http.Response, providerType, clientType string, rawAccumulator *strings.Builder) (*http.Response, error) {
 	midReader, midWriter := io.Pipe()
 	outReader, outWriter := io.Pipe()
 
 	go func() {
 		defer response.Body.Close()
 
-		err := transformStreamBodyRealtime(response.Body, midWriter, providerType, "openai-res")
+		// 第一个 goroutine 读上游原始 body，传累积器；第二个 goroutine 读中间格式，不累积。
+		err := transformStreamBodyRealtime(response.Body, midWriter, providerType, "openai-res", rawAccumulator)
 		if err != nil {
 			midWriter.CloseWithError(err)
 			return
@@ -110,7 +119,7 @@ func transformResponseRealtimeViaResponses(response *http.Response, providerType
 	go func() {
 		defer midReader.Close()
 
-		err := transformStreamBodyRealtime(midReader, outWriter, "openai-res", clientType)
+		err := transformStreamBodyRealtime(midReader, outWriter, "openai-res", clientType, nil)
 		if err != nil {
 			outWriter.CloseWithError(err)
 			return
@@ -132,7 +141,7 @@ func transformResponseRealtimeViaResponses(response *http.Response, providerType
 	return newResponse, nil
 }
 
-func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, providerType, clientType string) error {
+func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, providerType, clientType string, rawAccumulator *strings.Builder) error {
 	scanner := bufio.NewScanner(src)
 	// Increase initial buffer to 64KB, and cap at maxSSEEventSize (avoid "token too long").
 	scanner.Buffer(make([]byte, 0, 64*1024), maxSSEEventSize)
@@ -142,6 +151,7 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, provider
 		providerType:              providerType,
 		clientType:                clientType,
 		anthropicActiveBlockIndex: -1,
+		rawAccumulator:            rawAccumulator,
 	}
 
 	var eventName string
@@ -166,6 +176,9 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, provider
 			state.currentEvent = ""
 			return nil
 		}
+
+		// 累积原始 SSE 字节流供日志记录 RawResponseBody。达到上限后停止累积。
+		accumulateRawSSE(state, eventName, data)
 
 		if err := dispatchRealtimeStreamChunk(state, data); err != nil {
 			return err
@@ -292,4 +305,37 @@ func nextRealtimeSequence(state *realtimeStreamState) int {
 	seq := state.sequenceNumber
 	state.sequenceNumber++
 	return seq
+}
+
+// accumulateRawSSE 把原始 SSE event 追加到累积器，达到 maxRawAccumulatorSize 后停止。
+// 累积格式与上游原始 SSE 一致：event 行（若有）+ data 行 + 空行，便于事后整段查看或解析。
+func accumulateRawSSE(state *realtimeStreamState, eventName, data string) {
+	if state.rawAccumulator == nil || state.rawAccumulatorFull {
+		return
+	}
+	// 估算本次追加大小：event 行 + data 行 + 空行。
+	chunk := 0
+	if eventName != "" {
+		chunk += len("event: ") + len(eventName) + 1
+	}
+	chunk += len("data: ") + len(data) + 2 // "data: <data>\n\n"
+
+	if state.rawAccumulator.Len()+chunk > maxRawAccumulatorSize {
+		state.rawAccumulatorFull = true
+		slog.Warn("raw response body accumulator reached size limit, truncating",
+			"limit", maxRawAccumulatorSize,
+			"provider_type", state.providerType,
+			"client_type", state.clientType,
+		)
+		return
+	}
+
+	if eventName != "" {
+		state.rawAccumulator.WriteString("event: ")
+		state.rawAccumulator.WriteString(eventName)
+		state.rawAccumulator.WriteByte('\n')
+	}
+	state.rawAccumulator.WriteString("data: ")
+	state.rawAccumulator.WriteString(data)
+	state.rawAccumulator.WriteString("\n\n")
 }

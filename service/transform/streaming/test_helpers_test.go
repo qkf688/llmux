@@ -49,7 +49,7 @@ func runRealtimeTransform(t *testing.T, in, from, to string) []sseEvent {
 		Body:       io.NopCloser(strings.NewReader(in)),
 	}
 
-	out, err := TransformResponseRealtime(resp, from, to)
+	out, err := TransformResponseRealtime(resp, from, to, nil)
 	if err != nil {
 		t.Fatalf("TransformResponseRealtime(%s->%s) 失败: %v", from, to, err)
 	}

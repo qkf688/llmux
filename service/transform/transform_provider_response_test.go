@@ -34,7 +34,7 @@ func TestTransformProviderResponse_RewritesContentLengthAndEncodingHeaders(t *te
 	resp.Header.Set("Content-Encoding", "gzip")
 	resp.Header.Set("Transfer-Encoding", "chunked")
 
-	converted, err := TransformProviderResponse(resp, "openai", "openai-res")
+	converted, err := TransformProviderResponse(resp, "openai", "openai-res", nil)
 	if err != nil {
 		t.Fatalf("TransformProviderResponse returned error: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestTransformProviderResponse_OpenAIToAnthropic_MapsMultimodalImage(t *test
 	}
 	resp.Header.Set("Content-Type", "application/json")
 
-	converted, err := TransformProviderResponse(resp, "openai", "anthropic")
+	converted, err := TransformProviderResponse(resp, "openai", "anthropic", nil)
 	if err != nil {
 		t.Fatalf("TransformProviderResponse returned error: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestTransformProviderResponse_SameTypePassthrough(t *testing.T) {
 		Body:       io.NopCloser(bytes.NewReader(body)),
 	}
 
-	converted, err := TransformProviderResponse(resp, "openai", "openai")
+	converted, err := TransformProviderResponse(resp, "openai", "openai", nil)
 	if err != nil {
 		t.Fatalf("TransformProviderResponse returned error: %v", err)
 	}
@@ -166,11 +166,11 @@ func TestTransformProviderResponse_UnknownTypesFallBackToOpenAI(t *testing.T) {
 		"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}
 	}`)
 
-	unknownProvider, err := TransformProviderResponse(newJSONResponse(openaiBody), "unknown-provider", "openai-res")
+	unknownProvider, err := TransformProviderResponse(newJSONResponse(openaiBody), "unknown-provider", "openai-res", nil)
 	if err != nil {
 		t.Fatalf("TransformProviderResponse with unknown provider type returned error: %v", err)
 	}
-	openAIProvider, err := TransformProviderResponse(newJSONResponse(openaiBody), "openai", "openai-res")
+	openAIProvider, err := TransformProviderResponse(newJSONResponse(openaiBody), "openai", "openai-res", nil)
 	if err != nil {
 		t.Fatalf("TransformProviderResponse with openai provider type returned error: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestTransformProviderResponse_UnknownTypesFallBackToOpenAI(t *testing.T) {
 	openAIProviderBody := mustReadResponseBody(t, openAIProvider)
 	assertJSONEqual(t, unknownProviderBody, openAIProviderBody)
 
-	unknownClient, err := TransformProviderResponse(newJSONResponse(openaiBody), "openai", "unknown-client")
+	unknownClient, err := TransformProviderResponse(newJSONResponse(openaiBody), "openai", "unknown-client", nil)
 	if err != nil {
 		t.Fatalf("TransformProviderResponse with unknown client type returned error: %v", err)
 	}

@@ -10,7 +10,7 @@ import (
 	"github.com/qkf688/llmux/service/transform/streaming"
 )
 
-func TransformProviderResponse(response *http.Response, providerType, clientType string) (*http.Response, error) {
+func TransformProviderResponse(response *http.Response, providerType, clientType string, rawAccumulator *strings.Builder) (*http.Response, error) {
 	if providerType == clientType {
 		return response, nil
 	}
@@ -21,7 +21,7 @@ func TransformProviderResponse(response *http.Response, providerType, clientType
 
 	if isStream {
 		// 流式响应：直接从 Body 读取器进行实时转换
-		return streaming.TransformResponseRealtime(response, providerType, clientType)
+		return streaming.TransformResponseRealtime(response, providerType, clientType, rawAccumulator)
 	}
 
 	// 非流式响应：读取完整响应体后转换

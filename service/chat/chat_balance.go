@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/qkf688/llmux/models"
@@ -12,7 +13,7 @@ import (
 	"github.com/qkf688/llmux/service/chatcore"
 )
 
-func BalanceChat(ctx context.Context, start time.Time, style string, before Before, providersWithMeta ProvidersWithMeta, reqMeta models.ReqMeta) (*http.Response, uint, string, error) {
+func BalanceChat(ctx context.Context, start time.Time, style string, before Before, providersWithMeta ProvidersWithMeta, reqMeta models.ReqMeta) (*http.Response, uint, string, *strings.Builder, error) {
 	slog.Info("request", "model", before.Model, "stream", before.Stream, "tool_call", before.toolCall, "structured_output", before.structuredOutput, "image", before.image)
 
 	// 检查是否是虚拟模型
@@ -34,15 +35,15 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 	for retry := range providersWithMeta.MaxRetry {
 		select {
 		case <-ctx.Done():
-			return nil, 0, "", ctx.Err()
+			return nil, 0, "", nil, ctx.Err()
 		case <-timer.C:
-			return nil, 0, "", errors.New("retry time out")
+			return nil, 0, "", nil, errors.New("retry time out")
 		default:
 		}
 
 		id, err := chatcore.SelectByPriorityAndWeight(weightItems, priorityItems)
 		if err != nil {
-			return nil, 0, "", err
+			return nil, 0, "", nil, err
 		}
 
 		modelWithProvider, ok := providersWithMeta.ModelWithProviderMap[*id]
@@ -54,7 +55,7 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 		provider := providerMap[modelWithProvider.ProviderID]
 		chatModel, err := providers.New(provider.Type, provider.Config, provider.Proxy)
 		if err != nil {
-			return nil, 0, "", err
+			return nil, 0, "", nil, err
 		}
 
 		client := providers.GetClientWithProxy(time.Second*time.Duration(providersWithMeta.TimeOut), chatModel.GetProxy())
@@ -76,14 +77,14 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 		}, retryLog)
 
 		if result.FatalErr != nil {
-			return nil, 0, "", result.FatalErr
+			return nil, 0, "", nil, result.FatalErr
 		}
 		if result.Success {
-			return result.Response, result.LogID, provider.Name, nil
+			return result.Response, result.LogID, provider.Name, result.RawAccumulator, nil
 		}
 
 		applyProviderSelectionResult(weightItems, priorityItems, *id, result)
 	}
 
-	return nil, 0, "", errors.New("maximum retry attempts reached")
+	return nil, 0, "", nil, errors.New("maximum retry attempts reached")
 }

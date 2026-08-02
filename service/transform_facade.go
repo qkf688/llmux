@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/transform"
@@ -39,8 +40,8 @@ func TransformUnifiedToAnthropic(unified *models.UnifiedRequest) ([]byte, error)
 	return transform.TransformUnifiedToAnthropic(unified)
 }
 
-func TransformProviderResponse(response *http.Response, providerType, clientType string) (*http.Response, error) {
-	return transform.TransformProviderResponse(response, providerType, clientType)
+func TransformProviderResponse(response *http.Response, providerType, clientType string, rawAccumulator *strings.Builder) (*http.Response, error) {
+	return transform.TransformProviderResponse(response, providerType, clientType, rawAccumulator)
 }
 
 func ValidateUnifiedRequest(req *models.UnifiedRequest) error {

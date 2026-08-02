@@ -6,15 +6,14 @@ import (
 	"github.com/qkf688/llmux/middleware"
 )
 
-// RegisterV1 注册 /v1 协议路由（OpenAI / Anthropic）。
+// RegisterV1 注册 /v1 协议路由（OpenAI / Anthropic），使用 per-user API key 鉴权。
 func RegisterV1(rg *gin.RouterGroup, d Deps) {
-	authOpenAI := middleware.Auth(d.Token)
-	authAnthropic := middleware.AuthAnthropic(d.Token)
+	authAPIKey := middleware.AuthAPIKey(Repos().User)
 
-	rg.GET("/models", authOpenAI, v1.ModelsHandler)
-	rg.POST("/chat/completions", authOpenAI, v1.ChatCompletionsHandler)
-	rg.POST("/responses", authOpenAI, v1.ResponsesHandler)
-	rg.POST("/messages", authAnthropic, v1.Messages)
+	rg.GET("/models", authAPIKey, v1.ModelsHandler)
+	rg.POST("/chat/completions", authAPIKey, v1.ChatCompletionsHandler)
+	rg.POST("/responses", authAPIKey, v1.ResponsesHandler)
+	rg.POST("/messages", authAPIKey, v1.Messages)
 	// TODO
-	rg.POST("/count_tokens", authAnthropic)
+	rg.POST("/count_tokens", authAPIKey)
 }

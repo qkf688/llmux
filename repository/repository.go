@@ -25,6 +25,7 @@ type Repositories struct {
 	HealthCheckLog      HealthCheckLogRepo
 	ModelSyncLog        ModelSyncLogRepo
 	Stats               StatsRepo
+	User                UserRepo
 }
 
 // New 根据 *gorm.DB 创建所有 Repository 实例。
@@ -44,6 +45,7 @@ func New(db *gorm.DB) *Repositories {
 		HealthCheckLog:      NewHealthCheckLogRepo(db),
 		ModelSyncLog:        NewModelSyncLogRepo(db),
 		Stats:               NewStatsRepo(db),
+		User:                NewUserRepo(db),
 	}
 }
 

@@ -8,6 +8,7 @@ import { RoutingSettings } from "./settings/routing-settings";
 import { BalancerSettings } from "./settings/balancer-settings";
 import { LogsSettings } from "./settings/logs-settings";
 import { HealthCheckSettingsTab } from "./settings/health-check-settings";
+import { AccountSettings } from "./settings/account/account-settings";
 import { useSettings, useHealthCheckSettingsQuery, settingsKeys, healthCheckSettingsKeys } from "@/hooks/api/use-providers";
 
 export default function SettingsPage() {
@@ -42,11 +43,12 @@ export default function SettingsPage() {
         </div>
 
         <Tabs defaultValue="general" className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="general">通用</TabsTrigger>
             <TabsTrigger value="balancer">负载均衡</TabsTrigger>
             <TabsTrigger value="logs">日志</TabsTrigger>
             <TabsTrigger value="health-check">健康检测</TabsTrigger>
+            <TabsTrigger value="account">账户</TabsTrigger>
             <TabsTrigger value="about">关于</TabsTrigger>
           </TabsList>
 
@@ -76,6 +78,10 @@ export default function SettingsPage() {
               healthCheckSettings={healthCheckSettings}
               onHealthCheckSettingsChange={handleHealthCheckSettingsChange}
             />
+          </TabsContent>
+
+          <TabsContent value="account" className="mt-4 md:mt-6">
+            <AccountSettings />
           </TabsContent>
 
           <TabsContent value="about" className="mt-4 md:mt-6">

@@ -13,21 +13,47 @@ import (
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"github.com/qkf688/llmux/handler"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/repository"
 	"github.com/qkf688/llmux/service"
+	"github.com/qkf688/llmux/service/auth"
 	_ "golang.org/x/crypto/x509roots/fallback"
 )
 
 func init() {
+	// 加载 .env（文件不存在则静默跳过，不影响系统环境变量）
+	_ = godotenv.Load()
+
 	ctx := context.Background()
 	models.Init(ctx, "./db/llmux.db")
 	repository.SetDefault(repository.New(models.DB))
 	slog.Info("TZ", "time.Local", time.Local.String())
+
+	// bootstrap admin 账号
+	password := os.Getenv("ADMIN_PASSWORD")
+	if password == "" {
+		var err error
+		password, err = auth.GenerateRandomPassword()
+		if err != nil {
+			panic("generate random admin password: " + err.Error())
+		}
+	}
+	plain, err := auth.BootstrapAdmin(ctx, repository.Default().User, password)
+	if err != nil {
+		panic("bootstrap admin: " + err.Error())
+	}
+	auth.LogBootstrap(plain)
 }
 
 func main() {
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		slog.Error("JWT_SECRET env is required")
+		os.Exit(1)
+	}
+
 	ctx := context.Background()
 	startBackgroundServices(ctx)
 
@@ -35,7 +61,7 @@ func main() {
 
 	router.Use(gzip.Gzip(gzip.DefaultCompression, gzip.WithExcludedPaths([]string{"/v1/"})))
 
-	handler.RegisterAll(router, handler.Deps{Token: os.Getenv("TOKEN")})
+	handler.RegisterAll(router, handler.Deps{JWTSecret: jwtSecret})
 
 	setwebui(router)
 	router.Run(":7070")

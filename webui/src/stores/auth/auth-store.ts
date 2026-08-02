@@ -1,29 +1,40 @@
 import { createStore } from "zustand/vanilla";
 import { clearAuthToken, readAuthToken, writeAuthToken } from "@/stores/auth/token-storage";
+import { clearAuthUser, readAuthUser, writeAuthUser } from "@/stores/auth/user-storage";
+
+export type AuthUser = {
+  id: number;
+  username: string;
+  role: string;
+};
 
 export type AuthState = {
   token: string | null;
-  setToken: (token: string) => void;
-  clearToken: () => void;
+  user: AuthUser | null;
+  setSession: (token: string, user: AuthUser) => void;
+  clearSession: () => void;
 };
 
 const initialToken = readAuthToken();
+const initialUser = readAuthUser();
 
 export const authStore = createStore<AuthState>()((set) => ({
   token: initialToken,
-  setToken: (token: string) => {
+  user: initialUser,
+  setSession: (token: string, user: AuthUser) => {
     const normalized = token.trim();
     if (!normalized) return;
     writeAuthToken(normalized);
-    set({ token: normalized });
+    writeAuthUser(user);
+    set({ token: normalized, user });
   },
-  clearToken: () => {
+  clearSession: () => {
     clearAuthToken();
-    set({ token: null });
+    clearAuthUser();
+    set({ token: null, user: null });
   },
 }));
 
 export function getAuthToken(): string | null {
   return authStore.getState().token ?? readAuthToken();
 }
-

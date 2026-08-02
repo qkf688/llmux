@@ -130,7 +130,7 @@ main.go                       # 入口：路由注册、服务启动
 │   ├── model.go             # 数据库模型定义
 │   └── unified/             # 统一请求/响应格式
 ├── middleware/              # 中间件
-│   └── auth.go              # 认证中间件（Bearer Token + x-api-key）
+│   └── auth.go              # 认证中间件（JWT + per-user API key）
 ├── balancer/                # 负载均衡器
 ├── common/                  # 公共工具
 │   └── response.go          # 统一响应格式
@@ -233,10 +233,14 @@ webui/
 
 ### 认证
 
-- 环境变量 `TOKEN` 控制 API 认证
-- 未设置 `TOKEN` 则不启用鉴权（仅建议本地开发）
-- OpenAI 格式：`Authorization: Bearer <TOKEN>`
-- Anthropic 格式：`x-api-key: <TOKEN>`
+- 管理后台 `/api/*`：JWT 登录（用户名固定 `admin`，密码输入）
+  - 登录：`POST /api/auth/login`（请求体 `{password}`，返回 `{token, user}`）
+  - JWT 签名密钥由环境变量 `JWT_SECRET` 提供（必填）
+  - 首启动 bootstrap admin 账号，密码由 `ADMIN_PASSWORD` 指定（未设则随机生成并打印日志）
+  - API key 轮换 / 改密码：settings 页"账户" tab
+- 代理 `/v1/*`：per-user API key
+  - OpenAI 格式：`Authorization: Bearer <API_KEY>`
+  - Anthropic 格式：`x-api-key: <API_KEY>`
 
 ### 前端嵌入
 
@@ -269,7 +273,10 @@ webui/
 
 ## 环境变量
 
-- `TOKEN`: API 认证令牌（可选）
+支持 `.env` 文件加载（启动时自动读取项目根 `.env`，文件不存在则跳过；模板见 `.env.example`）。
+
+- `JWT_SECRET`: 管理后台 JWT 签名密钥（**必填**）
+- `ADMIN_PASSWORD`: 首启动 admin 密码（未设则随机生成并打印日志）
 - `GIN_MODE`: Gin 运行模式（`debug`/`release`/`test`）
 - `TZ`: 时区设置（如 `Asia/Shanghai`）
 

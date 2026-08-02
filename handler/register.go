@@ -3,6 +3,7 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/handler/associations"
+	"github.com/qkf688/llmux/handler/auth"
 	"github.com/qkf688/llmux/handler/autoassoc"
 	"github.com/qkf688/llmux/handler/database"
 	"github.com/qkf688/llmux/handler/importexport"
@@ -15,21 +16,28 @@ import (
 	"github.com/qkf688/llmux/middleware"
 )
 
-// Deps 路由注册依赖（鉴权令牌等）。
+// Deps 路由注册依赖（鉴权密钥等）。
 // 新增 API：在对应子包 Register 追加，禁止改 main。
 type Deps struct {
-	Token string
+	JWTSecret string
 }
 
 // RegisterAll 唯一业务路由注册入口：建组、鉴权、挂接各域路由。
 // 注册顺序以历史 main.go 现序为准；method/path/handler 与现网 1:1。
 // Group / Use 仅在此函数；子包 Register 只挂叶子路由。
 func RegisterAll(r *gin.Engine, d Deps) {
+	auth.SetJWTSecret(d.JWTSecret)
+
 	v1 := r.Group("/v1")
 	RegisterV1(v1, d)
 
 	api := r.Group("/api")
-	api.Use(middleware.Auth(d.Token))
+
+	// 登录路由不挂鉴权中间件
+	auth.RegisterLogin(api)
+
+	// 以下路由需要 JWT 鉴权
+	api.Use(middleware.AuthJWT(d.JWTSecret, Repos().User))
 
 	// 以下调用顺序对齐历史 main.go 现序（跨包交错处用拆分 Register）
 	RegisterMetrics(api)
@@ -63,4 +71,7 @@ func RegisterAll(r *gin.Engine, d Deps) {
 	RegisterModelSync(api)
 
 	virtualmodels.Register(api)
+
+	// auth 受保护路由（me / rotate api key / change password）
+	auth.Register(api)
 }

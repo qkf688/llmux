@@ -77,7 +77,7 @@ make webui            # cd webui && pnpm install && pnpm run build
 ```
 
 > makefile **无** `test`/`lint` 目标；Go 用 `go test ./...`，前端用 `pnpm lint` / `pnpm test`。  
-> 环境变量：`TOKEN`（API 鉴权，未设则跳过）、`GIN_MODE`、`TZ`。
+> 环境变量：`JWT_SECRET`（管理后台 JWT 签名密钥，必填）、`ADMIN_PASSWORD`（首启动 admin 密码，未设则随机生成并打印日志）、`GIN_MODE`、`TZ`。支持 `.env` 文件加载（启动时自动读取项目根 `.env`，文件不存在则跳过；`.env` 已在 `.gitignore`，模板见 `.env.example`）。
 
 ## 2.1 任务导航
 
@@ -278,7 +278,7 @@ make webui            # cd webui && pnpm install && pnpm run build
 
 ### 5.7 配置驱动优先
 
-- 运行时行为变更优先：`models.Setting`、Provider.Config/Proxy/Blacklisted、VirtualModel.Strategy、关联 Weight/Priority/Status、环境变量 `TOKEN`/`GIN_MODE`/`TZ`。
+- 运行时行为变更优先：`models.Setting`、Provider.Config/Proxy/Blacklisted、VirtualModel.Strategy、关联 Weight/Priority/Status、环境变量 `JWT_SECRET`/`ADMIN_PASSWORD`/`GIN_MODE`/`TZ`。
 - **禁止**为可配置行为新增硬编码分支（除非架构文档标明的未闭环例外，并在 PR 说明）。
 
 ## 6. 复用策略（DRY）
@@ -328,7 +328,7 @@ webui/src/components/ui/  # 基础 UI
 ### 7.3 协议与代理
 
 - 对外：OpenAI/Anthropic 兼容 `/v1/*`；对内管理：`/api/*`。
-- 认证：OpenAI 风格 `Authorization: Bearer <TOKEN>`；Anthropic 风格 `x-api-key: <TOKEN>`。
+- 认证：管理后台 `/api/*` 用 JWT（`Authorization: Bearer <JWT>`，登录走 `POST /api/auth/login`）；代理 `/v1/*` 用 per-user API key（`Authorization: Bearer <key>` 或 `x-api-key: <key>`，Anthropic 兼容）。
 - 流式：SSE；转换与 process 路径分流行/非流，**禁止**混用缓冲假设。
 - 两层 LB：虚拟→真实（virtualmodel）+ 真实→供应商（chatcore/balancer）；改一层时**禁止**破坏另一层的候选过滤（如黑名单在候选池）。
 

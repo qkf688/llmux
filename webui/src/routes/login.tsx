@@ -4,19 +4,31 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { selectSetToken, useAuthStore } from "@/stores/auth";
+import { selectSetSession, useAuthStore } from "@/stores/auth";
+import { login as loginApi } from "@/lib/api/modules/auth/auth";
 
 export default function LoginPage() {
-  const [token, setToken] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const setAuthToken = useAuthStore(selectSetToken);
+  const setSession = useAuthStore(selectSetSession);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (token.trim()) {
-      setAuthToken(token);
-      // Redirect to home page after login
+    const trimmed = password.trim();
+    if (!trimmed) return;
+
+    setError("");
+    setLoading(true);
+    try {
+      const res = await loginApi(trimmed);
+      setSession(res.token, res.user);
       navigate("/");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "登录失败");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -26,29 +38,34 @@ export default function LoginPage() {
         <CardHeader>
           <CardTitle className="text-2xl">登录</CardTitle>
           <CardDescription>
-            输入您的访问令牌以访问系统
+            输入管理员密码以访问系统
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleLogin}>
           <CardContent className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="token">访问令牌</Label>
+              <Label htmlFor="password">密码</Label>
               <Input
-                id="token"
+                id="password"
                 type="password"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder="输入您的访问令牌"
-                autoComplete="current-password"
-                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="请输入密码"
+                autoFocus
+                disabled={loading}
               />
             </div>
+            {error && (
+              <p className="text-sm text-destructive">{error}</p>
+            )}
           </CardContent>
           <CardFooter>
-            <Button className="w-full mt-5" type="submit">登录</Button>
+            <Button type="submit" className="w-full" disabled={loading || !password.trim()}>
+              {loading ? "登录中..." : "登录"}
+            </Button>
           </CardFooter>
         </form>
       </Card>
     </div>
   );
-} 
+}

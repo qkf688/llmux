@@ -6,14 +6,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/httpresp"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/repository"
+	"github.com/qkf688/llmux/service/auth"
 )
 
-func Auth(token string) gin.HandlerFunc {
+// ContextKey 当前用户在 gin context 中的键。
+const ContextKeyUser = "currentUser"
+
+// AuthJWT 校验 Bearer JWT，通过后注入 *models.User 到 context。
+func AuthJWT(secret string, repo repository.UserRepo) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 不设置token，则不进行验证
-		if token == "" {
-			return
-		}
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			httpresp.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Authorization header is missing")
@@ -28,42 +31,65 @@ func Auth(token string) gin.HandlerFunc {
 			return
 		}
 
-		tokenString := parts[1]
-		if tokenString != token {
-			httpresp.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Invalid token")
+		claims, err := auth.Parse(secret, parts[1])
+		if err != nil {
+			httpresp.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Invalid or expired token")
 			c.Abort()
 			return
 		}
-	}
-}
 
-func AuthAnthropic(koken string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// 不设置token，则不进行验证
-		if koken == "" {
+		user, err := repo.GetByID(c.Request.Context(), claims.UserID)
+		if err != nil {
+			httpresp.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "User not found")
+			c.Abort()
 			return
 		}
 
-		// 优先检查 Authorization: Bearer 头
-		authHeader := c.GetHeader("Authorization")
-		if authHeader != "" {
-			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) == 2 && parts[0] == "Bearer" && parts[1] == koken {
-				return
-			}
-		}
+		c.Set(ContextKeyUser, user)
+		c.Next()
+	}
+}
 
-		// 回退检查 x-api-key 头（保持向后兼容）
-		xApiKey := c.GetHeader("x-api-key")
-		if xApiKey == "" {
+// AuthAPIKey 校验 /v1 代理 API 的 per-user API key。
+// 优先 Authorization: Bearer <key>，回退 x-api-key（Anthropic 兼容）。
+func AuthAPIKey(repo repository.UserRepo) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		key := extractAPIKey(c)
+		if key == "" {
 			httpresp.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Authorization header or x-api-key header is missing")
 			c.Abort()
 			return
 		}
-		if xApiKey != koken {
-			httpresp.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Invalid token")
+
+		user, err := repo.FindByAPIKey(c.Request.Context(), key)
+		if err != nil {
+			httpresp.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Invalid API key")
 			c.Abort()
 			return
 		}
+
+		c.Set(ContextKeyUser, user)
+		c.Next()
 	}
+}
+
+// extractAPIKey 从 Authorization Bearer 或 x-api-key 头提取 API key。
+func extractAPIKey(c *gin.Context) string {
+	if authHeader := c.GetHeader("Authorization"); authHeader != "" {
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) == 2 && parts[0] == "Bearer" {
+			return parts[1]
+		}
+	}
+	return c.GetHeader("x-api-key")
+}
+
+// CurrentUser 从 gin context 取当前用户（已通过 AuthJWT 或 AuthAPIKey 注入）。
+func CurrentUser(c *gin.Context) *models.User {
+	v, ok := c.Get(ContextKeyUser)
+	if !ok {
+		return nil
+	}
+	user, _ := v.(*models.User)
+	return user
 }

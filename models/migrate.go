@@ -26,6 +26,7 @@ func migrate(ctx context.Context) {
 		&Setting{},
 		&HealthCheckLog{},
 		&ModelSyncLog{},
+		&User{},
 	); err != nil {
 		panic(err)
 	}

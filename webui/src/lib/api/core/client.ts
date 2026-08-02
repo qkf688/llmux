@@ -1,4 +1,4 @@
-import { getAuthToken } from "@/stores/auth";
+import { authStore, getAuthToken } from "@/stores/auth";
 
 export const API_BASE = "/api";
 
@@ -17,6 +17,7 @@ function buildAuthHeaders(headers: HeadersInit = {}): HeadersInit {
 }
 
 function handleUnauthorized(): never {
+  authStore.getState().clearSession();
   window.location.href = "/login";
   throw new Error("Unauthorized");
 }

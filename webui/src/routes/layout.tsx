@@ -19,7 +19,7 @@ import {
   FaLayerGroup
 } from "react-icons/fa";
 import { useTheme } from "@/components/theme-provider";
-import { selectClearToken, useAuthStore } from "@/stores/auth";
+import { selectClearSession, useAuthStore } from "@/stores/auth";
 import { getNavRoutes } from "./route-config";
 
 /** path → icon：配置不塞 React 节点，映射留在 layout */
@@ -42,10 +42,10 @@ export default function Layout() {
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation(); // 用于高亮当前选中的菜单
-  const clearAuthToken = useAuthStore(selectClearToken);
+  const clearSession = useAuthStore(selectClearSession);
 
   const handleLogout = () => {
-    clearAuthToken();
+    clearSession();
     navigate("/login");
   };
 

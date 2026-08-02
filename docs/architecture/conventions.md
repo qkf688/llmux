@@ -46,8 +46,9 @@
 
 | 类别 | 约定 | 示例 |
 |------|------|------|
-| 代理 API | `/v1/*` | `/v1/chat/completions`, `/v1/messages`, `/v1/responses` |
-| 管理 API | `/api/*`，需鉴权（`TOKEN` 未设置时跳过） | `/api/providers`, `/api/settings` |
+| 代理 API | `/v1/*`，需 per-user API key 鉴权（`Authorization: Bearer <key>` 或 `x-api-key: <key>`） | `/v1/chat/completions`, `/v1/messages`, `/v1/responses` |
+| 管理 API | `/api/*`，需 JWT 鉴权（`Authorization: Bearer <JWT>`） | `/api/providers`, `/api/settings` |
+| 管理 API - auth | `/api/auth/*`，登录路由免鉴权，其余需 JWT | `/api/auth/login`, `/api/auth/me`, `/api/auth/api-key/rotate`, `/api/auth/password` |
 | 前端 SPA | 浏览器 path，由 `route-config.ts` 定义 | `/models`, `/virtual-models` |
 | 静态资源 | `/assets` + SPA fallback | embed `webui/dist` |
 

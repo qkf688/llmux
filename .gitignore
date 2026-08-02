@@ -12,6 +12,7 @@ CLAUDE.md
 test.txt
 test_stream.bat
 llmux-test.exe
+llmux.exe
 llmux.exe~
 proxy-logger
 # BitFun snapshot data - auto managed

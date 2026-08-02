@@ -311,7 +311,7 @@ webui/src/components/ui/  # 基础 UI
 
 ### 7.1 Go / Gin
 
-- 路由：`RegisterAll` 建 `/v1` 与 `/api`；`/api` 挂 `middleware.Auth(token)`。
+- 路由：`RegisterAll` 建 `/v1` 与 `/api`；`/v1` 挂 `middleware.AuthAPIKey(repo)`，`/api` 登录路由免鉴权，其余挂 `middleware.AuthJWT(secret, repo)`。
 - 子包注册函数只接收 `gin.IRoutes`（或项目既有签名），**不**在子包内 `Group` 出与全局不一致的鉴权边界。
 - 后台任务在 `main` 启动：`HealthChecker.Start`、`ModelSyncService.StartAutoSync`；**禁止**在 handler 请求路径里偷偷起无生命周期管理的全局 goroutine（除非既有模式且有 ctx 取消）。
 - 前端产物：`//go:embed webui/dist`；改前端后未 rebuild 则二进制仍是旧 UI。

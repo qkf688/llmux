@@ -1,8 +1,6 @@
 package auth
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/httpresp"
 	"github.com/qkf688/llmux/middleware"
@@ -37,12 +35,12 @@ func Login(secret string) gin.HandlerFunc {
 		repo := repos().User
 		user, err := repo.FindByUsername(c.Request.Context(), authservice.AdminUsername)
 		if err != nil {
-			httpresp.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "invalid password")
+			httpresp.Unauthorized(c, "invalid password")
 			return
 		}
 
 		if err := authservice.VerifyPassword(user.PasswordHash, req.Password); err != nil {
-			httpresp.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "invalid password")
+			httpresp.Unauthorized(c, "invalid password")
 			return
 		}
 
@@ -63,7 +61,7 @@ func Login(secret string) gin.HandlerFunc {
 func Me(c *gin.Context) {
 	user := middleware.CurrentUser(c)
 	if user == nil {
-		httpresp.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "not authenticated")
+		httpresp.Unauthorized(c, "not authenticated")
 		return
 	}
 	httpresp.Success(c, toUserResponse(user))

@@ -14,6 +14,5 @@ func RegisterV1(rg *gin.RouterGroup, d Deps) {
 	rg.POST("/chat/completions", authAPIKey, v1.ChatCompletionsHandler)
 	rg.POST("/responses", authAPIKey, v1.ResponsesHandler)
 	rg.POST("/messages", authAPIKey, v1.Messages)
-	// TODO
-	rg.POST("/count_tokens", authAPIKey)
+	rg.POST("/count_tokens", authAPIKey, v1.CountTokens)
 }

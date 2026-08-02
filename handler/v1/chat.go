@@ -71,6 +71,12 @@ func Messages(c *gin.Context) {
 	chatHandlerByStyle(c, consts.StyleAnthropic)
 }
 
+// CountTokens 是 /v1/count_tokens 的占位 handler，返回 501 Not Implemented。
+// 该端点仅挂鉴权中间件，待实现真实 token 计数逻辑时替换。
+func CountTokens(c *gin.Context) {
+	httpresp.ErrorWithHttpStatus(c, http.StatusNotImplemented, http.StatusNotImplemented, "count_tokens not implemented")
+}
+
 func chatHandlerByStyle(c *gin.Context, style string) {
 	beforer, err := service.GetBeforer(style)
 	if err != nil {

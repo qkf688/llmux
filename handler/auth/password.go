@@ -22,12 +22,12 @@ func ChangePassword(c *gin.Context) {
 
 	user := middleware.CurrentUser(c)
 	if user == nil {
-		httpresp.ErrorWithHttpStatus(c, 401, 401, "not authenticated")
+		httpresp.Unauthorized(c, "not authenticated")
 		return
 	}
 
 	if err := authservice.VerifyPassword(user.PasswordHash, req.OldPassword); err != nil {
-		httpresp.ErrorWithHttpStatus(c, 401, 401, "old password incorrect")
+		httpresp.Unauthorized(c, "old password incorrect")
 		return
 	}
 

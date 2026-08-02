@@ -15,7 +15,7 @@ type rotateAPIKeyResponse struct {
 func RotateAPIKey(c *gin.Context) {
 	user := middleware.CurrentUser(c)
 	if user == nil {
-		httpresp.ErrorWithHttpStatus(c, 401, 401, "not authenticated")
+		httpresp.Unauthorized(c, "not authenticated")
 		return
 	}
 

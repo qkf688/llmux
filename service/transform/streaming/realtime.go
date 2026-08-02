@@ -59,6 +59,20 @@ type realtimeStreamState struct {
 	anthropicActiveBlockIndex                 int
 	anthropicNextBlockIndex                   int
 	responsesOutputIndexToAnthropicBlockIndex map[int]int
+
+	// Responses -> Anthropic 并行顺序化：Anthropic streaming 一次只允许一个 active
+	// content_block，但 OpenAI Responses 的并行 tool_call / reasoning+content 是按
+	// output_index 交错到达的。下列字段把非 active output_index 的 delta 缓冲起来，
+	// 由 output_item.done 驱动 block 切换并 flush 缓冲，保证参数完整不丢。
+	//
+	// anthropicActiveOutputIndex：当前已开未关 block 对应的 output_index，-1 表示无。
+	// anthropicItemMeta：output_index → item 元数据（type/id/name），item.added 时记录。
+	// anthropicDeltaBuffer：output_index → 待 flush 的 delta 切片（非 active 时缓冲）。
+	// anthropicDoneOutputIndices：已收到 output_item.done 的 output_index 集合。
+	anthropicActiveOutputIndex   int
+	anthropicItemMeta            map[int]anthropicItemMeta
+	anthropicDeltaBuffer         map[int][]anthropicBufferedDelta
+	anthropicDoneOutputIndices   map[int]bool
 }
 
 // TransformResponseRealtime performs real-time streaming response conversion
@@ -147,11 +161,12 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, provider
 	scanner.Buffer(make([]byte, 0, 64*1024), maxSSEEventSize)
 
 	state := &realtimeStreamState{
-		writer:                    dst,
-		providerType:              providerType,
-		clientType:                clientType,
-		anthropicActiveBlockIndex: -1,
-		rawAccumulator:            rawAccumulator,
+		writer:                      dst,
+		providerType:                providerType,
+		clientType:                  clientType,
+		anthropicActiveBlockIndex:   -1,
+		anthropicActiveOutputIndex:  -1,
+		rawAccumulator:              rawAccumulator,
 	}
 
 	var eventName string

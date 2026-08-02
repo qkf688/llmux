@@ -5,30 +5,12 @@ import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AnimatedNumber } from "@/components/ui/animated-number";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { addDays, formatDateYYYYMMDD, startOfDay } from "@/lib/date";
 import { formatCompactCount } from "@/lib/formatters";
 import type { DailyMetricsData, HourlyMetricsData } from "@/lib/api";
 
 type ChartMetricType = "count" | "tokens";
 type ChartPeriod = "today" | "7" | "30" | "365";
-
-function formatDateYYYYMMDD(date: Date): string {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function addDays(date: Date, days: number): Date {
-  const copy = new Date(date);
-  copy.setDate(copy.getDate() + days);
-  return copy;
-}
-
-function startOfDay(date: Date): Date {
-  const copy = new Date(date);
-  copy.setHours(0, 0, 0, 0);
-  return copy;
-}
 
 function formatMMDD(dateStr: string): string {
   const parts = dateStr.split("-");

@@ -4,6 +4,7 @@ import { Fragment, memo, useCallback, useLayoutEffect, useMemo, useRef, useState
 import { createPortal } from "react-dom";
 import { Activity, Bot, MessageSquare } from "lucide-react";
 import type { DailyMetricsData } from "@/lib/api";
+import { addDays, formatDateYYYYMMDD, startOfDay } from "@/lib/date";
 import { formatCompactCount } from "@/lib/formatters";
 
 type ActivityDay = {
@@ -66,25 +67,6 @@ const HeatmapCell = memo(function HeatmapCell({ day, onShowTooltip, onHideToolti
     />
   );
 });
-
-function formatDateYYYYMMDD(date: Date): string {
-  const y = date.getFullYear();
-  const m = `${date.getMonth() + 1}`.padStart(2, "0");
-  const d = `${date.getDate()}`.padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function addDays(date: Date, days: number): Date {
-  const copy = new Date(date);
-  copy.setDate(copy.getDate() + days);
-  return copy;
-}
-
-function startOfDay(date: Date): Date {
-  const copy = new Date(date);
-  copy.setHours(0, 0, 0, 0);
-  return copy;
-}
 
 export function ActivityHeatmapCard({
   data,

@@ -25,36 +25,38 @@ type loginResponse struct {
 	User  userResponse `json:"user"`
 }
 
-// Login 校验密码并签发 JWT。单管理员场景，username 隐式为 admin。
-func Login(c *gin.Context) {
-	var req loginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httpresp.BadRequest(c, "password is required")
-		return
-	}
+// Login 返回登录 handler，secret 通过闭包持有（避免包级可变状态）。
+func Login(secret string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req loginRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpresp.BadRequest(c, "password is required")
+			return
+		}
 
-	repo := repos().User
-	user, err := repo.FindByUsername(c.Request.Context(), authservice.AdminUsername)
-	if err != nil {
-		httpresp.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "invalid password")
-		return
-	}
+		repo := repos().User
+		user, err := repo.FindByUsername(c.Request.Context(), authservice.AdminUsername)
+		if err != nil {
+			httpresp.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "invalid password")
+			return
+		}
 
-	if err := authservice.VerifyPassword(user.PasswordHash, req.Password); err != nil {
-		httpresp.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "invalid password")
-		return
-	}
+		if err := authservice.VerifyPassword(user.PasswordHash, req.Password); err != nil {
+			httpresp.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "invalid password")
+			return
+		}
 
-	token, err := authservice.Sign(jwtSecret, user.ID, user.Username)
-	if err != nil {
-		httpresp.InternalServerError(c, "failed to sign token")
-		return
-	}
+		token, err := authservice.Sign(secret, user.ID, user.Username)
+		if err != nil {
+			httpresp.InternalServerError(c, "failed to sign token")
+			return
+		}
 
-	httpresp.Success(c, loginResponse{
-		Token: token,
-		User:  toUserResponse(user),
-	})
+		httpresp.Success(c, loginResponse{
+			Token: token,
+			User:  toUserResponse(user),
+		})
+	}
 }
 
 // Me 返回当前登录用户信息。

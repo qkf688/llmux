@@ -26,15 +26,13 @@ type Deps struct {
 // 注册顺序以历史 main.go 现序为准；method/path/handler 与现网 1:1。
 // Group / Use 仅在此函数；子包 Register 只挂叶子路由。
 func RegisterAll(r *gin.Engine, d Deps) {
-	auth.SetJWTSecret(d.JWTSecret)
-
 	v1 := r.Group("/v1")
 	RegisterV1(v1, d)
 
 	api := r.Group("/api")
 
 	// 登录路由不挂鉴权中间件
-	auth.RegisterLogin(api)
+	auth.RegisterLogin(api, d.JWTSecret)
 
 	// 以下路由需要 JWT 鉴权
 	api.Use(middleware.AuthJWT(d.JWTSecret, Repos().User))

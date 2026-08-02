@@ -30,21 +30,6 @@ func init() {
 	models.Init(ctx, "./db/llmux.db")
 	repository.SetDefault(repository.New(models.DB))
 	slog.Info("TZ", "time.Local", time.Local.String())
-
-	// bootstrap admin 账号
-	password := os.Getenv("ADMIN_PASSWORD")
-	if password == "" {
-		var err error
-		password, err = auth.GenerateRandomPassword()
-		if err != nil {
-			panic("generate random admin password: " + err.Error())
-		}
-	}
-	plain, err := auth.BootstrapAdmin(ctx, repository.Default().User, password)
-	if err != nil {
-		panic("bootstrap admin: " + err.Error())
-	}
-	auth.LogBootstrap(plain)
 }
 
 func main() {
@@ -55,6 +40,25 @@ func main() {
 	}
 
 	ctx := context.Background()
+
+	// bootstrap admin 账号（在 JWT_SECRET 校验之后，避免缺密钥时白建 admin）
+	adminPassword := os.Getenv("ADMIN_PASSWORD")
+	fromEnv := adminPassword != ""
+	if !fromEnv {
+		var err error
+		adminPassword, err = auth.GenerateRandomPassword()
+		if err != nil {
+			slog.Error("generate random admin password", "error", err)
+			os.Exit(1)
+		}
+	}
+	plain, err := auth.BootstrapAdmin(ctx, repository.Default().User, adminPassword)
+	if err != nil {
+		slog.Error("bootstrap admin", "error", err)
+		os.Exit(1)
+	}
+	auth.LogBootstrap(plain, fromEnv)
+
 	startBackgroundServices(ctx)
 
 	router := gin.Default()

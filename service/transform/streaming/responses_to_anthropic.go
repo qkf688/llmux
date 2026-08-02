@@ -140,7 +140,7 @@ func handleResponsesToAnthropicOutputItemAddedEvent(state *realtimeStreamState, 
 	// 驱动 openNextPendingBlock 时开启，期间的 delta 由 emitOrBufferAnthropicDelta 缓冲。
 	if state.anthropicActiveOutputIndex < 0 {
 		blockIndex := getOrAllocAnthropicBlockIndex(state, ev.OutputIndex)
-		if err := openAnthropicBlockForItem(state, blockIndex, state.anthropicItemMeta[ev.OutputIndex]); err != nil {
+		if err := openAnthropicBlockForItem(state, blockIndex, ev.OutputIndex, state.anthropicItemMeta[ev.OutputIndex]); err != nil {
 			return err
 		}
 		state.anthropicActiveOutputIndex = ev.OutputIndex
@@ -178,76 +178,72 @@ func handleResponsesToAnthropicOutputItemDoneEvent(state *realtimeStreamState, e
 	return openNextPendingAnthropicBlock(state)
 }
 
-// openNextPendingAnthropicBlock 从 anthropicDeltaBuffer 中找下一个有待发 delta 且未 done
-// 的最小 output_index，开 block 并 flush 其全部缓冲 delta。若无待 flush 项，返回 nil。
+// openNextPendingAnthropicBlock 从候选列表（有 meta、未 started、需补发）中找最小
+// output_index，开 block 并 flush 其全部缓冲 delta。
+// 补发后行为按 done 状态分：
+//   - 已 done → 立即 stop + 清 active + 继续找下一个（循环补发空 block）
+//   - 未 done → 设为 active + 返回（不 stop，等 done 或后续 delta 驱动）
+//
+// 循环不变量：每次迭代至少标记一个 started（openAnthropicBlockForItem 内部标记），
+// 候选集合有限（≤ item 数），必然终止。
 func openNextPendingAnthropicBlock(state *realtimeStreamState) error {
-	if len(state.anthropicDeltaBuffer) == 0 {
-		return nil
-	}
-	// 找最小未 done 且有缓冲的 output_index。
-	// 跳过 done 项是安全的：emitOrBufferAnthropicDelta 在 done 后直接丢弃 delta，
-	// done 项的缓冲不会再增长。此处不 delete 已 done 项的缓冲（留待 flushRemainingAnthropicBuffers
-	// 或 GC），因为 done 项的缓冲若非空意味着 done 先于 delta 到达（上游异常），由 completed 兜底处理。
-	nextIdx := -1
-	for idx, buf := range state.anthropicDeltaBuffer {
-		if len(buf) == 0 {
-			continue
+	for {
+		indices := collectPendingAnthropicBlockIndices(state)
+		if len(indices) == 0 {
+			return nil
 		}
-		if state.anthropicDoneOutputIndices != nil && state.anthropicDoneOutputIndices[idx] {
-			continue
-		}
-		if nextIdx < 0 || idx < nextIdx {
-			nextIdx = idx
-		}
-	}
-	if nextIdx < 0 {
-		return nil
-	}
+		nextIdx := indices[0]
 
-	meta, ok := state.anthropicItemMeta[nextIdx]
-	if !ok {
-		meta = anthropicItemMeta{itemType: "message"}
-	}
-	blockIndex := getOrAllocAnthropicBlockIndex(state, nextIdx)
-	if err := openAnthropicBlockForItem(state, blockIndex, meta); err != nil {
-		return err
-	}
-	state.anthropicActiveOutputIndex = nextIdx
-
-	// flush 缓冲 delta。
-	for _, bd := range state.anthropicDeltaBuffer[nextIdx] {
-		contentDelta := map[string]interface{}{
-			"type":  "content_block_delta",
-			"index": blockIndex,
-			"delta": bd.inner,
+		meta, ok := state.anthropicItemMeta[nextIdx]
+		if !ok {
+			meta = anthropicItemMeta{itemType: "message"}
 		}
-		if err := writeRealtimeEventJSONData(state, "content_block_delta", contentDelta); err != nil {
+		blockIndex := getOrAllocAnthropicBlockIndex(state, nextIdx)
+		if err := openAnthropicBlockForItem(state, blockIndex, nextIdx, meta); err != nil {
 			return err
 		}
+
+		// flush 缓冲 delta（可能为空——空 args 的 tool_call 无 delta）。
+		for _, bd := range state.anthropicDeltaBuffer[nextIdx] {
+			contentDelta := map[string]interface{}{
+				"type":  "content_block_delta",
+				"index": blockIndex,
+				"delta": bd.inner,
+			}
+			if err := writeRealtimeEventJSONData(state, "content_block_delta", contentDelta); err != nil {
+				return err
+			}
+		}
+		delete(state.anthropicDeltaBuffer, nextIdx)
+
+		// 已 done：立即 stop + 清 active + 继续找下一个（空 args 的 tool_call 走此分支）。
+		if state.anthropicDoneOutputIndices != nil && state.anthropicDoneOutputIndices[nextIdx] {
+			blockStop := map[string]interface{}{
+				"type":  "content_block_stop",
+				"index": blockIndex,
+			}
+			if err := writeRealtimeEventJSONData(state, "content_block_stop", blockStop); err != nil {
+				return err
+			}
+			state.anthropicActiveBlockIndex = -1
+			continue
+		}
+
+		// 未 done：设为 active + 返回（等 done 或后续 delta 驱动，不提前 stop）。
+		state.anthropicActiveOutputIndex = nextIdx
+		return nil
 	}
-	delete(state.anthropicDeltaBuffer, nextIdx)
-	return nil
 }
 
 // flushRemainingAnthropicBuffers 在 response.completed 兜底阶段，按 output_index 升序
-// 逐个 flush 仍有缓冲 delta 的 item：开 block → 发全部缓冲 delta → 关 block。
-// 用于上游不发 output_item.done 的场景（如 openai→responses 对 reasoning/tool_call）。
+// 逐个处理「有 meta、未 started」的 item：开 block → flush 缓冲 delta（可能为空）→ 关 block。
+// 用于上游不发 output_item.done 的场景（如 openai→responses 对 reasoning/tool_call），
+// 以及空 args 的并行 tool_call（无 delta 触发接管、done 兜底也跳过时）补发空 block。
+// 候选筛选复用 collectPendingAnthropicBlockIndices，与 openNextPendingAnthropicBlock 一致。
 func flushRemainingAnthropicBuffers(state *realtimeStreamState) error {
-	if len(state.anthropicDeltaBuffer) == 0 {
+	indices := collectPendingAnthropicBlockIndices(state)
+	if len(indices) == 0 {
 		return nil
-	}
-	// 收集并排序有待发缓冲的 output_index。
-	var indices []int
-	for idx, buf := range state.anthropicDeltaBuffer {
-		if len(buf) > 0 {
-			indices = append(indices, idx)
-		}
-	}
-	// 升序排序，保证 block 顺序与 output_index 顺序一致。
-	for i := 1; i < len(indices); i++ {
-		for j := i; j > 0 && indices[j-1] > indices[j]; j-- {
-			indices[j-1], indices[j] = indices[j], indices[j-1]
-		}
 	}
 
 	for _, idx := range indices {
@@ -256,7 +252,7 @@ func flushRemainingAnthropicBuffers(state *realtimeStreamState) error {
 			meta = anthropicItemMeta{itemType: "message"}
 		}
 		blockIndex := getOrAllocAnthropicBlockIndex(state, idx)
-		if err := openAnthropicBlockForItem(state, blockIndex, meta); err != nil {
+		if err := openAnthropicBlockForItem(state, blockIndex, idx, meta); err != nil {
 			return err
 		}
 		for _, bd := range state.anthropicDeltaBuffer[idx] {
@@ -284,14 +280,18 @@ func flushRemainingAnthropicBuffers(state *realtimeStreamState) error {
 }
 
 // openAnthropicBlockForItem 根据 item 元数据构造对应类型的 Anthropic content_block
-// 并发送 content_block_start，然后标记该 block 为 active。
+// 并发送 content_block_start，然后标记该 block 为 active，并记录 outputIndex 已 started。
 // 调用方负责在调用前关闭前一个 active block（如需要）——本函数只「开 block」不「关 active」，
 // 关 active 由 output_item.done 驱动，避免并行 item.added 提前关掉仍需接收 delta 的 block。
+//
+// outputIndex 用于标记 anthropicStartedOutputIndices（开 block 与标记 started 天然原子，
+// 调用方无需额外标记），让 done/completed 兜底能区分「已开 block」与「未开 block 待补」
+// （空 args 的并行 tool_call 场景）。
 //
 // 映射 Responses item 类型 → Anthropic content_block 类型：
 // 未知类型一律降级为 text（Anthropic 只认 text/thinking/tool_use/image 等固定几种，
 // 把 Responses 的 item 类型原样透出会产出非法 content_block）。
-func openAnthropicBlockForItem(state *realtimeStreamState, blockIndex int, meta anthropicItemMeta) error {
+func openAnthropicBlockForItem(state *realtimeStreamState, blockIndex int, outputIndex int, meta anthropicItemMeta) error {
 	contentBlock := map[string]interface{}{
 		"type": "text",
 		"text": "",
@@ -318,7 +318,37 @@ func openAnthropicBlockForItem(state *realtimeStreamState, blockIndex int, meta 
 		return err
 	}
 	state.anthropicActiveBlockIndex = blockIndex
+	if state.anthropicStartedOutputIndices == nil {
+		state.anthropicStartedOutputIndices = map[int]bool{}
+	}
+	state.anthropicStartedOutputIndices[outputIndex] = true
 	return nil
+}
+
+// collectPendingAnthropicBlockIndices 收集需要补发 block 的 output_index（升序），
+// 供 openNextPendingAnthropicBlock（done 驱动）和 flushRemainingAnthropicBuffers（completed 兜底）共用。
+// 候选条件：有 meta、未 started、且（有缓冲 delta 或 类型需要补发空 block）。
+// message 类型无 delta 时不补发空 text block（保持 NoDelta 不变量——空 text block 无意义）。
+// function_call/reasoning 无 delta 仍补发空 block（tool_use/thinking block 对客户端有语义意义）。
+func collectPendingAnthropicBlockIndices(state *realtimeStreamState) []int {
+	var indices []int
+	for idx, meta := range state.anthropicItemMeta {
+		if state.anthropicStartedOutputIndices != nil && state.anthropicStartedOutputIndices[idx] {
+			continue
+		}
+		hasBuf := len(state.anthropicDeltaBuffer[idx]) > 0
+		if !hasBuf && meta.itemType == "message" {
+			continue
+		}
+		indices = append(indices, idx)
+	}
+	// 升序排序，保证 block 顺序与 output_index 顺序一致。
+	for i := 1; i < len(indices); i++ {
+		for j := i; j > 0 && indices[j-1] > indices[j]; j-- {
+			indices[j-1], indices[j] = indices[j], indices[j-1]
+		}
+	}
+	return indices
 }
 
 // emitOrBufferAnthropicDelta 处理 reasoning/args delta 的并行顺序化：
@@ -343,7 +373,7 @@ func emitOrBufferAnthropicDelta(state *realtimeStreamState, outputIndex int, inn
 		if !ok {
 			meta = anthropicItemMeta{itemType: "message"}
 		}
-		if err := openAnthropicBlockForItem(state, blockIndex, meta); err != nil {
+		if err := openAnthropicBlockForItem(state, blockIndex, outputIndex, meta); err != nil {
 			return err
 		}
 		state.anthropicActiveOutputIndex = outputIndex
@@ -382,7 +412,7 @@ func switchToAnthropicTextBlock(state *realtimeStreamState, outputIndex int) err
 		}
 		state.anthropicActiveOutputIndex = -1
 	}
-	if err := openAnthropicBlockForItem(state, blockIndex, anthropicItemMeta{itemType: "message"}); err != nil {
+	if err := openAnthropicBlockForItem(state, blockIndex, outputIndex, anthropicItemMeta{itemType: "message"}); err != nil {
 		return err
 	}
 	state.anthropicActiveOutputIndex = outputIndex
@@ -518,6 +548,9 @@ func handleResponsesToAnthropicContentPartAddedEvent(state *realtimeStreamState,
 		return nil
 	}
 
+	// 记录被 image 打断的 active output_index。
+	interruptedOutputIndex := state.anthropicActiveOutputIndex
+
 	blockIndex := allocAnthropicBlockIndex(state)
 	if err := closeAnthropicActiveBlockIfNeeded(state, blockIndex); err != nil {
 		return err
@@ -564,6 +597,21 @@ func handleResponsesToAnthropicContentPartAddedEvent(state *realtimeStreamState,
 	// 后续 delta 应走 emitOrBufferAnthropicDelta 的「无 active 接管」或缓冲分支，
 	// 而非误判前一个 item 仍 active（会导致 delta 发到已 stop 的 block）。
 	state.anthropicActiveOutputIndex = -1
+
+	// 清掉被打断的 output_index 的 block index 映射，让后续 delta 分配新 block index
+	// （避免重复 start 同一个 block——Anthropic 不允许同 index 重复 start）。
+	// 不清 started 标记：该 block 确实 start 过（被 image 打断），flushRemainingAnthropicBuffers
+	// 据此跳过它不会误补发空 block。后续 delta 走「无 active 接管」分支，getOrAllocAnthropicBlockIndex
+	// 分配新 index 后 openAnthropicBlockForItem 标记 started=true（已是 true，无影响）。
+	// 职责边界：映射管「本次 block index 分配」，started 管「start 事件是否发放」。
+	// image 打断后形成「映射=无、started=true」中间态是有意为之。
+	// 极端场景下同一 tool_call 的 args 分裂到两个 block，但比重复 start（协议违规）
+	// 和 args 丢失（功能 bug）要好——image 穿插并行 tool_call 本身是上游协议异常。
+	if interruptedOutputIndex >= 0 {
+		if state.responsesOutputIndexToAnthropicBlockIndex != nil {
+			delete(state.responsesOutputIndexToAnthropicBlockIndex, interruptedOutputIndex)
+		}
+	}
 	return nil
 }
 

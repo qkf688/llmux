@@ -69,10 +69,17 @@ type realtimeStreamState struct {
 	// anthropicItemMeta：output_index → item 元数据（type/id/name），item.added 时记录。
 	// anthropicDeltaBuffer：output_index → 待 flush 的 delta 切片（非 active 时缓冲）。
 	// anthropicDoneOutputIndices：已收到 output_item.done 的 output_index 集合。
-	anthropicActiveOutputIndex   int
-	anthropicItemMeta            map[int]anthropicItemMeta
-	anthropicDeltaBuffer         map[int][]anthropicBufferedDelta
-	anthropicDoneOutputIndices   map[int]bool
+	// anthropicStartedOutputIndices：已发出 content_block_start 的 output_index 集合。
+	//   职责边界：responsesOutputIndexToAnthropicBlockIndex 管「block index 分配」（message
+	//   在 item.added 时预分配但未 start），anthropicStartedOutputIndices 管「start 事件是否
+	//   已发放」。两者生命周期强耦合但语义不同：image 打断时清映射（强制下次分配新 index）
+	//   但不清 started（该 block 确实 start 过），形成「映射=无、started=true」中间态——
+	//   这是有意为之，让 flushRemainingAnthropicBuffers 据此跳过已 start 的 item 不误补发。
+	anthropicActiveOutputIndex    int
+	anthropicItemMeta             map[int]anthropicItemMeta
+	anthropicDeltaBuffer          map[int][]anthropicBufferedDelta
+	anthropicDoneOutputIndices    map[int]bool
+	anthropicStartedOutputIndices map[int]bool
 }
 
 // TransformResponseRealtime performs real-time streaming response conversion

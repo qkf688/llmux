@@ -6,10 +6,11 @@ import {
   Server,
   WifiOff,
 } from "lucide-react";
+import type { ErrorType } from "@/lib/errors";
 
 export interface ErrorDetail {
-  /** 错误类型：network | auth | provider | timeout | validation | unknown */
-  type?: "network" | "auth" | "provider" | "timeout" | "validation" | "unknown";
+  /** 错误类型（值域见 lib/errors 的 ErrorType） */
+  type?: ErrorType;
   /** 简要的错误摘要（显示在概要层） */
   summary?: string;
   /** 完整的错误信息（显示在详情层） */

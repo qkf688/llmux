@@ -52,20 +52,28 @@ func ProviderTestHandler(c *gin.Context) {
 	header := BuildTestHeaders(c.Request.Header, chatModel.WithHeader, chatModel.CustomerHeaders)
 	req, err := providerInstance.BuildReq(ctx, header, chatModel.Model, testBody)
 	if err != nil {
-		httpresp.ErrorWithHttpStatus(c, http.StatusOK, http.StatusBadGateway, BuildDetailedError("network", "构建请求失败", err.Error(), map[string]string{
-			"provider": chatModel.Name,
-			"model":    chatModel.Model,
-		}))
+		httpresp.Success(c, map[string]interface{}{
+			"passed": false,
+			"error": BuildDetailedError("network", "构建请求失败", err.Error(), map[string]string{
+				"provider": chatModel.Name,
+				"model":    chatModel.Model,
+			}),
+			"error_type": "network",
+		})
 		return
 	}
 
 	res, err := client.Do(req)
 	if err != nil {
-		httpresp.ErrorWithHttpStatus(c, http.StatusOK, http.StatusBadGateway, BuildDetailedError("network", "连接提供商失败", err.Error(), map[string]string{
-			"provider": chatModel.Name,
-			"model":    chatModel.Model,
-			"proxy":    proxyURL,
-		}))
+		httpresp.Success(c, map[string]interface{}{
+			"passed": false,
+			"error": BuildDetailedError("network", "连接提供商失败", err.Error(), map[string]string{
+				"provider": chatModel.Name,
+				"model":    chatModel.Model,
+				"proxy":    proxyURL,
+			}),
+			"error_type": "network",
+		})
 		return
 	}
 	defer res.Body.Close()
@@ -73,20 +81,29 @@ func ProviderTestHandler(c *gin.Context) {
 	if res.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(res.Body)
 		errorDetail := parseProviderErrorDetail(bodyBytes)
-		httpresp.ErrorWithHttpStatus(c, http.StatusOK, res.StatusCode, BuildDetailedError(getErrorTypeFromStatus(res.StatusCode), "提供商返回错误", errorDetail, map[string]string{
-			"provider":    chatModel.Name,
-			"model":       chatModel.Model,
-			"status_code": strconv.Itoa(res.StatusCode),
-		}))
+		errorType := getErrorTypeFromStatus(res.StatusCode)
+		httpresp.Success(c, map[string]interface{}{
+			"passed": false,
+			"error": BuildDetailedError(errorType, "提供商返回错误", errorDetail, map[string]string{
+				"provider":    chatModel.Name,
+				"model":       chatModel.Model,
+				"status_code": strconv.Itoa(res.StatusCode),
+			}),
+			"error_type": errorType,
+		})
 		return
 	}
 
 	content, err := io.ReadAll(res.Body)
 	if err != nil {
-		httpresp.ErrorWithHttpStatus(c, http.StatusOK, res.StatusCode, BuildDetailedError("network", "读取响应失败", err.Error(), map[string]string{
-			"provider": chatModel.Name,
-			"model":    chatModel.Model,
-		}))
+		httpresp.Success(c, map[string]interface{}{
+			"passed": false,
+			"error": BuildDetailedError("network", "读取响应失败", err.Error(), map[string]string{
+				"provider": chatModel.Name,
+				"model":    chatModel.Model,
+			}),
+			"error_type": "network",
+		})
 		return
 	}
 

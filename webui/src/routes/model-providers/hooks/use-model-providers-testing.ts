@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { getAuthToken } from "@/stores/auth";
+import { toErrorMessage } from "@/lib/errors";
 import {
   testModelProvider,
   testModelProviderStructuredOutput,
@@ -72,9 +73,10 @@ export function useModelProvidersTesting({
       setTestResults((prev) => ({ ...prev, [id]: { loading: false, result } }));
       return result;
     } catch (err) {
-      setTestResults((prev) => ({ ...prev, [id]: { loading: false, result: { error: "测试失败" + err } } }));
+      const message = `测试失败: ${toErrorMessage(err)}`;
+      setTestResults((prev) => ({ ...prev, [id]: { loading: false, result: { error: message } } }));
       console.error(err);
-      return { error: "测试失败" + err };
+      return { error: message };
     }
   }, []);
 
@@ -85,12 +87,13 @@ export function useModelProvidersTesting({
       setStructuredTestResults((prev) => ({ ...prev, [id]: { loading: false, result } }));
       return result;
     } catch (err) {
+      const message = `测试失败: ${toErrorMessage(err)}`;
       setStructuredTestResults((prev) => ({
         ...prev,
-        [id]: { loading: false, result: { passed: false, error: "测试失败" + err } },
+        [id]: { loading: false, result: { passed: false, error: message } },
       }));
       console.error(err);
-      return { passed: false, error: "测试失败" + err };
+      return { passed: false, error: message };
     }
   }, []);
 

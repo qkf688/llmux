@@ -93,6 +93,8 @@ export function TestDialog({
                     testResults[selectedTestId].result?.error ||
                     testResults[selectedTestId].result?.message ||
                     "测试成功",
+                  summary: testResults[selectedTestId].result?.error ? "测试失败" : "测试成功",
+                  type: testResults[selectedTestId].result?.error_type,
                 }}
                 isSuccess={!testResults[selectedTestId].result?.error}
                 defaultExpanded={!!testResults[selectedTestId].result?.error}
@@ -144,13 +146,14 @@ export function TestDialog({
               <LoadingState text="测试中..." />
             ) : selectedTestId && structuredTestResults[selectedTestId]?.result ? (
               (() => {
-                const result = structuredTestResults[selectedTestId]?.result as Record<string, unknown> | null;
+                const result = structuredTestResults[selectedTestId]?.result;
                 const passed = result?.passed === true;
+                const errorType = result?.error_type;
                 const errorMessage =
-                  (typeof result?.error === "string" && result.error) ||
-                  (typeof result?.message === "string" && result.message) ||
+                  result?.error ||
+                  result?.message ||
                   (passed ? "结构化输出能力测试通过" : "结构化输出能力测试失败");
-                const rawOutput = typeof result?.raw_output === "string" ? result.raw_output : "";
+                const rawOutput = result?.raw_output ?? "";
                 const parsed = result?.parsed;
 
                 return (
@@ -159,6 +162,7 @@ export function TestDialog({
                       error={{
                         message: errorMessage,
                         summary: passed ? "测试成功" : "测试失败",
+                        type: errorType,
                       }}
                       isSuccess={passed}
                       defaultExpanded={!passed}

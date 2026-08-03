@@ -46,6 +46,10 @@ func BuildDetailedError(errorType string, summary string, detail string, context
 	return sb.String()
 }
 
+// 只负责状态码 → 错误类型的映射，产出 auth / provider / validation / unknown 四类。
+// network 由调用点硬编码（构建请求/连接/读取失败）；timeout 为预留值——当前 60s
+// 客户端超时（context.DeadlineExceeded）仍归类为 network，若需细分可在 client.Do
+// 错误分支用 errors.Is 区分，届时 error_type 与 getErrorTypeLabel 同步补充。
 func getErrorTypeFromStatus(statusCode int) string {
 	switch {
 	case statusCode == 401 || statusCode == 403:

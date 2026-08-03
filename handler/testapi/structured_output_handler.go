@@ -35,7 +35,12 @@ func TestStructuredOutputHandler(c *gin.Context) {
 	if err != nil {
 		httpresp.Success(c, map[string]interface{}{
 			"passed": false,
-			"error":  "创建提供商失败: " + err.Error(),
+			"error": BuildDetailedError("provider", "创建提供商失败", err.Error(), map[string]string{
+				"provider": chatModel.Name,
+				"model":    chatModel.Model,
+				"type":     chatModel.Type,
+			}),
+			"error_type": "provider",
 		})
 		return
 	}
@@ -53,6 +58,7 @@ func TestStructuredOutputHandler(c *gin.Context) {
 				"model":    chatModel.Model,
 				"type":     chatModel.Type,
 			}),
+			"error_type": "validation",
 		})
 		return
 	}
@@ -67,6 +73,7 @@ func TestStructuredOutputHandler(c *gin.Context) {
 				"model":    chatModel.Model,
 				"type":     chatModel.Type,
 			}),
+			"error_type": "network",
 		})
 		return
 	}
@@ -81,6 +88,7 @@ func TestStructuredOutputHandler(c *gin.Context) {
 				"type":     chatModel.Type,
 				"proxy":    proxyURL,
 			}),
+			"error_type": "network",
 		})
 		return
 	}
@@ -95,20 +103,23 @@ func TestStructuredOutputHandler(c *gin.Context) {
 				"model":    chatModel.Model,
 				"type":     chatModel.Type,
 			}),
+			"error_type": "network",
 		})
 		return
 	}
 
 	if res.StatusCode != http.StatusOK {
 		errorDetail := parseProviderErrorDetail(bodyBytes)
+		errorType := getErrorTypeFromStatus(res.StatusCode)
 		httpresp.Success(c, map[string]interface{}{
 			"passed": false,
-			"error": BuildDetailedError(getErrorTypeFromStatus(res.StatusCode), "提供商返回错误", errorDetail, map[string]string{
+			"error": BuildDetailedError(errorType, "提供商返回错误", errorDetail, map[string]string{
 				"provider":    chatModel.Name,
 				"model":       chatModel.Model,
 				"type":        chatModel.Type,
 				"status_code": strconv.Itoa(res.StatusCode),
 			}),
+			"error_type": errorType,
 			"raw_output": string(bodyBytes),
 		})
 		return
@@ -123,6 +134,7 @@ func TestStructuredOutputHandler(c *gin.Context) {
 				"model":    chatModel.Model,
 				"type":     chatModel.Type,
 			}),
+			"error_type": "validation",
 			"raw_output": string(bodyBytes),
 		})
 		return
@@ -137,6 +149,7 @@ func TestStructuredOutputHandler(c *gin.Context) {
 				"model":    chatModel.Model,
 				"type":     chatModel.Type,
 			}),
+			"error_type": "validation",
 			"raw_output": rawOutput,
 		})
 		return

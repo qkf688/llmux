@@ -190,7 +190,10 @@ export function useModelProvidersBatch({
       try {
         setAssociationTestResults((prev) => ({ ...prev, [associationId]: { loading: true, success: null } }));
 
-        await testModelProvider(associationId);
+        const result = await testModelProvider(associationId);
+        if (result?.error) {
+          throw new Error(result.error);
+        }
 
         setAssociationTestResults((prev) => ({ ...prev, [associationId]: { loading: false, success: true } }));
 

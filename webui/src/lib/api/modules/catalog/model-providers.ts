@@ -1,3 +1,4 @@
+import type { ErrorType } from "@/lib/errors";
 import { apiRequest } from "../../core/client";
 
 export interface ModelWithProvider {
@@ -25,8 +26,12 @@ export interface AssociationPreview {
 }
 
 export interface ModelProviderTestResult {
+  passed?: boolean;
   error?: string;
+  error_type?: ErrorType;
   message?: string;
+  raw_output?: string;
+  parsed?: unknown;
   [key: string]: unknown;
 }
 

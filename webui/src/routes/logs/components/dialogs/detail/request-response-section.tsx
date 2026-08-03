@@ -84,22 +84,22 @@ export function RequestResponseSection({
         )}
 
         {log.RawRequestBody && (
-          <div className="rounded-md border bg-blue-50 dark:bg-blue-950/20 p-2 space-y-1 sm:p-3">
-            <p className="text-[11px] text-blue-700 dark:text-blue-400 uppercase tracking-wide">
+          <div className="rounded-md border bg-info-tint p-2 space-y-1 sm:p-3">
+            <p className="text-[11px] text-info-foreground uppercase tracking-wide">
               {log.RequestBody ? "原始请求体 - 转换前" : "请求体"} ({formatByteLength(log.RawRequestBody)})
             </p>
-            <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-blue-900 dark:text-blue-200">
+            <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-info-foreground">
               {log.RawRequestBody}
             </pre>
           </div>
         )}
 
         {log.RequestBody && (
-          <div className="rounded-md border bg-green-50 dark:bg-green-950/20 p-2 space-y-1 sm:p-3">
-            <p className="text-[11px] text-green-700 dark:text-green-400 uppercase tracking-wide">
+          <div className="rounded-md border bg-success-tint p-2 space-y-1 sm:p-3">
+            <p className="text-[11px] text-success-foreground uppercase tracking-wide">
               {log.RawRequestBody ? "请求体 - 转换后" : "请求体"} ({formatByteLength(log.RequestBody)})
             </p>
-            <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-green-900 dark:text-green-200">
+            <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-success-foreground">
               {log.RequestBody}
             </pre>
           </div>
@@ -117,22 +117,22 @@ export function RequestResponseSection({
         )}
 
         {log.RawResponseBody && (
-          <div className="rounded-md border bg-blue-50 dark:bg-blue-950/20 p-2 space-y-1 sm:p-3">
-            <p className="text-[11px] text-blue-700 dark:text-blue-400 uppercase tracking-wide">
+          <div className="rounded-md border bg-info-tint p-2 space-y-1 sm:p-3">
+            <p className="text-[11px] text-info-foreground uppercase tracking-wide">
               {log.ResponseBody ? "原始响应体 - 转换前" : "响应体"} ({formatByteLength(log.RawResponseBody)})
             </p>
-            <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-blue-900 dark:text-blue-200">
+            <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-info-foreground">
               {log.RawResponseBody}
             </pre>
           </div>
         )}
 
         {log.ResponseBody && (
-          <div className="rounded-md border bg-green-50 dark:bg-green-950/20 p-2 space-y-1 sm:p-3">
-            <p className="text-[11px] text-green-700 dark:text-green-400 uppercase tracking-wide">
+          <div className="rounded-md border bg-success-tint p-2 space-y-1 sm:p-3">
+            <p className="text-[11px] text-success-foreground uppercase tracking-wide">
               响应体 - 转换后 ({formatByteLength(log.ResponseBody)})
             </p>
-            <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-green-900 dark:text-green-200">
+            <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-success-foreground">
               {log.ResponseBody}
             </pre>
           </div>

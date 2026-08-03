@@ -206,8 +206,8 @@ export function RecentErrorsSection({
                                 providerMissing
                                   ? "bg-muted border-border text-muted-foreground"
                                   : enabled
-                                    ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-400"
-                                    : "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900 text-amber-700 dark:text-amber-400"
+                                    ? "bg-success-tint border-success/20 text-success-foreground"
+                                    : "bg-warning-tint border-warning/20 text-warning-foreground"
                               )}
                             >
                               模型端点: {providerMissing ? "不可用" : enabled ? "开启" : "关闭"}
@@ -316,8 +316,8 @@ export function RecentErrorsSection({
                           providerMissing
                             ? "bg-muted border-border text-muted-foreground"
                             : enabled
-                              ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-400"
-                              : "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900 text-amber-700 dark:text-amber-400"
+                              ? "bg-success-tint border-success/20 text-success-foreground"
+                              : "bg-warning-tint border-warning/20 text-warning-foreground"
                         )}
                       >
                         模型端点: {providerMissing ? "不可用" : enabled ? "开启" : "关闭"}

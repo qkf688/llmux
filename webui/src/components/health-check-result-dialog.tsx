@@ -131,7 +131,7 @@ export function HealthCheckResultDialog({
                     <CheckCircle2 className="w-3 h-3" />
                     成功
                   </div>
-                  <div className="text-2xl font-bold mt-1 text-green-600">
+                  <div className="text-2xl font-bold mt-1 text-success">
                     {status.success}
                   </div>
                 </div>
@@ -140,7 +140,7 @@ export function HealthCheckResultDialog({
                     <XCircle className="w-3 h-3" />
                     失败
                   </div>
-                  <div className="text-2xl font-bold mt-1 text-red-600">
+                  <div className="text-2xl font-bold mt-1 text-destructive">
                     {status.failed}
                   </div>
                 </div>
@@ -149,7 +149,7 @@ export function HealthCheckResultDialog({
                     <Clock className="w-3 h-3" />
                     待检测
                   </div>
-                  <div className="text-2xl font-bold mt-1 text-blue-600">
+                  <div className="text-2xl font-bold mt-1 text-info">
                     {status.pending}
                   </div>
                 </div>
@@ -197,12 +197,12 @@ export function HealthCheckResultDialog({
                           >
                             <td className="px-3 py-2">
                               {log.status === "success" ? (
-                                <span className="flex items-center gap-1 text-green-600">
+                                <span className="flex items-center gap-1 text-success">
                                   <CheckCircle2 className="w-4 h-4" />
                                   成功
                                 </span>
                               ) : (
-                                <span className="flex items-center gap-1 text-red-600">
+                                <span className="flex items-center gap-1 text-destructive">
                                   <XCircle className="w-4 h-4" />
                                   失败
                                 </span>

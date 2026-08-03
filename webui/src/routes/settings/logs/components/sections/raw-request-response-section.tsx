@@ -28,7 +28,7 @@ export function RawRequestResponseSection({ localSettings, updateLocalSettings }
         <p className="text-xs md:text-sm text-muted-foreground">
           选择需要记录的内容。您可以根据需要选择性记录以优化存储空间。
           <br />
-          <span className="text-amber-600 dark:text-amber-500">注意：记录内容越多，日志存储空间占用越大。</span>
+          <span className="text-warning">注意：记录内容越多，日志存储空间占用越大。</span>
         </p>
       </div>
 

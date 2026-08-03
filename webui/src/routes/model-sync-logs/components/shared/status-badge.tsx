@@ -9,7 +9,7 @@ type StatusBadgeProps = {
 export function StatusBadge({ status, textClassName = "text-sm", iconClassName = "h-4 w-4" }: StatusBadgeProps) {
   if (status === "success") {
     return (
-      <div className="flex items-center gap-1 text-green-600">
+      <div className="flex items-center gap-1 text-success">
         <CheckCircle className={iconClassName} />
         <span className={`font-medium ${textClassName}`}>成功</span>
       </div>
@@ -18,7 +18,7 @@ export function StatusBadge({ status, textClassName = "text-sm", iconClassName =
 
   if (status === "unchanged") {
     return (
-      <div className="flex items-center gap-1 text-blue-600">
+      <div className="flex items-center gap-1 text-info">
         <MinusCircle className={iconClassName} />
         <span className={`font-medium ${textClassName}`}>无变化</span>
       </div>
@@ -27,7 +27,7 @@ export function StatusBadge({ status, textClassName = "text-sm", iconClassName =
 
   if (status === "error") {
     return (
-      <div className="flex items-center gap-1 text-red-600">
+      <div className="flex items-center gap-1 text-destructive">
         <XCircle className={iconClassName} />
         <span className={`font-medium ${textClassName}`}>错误</span>
       </div>

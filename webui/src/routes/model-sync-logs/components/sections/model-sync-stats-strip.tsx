@@ -20,7 +20,7 @@ export function ModelSyncStatsStrip({ stats, loading }: ModelSyncStatsStripProps
             {stats?.sync_enabled && stats?.next_sync_at && <> · 下次: {formatSyncDate(stats.next_sync_at)}</>}
           </span>
           {stats?.sync_enabled ? (
-            <span className="text-green-600">自动 {stats.sync_interval}h</span>
+            <span className="text-success">自动 {stats.sync_interval}h</span>
           ) : (
             <span className="text-muted-foreground">手动</span>
           )}
@@ -41,8 +41,8 @@ export function ModelSyncStatsStrip({ stats, loading }: ModelSyncStatsStripProps
         <div className="h-6 w-16 bg-muted animate-pulse rounded" />
       ) : (
         <div className="flex items-center gap-1">
-          <CheckCircle className="h-4 w-4 text-green-500" />
-          <span className="font-medium text-green-600">{stats?.providers_with_updates || 0}</span>
+          <CheckCircle className="h-4 w-4 text-success" />
+          <span className="font-medium text-success">{stats?.providers_with_updates || 0}</span>
           <span className="text-muted-foreground">更新</span>
         </div>
       )}
@@ -51,8 +51,8 @@ export function ModelSyncStatsStrip({ stats, loading }: ModelSyncStatsStripProps
         <div className="h-6 w-16 bg-muted animate-pulse rounded" />
       ) : (
         <div className="flex items-center gap-1">
-          <CheckCircle className="h-4 w-4 text-blue-500" />
-          <span className="font-medium text-blue-600">{stats?.providers_unchanged || 0}</span>
+          <CheckCircle className="h-4 w-4 text-info" />
+          <span className="font-medium text-info">{stats?.providers_unchanged || 0}</span>
           <span className="text-muted-foreground">无变</span>
         </div>
       )}
@@ -61,8 +61,8 @@ export function ModelSyncStatsStrip({ stats, loading }: ModelSyncStatsStripProps
         <div className="h-6 w-16 bg-muted animate-pulse rounded" />
       ) : (
         <div className="flex items-center gap-1">
-          <AlertTriangle className="h-4 w-4 text-orange-500" />
-          <span className="font-medium text-orange-600">{stats?.providers_with_errors || 0}</span>
+          <AlertTriangle className="h-4 w-4 text-warning" />
+          <span className="font-medium text-warning">{stats?.providers_with_errors || 0}</span>
           <span className="text-muted-foreground">错误</span>
         </div>
       )}

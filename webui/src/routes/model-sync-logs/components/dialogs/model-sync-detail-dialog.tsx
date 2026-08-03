@@ -35,7 +35,7 @@ export function ModelSyncDetailDialog({ log, onClose }: ModelSyncDetailDialogPro
 
           {log && log.AddedCount > 0 && (
             <div>
-              <h3 className="font-semibold text-green-600 mb-2">新增模型 ({log.AddedCount})</h3>
+              <h3 className="font-semibold text-success mb-2">新增模型 ({log.AddedCount})</h3>
               <div className="max-h-40 overflow-y-auto border rounded p-2 space-y-1">
                 {(log.AddedModels ?? []).map((model, index) => (
                   <div key={`${model}-${index}`} className="text-sm">
@@ -48,7 +48,7 @@ export function ModelSyncDetailDialog({ log, onClose }: ModelSyncDetailDialogPro
 
           {log && log.RemovedCount > 0 && (
             <div>
-              <h3 className="font-semibold text-red-600 mb-2">删除模型 ({log.RemovedCount})</h3>
+              <h3 className="font-semibold text-destructive mb-2">删除模型 ({log.RemovedCount})</h3>
               <div className="max-h-40 overflow-y-auto border rounded p-2 space-y-1">
                 {(log.RemovedModels ?? []).map((model, index) => (
                   <div key={`${model}-${index}`} className="text-sm">
@@ -60,8 +60,8 @@ export function ModelSyncDetailDialog({ log, onClose }: ModelSyncDetailDialogPro
           )}
 
           {log && log.Status === "unchanged" && (
-            <div className="p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-md">
-              <p className="text-sm text-blue-700 dark:text-blue-400 flex items-center gap-2">
+            <div className="p-3 bg-info-tint border border-info/20 rounded-md">
+              <p className="text-sm text-info-foreground flex items-center gap-2">
                 <MinusCircle className="h-4 w-4" />
                 此次同步未检测到模型变化
               </p>
@@ -81,15 +81,15 @@ function ErrorInfoSection({ errorMessage }: ErrorInfoSectionProps) {
   const parsedError = parseModelSyncError(errorMessage);
 
   return (
-    <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-md">
-      <h3 className="font-semibold text-red-600 mb-2 flex items-center gap-2">
+    <div className="p-3 bg-destructive-tint border border-destructive/20 rounded-md">
+      <h3 className="font-semibold text-destructive mb-2 flex items-center gap-2">
         <XCircle className="h-4 w-4" />
         错误信息
       </h3>
 
       {parsedError.statusCode && (
         <div className="mb-2">
-          <span className="text-sm font-medium text-red-700 dark:text-red-400">
+          <span className="text-sm font-medium text-destructive-tint-foreground">
             HTTP状态码: <span className="font-mono">{parsedError.statusCode}</span>
           </span>
         </div>
@@ -97,15 +97,15 @@ function ErrorInfoSection({ errorMessage }: ErrorInfoSectionProps) {
 
       {parsedError.responseBody && (
         <div className="mb-2">
-          <span className="text-sm font-medium text-red-700 dark:text-red-400 block mb-1">响应内容:</span>
-          <pre className="text-xs text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-950/40 p-2 rounded overflow-x-auto">
+          <span className="text-sm font-medium text-destructive-tint-foreground block mb-1">响应内容:</span>
+          <pre className="text-xs text-destructive-tint-foreground bg-destructive/10 p-2 rounded overflow-x-auto">
             {parsedError.responseBody}
           </pre>
         </div>
       )}
 
       {!parsedError.statusCode && !parsedError.responseBody && (
-        <div className="text-sm text-red-700 dark:text-red-400 whitespace-pre-wrap break-words">
+        <div className="text-sm text-destructive-tint-foreground whitespace-pre-wrap break-words">
           {parsedError.originalError}
         </div>
       )}

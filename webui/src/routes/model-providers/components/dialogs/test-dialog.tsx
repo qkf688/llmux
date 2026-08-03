@@ -66,26 +66,26 @@ export function TestDialog({
             <RadioGroupItem value="connectivity" id="connectivity" />
             <Label htmlFor="connectivity">连通性测试</Label>
           </div>
-          <p className="text-sm text-gray-500 ml-6">测试模型提供商的基本连通性</p>
+          <p className="text-sm text-muted-foreground ml-6">测试模型提供商的基本连通性</p>
 
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="react" id="react" />
             <Label htmlFor="react">React Agent 能力测试</Label>
           </div>
-          <p className="text-sm text-gray-500 ml-6">测试模型的工具调用和反应能力</p>
+          <p className="text-sm text-muted-foreground ml-6">测试模型的工具调用和反应能力</p>
 
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="structured_output" id="structured_output" />
             <Label htmlFor="structured_output">结构化输出能力测试</Label>
           </div>
-          <p className="text-sm text-gray-500 ml-6">测试模型是否支持结构化输出（JSON Schema / Tool Output）</p>
+          <p className="text-sm text-muted-foreground ml-6">测试模型是否支持结构化输出（JSON Schema / Tool Output）</p>
         </RadioGroup>
 
         {testType === "connectivity" && (
           <div className="mt-4">
             {selectedTestId && testResults[selectedTestId]?.loading ? (
               <div className="flex items-center justify-center py-4">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground" />
                 <span className="ml-2">测试中...</span>
               </div>
             ) : selectedTestId && testResults[selectedTestId] ? (
@@ -100,7 +100,7 @@ export function TestDialog({
                 defaultExpanded={!!testResults[selectedTestId].result?.error}
               />
             ) : (
-              <p className="text-gray-500">点击"执行测试"开始测试</p>
+              <p className="text-muted-foreground">点击"执行测试"开始测试</p>
             )}
           </div>
         )}
@@ -109,7 +109,7 @@ export function TestDialog({
           <div className="mt-4 max-h-96 min-w-0">
             {reactTestResult.loading ? (
               <div className="flex items-center justify-center py-4">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground" />
                 <span className="ml-2">测试中...</span>
               </div>
             ) : reactTestResult.error ? (
@@ -131,7 +131,7 @@ export function TestDialog({
 
             {reactTestResult.messages && (
               <div className="mt-4">
-                <p className="text-xs font-medium text-gray-600 mb-1">测试日志</p>
+                <p className="text-xs font-medium text-muted-foreground mb-1">测试日志</p>
                 <Textarea
                   name="logs"
                   className="max-h-48 resize-none whitespace-pre overflow-x-auto font-mono text-xs"
@@ -147,7 +147,7 @@ export function TestDialog({
           <div className="mt-4 min-w-0 pb-4">
             {selectedTestId && structuredTestResults[selectedTestId]?.loading ? (
               <div className="flex items-center justify-center py-4">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground" />
                 <span className="ml-2">测试中...</span>
               </div>
             ) : selectedTestId && structuredTestResults[selectedTestId]?.result ? (
@@ -174,10 +174,10 @@ export function TestDialog({
 
                     {rawOutput && (
                       <div>
-                        <p className="text-xs font-medium text-gray-600 mb-1">原始输出</p>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">原始输出</p>
                         <Textarea
                           name="raw_output"
-                          className="max-h-48 resize-none whitespace-pre overflow-x-auto font-mono text-xs bg-white/50"
+                          className="max-h-48 resize-none whitespace-pre overflow-x-auto font-mono text-xs bg-background/50"
                           readOnly
                           value={rawOutput}
                         />
@@ -186,10 +186,10 @@ export function TestDialog({
 
                     {parsed != null && (
                       <div>
-                        <p className="text-xs font-medium text-gray-600 mb-1">解析结果</p>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">解析结果</p>
                         <Textarea
                           name="parsed"
-                          className="max-h-48 resize-none whitespace-pre overflow-x-auto font-mono text-xs bg-white/50"
+                          className="max-h-48 resize-none whitespace-pre overflow-x-auto font-mono text-xs bg-background/50"
                           readOnly
                           value={JSON.stringify(parsed, null, 2)}
                         />
@@ -199,7 +199,7 @@ export function TestDialog({
                 );
               })()
             ) : (
-              <p className="text-gray-500">点击"执行测试"开始测试</p>
+              <p className="text-muted-foreground">点击"执行测试"开始测试</p>
             )}
           </div>
         )}

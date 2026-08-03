@@ -1,21 +1,8 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, AlertCircle, CheckCircle, Info } from "lucide-react";
+import { ChevronDown, ChevronRight, CheckCircle, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-export interface ErrorDetail {
-  /** 错误类型：network | auth | provider | timeout | validation | unknown */
-  type?: "network" | "auth" | "provider" | "timeout" | "validation" | "unknown";
-  /** 简要的错误摘要（显示在概要层） */
-  summary?: string;
-  /** 完整的错误信息（显示在详情层） */
-  message: string;
-  /** 错误代码（如果有） */
-  code?: string;
-  /** 解决建议列表 */
-  suggestions?: string[];
-  /** 原始错误对象 */
-  originalError?: Error;
-}
+import { getErrorTypeConfig, inferErrorType } from "./expandable-error-utils";
+import type { ErrorDetail } from "./expandable-error-utils";
 
 interface ExpandableErrorProps {
   /** 错误信息对象 */
@@ -26,99 +13,6 @@ interface ExpandableErrorProps {
   className?: string;
   /** 显示成功状态（绿色）而不是错误状态（红色） */
   isSuccess?: boolean;
-}
-
-/** 获取错误类型的显示配置 */
-function getErrorTypeConfig(type?: string) {
-  const configs = {
-    network: {
-      icon: AlertCircle,
-      color: "text-destructive",
-      bgColor: "bg-destructive-tint",
-      borderColor: "border-destructive/20",
-      label: "网络错误",
-    },
-    auth: {
-      icon: AlertCircle,
-      color: "text-destructive",
-      bgColor: "bg-destructive-tint",
-      borderColor: "border-destructive/20",
-      label: "认证错误",
-    },
-    provider: {
-      icon: AlertCircle,
-      color: "text-info",
-      bgColor: "bg-info-tint",
-      borderColor: "border-info/20",
-      label: "提供商错误",
-    },
-    timeout: {
-      icon: AlertCircle,
-      color: "text-warning",
-      bgColor: "bg-warning-tint",
-      borderColor: "border-warning/20",
-      label: "超时错误",
-    },
-    validation: {
-      icon: AlertCircle,
-      color: "text-info",
-      bgColor: "bg-info-tint",
-      borderColor: "border-info/20",
-      label: "验证错误",
-    },
-    unknown: {
-      icon: AlertCircle,
-      color: "text-muted-foreground",
-      bgColor: "bg-muted",
-      borderColor: "border-border",
-      label: "未知错误",
-    },
-  };
-
-  return configs[type as keyof typeof configs] || configs.unknown;
-}
-
-/** 根据错误信息智能推断错误类型 */
-function inferErrorType(message: string): ErrorDetail["type"] {
-  const lowerMessage = message.toLowerCase();
-  
-  if (lowerMessage.includes("connection") || 
-      lowerMessage.includes("network") || 
-      lowerMessage.includes("dial") ||
-      lowerMessage.includes("econnrefused") ||
-      lowerMessage.includes("timeout")) {
-    return "network";
-  }
-  
-  if (lowerMessage.includes("unauthorized") || 
-      lowerMessage.includes("401") || 
-      lowerMessage.includes("api key") ||
-      lowerMessage.includes("apikey") ||
-      lowerMessage.includes("authentication") ||
-      lowerMessage.includes("credential")) {
-    return "auth";
-  }
-  
-  if (lowerMessage.includes("not found") || 
-      lowerMessage.includes("404") ||
-      lowerMessage.includes("provider") ||
-      lowerMessage.includes("base url")) {
-    return "provider";
-  }
-  
-  if (lowerMessage.includes("timeout") || 
-      lowerMessage.includes("timed out")) {
-    return "timeout";
-  }
-  
-  if (lowerMessage.includes("invalid") || 
-      lowerMessage.includes("validation") ||
-      lowerMessage.includes("bad request") ||
-      lowerMessage.includes("400")) {
-    return "validation";
-  }
-  
-  return "unknown";
 }
 
 // 成功状态展示块（ExpandableError / SimpleError 共用，避免重复）

@@ -15,7 +15,7 @@ interface ExpandableErrorProps {
   isSuccess?: boolean;
 }
 
-// 成功状态展示块（ExpandableError / SimpleError 共用，避免重复）
+// 成功状态展示块（ExpandableError 使用）
 function SuccessState({ message, className }: { message?: string; className?: string }) {
   return (
     <div className={cn(
@@ -116,42 +116,6 @@ export function ExpandableError({
 
         </div>
       )}
-    </div>
-  );
-}
-
-/** 简单错误展示组件 - 不带展开功能 */
-export function SimpleError({ 
-  error, 
-  className,
-  isSuccess = false 
-}: ExpandableErrorProps) {
-  if (isSuccess) {
-    return <SuccessState message={error.summary} className={className} />;
-  }
-
-  const detectedType = error.type || inferErrorType(error.message);
-  const typeConfig = getErrorTypeConfig(detectedType);
-  const Icon = typeConfig.icon;
-
-  return (
-    <div className={cn(
-      "rounded-md border p-4",
-      typeConfig.bgColor,
-      typeConfig.borderColor,
-      className
-    )}>
-      <div className="flex items-start gap-3">
-        <Icon className={cn("h-5 w-5 mt-0.5 flex-shrink-0", typeConfig.color)} />
-        <div className="flex-1">
-          <p className={cn("font-medium", typeConfig.color)}>
-            {typeConfig.label}
-          </p>
-          <p className="text-sm text-foreground mt-1">
-            {error.summary || error.message}
-          </p>
-        </div>
-      </div>
     </div>
   );
 }

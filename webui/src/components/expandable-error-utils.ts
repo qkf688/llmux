@@ -16,10 +16,6 @@ export interface ErrorDetail {
   message: string;
   /** 错误代码（如果有） */
   code?: string;
-  /** 解决建议列表 */
-  suggestions?: string[];
-  /** 原始错误对象 */
-  originalError?: Error;
 }
 
 /** 获取错误类型的显示配置 */

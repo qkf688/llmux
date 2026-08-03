@@ -335,7 +335,7 @@ export function AssociationFilterPanel({
                 {batchUpdatingStatus ? (
                   <Spinner className="mr-2 h-4 w-4" />
                 ) : (
-                  <CheckCircle className="mr-2 h-4 w-4 text-green-600" />
+                  <CheckCircle className="mr-2 h-4 w-4 text-success" />
                 )}
                 <span>批量启用</span>
               </DropdownMenuItem>
@@ -348,7 +348,7 @@ export function AssociationFilterPanel({
                 {batchUpdatingStatus ? (
                   <Spinner className="mr-2 h-4 w-4" />
                 ) : (
-                  <XCircle className="mr-2 h-4 w-4 text-orange-600" />
+                  <XCircle className="mr-2 h-4 w-4 text-warning" />
                 )}
                 <span>批量停用</span>
               </DropdownMenuItem>
@@ -381,13 +381,13 @@ export function AssociationFilterPanel({
                 onClick={onSelectAllSuccessful}
                 className="cursor-pointer"
               >
-                <CheckCircle className="mr-2 h-4 w-4 text-green-600" />
+                <CheckCircle className="mr-2 h-4 w-4 text-success" />
                 <span>选择成功项</span>
                 {successfulCount > 0 && <span className="ml-auto text-xs text-muted-foreground">{successfulCount}</span>}
               </DropdownMenuItem>
 
               <DropdownMenuItem disabled={!hasResults || failedCount === 0} onClick={onSelectAllFailed} className="cursor-pointer">
-                <XCircle className="mr-2 h-4 w-4 text-red-600" />
+                <XCircle className="mr-2 h-4 w-4 text-destructive" />
                 <span>选择失败项</span>
                 {failedCount > 0 && <span className="ml-auto text-xs text-muted-foreground">{failedCount}</span>}
               </DropdownMenuItem>

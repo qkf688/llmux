@@ -76,7 +76,7 @@ export function OperationScopeToolbar({
             {enablingAssociations ? (
               <Spinner className="mr-2 h-4 w-4" />
             ) : (
-              <CheckCircle className="mr-2 h-4 w-4 text-green-600" />
+              <CheckCircle className="mr-2 h-4 w-4 text-success" />
             )}
             启用所有关联
           </DropdownMenuItem>

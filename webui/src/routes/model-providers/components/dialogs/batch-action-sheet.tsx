@@ -85,7 +85,7 @@ export function BatchActionSheet({
                   {batchUpdatingStatus ? (
                     <Spinner className="h-5 w-5" />
                   ) : (
-                    <CheckCircle className="h-5 w-5 text-green-600" />
+                    <CheckCircle className="h-5 w-5 text-success" />
                   )}
                   <span className="text-xs font-medium">批量启用</span>
                   {selectedAssociationCount > 0 && (
@@ -104,7 +104,7 @@ export function BatchActionSheet({
                   {batchUpdatingStatus ? (
                     <Spinner className="h-5 w-5" />
                   ) : (
-                    <XCircle className="h-5 w-5 text-orange-600" />
+                    <XCircle className="h-5 w-5 text-warning" />
                   )}
                   <span className="text-xs font-medium">批量停用</span>
                   {selectedAssociationCount > 0 && (
@@ -179,7 +179,7 @@ export function BatchActionSheet({
                   }}
                   className="h-16 flex flex-col gap-1 items-center justify-center"
                 >
-                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <CheckCircle className="h-5 w-5 text-success" />
                   <span className="text-xs font-medium">选择成功</span>
                   {successfulCount > 0 && <span className="text-[10px] text-muted-foreground">{successfulCount} 项</span>}
                 </Button>
@@ -192,7 +192,7 @@ export function BatchActionSheet({
                   }}
                   className="h-16 flex flex-col gap-1 items-center justify-center"
                 >
-                  <XCircle className="h-5 w-5 text-red-600" />
+                  <XCircle className="h-5 w-5 text-destructive" />
                   <span className="text-xs font-medium">选择失败</span>
                   {failedCount > 0 && <span className="text-[10px] text-muted-foreground">{failedCount} 项</span>}
                 </Button>

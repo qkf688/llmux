@@ -88,7 +88,7 @@ export function LogsDesktopTable({
               <TableCell>
                 <span
                   className={`inline-flex items-center px-2 py-1 ${
-                    log.Status === "success" ? "text-green-500" : "text-red-500"
+                    log.Status === "success" ? "text-success" : "text-destructive"
                   }`}
                 >
                   {log.Status}

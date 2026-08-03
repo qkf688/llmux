@@ -57,7 +57,9 @@ export function LogsMobileList({
                   </p>
                   <span
                     className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                      log.Status === "success" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                      log.Status === "success"
+                        ? "bg-success-tint text-success-foreground"
+                        : "bg-destructive-tint text-destructive-tint-foreground"
                     }`}
                   >
                     {log.Status}

@@ -93,7 +93,7 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDet
               </div>
               <div className="text-sm">
                 <span className="text-muted-foreground">状态：</span>
-                <span className={detailLog.Status === "success" ? "text-green-600" : "text-red-600"}>
+                <span className={detailLog.Status === "success" ? "text-success" : "text-destructive"}>
                   {detailLog.Status}
                 </span>
               </div>

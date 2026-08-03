@@ -22,10 +22,10 @@ export function HealthCheckBanner({
 
   if (completed) {
     return (
-      <div className="flex-shrink-0 rounded-lg border bg-green-500/10 border-green-500/30 px-4 py-3">
+      <div className="flex-shrink-0 rounded-lg border bg-success-tint border-success/30 px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-green-600">健康检测已完成</span>
+            <span className="text-success">健康检测已完成</span>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={onShowProgress} className="h-7">

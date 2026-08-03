@@ -35,7 +35,7 @@ export function AllModelsListItem({
 }: AllModelsListItemProps) {
   return (
     <div
-      className={`flex items-center justify-between px-3 py-2.5 text-sm gap-2 transition-colors border-b last:border-b-0 ${checked ? "bg-blue-50/80" : "hover:bg-muted/50"}`}
+      className={`flex items-center justify-between px-3 py-2.5 text-sm gap-2 transition-colors border-b last:border-b-0 ${checked ? "bg-info-tint" : "hover:bg-muted/50"}`}
     >
       <div className="flex items-center gap-2 min-w-0">
         <Checkbox
@@ -46,7 +46,7 @@ export function AllModelsListItem({
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="truncate font-mono text-xs">{model}</span>
           <span
-            className={`flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${isUpstream ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"}`}
+            className={`flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${isUpstream ? "bg-info-tint text-info-foreground" : "bg-muted text-muted-foreground"}`}
           >
             {isUpstream ? "上游" : "自定义"}
           </span>

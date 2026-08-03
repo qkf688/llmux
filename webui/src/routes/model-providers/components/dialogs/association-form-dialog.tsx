@@ -322,7 +322,7 @@ export function AssociationFormDialog({
                                   删除
                                 </Button>
                               </div>
-                              {errorMsg && <p className="text-sm text-red-500">{errorMsg}</p>}
+                              {errorMsg && <p className="text-sm text-destructive">{errorMsg}</p>}
                             </div>
                           );
                         })}

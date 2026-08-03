@@ -11,7 +11,7 @@ export function AllModelsUpstreamStatus({
 }: AllModelsUpstreamStatusProps) {
   if (status === "loading") {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-800">
+      <div className="flex items-center gap-2 px-3 py-2 bg-info-tint border border-info/30 rounded-md text-sm text-info-foreground">
         <svg
           className="animate-spin h-4 w-4"
           xmlns="http://www.w3.org/2000/svg"
@@ -38,7 +38,7 @@ export function AllModelsUpstreamStatus({
   }
   if (status === "success") {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-md text-sm text-green-800">
+      <div className="flex items-center gap-2 px-3 py-2 bg-success-tint border border-success/30 rounded-md text-sm text-success-foreground">
         <svg
           className="h-4 w-4"
           fill="none"
@@ -58,7 +58,7 @@ export function AllModelsUpstreamStatus({
   }
   if (status === "empty") {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-800">
+      <div className="flex items-center gap-2 px-3 py-2 bg-warning-tint border border-warning/30 rounded-md text-sm text-warning-foreground">
         <svg
           className="h-4 w-4"
           fill="none"
@@ -78,7 +78,7 @@ export function AllModelsUpstreamStatus({
   }
   if (status === "error") {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-md text-sm text-red-800">
+      <div className="flex items-center gap-2 px-3 py-2 bg-destructive-tint border border-destructive/30 rounded-md text-sm text-destructive-tint-foreground">
         <svg
           className="h-4 w-4"
           fill="none"

@@ -108,7 +108,7 @@ export function BatchTestActionButtons({
             disabled={successCount === 0 || batchTesting}
           >
             <svg
-              className="h-4 w-4 text-green-600"
+              className="h-4 w-4 text-success"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -135,7 +135,7 @@ export function BatchTestActionButtons({
             disabled={failedCount === 0 || batchTesting}
           >
             <svg
-              className="h-4 w-4 text-red-600"
+              className="h-4 w-4 text-destructive"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"

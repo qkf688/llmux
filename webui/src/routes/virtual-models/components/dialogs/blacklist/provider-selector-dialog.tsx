@@ -57,8 +57,8 @@ export function ProviderSelectorDialog({
                 return (
                   <div
                     key={provider.ID}
-                    className={`flex items-center gap-2 p-2 hover:bg-gray-50 ${
-                      isBlacklisted ? "bg-gray-100" : ""
+                    className={`flex items-center gap-2 p-2 hover:bg-muted/50 ${
+                      isBlacklisted ? "bg-muted" : ""
                     }`}
                   >
                     <input
@@ -71,7 +71,7 @@ export function ProviderSelectorDialog({
                     <div className="flex-1">
                       <div
                         className={`text-sm font-medium ${
-                          isBlacklisted ? "text-gray-500 line-through" : ""
+                          isBlacklisted ? "text-muted-foreground line-through" : ""
                         }`}
                       >
                         {provider.Name}
@@ -79,7 +79,7 @@ export function ProviderSelectorDialog({
                       <div className="text-xs text-muted-foreground">{provider.Type}</div>
                     </div>
                     {isBlacklisted && (
-                      <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs text-gray-500">
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                         已拉黑
                       </span>
                     )}

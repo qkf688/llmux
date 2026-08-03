@@ -14,7 +14,7 @@ const Loading: React.FC<LoadingProps> = ({ message = '加载中', className = ''
         <div></div>
         <div></div>
       </div>
-      <div className="mt-4 text-gray-500 dark:text-gray-400">
+      <div className="mt-4 text-muted-foreground">
         {message}...
       </div>
     </div>

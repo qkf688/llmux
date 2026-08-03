@@ -31,7 +31,7 @@ export function BatchDeleteDialog({
       <AlertDialogTrigger asChild>
         <Button variant="destructive" className="relative">
           批量删除
-          <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold leading-none bg-red-500 text-white">
+          <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold leading-none bg-destructive text-destructive-foreground">
             {selectedCount}
           </span>
         </Button>

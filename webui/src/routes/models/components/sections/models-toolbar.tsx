@@ -40,10 +40,7 @@ export function ModelsToolbar({
 
       {/* 第二行：操作按钮（靠右） */}
       <div className="flex flex-wrap items-center justify-start gap-2">
-        <Button
-          onClick={onOpenCreateDialog}
-          className="bg-green-600 hover:bg-green-700 text-white"
-        >
+        <Button onClick={onOpenCreateDialog}>
           添加模型
         </Button>
         {selectedCount > 0 && (
@@ -51,10 +48,10 @@ export function ModelsToolbar({
             <Button
               variant="default"
               onClick={onOpenBatchSettings}
-              className="relative bg-green-600 hover:bg-green-700 text-white"
+              className="relative"
             >
               批量设置
-              <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold leading-none bg-red-500 text-white">
+              <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold leading-none bg-destructive text-destructive-foreground">
                 {selectedCount}
               </span>
             </Button>

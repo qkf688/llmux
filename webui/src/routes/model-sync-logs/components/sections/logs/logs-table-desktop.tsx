@@ -53,8 +53,8 @@ export function LogsTableDesktop({
               </TableCell>
               <TableCell>
                 <div className="flex gap-2">
-                  {log.AddedCount > 0 && <span className="text-green-600">+{log.AddedCount}</span>}
-                  {log.RemovedCount > 0 && <span className="text-red-600">-{log.RemovedCount}</span>}
+                  {log.AddedCount > 0 && <span className="text-success">+{log.AddedCount}</span>}
+                  {log.RemovedCount > 0 && <span className="text-destructive">-{log.RemovedCount}</span>}
                   {log.AddedCount === 0 && log.RemovedCount === 0 && log.Status !== "error" && (
                     <span className="text-muted-foreground text-sm">-</span>
                   )}

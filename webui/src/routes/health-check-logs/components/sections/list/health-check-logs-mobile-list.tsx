@@ -24,7 +24,9 @@ export function HealthCheckLogsMobileList({ logs, onOpenDetail }: HealthCheckLog
               <div className="flex items-center gap-2">
                 <span
                   className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                    success ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                    success
+                      ? "bg-success-tint text-success-foreground"
+                      : "bg-destructive-tint text-destructive-tint-foreground"
                   }`}
                 >
                   {success ? "成功" : "失败"}

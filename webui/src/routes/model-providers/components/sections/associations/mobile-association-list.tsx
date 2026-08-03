@@ -105,9 +105,9 @@ export function MobileAssociationList({
         const testBadge = currentResult?.loading
           ? { text: "测试中", className: "bg-muted text-muted-foreground" }
           : currentResult?.success === true
-            ? { text: "成功", className: "bg-emerald-100 text-emerald-700" }
+            ? { text: "成功", className: "bg-success-tint text-success-foreground" }
             : currentResult?.success === false
-              ? { text: "失败", className: "bg-red-100 text-red-700" }
+              ? { text: "失败", className: "bg-destructive-tint text-destructive-tint-foreground" }
               : null;
 
         return (
@@ -212,8 +212,8 @@ export function MobileAssociationList({
                         <div className="flex items-center gap-1">
                           <StatusBars
                             bars={statusBars}
-                            successClassName="bg-green-500"
-                            failClassName="bg-red-500"
+                            successClassName="bg-success"
+                            failClassName="bg-destructive"
                             barClassName="w-1 h-3 rounded"
                             emptyTextClassName="text-muted-foreground text-[10px]"
                           />
@@ -226,8 +226,8 @@ export function MobileAssociationList({
                         <div className="flex items-center gap-1">
                           <StatusBars
                             bars={healthBars}
-                            successClassName="bg-emerald-500"
-                            failClassName="bg-orange-500"
+                            successClassName="bg-success"
+                            failClassName="bg-warning"
                             barClassName="w-1 h-3 rounded"
                             emptyTextClassName="text-muted-foreground text-[10px]"
                           />
@@ -247,10 +247,10 @@ export function MobileAssociationList({
                           <span className="text-xs">测试中...</span>
                         </>
                       ) : currentResult.success === true ? (
-                        <span className="text-sm text-green-600 font-medium">✓ 测试成功</span>
+                        <span className="text-sm text-success font-medium">✓ 测试成功</span>
                       ) : currentResult.success === false ? (
                         <div className="flex-1">
-                          <span className="text-sm text-red-600 font-medium">✗ 测试失败</span>
+                          <span className="text-sm text-destructive font-medium">✗ 测试失败</span>
                           {currentResult.error && (
                             <p className="text-xs text-muted-foreground mt-1 break-words">{currentResult.error}</p>
                           )}

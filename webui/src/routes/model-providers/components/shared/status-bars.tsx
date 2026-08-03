@@ -16,7 +16,7 @@ export function StatusBars({
   successClassName,
   failClassName,
   barClassName = "w-1 h-6",
-  emptyTextClassName = "text-xs text-gray-400",
+  emptyTextClassName = "text-xs text-muted-foreground",
   showTitle = false,
   successTitle = "成功",
   failTitle = "失败",

@@ -164,8 +164,8 @@ export function DesktopAssociationTable({
                   <div className="flex items-center space-x-4 w-20">
                     <StatusBars
                       bars={statusBars}
-                      successClassName="bg-green-500"
-                      failClassName="bg-red-500"
+                      successClassName="bg-success"
+                      failClassName="bg-destructive"
                       showTitle
                       successTitle="成功"
                       failTitle="失败"
@@ -176,8 +176,8 @@ export function DesktopAssociationTable({
                   <div className="flex items-center space-x-4 w-20">
                     <StatusBars
                       bars={healthBars}
-                      successClassName="bg-emerald-500"
-                      failClassName="bg-orange-500"
+                      successClassName="bg-success"
+                      failClassName="bg-warning"
                       showTitle
                       successTitle="健康检测成功"
                       failTitle="健康检测失败"
@@ -193,9 +193,9 @@ export function DesktopAssociationTable({
                           <span className="text-xs text-muted-foreground">测试中</span>
                         </>
                       ) : currentResult.success === true ? (
-                        <span className="text-xs text-green-600 font-medium">✓ 成功</span>
+                        <span className="text-xs text-success font-medium">✓ 成功</span>
                       ) : currentResult.success === false ? (
-                        <span className="text-xs text-red-600 font-medium" title={currentResult.error}>
+                        <span className="text-xs text-destructive font-medium" title={currentResult.error}>
                           ✗ 失败
                         </span>
                       ) : null}

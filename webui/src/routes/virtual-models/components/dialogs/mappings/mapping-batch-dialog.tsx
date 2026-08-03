@@ -97,8 +97,8 @@ export function MappingBatchDialog({
                 return (
                   <div
                     key={model.ID}
-                    className={`flex items-center gap-3 p-3 hover:bg-gray-50 ${
-                      isMapped ? "bg-gray-100" : ""
+                    className={`flex items-center gap-3 p-3 hover:bg-muted/50 ${
+                      isMapped ? "bg-muted" : ""
                     }`}
                   >
                     <input
@@ -109,13 +109,13 @@ export function MappingBatchDialog({
                       className="h-4 w-4"
                     />
                     <div className="flex-1">
-                      <div className={`font-medium ${isMapped ? "text-gray-500 line-through" : ""}`}>
+                      <div className={`font-medium ${isMapped ? "text-muted-foreground line-through" : ""}`}>
                         {model.Name}
                       </div>
                       {model.Remark && <div className="text-sm text-muted-foreground">{model.Remark}</div>}
                     </div>
                     {isMapped && (
-                      <span className="rounded bg-gray-200 px-2 py-1 text-xs text-gray-500">已映射</span>
+                      <span className="rounded bg-muted px-2 py-1 text-xs text-muted-foreground">已映射</span>
                     )}
                   </div>
                 );

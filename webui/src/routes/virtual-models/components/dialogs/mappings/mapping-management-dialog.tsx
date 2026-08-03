@@ -136,7 +136,7 @@ export function MappingManagementDialog({
                             className={`rounded px-2 py-0.5 text-xs ${
                               mapping.Enabled
                                 ? "bg-primary/10 border border-primary/30 text-primary"
-                                : "bg-gray-100 text-gray-800"
+                                : "bg-muted text-muted-foreground"
                             }`}
                           >
                             {mapping.Enabled ? "启用" : "禁用"}
@@ -203,7 +203,7 @@ export function MappingManagementDialog({
                           className={`shrink-0 rounded px-2 py-0.5 text-xs ${
                             enabled
                               ? "bg-primary/10 border border-primary/30 text-primary"
-                              : "bg-gray-100 text-gray-800"
+                              : "bg-muted text-muted-foreground"
                           }`}
                         >
                           {enabled ? "启用" : "禁用"}

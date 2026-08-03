@@ -61,8 +61,8 @@ export function BatchTestProgressCard({
       )}
 
       <div className="flex gap-3 text-xs">
-        <span className="text-green-600">成功: {batchTestProgress.success}</span>
-        <span className="text-red-600">失败: {batchTestProgress.failed}</span>
+        <span className="text-success">成功: {batchTestProgress.success}</span>
+        <span className="text-destructive">失败: {batchTestProgress.failed}</span>
       </div>
 
       {!batchTesting && hasResults && (

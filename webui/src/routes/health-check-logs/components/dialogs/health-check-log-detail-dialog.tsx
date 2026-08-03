@@ -40,7 +40,7 @@ export function HealthCheckLogDetailDialog({
                 </div>
                 <div className="text-sm">
                   <span className="text-muted-foreground">状态：</span>
-                  <span className={success ? "text-green-600" : "text-red-600"}>
+                  <span className={success ? "text-success" : "text-destructive"}>
                     {success ? "成功" : "失败"}
                   </span>
                 </div>

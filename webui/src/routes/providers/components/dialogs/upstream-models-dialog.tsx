@@ -81,7 +81,7 @@ export function UpstreamModelsDialog({
         ) : (
           <div className="max-h-96 overflow-y-auto space-y-2 flex-1 min-h-0">
             {filteredProviderModels.length === 0 ? (
-              <div className="text-center text-gray-500 py-8">
+              <div className="text-center text-muted-foreground py-8">
                 {providerModels.length === 0
                   ? "暂无模型数据"
                   : "未找到匹配的模型"}

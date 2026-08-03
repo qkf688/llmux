@@ -24,7 +24,7 @@ function VirtualModelStatusPill({ enabled }: { enabled: boolean }) {
       className={`rounded px-2 py-1 text-xs ${
         enabled
           ? "bg-primary/10 border border-primary/30 text-primary"
-          : "bg-gray-100 text-gray-800"
+          : "bg-muted text-muted-foreground"
       }`}
     >
       {enabled ? "启用" : "禁用"}

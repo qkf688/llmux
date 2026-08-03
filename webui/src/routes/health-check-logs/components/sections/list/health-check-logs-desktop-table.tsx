@@ -50,7 +50,7 @@ export function HealthCheckLogsDesktopTable({
                 <TableCell>
                   <span
                     className={`inline-flex items-center px-2 py-1 ${
-                      success ? "text-green-500" : "text-red-500"
+                      success ? "text-success" : "text-destructive"
                     }`}
                   >
                     {success ? "成功" : "失败"}

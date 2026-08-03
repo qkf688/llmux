@@ -44,13 +44,13 @@ export function LogsMobileList({
           <div className="grid grid-cols-2 gap-3 text-xs ml-6">
             <div className="space-y-1">
               <p className="text-muted-foreground text-[10px] uppercase tracking-wide">新增</p>
-              <p className={`font-medium ${log.AddedCount > 0 ? "text-green-600" : "text-muted-foreground"}`}>
+              <p className={`font-medium ${log.AddedCount > 0 ? "text-success" : "text-muted-foreground"}`}>
                 {log.AddedCount > 0 ? `+${log.AddedCount}` : "-"}
               </p>
             </div>
             <div className="space-y-1">
               <p className="text-muted-foreground text-[10px] uppercase tracking-wide">删除</p>
-              <p className={`font-medium ${log.RemovedCount > 0 ? "text-red-600" : "text-muted-foreground"}`}>
+              <p className={`font-medium ${log.RemovedCount > 0 ? "text-destructive" : "text-muted-foreground"}`}>
                 {log.RemovedCount > 0 ? `-${log.RemovedCount}` : "-"}
               </p>
             </div>

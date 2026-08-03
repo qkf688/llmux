@@ -34,9 +34,9 @@ export function UpstreamModelsListItem({
     <div
       className={`flex items-center justify-between p-2 border rounded-lg ${
         isSaved
-          ? "border-gray-300 bg-gray-50/50"
+          ? "border-muted bg-muted/50"
           : checked
-            ? "bg-blue-50/80 border-blue-200"
+            ? "bg-info-tint border-info/30"
             : "border-border bg-background"
       }`}
     >

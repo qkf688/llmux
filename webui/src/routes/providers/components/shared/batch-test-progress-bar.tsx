@@ -12,9 +12,9 @@ export function BatchTestProgressBar({
 }: BatchTestProgressProps) {
   const pct = progress.total > 0 ? (progress.completed / progress.total) * 100 : 0;
   return (
-    <div className="flex items-center gap-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-md flex-shrink-0">
+    <div className="flex items-center gap-3 px-3 py-2 bg-info-tint border border-info/30 rounded-md flex-shrink-0">
       <div className="flex-1">
-        <div className="flex items-center justify-between text-xs text-blue-800 mb-1">
+        <div className="flex items-center justify-between text-xs text-info-foreground mb-1">
           <span>
             测试进度：{progress.completed}/{progress.total}
             (成功: {progress.success}, 失败: {progress.failed}, 进行中:{" "}
@@ -22,9 +22,9 @@ export function BatchTestProgressBar({
           </span>
           <span>{Math.round(pct)}%</span>
         </div>
-        <div className="w-full bg-blue-200 rounded-full h-2">
+        <div className="w-full bg-info/20 rounded-full h-2">
           <div
-            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+            className="bg-info h-2 rounded-full transition-all duration-300"
             style={{ width: `${pct}%` }}
           />
         </div>

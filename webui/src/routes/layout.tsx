@@ -60,7 +60,7 @@ export default function Layout() {
   const WIDTH_COLLAPSED = "min-w-14";
 
   return (
-    <div className="flex flex-col h-screen w-full dark:bg-gray-900 transition-colors duration-300">
+    <div className="flex flex-col h-screen w-full bg-background transition-colors duration-300">
       
       {/* 1. 顶部栏 Header */}
       <header className="h-16 border-b bg-background flex items-center justify-between px-6 flex-shrink-0 shadow-sm z-20">

@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { ExpandableError } from "@/components/expandable-error";
+import { LoadingState } from "@/components/ui/loading-state";
 
 type TestDialogProps = {
   open: boolean;
@@ -84,10 +85,7 @@ export function TestDialog({
         {testType === "connectivity" && (
           <div className="mt-4">
             {selectedTestId && testResults[selectedTestId]?.loading ? (
-              <div className="flex items-center justify-center py-4">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground" />
-                <span className="ml-2">测试中...</span>
-              </div>
+              <LoadingState text="测试中..." />
             ) : selectedTestId && testResults[selectedTestId] ? (
               <ExpandableError
                 error={{
@@ -108,10 +106,7 @@ export function TestDialog({
         {testType === "react" && (
           <div className="mt-4 max-h-96 min-w-0">
             {reactTestResult.loading ? (
-              <div className="flex items-center justify-center py-4">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground" />
-                <span className="ml-2">测试中...</span>
-              </div>
+              <LoadingState text="测试中..." />
             ) : reactTestResult.error ? (
               <ExpandableError
                 error={{ message: reactTestResult.error }}
@@ -146,10 +141,7 @@ export function TestDialog({
         {testType === "structured_output" && (
           <div className="mt-4 min-w-0 pb-4">
             {selectedTestId && structuredTestResults[selectedTestId]?.loading ? (
-              <div className="flex items-center justify-center py-4">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground" />
-                <span className="ml-2">测试中...</span>
-              </div>
+              <LoadingState text="测试中..." />
             ) : selectedTestId && structuredTestResults[selectedTestId]?.result ? (
               (() => {
                 const result = structuredTestResults[selectedTestId]?.result as Record<string, unknown> | null;

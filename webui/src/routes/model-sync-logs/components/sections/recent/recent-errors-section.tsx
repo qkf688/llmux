@@ -37,6 +37,23 @@ function isModelEndpointEnabled(provider?: Provider): boolean {
   return provider?.ModelEndpoint !== false;
 }
 
+// 「模型端点」徽章样式（desktop/mobile 共用，避免 cn() 表达式重复）
+function getModelEndpointBadgeClass(providerMissing: boolean, enabled: boolean): string {
+  return cn(
+    "text-xs px-2 py-0.5 rounded border",
+    providerMissing
+      ? "bg-muted border-border text-muted-foreground"
+      : enabled
+        ? "bg-success-tint border-success/20 text-success-foreground"
+        : "bg-warning-tint border-warning/20 text-warning-foreground"
+  );
+}
+
+// 「模型端点」徽章文本（desktop/mobile 共用）
+function getModelEndpointBadgeText(providerMissing: boolean, enabled: boolean): string {
+  return `模型端点: ${providerMissing ? "不可用" : enabled ? "开启" : "关闭"}`;
+}
+
 export function RecentErrorsSection({
   loading,
   logs,
@@ -201,16 +218,9 @@ export function RecentErrorsSection({
                           <div className="flex items-center gap-2">
                             <span>{item.providerName}</span>
                             <span
-                              className={cn(
-                                "text-xs px-2 py-0.5 rounded border",
-                                providerMissing
-                                  ? "bg-muted border-border text-muted-foreground"
-                                  : enabled
-                                    ? "bg-success-tint border-success/20 text-success-foreground"
-                                    : "bg-warning-tint border-warning/20 text-warning-foreground"
-                              )}
+                              className={getModelEndpointBadgeClass(providerMissing, enabled)}
                             >
-                              模型端点: {providerMissing ? "不可用" : enabled ? "开启" : "关闭"}
+                              {getModelEndpointBadgeText(providerMissing, enabled)}
                             </span>
                           </div>
                         </TableCell>
@@ -311,16 +321,9 @@ export function RecentErrorsSection({
                         <div className="font-medium truncate">{item.providerName}</div>
                       </div>
                       <span
-                        className={cn(
-                          "text-xs px-2 py-0.5 rounded border",
-                          providerMissing
-                            ? "bg-muted border-border text-muted-foreground"
-                            : enabled
-                              ? "bg-success-tint border-success/20 text-success-foreground"
-                              : "bg-warning-tint border-warning/20 text-warning-foreground"
-                        )}
+                        className={getModelEndpointBadgeClass(providerMissing, enabled)}
                       >
-                        模型端点: {providerMissing ? "不可用" : enabled ? "开启" : "关闭"}
+                        {getModelEndpointBadgeText(providerMissing, enabled)}
                       </span>
                     </div>
                     <div className="text-xs text-muted-foreground">

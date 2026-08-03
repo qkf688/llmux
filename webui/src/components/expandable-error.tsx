@@ -121,31 +121,36 @@ function inferErrorType(message: string): ErrorDetail["type"] {
   return "unknown";
 }
 
-export function ExpandableError({ 
-  error, 
-  defaultExpanded = false, 
+// 成功状态展示块（ExpandableError / SimpleError 共用，避免重复）
+function SuccessState({ message, className }: { message?: string; className?: string }) {
+  return (
+    <div className={cn(
+      "rounded-md bg-success-tint border border-success/20 p-4",
+      className
+    )}>
+      <div className="flex items-start gap-3">
+        <CheckCircle className="h-5 w-5 text-success mt-0.5" />
+        <div className="flex-1">
+          <p className="text-sm text-success-foreground font-medium">
+            {message || "操作成功"}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ExpandableError({
+  error,
+  defaultExpanded = false,
   className,
-  isSuccess = false 
+  isSuccess = false
 }: ExpandableErrorProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   // 如果是成功状态，显示成功样式
   if (isSuccess) {
-    return (
-      <div className={cn(
-        "rounded-md bg-success-tint border border-success/20 p-4",
-        className
-      )}>
-        <div className="flex items-start gap-3">
-          <CheckCircle className="h-5 w-5 text-success mt-0.5" />
-          <div className="flex-1">
-            <p className="text-sm text-success-foreground font-medium">
-              {error.summary || "操作成功"}
-            </p>
-          </div>
-        </div>
-      </div>
-    );
+    return <SuccessState message={error.summary} className={className} />;
   }
 
   // 推断错误类型
@@ -228,21 +233,7 @@ export function SimpleError({
   isSuccess = false 
 }: ExpandableErrorProps) {
   if (isSuccess) {
-    return (
-      <div className={cn(
-        "rounded-md bg-success-tint border border-success/20 p-4",
-        className
-      )}>
-        <div className="flex items-start gap-3">
-          <CheckCircle className="h-5 w-5 text-success mt-0.5" />
-          <div className="flex-1">
-            <p className="text-sm text-success-foreground font-medium">
-              {error.summary || "操作成功"}
-            </p>
-          </div>
-        </div>
-      </div>
-    );
+    return <SuccessState message={error.summary} className={className} />;
   }
 
   const detectedType = error.type || inferErrorType(error.message);

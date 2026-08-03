@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Spinner } from "@/components/ui/spinner";
+import { LoadingState } from "@/components/ui/loading-state";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 type ModelListDialogProps = {
@@ -108,10 +108,7 @@ export function ModelListDialog({
 
           <div className="flex-1 min-h-0 overflow-y-auto border rounded-md p-2 space-y-2">
             {loadingProviderModels ? (
-              <div className="flex items-center justify-center py-4">
-                <Spinner className="h-4 w-4" />
-                <span className="ml-2 text-sm">加载全部模型...</span>
-              </div>
+              <LoadingState text="加载全部模型..." className="text-sm" spinnerClassName="h-4 w-4" />
             ) : providerModels.length === 0 ? (
               <div className="text-center py-4 text-sm text-muted-foreground">暂无全部模型缓存，请先在提供商管理页同步</div>
             ) : visibleProviderGroups.length === 0 ? (

@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
+import { LoadingState } from "@/components/ui/loading-state";
 import type { Provider } from "@/lib/api";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { ProviderModelGroup, ProviderModelWithOwner } from "../../types";
@@ -69,10 +69,7 @@ export function ModelPickerDialog({
 
         <div className="flex-1 min-h-0 overflow-y-auto border rounded-md space-y-2 p-2">
           {loadingProviderModels ? (
-            <div className="flex items-center justify-center h-32">
-              <Spinner className="h-6 w-6 mr-2" />
-              <span>加载模型列表...</span>
-            </div>
+            <LoadingState text="加载模型列表..." className="h-32" spinnerClassName="h-6 w-6" />
           ) : providerModels.length === 0 ? (
             <div className="flex items-center justify-center h-32 text-muted-foreground">
               暂无全部模型缓存，请先在提供商管理页同步

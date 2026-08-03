@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { LoadingState } from "@/components/ui/loading-state";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -79,10 +80,7 @@ export function BlacklistDialog({
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-8 gap-2 text-sm text-muted-foreground">
-            <Spinner className="h-4 w-4" />
-            加载中...
-          </div>
+          <LoadingState text="加载中..." className="py-8 text-sm text-muted-foreground" spinnerClassName="h-4 w-4" />
         ) : (
           <div className="space-y-2">
             {filteredProviders.length === 0 ? (

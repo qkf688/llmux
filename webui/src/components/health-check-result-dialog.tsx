@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
+import { LoadingState } from "@/components/ui/loading-state";
 import { getBatchHealthCheckStatus, type BatchHealthCheckStatus } from "@/lib/api";
 import { CheckCircle2, XCircle, Clock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -33,7 +33,7 @@ export function HealthCheckResultDialog({
 }: HealthCheckResultDialogProps) {
   const [status, setStatus] = useState<BatchHealthCheckStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const navigate = useNavigate();
 
   const fetchStatus = useCallback(async () => {
@@ -115,9 +115,7 @@ export function HealthCheckResultDialog({
 
         <div className="flex-1 overflow-y-auto space-y-4">
           {loading || !status ? (
-            <div className="flex items-center justify-center py-8">
-              <Spinner className="w-8 h-8" />
-            </div>
+            <LoadingState text="" className="py-8" spinnerClassName="w-8 h-8" />
           ) : (
             <>
               {/* 统计概览 */}
@@ -230,10 +228,7 @@ export function HealthCheckResultDialog({
 
               {/* 检测中状态 */}
               {!status.completed && (
-                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground py-2">
-                  <Spinner className="w-4 h-4" />
-                  <span>检测进行中...</span>
-                </div>
+                <LoadingState text="检测进行中..." className="py-2 text-sm text-muted-foreground" spinnerClassName="w-4 h-4" />
               )}
             </>
           )}

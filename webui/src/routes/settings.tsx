@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { HealthCheckSettings, Settings } from "@/lib/api";
-import { Spinner } from "@/components/ui/spinner";
+import { LoadingState } from "@/components/ui/loading-state";
 import { RoutingSettings } from "./settings/routing-settings";
 import { BalancerSettings } from "./settings/balancer-settings";
 import { LogsSettings } from "./settings/logs-settings";
@@ -28,9 +28,7 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Spinner className="w-8 h-8" />
-      </div>
+      <LoadingState text="" className="h-full" spinnerClassName="w-8 h-8" />
     );
   }
 

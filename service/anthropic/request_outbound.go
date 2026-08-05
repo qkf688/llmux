@@ -78,7 +78,7 @@ func TransformFromUnified(unified *models.UnifiedRequest) ([]byte, error) {
 		if unified.ReasoningBudget != nil {
 			thinking["budget_tokens"] = *unified.ReasoningBudget
 		} else if unified.ReasoningEffort != nil {
-			thinking["budget_tokens"] = reasoningEffortToThinkingBudget(*unified.ReasoningEffort)
+			thinking["budget_tokens"] = ReasoningEffortToThinkingBudget(*unified.ReasoningEffort)
 		}
 
 		req["thinking"] = thinking

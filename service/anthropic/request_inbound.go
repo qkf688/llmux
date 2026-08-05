@@ -47,7 +47,7 @@ func TransformToUnified(rawBody []byte) (*models.UnifiedRequest, error) {
 		thinkingType := maputil.String(thinking, "type")
 		budgetTokens := maputil.Int64(thinking, "budget_tokens")
 		if thinkingType == "enabled" && budgetTokens > 0 {
-			effort := thinkingBudgetToReasoningEffort(budgetTokens)
+			effort := ThinkingBudgetToReasoningEffort(budgetTokens)
 			if effort != "" {
 				unified.ReasoningEffort = &effort
 			}

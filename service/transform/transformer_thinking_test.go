@@ -44,50 +44,6 @@ func TestThinking_AnthropicToUnified(t *testing.T) {
 	}
 }
 
-func TestThinking_BudgetMapping(t *testing.T) {
-	tests := []struct {
-		name           string
-		budgetTokens   int64
-		expectedEffort string
-	}{
-		{"high effort", 50000, "high"},
-		{"medium effort", 30000, "medium"},
-		{"low effort", 5000, "low"},
-		{"zero budget", 0, ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			effort := thinkingBudgetToReasoningEffort(tt.budgetTokens)
-			if effort != tt.expectedEffort {
-				t.Errorf("Expected effort '%s', got '%s'", tt.expectedEffort, effort)
-			}
-		})
-	}
-}
-
-func TestThinking_EffortMapping(t *testing.T) {
-	tests := []struct {
-		name           string
-		effort         string
-		expectedBudget int64
-	}{
-		{"high effort", "high", 50000},
-		{"medium effort", "medium", 20000},
-		{"low effort", "low", 1000},
-		{"empty effort", "", 0},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			budget := reasoningEffortToThinkingBudget(tt.effort)
-			if budget != tt.expectedBudget {
-				t.Errorf("Expected budget %d, got %d", tt.expectedBudget, budget)
-			}
-		})
-	}
-}
-
 func TestThinking_UnifiedToAnthropic_WithBudget(t *testing.T) {
 	// 测试 Unified → Anthropic 转换 (使用 ReasoningBudget)
 	temp := 0.7

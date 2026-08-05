@@ -19,6 +19,10 @@ export const formSchema = z.object({
   customer_headers: z.array(headerPairSchema).default([]),
   // 三态："inherit"=继承 model，"true"/"false"=override
   supports_thinking: z.enum(["inherit", "true", "false"]),
+  // thinking_levels 三态："inherit"=继承 model，"custom"=自定义白名单
+  // custom 模式下 thinking_levels_custom 数组为白名单内容
+  thinking_levels_mode: z.enum(["inherit", "custom"]),
+  thinking_levels_custom: z.array(z.string()).default([]),
 });
 
 export type FormValues = z.input<typeof formSchema>;

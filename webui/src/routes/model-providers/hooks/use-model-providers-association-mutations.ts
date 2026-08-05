@@ -102,6 +102,8 @@ export function useModelProvidersAssociationMutations({
         max_tokens: 0,
         customer_headers: [],
         supports_thinking: "inherit", // 默认继承 model
+        thinking_levels_mode: "inherit", // 默认继承 model
+        thinking_levels_custom: [],
       });
       setSelectedProviderModels([]);
       if (selectedModelId) {
@@ -137,6 +139,8 @@ export function useModelProvidersAssociationMutations({
         max_tokens: 0,
         customer_headers: [],
         supports_thinking: "inherit", // 默认继承 model
+        thinking_levels_mode: "inherit", // 默认继承 model
+        thinking_levels_custom: [],
       });
       if (selectedModelId) {
         void fetchModelProviders(selectedModelId);

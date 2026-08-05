@@ -18,6 +18,8 @@ export function useModelProvidersAssociationForm() {
       max_tokens: 0,
       customer_headers: [],
       supports_thinking: "inherit", // 默认继承 model
+      thinking_levels_mode: "inherit", // 默认继承 model
+      thinking_levels_custom: [],
     },
   });
 

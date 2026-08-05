@@ -9,6 +9,7 @@ export const defaultModelFormValues: ModelFormValues = {
   io_log: false,
   auto_associate: true,
   supports_thinking: false,
+  thinking_levels: [],
 };
 
 export const defaultBatchUpdateValues: BatchUpdateValues = {
@@ -26,4 +27,5 @@ export const toModelFormValues = (model: Model): ModelFormValues => ({
   io_log: model.IOLog,
   auto_associate: model.auto_associate,
   supports_thinking: model.supports_thinking ?? false,
+  thinking_levels: model.thinking_levels ?? [],
 });

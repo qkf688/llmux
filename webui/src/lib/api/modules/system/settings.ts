@@ -49,7 +49,8 @@ export interface Settings {
   auto_clean_on_delete: boolean;
   auto_save_template_on_associate: boolean;
   reasoning_effort_mapping_enabled: boolean;
-  reasoning_effort_default_value: "low" | "medium" | "high";
+  reasoning_effort_default_value: "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+  reasoning_effort_unknown_strategy: "clamp_to_default" | "passthrough";
 }
 
 export interface ResetWeightsResponse {

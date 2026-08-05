@@ -45,6 +45,9 @@ export function useModelProvidersAssociationDialog({
       max_tokens: association.MaxTokens ?? 0,
       customer_headers: headerPairs.length ? headerPairs : [],
       supports_thinking: toTriState(association.SupportsThinking),
+      // thinking_levels 三态：null=继承，非 null=自定义（空切片=不约束）
+      thinking_levels_mode: association.ThinkingLevels === null ? "inherit" : "custom",
+      thinking_levels_custom: association.ThinkingLevels ?? [],
     });
     setOpen(true);
   };
@@ -69,6 +72,8 @@ export function useModelProvidersAssociationDialog({
       max_tokens: 0,
       customer_headers: [],
       supports_thinking: "inherit", // 默认继承 model
+      thinking_levels_mode: "inherit", // 默认继承 model
+      thinking_levels_custom: [],
     });
     setOpen(true);
   };

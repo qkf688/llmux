@@ -9,6 +9,7 @@ export interface Model {
   IOLog: boolean;
   auto_associate?: boolean;
   supports_thinking: boolean;
+  thinking_levels?: string[];
 }
 
 export interface ModelTemplateItem {
@@ -33,6 +34,7 @@ export async function createModel(model: {
   time_out: number;
   io_log: boolean;
   supports_thinking?: boolean;
+  thinking_levels?: string[];
 }): Promise<Model> {
   return apiRequest<Model>("/models", {
     method: "POST",
@@ -50,6 +52,7 @@ export async function updateModel(
     io_log?: boolean;
     auto_associate?: boolean;
     supports_thinking?: boolean;
+    thinking_levels?: string[];
   }
 ): Promise<Model> {
   return apiRequest<Model>(`/models/${id}`, {

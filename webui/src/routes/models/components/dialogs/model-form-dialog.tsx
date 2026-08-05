@@ -29,6 +29,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { Model, Provider } from "@/lib/api";
 import type { UseFormReturn } from "react-hook-form";
 import type { ModelFormValues } from "../../schemas/forms";
+import { THINKING_LEVEL_OPTIONS } from "@/lib/constants/thinking-levels";
 
 interface ModelFormDialogProps {
   open: boolean;
@@ -220,6 +221,51 @@ export function ModelFormDialog({
                   <FormControl>
                     <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                   </FormControl>
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="thinking_levels"
+              render={({ field }) => (
+                <FormItem className="rounded-lg border p-4 space-y-3">
+                  <div className="space-y-0.5">
+                    <FormLabel className="text-base">思考档位白名单</FormLabel>
+                    <div className="text-sm text-muted-foreground">
+                      勾选允许的 reasoning_effort 档位；空列表=不约束（任意档位透传）。
+                      不在白名单的档位会被就近钳制到白名单内最接近的档位
+                    </div>
+                  </div>
+                  <FormControl>
+                    <div className="flex flex-wrap gap-3 pt-1">
+                      {THINKING_LEVEL_OPTIONS.map((opt) => {
+                        const checked = (field.value ?? []).includes(opt.value);
+                        return (
+                          <label
+                            key={opt.value}
+                            className="flex items-center gap-2 cursor-pointer text-sm"
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(c) => {
+                                const current = field.value ? [...field.value] : [];
+                                if (c) {
+                                  current.push(opt.value);
+                                } else {
+                                  const idx = current.indexOf(opt.value);
+                                  if (idx >= 0) current.splice(idx, 1);
+                                }
+                                field.onChange(current);
+                              }}
+                            />
+                            {opt.label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </FormControl>
+                  <FormMessage />
                 </FormItem>
               )}
             />

@@ -8,6 +8,7 @@ export const modelFormSchema = z.object({
   io_log: z.boolean(),
   auto_associate: z.boolean().optional(),
   supports_thinking: z.boolean(),
+  thinking_levels: z.array(z.string()).optional(),
 });
 
 export type ModelFormValues = z.infer<typeof modelFormSchema>;

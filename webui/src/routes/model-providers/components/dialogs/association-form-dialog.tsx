@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { THINKING_LEVEL_OPTIONS } from "@/lib/constants/thinking-levels";
 
 type AssociationFormDialogProps = {
   open: boolean;
@@ -295,6 +296,87 @@ export function AssociationFormDialog({
                     </FormItem>
                   );
                 }}
+              />
+              <FormField
+                control={form.control}
+                name="thinking_levels_mode"
+                render={({ field }) => {
+                  const selectedModel = models.find((m) => m.ID === selectedModelId);
+                  const inheritedLevels = selectedModel?.thinking_levels;
+                  const inheritedLabel =
+                    inheritedLevels === undefined || inheritedLevels === null
+                      ? "未设置（不约束）"
+                      : inheritedLevels.length === 0
+                        ? "不约束（空）"
+                        : inheritedLevels.join(", ");
+                  return (
+                    <FormItem className="rounded-md border p-4 space-y-3">
+                      <div className="space-y-1">
+                        <FormLabel>思考档位白名单</FormLabel>
+                        <div className="text-sm text-muted-foreground">
+                          覆盖模型级的思考档位白名单；"继承"跟随模型设置（当前：{inheritedLabel}）。
+                          自定义模式下勾选允许的档位，空列表=不约束
+                        </div>
+                      </div>
+                      <FormControl>
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="选择" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="inherit">继承（当前：{inheritedLabel}）</SelectItem>
+                            <SelectItem value="custom">自定义</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
+              />
+              <FormField
+                control={form.control}
+                name="thinking_levels_custom"
+                render={({ field }) => (
+                  <FormItem className="rounded-md border p-4 space-y-3">
+                    <div className="space-y-1">
+                      <FormLabel>自定义白名单</FormLabel>
+                      <div className="text-sm text-muted-foreground">
+                        勾选允许的 reasoning_effort 档位；空列表=不约束（任意档位透传）。
+                        不在白名单的档位会被就近钳制到白名单内最接近的档位
+                      </div>
+                    </div>
+                    <FormControl>
+                      <div className="flex flex-wrap gap-3 pt-1">
+                        {THINKING_LEVEL_OPTIONS.map((opt) => {
+                          const checked = (field.value ?? []).includes(opt.value);
+                          return (
+                            <label
+                              key={opt.value}
+                              className="flex items-center gap-2 cursor-pointer text-sm"
+                            >
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={(c) => {
+                                  const current = field.value ? [...field.value] : [];
+                                  if (c) {
+                                    current.push(opt.value);
+                                  } else {
+                                    const idx = current.indexOf(opt.value);
+                                    if (idx >= 0) current.splice(idx, 1);
+                                  }
+                                  field.onChange(current);
+                                }}
+                              />
+                              {opt.label}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
               <FormField
                 control={form.control}

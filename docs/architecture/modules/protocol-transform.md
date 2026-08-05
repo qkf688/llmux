@@ -47,6 +47,7 @@ models/
 | `RegisterAdapter` | 注册协议适配器 | `service/transform/` | `adapters_register.go` |
 | `RegisterRealtimeRoute` | 注册实时流协议组合 | `service/transform/streaming/` | 各路由实现 |
 | `UnifiedRequest` / `UnifiedResponse` | 协议中枢类型；`UnifiedMessage.RedactedThinkingData` 独立保存 Anthropic `redacted_thinking.data` 不透明密文，不与 reasoning 文本混用 | `models/unified/` 与 `models/unified.go`（响应等部分类型仍在门面文件） | 被转换器读写 |
+| `ThinkingClampConfig` | 思考档位钳制配置（白名单 + autoFallback + unknownStrategy），由 chat 主路径传入 `ProcessRequest` | `service/transform/transformer.go` | `clampUnifiedReasoning`（transform 路径）+ `clampPassthroughReasoning`（passthrough 路径） |
 
 ## 5. 特殊约定
 
@@ -55,6 +56,21 @@ models/
 - **扩展最小改动集（现状）**：新外部格式通常同时需要 `RegisterAdapter`、流式 `RegisterRealtimeRoute`（若涉及 SSE）、chat 侧 `Beforer`/`Processer`、`register_v1` 路由与 `consts.Style*`；Realtime 矩阵当前未覆盖全部协议组合，部分路径走 pivot/遗留逻辑
 - **Responses `function_call_output.output` 多模态**：`ResponsesItem.Output` 为 `interface{}`——纯文本 tool result 输出 `string`（老上游兼容），含图片块输出 `input_text`/`input_image` 数组（OpenAI Responses 协议规范）。编解码 helper 在 `service/responses/tool_content_codec.go`，入站解析复用 `parsePartsToUnifiedContent`（纯文本→string、含图片→块数组，与 Anthropic 路径行为一致）
 - 专题细节可参考历史图示（本地 `local/架构文档/格式转换架构图.md`，未入库）
+
+### 思考档位归一化与钳制（Stage B 扩档）
+
+- **归一化（`NormalizeReasoningEffort`）**：只做字符串小写归一化，不做模型能力钳制。8 档 `[minimal, low, medium, high, xhigh, max, none, auto]` 原样小写透传；未知档位也原样透传（不再回退默认值）。钳制职责分离到 `ClampReasoningEffort`。
+- **钳制（`ClampReasoningEffort`）**：纯函数（`models/model.go`），根据白名单 + `autoFallback` + `unknownStrategy` 执行就近钳制。规则：
+  - 档位在白名单内 → 透传
+  - 档位不在白名单 → 就近钳制到白名单内最接近的档位（6 档有序，按索引距离取最近；`none`/`auto` 特殊档不在有序序列中，只在白名单显式包含时透传）
+  - `auto` 不在白名单 → 回退到 `autoFallback`（`SettingKeyReasoningEffortDefaultValue`）
+  - `none` 不在白名单 → 返回空串（调用方剥离 thinking 字段）
+  - 未知档位 + `unknownStrategy=clamp_to_default` → 回退到 `autoFallback`；`passthrough` → 原样透传
+- **budget 互转（`ReasoningEffortToThinkingBudget` / `ThinkingBudgetToReasoningEffort`）**：6 档双向映射，single source of truth 在 `service/anthropic/helpers.go`。保留 Octopus 原值（low→1000, medium→20000, high→50000），新增 minimal→512, xhigh→80000, max→128000。
+- **budget 联动（方案 E）**：effort 被钳制时，budget 按钳制后 effort 对应的 budget 值作上限——超上限则钳到上限 + warn；低于上限不动；effort 未钳制则 budget 不动。防止用户用高 budget 绕过 effort 白名单。
+- **分路径钳制**：
+  - transform 路径：`ProcessRequest(ctx, raw, clamp)` 在 ToUnified 后、FromUnified 前对 `unified.ReasoningEffort` 钳制（`clampUnifiedReasoning`）
+  - passthrough 路径：`clampPassthroughReasoning` 对 raw body 按 style 钳制 effort 字段（OpenAI `reasoning_effort`、Anthropic `output_config.effort`、Responses 双路径 `reasoning.effort` + `metadata.reasoning_effort`）+ budget 字段（Anthropic `thinking.budget_tokens`、Responses `reasoning.max_tokens`）。**大小写归一化**：两条路径都在钳制前对 effort 做小写归一化（transform 经 `NormalizeReasoningEffort`，passthrough 经 `strings.ToLower`），避免客户端传 "HIGH" 时白名单命中失败。passthrough 路径在归一化后若值在白名单内但原始大小写不规范，会写回归一化小写值。
 
 ---
 

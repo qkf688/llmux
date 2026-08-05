@@ -48,6 +48,16 @@ models.Model / ModelTemplateItem
 - 默认 `false`：**存量模型与 modelsync 同步创建的模型升级后默认不支持 thinking**，需手动在 model 编辑页勾选（含存量部署升级场景——升级后旧模型的 thinking 请求会被裁剪，属预期行为，有日志可观测）；自动推断（按模型名匹配已知支持 thinking 的模型）是后续独立任务。
 - 消费方：`service/chat` 在构建上游请求时经 `ModelWithProvider.SupportsThinkingResolved` 解析最终状态，`false` 时裁剪请求体中的 thinking 配置字段。
 
+### `Model.ThinkingLevels`（思考档位白名单）
+
+- `[]string`（GORM `serializer:json`）：Model 层的思考档位白名单，空切片/nil=不约束（任意档位透传），非空=只允许白名单内档位。
+- 8 档候选：6 档有序 `[minimal, low, medium, high, xhigh, max]` + 2 特殊 `[none, auto]`。
+- `SupportsThinking=false` 时此字段被忽略（thinking 整体剥离，白名单无意义）。
+- 消费方：`service/chat` 经 `ModelWithProvider.ThinkingLevelsResolved(model)` 解析最终白名单（关联 override 优先，否则继承 model），传给 `transform.ThinkingClampConfig` 在 chat 主路径钳制。
+- 钳制规则：请求中的 `reasoning_effort` 不在白名单时，按就近原则钳制到白名单内最接近的档位；`auto` 不在白名单时回退到 `SettingKeyReasoningEffortDefaultValue`；`none` 不在白名单时剥离 thinking 字段。详见 `protocol-transform.md` 钳制章节。
+- GORM map-based UpdateFields 不走 `serializer:json`，需手动序列化。`models.SerializeThinkingLevelsForUpdate([]string)` 用于 Model（非三态），`models.SerializeThinkingLevelsPtrForUpdate(*[]string)` 用于 ModelWithProvider（三态）。详见 `associations.md`。
+- `models.IsSixLevelEffort(effort)` 校验 effort 是否为 6 档有序档位之一（不含 none/auto），用于 `buildThinkingClampConfig` 兜底校验 autoFallback 设置值。
+
 ---
 
 *本文档由 Project Architecture Documenter skill 生成，生成日期：2026-07-23*

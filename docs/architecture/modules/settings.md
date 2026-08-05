@@ -45,6 +45,10 @@ models.Setting
 - 交叉字段归一化（如 `normalizeUpdateSettingsRequest`）可能不在 schema 内，新增约束时需排查
 - **热读未完全单路径**：并存 `models.GetSetting*`、`service/settings.Reader`、部分业务包自写 getter（默认值/min 语义可能不一致）
 - 键名使用 `SettingKey*` 常量，禁止魔法字符串散落
+- **思考档位相关设置（Stage B 扩档）**：
+  - `SettingKeyReasoningEffortDefaultValue`：Type=string，Default=`low`，Enum=`[minimal, low, medium, high, xhigh, max]`（6 档，不含 none/auto）。用于 `auto` 不支持且白名单空时的兜底 + `unknownStrategy=clamp_to_default` 时的回退值。
+  - `SettingKeyReasoningEffortUnknownStrategy`：Type=string，Default=`clamp_to_default`，Enum=`[clamp_to_default, passthrough]`。用于请求中的 reasoning_effort 不在模型白名单时的处理策略。
+  - 消费方：`service/chat` 的 `buildThinkingClampConfig`（`chat_settings.go`）经 `settingsReader` 读取这两个设置 + `ThinkingLevelsResolved` 白名单，构建 `transform.ThinkingClampConfig` 传入 chat 主路径钳制。
 
 ---
 

@@ -316,9 +316,9 @@ func TestStreamConversion_OpenAIToAnthropic_NoDelta(t *testing.T) {
 
 	// 确认基本事件存在
 	wantTypes := map[string]bool{
-		"message_start":  false,
-		"message_delta":  false,
-		"message_stop":   false,
+		"message_start": false,
+		"message_delta": false,
+		"message_stop":  false,
 	}
 	for _, ev := range events {
 		if _, ok := wantTypes[ev.typ()]; ok {

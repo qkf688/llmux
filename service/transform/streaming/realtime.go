@@ -168,12 +168,12 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, provider
 	scanner.Buffer(make([]byte, 0, 64*1024), maxSSEEventSize)
 
 	state := &realtimeStreamState{
-		writer:                      dst,
-		providerType:                providerType,
-		clientType:                  clientType,
-		anthropicActiveBlockIndex:   -1,
-		anthropicActiveOutputIndex:  -1,
-		rawAccumulator:              rawAccumulator,
+		writer:                     dst,
+		providerType:               providerType,
+		clientType:                 clientType,
+		anthropicActiveBlockIndex:  -1,
+		anthropicActiveOutputIndex: -1,
+		rawAccumulator:             rawAccumulator,
 	}
 
 	var eventName string

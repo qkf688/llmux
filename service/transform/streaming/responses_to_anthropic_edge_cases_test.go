@@ -52,7 +52,7 @@ func TestStreamConversion_ResponsesToAnthropic_ParallelToolCallsEmptyArgs(t *tes
 	openBlocks := map[int]string{}
 	closedBlocks := map[int]bool{}
 	var blockOpenOrder []int
-	toolUseBlocks := map[int]string{}  // blockIndex -> item id
+	toolUseBlocks := map[int]string{} // blockIndex -> item id
 	toolUseNames := map[int]string{}  // blockIndex -> item name
 	argsByBlock := map[int]*strings.Builder{}
 	deltaCountByBlock := map[int]int{}

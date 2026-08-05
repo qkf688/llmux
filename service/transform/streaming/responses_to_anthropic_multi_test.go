@@ -255,7 +255,7 @@ func TestStreamConversion_ResponsesToAnthropic_ImageInterleavedWithToolCalls(t *
 
 	openBlocks := map[int]string{}
 	closedBlocks := map[int]bool{}
-	toolUseBlocks := map[int]string{}   // blockIndex -> item id
+	toolUseBlocks := map[int]string{} // blockIndex -> item id
 	argsByBlock := map[int]*strings.Builder{}
 	imageBlockIndex := -1
 	var blockOpenOrder []int

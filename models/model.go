@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -46,6 +47,11 @@ type Model struct {
 	// nil 与 false 业务上等价；三态语义（nil=继承）只属于 ModelWithProvider 的 override 字段。
 	// 与 IOLog/IsUpstream 的 *bool 风格不一致，是有意为之：Model 层不存在"未设置"状态。
 	SupportsThinking bool `json:"supports_thinking"` // 是否支持 thinking（默认 false，存量/同步模型需手动开启）
+	// ThinkingLevels 思考档位白名单（允许的 reasoning_effort 取值）。
+	// 空切片=显式不约束（任意档位透传）；非空=只允许白名单内档位，超出按就近钳制规则收敛。
+	// SupportsThinking=false 时此字段被忽略（thinking 整体剥离）。
+	// 6 档有序 [minimal, low, medium, high, xhigh, max] + 2 特殊 [none, auto]；none/auto 不参与就近钳制。
+	ThinkingLevels []string `json:"thinking_levels,omitempty" gorm:"serializer:json"`
 }
 
 type ModelWithProvider struct {
@@ -67,6 +73,10 @@ type ModelWithProvider struct {
 	// true/false=override。与 Model.SupportsThinking 的 bool（二态）不同：关联层存在"继承"这一
 	// 有效状态，因此必须用 *bool。解析语义见 SupportsThinkingResolved。
 	SupportsThinking *bool
+	// ThinkingLevels 思考档位 override，三态：
+	// nil=继承 Model.ThinkingLevels；空切片=显式不约束（任意档位透传）；非空=override 白名单。
+	// 用 *[]string 而非 []string 以区分"继承"与"显式不约束"。解析语义见 ThinkingLevelsResolved。
+	ThinkingLevels *[]string `json:"thinking_levels,omitempty" gorm:"serializer:json"`
 }
 
 // SupportsThinkingResolved 解析该关联最终是否支持 thinking：
@@ -81,6 +91,198 @@ func (m *ModelWithProvider) SupportsThinkingResolved(model *Model) bool {
 		return model.SupportsThinking
 	}
 	return false
+}
+
+// ThinkingLevelsResolved 解析该关联最终生效的思考档位白名单：
+// override（ThinkingLevels）非 nil 时以 override 为准（含空切片=显式不约束）；
+// 否则继承 model 的 ThinkingLevels（可能为空切片=不约束）。
+// 纯函数（只读字段，无 IO），调用侧允许传 nil mwp / nil model，方法内部兜底返回 nil。
+// 返回 nil 表示"不约束"（白名单空），非 nil 表示有效白名单。
+// 注意：返回值 nil 与空切片语义不同——nil=继承且 model 也无白名单（按 unknown_strategy 处理），
+// 空切片=显式不约束（任意档位透传，不进 ClampReasoningEffort 的 levels 分支）。
+// 但 ClampReasoningEffort 的 levels 参数约定：nil 与空切片都视为"白名单空"，统一走 unknown_strategy。
+// 因此本方法返回 nil 或空切片对 ClampReasoningEffort 等价，调用方无需区分。
+func (m *ModelWithProvider) ThinkingLevelsResolved(model *Model) []string {
+	if m != nil && m.ThinkingLevels != nil {
+		return *m.ThinkingLevels
+	}
+	if model != nil {
+		return model.ThinkingLevels
+	}
+	return nil
+}
+
+// SerializeThinkingLevelsForUpdate 将 []string 序列化为 GORM map-based UpdateFields 可接受的值。
+// GORM serializer:json 只对 struct Updates 生效，map-based UpdateFields 不走 serializer，
+// 需手动转 JSON 字符串。用于 Model.ThinkingLevels（[]string，非三态）。
+// nil → JSON "null" 写入（GORM 会存 NULL）；非 nil → JSON 数组字符串。
+func SerializeThinkingLevelsForUpdate(levels []string) (any, error) {
+	data, err := json.Marshal(levels)
+	if err != nil {
+		return nil, err
+	}
+	return string(data), nil
+}
+
+// SerializeThinkingLevelsPtrForUpdate 将 *[]string 序列化为 GORM map-based UpdateFields 可接受的值。
+// 用于 ModelWithProvider.ThinkingLevels（*[]string，三态）。
+// nil → nil（写 NULL=继承）；非 nil → JSON 数组字符串（空切片="[]"=显式不约束）。
+func SerializeThinkingLevelsPtrForUpdate(levels *[]string) (any, error) {
+	if levels == nil {
+		return nil, nil
+	}
+	data, err := json.Marshal(*levels)
+	if err != nil {
+		return nil, err
+	}
+	return string(data), nil
+}
+
+// thinkingEffortOrder 6 档思考档位的有序索引（从低到高）。
+// none/auto 是特殊档位，不参与就近钳制，单独处理。
+var thinkingEffortOrder = map[string]int{
+	"minimal": 0,
+	"low":     1,
+	"medium":  2,
+	"high":    3,
+	"xhigh":   4,
+	"max":     5,
+}
+
+// thinkingEffortLevels 6 档有序切片（从低到高），用于就近钳制时取最低档/遍历。
+var thinkingEffortLevels = []string{"minimal", "low", "medium", "high", "xhigh", "max"}
+
+// IsSixLevelEffort 判断 effort 是否为 6 档有序档位之一（不含 none/auto）。
+// 用于校验 autoFallback 等设置值是否合法，防止数据库脏值传入 ClampReasoningEffort。
+func IsSixLevelEffort(effort string) bool {
+	_, ok := thinkingEffortOrder[effort]
+	return ok
+}
+
+// ClampReasoningEffort 将 reasoning effort 按模型白名单就近钳制（平手偏低）。
+// 纯函数：不读设置、不记日志，所有外部输入经参数传入，便于单测。
+//
+// 参数：
+//   - effort: 客户端原始档位（已归一化小写，含 none/auto/未知值）
+//   - levels: 模型白名单（ThinkingLevelsResolved 结果）。nil 或空切片=白名单空
+//   - autoFallback: auto 不支持且白名单空时的兜底档位（调用方从 ctx 读 SettingKeyReasoningEffortDefaultValue 传入）
+//   - unknownStrategy: 白名单空时未知档位的处理策略（"clamp_to_default" 或 "passthrough"，调用方从 ctx 读 SettingKeyReasoningEffortUnknownStrategy 传入）
+//
+// 返回钳制后的档位；返回空串表示"剥离 thinking"（调用方删 effort 字段 / 设 unified.ReasoningEffort=nil）。
+//
+// 规则：
+//   - effort 为空串：原样返回空串（调用方本就不该 emit）
+//   - levels 空（nil/空切片）：
+//   - unknownStrategy=clamp_to_default → 未知档位兜底到 autoFallback；已知 6 档（minimal/low/medium/high/xhigh/max）始终透传
+//   - unknownStrategy=passthrough → 原样透传
+//   - levels 非空：
+//   - effort 在白名单内 → 透传
+//   - none：白名单含 none → 透传；不含 → 返回空串（剥离 thinking）
+//   - auto：白名单含 auto → 透传；不含 → 取白名单中最低的 6 档档位（auto 语义=让模型自定，无 auto 能力时最低档最保守）
+//   - 其余 6 档：就近钳制（平手偏低）——找白名单中 <= effort 档位的最高档；若无更低档则取白名单最低档
+func ClampReasoningEffort(effort string, levels []string, autoFallback string, unknownStrategy string) string {
+	if effort == "" {
+		return ""
+	}
+
+	levelsEmpty := len(levels) == 0
+
+	// 白名单空：走 unknown_strategy
+	if levelsEmpty {
+		if unknownStrategy == "passthrough" {
+			return effort
+		}
+		// clamp_to_default：已知 6 档透传，未知档位兜底 autoFallback
+		if _, isKnown := thinkingEffortOrder[effort]; isKnown {
+			return effort
+		}
+		// none/auto 是特殊档位，clamp_to_default 下也兜底（none 不在 6 档，auto 不在 6 档）
+		if autoFallback != "" {
+			return autoFallback
+		}
+		return "low"
+	}
+
+	// 白名单非空：先查精确命中
+	levelSet := make(map[string]bool, len(levels))
+	for _, l := range levels {
+		levelSet[l] = true
+	}
+	if levelSet[effort] {
+		return effort
+	}
+
+	// none 特殊处理
+	if effort == "none" {
+		if levelSet["none"] {
+			return "none"
+		}
+		return "" // 剥离 thinking
+	}
+
+	// auto 特殊处理：白名单不含 auto → 取白名单中最低的 6 档档位
+	if effort == "auto" {
+		if levelSet["auto"] {
+			return "auto"
+		}
+		if lowest := lowestLevelInWhitelist(levelSet); lowest != "" {
+			return lowest
+		}
+		// 白名单只含 none/auto 这类特殊档位，无 6 档 → 兜底 autoFallback
+		if autoFallback != "" {
+			return autoFallback
+		}
+		return "low"
+	}
+
+	// 6 档就近钳制（平手偏低）
+	effortRank, isSixLevel := thinkingEffortOrder[effort]
+	if !isSixLevel {
+		// 未知档位 + 白名单非空：兜底到白名单最低档（保守）
+		if lowest := lowestLevelInWhitelist(levelSet); lowest != "" {
+			return lowest
+		}
+		if autoFallback != "" {
+			return autoFallback
+		}
+		return "low"
+	}
+
+	// 找白名单中 <= effort 的最高档（平手偏低）
+	best := ""
+	bestRank := -1
+	for _, l := range thinkingEffortLevels {
+		if !levelSet[l] {
+			continue
+		}
+		r := thinkingEffortOrder[l]
+		if r <= effortRank && r > bestRank {
+			best = l
+			bestRank = r
+		}
+	}
+	if best != "" {
+		return best
+	}
+	// 无更低档：取白名单最低档
+	if lowest := lowestLevelInWhitelist(levelSet); lowest != "" {
+		return lowest
+	}
+	// 白名单只含 none/auto：兜底 autoFallback
+	if autoFallback != "" {
+		return autoFallback
+	}
+	return "low"
+}
+
+// lowestLevelInWhitelist 返回白名单中最低的 6 档档位；白名单无 6 档时返回空串。
+func lowestLevelInWhitelist(levelSet map[string]bool) string {
+	for _, l := range thinkingEffortLevels {
+		if levelSet[l] {
+			return l
+		}
+	}
+	return ""
 }
 
 // ModelTemplateItem 模型模板条目：用于将 provider_model 映射到 ModelID（区分大小写、去重）
@@ -322,8 +524,9 @@ const (
 	SettingKeyAutoSaveTemplateOnAssociate = "auto_save_template_on_associate" // 关联模型时自动保存到模板
 
 	// reasoning_effort 参数映射相关设置
-	SettingKeyReasoningEffortMappingEnabled = "reasoning_effort_mapping_enabled" // 是否启用映射
-	SettingKeyReasoningEffortDefaultValue   = "reasoning_effort_default_value"   // 默认值（low/medium/high）
+	SettingKeyReasoningEffortMappingEnabled  = "reasoning_effort_mapping_enabled"  // 是否启用映射
+	SettingKeyReasoningEffortDefaultValue    = "reasoning_effort_default_value"    // 默认值（minimal/low/medium/high/xhigh/max）
+	SettingKeyReasoningEffortUnknownStrategy = "reasoning_effort_unknown_strategy" // 未知档位策略（clamp_to_default / passthrough）
 )
 
 // HealthCheckLog 模型健康检测日志

@@ -142,7 +142,8 @@ func buildSettingSchemas() map[string]SettingSchema {
 
 		// reasoning_effort 映射
 		{Key: SettingKeyReasoningEffortMappingEnabled, Field: "ReasoningEffortMappingEnabled", Type: SettingTypeBool, Default: true, Category: "reasoning"},
-		{Key: SettingKeyReasoningEffortDefaultValue, Field: "ReasoningEffortDefaultValue", Type: SettingTypeString, Default: "low", Category: "reasoning", Enum: []string{"low", "medium", "high"}},
+		{Key: SettingKeyReasoningEffortDefaultValue, Field: "ReasoningEffortDefaultValue", Type: SettingTypeString, Default: "low", Category: "reasoning", Enum: []string{"minimal", "low", "medium", "high", "xhigh", "max"}},
+		{Key: SettingKeyReasoningEffortUnknownStrategy, Field: "ReasoningEffortUnknownStrategy", Type: SettingTypeString, Default: "clamp_to_default", Category: "reasoning", Enum: []string{"clamp_to_default", "passthrough"}},
 	}
 
 	result := make(map[string]SettingSchema, len(list))

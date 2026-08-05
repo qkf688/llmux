@@ -115,7 +115,7 @@ func TestTransformerManager(t *testing.T) {
 		"max_tokens": 100
 	}`)
 
-	result, err := tm.ProcessRequest(context.Background(), openaiRequest)
+	result, err := tm.ProcessRequest(context.Background(), openaiRequest, nil)
 	if err != nil {
 		t.Fatalf("ProcessRequest failed: %v", err)
 	}
@@ -148,13 +148,13 @@ func TestTransformerManager_UnknownTypesFallBackToOpenAI(t *testing.T) {
 	}`)
 
 	unknownClient := NewTransformerManager("unknown-client", "anthropic")
-	unknownClientResult, err := unknownClient.ProcessRequest(context.Background(), openaiRequest)
+	unknownClientResult, err := unknownClient.ProcessRequest(context.Background(), openaiRequest, nil)
 	if err != nil {
 		t.Fatalf("ProcessRequest with unknown client type failed: %v", err)
 	}
 
 	openAIClient := NewTransformerManager("openai", "anthropic")
-	openAIClientResult, err := openAIClient.ProcessRequest(context.Background(), openaiRequest)
+	openAIClientResult, err := openAIClient.ProcessRequest(context.Background(), openaiRequest, nil)
 	if err != nil {
 		t.Fatalf("ProcessRequest with openai client type failed: %v", err)
 	}
@@ -162,13 +162,13 @@ func TestTransformerManager_UnknownTypesFallBackToOpenAI(t *testing.T) {
 	assertJSONEqual(t, unknownClientResult, openAIClientResult)
 
 	unknownProvider := NewTransformerManager("openai", "unknown-provider")
-	unknownProviderResult, err := unknownProvider.ProcessRequest(context.Background(), openaiRequest)
+	unknownProviderResult, err := unknownProvider.ProcessRequest(context.Background(), openaiRequest, nil)
 	if err != nil {
 		t.Fatalf("ProcessRequest with unknown provider type failed: %v", err)
 	}
 
 	openAIProvider := NewTransformerManager("openai", "openai")
-	openAIProviderResult, err := openAIProvider.ProcessRequest(context.Background(), openaiRequest)
+	openAIProviderResult, err := openAIProvider.ProcessRequest(context.Background(), openaiRequest, nil)
 	if err != nil {
 		t.Fatalf("ProcessRequest with openai provider type failed: %v", err)
 	}

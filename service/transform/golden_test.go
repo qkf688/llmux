@@ -32,7 +32,7 @@ func TestGolden_RequestConversions(t *testing.T) {
 				to := to
 				t.Run("to_"+to, func(t *testing.T) {
 					tm := NewTransformerManager(from, to)
-					out, err := tm.ProcessRequest(context.Background(), in)
+					out, err := tm.ProcessRequest(context.Background(), in, nil)
 					if err != nil {
 						t.Fatalf("ProcessRequest(%s->%s) failed: %v", from, to, err)
 					}

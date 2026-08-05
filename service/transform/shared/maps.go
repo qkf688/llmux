@@ -121,26 +121,11 @@ func GetIntMap(m map[string]interface{}, key string) map[string]int64 {
 	return nil
 }
 
-// NormalizeReasoningEffort normalizes the reasoning_effort parameter.
-// Valid values: low, medium, high. "minimal" maps to "low".
-// Invalid values fall back to the configured default (default low).
+// NormalizeReasoningEffort 只做字符串归一化（小写），不做模型能力钳制。
+// 6 档有序 [minimal, low, medium, high, xhigh, max] + 2 特殊 [none, auto] 原样归一化返回；
+// 未知档位不再回退默认，原样小写透传（钳制由 models.ClampReasoningEffort 在 chat 主路径完成）。
 func NormalizeReasoningEffort(ctx context.Context, value string) string {
-	switch strings.ToLower(value) {
-	case "low", "medium", "high":
-		return strings.ToLower(value)
-	case "minimal":
-		return "low"
-	default:
-		defaultValue := getReasoningEffortDefaultValue(ctx)
-		if defaultValue != "" {
-			return defaultValue
-		}
-		return "low"
-	}
-}
-
-func getReasoningEffortDefaultValue(ctx context.Context) string {
-	return models.GetSettingString(ctx, models.SettingKeyReasoningEffortDefaultValue, "low")
+	return strings.ToLower(value)
 }
 
 // GetReasoningEffortMappingEnabled returns whether reasoning_effort mapping is enabled.

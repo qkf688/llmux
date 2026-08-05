@@ -65,6 +65,15 @@ type Transformer interface {
 	TransformResponse(response *http.Response, clientType string) (*http.Response, error)
 }
 
+// ThinkingClampConfig 携带模型思考档位白名单 + 策略设置进入 ProcessRequest。
+// 所有字段由调用方预先从 ctx + model/association 解析后传入，ProcessRequest 保持纯函数（不读设置）。
+// Clamp 为 nil 表示不做钳制（如 SupportsThinking=false 时 thinking 已被 stripThinkingFields 剥离）。
+type ThinkingClampConfig struct {
+	Levels          []string // ThinkingLevelsResolved 结果；nil/空=白名单空
+	AutoFallback    string   // SettingKeyReasoningEffortDefaultValue（auto 不支持且白名单空时兜底）
+	UnknownStrategy string   // SettingKeyReasoningEffortUnknownStrategy（clamp_to_default / passthrough）
+}
+
 // TransformerManager 转换管理器
 type TransformerManager struct {
 	clientType   string // 客户端格式类型
@@ -79,8 +88,13 @@ func NewTransformerManager(clientType, providerType string) *TransformerManager 
 	}
 }
 
-// ProcessRequest 处理请求转换
-func (tm *TransformerManager) ProcessRequest(ctx context.Context, rawBody []byte) ([]byte, error) {
+// ProcessRequest 处理请求转换。
+// clamp 为 nil 时跳过思考档位钳制（thinking 已被上游剥离或模型不支持）。
+// 钳制在 ToUnified 后、FromUnified 前对 unified.ReasoningEffort 执行（走 unified 合规 4.4 节）。
+// 钳制后 effort 为空串 → 设 nil（FromUnified 自然不 emit thinking 字段）。
+// budget 联动（方案 E）：effort 被钳制时，按钳制后 effort 对应 budget 值作上限，
+// 超上限则钳到上限 + warn；低于上限不动；effort 未钳制则 budget 不动。
+func (tm *TransformerManager) ProcessRequest(ctx context.Context, rawBody []byte, clamp *ThinkingClampConfig) ([]byte, error) {
 	clientAdapter, err := getAdapterOrDefault(tm.clientType)
 	if err != nil {
 		return nil, err
@@ -88,6 +102,11 @@ func (tm *TransformerManager) ProcessRequest(ctx context.Context, rawBody []byte
 	unified, err := clientAdapter.ToUnified(ctx, rawBody)
 	if err != nil {
 		return nil, err
+	}
+
+	// 思考档位钳制（transform 路径，走 unified）
+	if clamp != nil {
+		clampUnifiedReasoning(unified, clamp, tm.clientType, tm.providerType)
 	}
 
 	providerAdapter, err := getAdapterOrDefault(tm.providerType)

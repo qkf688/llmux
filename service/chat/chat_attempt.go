@@ -40,7 +40,22 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 
 	reqCtx := withOptionalRequestTrace(input.Ctx)
 
-	requestBody, skipProvider, bodyErr := buildRequestBodyForProvider(input.Ctx, input.Style, input.Provider.Type, input.Before.raw, input.ModelWithProvider.MaxTokens, input.ModelWithProvider.SupportsThinkingResolved(input.Model))
+	// 构建思考档位钳制配置：supportsThinking=false 时 ThinkingClamp 为 nil
+	// （stripThinkingFields 已整体剥离 thinking，钳制无意义）。
+	var thinkingClamp *transform.ThinkingClampConfig
+	supportsThinking := input.ModelWithProvider.SupportsThinkingResolved(input.Model)
+	if supportsThinking {
+		thinkingClamp = buildThinkingClampConfig(input.Ctx, input.Model, &input.ModelWithProvider)
+	}
+
+	requestBody, skipProvider, bodyErr := buildRequestBodyForProvider(input.Ctx, ProviderRequestCaps{
+		Style:            input.Style,
+		ProviderType:     input.Provider.Type,
+		Raw:              input.Before.raw,
+		MaxTokensLimit:   input.ModelWithProvider.MaxTokens,
+		SupportsThinking: supportsThinking,
+		ThinkingClamp:    thinkingClamp,
+	})
 	if skipProvider {
 		return singleProviderAttemptResult{RemoveWeight: true, RemovePriority: true}
 	}

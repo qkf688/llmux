@@ -16,6 +16,18 @@ import (
 	"github.com/tidwall/sjson"
 )
 
+// ProviderRequestCaps 聚合 buildRequestBodyForProvider 的全部请求体改写参数。
+// 重构自 6 个位置参数（style/providerType/raw/maxTokensLimit/supportsThinking + thinkingClamp），
+// 避免继续横向膨胀。新增改写型能力字段时追加到此结构体，不再加位置参数。
+type ProviderRequestCaps struct {
+	Style            string                         // 客户端协议格式
+	ProviderType     string                         // 上游供应商格式
+	Raw              []byte                         // 原始请求体
+	MaxTokensLimit   *int                           // max_tokens 上限，nil=不限
+	SupportsThinking bool                           // 关联最终是否支持 thinking（SupportsThinkingResolved 结果）
+	ThinkingClamp    *transform.ThinkingClampConfig // nil=不钳制（supportsThinking=false 时 thinking 已剥离）
+}
+
 func withOptionalRequestTrace(ctx context.Context) context.Context {
 	if !getEnableRequestTrace(ctx) {
 		return ctx
@@ -30,22 +42,30 @@ func withOptionalRequestTrace(ctx context.Context) context.Context {
 	return httptrace.WithClientTrace(ctx, trace)
 }
 
-// buildRequestBodyForProvider 参数持续膨胀（style/providerType/raw/maxTokensLimit/supportsThinking）。
-// 该入口聚合两条路径（真实/虚拟模型）的全部请求体改写（clampMaxTokens / stripThinkingFields），
-// 改动时须同步两条路径的测试。触发条件：新增第 4 个改写型能力字段时，重构为
-// ProviderRequestCaps 结构体参数（含各自 limit 指针），避免继续横向膨胀。
-func buildRequestBodyForProvider(ctx context.Context, style, providerType string, raw []byte, maxTokensLimit *int, supportsThinking bool) ([]byte, bool, error) {
+// buildRequestBodyForProvider 聚合两条路径（真实/虚拟模型）的全部请求体改写。
+// 执行顺序：stripThinkingFields（先剥离不支持 thinking 的）→ passthrough/transform 钳制 → clampMaxTokens。
+// 改动时须同步两条路径的测试。
+func buildRequestBodyForProvider(ctx context.Context, caps ProviderRequestCaps) ([]byte, bool, error) {
+	style := caps.Style
+	providerType := caps.ProviderType
+	raw := caps.Raw
+
 	// 裁剪 thinking 字段：model/关联不支持 thinking 时去掉请求中的思考配置，
 	// 避免上游对不支持 thinking 的模型报 400/静默忽略导致行为不一致。
-	raw = stripThinkingFields(raw, supportsThinking)
+	// 先于钳制执行：supportsThinking=false 时整体剥离，钳制无意义。
+	raw = stripThinkingFields(raw, caps.SupportsThinking)
 
 	if style == providerType {
 		slog.Debug("passthrough mode", "client_type", style, "provider_type", providerType)
+		// passthrough 路径思考档位钳制（同格式 1×1，对 raw body 按 style 钳制）
+		if caps.ThinkingClamp != nil {
+			raw = clampPassthroughReasoning(raw, style, caps.ThinkingClamp)
+		}
 		validated, err := validateAndPatchOutgoingOpenAIRequest(providerType, raw)
 		if err != nil {
 			return nil, false, err
 		}
-		clamped, clampErr := clampMaxTokens(validated, maxTokensLimit)
+		clamped, clampErr := clampMaxTokens(validated, caps.MaxTokensLimit)
 		if clampErr != nil {
 			slog.Warn("max_tokens clamp failed, sending unclamped body", "error", clampErr)
 		}
@@ -59,7 +79,7 @@ func buildRequestBodyForProvider(ctx context.Context, style, providerType string
 
 	slog.Debug("transform mode", "client_type", style, "provider_type", providerType)
 	tm := transform.NewTransformerManager(style, providerType)
-	convertedBody, err := tm.ProcessRequest(ctx, raw)
+	convertedBody, err := tm.ProcessRequest(ctx, raw, caps.ThinkingClamp)
 	if err != nil {
 		return nil, false, err
 	}
@@ -67,7 +87,7 @@ func buildRequestBodyForProvider(ctx context.Context, style, providerType string
 	if err != nil {
 		return nil, false, err
 	}
-	clamped, clampErr := clampMaxTokens(validated, maxTokensLimit)
+	clamped, clampErr := clampMaxTokens(validated, caps.MaxTokensLimit)
 	if clampErr != nil {
 		slog.Warn("max_tokens clamp failed, sending unclamped body", "error", clampErr)
 	}

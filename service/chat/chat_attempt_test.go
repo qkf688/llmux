@@ -69,7 +69,13 @@ func TestBuildRequestBodyForProvider_OpenAI_MissingToolCallFunctionName_ReturnsH
 		]
 	}`)
 
-	_, skip, err := buildRequestBodyForProvider(ctx, consts.StyleOpenAI, consts.StyleOpenAI, raw, nil, true)
+	_, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
+		Style:            consts.StyleOpenAI,
+		ProviderType:     consts.StyleOpenAI,
+		Raw:              raw,
+		MaxTokensLimit:   nil,
+		SupportsThinking: true,
+	})
 	if skip {
 		t.Fatalf("skipProvider = true, want false")
 	}
@@ -100,7 +106,13 @@ func TestBuildRequestBodyForProvider_OpenAI_ValidToolCall_Passes(t *testing.T) {
 		]
 	}`)
 
-	got, skip, err := buildRequestBodyForProvider(ctx, consts.StyleOpenAI, consts.StyleOpenAI, raw, nil, true)
+	got, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
+		Style:            consts.StyleOpenAI,
+		ProviderType:     consts.StyleOpenAI,
+		Raw:              raw,
+		MaxTokensLimit:   nil,
+		SupportsThinking: true,
+	})
 	if skip {
 		t.Fatalf("skipProvider = true, want false")
 	}

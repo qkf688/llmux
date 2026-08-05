@@ -3,8 +3,10 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/transform"
 )
 
 // getStrictCapabilityMatch 读取严格能力匹配设置。
@@ -59,4 +61,26 @@ func GetStripResponseHeaders(ctx context.Context) bool {
 // getEnableFormatConversion 获取是否启用格式转换
 func getEnableFormatConversion(ctx context.Context) bool {
 	return settingsReader.Bool(ctx, models.SettingKeyEnableFormatConversion, true)
+}
+
+// buildThinkingClampConfig 从 ctx 读取设置 + model/association 白名单，构建思考档位钳制配置。
+// 调用方在 supportsThinking=true 时调用（false 时 thinking 已被 stripThinkingFields 剥离，无需钳制）。
+// autoFallback 复用 SettingKeyReasoningEffortDefaultValue（P0-2：设置键保留真实消费者）。
+// unknownStrategy 复用 SettingKeyReasoningEffortUnknownStrategy。
+// autoFallback 兜底校验：设置写入时已校验 enum，但绕过 API 的数据库脏值仍可能传入非法值，
+// 此处再校验一次，非法则回退 "low"（ClampReasoningEffort 是纯函数，不自身校验）。
+func buildThinkingClampConfig(ctx context.Context, model *models.Model, mwp *models.ModelWithProvider) *transform.ThinkingClampConfig {
+	levels := mwp.ThinkingLevelsResolved(model)
+	autoFallback := settingsReader.String(ctx, models.SettingKeyReasoningEffortDefaultValue, "low")
+	if !models.IsSixLevelEffort(autoFallback) {
+		slog.Warn("invalid reasoning_effort_default_value in settings, falling back to low",
+			"got", autoFallback)
+		autoFallback = "low"
+	}
+	unknownStrategy := settingsReader.String(ctx, models.SettingKeyReasoningEffortUnknownStrategy, "clamp_to_default")
+	return &transform.ThinkingClampConfig{
+		Levels:          levels,
+		AutoFallback:    autoFallback,
+		UnknownStrategy: unknownStrategy,
+	}
 }

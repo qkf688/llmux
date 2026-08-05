@@ -23,6 +23,11 @@ type ProvidersWithMeta struct {
 	TimeOut              int
 	IOLog                bool
 
+	// Model 当前请求关联的真实模型：真实路径为查询到的 model；虚拟路径不设置本字段
+	//（虚拟分支在 balanceChatVirtual 循环内经 singleProviderAttemptInput.Model 注入正在尝试的 ordered model）。
+	// 供裁剪 thinking 字段时解析 ModelWithProvider.SupportsThinkingResolved（关联 override → model 继承）。
+	Model *models.Model
+
 	// 虚拟模型相关字段
 	IsVirtualModel    bool                            // 是否是虚拟模型
 	VirtualModelID    uint                            // 虚拟模型ID
@@ -160,6 +165,7 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 		MaxRetry:             model.MaxRetry,
 		TimeOut:              model.TimeOut,
 		IOLog:                *model.IOLog,
+		Model:                model,
 	}, nil
 }
 

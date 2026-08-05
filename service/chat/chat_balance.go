@@ -72,6 +72,7 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 			Retry:             retry,
 			Provider:          provider,
 			ModelWithProvider: modelWithProvider,
+			Model:             providersWithMeta.Model,
 			ChatModel:         chatModel,
 			Client:            client,
 		}, retryLog)

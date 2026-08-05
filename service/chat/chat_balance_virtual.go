@@ -118,6 +118,7 @@ func balanceChatVirtual(ctx context.Context, start time.Time, style string, befo
 				Retry:             retry,
 				Provider:          provider,
 				ModelWithProvider: modelWithProvider,
+				Model:             &realModel,
 				ChatModel:         chatModel,
 				Client:            client,
 			}, retryLog)

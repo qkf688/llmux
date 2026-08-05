@@ -12,6 +12,7 @@ import (
 	"github.com/qkf688/llmux/consts"
 	preprocessopenai "github.com/qkf688/llmux/service/chat/preprocess/openai"
 	"github.com/qkf688/llmux/service/transform"
+	"github.com/tidwall/sjson"
 )
 
 func withOptionalRequestTrace(ctx context.Context) context.Context {
@@ -28,7 +29,15 @@ func withOptionalRequestTrace(ctx context.Context) context.Context {
 	return httptrace.WithClientTrace(ctx, trace)
 }
 
-func buildRequestBodyForProvider(ctx context.Context, style, providerType string, raw []byte, maxTokensLimit *int) ([]byte, bool, error) {
+// buildRequestBodyForProvider 参数持续膨胀（style/providerType/raw/maxTokensLimit/supportsThinking）。
+// 该入口聚合两条路径（真实/虚拟模型）的全部请求体改写（clampMaxTokens / stripThinkingFields），
+// 改动时须同步两条路径的测试。触发条件：新增第 4 个改写型能力字段时，重构为
+// ProviderRequestCaps 结构体参数（含各自 limit 指针），避免继续横向膨胀。
+func buildRequestBodyForProvider(ctx context.Context, style, providerType string, raw []byte, maxTokensLimit *int, supportsThinking bool) ([]byte, bool, error) {
+	// 裁剪 thinking 字段：model/关联不支持 thinking 时去掉请求中的思考配置，
+	// 避免上游对不支持 thinking 的模型报 400/静默忽略导致行为不一致。
+	raw = stripThinkingFields(raw, supportsThinking)
+
 	if style == providerType {
 		slog.Debug("passthrough mode", "client_type", style, "provider_type", providerType)
 		validated, err := validateAndPatchOutgoingOpenAIRequest(providerType, raw)
@@ -62,6 +71,38 @@ func buildRequestBodyForProvider(ctx context.Context, style, providerType string
 		slog.Warn("max_tokens clamp failed, sending unclamped body", "error", clampErr)
 	}
 	return clamped, false, nil
+}
+
+// stripThinkingFields 在 supportsThinking 为 false 时删除请求体中的 thinking 配置字段
+// （OpenAI: reasoning_effort / reasoning；Anthropic: thinking）。
+// 为 true 或非 JSON 时原样返回。失败时记录日志并返回原 body（防御性裁剪，不阻断主流程）。
+// 幂等改写函数：用 sjson.DeleteBytes 做字节级删键，保留其余字节原样（键序/数字精度/空白不重排）。
+// 注意：与 clampMaxTokens 叠加时可能各做一次 JSON 解析，大请求体场景开销可感知，可接受。
+func stripThinkingFields(body []byte, supportsThinking bool) []byte {
+	if supportsThinking || len(body) == 0 {
+		return body
+	}
+	if !json.Valid(body) {
+		return body
+	}
+
+	changed := false
+	original := body
+	for _, field := range []string{"thinking", "reasoning_effort", "reasoning"} {
+		next, err := sjson.DeleteBytes(body, field)
+		if err != nil {
+			slog.Warn("strip thinking fields failed, sending original body", "field", field, "error", err)
+			return original
+		}
+		if string(next) != string(body) {
+			body = next
+			changed = true
+		}
+	}
+	if changed {
+		slog.Debug("stripped thinking fields from request body (model does not support thinking)")
+	}
+	return body
 }
 
 func validateAndPatchOutgoingOpenAIRequest(providerType string, body []byte) ([]byte, error) {

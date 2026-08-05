@@ -40,7 +40,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 
 	reqCtx := withOptionalRequestTrace(input.Ctx)
 
-	requestBody, skipProvider, bodyErr := buildRequestBodyForProvider(input.Ctx, input.Style, input.Provider.Type, input.Before.raw, input.ModelWithProvider.MaxTokens)
+	requestBody, skipProvider, bodyErr := buildRequestBodyForProvider(input.Ctx, input.Style, input.Provider.Type, input.Before.raw, input.ModelWithProvider.MaxTokens, input.ModelWithProvider.SupportsThinkingResolved(input.Model))
 	if skipProvider {
 		return singleProviderAttemptResult{RemoveWeight: true, RemovePriority: true}
 	}

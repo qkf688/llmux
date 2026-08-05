@@ -21,8 +21,10 @@ type singleProviderAttemptInput struct {
 	Retry             int
 	Provider          models.Provider
 	ModelWithProvider models.ModelWithProvider
-	ChatModel         providers.Provider
-	Client            *http.Client
+	// Model 当前尝试关联所属的真实模型；用于 SupportsThinkingResolved 的 model 继承来源。
+	Model     *models.Model
+	ChatModel providers.Provider
+	Client    *http.Client
 }
 
 type singleProviderAttemptResult struct {

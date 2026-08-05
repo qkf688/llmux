@@ -69,7 +69,7 @@ func TestBuildRequestBodyForProvider_OpenAI_MissingToolCallFunctionName_ReturnsH
 		]
 	}`)
 
-	_, skip, err := buildRequestBodyForProvider(ctx, consts.StyleOpenAI, consts.StyleOpenAI, raw, nil)
+	_, skip, err := buildRequestBodyForProvider(ctx, consts.StyleOpenAI, consts.StyleOpenAI, raw, nil, true)
 	if skip {
 		t.Fatalf("skipProvider = true, want false")
 	}
@@ -100,7 +100,7 @@ func TestBuildRequestBodyForProvider_OpenAI_ValidToolCall_Passes(t *testing.T) {
 		]
 	}`)
 
-	got, skip, err := buildRequestBodyForProvider(ctx, consts.StyleOpenAI, consts.StyleOpenAI, raw, nil)
+	got, skip, err := buildRequestBodyForProvider(ctx, consts.StyleOpenAI, consts.StyleOpenAI, raw, nil, true)
 	if skip {
 		t.Fatalf("skipProvider = true, want false")
 	}
@@ -109,6 +109,83 @@ func TestBuildRequestBodyForProvider_OpenAI_ValidToolCall_Passes(t *testing.T) {
 	}
 	if string(got) == "" {
 		t.Fatalf("expected non-empty body")
+	}
+}
+
+func TestStripThinkingFields_Unsupported_RemovesFields(t *testing.T) {
+	body := []byte(`{"model":"m","thinking":{"type":"enabled","budget_tokens":20000},"reasoning_effort":"high","messages":[]}`)
+	got := stripThinkingFields(body, false)
+
+	var obj map[string]any
+	if err := json.Unmarshal(got, &obj); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if _, ok := obj["thinking"]; ok {
+		t.Fatal("expected thinking field removed")
+	}
+	if _, ok := obj["reasoning_effort"]; ok {
+		t.Fatal("expected reasoning_effort field removed")
+	}
+	if _, ok := obj["messages"]; !ok {
+		t.Fatal("expected messages field kept")
+	}
+}
+
+func TestStripThinkingFields_Supported_Unchanged(t *testing.T) {
+	body := []byte(`{"model":"m","thinking":{"type":"enabled","budget_tokens":20000},"messages":[]}`)
+	got := stripThinkingFields(body, true)
+	if string(got) != string(body) {
+		t.Fatalf("expected unchanged when supportsThinking=true, got %s", got)
+	}
+}
+
+func TestStripThinkingFields_NoThinkingFields_Unchanged(t *testing.T) {
+	body := []byte(`{"model":"m","messages":[]}`)
+	got := stripThinkingFields(body, false)
+	if string(got) != string(body) {
+		t.Fatalf("expected unchanged when no thinking fields, got %s", got)
+	}
+}
+
+func TestStripThinkingFields_InvalidJSON_Unchanged(t *testing.T) {
+	body := []byte(`not-json`)
+	got := stripThinkingFields(body, false)
+	if string(got) != string(body) {
+		t.Fatalf("expected unchanged for invalid JSON, got %s", got)
+	}
+}
+
+func TestStripThinkingFields_Reasoning_Removed(t *testing.T) {
+	body := []byte(`{"model":"m","reasoning":{"effort":"high"},"messages":[]}`)
+	got := stripThinkingFields(body, false)
+
+	var obj map[string]any
+	if err := json.Unmarshal(got, &obj); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if _, ok := obj["reasoning"]; ok {
+		t.Fatal("expected reasoning field removed")
+	}
+}
+
+// TestStripThinkingFields_PartialFields 真实场景：请求只带部分 thinking 键
+//（Anthropic 只带 thinking、OpenAI 只带 reasoning_effort），缺失键应原样跳过。
+func TestStripThinkingFields_PartialFields(t *testing.T) {
+	body := []byte(`{"model":"m","thinking":{"type":"enabled","budget_tokens":20000},"messages":[]}`)
+	got := stripThinkingFields(body, false)
+
+	var obj map[string]any
+	if err := json.Unmarshal(got, &obj); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if _, ok := obj["thinking"]; ok {
+		t.Fatal("expected thinking field removed")
+	}
+	if _, ok := obj["reasoning_effort"]; ok {
+		t.Fatal("unexpected reasoning_effort present")
+	}
+	if _, ok := obj["messages"]; !ok {
+		t.Fatal("expected messages field kept")
 	}
 }
 

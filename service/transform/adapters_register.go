@@ -41,9 +41,7 @@ func init() {
 		formatResponse: openai.FormatResponse,
 	})
 	RegisterAdapter("anthropic", funcAdapter{
-		toUnified: func(_ context.Context, rawBody []byte) (*models.UnifiedRequest, error) {
-			return anthropic.ToUnified(rawBody)
-		},
+		toUnified:      anthropic.ToUnified,
 		fromUnified:    anthropic.FromUnified,
 		parseResponse:  anthropic.ParseResponse,
 		formatResponse: anthropic.FormatResponse,

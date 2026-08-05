@@ -47,7 +47,7 @@ func TestTransformAnthropicToUnified(t *testing.T) {
 		"stream": false
 	}`)
 
-	unified, err := TransformAnthropicToUnified(anthropicRequest)
+	unified, err := TransformAnthropicToUnified(context.Background(), anthropicRequest)
 	if err != nil {
 		t.Fatalf("TransformAnthropicToUnified failed: %v", err)
 	}

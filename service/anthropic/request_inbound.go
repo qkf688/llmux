@@ -1,16 +1,18 @@
 package anthropic
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/transform/shared"
 	"strings"
 
 	"github.com/qkf688/llmux/common/maputil"
 )
 
 // TransformToUnified 将 Anthropic 请求格式转换为统一格式。
-func TransformToUnified(rawBody []byte) (*models.UnifiedRequest, error) {
+func TransformToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedRequest, error) {
 	var req map[string]interface{}
 	if err := json.Unmarshal(rawBody, &req); err != nil {
 		return nil, err
@@ -52,6 +54,17 @@ func TransformToUnified(rawBody []byte) (*models.UnifiedRequest, error) {
 				unified.ReasoningEffort = &effort
 			}
 			unified.ReasoningBudget = &budgetTokens
+		}
+	}
+
+	// output_config.effort 是 Claude 4.6 adaptive thinking 的显式档位字段，
+	// 优先级高于 thinking.budget_tokens 反推（显式意图优先）。
+	// 归一化走 NormalizeReasoningEffort，与 OpenAI 入站行为一致；
+	// budget 仍取 thinking.budget_tokens（两字段并存，出站 budget 优先已有实现不变）。
+	if outputConfig, ok := asMap(req["output_config"]); ok {
+		if effortStr := maputil.String(outputConfig, "effort"); effortStr != "" {
+			normalized := shared.NormalizeReasoningEffort(ctx, effortStr)
+			unified.ReasoningEffort = &normalized
 		}
 	}
 

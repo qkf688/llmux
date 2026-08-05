@@ -1,6 +1,7 @@
 package transform
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/qkf688/llmux/models"
 	"testing"
@@ -22,7 +23,7 @@ func TestThinking_AnthropicToUnified(t *testing.T) {
 		}
 	}`)
 
-	unified, err := TransformAnthropicToUnified(anthropicRequest)
+	unified, err := TransformAnthropicToUnified(context.Background(), anthropicRequest)
 	if err != nil {
 		t.Fatalf("TransformAnthropicToUnified failed: %v", err)
 	}

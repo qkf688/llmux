@@ -169,7 +169,7 @@ func TestStripThinkingFields_Reasoning_Removed(t *testing.T) {
 }
 
 // TestStripThinkingFields_PartialFields 真实场景：请求只带部分 thinking 键
-//（Anthropic 只带 thinking、OpenAI 只带 reasoning_effort），缺失键应原样跳过。
+// （Anthropic 只带 thinking、OpenAI 只带 reasoning_effort），缺失键应原样跳过。
 func TestStripThinkingFields_PartialFields(t *testing.T) {
 	body := []byte(`{"model":"m","thinking":{"type":"enabled","budget_tokens":20000},"messages":[]}`)
 	got := stripThinkingFields(body, false)
@@ -186,6 +186,44 @@ func TestStripThinkingFields_PartialFields(t *testing.T) {
 	}
 	if _, ok := obj["messages"]; !ok {
 		t.Fatal("expected messages field kept")
+	}
+}
+
+// TestStripThinkingFields_OutputConfigEffort_RemovedAndCleaned：
+// Anthropic output_config.effort 是 adaptive thinking 字段，不支持 thinking 时必须删除，
+// 删完后若 output_config 变空对象再删整个 output_config（避免残留空对象）。
+func TestStripThinkingFields_OutputConfigEffort_RemovedAndCleaned(t *testing.T) {
+	body := []byte(`{"model":"m","output_config":{"effort":"high"},"messages":[]}`)
+	got := stripThinkingFields(body, false)
+
+	var obj map[string]any
+	if err := json.Unmarshal(got, &obj); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if _, ok := obj["output_config"]; ok {
+		t.Fatal("expected output_config removed (was {effort:high}, after strip effort only key left → empty object → removed)")
+	}
+}
+
+// TestStripThinkingFields_OutputConfigWithOtherFields_KeepsShell：
+// output_config 含 effort 之外的字段时，删 effort 后 output_config 不空，应保留。
+func TestStripThinkingFields_OutputConfigWithOtherFields_KeepsShell(t *testing.T) {
+	body := []byte(`{"model":"m","output_config":{"effort":"high","format":"json"},"messages":[]}`)
+	got := stripThinkingFields(body, false)
+
+	var obj map[string]any
+	if err := json.Unmarshal(got, &obj); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	oc, ok := obj["output_config"].(map[string]any)
+	if !ok {
+		t.Fatal("expected output_config kept (has format field left)")
+	}
+	if _, ok := oc["effort"]; ok {
+		t.Fatal("expected output_config.effort removed")
+	}
+	if oc["format"] != "json" {
+		t.Fatalf("expected output_config.format=json kept, got %v", oc["format"])
 	}
 }
 

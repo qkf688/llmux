@@ -3,13 +3,15 @@
 package anthropic
 
 import (
+	"context"
+
 	"github.com/qkf688/llmux/models"
 	anthropictransform "github.com/qkf688/llmux/service/anthropic"
 )
 
 // ToUnified converts an Anthropic request body into the unified request representation.
-func ToUnified(rawBody []byte) (*models.UnifiedRequest, error) {
-	return anthropictransform.TransformToUnified(rawBody)
+func ToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedRequest, error) {
+	return anthropictransform.TransformToUnified(ctx, rawBody)
 }
 
 // FromUnified converts a unified request into an Anthropic request body.

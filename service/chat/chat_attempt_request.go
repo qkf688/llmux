@@ -12,6 +12,7 @@ import (
 	"github.com/qkf688/llmux/consts"
 	preprocessopenai "github.com/qkf688/llmux/service/chat/preprocess/openai"
 	"github.com/qkf688/llmux/service/transform"
+	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
 
@@ -74,9 +75,10 @@ func buildRequestBodyForProvider(ctx context.Context, style, providerType string
 }
 
 // stripThinkingFields 在 supportsThinking 为 false 时删除请求体中的 thinking 配置字段
-// （OpenAI: reasoning_effort / reasoning；Anthropic: thinking）。
+// （OpenAI: reasoning_effort / reasoning；Anthropic: thinking / output_config.effort）。
 // 为 true 或非 JSON 时原样返回。失败时记录日志并返回原 body（防御性裁剪，不阻断主流程）。
 // 幂等改写函数：用 sjson.DeleteBytes 做字节级删键，保留其余字节原样（键序/数字精度/空白不重排）。
+// output_config.effort 删除后若 output_config 变空对象，再删整个 output_config（避免残留空对象）。
 // 注意：与 clampMaxTokens 叠加时可能各做一次 JSON 解析，大请求体场景开销可感知，可接受。
 func stripThinkingFields(body []byte, supportsThinking bool) []byte {
 	if supportsThinking || len(body) == 0 {
@@ -88,7 +90,7 @@ func stripThinkingFields(body []byte, supportsThinking bool) []byte {
 
 	changed := false
 	original := body
-	for _, field := range []string{"thinking", "reasoning_effort", "reasoning"} {
+	for _, field := range []string{"thinking", "reasoning_effort", "reasoning", "output_config.effort"} {
 		next, err := sjson.DeleteBytes(body, field)
 		if err != nil {
 			slog.Warn("strip thinking fields failed, sending original body", "field", field, "error", err)
@@ -99,7 +101,14 @@ func stripThinkingFields(body []byte, supportsThinking bool) []byte {
 			changed = true
 		}
 	}
+
+	// output_config.effort 删除后，若 output_config 只剩空对象 {}，删掉整个键避免残留。
 	if changed {
+		if oc := gjson.GetBytes(body, "output_config"); oc.IsObject() && len(oc.Map()) == 0 {
+			if next, err := sjson.DeleteBytes(body, "output_config"); err == nil {
+				body = next
+			}
+		}
 		slog.Debug("stripped thinking fields from request body (model does not support thinking)")
 	}
 	return body

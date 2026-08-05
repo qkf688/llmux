@@ -32,8 +32,8 @@ func TransformUnifiedToResponses(unified *models.UnifiedRequest) ([]byte, error)
 	return transform.TransformUnifiedToResponses(unified)
 }
 
-func TransformAnthropicToUnified(rawBody []byte) (*models.UnifiedRequest, error) {
-	return transform.TransformAnthropicToUnified(rawBody)
+func TransformAnthropicToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedRequest, error) {
+	return transform.TransformAnthropicToUnified(ctx, rawBody)
 }
 
 func TransformUnifiedToAnthropic(unified *models.UnifiedRequest) ([]byte, error) {

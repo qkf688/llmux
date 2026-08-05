@@ -1,6 +1,7 @@
 package transform
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/qkf688/llmux/models"
 	"testing"
@@ -22,7 +23,7 @@ func TestCacheControl_MessageLevel(t *testing.T) {
 		"max_tokens": 100
 	}`)
 
-	unified, err := TransformAnthropicToUnified(anthropicRequest)
+	unified, err := TransformAnthropicToUnified(context.Background(), anthropicRequest)
 	if err != nil {
 		t.Fatalf("TransformAnthropicToUnified failed: %v", err)
 	}
@@ -58,7 +59,7 @@ func TestCacheControl_ToolLevel(t *testing.T) {
 		"max_tokens": 100
 	}`)
 
-	unified, err := TransformAnthropicToUnified(anthropicRequest)
+	unified, err := TransformAnthropicToUnified(context.Background(), anthropicRequest)
 	if err != nil {
 		t.Fatalf("TransformAnthropicToUnified failed: %v", err)
 	}

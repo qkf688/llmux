@@ -22,8 +22,8 @@ func TransformUnifiedToOpenAI(unified *models.UnifiedRequest) ([]byte, error) {
 }
 
 // TransformAnthropicToUnified 将 Anthropic 格式转换为统一格式。
-func TransformAnthropicToUnified(rawBody []byte) (*models.UnifiedRequest, error) {
-	return anthropic.ToUnified(rawBody)
+func TransformAnthropicToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedRequest, error) {
+	return anthropic.ToUnified(ctx, rawBody)
 }
 
 // TransformUnifiedToAnthropic 将统一格式转换为 Anthropic 格式。

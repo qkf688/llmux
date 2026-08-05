@@ -1,6 +1,7 @@
 package anthropic
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/qkf688/llmux/models"
 	"testing"
@@ -39,7 +40,7 @@ func TestTransformToUnified(t *testing.T) {
 		"thinking":{"type":"enabled","budget_tokens":30000}
 	}`)
 
-	unified, err := TransformToUnified(raw)
+	unified, err := TransformToUnified(context.Background(), raw)
 	if err != nil {
 		t.Fatalf("TransformToUnified returned error: %v", err)
 	}
@@ -113,7 +114,7 @@ func TestTransformToUnified_MapsAnthropicBase64ImageToOpenAIDataURL(t *testing.T
 		]
 	}`)
 
-	unified, err := TransformToUnified(raw)
+	unified, err := TransformToUnified(context.Background(), raw)
 	if err != nil {
 		t.Fatalf("TransformToUnified returned error: %v", err)
 	}
@@ -191,7 +192,7 @@ func TestTransformRoundTripPreservesSystemArray(t *testing.T) {
 		"messages":[{"role":"user","content":"hi"}]
 	}`)
 
-	unified, err := TransformToUnified(raw)
+	unified, err := TransformToUnified(context.Background(), raw)
 	if err != nil {
 		t.Fatalf("TransformToUnified returned error: %v", err)
 	}

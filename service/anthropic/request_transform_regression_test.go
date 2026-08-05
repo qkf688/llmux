@@ -1,6 +1,7 @@
 package anthropic
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -125,7 +126,7 @@ func TestTransformToUnified_ToolResultKeepsImageBlocks(t *testing.T) {
 		]
 	}`)
 
-	unified, err := TransformToUnified(raw)
+	unified, err := TransformToUnified(context.Background(), raw)
 	if err != nil {
 		t.Fatalf("TransformToUnified 失败: %v", err)
 	}
@@ -164,7 +165,7 @@ func TestTransformToUnified_TextOnlyToolResultStaysString(t *testing.T) {
 		]
 	}`)
 
-	unified, err := TransformToUnified(raw)
+	unified, err := TransformToUnified(context.Background(), raw)
 	if err != nil {
 		t.Fatalf("TransformToUnified 失败: %v", err)
 	}
@@ -262,7 +263,7 @@ func TestTransform_ThinkingBlockSurvivesRoundTrip(t *testing.T) {
 		]
 	}`)
 
-	unified, err := TransformToUnified(raw)
+	unified, err := TransformToUnified(context.Background(), raw)
 	if err != nil {
 		t.Fatalf("TransformToUnified 失败: %v", err)
 	}
@@ -321,7 +322,7 @@ func TestTransform_RedactedThinkingBlockSurvivesRoundTrip(t *testing.T) {
 		]
 	}`)
 
-	unified, err := TransformToUnified(raw)
+	unified, err := TransformToUnified(context.Background(), raw)
 	if err != nil {
 		t.Fatalf("TransformToUnified 失败: %v", err)
 	}
@@ -359,3 +360,73 @@ func TestTransform_RedactedThinkingBlockSurvivesRoundTrip(t *testing.T) {
 		t.Fatalf("redacted_thinking.data 被改写: %#v", redacted["data"])
 	}
 }
+
+// Stage A：output_config.effort 是 Claude 4.6 adaptive thinking 的显式档位字段，
+// 入站必须接住并映射到 UnifiedRequest.ReasoningEffort，不能丢失。
+// 三场景：effort+budget 共存（effort 优先）、仅 budget（反推）、仅 effort。
+
+func TestTransformToUnified_OutputConfigEffort_WithBudget_EffortWins(t *testing.T) {
+	// output_config.effort=high 与 thinking.budget_tokens=5000 共存：
+	// effort 取 output_config.effort（显式意图优先），budget 仍取 budget_tokens。
+	raw := []byte(`{
+		"model":"claude-sonnet-4-5",
+		"max_tokens":1024,
+		"thinking":{"type":"enabled","budget_tokens":5000},
+		"output_config":{"effort":"high"},
+		"messages":[{"role":"user","content":"hi"}]
+	}`)
+
+	unified, err := TransformToUnified(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("TransformToUnified 失败: %v", err)
+	}
+	if unified.ReasoningEffort == nil || *unified.ReasoningEffort != "high" {
+		t.Fatalf("effort 应取 output_config.effort=high（显式意图优先于 budget 反推），实际 %#v", unified.ReasoningEffort)
+	}
+	if unified.ReasoningBudget == nil || *unified.ReasoningBudget != 5000 {
+		t.Fatalf("budget 应仍取 budget_tokens=5000，实际 %#v", unified.ReasoningBudget)
+	}
+}
+
+func TestTransformToUnified_OutputConfigEffort_OnlyBudget_KeepsInference(t *testing.T) {
+	// 仅 thinking.budget_tokens 无 output_config.effort：保持现状用 ThinkingBudgetToReasoningEffort 反推。
+	raw := []byte(`{
+		"model":"claude-sonnet-4-5",
+		"max_tokens":1024,
+		"thinking":{"type":"enabled","budget_tokens":30000},
+		"messages":[{"role":"user","content":"hi"}]
+	}`)
+
+	unified, err := TransformToUnified(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("TransformToUnified 失败: %v", err)
+	}
+	if unified.ReasoningEffort == nil || *unified.ReasoningEffort != "medium" {
+		t.Fatalf("仅 budget 时应反推 medium，实际 %#v", unified.ReasoningEffort)
+	}
+	if unified.ReasoningBudget == nil || *unified.ReasoningBudget != 30000 {
+		t.Fatalf("budget 应为 30000，实际 %#v", unified.ReasoningBudget)
+	}
+}
+
+func TestTransformToUnified_OutputConfigEffort_OnlyEffort_NoBudget(t *testing.T) {
+	// 仅 output_config.effort 无 thinking.budget_tokens：effort 注入，budget 不设。
+	raw := []byte(`{
+		"model":"claude-sonnet-4-5",
+		"max_tokens":1024,
+		"output_config":{"effort":"high"},
+		"messages":[{"role":"user","content":"hi"}]
+	}`)
+
+	unified, err := TransformToUnified(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("TransformToUnified 失败: %v", err)
+	}
+	if unified.ReasoningEffort == nil || *unified.ReasoningEffort != "high" {
+		t.Fatalf("effort 应取 output_config.effort=high，实际 %#v", unified.ReasoningEffort)
+	}
+	if unified.ReasoningBudget != nil {
+		t.Fatalf("无 budget_tokens 时不应设 ReasoningBudget，实际 %#v", unified.ReasoningBudget)
+	}
+}
+

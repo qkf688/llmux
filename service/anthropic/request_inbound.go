@@ -59,12 +59,16 @@ func TransformToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedReq
 
 	// output_config.effort 是 Claude 4.6 adaptive thinking 的显式档位字段，
 	// 优先级高于 thinking.budget_tokens 反推（显式意图优先）。
-	// 归一化走 NormalizeReasoningEffort，与 OpenAI 入站行为一致；
+	// 归一化开关与 OpenAI/Responses 入站一致：开启时走 NormalizeReasoningEffort，
+	// 关闭时原值透传（用户显式关闭映射设置后，跨协议行为对称）；
 	// budget 仍取 thinking.budget_tokens（两字段并存，出站 budget 优先已有实现不变）。
 	if outputConfig, ok := asMap(req["output_config"]); ok {
 		if effortStr := maputil.String(outputConfig, "effort"); effortStr != "" {
-			normalized := shared.NormalizeReasoningEffort(ctx, effortStr)
-			unified.ReasoningEffort = &normalized
+			effort := effortStr
+			if shared.GetReasoningEffortMappingEnabled(ctx) {
+				effort = shared.NormalizeReasoningEffort(ctx, effortStr)
+			}
+			unified.ReasoningEffort = &effort
 		}
 	}
 

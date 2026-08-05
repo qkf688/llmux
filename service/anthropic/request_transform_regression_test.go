@@ -430,3 +430,57 @@ func TestTransformToUnified_OutputConfigEffort_OnlyEffort_NoBudget(t *testing.T)
 	}
 }
 
+// Stage A 健壮性测试：output_config.effort 为非字符串类型 / output_config 非对象 /
+// effort 空串时，入站不 panic、不误注入 ReasoningEffort。
+// maputil.String 对非字符串返回 ""，asMap 对非对象返回 false，行为经代码审查正确，
+// 此用例固化该不变量，防止未来重构引入类型断言 panic 或误接。
+func TestTransformToUnified_OutputConfigEffort_Robustness(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		wantNil bool // true=ReasoningEffort 应为 nil；false=应保持 budget 反推值
+	}{
+		{
+			name:    "effort is number",
+			body:    `{"model":"m","max_tokens":1024,"output_config":{"effort":3},"messages":[{"role":"user","content":"hi"}]}`,
+			wantNil: true,
+		},
+		{
+			name:    "effort is array",
+			body:    `{"model":"m","max_tokens":1024,"output_config":{"effort":["high"]},"messages":[{"role":"user","content":"hi"}]}`,
+			wantNil: true,
+		},
+		{
+			name:    "effort is object",
+			body:    `{"model":"m","max_tokens":1024,"output_config":{"effort":{"a":1}},"messages":[{"role":"user","content":"hi"}]}`,
+			wantNil: true,
+		},
+		{
+			name:    "effort is empty string",
+			body:    `{"model":"m","max_tokens":1024,"output_config":{"effort":""},"messages":[{"role":"user","content":"hi"}]}`,
+			wantNil: true,
+		},
+		{
+			name:    "output_config is string not object",
+			body:    `{"model":"m","max_tokens":1024,"output_config":"high","messages":[{"role":"user","content":"hi"}]}`,
+			wantNil: true,
+		},
+		{
+			name:    "output_config is array",
+			body:    `{"model":"m","max_tokens":1024,"output_config":["high"],"messages":[{"role":"user","content":"hi"}]}`,
+			wantNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			unified, err := TransformToUnified(context.Background(), []byte(tt.body))
+			if err != nil {
+				t.Fatalf("TransformToUnified 失败: %v", err)
+			}
+			if tt.wantNil && unified.ReasoningEffort != nil {
+				t.Fatalf("ReasoningEffort 应为 nil，实际 %#v", unified.ReasoningEffort)
+			}
+		})
+	}
+}

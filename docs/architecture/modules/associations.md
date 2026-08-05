@@ -48,7 +48,7 @@ models.ModelWithProvider
 
 - `MaxTokens *int`：发给上游前的 `max_tokens`（及 OpenAI 新名 `max_completion_tokens`）裁剪上限。`nil`/`0`/负数 = 不限，原样透传；`>0` 时超过此值会被裁剪到此上限。用于兜底客户端（如 Cursor）发超大 `max_tokens` 触发上游 400。裁剪在 `service/chat` 的 `buildRequestBodyForProvider` 中执行，passthrough 与 transform 两条路径均生效。
 - `SupportsThinking *bool`：是否支持 thinking（推理）能力，**三态**——`nil`=继承 `Model.SupportsThinking`，`true`/`false`=override。解析语义见 `ModelWithProvider.SupportsThinkingResolved(model)`（纯函数：override 优先，其次继承 model，model 为 nil 时 false）。上传路径：DTO 用 `*bool` + `omitempty`；Create 直接赋值（nil 落库）；Update 在 `repos().RunInTx` 事务内执行两步——struct `Update`（其他字段部分更新，跳过零值）+ `UpdateFields` 显式写 `supports_thinking`（map 中的 nil 会写 NULL），保证原子且不破坏其余字段的部分更新语义。**注意契约**：关联 Update 中 `supports_thinking` **缺省（nil）= 显式清空 override（改回继承）**，与 Model Update 的"nil=不改"语义相反——因为该字段是三态且前端总是显式提交（inherit/true/false 之一）。
-- 裁剪联动：`SupportsThinkingResolved` 为 `false` 时，`service/chat` 的 `buildRequestBodyForProvider` 会删除请求体中的 `thinking`/`reasoning_effort`/`reasoning` 字段（`stripThinkingFields` 纯函数），避免不支持 thinking 的上游报 400/静默忽略。
+- 裁剪联动：`SupportsThinkingResolved` 为 `false` 时，`service/chat` 的 `buildRequestBodyForProvider` 会删除请求体中的 `thinking`/`reasoning_effort`/`reasoning`/`output_config.effort` 字段（`stripThinkingFields` 纯函数，`output_config.effort` 删后空对象连壳删除），避免不支持 thinking 的上游报 400/静默忽略。
 
 ## 5. 特殊约定
 

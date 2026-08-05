@@ -67,7 +67,7 @@ balancer/                   # 加权随机纯算法
 - **数据访问**：统一经 `repos()`（`service/chat/repos.go` → `repository.Default()`），**禁止**直连 `models.DB`/`gorm.G`；旁路包 `chatstats` 同样经 `repos().Stats`（`repository.StatsRepo`）
 - **职责拆分（现状）**：选路/重试/协议/日志落库编排仍在 `service/chat`；Stats 在 `chatstats`；权重调整在 `adjustment`。改统计策略与改选路策略不再同文件碰撞；日志 IO 存储仍可后续下沉
 - 虚拟模型路径：先由 `virtualmodel` 产出有序真实模型，再在真实模型层做 provider 级选路（两层 LB）
-- **thinking 裁剪（能力标记联动）**：`ProvidersWithMeta` 携带 `Model`（真实路径为查询到的 model；虚拟路径为正在尝试的 ordered model），经 `singleProviderAttemptInput.Model` 传入单次尝试；`buildRequestBodyForProvider` 在入口处调用纯函数 `stripThinkingFields`（`chat_attempt_request.go`）——当 `ModelWithProvider.SupportsThinkingResolved(model)` 为 `false` 时删除请求体中的 `thinking`/`reasoning_effort`/`reasoning` 字段，避免不支持 thinking 的上游报 400/静默忽略；失败仅记录日志不阻断主流程。裁剪与 `clampMaxTokens` 同属"构建请求体时的保护性改写"，两条路径（真实/虚拟模型）共享同一入口
+- **thinking 裁剪（能力标记联动）**：`ProvidersWithMeta` 携带 `Model`（真实路径为查询到的 model；虚拟路径为正在尝试的 ordered model），经 `singleProviderAttemptInput.Model` 传入单次尝试；`buildRequestBodyForProvider` 在入口处调用纯函数 `stripThinkingFields`（`chat_attempt_request.go`）——当 `ModelWithProvider.SupportsThinkingResolved(model)` 为 `false` 时删除请求体中的 `thinking`/`reasoning_effort`/`reasoning`/`output_config.effort` 字段（Anthropic adaptive thinking 字段），避免不支持 thinking 的上游报 400/静默忽略；`output_config.effort` 删除后若 `output_config` 变空对象则连壳删除，避免残留空对象；失败仅记录日志不阻断主流程。裁剪与 `clampMaxTokens` 同属"构建请求体时的保护性改写"，两条路径（真实/虚拟模型）共享同一入口
 - `service/chat_facade.go` 为兼容 re-export，不是第二实现
 - `chatstats` / `adjustment` 为叶子包，**禁止** import `service/chat`
 

@@ -76,6 +76,8 @@ func CreateModelProvider(c *gin.Context) {
 		MaxTokens:        req.MaxTokens,
 		// 三态：nil=继承 model，true/false=override
 		SupportsThinking: req.SupportsThinking,
+		// 三态：nil=继承 model，空切片=显式不约束，非空=override
+		ThinkingLevels: req.ThinkingLevels,
 	}
 
 	defaultStatus := true
@@ -128,7 +130,7 @@ func UpdateModelProvider(c *gin.Context) {
 		return
 	}
 
-	// supports_thinking 三态需要 nil 显式写 NULL（struct Updates 会跳过 nil 指针），
+	// supports_thinking / thinking_levels 三态需要 nil 显式写 NULL（struct Updates 会跳过 nil 指针），
 	// 其余字段保持 struct 部分更新语义（跳过零值，缺省不改）。
 	// 两步在同一事务内执行（RunInTx），避免非原子：失败整体回滚。
 	updates := models.ModelWithProvider{
@@ -150,7 +152,17 @@ func UpdateModelProvider(c *gin.Context) {
 			return err
 		}
 		// 非 nil 写 override；nil 写 NULL（改回"继承"）
-		_, err := txRepos.ModelWithProvider.UpdateFields(ctx, uint(id), map[string]any{"supports_thinking": req.SupportsThinking})
+		// supports_thinking + thinking_levels 都走 UpdateFields 显式写 NULL。
+		// thinking_levels 需手动 JSON 序列化：GORM serializer:json 只对 struct Updates 生效，
+		// map-based UpdateFields 不走 serializer，直接传 *[]string 会报 unsupported type。
+		thinkingLevelsVal, err := models.SerializeThinkingLevelsPtrForUpdate(req.ThinkingLevels)
+		if err != nil {
+			return err
+		}
+		_, err = txRepos.ModelWithProvider.UpdateFields(ctx, uint(id), map[string]any{
+			"supports_thinking": req.SupportsThinking,
+			"thinking_levels":   thinkingLevelsVal,
+		})
 		return err
 	}); err != nil {
 		httpresp.InternalServerError(c, "Failed to update model-provider association: "+err.Error())

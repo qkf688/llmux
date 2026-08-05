@@ -154,10 +154,19 @@ func normalizeUpdateSettingsRequest(req *UpdateSettingsRequest) {
 		req.ModelSyncLogRetentionDays = 7
 	}
 
-	if req.ReasoningEffortDefaultValue != "low" &&
-		req.ReasoningEffortDefaultValue != "medium" &&
-		req.ReasoningEffortDefaultValue != "high" {
+	// reasoning_effort_default_value：硬编码 6 档校验（不走 schema enum，独立硬编码与现有风格一致）
+	switch req.ReasoningEffortDefaultValue {
+	case "minimal", "low", "medium", "high", "xhigh", "max":
+		// 合法，保留
+	default:
 		req.ReasoningEffortDefaultValue = "low"
+	}
+	// reasoning_effort_unknown_strategy：硬编码枚举校验
+	switch req.ReasoningEffortUnknownStrategy {
+	case "clamp_to_default", "passthrough":
+		// 合法，保留
+	default:
+		req.ReasoningEffortUnknownStrategy = "clamp_to_default"
 	}
 }
 

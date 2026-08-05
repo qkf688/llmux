@@ -60,8 +60,9 @@ type Settings struct {
 	AutoCleanOnDelete           bool `json:"auto_clean_on_delete"`
 	AutoSaveTemplateOnAssociate bool `json:"auto_save_template_on_associate"`
 	// reasoning_effort 映射相关设置
-	ReasoningEffortMappingEnabled bool   `json:"reasoning_effort_mapping_enabled"`
-	ReasoningEffortDefaultValue   string `json:"reasoning_effort_default_value"` // low/medium/high
+	ReasoningEffortMappingEnabled  bool   `json:"reasoning_effort_mapping_enabled"`
+	ReasoningEffortDefaultValue    string `json:"reasoning_effort_default_value"`    // minimal/low/medium/high/xhigh/max
+	ReasoningEffortUnknownStrategy string `json:"reasoning_effort_unknown_strategy"` // clamp_to_default / passthrough
 }
 
 // SettingsResponse 设置响应结构（类型别名，字段定义统一在 Settings 中）

@@ -14,6 +14,11 @@ type ModelWithProviderRequest struct {
 	Priority         int               `json:"priority"`
 	MaxTokens        *int              `json:"max_tokens"`        // max_tokens 上限，nil/0=不限
 	SupportsThinking *bool             `json:"supports_thinking"` // 三态：nil=继承 model，true/false=override
+	// ThinkingLevels 三态 JSON 契约（json:"thinking_levels,omitempty" + *[]string）：
+	// 继承 → 前端不发字段（JSON null）→ 后端 *[]string 为 nil
+	// 自定义 → 前端发 ["low","medium"] → 后端 *[]string 指向非空切片
+	// 不约束 → 前端发 [] → 后端 *[]string 指向空切片
+	ThinkingLevels *[]string `json:"thinking_levels,omitempty"`
 }
 
 // ModelProviderStatusRequest represents the request body for updating provider status.

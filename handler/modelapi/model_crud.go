@@ -46,6 +46,7 @@ func CreateModel(c *gin.Context) {
 		IOLog:            &req.IOLog,
 		AutoAssociate:    req.AutoAssociate,
 		SupportsThinking: req.SupportsThinking != nil && *req.SupportsThinking,
+		ThinkingLevels:   req.ThinkingLevels,
 	}
 	if err := repos().Model.Create(c.Request.Context(), &model); err != nil {
 		httpresp.InternalServerError(c, "Failed to create model: "+err.Error())
@@ -86,6 +87,18 @@ func UpdateModel(c *gin.Context) {
 	if req.SupportsThinking != nil {
 		updates["supports_thinking"] = *req.SupportsThinking
 	}
+	// ThinkingLevels：DTO 用 []string（非指针），nil=不约束（空切片语义）。
+	// 始终写入：前端不发字段时 JSON 解析为 nil，写入空切片（=不约束）；
+	// 前端发非空数组时写入白名单。与 SupportsThinking 的条件写不同——
+	// ThinkingLevels 无"不改"语义（前端总是显式提交完整列表）。
+	// 需手动 JSON 序列化：GORM serializer:json 只对 struct Updates 生效，
+	// map-based UpdateFields 不走 serializer，直接传 []string 会报 unsupported type。
+	thinkingLevelsVal, err := models.SerializeThinkingLevelsForUpdate(req.ThinkingLevels)
+	if err != nil {
+		httpresp.InternalServerError(c, "Failed to serialize thinking_levels: "+err.Error())
+		return
+	}
+	updates["thinking_levels"] = thinkingLevelsVal
 	if _, err := repos().Model.UpdateFields(c.Request.Context(), id, updates); err != nil {
 		httpresp.InternalServerError(c, "Failed to update model: "+err.Error())
 		return

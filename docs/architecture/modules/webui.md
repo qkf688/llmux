@@ -86,6 +86,11 @@ routes/<page>/
 | `/database` | system-ops（database/importexport） |
 | `/` home | logs-metrics metrics |
 
+### thinking 能力开关（models / model-providers 页）
+
+- `/models` 编辑弹窗：`支持 thinking` Checkbox ↔ `Model.SupportsThinking`（`supports_thinking` 字段，二态 bool，默认 false）
+- `/model-providers` 关联弹窗：`支持 thinking` 三态 Select（继承/启用/禁用）↔ `ModelWithProvider.SupportsThinking`（`supports_thinking` 字段，`*bool`：不传=继承、true/false=override）；"继承"选项实时显示当前所选 model 的支持状态（弹窗持有 `models` prop 查询）
+
 ---
 
 *本文档由 Project Architecture Documenter skill 生成，生成日期：2026-07-23；同日审查回写。*

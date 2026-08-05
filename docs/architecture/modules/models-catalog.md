@@ -35,12 +35,18 @@ models.Model / ModelTemplateItem
 | `ModelRepo` | 真实模型持久化与批量更新 | `repository/model.go` | GORM |
 | `ModelTemplateItemRepo` | 模板名条目 | `repository/model_template_item.go` | GORM |
 | `TemplateIndex` | 上游模型名 → 真实模型模板匹配 | `service/model_template.go` | 同文件 |
-| `models.Model` | 真实模型实体（重试、超时、IO 日志、上游标记等） | `models/model.go` | GORM |
+| `models.Model` | 真实模型实体（重试、超时、IO 日志、thinking 能力、自动关联标记等） | `models/model.go` | GORM |
 
 ## 5. 特殊约定
 
 - `handler/modelapi` 统一经 `repos()` 访问持久层（模型 CRUD、批量、模板项、级联清理），**禁止**新增 `gorm.G` 直连
 - 自动关联消费 `TemplateIndex`，实现落在 `service/autoassoc`，本模块只提供匹配能力
+
+### `Model.SupportsThinking`（thinking 能力标记）
+
+- `bool`（**非** `*bool`）：Model 层是能力真实值的 single source of truth，无继承对象，`nil` 与 `false` 业务等价；三态语义只属于 `ModelWithProvider.SupportsThinking`（见 `associations` 文档）。
+- 默认 `false`：**存量模型与 modelsync 同步创建的模型升级后默认不支持 thinking**，需手动在 model 编辑页勾选（含存量部署升级场景——升级后旧模型的 thinking 请求会被裁剪，属预期行为，有日志可观测）；自动推断（按模型名匹配已知支持 thinking 的模型）是后续独立任务。
+- 消费方：`service/chat` 在构建上游请求时经 `ModelWithProvider.SupportsThinkingResolved` 解析最终状态，`false` 时裁剪请求体中的 thinking 配置字段。
 
 ---
 

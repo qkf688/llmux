@@ -17,6 +17,7 @@ export function useModelProvidersAssociationForm() {
       priority: 10,
       max_tokens: 0,
       customer_headers: [],
+      supports_thinking: "inherit", // 默认继承 model
     },
   });
 

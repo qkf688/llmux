@@ -12,7 +12,8 @@ type ModelWithProviderRequest struct {
 	CustomerHeaders  map[string]string `json:"customer_headers"`
 	Weight           int               `json:"weight"`
 	Priority         int               `json:"priority"`
-	MaxTokens        *int              `json:"max_tokens"` // max_tokens 上限，nil/0=不限
+	MaxTokens        *int              `json:"max_tokens"`        // max_tokens 上限，nil/0=不限
+	SupportsThinking *bool             `json:"supports_thinking"` // 三态：nil=继承 model，true/false=override
 }
 
 // ModelProviderStatusRequest represents the request body for updating provider status.

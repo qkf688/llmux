@@ -1,5 +1,6 @@
 import type { UseFormReturn } from "react-hook-form";
 import type { ModelWithProvider, Settings } from "@/lib/api";
+import { toTriState } from "../utils/tri-state";
 import type { Updater } from "@/stores/core/updater";
 import type { FormValues } from "../form-schema";
 import type { ProviderModelSelection } from "../types";
@@ -43,6 +44,7 @@ export function useModelProvidersAssociationDialog({
       priority: association.Priority ?? 100,
       max_tokens: association.MaxTokens ?? 0,
       customer_headers: headerPairs.length ? headerPairs : [],
+      supports_thinking: toTriState(association.SupportsThinking),
     });
     setOpen(true);
   };
@@ -66,6 +68,7 @@ export function useModelProvidersAssociationDialog({
       priority: defaultPriority,
       max_tokens: 0,
       customer_headers: [],
+      supports_thinking: "inherit", // 默认继承 model
     });
     setOpen(true);
   };

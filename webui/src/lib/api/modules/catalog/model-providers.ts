@@ -15,6 +15,7 @@ export interface ModelWithProvider {
   Weight: number;
   Priority: number;
   MaxTokens: number | null;
+  SupportsThinking: boolean | null; // 三态：null=继承 model，true/false=override
 }
 
 export interface AssociationPreview {
@@ -75,6 +76,7 @@ export async function createModelProvider(association: {
   weight: number;
   priority?: number;
   max_tokens?: number;
+  supports_thinking?: boolean;
 }): Promise<ModelWithProvider> {
   return apiRequest<ModelWithProvider>("/model-providers", {
     method: "POST",
@@ -96,6 +98,7 @@ export async function updateModelProvider(
     weight?: number;
     priority?: number;
     max_tokens?: number;
+    supports_thinking?: boolean;
   }
 ): Promise<ModelWithProvider> {
   return apiRequest<ModelWithProvider>(`/model-providers/${id}`, {

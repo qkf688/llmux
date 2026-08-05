@@ -101,6 +101,7 @@ export function useModelProvidersAssociationMutations({
         priority: settings?.auto_priority_decay_default || 100,
         max_tokens: 0,
         customer_headers: [],
+        supports_thinking: "inherit", // 默认继承 model
       });
       setSelectedProviderModels([]);
       if (selectedModelId) {
@@ -135,6 +136,7 @@ export function useModelProvidersAssociationMutations({
         priority: 100,
         max_tokens: 0,
         customer_headers: [],
+        supports_thinking: "inherit", // 默认继承 model
       });
       if (selectedModelId) {
         void fetchModelProviders(selectedModelId);

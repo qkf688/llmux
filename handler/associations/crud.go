@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/httpresp"
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/repository"
 	"gorm.io/gorm"
 )
 
@@ -73,6 +74,8 @@ func CreateModelProvider(c *gin.Context) {
 		Weight:           req.Weight,
 		Priority:         priority,
 		MaxTokens:        req.MaxTokens,
+		// 三态：nil=继承 model，true/false=override
+		SupportsThinking: req.SupportsThinking,
 	}
 
 	defaultStatus := true
@@ -109,12 +112,11 @@ func UpdateModelProvider(c *gin.Context) {
 		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
 		return
 	}
-	slog.Info("UpdateModelProvider", "req", req)
+	slog.Debug("UpdateModelProvider", "id", id, "model_id", req.ModelID, "provider_id", req.ProviderID) // 不打印 req：CustomerHeaders 可能含敏感 header 值
 
+	// customer_headers 保持原样：nil 时 struct Updates 跳过该字段（部分更新语义，保留旧值）。
+	// 注意与 Create 路径不同：Create 需要空 map 兜底（新行无旧值可保留）。
 	customerHeaders := req.CustomerHeaders
-	if customerHeaders == nil {
-		customerHeaders = map[string]string{}
-	}
 
 	ctx := c.Request.Context()
 	if _, err := repos().ModelWithProvider.Get(ctx, uint(id)); err != nil {
@@ -126,6 +128,9 @@ func UpdateModelProvider(c *gin.Context) {
 		return
 	}
 
+	// supports_thinking 三态需要 nil 显式写 NULL（struct Updates 会跳过 nil 指针），
+	// 其余字段保持 struct 部分更新语义（跳过零值，缺省不改）。
+	// 两步在同一事务内执行（RunInTx），避免非原子：失败整体回滚。
 	updates := models.ModelWithProvider{
 		ModelID:          req.ModelID,
 		ProviderID:       req.ProviderID,
@@ -140,7 +145,14 @@ func UpdateModelProvider(c *gin.Context) {
 		MaxTokens:        req.MaxTokens,
 	}
 
-	if err := repos().ModelWithProvider.Update(ctx, uint(id), updates); err != nil {
+	if err := repos().RunInTx(ctx, func(txRepos *repository.Repositories) error {
+		if err := txRepos.ModelWithProvider.Update(ctx, uint(id), updates); err != nil {
+			return err
+		}
+		// 非 nil 写 override；nil 写 NULL（改回"继承"）
+		_, err := txRepos.ModelWithProvider.UpdateFields(ctx, uint(id), map[string]any{"supports_thinking": req.SupportsThinking})
+		return err
+	}); err != nil {
 		httpresp.InternalServerError(c, "Failed to update model-provider association: "+err.Error())
 		return
 	}

@@ -1,3 +1,4 @@
+import { useWatch } from "react-hook-form";
 import type { FieldArrayWithId, UseFormReturn } from "react-hook-form";
 import type { Model, ModelWithProvider, Provider } from "@/lib/api";
 import type { FormValues } from "../../form-schema";
@@ -64,6 +65,8 @@ export function AssociationFormDialog({
   onProviderChange,
 }: AssociationFormDialogProps) {
   const handleSubmit = editingAssociation ? onSubmitUpdate : onSubmitCreate;
+  // 仅订阅 model_id 字段变化（比 form.watch 每渲染全表单订阅更小）
+  const selectedModelId = useWatch({ control: form.control, name: "model_id" });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -262,6 +265,37 @@ export function AssociationFormDialog({
               />
 
               <FormLabel>参数配置</FormLabel>
+              <FormField
+                control={form.control}
+                name="supports_thinking"
+                render={({ field }) => {
+                  const selectedModel = models.find((m) => m.ID === selectedModelId);
+                  const inherited = selectedModel ? selectedModel.supports_thinking : false;
+                  return (
+                    <FormItem className="rounded-md border p-4">
+                      <div className="space-y-1">
+                        <FormLabel>支持 thinking</FormLabel>
+                        <div className="text-sm text-muted-foreground">
+                          覆盖模型级的 thinking 能力；"继承"跟随模型设置（当前：{inherited ? "启用" : "禁用"}）
+                        </div>
+                      </div>
+                      <FormControl>
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="选择" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="inherit">继承（当前：{inherited ? "启用" : "禁用"}）</SelectItem>
+                            <SelectItem value="true">启用</SelectItem>
+                            <SelectItem value="false">禁用</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
+              />
               <FormField
                 control={form.control}
                 name="with_header"

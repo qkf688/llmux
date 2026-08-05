@@ -17,6 +17,8 @@ export const formSchema = z.object({
   priority: z.number().min(0, { message: "优先级必须大于等于0" }),
   max_tokens: z.number().int().min(0, { message: "max_tokens 上限必须大于等于0" }).optional(),
   customer_headers: z.array(headerPairSchema).default([]),
+  // 三态："inherit"=继承 model，"true"/"false"=override
+  supports_thinking: z.enum(["inherit", "true", "false"]),
 });
 
 export type FormValues = z.input<typeof formSchema>;

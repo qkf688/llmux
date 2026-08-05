@@ -1,4 +1,5 @@
 import type { FormValues } from "../form-schema";
+import { fromTriState } from "../utils/tri-state";
 
 export const buildAssociationPayload = (
   values: FormValues,
@@ -27,6 +28,8 @@ export const buildAssociationPayload = (
     weight: values.weight,
     priority: values.priority,
     max_tokens: values.max_tokens ?? 0,
+    // 三态转换集中在 tri-state.ts：inherit → undefined（不传该字段，后端置 NULL）
+    supports_thinking: fromTriState(values.supports_thinking),
   };
 };
 

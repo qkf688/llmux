@@ -32,6 +32,7 @@ function createMockAssociation(ID: number, ProviderID: number): ModelWithProvide
     Weight: 1,
     Priority: 0,
     MaxTokens: null,
+    SupportsThinking: null,
   };
 }
 

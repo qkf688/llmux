@@ -41,6 +41,11 @@ type Model struct {
 	IOLog         *bool // 是否记录IO
 	IsUpstream    *bool // 是否是上游模型（true=上游，false=自定义）
 	AutoAssociate *bool `gorm:"default:true" json:"auto_associate"` // 是否允许自动关联触发
+	// SupportsThinking 是否支持 thinking（推理）能力。
+	// 用 bool 而非 *bool：Model 层是能力真实值的 single source of truth，无继承对象，
+	// nil 与 false 业务上等价；三态语义（nil=继承）只属于 ModelWithProvider 的 override 字段。
+	// 与 IOLog/IsUpstream 的 *bool 风格不一致，是有意为之：Model 层不存在"未设置"状态。
+	SupportsThinking bool `json:"supports_thinking"` // 是否支持 thinking（默认 false，存量/同步模型需手动开启）
 }
 
 type ModelWithProvider struct {
@@ -55,9 +60,27 @@ type ModelWithProvider struct {
 	Status              *bool             // 是否启用
 	CustomerHeaders     map[string]string `gorm:"serializer:json"` // 自定义headers
 	Weight              int
-	Priority            int // 优先级，值越高越优先选择
+	Priority            int  // 优先级，值越高越优先选择
 	MaxTokens           *int // max_tokens 上限，nil=不限；超过则裁剪到此值，避免客户端发超大值触发上游 400
 	ConsecutiveFailures int  // 连续调用失败次数
+	// SupportsThinking 是否支持 thinking（推理）能力，三态：nil=继承 Model.SupportsThinking，
+	// true/false=override。与 Model.SupportsThinking 的 bool（二态）不同：关联层存在"继承"这一
+	// 有效状态，因此必须用 *bool。解析语义见 SupportsThinkingResolved。
+	SupportsThinking *bool
+}
+
+// SupportsThinkingResolved 解析该关联最终是否支持 thinking：
+// override 非 nil 时以 override 为准；否则继承 model 的 SupportsThinking；
+// model 为 nil 或 model.SupportsThinking 为 false 时返回 false。
+// 纯函数（只读字段，无 IO），调用侧允许传 nil model，方法内部兜底。
+func (m *ModelWithProvider) SupportsThinkingResolved(model *Model) bool {
+	if m != nil && m.SupportsThinking != nil {
+		return *m.SupportsThinking
+	}
+	if model != nil {
+		return model.SupportsThinking
+	}
+	return false
 }
 
 // ModelTemplateItem 模型模板条目：用于将 provider_model 映射到 ModelID（区分大小写、去重）

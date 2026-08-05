@@ -8,6 +8,7 @@ export const defaultModelFormValues: ModelFormValues = {
   time_out: 60,
   io_log: false,
   auto_associate: true,
+  supports_thinking: false,
 };
 
 export const defaultBatchUpdateValues: BatchUpdateValues = {
@@ -24,4 +25,5 @@ export const toModelFormValues = (model: Model): ModelFormValues => ({
   time_out: model.TimeOut,
   io_log: model.IOLog,
   auto_associate: model.auto_associate,
+  supports_thinking: model.supports_thinking ?? false,
 });

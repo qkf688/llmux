@@ -39,12 +39,13 @@ func CreateModel(c *gin.Context) {
 	}
 
 	model := models.Model{
-		Name:          req.Name,
-		Remark:        req.Remark,
-		MaxRetry:      req.MaxRetry,
-		TimeOut:       req.TimeOut,
-		IOLog:         &req.IOLog,
-		AutoAssociate: req.AutoAssociate,
+		Name:             req.Name,
+		Remark:           req.Remark,
+		MaxRetry:         req.MaxRetry,
+		TimeOut:          req.TimeOut,
+		IOLog:            &req.IOLog,
+		AutoAssociate:    req.AutoAssociate,
+		SupportsThinking: req.SupportsThinking != nil && *req.SupportsThinking,
 	}
 	if err := repos().Model.Create(c.Request.Context(), &model); err != nil {
 		httpresp.InternalServerError(c, "Failed to create model: "+err.Error())
@@ -80,6 +81,10 @@ func UpdateModel(c *gin.Context) {
 	}
 	if req.AutoAssociate != nil {
 		updates["auto_associate"] = *req.AutoAssociate
+	}
+	// 条件写：缺省（nil）时保留存量值，避免 PUT 不带该字段把已开启的模型静默重置为 false
+	if req.SupportsThinking != nil {
+		updates["supports_thinking"] = *req.SupportsThinking
 	}
 	if _, err := repos().Model.UpdateFields(c.Request.Context(), id, updates); err != nil {
 		httpresp.InternalServerError(c, "Failed to update model: "+err.Error())

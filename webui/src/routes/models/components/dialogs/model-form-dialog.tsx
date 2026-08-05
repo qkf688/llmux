@@ -206,6 +206,24 @@ export function ModelFormDialog({
               )}
             />
 
+            <FormField
+              control={form.control}
+              name="supports_thinking"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <div className="space-y-0.5">
+                    <FormLabel className="text-base">支持 thinking</FormLabel>
+                    <div className="text-sm text-muted-foreground">
+                      该模型是否支持推理能力；关闭时上游请求中的 thinking/reasoning 字段会被裁剪
+                    </div>
+                  </div>
+                  <FormControl>
+                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 取消

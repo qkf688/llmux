@@ -7,4 +7,5 @@ export const buildModelUpdatePayload = (model: Model) => ({
   time_out: model.TimeOut,
   io_log: model.IOLog,
   auto_associate: model.auto_associate,
+  supports_thinking: model.supports_thinking,
 });

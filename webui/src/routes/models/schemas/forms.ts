@@ -7,6 +7,7 @@ export const modelFormSchema = z.object({
   time_out: z.number().min(0, { message: "超时时间不能为负数" }),
   io_log: z.boolean(),
   auto_associate: z.boolean().optional(),
+  supports_thinking: z.boolean(),
 });
 
 export type ModelFormValues = z.infer<typeof modelFormSchema>;

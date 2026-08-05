@@ -8,6 +8,7 @@ export interface Model {
   TimeOut: number;
   IOLog: boolean;
   auto_associate?: boolean;
+  supports_thinking: boolean;
 }
 
 export interface ModelTemplateItem {
@@ -31,6 +32,7 @@ export async function createModel(model: {
   max_retry: number;
   time_out: number;
   io_log: boolean;
+  supports_thinking?: boolean;
 }): Promise<Model> {
   return apiRequest<Model>("/models", {
     method: "POST",
@@ -47,6 +49,7 @@ export async function updateModel(
     time_out?: number;
     io_log?: boolean;
     auto_associate?: boolean;
+    supports_thinking?: boolean;
   }
 ): Promise<Model> {
   return apiRequest<Model>(`/models/${id}`, {

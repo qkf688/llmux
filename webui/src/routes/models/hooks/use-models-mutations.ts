@@ -150,6 +150,10 @@ export function useModelsMutations({
         data: {
           ...buildModelUpdatePayload(model),
           io_log: newIOLogValue,
+          // 不覆盖条件写字段（thinking/auto_associate）：避免 stale cache 值回写覆盖他人修改（后端 *bool 条件写，undefined 被 JSON 省略）
+          supports_thinking: undefined,
+          auto_associate: undefined,
+          // 注：name/remark/max_retry/time_out 仍随全量 payload 回写（既有 toggle 模式，后端无条件写，故不能只提交单字段）
         },
       });
 
@@ -179,6 +183,9 @@ export function useModelsMutations({
         data: {
           ...buildModelUpdatePayload(model),
           auto_associate: checked,
+          // 不覆盖 thinking：避免 stale cache 值回写覆盖他人修改（后端 *bool 条件写，undefined 被 JSON 省略）
+          supports_thinking: undefined,
+          // 注：name/remark/max_retry/time_out/io_log 仍随全量 payload 回写（既有 toggle 模式，后端无条件写，故不能只提交单字段）
         },
       });
 

@@ -1,8 +1,18 @@
 import { selectSidebarOpen, selectToggleSidebarOpen, useLayoutStore } from "@/stores/ui";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { AnimatedOutlet } from "@/components/animated-outlet";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   FaHome,
   FaCloud,
@@ -43,6 +53,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation(); // 用于高亮当前选中的菜单
   const clearSession = useAuthStore(selectClearSession);
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
 
   const handleLogout = () => {
     clearSession();
@@ -61,25 +72,25 @@ export default function Layout() {
 
   return (
     <div className="flex flex-col h-screen w-full bg-background transition-colors duration-300">
-      
+
       {/* 1. 顶部栏 Header */}
       <header className="h-16 border-b bg-background flex items-center justify-between px-6 flex-shrink-0 shadow-sm z-20">
         <div className="font-bold text-xl flex items-center gap-2">
-          <span className="text-primary text-2xl">LLMux</span> 
+          <span className="text-primary text-2xl">LLMux</span>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="icon"
-            className="hover:bg-accent hover:text-accent-foreground" 
+            className="hover:bg-accent hover:text-accent-foreground"
             onClick={() => setTheme(theme === "light" ? "dark" : "light")}
           >
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              width="24" height="24" viewBox="0 0 24 24" 
-              fill="none" stroke="currentColor" strokeWidth="2" 
-              strokeLinecap="round" strokeLinejoin="round" 
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24" height="24" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round"
               className="size-5"
             >
               <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
@@ -90,10 +101,10 @@ export default function Layout() {
               <path d="M12 19.6l8.85 -8.85"></path>
             </svg>
           </Button>
-          
-          <Button 
-            variant="ghost" 
-            onClick={handleLogout}
+
+          <Button
+            variant="ghost"
+            onClick={() => setLogoutDialogOpen(true)}
             className="gap-2"
           >
             <FaSignOutAlt />
@@ -101,11 +112,27 @@ export default function Layout() {
         </div>
       </header>
 
+      {/* 退出登录确认弹窗 */}
+      <AlertDialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认退出登录</AlertDialogTitle>
+            <AlertDialogDescription>
+              退出后需要重新输入密码登录，确认继续？
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={handleLogout}>确认退出</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* 2. 下方主体区域 */}
       <div className="flex overflow-y-hidden flex-1 min-w-0">
-        
+
         {/* 左侧侧边栏 Sidebar */}
-        <aside 
+        <aside
           className={`
             flex flex-col border-r bg-background/95 transition-all duration-200 ease-in-out
             ${sidebarOpen ? WIDTH_EXPANDED : WIDTH_COLLAPSED}
@@ -118,17 +145,17 @@ export default function Layout() {
                 return (
                   <li key={item.to}>
                     <Link to={item.to}>
-                      <div 
+                      <div
                         className={`
                           group flex items-center h-10 mx-2 rounded-md transition-colors relative overflow-hidden whitespace-nowrap
-                          ${isActive 
+                          ${isActive
                             ? "bg-primary text-primary-foreground shadow-sm" // 选中状态
                             : "hover:bg-accent hover:text-accent-foreground text-muted-foreground" // 默认状态
                           }
                         `}
                         title={!sidebarOpen ? item.label : ""}
                       >
-                        {/* 
+                        {/*
                           关键点：图标容器
                           永远固定为 w-12 (48px) 或 w-16 (相当于收起时的宽度)，
                           并且 flex-shrink-0 防止被挤压。
@@ -136,21 +163,21 @@ export default function Layout() {
                         */}
                         <div className={`
                            flex items-center justify-center flex-shrink-0 h-full
-                           ${sidebarOpen ? "w-10" : "w-full"} 
+                           ${sidebarOpen ? "w-10" : "w-full"}
                            transition-all duration-300
                         `}>
                           <span className="text-lg">{item.icon}</span>
                         </div>
-                        
-                        {/* 
+
+                        {/*
                            关键点：文字容器
                            通过 width, opacity, translate 组合实现平滑过渡
                         */}
-                        <span 
+                        <span
                           className={`
                             font-medium transition-all duration-300 ease-in-out origin-left
-                            ${sidebarOpen 
-                              ? "w-auto opacity-100 translate-x-0 ml-2" 
+                            ${sidebarOpen
+                              ? "w-auto opacity-100 translate-x-0 ml-2"
                               : "w-0 opacity-0 -translate-x-4 ml-0"
                             }
                           `}
@@ -182,11 +209,11 @@ export default function Layout() {
               `}>
                  {sidebarOpen ? <FaChevronLeft /> : <FaChevronRight />}
               </div>
-              
+
               <span className={`
                 whitespace-nowrap transition-all duration-300 ease-in-out overflow-hidden
-                ${sidebarOpen 
-                  ? "w-auto opacity-100 translate-x-0 ml-2" 
+                ${sidebarOpen
+                  ? "w-auto opacity-100 translate-x-0 ml-2"
                   : "w-0 opacity-0 -translate-x-4 ml-0"
                 }
               `}>
@@ -207,4 +234,4 @@ export default function Layout() {
     </div>
   );
 }
- 
+

@@ -1,7 +1,19 @@
+import { useState } from "react";
+import { FaSync } from "react-icons/fa";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface ProvidersToolbarProps {
   syncingAll: boolean;
@@ -29,20 +41,49 @@ export function ProvidersToolbar({
   flushNameFilter,
   onCreateProvider,
 }: ProvidersToolbarProps) {
+  const [syncConfirmOpen, setSyncConfirmOpen] = useState(false);
+
+  const handleConfirmSync = () => {
+    setSyncConfirmOpen(false);
+    onSyncAllProviders();
+  };
+
   return (
     <>
       <div className="flex flex-col gap-2 flex-shrink-0">
-        <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
             <h2 className="text-2xl font-bold tracking-tight">提供商管理</h2>
           </div>
-          <div className="flex w-full sm:w-auto items-center justify-end gap-2">
-            <Button variant="secondary" size="sm" onClick={onSyncAllProviders} disabled={syncingAll} className="h-9">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSyncConfirmOpen(true)}
+              disabled={syncingAll}
+              className="h-9"
+            >
+              <FaSync className={syncingAll ? "animate-spin" : ""} />
               {syncingAll ? "同步中..." : "一键同步上游模型"}
             </Button>
           </div>
         </div>
       </div>
+
+      <AlertDialog open={syncConfirmOpen} onOpenChange={setSyncConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认一键同步</AlertDialogTitle>
+            <AlertDialogDescription>
+              此操作将向所有已配置的提供商发起模型列表同步，可能涉及新增或删除模型记录。确认继续？
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmSync}>确认同步</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="flex flex-col gap-2 flex-shrink-0">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:gap-4">

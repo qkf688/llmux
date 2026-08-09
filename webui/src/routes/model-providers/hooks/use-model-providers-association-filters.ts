@@ -64,14 +64,14 @@ export function useModelProvidersAssociationFilters({
     );
   }, [searchKeyword, selectedProviderFilter, selectedProviderType, selectedStatusFilter]);
 
+  // 仅统计 Select 筛选器激活数（不含搜索词，搜索有独立输入框）
   const activeFilterCount = useMemo(() => {
     return [
       selectedProviderType !== "all",
       selectedProviderFilter !== "all",
       selectedStatusFilter !== "all",
-      searchKeyword.trim() !== "",
     ].filter(Boolean).length;
-  }, [searchKeyword, selectedProviderFilter, selectedProviderType, selectedStatusFilter]);
+  }, [selectedProviderFilter, selectedProviderType, selectedStatusFilter]);
 
   const isAllAssociationsSelected = useMemo(() => {
     return filteredModelProviders.length > 0 && selectedAssociationIds.length === filteredModelProviders.length;

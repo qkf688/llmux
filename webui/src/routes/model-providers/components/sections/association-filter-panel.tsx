@@ -12,6 +12,7 @@ import {
   ChevronUp,
   Filter,
   MoreHorizontal,
+  Plus,
   SlidersHorizontal,
   TestTube,
   TestTubes,
@@ -120,46 +121,84 @@ export function AssociationFilterPanel({
   const failedCount = Object.values(associationTestResults).filter((result) => result.success === false).length;
   const hasResults = Object.keys(associationTestResults).length > 0;
 
+  // 模型选择器（移动端/桌面端共用，避免重复）
+  const modelSelect = (
+    <Select value={selectedModelId?.toString() || ""} onValueChange={onModelChange}>
+      <SelectTrigger className="h-8 w-full text-xs px-2">
+        <SelectValue placeholder="选择模型" />
+      </SelectTrigger>
+      <SelectContent>
+        {models.map((model) => (
+          <SelectItem key={model.ID} value={model.ID.toString()}>
+            {model.Name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
+  // "更多"菜单内容（移动端/桌面端共用）
+  const moreMenuItems = (
+    <>
+      <DropdownMenuItem
+        disabled={!selectedModelId}
+        onSelect={() => {
+          window.setTimeout(() => onToggleTemplateEditor(), 0);
+        }}
+        className="cursor-pointer"
+      >
+        模板编辑
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        onSelect={() => {
+          window.setTimeout(() => onOpenBlacklistDialog(), 0);
+        }}
+        className="cursor-pointer"
+      >
+        拉黑管理
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem onClick={onAutoAssociate} className="cursor-pointer">
+        一键关联
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={onCleanInvalid} className="cursor-pointer">
+        清除无效
+      </DropdownMenuItem>
+    </>
+  );
+
   return (
     <div className="flex flex-col gap-2 flex-shrink-0">
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 lg:gap-2">
+      {/* 移动端：模型选择器 + 筛选按钮合并一行 */}
+      <div className="flex gap-2 sm:hidden">
+        <div className="flex-1 min-w-0">{modelSelect}</div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onFilterPanelOpenChange(!filterPanelOpen)}
+          className="flex-shrink-0 justify-between h-8 text-xs"
+        >
+          <span className="flex items-center gap-1.5">
+            <Filter className="h-4 w-4" />
+            <span>筛选</span>
+            {activeFilterCount > 0 && (
+              <span className="bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded-full">
+                {activeFilterCount}
+              </span>
+            )}
+          </span>
+          {filterPanelOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </Button>
+      </div>
+
+      {/* 桌面端：4列 grid（模型 + 3个筛选器） */}
+      <div className="hidden sm:grid grid-cols-2 lg:grid-cols-4 gap-2">
         <div className="flex flex-col gap-1 text-xs">
           <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">关联模型</Label>
-          <Select value={selectedModelId?.toString() || ""} onValueChange={onModelChange}>
-            <SelectTrigger className="h-8 w-full text-xs px-2">
-              <SelectValue placeholder="选择模型" />
-            </SelectTrigger>
-            <SelectContent>
-              {models.map((model) => (
-                <SelectItem key={model.ID} value={model.ID.toString()}>
-                  {model.Name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {modelSelect}
         </div>
 
-        <div className="sm:hidden">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onFilterPanelOpenChange(!filterPanelOpen)}
-            className="w-full justify-between h-8 text-xs"
-          >
-            <span className="flex items-center gap-2">
-              <Filter className="h-4 w-4" />
-              <span>筛选与操作</span>
-              {activeFilterCount > 0 && (
-                <span className="bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded-full">
-                  {activeFilterCount}
-                </span>
-              )}
-            </span>
-            {filterPanelOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </Button>
-        </div>
-
-        <div className="hidden sm:flex flex-col gap-1 text-xs">
+        <div className="flex flex-col gap-1 text-xs">
           <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">提供商类型</Label>
           <Select value={selectedProviderType} onValueChange={onSelectedProviderTypeChange}>
             <SelectTrigger className="h-8 w-full text-xs px-2">
@@ -176,7 +215,7 @@ export function AssociationFilterPanel({
           </Select>
         </div>
 
-        <div className="hidden sm:flex flex-col gap-1 text-xs">
+        <div className="flex flex-col gap-1 text-xs">
           <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">具体提供商</Label>
           <Select value={selectedProviderFilter} onValueChange={onSelectedProviderFilterChange}>
             <SelectTrigger className="h-8 w-full text-xs px-2">
@@ -193,7 +232,7 @@ export function AssociationFilterPanel({
           </Select>
         </div>
 
-        <div className="hidden sm:flex flex-col gap-1 text-xs">
+        <div className="flex flex-col gap-1 text-xs">
           <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">启用状态</Label>
           <Select value={selectedStatusFilter} onValueChange={onSelectedStatusFilterChange}>
             <SelectTrigger className="h-8 w-full text-xs px-2">
@@ -265,7 +304,47 @@ export function AssociationFilterPanel({
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-2">
+      {/* 移动端：搜索框 + 图标按钮组（单行） */}
+      <div className="flex flex-col gap-2 sm:hidden">
+        <Input
+          placeholder="搜索提供商、模型名称或ID..."
+          value={searchKeyword}
+          onChange={(event) => onSearchKeywordChange(event.target.value)}
+          className="h-8 text-xs"
+        />
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 relative flex-shrink-0"
+            onClick={() => onBatchActionSheetOpenChange(true)}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            {selectedAssociationCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] min-w-[16px] h-[16px] flex items-center justify-center rounded-full px-1 leading-none">
+                {selectedAssociationCount}
+              </span>
+            )}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" className="h-8 w-8 flex-shrink-0">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48">
+              {moreMenuItems}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button onClick={onOpenCreateDialog} disabled={!selectedModelId} className="h-8 text-xs flex-1">
+            <Plus className="h-4 w-4" />
+            添加关联
+          </Button>
+        </div>
+      </div>
+
+      {/* 桌面端：搜索框 + 按钮组 */}
+      <div className="hidden sm:flex flex-row gap-2">
         <div className="flex-1">
           <Input
             placeholder="搜索提供商、模型名称或ID..."
@@ -274,20 +353,10 @@ export function AssociationFilterPanel({
             className="h-8 text-xs"
           />
         </div>
-        <div className="flex gap-2 sm:flex-shrink-0 flex-wrap">
-          <Button
-            variant="outline"
-            className="h-8 text-xs flex-1 sm:hidden"
-            onClick={() => onBatchActionSheetOpenChange(true)}
-          >
-            批量操作
-            {selectedAssociationCount > 0 && <span className="ml-1">({selectedAssociationCount})</span>}
-            <ChevronDown className="ml-2 h-4 w-4" />
-          </Button>
-
+        <div className="flex gap-2 flex-shrink-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="h-8 text-xs hidden sm:flex">
+              <Button variant="outline" className="h-8 text-xs">
                 批量操作
                 {selectedAssociationCount > 0 && <span className="ml-1">({selectedAssociationCount})</span>}
                 <ChevronDown className="ml-2 h-4 w-4" />
@@ -396,39 +465,16 @@ export function AssociationFilterPanel({
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="h-8 text-xs flex-1 sm:flex-initial">
+              <Button variant="outline" className="h-8 text-xs">
                 更多
                 <MoreHorizontal className="ml-2 h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-48">
-              <DropdownMenuItem
-                disabled={!selectedModelId}
-                onSelect={() => {
-                  window.setTimeout(() => onToggleTemplateEditor(), 0);
-                }}
-                className="cursor-pointer"
-              >
-                模板编辑
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  window.setTimeout(() => onOpenBlacklistDialog(), 0);
-                }}
-                className="cursor-pointer"
-              >
-                拉黑管理
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={onAutoAssociate} className="cursor-pointer">
-                一键关联
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onCleanInvalid} className="cursor-pointer">
-                清除无效
-              </DropdownMenuItem>
+              {moreMenuItems}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button onClick={onOpenCreateDialog} disabled={!selectedModelId} className="h-8 text-xs flex-1 sm:flex-initial">
+          <Button onClick={onOpenCreateDialog} disabled={!selectedModelId} className="h-8 text-xs">
             添加关联
           </Button>
         </div>

@@ -8,19 +8,6 @@ import type { SectionPropsContext } from "./use-model-providers-page-context";
 export function useModelProvidersPageSectionProps(ctx: SectionPropsContext) {
   const { store, filters, localState, associationStatus, batch, operationScope, preview, modelChange, pageActions, mutations, statusToggle, testing, associationDialog, templateEditor, blacklist, selectedModel, isGlobalScope } = ctx;
 
-  const operationScopeToolbarProps = {
-    operationScope: store.operationScope,
-    onOperationScopeChange: store.setOperationScope,
-    selectedModelName: isGlobalScope ? "全部" : (selectedModel?.Name ?? "未选择"),
-    selectedModelId: localState.selectedModelId,
-    resettingWeights: store.resettingWeights,
-    resettingPriorities: store.resettingPriorities,
-    enablingAssociations: store.enablingAssociations,
-    onResetWeights: operationScope.handleResetWeights,
-    onResetPriorities: operationScope.handleResetPriorities,
-    onEnableAssociations: operationScope.handleEnableAssociations,
-  };
-
   const associationFilterPanelProps = {
     filterPanelOpen: store.filterPanelOpen,
     onFilterPanelOpenChange: store.setFilterPanelOpen,
@@ -63,6 +50,23 @@ export function useModelProvidersPageSectionProps(ctx: SectionPropsContext) {
     onAutoAssociate: preview.handleAutoAssociate,
     onCleanInvalid: preview.handleCleanInvalid,
     onOpenCreateDialog: associationDialog.openCreateDialog,
+    // ActionMenuDialog（操作菜单）
+    actionMenuProps: {
+      operationScope: store.operationScope,
+      onOperationScopeChange: store.setOperationScope,
+      selectedModelName: isGlobalScope ? "全部" : (selectedModel?.Name ?? "未选择"),
+      selectedModelId: localState.selectedModelId,
+      resettingWeights: store.resettingWeights,
+      resettingPriorities: store.resettingPriorities,
+      enablingAssociations: store.enablingAssociations,
+      onResetWeights: operationScope.handleResetWeights,
+      onResetPriorities: operationScope.handleResetPriorities,
+      onEnableAssociations: operationScope.handleEnableAssociations,
+      onToggleTemplateEditor: templateEditor.handleToggleTemplateEditor,
+      onOpenBlacklistDialog: blacklist.openBlacklistDialog,
+      onAutoAssociate: preview.handleAutoAssociate,
+      onCleanInvalid: preview.handleCleanInvalid,
+    },
   };
 
   const batchTestProgressCardProps = {
@@ -101,7 +105,6 @@ export function useModelProvidersPageSectionProps(ctx: SectionPropsContext) {
   };
 
   return {
-    operationScopeToolbarProps,
     associationFilterPanelProps,
     batchTestProgressCardProps,
     associationListSectionProps,

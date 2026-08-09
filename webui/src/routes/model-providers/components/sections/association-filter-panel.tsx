@@ -1,5 +1,6 @@
 import type { AssociationBatchTestResult } from "../../types";
 import type { Model, Provider } from "@/lib/api";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,8 +10,8 @@ import {
   CheckCircle,
   ChevronDown,
   Filter,
-  MoreHorizontal,
   Plus,
+  Settings2,
   SlidersHorizontal,
   TestTube,
   TestTubes,
@@ -25,6 +26,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ActionMenuDialog, type ActionMenuProps } from "../dialogs/action-menu-dialog";
 import { BatchActionSheet } from "../dialogs/batch-action-sheet";
 import { BatchCapabilitiesDialog } from "../dialogs/batch-capabilities-dialog";
 import { BatchDeleteDialog } from "../dialogs/batch-delete-dialog";
@@ -67,11 +69,9 @@ type AssociationFilterPanelProps = {
   onBatchTestAll: () => void;
   onSelectAllSuccessful: () => void;
   onSelectAllFailed: () => void;
-  onToggleTemplateEditor: () => void;
-  onOpenBlacklistDialog: () => void;
-  onAutoAssociate: () => void;
-  onCleanInvalid: () => void;
   onOpenCreateDialog: () => void;
+  // ActionMenuDialog（操作菜单）
+  actionMenuProps: ActionMenuProps;
 };
 
 export function AssociationFilterPanel({
@@ -111,15 +111,14 @@ export function AssociationFilterPanel({
   onBatchTestAll,
   onSelectAllSuccessful,
   onSelectAllFailed,
-  onToggleTemplateEditor,
-  onOpenBlacklistDialog,
-  onAutoAssociate,
-  onCleanInvalid,
   onOpenCreateDialog,
+  actionMenuProps,
 }: AssociationFilterPanelProps) {
   const successfulCount = Object.values(associationTestResults).filter((result) => result.success === true).length;
   const failedCount = Object.values(associationTestResults).filter((result) => result.success === false).length;
   const hasResults = Object.keys(associationTestResults).length > 0;
+
+  const [actionMenuDialogOpen, setActionMenuDialogOpen] = useState(false);
 
   // 模型选择器（移动端/桌面端共用，避免重复）
   const modelSelect = (
@@ -135,36 +134,6 @@ export function AssociationFilterPanel({
         ))}
       </SelectContent>
     </Select>
-  );
-
-  // "更多"菜单内容（移动端/桌面端共用）
-  const moreMenuItems = (
-    <>
-      <DropdownMenuItem
-        disabled={!selectedModelId}
-        onSelect={() => {
-          window.setTimeout(() => onToggleTemplateEditor(), 0);
-        }}
-        className="cursor-pointer"
-      >
-        模板编辑
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        onSelect={() => {
-          window.setTimeout(() => onOpenBlacklistDialog(), 0);
-        }}
-        className="cursor-pointer"
-      >
-        拉黑管理
-      </DropdownMenuItem>
-      <DropdownMenuSeparator />
-      <DropdownMenuItem onClick={onAutoAssociate} className="cursor-pointer">
-        一键关联
-      </DropdownMenuItem>
-      <DropdownMenuItem onClick={onCleanInvalid} className="cursor-pointer">
-        清除无效
-      </DropdownMenuItem>
-    </>
   );
 
   return (
@@ -281,6 +250,15 @@ export function AssociationFilterPanel({
           <Button
             variant="outline"
             size="icon"
+            className="h-8 w-8 flex-shrink-0"
+            onClick={() => setActionMenuDialogOpen(true)}
+            aria-label="操作菜单"
+          >
+            <Settings2 className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
             className="h-8 w-8 relative flex-shrink-0"
             onClick={() => onBatchActionSheetOpenChange(true)}
           >
@@ -291,16 +269,6 @@ export function AssociationFilterPanel({
               </span>
             )}
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" className="h-8 w-8 flex-shrink-0">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48">
-              {moreMenuItems}
-            </DropdownMenuContent>
-          </DropdownMenu>
           <Button onClick={onOpenCreateDialog} disabled={!selectedModelId} className="h-8 text-xs flex-1">
             <Plus className="h-4 w-4" />
             添加关联
@@ -319,6 +287,14 @@ export function AssociationFilterPanel({
           />
         </div>
         <div className="flex gap-2 flex-shrink-0">
+          <Button
+            variant="outline"
+            className="h-8 text-xs"
+            onClick={() => setActionMenuDialogOpen(true)}
+          >
+            <Settings2 className="mr-1.5 h-4 w-4" />
+            操作
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="h-8 text-xs">
@@ -428,17 +404,6 @@ export function AssociationFilterPanel({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="h-8 text-xs">
-                更多
-                <MoreHorizontal className="ml-2 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48">
-              {moreMenuItems}
-            </DropdownMenuContent>
-          </DropdownMenu>
           <Button onClick={onOpenCreateDialog} disabled={!selectedModelId} className="h-8 text-xs">
             添加关联
           </Button>
@@ -477,6 +442,12 @@ export function AssociationFilterPanel({
           onSelectedProviderFilterChange("all");
           onSelectedStatusFilterChange("all");
         }}
+      />
+
+      <ActionMenuDialog
+        open={actionMenuDialogOpen}
+        onOpenChange={setActionMenuDialogOpen}
+        {...actionMenuProps}
       />
 
       <BatchActionSheet

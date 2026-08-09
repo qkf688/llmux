@@ -40,7 +40,7 @@ export function FilterSheet({
 }: FilterSheetProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg p-0 gap-0 [&>button]:hidden">
+      <DialogContent className="sm:max-w-lg p-0 gap-0" showCloseButton={false}>
         <div className="flex flex-col max-h-[80vh]">
           <DialogHeader className="px-4 py-3 border-b">
             <div className="flex items-center justify-between">

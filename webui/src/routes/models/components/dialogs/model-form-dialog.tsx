@@ -62,14 +62,18 @@ export function ModelFormDialog({
 }: ModelFormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
+      <DialogContent className="max-h-[85vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>{editingModel ? "编辑模型" : "添加模型"}</DialogTitle>
           <DialogDescription>{editingModel ? "修改模型信息" : "添加一个新的模型"}</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(editingModel ? onUpdate : onCreate)} className="space-y-4">
+          <form
+            onSubmit={form.handleSubmit(editingModel ? onUpdate : onCreate)}
+            className="flex flex-col gap-4 flex-1 min-h-0"
+          >
+            <div className="space-y-4 overflow-y-auto pr-1 sm:pr-2 flex-1 min-h-0">
             {!editingModel && (
               <div className="space-y-2">
                 <label className="text-sm font-medium">从提供商选择（默认全部）</label>
@@ -172,58 +176,55 @@ export function ModelFormDialog({
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name="io_log"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                  <div className="space-y-0.5">
-                    <FormLabel className="text-base">IO 记录</FormLabel>
-                    <div className="text-sm text-muted-foreground">是否记录输入输出日志</div>
-                  </div>
-                  <FormControl>
-                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="auto_associate"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                  <div className="space-y-0.5">
-                    <FormLabel className="text-base">自动关联</FormLabel>
-                    <div className="text-sm text-muted-foreground">是否允许该模型被自动关联触发</div>
-                  </div>
-                  <FormControl>
-                    <Checkbox
-                      checked={field.value !== false}
-                      onCheckedChange={(checked) => field.onChange(checked)}
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="supports_thinking"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                  <div className="space-y-0.5">
-                    <FormLabel className="text-base">支持 thinking</FormLabel>
-                    <div className="text-sm text-muted-foreground">
-                      该模型是否支持推理能力；关闭时上游请求中的 thinking/reasoning 字段会被裁剪
-                    </div>
-                  </div>
-                  <FormControl>
-                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
+            <div className="rounded-lg border p-4 space-y-3">
+              <div className="space-y-0.5">
+                <div className="text-base font-medium">行为开关</div>
+                <div className="text-sm text-muted-foreground">
+                  IO 记录：是否记录输入输出日志；自动关联：是否允许被自动关联触发；支持 thinking：关闭时上游请求中的 thinking/reasoning 字段会被裁剪
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <FormField
+                  control={form.control}
+                  name="io_log"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center gap-2 space-y-0">
+                      <FormControl>
+                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                      <FormLabel className="text-sm">IO 记录</FormLabel>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="auto_associate"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center gap-2 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value !== false}
+                          onCheckedChange={(checked) => field.onChange(checked)}
+                        />
+                      </FormControl>
+                      <FormLabel className="text-sm">自动关联</FormLabel>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="supports_thinking"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center gap-2 space-y-0">
+                      <FormControl>
+                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                      <FormLabel className="text-sm">支持 thinking</FormLabel>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
 
             <FormField
               control={form.control}
@@ -270,7 +271,9 @@ export function ModelFormDialog({
               )}
             />
 
-            <DialogFooter>
+            </div>
+
+            <DialogFooter className="flex-shrink-0">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 取消
               </Button>

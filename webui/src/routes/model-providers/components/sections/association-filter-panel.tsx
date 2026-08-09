@@ -5,11 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
 import {
   CheckCircle,
   ChevronDown,
-  ChevronUp,
   Filter,
   MoreHorizontal,
   Plus,
@@ -17,6 +15,7 @@ import {
   TestTube,
   TestTubes,
   Trash2,
+  X,
   XCircle,
 } from "lucide-react";
 import {
@@ -29,6 +28,7 @@ import {
 import { BatchActionSheet } from "../dialogs/batch-action-sheet";
 import { BatchCapabilitiesDialog } from "../dialogs/batch-capabilities-dialog";
 import { BatchDeleteDialog } from "../dialogs/batch-delete-dialog";
+import { FilterSheet } from "../dialogs/filter-sheet";
 
 type AssociationFilterPanelProps = {
   filterPanelOpen: boolean;
@@ -175,8 +175,8 @@ export function AssociationFilterPanel({
         <Button
           variant="outline"
           size="sm"
-          onClick={() => onFilterPanelOpenChange(!filterPanelOpen)}
-          className="flex-shrink-0 justify-between h-8 text-xs"
+          onClick={() => onFilterPanelOpenChange(true)}
+          className="flex-shrink-0 h-8 text-xs"
         >
           <span className="flex items-center gap-1.5">
             <Filter className="h-4 w-4" />
@@ -187,9 +187,31 @@ export function AssociationFilterPanel({
               </span>
             )}
           </span>
-          {filterPanelOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </Button>
       </div>
+
+      {/* 移动端：筛选激活条件芯片行 */}
+      {activeFilterCount > 0 && (
+        <div className="flex flex-wrap gap-1.5 sm:hidden">
+          {selectedProviderType !== "all" && (
+            <FilterChip label="类型" value={selectedProviderType} onRemove={() => onSelectedProviderTypeChange("all")} />
+          )}
+          {selectedProviderFilter !== "all" && (
+            <FilterChip
+              label="提供商"
+              value={providers.find((p) => p.ID.toString() === selectedProviderFilter)?.Name ?? selectedProviderFilter}
+              onRemove={() => onSelectedProviderFilterChange("all")}
+            />
+          )}
+          {selectedStatusFilter !== "all" && (
+            <FilterChip
+              label="状态"
+              value={selectedStatusFilter === "enabled" ? "已启用" : "未启用"}
+              onRemove={() => onSelectedStatusFilterChange("all")}
+            />
+          )}
+        </div>
+      )}
 
       {/* 桌面端：4列 grid（模型 + 3个筛选器） */}
       <div className="hidden sm:grid grid-cols-2 lg:grid-cols-4 gap-2">
@@ -244,63 +266,6 @@ export function AssociationFilterPanel({
               <SelectItem value="disabled">未启用</SelectItem>
             </SelectContent>
           </Select>
-        </div>
-      </div>
-
-      <div
-        className={cn(
-          "sm:hidden overflow-hidden transition-all duration-300 ease-in-out",
-          filterPanelOpen ? "max-h-[220px] opacity-100" : "max-h-0 opacity-0"
-        )}
-      >
-        <div className="grid grid-cols-1 gap-2 pt-1">
-          <div className="flex flex-col gap-1 text-xs">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">提供商类型</Label>
-            <Select value={selectedProviderType} onValueChange={onSelectedProviderTypeChange}>
-              <SelectTrigger className="h-8 w-full text-xs px-2">
-                <SelectValue placeholder="按类型筛选" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部类型</SelectItem>
-                {providerTypes.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex flex-col gap-1 text-xs">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">具体提供商</Label>
-            <Select value={selectedProviderFilter} onValueChange={onSelectedProviderFilterChange}>
-              <SelectTrigger className="h-8 w-full text-xs px-2">
-                <SelectValue placeholder="按提供商筛选" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部提供商</SelectItem>
-                {providers.map((provider) => (
-                  <SelectItem key={provider.ID} value={provider.ID.toString()}>
-                    {provider.Name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex flex-col gap-1 text-xs">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">启用状态</Label>
-            <Select value={selectedStatusFilter} onValueChange={onSelectedStatusFilterChange}>
-              <SelectTrigger className="h-8 w-full text-xs px-2">
-                <SelectValue placeholder="按状态筛选" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部状态</SelectItem>
-                <SelectItem value="enabled">已启用</SelectItem>
-                <SelectItem value="disabled">未启用</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
         </div>
       </div>
 
@@ -496,6 +461,24 @@ export function AssociationFilterPanel({
         onConfirm={onBatchUpdateCapabilities}
       />
 
+      <FilterSheet
+        open={filterPanelOpen}
+        onOpenChange={onFilterPanelOpenChange}
+        selectedProviderType={selectedProviderType}
+        onSelectedProviderTypeChange={onSelectedProviderTypeChange}
+        selectedProviderFilter={selectedProviderFilter}
+        onSelectedProviderFilterChange={onSelectedProviderFilterChange}
+        selectedStatusFilter={selectedStatusFilter}
+        onSelectedStatusFilterChange={onSelectedStatusFilterChange}
+        providers={providers}
+        providerTypes={providerTypes}
+        onReset={() => {
+          onSelectedProviderTypeChange("all");
+          onSelectedProviderFilterChange("all");
+          onSelectedStatusFilterChange("all");
+        }}
+      />
+
       <BatchActionSheet
         open={batchActionSheetOpen}
         onOpenChange={onBatchActionSheetOpenChange}
@@ -517,5 +500,27 @@ export function AssociationFilterPanel({
         }}
       />
     </div>
+  );
+}
+
+// 筛选条件芯片：显示当前激活的筛选条件，点 × 清除单个筛选
+type FilterChipProps = {
+  label: string;
+  value: string;
+  onRemove: () => void;
+};
+
+function FilterChip({ label, value, onRemove }: FilterChipProps) {
+  return (
+    <span className="inline-flex items-center gap-1 bg-secondary text-secondary-foreground border border-border rounded-full py-0.5 pl-2.5 pr-1 text-xs">
+      {label}: {value}
+      <button
+        onClick={onRemove}
+        aria-label={`清除${label}筛选`}
+        className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-muted hover:bg-destructive transition-colors"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </span>
   );
 }

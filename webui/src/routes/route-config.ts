@@ -1,12 +1,29 @@
 import type { ComponentType, LazyExoticComponent } from "react";
 import { lazy } from "react";
+import {
+  House,
+  Cloud,
+  Bot,
+  Link as LinkIcon,
+  FileText,
+  HeartPulse,
+  RefreshCw,
+  Database,
+  Layers,
+  Settings,
+} from "lucide-react";
 
 export type AppRouteLayout = "none" | "app";
+
+/** Lucide 图标组件类型 */
+type NavIcon = ComponentType<{ className?: string }>;
 
 export type AppRouteNav = {
   label: string;
   /** 侧栏排序，越小越靠前 */
   order: number;
+  /** 侧栏图标：存组件类型而非 ReactNode，配置不实例化节点 */
+  icon: NavIcon;
 };
 
 export type AppRouteConfig = {
@@ -35,37 +52,37 @@ export const appRoutes: AppRouteConfig[] = [
     layout: "app",
     index: true,
     lazy: () => import("./home"),
-    nav: { label: "首页", order: 10 },
+    nav: { label: "首页", order: 10, icon: House },
   },
   {
     path: "/providers",
     layout: "app",
     lazy: () => import("./providers"),
-    nav: { label: "提供商管理", order: 20 },
+    nav: { label: "提供商管理", order: 20, icon: Cloud },
   },
   {
     path: "/models",
     layout: "app",
     lazy: () => import("./models"),
-    nav: { label: "模型管理", order: 30 },
+    nav: { label: "模型管理", order: 30, icon: Bot },
   },
   {
     path: "/virtual-models",
     layout: "app",
     lazy: () => import("./virtual-models"),
-    nav: { label: "虚拟模型", order: 40 },
+    nav: { label: "虚拟模型", order: 40, icon: Layers },
   },
   {
     path: "/model-providers",
     layout: "app",
     lazy: () => import("./model-providers"),
-    nav: { label: "模型提供商关联", order: 50 },
+    nav: { label: "模型提供商关联", order: 50, icon: LinkIcon },
   },
   {
     path: "/logs",
     layout: "app",
     lazy: () => import("./logs"),
-    nav: { label: "请求日志", order: 60 },
+    nav: { label: "请求日志", order: 60, icon: FileText },
   },
   {
     path: "/logs/:logId/chat-io",
@@ -76,25 +93,25 @@ export const appRoutes: AppRouteConfig[] = [
     path: "/health-check-logs",
     layout: "app",
     lazy: () => import("./health-check-logs"),
-    nav: { label: "健康检测日志", order: 70 },
+    nav: { label: "健康检测日志", order: 70, icon: HeartPulse },
   },
   {
     path: "/model-sync-logs",
     layout: "app",
     lazy: () => import("./model-sync-logs"),
-    nav: { label: "模型同步日志", order: 80 },
+    nav: { label: "模型同步日志", order: 80, icon: RefreshCw },
   },
   {
     path: "/database",
     layout: "app",
     lazy: () => import("./database"),
-    nav: { label: "数据库管理", order: 90 },
+    nav: { label: "数据库管理", order: 90, icon: Database },
   },
   {
     path: "/settings",
     layout: "app",
     lazy: () => import("./settings"),
-    nav: { label: "系统设置", order: 100 },
+    nav: { label: "系统设置", order: 100, icon: Settings },
   },
 ];
 

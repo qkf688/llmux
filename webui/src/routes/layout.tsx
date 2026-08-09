@@ -12,39 +12,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { AnimatedOutlet } from "@/components/animated-outlet";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import {
-  House,
-  Cloud,
-  Bot,
-  Link as LinkIcon,
-  FileText,
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Settings,
-  HeartPulse,
-  RefreshCw,
-  Database,
-  Layers
 } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { selectClearSession, useAuthStore } from "@/stores/auth";
 import { getNavRoutes } from "./route-config";
-
-/** path → icon：配置不塞 React 节点，映射留在 layout */
-const navIconByPath: Record<string, ReactNode> = {
-  "/": <House />,
-  "/providers": <Cloud />,
-  "/models": <Bot />,
-  "/virtual-models": <Layers />,
-  "/model-providers": <LinkIcon />,
-  "/logs": <FileText />,
-  "/health-check-logs": <HeartPulse />,
-  "/model-sync-logs": <RefreshCw />,
-  "/database": <Database />,
-  "/settings": <Settings />,
-};
 
 export default function Layout() {
   const sidebarOpen = useLayoutStore(selectSidebarOpen);
@@ -63,7 +39,7 @@ export default function Layout() {
   const navItems = getNavRoutes().map((route) => ({
     to: route.path,
     label: route.nav.label,
-    icon: navIconByPath[route.path] ?? null,
+    icon: route.nav.icon,
   }));
 
   // 侧边栏宽度常量，方便统一管理
@@ -166,7 +142,7 @@ export default function Layout() {
                            ${sidebarOpen ? "w-10" : "w-full"}
                            transition-all duration-300
                         `}>
-                          <span className="text-lg">{item.icon}</span>
+                          <span className="text-lg"><item.icon /></span>
                         </div>
 
                         {/*

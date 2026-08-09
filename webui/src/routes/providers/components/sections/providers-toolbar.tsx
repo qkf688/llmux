@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FaSync } from "react-icons/fa";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,7 +63,7 @@ export function ProvidersToolbar({
               disabled={syncingAll}
               className="h-9"
             >
-              <FaSync className={syncingAll ? "animate-spin" : ""} />
+              <RefreshCw className={syncingAll ? "animate-spin" : ""} />
               {syncingAll ? "同步中..." : "一键同步上游模型"}
             </Button>
           </div>

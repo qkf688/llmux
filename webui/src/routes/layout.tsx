@@ -14,36 +14,36 @@ import {
 import { AnimatedOutlet } from "@/components/animated-outlet";
 import { useState, type ReactNode } from "react";
 import {
-  FaHome,
-  FaCloud,
-  FaRobot,
-  FaLink,
-  FaFileAlt,
-  FaSignOutAlt,
-  FaChevronLeft,
-  FaChevronRight,
-  FaCog,
-  FaHeartbeat,
-  FaSync,
-  FaDatabase,
-  FaLayerGroup
-} from "react-icons/fa";
+  House,
+  Cloud,
+  Bot,
+  Link as LinkIcon,
+  FileText,
+  LogOut,
+  ChevronLeft,
+  ChevronRight,
+  Settings,
+  HeartPulse,
+  RefreshCw,
+  Database,
+  Layers
+} from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { selectClearSession, useAuthStore } from "@/stores/auth";
 import { getNavRoutes } from "./route-config";
 
 /** path → icon：配置不塞 React 节点，映射留在 layout */
 const navIconByPath: Record<string, ReactNode> = {
-  "/": <FaHome />,
-  "/providers": <FaCloud />,
-  "/models": <FaRobot />,
-  "/virtual-models": <FaLayerGroup />,
-  "/model-providers": <FaLink />,
-  "/logs": <FaFileAlt />,
-  "/health-check-logs": <FaHeartbeat />,
-  "/model-sync-logs": <FaSync />,
-  "/database": <FaDatabase />,
-  "/settings": <FaCog />,
+  "/": <House />,
+  "/providers": <Cloud />,
+  "/models": <Bot />,
+  "/virtual-models": <Layers />,
+  "/model-providers": <LinkIcon />,
+  "/logs": <FileText />,
+  "/health-check-logs": <HeartPulse />,
+  "/model-sync-logs": <RefreshCw />,
+  "/database": <Database />,
+  "/settings": <Settings />,
 };
 
 export default function Layout() {
@@ -107,7 +107,7 @@ export default function Layout() {
             onClick={() => setLogoutDialogOpen(true)}
             className="gap-2"
           >
-            <FaSignOutAlt />
+            <LogOut />
           </Button>
         </div>
       </header>
@@ -207,7 +207,7 @@ export default function Layout() {
                  ${sidebarOpen ? "w-12" : "w-full"}
                  transition-all duration-300
               `}>
-                 {sidebarOpen ? <FaChevronLeft /> : <FaChevronRight />}
+                 {sidebarOpen ? <ChevronLeft /> : <ChevronRight />}
               </div>
 
               <span className={`

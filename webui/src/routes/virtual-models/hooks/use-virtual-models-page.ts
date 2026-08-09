@@ -72,8 +72,8 @@ export function useVirtualModelsPage() {
   const { data: providersData, isLoading: providersLoading } = useProviders();
 
   const virtualModels = virtualModelsData ?? [];
-  const realModels = realModelsData ?? [];
-  const providers = providersData ?? [];
+  const realModels = useMemo(() => realModelsData ?? [], [realModelsData]);
+  const providers = useMemo(() => providersData ?? [], [providersData]);
 
   const blacklistedProviders = useMemo(
     () => providers.filter((p) => p.blacklisted),
@@ -140,7 +140,7 @@ export function useVirtualModelsPage() {
   });
 
   const { data: mappingsData } = useVMMappings(currentVirtualModel?.ID ?? null);
-  const mappings = mappingsData ?? [];
+  const mappings = useMemo(() => mappingsData ?? [], [mappingsData]);
 
   // 可显式传入 vm，避免 setCurrentVirtualModel 同 tick 内仍读到闭包旧值
   const refreshMappings = useCallback(

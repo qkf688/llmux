@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog,
@@ -50,23 +49,53 @@ export function ProvidersToolbar({
 
   return (
     <>
-      <div className="flex flex-col gap-2 flex-shrink-0">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="min-w-0">
-            <h2 className="text-2xl font-bold tracking-tight">提供商管理</h2>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSyncConfirmOpen(true)}
-              disabled={syncingAll}
-              className="h-9"
-            >
-              <RefreshCw className={syncingAll ? "animate-spin" : ""} />
-              {syncingAll ? "同步中..." : "一键同步上游模型"}
-            </Button>
-          </div>
+      <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+        <h2 className="text-2xl font-bold tracking-tight whitespace-nowrap shrink-0">提供商管理</h2>
+
+        <div className="relative min-w-[180px] max-w-[240px]">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+          <Input
+            aria-label="搜索提供商名称"
+            placeholder="搜索名称"
+            value={nameFilter}
+            onChange={(e) => setNameFilter(e.target.value)}
+            className="h-8 pl-7 text-xs"
+          />
+        </div>
+
+        <Select
+          value={typeFilter}
+          onValueChange={(value) => {
+            setTypeFilter(value);
+            flushNameFilter();
+          }}
+        >
+          <SelectTrigger aria-label="按类型筛选" className="h-8 w-[120px] text-xs">
+            <SelectValue placeholder="类型" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部</SelectItem>
+            {availableTypes.map((type) => (
+              <SelectItem key={type} value={type}>
+                {type}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSyncConfirmOpen(true)}
+            disabled={syncingAll}
+          >
+            <RefreshCw className={syncingAll ? "animate-spin" : ""} />
+            {syncingAll ? "同步中..." : "同步上游"}
+          </Button>
+          <Button size="sm" onClick={onCreateProvider}>
+            添加提供商
+          </Button>
         </div>
       </div>
 
@@ -84,49 +113,6 @@ export function ProvidersToolbar({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <div className="flex flex-col gap-2 flex-shrink-0">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:gap-4">
-          <div className="flex flex-col gap-1 text-xs col-span-1">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">提供商名称</Label>
-            <Input
-              placeholder="输入名称"
-              value={nameFilter}
-              onChange={(e) => setNameFilter(e.target.value)}
-              className="h-8 w-full text-xs px-2"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1 text-xs col-span-1">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">类型</Label>
-            <Select
-              value={typeFilter}
-              onValueChange={(value) => {
-                setTypeFilter(value);
-                flushNameFilter();
-              }}
-            >
-              <SelectTrigger className="h-8 w-full text-xs px-2">
-                <SelectValue placeholder="选择类型" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部</SelectItem>
-                {availableTypes.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-end col-span-2 sm:col-span-1 sm:justify-end">
-            <Button onClick={onCreateProvider} className="h-8 w-full text-xs sm:w-auto sm:ml-auto">
-              添加提供商
-            </Button>
-          </div>
-        </div>
-      </div>
     </>
   );
 }

@@ -201,7 +201,7 @@ export default function Layout() {
         </aside>
 
         {/* 右侧主内容区域 */}
-        <main className="flex-1 min-w-0 bg-muted/20 p-2 md:p-4 transition-all duration-300">
+        <main className="flex-1 min-w-0 bg-muted/20 p-2 md:p-3 transition-all duration-300">
           <div className="mx-auto max-w-full h-full min-w-0 overflow-x-hidden">
              <AnimatedOutlet />
           </div>

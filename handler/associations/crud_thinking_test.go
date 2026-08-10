@@ -14,6 +14,9 @@ import (
 
 func createAssocForThinkingTest(t *testing.T) models.ModelWithProvider {
 	t.Helper()
+	// 预置 model + provider，满足 Update handler 的存在性校验。
+	createModelForThinkingTest(t)
+	createProviderForThinkingTest(t)
 	mp := models.ModelWithProvider{
 		ModelID:         1,
 		ProviderID:      1,
@@ -29,6 +32,15 @@ func createAssocForThinkingTest(t *testing.T) models.ModelWithProvider {
 		t.Fatalf("create model provider: %v", err)
 	}
 	return mp
+}
+
+// createProviderForThinkingTest 创建一个 provider（自增 ID=1）供 association 测试使用。
+func createProviderForThinkingTest(t *testing.T) {
+	t.Helper()
+	p := models.Provider{Name: "test-provider", Type: "openai"}
+	if err := repository.Default().Provider.Create(t.Context(), &p); err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
 }
 
 func boolPtr(v bool) *bool { return &v }

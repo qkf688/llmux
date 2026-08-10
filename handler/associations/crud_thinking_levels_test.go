@@ -82,8 +82,9 @@ func TestUpdateModelProvider_ThinkingLevelsJSONNullAsInherit(t *testing.T) {
 // TestCreateModelProvider_ThinkingLevels 覆盖 Create 路径的 ThinkingLevels 三态。
 func TestCreateModelProvider_ThinkingLevels(t *testing.T) {
 	testsupport.InitTestDB(t)
-	// Create 路径需要 model 存在（handler 检查 model_id）
+	// Create 路径校验 model + provider 存在
 	createModelForThinkingTest(t)
+	createProviderForThinkingTest(t)
 
 	tests := []struct {
 		name      string

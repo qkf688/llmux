@@ -45,10 +45,25 @@ func CreateModelProvider(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// 检查模型是否存在（手动关联始终允许，与现网一致）
+	// 校验 model 存在（手动关联始终允许，与现网一致）。
 	if _, err := repos().Model.Get(ctx, req.ModelID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			httpresp.BadRequest(c, "Model not found")
+			return
+		}
 		httpresp.InternalServerError(c, "Failed to get model: "+err.Error())
 		return
+	}
+	// 校验 provider 存在，避免悬空关联（与 Update 对齐）。
+	if req.ProviderID > 0 {
+		if _, err := repos().Provider.Get(ctx, req.ProviderID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				httpresp.BadRequest(c, "Provider not found")
+				return
+			}
+			httpresp.InternalServerError(c, "Failed to get provider: "+err.Error())
+			return
+		}
 	}
 
 	customerHeaders := req.CustomerHeaders
@@ -128,6 +143,29 @@ func UpdateModelProvider(c *gin.Context) {
 		}
 		httpresp.InternalServerError(c, "Database error: "+err.Error())
 		return
+	}
+
+	// 校验改写目标存在，避免悬空关联（与 Create 对齐）。
+	// GORM struct Updates 跳过零值，零值=不改，只校验非零 ID。
+	if req.ModelID > 0 {
+		if _, err := repos().Model.Get(ctx, req.ModelID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				httpresp.BadRequest(c, "Model not found")
+				return
+			}
+			httpresp.InternalServerError(c, "Failed to get model: "+err.Error())
+			return
+		}
+	}
+	if req.ProviderID > 0 {
+		if _, err := repos().Provider.Get(ctx, req.ProviderID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				httpresp.BadRequest(c, "Provider not found")
+				return
+			}
+			httpresp.InternalServerError(c, "Failed to get provider: "+err.Error())
+			return
+		}
 	}
 
 	// supports_thinking / thinking_levels 三态需要 nil 显式写 NULL（struct Updates 会跳过 nil 指针），

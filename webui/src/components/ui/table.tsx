@@ -112,4 +112,13 @@ export {
   TableCell,
   TableCaption,
 }
+
+// 操作列钉右 + 左侧阴影的公用类：横向滚动时始终可见。
+// 抽公共常量避免两处 sticky 阴影漂移（providers / model-providers 关联表都在用）。
+export const STICKY_ACTIONS_SHADOW =
+  "shadow-[rgba(0,0,0,0.08)_-4px_0_8px_-2px]"
+export const STICKY_ACTIONS_HEAD_CLS =
+  `sticky right-0 bg-secondary ${STICKY_ACTIONS_SHADOW}`
+export const STICKY_ACTIONS_CELL_CLS =
+  `sticky right-0 bg-background group-hover:bg-muted/50 ${STICKY_ACTIONS_SHADOW}`
  

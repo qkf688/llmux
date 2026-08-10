@@ -14,6 +14,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  STICKY_ACTIONS_CELL_CLS,
+  STICKY_ACTIONS_HEAD_CLS,
   Table,
   TableBody,
   TableCell,
@@ -112,7 +114,7 @@ export function DesktopAssociationTable({
             <TableHead>健康检测</TableHead>
             <TableHead>测试结果</TableHead>
             {/* 操作列钉右：横向滚动时始终可见（窄屏下表格宽于容器且滚动条隐蔽，不钉右则看不到） */}
-            <TableHead className="sticky right-0 bg-secondary shadow-[rgba(0,0,0,0.08)_-4px_0_8px_-2px]">
+            <TableHead className={STICKY_ACTIONS_HEAD_CLS}>
               操作
             </TableHead>
           </TableRow>
@@ -207,7 +209,7 @@ export function DesktopAssociationTable({
                     <span className="text-xs text-muted-foreground">-</span>
                   )}
                 </TableCell>
-                <TableCell className="sticky right-0 bg-background group-hover:bg-muted/50 shadow-[rgba(0,0,0,0.08)_-4px_0_8px_-2px]">
+                <TableCell className={STICKY_ACTIONS_CELL_CLS}>
                   <div className="flex flex-wrap gap-2">
                     <Button variant="outline" size="sm" onClick={() => onEdit(association)}>
                       编辑

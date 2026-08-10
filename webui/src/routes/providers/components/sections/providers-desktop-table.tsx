@@ -1,18 +1,9 @@
 import { Boxes, Hash } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
 import {
+  STICKY_ACTIONS_CELL_CLS,
+  STICKY_ACTIONS_HEAD_CLS,
   Table,
   TableBody,
   TableCell,
@@ -27,12 +18,14 @@ import {
 } from "@/components/ui/tooltip";
 import type { Provider } from "@/lib/api";
 import { extractAllModels } from "../../utils/config";
+import { ProviderRowActions } from "./provider-row-actions";
 
 interface ProvidersDesktopTableProps {
   providers: Provider[];
   updatingFilter: Record<number, boolean>;
   updatingAssociationTrigger: Record<number, boolean>;
   clearingAssociation: boolean;
+  deleting: boolean;
 
   onOpenAllModelsDialog: (provider: Provider) => void | Promise<void>;
   onToggleModelEndpoint: (provider: Provider) => void | Promise<void>;
@@ -49,11 +42,11 @@ interface ProvidersDesktopTableProps {
 
   onOpenClearAssociationsDialog: (providerId: number) => void;
   onCancelClearAssociationsDialog: () => void;
-  onHandleClearAssociations: () => void | Promise<void>;
+  onHandleClearAssociations: (providerId: number) => void | Promise<void>;
 
   onOpenDeleteDialog: (providerId: number) => void;
   onCancelDeleteDialog: () => void;
-  onHandleDelete: () => void | Promise<void>;
+  onHandleDelete: (providerId: number) => void | Promise<void>;
 }
 
 export function ProvidersDesktopTable({
@@ -61,6 +54,7 @@ export function ProvidersDesktopTable({
   updatingFilter,
   updatingAssociationTrigger,
   clearingAssociation,
+  deleting,
   onOpenAllModelsDialog,
   onToggleModelEndpoint,
   onToggleAssociationTrigger,
@@ -76,7 +70,7 @@ export function ProvidersDesktopTable({
 }: ProvidersDesktopTableProps) {
   return (
     <div className="hidden sm:block w-full overflow-x-auto">
-      <Table className="min-w-[1200px]">
+      <Table className="min-w-[860px]">
         <TableHeader className="z-10 sticky top-0 bg-secondary/80 text-secondary-foreground">
           <TableRow>
             <TableHead>ID</TableHead>
@@ -85,14 +79,18 @@ export function ProvidersDesktopTable({
             <TableHead>全部模型</TableHead>
             <TableHead>模型端点</TableHead>
             <TableHead>关联触发</TableHead>
-            <TableHead className="w-[360px]">操作</TableHead>
+            <TableHead>模型过滤</TableHead>
+            {/* 操作列钉右：横向滚动时始终可见，与关联表格保持一致 */}
+            <TableHead className={`w-[92px] ${STICKY_ACTIONS_HEAD_CLS}`}>
+              操作
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {providers.map((provider) => {
             const allModels = extractAllModels(provider.Config);
             return (
-              <TableRow key={provider.ID}>
+              <TableRow key={provider.ID} className="group">
                 <TableCell className="font-mono text-xs text-muted-foreground">
                   <span className="inline-flex items-center gap-1">
                     <Hash className="size-3 opacity-60" />
@@ -128,102 +126,39 @@ export function ProvidersDesktopTable({
                   />
                 </TableCell>
                 <TableCell>
-                  <div className="flex flex-wrap gap-2 items-center">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center">
-                          <Switch
-                            checked={provider.ModelFilterEnabled ?? false}
-                            onCheckedChange={(checked) =>
-                              onToggleModelFilter(provider, checked)
-                            }
-                            disabled={updatingFilter[provider.ID]}
-                          />
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>启用模型过滤</TooltipContent>
-                    </Tooltip>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onEditProvider(provider)}
-                    >
-                      编辑
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => onOpenModelsDialog(provider.ID)}
-                    >
-                      获取模型
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            onOpenClearAssociationsDialog(provider.ID)
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center">
+                        <Switch
+                          checked={provider.ModelFilterEnabled ?? false}
+                          onCheckedChange={(checked) =>
+                            onToggleModelFilter(provider, checked)
                           }
-                        >
-                          清除关联
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>
-                            确定要清除这个提供商的所有关联吗？
-                          </AlertDialogTitle>
-                          <AlertDialogDescription>
-                            此操作将删除该提供商下所有的模型关联关系，但不会删除提供商本身。此操作无法撤销。
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel
-                            onClick={onCancelClearAssociationsDialog}
-                          >
-                            取消
-                          </AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={onHandleClearAssociations}
-                            disabled={clearingAssociation}
-                            className="bg-destructive hover:bg-destructive/90"
-                          >
-                            {clearingAssociation ? "清除中..." : "确认清除"}
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => onOpenDeleteDialog(provider.ID)}
-                        >
-                          删除
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>
-                            确定要删除这个提供商吗？
-                          </AlertDialogTitle>
-                          <AlertDialogDescription>
-                            此操作无法撤销。这将永久删除该提供商。
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel onClick={onCancelDeleteDialog}>
-                            取消
-                          </AlertDialogCancel>
-                          <AlertDialogAction onClick={onHandleDelete}>
-                            确认删除
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
+                          disabled={updatingFilter[provider.ID]}
+                        />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>启用模型过滤</TooltipContent>
+                  </Tooltip>
+                </TableCell>
+                <TableCell className={STICKY_ACTIONS_CELL_CLS}>
+                  <ProviderRowActions
+                    provider={provider}
+                    clearingAssociation={clearingAssociation}
+                    deleting={deleting}
+                    onEditProvider={onEditProvider}
+                    onOpenModelsDialog={onOpenModelsDialog}
+                    onOpenClearAssociationsDialog={
+                      onOpenClearAssociationsDialog
+                    }
+                    onCancelClearAssociationsDialog={
+                      onCancelClearAssociationsDialog
+                    }
+                    onHandleClearAssociations={onHandleClearAssociations}
+                    onOpenDeleteDialog={onOpenDeleteDialog}
+                    onCancelDeleteDialog={onCancelDeleteDialog}
+                    onHandleDelete={onHandleDelete}
+                  />
                 </TableCell>
               </TableRow>
             );

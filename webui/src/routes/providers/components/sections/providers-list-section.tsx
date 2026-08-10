@@ -10,6 +10,7 @@ interface ProvidersListSectionProps {
   updatingFilter: Record<number, boolean>;
   updatingAssociationTrigger: Record<number, boolean>;
   clearingAssociation: boolean;
+  deleting: boolean;
 
   onOpenAllModelsDialog: (provider: Provider) => void | Promise<void>;
   onToggleModelEndpoint: (provider: Provider) => void | Promise<void>;
@@ -20,11 +21,11 @@ interface ProvidersListSectionProps {
 
   onOpenClearAssociationsDialog: (providerId: number) => void;
   onCancelClearAssociationsDialog: () => void;
-  onHandleClearAssociations: () => void | Promise<void>;
+  onHandleClearAssociations: (providerId: number) => void | Promise<void>;
 
   onOpenDeleteDialog: (providerId: number) => void;
   onCancelDeleteDialog: () => void;
-  onHandleDelete: () => void | Promise<void>;
+  onHandleDelete: (providerId: number) => void | Promise<void>;
 }
 
 export function ProvidersListSection({
@@ -34,6 +35,7 @@ export function ProvidersListSection({
   updatingFilter,
   updatingAssociationTrigger,
   clearingAssociation,
+  deleting,
   onOpenAllModelsDialog,
   onToggleModelEndpoint,
   onToggleAssociationTrigger,
@@ -64,6 +66,7 @@ export function ProvidersListSection({
             updatingFilter={updatingFilter}
             updatingAssociationTrigger={updatingAssociationTrigger}
             clearingAssociation={clearingAssociation}
+            deleting={deleting}
             onOpenAllModelsDialog={onOpenAllModelsDialog}
             onToggleModelEndpoint={onToggleModelEndpoint}
             onToggleAssociationTrigger={onToggleAssociationTrigger}
@@ -82,6 +85,7 @@ export function ProvidersListSection({
             updatingFilter={updatingFilter}
             updatingAssociationTrigger={updatingAssociationTrigger}
             clearingAssociation={clearingAssociation}
+            deleting={deleting}
             onOpenAllModelsDialog={onOpenAllModelsDialog}
             onToggleModelEndpoint={onToggleModelEndpoint}
             onToggleAssociationTrigger={onToggleAssociationTrigger}

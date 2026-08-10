@@ -316,6 +316,7 @@ export function useProvidersPage() {
     openClearAssociationsDialog,
     cancelClearAssociationsDialog,
     handleClearAssociations,
+    deleting,
   } = useProviderDangerActions({
     providers,
     deleteId,
@@ -348,6 +349,7 @@ export function useProvidersPage() {
     updatingFilter,
     updatingAssociationTrigger,
     clearingAssociation,
+    deleting,
     onOpenAllModelsDialog: openAllModelsDialog,
     onToggleModelEndpoint: handleToggleModelEndpoint,
     onToggleAssociationTrigger: handleToggleAssociationTrigger,

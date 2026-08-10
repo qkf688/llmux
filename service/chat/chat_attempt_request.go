@@ -95,7 +95,11 @@ func buildRequestBodyForProvider(ctx context.Context, caps ProviderRequestCaps) 
 }
 
 // stripThinkingFields 在 supportsThinking 为 false 时删除请求体中的 thinking 配置字段
-// （OpenAI: reasoning_effort / reasoning；Anthropic: thinking / output_config.effort）。
+// （OpenAI: reasoning_effort / reasoning；Anthropic: thinking / output_config.effort），
+// 并裁剪 messages 数组内 assistant 轮 content 里内嵌的 type=thinking /
+// type=redacted_thinking 块（Anthropic 扩展思考多轮会话回灌场景，由
+// service/anthropic/request_outbound.go 的 buildThinkingBlock/buildRedactedThinkingBlock
+// 生成/透传；路由到不支持 thinking 的上游时同样触发 400）。
 // 为 true 或非 JSON 时原样返回。失败时记录日志并返回原 body（防御性裁剪，不阻断主流程）。
 // 幂等改写函数：用 sjson.DeleteBytes 做字节级删键，保留其余字节原样（键序/数字精度/空白不重排）。
 // output_config.effort 删除后若 output_config 变空对象，再删整个 output_config（避免残留空对象）。
@@ -129,9 +133,60 @@ func stripThinkingFields(body []byte, supportsThinking bool) []byte {
 				body = next
 			}
 		}
+	}
+
+	// 裁剪 messages 内嵌的 thinking 块（Anthropic 扩展思考多轮回灌场景）。
+	var msgChanged bool
+	body, msgChanged = stripThinkingBlocksFromMessages(body)
+	if msgChanged {
+		changed = true
+	}
+
+	if changed {
 		slog.Debug("stripped thinking fields from request body (model does not support thinking)")
 	}
 	return body
+}
+
+// stripThinkingBlocksFromMessages 裁剪 messages 数组内 assistant 轮 content 里
+// type=thinking / type=redacted_thinking 的块。
+// 用 gjson 取快照索引、sjson.DeleteBytes 从后往前删，保持其余字节原样（不重排/不重序列化）。
+// 从后往前删保证快照索引与当前 body 索引一致（删后面的不影响前面的索引）。
+// 注意：若某条消息的 content 删空后只剩空数组，不在此处理——实际多轮会话中
+// assistant 轮通常还带 text/tool_use 块，thinking-only 轮极罕见，留待后续按需补。
+func stripThinkingBlocksFromMessages(body []byte) ([]byte, bool) {
+	messages := gjson.GetBytes(body, "messages")
+	if !messages.IsArray() {
+		return body, false
+	}
+
+	changed := false
+	msgs := messages.Array()
+	for i := len(msgs) - 1; i >= 0; i-- {
+		contentPath := fmt.Sprintf("messages.%d.content", i)
+		content := gjson.GetBytes(body, contentPath)
+		if !content.IsArray() {
+			continue
+		}
+
+		parts := content.Array()
+		for j := len(parts) - 1; j >= 0; j-- {
+			t := parts[j].Get("type").String()
+			if t != "thinking" && t != "redacted_thinking" {
+				continue
+			}
+			elemPath := fmt.Sprintf("%s.%d", contentPath, j)
+			next, err := sjson.DeleteBytes(body, elemPath)
+			if err != nil {
+				slog.Warn("strip thinking block from message failed", "path", elemPath, "error", err)
+				return body, changed
+			}
+			body = next
+			changed = true
+		}
+	}
+
+	return body, changed
 }
 
 func validateAndPatchOutgoingOpenAIRequest(providerType string, body []byte) ([]byte, error) {

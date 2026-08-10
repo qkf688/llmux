@@ -217,6 +217,110 @@ func TestStripThinkingFields_OutputConfigEffort_RemovedAndCleaned(t *testing.T) 
 	}
 }
 
+// TestStripThinkingFields_MessagesThinkingBlock_Removed：
+// Anthropic 扩展思考多轮会话里 assistant 轮 content 数组内嵌 type=thinking 块，
+// 路由到不支持 thinking 的上游时同样触发 400，需在裁剪顶层字段时一并剥离。
+// 断言：thinking 块删除、同轮 text/tool_use 块保留、其他轮次不动。
+func TestStripThinkingFields_MessagesThinkingBlock_Removed(t *testing.T) {
+	body := []byte(`{` +
+		`"model":"m",` +
+		`"messages":[` +
+		`{"role":"user","content":"hi"},` +
+		`{"role":"assistant","content":[` +
+		`{"type":"thinking","thinking":"let me think","signature":"sig-1"},` +
+		`{"type":"text","text":"answer"},` +
+		`{"type":"tool_use","id":"tu_1","name":"foo","input":{}}` +
+		`]},` +
+		`{"role":"user","content":"next"}` +
+		`]}`)
+
+	got := stripThinkingFields(body, false)
+
+	var obj map[string]any
+	if err := json.Unmarshal(got, &obj); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	msgs := obj["messages"].([]any)
+	asst := msgs[1].(map[string]any)
+	content := asst["content"].([]any)
+
+	for _, blk := range content {
+		bm := blk.(map[string]any)
+		if bm["type"] == "thinking" {
+			t.Fatalf("expected thinking block removed from assistant content, got %v", content)
+		}
+	}
+	if len(content) != 2 {
+		t.Fatalf("expected 2 blocks left (text+tool_use), got %d: %v", len(content), content)
+	}
+	if content[0].(map[string]any)["type"] != "text" {
+		t.Fatalf("expected first remaining block = text, got %v", content[0])
+	}
+	if content[1].(map[string]any)["type"] != "tool_use" {
+		t.Fatalf("expected second remaining block = tool_use, got %v", content[1])
+	}
+	// 其他轮次不动
+	if msgs[0].(map[string]any)["content"] != "hi" {
+		t.Fatalf("expected user content unchanged, got %v", msgs[0])
+	}
+	if msgs[2].(map[string]any)["content"] != "next" {
+		t.Fatalf("expected last user content unchanged, got %v", msgs[2])
+	}
+}
+
+// TestStripThinkingFields_MessagesRedactedThinkingBlock_Removed：
+// redacted_thinking 块（Anthropic 不透明思考密文）同样需剥离。
+func TestStripThinkingFields_MessagesRedactedThinkingBlock_Removed(t *testing.T) {
+	body := []byte(`{` +
+		`"model":"m",` +
+		`"messages":[` +
+		`{"role":"assistant","content":[` +
+		`{"type":"redacted_thinking","data":"opaque-1"},` +
+		`{"type":"redacted_thinking","data":"opaque-2"},` +
+		`{"type":"text","text":"ok"}` +
+		`]}` +
+		`]}`)
+
+	got := stripThinkingFields(body, false)
+
+	var obj map[string]any
+	if err := json.Unmarshal(got, &obj); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	content := obj["messages"].([]any)[0].(map[string]any)["content"].([]any)
+	if len(content) != 1 {
+		t.Fatalf("expected 1 block left (text), got %d: %v", len(content), content)
+	}
+	if content[0].(map[string]any)["type"] != "text" {
+		t.Fatalf("expected remaining block = text, got %v", content[0])
+	}
+}
+
+// TestStripThinkingFields_MessagesThinkingBlock_Supported_Unchanged：
+// supportsThinking=true 时 messages 内嵌 thinking 块不裁剪（与顶层字段一致）。
+func TestStripThinkingFields_MessagesThinkingBlock_Supported_Unchanged(t *testing.T) {
+	body := []byte(`{"model":"m","messages":[` +
+		`{"role":"assistant","content":[` +
+		`{"type":"thinking","thinking":"x","signature":"s"},` +
+		`{"type":"text","text":"y"}` +
+		`]}]}`)
+
+	got := stripThinkingFields(body, true)
+	if string(got) != string(body) {
+		t.Fatalf("expected unchanged when supportsThinking=true, got %s", got)
+	}
+}
+
+// TestStripThinkingFields_MessagesStringContent_Unchanged：
+// content 为 string（非数组）时不应触发数组遍历逻辑，原样返回。
+func TestStripThinkingFields_MessagesStringContent_Unchanged(t *testing.T) {
+	body := []byte(`{"model":"m","messages":[{"role":"user","content":"hello"}]}`)
+	got := stripThinkingFields(body, false)
+	if string(got) != string(body) {
+		t.Fatalf("expected unchanged for string content, got %s", got)
+	}
+}
+
 // TestStripThinkingFields_OutputConfigWithOtherFields_KeepsShell：
 // output_config 含 effort 之外的字段时，删 effort 后 output_config 不空，应保留。
 func TestStripThinkingFields_OutputConfigWithOtherFields_KeepsShell(t *testing.T) {

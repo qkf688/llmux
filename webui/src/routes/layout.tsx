@@ -12,6 +12,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { AnimatedOutlet } from "@/components/animated-outlet";
+import { motion, useReducedMotion } from "motion/react";
+import { EASING } from "@/lib/animations/fluid-transitions";
 import { useState } from "react";
 import {
   LogOut,
@@ -30,6 +32,8 @@ export default function Layout() {
   const location = useLocation(); // 用于高亮当前选中的菜单
   const clearSession = useAuthStore(selectClearSession);
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
+  // 与 AnimatedOutlet / AnimatedNumber 一致：JS 动画不受 CSS 的 prefers-reduced-motion 约束，需显式降级
+  const prefersReducedMotion = useReducedMotion();
 
   const handleLogout = () => {
     clearSession();
@@ -123,14 +127,26 @@ export default function Layout() {
                     <Link to={item.to}>
                       <div
                         className={`
-                          group flex items-center h-10 mx-2 rounded-md transition-colors relative overflow-hidden whitespace-nowrap
+                          group flex items-center h-10 mx-2 rounded-md transition-colors relative whitespace-nowrap
                           ${isActive
-                            ? "bg-primary text-primary-foreground shadow-sm" // 选中状态
-                            : "hover:bg-accent hover:text-accent-foreground text-muted-foreground" // 默认状态
+                            ? "text-primary-foreground shadow-sm"
+                            : "hover:bg-muted text-muted-foreground"
                           }
                         `}
                         title={!sidebarOpen ? item.label : ""}
                       >
+                        {/* layoutId 滑块：active 项条件渲染一个绝对定位背景层，
+                            motion 自动在不同 li 间补间位移。与文字/图标分层，避免 motion 残留 transform 影响 hover */}
+                        {isActive && (
+                          <motion.div
+                            layoutId="sidebar-active"
+                            className="absolute inset-0 bg-primary rounded-md"
+                            transition={prefersReducedMotion
+                              ? { duration: 0 }
+                              : { duration: 0.32, ease: EASING.easeOutExpo }
+                            }
+                          />
+                        )}
                         {/*
                           关键点：图标容器
                           永远固定为 w-12 (48px) 或 w-16 (相当于收起时的宽度)，
@@ -138,11 +154,12 @@ export default function Layout() {
                           这样无论侧边栏多宽，图标相对于左侧的位置永远不变。
                         */}
                         <div className={`
-                           flex items-center justify-center flex-shrink-0 h-full
+                           relative z-10 flex items-center justify-center flex-shrink-0 h-full
                            ${sidebarOpen ? "w-10" : "w-full"}
                            transition-all duration-300
                         `}>
-                          <span className="text-lg"><item.icon /></span>
+                          {/* 显式限尺寸：lucide 默认 24px 且带 width/height，父级 font-size 管不到 */}
+                          <item.icon className="size-[18px]" />
                         </div>
 
                         {/*
@@ -151,7 +168,7 @@ export default function Layout() {
                         */}
                         <span
                           className={`
-                            font-medium transition-all duration-300 ease-in-out origin-left
+                            relative z-10 font-medium overflow-hidden transition-all duration-300 ease-in-out origin-left
                             ${sidebarOpen
                               ? "w-auto opacity-100 translate-x-0 ml-2"
                               : "w-0 opacity-0 -translate-x-4 ml-0"
@@ -174,7 +191,7 @@ export default function Layout() {
               variant="ghost"
               onClick={toggleSidebar}
               className={`
-                w-full h-12 flex items-center p-0 hover:bg-accent transition-all duration-300
+                w-full h-12 flex items-center p-0 hover:bg-muted transition-all duration-300
               `}
             >
               {/* 同样的逻辑：图标容器固定宽度 */}
@@ -183,7 +200,7 @@ export default function Layout() {
                  ${sidebarOpen ? "w-12" : "w-full"}
                  transition-all duration-300
               `}>
-                 {sidebarOpen ? <ChevronLeft /> : <ChevronRight />}
+                 {sidebarOpen ? <ChevronLeft className="size-[18px]" /> : <ChevronRight className="size-[18px]" />}
               </div>
 
               <span className={`

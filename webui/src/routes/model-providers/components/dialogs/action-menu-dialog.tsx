@@ -7,13 +7,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
-import { Check, X } from "lucide-react";
+import {
+  FileText,
+  Globe,
+  ListOrdered,
+  Scale,
+  SlidersHorizontal,
+  TriangleAlert,
+  X,
+  CheckCircle,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 export type ActionMenuProps = {
   operationScope: "current" | "all";
   onOperationScopeChange: (value: "current" | "all") => void;
   selectedModelName: string;
   selectedModelId: number | null;
+  modelCount: number;
   resettingWeights: boolean;
   resettingPriorities: boolean;
   enablingAssociations: boolean;
@@ -21,9 +32,6 @@ export type ActionMenuProps = {
   onResetPriorities: () => void;
   onEnableAssociations: () => void;
   onToggleTemplateEditor: () => void;
-  onOpenBlacklistDialog: () => void;
-  onAutoAssociate: () => void;
-  onCleanInvalid: () => void;
 };
 
 type ActionMenuDialogProps = ActionMenuProps & {
@@ -38,6 +46,7 @@ export function ActionMenuDialog({
   onOperationScopeChange,
   selectedModelName,
   selectedModelId,
+  modelCount,
   resettingWeights,
   resettingPriorities,
   enablingAssociations,
@@ -45,9 +54,6 @@ export function ActionMenuDialog({
   onResetPriorities,
   onEnableAssociations,
   onToggleTemplateEditor,
-  onOpenBlacklistDialog,
-  onAutoAssociate,
-  onCleanInvalid,
 }: ActionMenuDialogProps) {
   const isGlobalScope = operationScope === "all";
   const disableGlobalActions = !selectedModelId && !isGlobalScope;
@@ -61,7 +67,7 @@ export function ActionMenuDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[280px] p-0 gap-0 rounded-[10px]" showCloseButton={false}>
+      <DialogContent className="sm:max-w-[300px] p-0 gap-0 rounded-[10px]" showCloseButton={false}>
         <div className="flex flex-col max-h-[80vh]">
           <DialogHeader className="px-3.5 py-2.5 border-b">
             <div className="flex items-center justify-between">
@@ -80,70 +86,107 @@ export function ActionMenuDialog({
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto py-1">
-            {/* 作用域（切换后不关闭，允许继续执行其他操作） */}
-            <SectionLabel>作用域</SectionLabel>
-            <MenuItem
-              active={!isGlobalScope}
-              onClick={() => onOperationScopeChange("current")}
-            >
-              <span className="truncate flex-1 min-w-0">当前模型：{selectedModelName}</span>
-              {!isGlobalScope && <Check className="h-3 w-3 flex-shrink-0" />}
-            </MenuItem>
-            <MenuItem
-              active={isGlobalScope}
-              onClick={() => onOperationScopeChange("all")}
-            >
-              <span className="flex-1">全部模型</span>
-              {isGlobalScope && <Check className="h-3 w-3 flex-shrink-0" />}
-            </MenuItem>
+            {/* 作用域切换（segmented control，高对比选中态） */}
+            <div className="mx-2.5 mt-2 mb-1 p-2 bg-secondary rounded-lg">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5">作用域</div>
+              <div className="grid grid-cols-2 gap-1 bg-muted rounded-md p-0.5">
+                <button
+                  onClick={() => onOperationScopeChange("current")}
+                  className={`flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs rounded-[5px] transition-all whitespace-nowrap ${
+                    !isGlobalScope
+                      ? "bg-primary text-primary-foreground font-medium shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <SlidersHorizontal className="h-3 w-3 flex-shrink-0" />
+                  <span className="truncate max-w-[90px]">{selectedModelName}</span>
+                </button>
+                <button
+                  onClick={() => onOperationScopeChange("all")}
+                  className={`flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs rounded-[5px] transition-all whitespace-nowrap ${
+                    isGlobalScope
+                      ? "bg-warning text-warning-foreground font-medium shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Globe className="h-3 w-3 flex-shrink-0" />
+                  全部模型
+                </button>
+              </div>
+            </div>
 
-            <Divider />
+            {/* 作用域影响提示（两种作用域都显示，保持高度稳定） */}
+            <div
+              className={`mx-2.5 mb-1 px-2.5 py-1.5 rounded-md text-[11px] flex items-center gap-1.5 transition-colors ${
+                isGlobalScope
+                  ? "bg-warning-tint text-warning-foreground"
+                  : "bg-secondary text-muted-foreground"
+              }`}
+            >
+              {isGlobalScope ? (
+                <TriangleAlert className="h-3 w-3 flex-shrink-0" />
+              ) : (
+                <SlidersHorizontal className="h-3 w-3 flex-shrink-0" />
+              )}
+              <span className="truncate">
+                {isGlobalScope
+                  ? `"随作用域"操作将影响全部 ${modelCount} 个模型`
+                  : `"随作用域"操作将作用于：${selectedModelName}`}
+              </span>
+            </div>
 
-            {/* 全局操作 */}
-            <SectionLabel>全局操作</SectionLabel>
+            {/* ── 关联状态（随作用域） ── */}
+            <SectionLabel badge="scope">关联状态</SectionLabel>
             <MenuItem
+              icon={CheckCircle}
+              scoped
+              globalActive={isGlobalScope}
               disabled={disableGlobalActions || enablingAssociations}
               onClick={() => handleAction(onEnableAssociations)}
-            >
-              {enablingAssociations ? <Spinner className="h-3 w-3 mr-2" /> : null}
-              启用所有关联
-            </MenuItem>
+              title="启用所有关联"
+              desc="将关联置为启用"
+              loading={enablingAssociations}
+            />
+
+            <Divider />
+
+            {/* ── 权重与优先级（随作用域） ── */}
+            <SectionLabel badge="scope">权重与优先级</SectionLabel>
             <MenuItem
+              icon={Scale}
+              scoped
+              globalActive={isGlobalScope}
+              warning={isGlobalScope}
               disabled={disableGlobalActions || resettingWeights}
               onClick={() => handleAction(onResetWeights)}
-            >
-              {resettingWeights ? <Spinner className="h-3 w-3 mr-2" /> : null}
-              重置权重
-            </MenuItem>
+              title="重置权重"
+              desc="恢复到默认权重"
+              loading={resettingWeights}
+            />
             <MenuItem
+              icon={ListOrdered}
+              scoped
+              globalActive={isGlobalScope}
+              warning={isGlobalScope}
               disabled={disableGlobalActions || resettingPriorities}
               onClick={() => handleAction(onResetPriorities)}
-            >
-              {resettingPriorities ? <Spinner className="h-3 w-3 mr-2" /> : null}
-              重置优先级
-            </MenuItem>
+              title="重置优先级"
+              desc="恢复到默认优先级"
+              loading={resettingPriorities}
+            />
 
             <Divider />
 
-            {/* 编辑管理 */}
-            <SectionLabel>编辑管理</SectionLabel>
-            <MenuItem disabled={!selectedModelId} onClick={() => handleAction(onToggleTemplateEditor)}>
-              模板编辑
-            </MenuItem>
-            <MenuItem onClick={() => handleAction(onOpenBlacklistDialog)}>
-              拉黑管理
-            </MenuItem>
-
-            <Divider />
-
-            {/* 关联维护 */}
-            <SectionLabel>关联维护</SectionLabel>
-            <MenuItem onClick={() => handleAction(onAutoAssociate)}>
-              一键关联
-            </MenuItem>
-            <MenuItem onClick={() => handleAction(onCleanInvalid)}>
-              清除无效
-            </MenuItem>
+            {/* ── 模板管理（当前模型专属） ── */}
+            <SectionLabel badge="scope">模板管理</SectionLabel>
+            <MenuItem
+              icon={FileText}
+              scoped
+              disabled={!selectedModelId || isGlobalScope}
+              onClick={() => handleAction(onToggleTemplateEditor)}
+              title="模板编辑"
+              desc="管理模型名映射模板"
+            />
           </div>
         </div>
       </DialogContent>
@@ -151,10 +194,21 @@ export function ActionMenuDialog({
   );
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function SectionLabel({
+  children,
+  badge,
+}: {
+  children: React.ReactNode;
+  badge?: "scope";
+}) {
   return (
-    <div className="text-[9px] text-muted-foreground uppercase tracking-wide px-3.5 pt-1.5 pb-0.5">
+    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide px-3.5 pt-1.5 pb-0.5">
       {children}
+      {badge === "scope" && (
+        <span className="text-[9px] px-1.5 py-px rounded-full bg-info-tint text-info font-medium normal-case tracking-normal">
+          随作用域
+        </span>
+      )}
     </div>
   );
 }
@@ -164,25 +218,59 @@ function Divider() {
 }
 
 function MenuItem({
-  active,
+  icon: Icon,
+  scoped,
+  globalActive,
+  warning,
+  danger,
   disabled,
+  loading,
   onClick,
-  children,
+  title,
+  desc,
 }: {
-  active?: boolean;
+  icon: LucideIcon;
+  scoped?: boolean;
+  globalActive?: boolean;
+  warning?: boolean;
+  danger?: boolean;
   disabled?: boolean;
+  loading?: boolean;
   onClick: () => void;
-  children: React.ReactNode;
+  title: string;
+  desc: string;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`flex items-center w-full text-left px-3.5 py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed ${
-        active ? "bg-secondary" : "hover:bg-secondary/50"
+      className={`flex items-start gap-2 w-full text-left ${
+        scoped ? "pl-[18px]" : "pl-3.5"
+      } pr-3.5 py-1.5 text-xs disabled:opacity-45 disabled:cursor-not-allowed hover:bg-secondary/50 transition-colors relative ${
+        warning ? "text-warning-foreground" : danger ? "text-destructive" : ""
       }`}
     >
-      {children}
+      {/* 作用域影响指示条 */}
+      {scoped && (
+        <span
+          className={`absolute left-2.5 top-2 bottom-2 w-0.5 rounded-full ${
+            globalActive ? "bg-warning/70" : "bg-info/50"
+          }`}
+        />
+      )}
+      {loading ? (
+        <Spinner className="h-3 w-3 mt-px flex-shrink-0" />
+      ) : (
+        <Icon
+          className={`h-3 w-3 mt-px flex-shrink-0 ${
+            warning ? "text-warning-foreground" : danger ? "text-destructive" : "text-muted-foreground"
+          }`}
+        />
+      )}
+      <span className="flex flex-col gap-px flex-1 min-w-0">
+        <span className="leading-tight">{title}</span>
+        <span className="text-[10px] text-muted-foreground leading-tight">{desc}</span>
+      </span>
     </button>
   );
 }

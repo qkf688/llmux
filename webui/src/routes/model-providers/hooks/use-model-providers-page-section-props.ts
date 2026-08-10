@@ -56,6 +56,7 @@ export function useModelProvidersPageSectionProps(ctx: SectionPropsContext) {
       onOperationScopeChange: store.setOperationScope,
       selectedModelName: isGlobalScope ? "全部" : (selectedModel?.Name ?? "未选择"),
       selectedModelId: localState.selectedModelId,
+      modelCount: localState.models.length,
       resettingWeights: store.resettingWeights,
       resettingPriorities: store.resettingPriorities,
       enablingAssociations: store.enablingAssociations,
@@ -63,9 +64,6 @@ export function useModelProvidersPageSectionProps(ctx: SectionPropsContext) {
       onResetPriorities: operationScope.handleResetPriorities,
       onEnableAssociations: operationScope.handleEnableAssociations,
       onToggleTemplateEditor: templateEditor.handleToggleTemplateEditor,
-      onOpenBlacklistDialog: blacklist.openBlacklistDialog,
-      onAutoAssociate: preview.handleAutoAssociate,
-      onCleanInvalid: preview.handleCleanInvalid,
     },
   };
 

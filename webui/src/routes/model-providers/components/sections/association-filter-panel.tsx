@@ -7,15 +7,18 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import {
+  Ban,
   CheckCircle,
   ChevronDown,
   Filter,
+  Link2,
   Plus,
   Settings2,
   SlidersHorizontal,
   TestTube,
   TestTubes,
   Trash2,
+  Wrench,
   X,
   XCircle,
 } from "lucide-react";
@@ -70,6 +73,10 @@ type AssociationFilterPanelProps = {
   onSelectAllSuccessful: () => void;
   onSelectAllFailed: () => void;
   onOpenCreateDialog: () => void;
+  // 全局维护操作（始终全局，不受作用域影响）
+  onAutoAssociate: () => void;
+  onCleanInvalid: () => void;
+  onOpenBlacklistDialog: () => void;
   // ActionMenuDialog（操作菜单）
   actionMenuProps: ActionMenuProps;
 };
@@ -112,6 +119,9 @@ export function AssociationFilterPanel({
   onSelectAllSuccessful,
   onSelectAllFailed,
   onOpenCreateDialog,
+  onAutoAssociate,
+  onCleanInvalid,
+  onOpenBlacklistDialog,
   actionMenuProps,
 }: AssociationFilterPanelProps) {
   const successfulCount = Object.values(associationTestResults).filter((result) => result.success === true).length;
@@ -256,6 +266,23 @@ export function AssociationFilterPanel({
           >
             <Settings2 className="h-4 w-4" />
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8 flex-shrink-0"
+                aria-label="全局维护"
+              >
+                <Wrench className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <MaintenanceMenuContent
+              onAutoAssociate={onAutoAssociate}
+              onCleanInvalid={onCleanInvalid}
+              onOpenBlacklistDialog={onOpenBlacklistDialog}
+            />
+          </DropdownMenu>
           <Button
             variant="outline"
             size="icon"
@@ -295,6 +322,21 @@ export function AssociationFilterPanel({
             <Settings2 className="mr-1.5 h-4 w-4" />
             操作
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="h-8 text-xs">
+                <Wrench className="mr-1.5 h-4 w-4" />
+                维护
+                <ChevronDown className="ml-1.5 h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <MaintenanceMenuContent
+              onAutoAssociate={onAutoAssociate}
+              onCleanInvalid={onCleanInvalid}
+              onOpenBlacklistDialog={onOpenBlacklistDialog}
+              showHints
+            />
+          </DropdownMenu>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="h-8 text-xs">
@@ -493,5 +535,49 @@ function FilterChip({ label, value, onRemove }: FilterChipProps) {
         <X className="h-3 w-3" />
       </button>
     </span>
+  );
+}
+
+// 维护菜单内容（移动端/桌面端共用，消除重复）
+type MaintenanceMenuContentProps = {
+  onAutoAssociate: () => void;
+  onCleanInvalid: () => void;
+  onOpenBlacklistDialog: () => void;
+  showHints?: boolean;
+};
+
+function MaintenanceMenuContent({
+  onAutoAssociate,
+  onCleanInvalid,
+  onOpenBlacklistDialog,
+  showHints,
+}: MaintenanceMenuContentProps) {
+  return (
+    <DropdownMenuContent align="start" className="w-56">
+      <DropdownMenuItem
+        onSelect={() => window.setTimeout(onAutoAssociate, 0)}
+        className="cursor-pointer"
+      >
+        <Link2 className="mr-2 h-4 w-4" />
+        <span>一键关联</span>
+        {showHints && <span className="ml-auto text-[10px] text-muted-foreground">自动匹配</span>}
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        onSelect={() => window.setTimeout(onCleanInvalid, 0)}
+        className="cursor-pointer"
+      >
+        <Trash2 className="mr-2 h-4 w-4 text-destructive" />
+        <span>清除无效</span>
+        {showHints && <span className="ml-auto text-[10px] text-muted-foreground">全局</span>}
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem
+        onSelect={() => window.setTimeout(onOpenBlacklistDialog, 0)}
+        className="cursor-pointer"
+      >
+        <Ban className="mr-2 h-4 w-4" />
+        <span>拉黑管理</span>
+      </DropdownMenuItem>
+    </DropdownMenuContent>
   );
 }

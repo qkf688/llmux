@@ -70,10 +70,10 @@ export function DesktopAssociationTable({
   onTest,
 }: DesktopAssociationTableProps) {
   return (
-    <div className="hidden sm:block w-full overflow-x-auto">
+    <div className="hidden lg:block w-full overflow-x-auto">
       <Table className="min-w-[950px]">
-        <TableHeader className="z-10 sticky top-0 bg-secondary/80 text-secondary-foreground">
-          <TableRow>
+        <TableHeader className="z-20 sticky top-0 bg-secondary/80 text-secondary-foreground">
+          <TableRow className="group">
             <TableHead className="w-[50px]">
               <Checkbox
                 checked={isAllSelected}
@@ -111,7 +111,10 @@ export function DesktopAssociationTable({
             </TableHead>
             <TableHead>健康检测</TableHead>
             <TableHead>测试结果</TableHead>
-            <TableHead>操作</TableHead>
+            {/* 操作列钉右：横向滚动时始终可见（窄屏下表格宽于容器且滚动条隐蔽，不钉右则看不到） */}
+            <TableHead className="sticky right-0 bg-secondary shadow-[rgba(0,0,0,0.08)_-4px_0_8px_-2px]">
+              操作
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -123,7 +126,7 @@ export function DesktopAssociationTable({
             const currentResult = associationTestResults[association.ID];
 
             return (
-              <TableRow key={association.ID}>
+              <TableRow key={association.ID} className="group">
                 <TableCell>
                   <Checkbox
                     checked={selectedAssociationIds.includes(association.ID)}
@@ -204,7 +207,7 @@ export function DesktopAssociationTable({
                     <span className="text-xs text-muted-foreground">-</span>
                   )}
                 </TableCell>
-                <TableCell>
+                <TableCell className="sticky right-0 bg-background group-hover:bg-muted/50 shadow-[rgba(0,0,0,0.08)_-4px_0_8px_-2px]">
                   <div className="flex flex-wrap gap-2">
                     <Button variant="outline" size="sm" onClick={() => onEdit(association)}>
                       编辑

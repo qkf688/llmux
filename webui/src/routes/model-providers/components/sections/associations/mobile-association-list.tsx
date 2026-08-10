@@ -75,7 +75,7 @@ export function MobileAssociationList({
   };
 
   return (
-    <div className="sm:hidden flex-1 min-h-0 overflow-y-auto px-1 py-2 divide-y divide-border">
+    <div className="lg:hidden flex-1 min-h-0 overflow-y-auto px-1 py-2 divide-y divide-border">
       <div className="py-1 border-b">
         <div className="flex items-center gap-2">
           <Checkbox

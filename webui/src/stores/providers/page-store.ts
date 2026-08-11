@@ -13,8 +13,6 @@ export type ProvidersPageState = {
   addingModels: boolean;
   syncingModels: boolean;
   syncingAll: boolean;
-  autoAssociateOnAddEnabled: boolean;
-  autoCleanOnDeleteEnabled: boolean;
 
   showApiKey: boolean;
 
@@ -51,8 +49,6 @@ export type ProvidersPageState = {
   setAddingModels: (adding: boolean) => void;
   setSyncingModels: (syncing: boolean) => void;
   setSyncingAll: (syncing: boolean) => void;
-  setAutoAssociateOnAddEnabled: (enabled: boolean) => void;
-  setAutoCleanOnDeleteEnabled: (enabled: boolean) => void;
 
   setShowApiKey: (show: boolean) => void;
   toggleShowApiKey: () => void;
@@ -99,8 +95,6 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
   addingModels: false,
   syncingModels: false,
   syncingAll: false,
-  autoAssociateOnAddEnabled: false,
-  autoCleanOnDeleteEnabled: false,
 
   showApiKey: false,
 
@@ -148,8 +142,6 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
   setAddingModels: (adding: boolean) => set({ addingModels: adding }),
   setSyncingModels: (syncing: boolean) => set({ syncingModels: syncing }),
   setSyncingAll: (syncing: boolean) => set({ syncingAll: syncing }),
-  setAutoAssociateOnAddEnabled: (enabled: boolean) => set({ autoAssociateOnAddEnabled: enabled }),
-  setAutoCleanOnDeleteEnabled: (enabled: boolean) => set({ autoCleanOnDeleteEnabled: enabled }),
 
   setShowApiKey: (show: boolean) => set({ showApiKey: show }),
   toggleShowApiKey: () => {
@@ -246,7 +238,5 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
       addingModels: false,
       syncingModels: false,
       syncingAll: false,
-      autoAssociateOnAddEnabled: false,
-      autoCleanOnDeleteEnabled: false,
     }),
 }));

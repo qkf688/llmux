@@ -8,8 +8,6 @@ export const selectModelsLoading = (state: ProvidersPageState) => state.modelsLo
 export const selectAddingModels = (state: ProvidersPageState) => state.addingModels;
 export const selectSyncingModels = (state: ProvidersPageState) => state.syncingModels;
 export const selectSyncingAll = (state: ProvidersPageState) => state.syncingAll;
-export const selectAutoAssociateOnAddEnabled = (state: ProvidersPageState) => state.autoAssociateOnAddEnabled;
-export const selectAutoCleanOnDeleteEnabled = (state: ProvidersPageState) => state.autoCleanOnDeleteEnabled;
 
 export const selectShowApiKey = (state: ProvidersPageState) => state.showApiKey;
 
@@ -46,8 +44,6 @@ export const selectSetModelsLoading = (state: ProvidersPageState) => state.setMo
 export const selectSetAddingModels = (state: ProvidersPageState) => state.setAddingModels;
 export const selectSetSyncingModels = (state: ProvidersPageState) => state.setSyncingModels;
 export const selectSetSyncingAll = (state: ProvidersPageState) => state.setSyncingAll;
-export const selectSetAutoAssociateOnAddEnabled = (state: ProvidersPageState) => state.setAutoAssociateOnAddEnabled;
-export const selectSetAutoCleanOnDeleteEnabled = (state: ProvidersPageState) => state.setAutoCleanOnDeleteEnabled;
 
 export const selectSetShowApiKey = (state: ProvidersPageState) => state.setShowApiKey;
 export const selectToggleShowApiKey = (state: ProvidersPageState) => state.toggleShowApiKey;

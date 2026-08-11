@@ -47,7 +47,25 @@ export function useDeleteModel() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: deleteModel,
-    onSuccess: () => {
+    // 乐观更新：立即从缓存中移除被删项，让 AnimatePresence 稳定接管退场动画
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: modelKeys.lists() });
+      const previous = qc.getQueriesData<Model[]>({ queryKey: modelKeys.lists() });
+      qc.setQueriesData<Model[]>(
+        { queryKey: modelKeys.lists() },
+        (old) => old?.filter((m) => m.ID !== id),
+      );
+      return { previous };
+    },
+    onError: (_err, _id, context) => {
+      // 请求失败回滚到乐观更新前的快照
+      if (context?.previous) {
+        for (const [key, data] of context.previous) {
+          qc.setQueryData(key, data);
+        }
+      }
+    },
+    onSettled: () => {
       void qc.invalidateQueries({ queryKey: modelKeys.all });
     },
   });
@@ -57,7 +75,25 @@ export function useBatchDeleteModels() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: batchDeleteModels,
-    onSuccess: () => {
+    // 与单条删除同理：批量删除也先从缓存移除，否则多行同时退场会被 refetch 打断
+    onMutate: async (ids: number[]) => {
+      await qc.cancelQueries({ queryKey: modelKeys.lists() });
+      const previous = qc.getQueriesData<Model[]>({ queryKey: modelKeys.lists() });
+      const removing = new Set(ids);
+      qc.setQueriesData<Model[]>(
+        { queryKey: modelKeys.lists() },
+        (old) => old?.filter((m) => !removing.has(m.ID)),
+      );
+      return { previous };
+    },
+    onError: (_err, _ids, context) => {
+      if (context?.previous) {
+        for (const [key, data] of context.previous) {
+          qc.setQueryData(key, data);
+        }
+      }
+    },
+    onSettled: () => {
       void qc.invalidateQueries({ queryKey: modelKeys.all });
     },
   });

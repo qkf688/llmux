@@ -81,7 +81,25 @@ export function useDeleteProvider() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: deleteProvider,
-    onSuccess: () => {
+    // 乐观更新：立即从缓存中移除被删项，让 AnimatePresence 稳定接管退场动画
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: providerKeys.lists() });
+      const previous = qc.getQueriesData<Provider[]>({ queryKey: providerKeys.lists() });
+      qc.setQueriesData<Provider[]>(
+        { queryKey: providerKeys.lists() },
+        (old) => old?.filter((p) => p.ID !== id),
+      );
+      return { previous };
+    },
+    onError: (_err, _id, context) => {
+      // 请求失败回滚到乐观更新前的快照
+      if (context?.previous) {
+        for (const [key, data] of context.previous) {
+          qc.setQueryData(key, data);
+        }
+      }
+    },
+    onSettled: () => {
       void qc.invalidateQueries({ queryKey: providerKeys.lists() });
     },
   });

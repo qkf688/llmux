@@ -1,3 +1,5 @@
+import { useMemo } from "react";
+import { AnimatePresence } from "motion/react";
 import {
   Dialog,
   DialogContent,
@@ -5,7 +7,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useMemo } from "react";
 import type { AllModelsDialogProps } from "./all-models-dialog-types";
 import { AllModelsUpstreamStatus } from "./all-models-upstream-status";
 import { AllModelsToolbar } from "./all-models-toolbar";
@@ -111,16 +112,9 @@ export function AllModelsDialog({
             />
 
             <div className="border rounded-md flex-1 min-h-0 overflow-y-auto">
-              {allModelsList.length === 0 ? (
-                <div className="text-sm text-muted-foreground text-center py-4">
-                  暂无缓存模型
-                </div>
-              ) : filteredAllModels.length === 0 ? (
-                <div className="text-sm text-muted-foreground text-center py-4">
-                  没有找到匹配的模型
-                </div>
-              ) : (
-                filteredAllModels.map((model) => {
+              {/* AnimatePresence 常驻：不能放进条件分支，否则删除到空列表时 AnimatePresence 会随分支切换整体卸载，正在 exit 的 item 被强制拔掉，退场动画不播 */}
+              <AnimatePresence initial={false}>
+                {filteredAllModels.map((model) => {
                   const checked = selectedSet.has(model);
                   const isUpstream = upstreamSet.has(model.toLowerCase());
                   const testResult = allModelsTestResults[model];
@@ -149,8 +143,17 @@ export function AllModelsDialog({
                       onRemove={() => handleRemoveModelFromAll(model)}
                     />
                   );
-                })
-              )}
+                })}
+              </AnimatePresence>
+              {allModelsList.length === 0 ? (
+                <div className="text-sm text-muted-foreground text-center py-4">
+                  暂无缓存模型
+                </div>
+              ) : filteredAllModels.length === 0 ? (
+                <div className="text-sm text-muted-foreground text-center py-4">
+                  没有找到匹配的模型
+                </div>
+              ) : null}
             </div>
 
             <AllModelsCustomAdd

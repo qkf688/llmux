@@ -1,5 +1,6 @@
-import { Checkbox } from "@/components/ui/checkbox";
+import { AnimatedListItem } from "@/components/ui/animated-list-item";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Tooltip,
   TooltipContent,
@@ -34,7 +35,7 @@ export function AllModelsListItem({
   onRemove,
 }: AllModelsListItemProps) {
   return (
-    <div
+    <AnimatedListItem
       className={`flex items-center justify-between px-3 py-2.5 text-sm gap-2 transition-colors border-b last:border-b-0 ${checked ? "bg-info-tint" : "hover:bg-muted/50"}`}
     >
       <div className="flex items-center gap-2 min-w-0">
@@ -112,6 +113,6 @@ export function AllModelsListItem({
           <TooltipContent>移除</TooltipContent>
         </Tooltip>
       </div>
-    </div>
+    </AnimatedListItem>
   );
 }

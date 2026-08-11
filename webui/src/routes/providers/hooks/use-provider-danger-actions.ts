@@ -1,8 +1,6 @@
-import { useState } from "react";
 import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
-import { clearProviderAssociations, deleteProvider, type Provider } from "@/lib/api";
-import { providerKeys } from "@/hooks/api/use-providers";
+import { clearProviderAssociations, type Provider } from "@/lib/api";
+import { useDeleteProvider } from "@/hooks/api/use-providers";
 
 type UseProviderDangerActionsInput = {
   providers: Provider[];
@@ -28,10 +26,10 @@ export function useProviderDangerActions({
   setClearingAssociation,
   autoCleanOnDeleteEnabled,
 }: UseProviderDangerActionsInput) {
-  const queryClient = useQueryClient();
+  const deleteMutation = useDeleteProvider();
   // 删除请求的 in-flight 标志：AlertDialogAction 点击后 Radix 默认关闭弹窗，
-  // 若用户重开菜单再次点击可能对同一 provider 触发第二次 DELETE。用行内 disabled + hook 标志避免重复提交
-  const [deleting, setDeleting] = useState(false);
+  // 若用户重开菜单再次点击可能对同一 provider 触发第二次 DELETE。用行内 disabled + mutation pending 态避免重复提交
+  const deleting = deleteMutation.isPending;
 
   const openDeleteDialog = (id: number) => {
     setDeleteId(id);
@@ -45,11 +43,9 @@ export function useProviderDangerActions({
   const handleDelete = async (id: number) => {
     if (!id || deleting) return;
     try {
-      setDeleting(true);
       const targetProvider = providers.find((provider) => provider.ID === id);
-      await deleteProvider(id);
+      await deleteMutation.mutateAsync(id);
       setDeleteId(null);
-      void queryClient.invalidateQueries({ queryKey: providerKeys.lists() });
       const message = `提供商 ${targetProvider?.Name ?? id} 删除成功`;
       if (autoCleanOnDeleteEnabled) {
         toast.success(message, { description: "已触发自动清理无效关联（后台异步）" });
@@ -60,8 +56,6 @@ export function useProviderDangerActions({
       const message = err instanceof Error ? err.message : String(err);
       toast.error(`删除提供商失败: ${message}`);
       console.error(err);
-    } finally {
-      setDeleting(false);
     }
   };
 

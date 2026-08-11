@@ -44,6 +44,11 @@ type ProviderRepo interface {
 	Delete(ctx context.Context, id uint) (int64, error)
 	// UpdateBlacklist 整体替换黑名单状态，返回受影响的行数。
 	UpdateBlacklist(ctx context.Context, ids []uint) (int64, error)
+	// EnabledModelEndpointIDs 返回启用模型端点的 Provider ID 集合。
+	// NULL 行视为启用（见 WhereModelEndpointEnabled）。
+	EnabledModelEndpointIDs(ctx context.Context) ([]uint, error)
+	// CountEnabledModelEndpoint 统计启用模型端点的 Provider 数量。
+	CountEnabledModelEndpoint(ctx context.Context) (int64, error)
 }
 
 // ProviderFilter 用于 List 查询的筛选条件。
@@ -153,4 +158,20 @@ func (r *providerRepo) UpdateBlacklist(ctx context.Context, ids []uint) (int64, 
 		return nil
 	})
 	return rowsAffected, err
+}
+
+func (r *providerRepo) EnabledModelEndpointIDs(ctx context.Context) ([]uint, error) {
+	var ids []uint
+	err := WhereModelEndpointEnabled(
+		r.db.WithContext(ctx).Model(&models.Provider{}).Select("id"),
+	).Scan(&ids).Error
+	return ids, err
+}
+
+func (r *providerRepo) CountEnabledModelEndpoint(ctx context.Context) (int64, error) {
+	var count int64
+	err := WhereModelEndpointEnabled(
+		r.db.WithContext(ctx).Model(&models.Provider{}),
+	).Count(&count).Error
+	return count, err
 }

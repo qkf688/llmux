@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/repository"
 	"github.com/qkf688/llmux/service/autoassoc"
 	"github.com/qkf688/llmux/service/modelsync"
 	"gorm.io/gorm"
@@ -20,6 +21,9 @@ type AddedModel = modelsync.AddedModel
 
 // RecentAddedModelsResponse 最近新增模型响应。
 type RecentAddedModelsResponse = modelsync.RecentAddedModelsResponse
+
+// SyncStatsResult 模型同步统计结果。
+type SyncStatsResult = modelsync.SyncStatsResult
 
 // NewModelSyncService 创建模型同步服务实例。
 // auto 为 nil 时使用 GetAutoAssocService() 默认单例。
@@ -56,6 +60,12 @@ func (s *ModelSyncService) SyncAllProviders(ctx context.Context) ([]*models.Mode
 // GetRecentAddedModels 获取最近一次同步批次新增的模型。
 func (s *ModelSyncService) GetRecentAddedModels(ctx context.Context) (*RecentAddedModelsResponse, error) {
 	return s.core.GetRecentAddedModels(ctx)
+}
+
+// GetSyncStats 汇总同步统计（供应商数 / 各状态计数 / 上次与下次同步时间）。
+// 数据访问经 repository.Default()，与仓储纪律一致。
+func (s *ModelSyncService) GetSyncStats(ctx context.Context) (*SyncStatsResult, error) {
+	return s.core.GetSyncStats(ctx, repository.Default())
 }
 
 // StartAutoSync 启动自动同步定时任务。

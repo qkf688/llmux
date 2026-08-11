@@ -4,7 +4,7 @@
 import { useEffect, useMemo } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { defaultProviderFormValues, providerFormSchema, type ProviderFormValues } from "../form-schema";
+import { useProviders, useProviderTemplates, useSettings } from "@/hooks/api/use-providers";
 import {
   selectAddingModels,
   selectAllModelsOpen,
@@ -14,11 +14,8 @@ import {
   selectAllModelsTypeFilter,
   selectBatchTestProgress,
   selectBatchTesting,
-  selectClearAssociationId,
-  selectClearingAssociation,
   selectCustomModelInput,
   selectDebouncedNameFilter,
-  selectDeleteId,
   selectEditingProvider,
   selectFlushNameFilter,
   selectModelsLoading,
@@ -37,11 +34,8 @@ import {
   selectSetAllModelsTypeFilter,
   selectSetBatchTestProgress,
   selectSetBatchTesting,
-  selectSetClearAssociationId,
-  selectSetClearingAssociation,
   selectSetCustomModelInput,
   selectSetDebouncedNameFilter,
-  selectSetDeleteId,
   selectSetEditingProvider,
   selectSetModelsLoading,
   selectSetModelsOpen,
@@ -67,6 +61,9 @@ import {
   selectUpstreamTestResults,
   useProvidersPageStore,
 } from "@/stores/providers";
+import { defaultProviderFormValues, providerFormSchema, type ProviderFormValues } from "../form-schema";
+import { getAllModelsForProvider } from "../utils/provider-models";
+import { hasActiveProvidersFilter } from "../utils/filters";
 import { useProviderModelTesting } from "./use-provider-model-testing";
 import { useAllModelsDialog } from "./use-all-models-dialog";
 import { useUpstreamModelsDialog } from "./use-upstream-models-dialog";
@@ -75,9 +72,6 @@ import { useProviderDangerActions } from "./use-provider-danger-actions";
 import { useProviderMutations } from "./use-provider-mutations";
 import { useProviderSyncActions } from "./use-provider-sync-actions";
 import { useProviderSwitchActions } from "./use-provider-switch-actions";
-import { useProviders, useProviderTemplates, useSettings } from "@/hooks/api/use-providers";
-import { getAllModelsForProvider } from "../utils/provider-models";
-import { hasActiveProvidersFilter } from "../utils/filters";
 
 export function useProvidersPage() {
   const nameFilter = useProvidersPageStore(selectNameFilter);
@@ -105,8 +99,6 @@ export function useProvidersPage() {
 
   const availableTypes = useMemo(() => providerTemplates.map((t) => t.type), [providerTemplates]);
 
-  const clearingAssociation = useProvidersPageStore(selectClearingAssociation);
-  const setClearingAssociation = useProvidersPageStore(selectSetClearingAssociation);
   const modelsLoading = useProvidersPageStore(selectModelsLoading);
   const setModelsLoading = useProvidersPageStore(selectSetModelsLoading);
   const addingModels = useProvidersPageStore(selectAddingModels);
@@ -120,10 +112,6 @@ export function useProvidersPage() {
   const setOpen = useProvidersPageStore(selectSetProviderDialogOpen);
   const editingProvider = useProvidersPageStore(selectEditingProvider);
   const setEditingProvider = useProvidersPageStore(selectSetEditingProvider);
-  const deleteId = useProvidersPageStore(selectDeleteId);
-  const setDeleteId = useProvidersPageStore(selectSetDeleteId);
-  const clearAssociationId = useProvidersPageStore(selectClearAssociationId);
-  const setClearAssociationId = useProvidersPageStore(selectSetClearAssociationId);
 
   const modelsOpen = useProvidersPageStore(selectModelsOpen);
   const setModelsOpen = useProvidersPageStore(selectSetModelsOpen);
@@ -309,22 +297,8 @@ export function useProvidersPage() {
     setShowApiKey,
   });
 
-  const {
-    openDeleteDialog,
-    cancelDeleteDialog,
-    handleDelete,
-    openClearAssociationsDialog,
-    cancelClearAssociationsDialog,
-    handleClearAssociations,
-    deleting,
-  } = useProviderDangerActions({
+  const { handleDelete, handleClearAssociations } = useProviderDangerActions({
     providers,
-    deleteId,
-    setDeleteId,
-    clearAssociationId,
-    setClearAssociationId,
-    clearingAssociation,
-    setClearingAssociation,
     autoCleanOnDeleteEnabled,
   });
 
@@ -348,19 +322,13 @@ export function useProvidersPage() {
     providers,
     updatingFilter,
     updatingAssociationTrigger,
-    clearingAssociation,
-    deleting,
     onOpenAllModelsDialog: openAllModelsDialog,
     onToggleModelEndpoint: handleToggleModelEndpoint,
     onToggleAssociationTrigger: handleToggleAssociationTrigger,
     onToggleModelFilter: handleToggleModelFilter,
     onEditProvider: openEditDialog,
     onOpenModelsDialog: openModelsDialog,
-    onOpenClearAssociationsDialog: openClearAssociationsDialog,
-    onCancelClearAssociationsDialog: cancelClearAssociationsDialog,
     onHandleClearAssociations: handleClearAssociations,
-    onOpenDeleteDialog: openDeleteDialog,
-    onCancelDeleteDialog: cancelDeleteDialog,
     onHandleDelete: handleDelete,
   };
 

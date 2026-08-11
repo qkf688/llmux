@@ -20,8 +20,6 @@ interface ProvidersMobileListProps {
   providers: Provider[];
   updatingFilter: Record<number, boolean>;
   updatingAssociationTrigger: Record<number, boolean>;
-  clearingAssociation: boolean;
-  deleting: boolean;
 
   onOpenAllModelsDialog: (provider: Provider) => void | Promise<void>;
   onToggleModelEndpoint: (provider: Provider) => void | Promise<void>;
@@ -36,12 +34,7 @@ interface ProvidersMobileListProps {
   onEditProvider: (provider: Provider) => void;
   onOpenModelsDialog: (providerId: number) => void | Promise<void>;
 
-  onOpenClearAssociationsDialog: (providerId: number) => void;
-  onCancelClearAssociationsDialog: () => void;
   onHandleClearAssociations: (providerId: number) => void | Promise<void>;
-
-  onOpenDeleteDialog: (providerId: number) => void;
-  onCancelDeleteDialog: () => void;
   onHandleDelete: (providerId: number) => void | Promise<void>;
 }
 
@@ -49,19 +42,13 @@ export function ProvidersMobileList({
   providers,
   updatingFilter,
   updatingAssociationTrigger,
-  clearingAssociation,
-  deleting,
   onOpenAllModelsDialog,
   onToggleModelEndpoint,
   onToggleAssociationTrigger,
   onToggleModelFilter,
   onEditProvider,
   onOpenModelsDialog,
-  onOpenClearAssociationsDialog,
-  onCancelClearAssociationsDialog,
   onHandleClearAssociations,
-  onOpenDeleteDialog,
-  onCancelDeleteDialog,
   onHandleDelete,
 }: ProvidersMobileListProps) {
   return (
@@ -91,18 +78,10 @@ export function ProvidersMobileList({
                 {/* 编辑 + ⋯ 菜单，和桌面端复用同一入口，避免两套动作按钮 */}
                 <ProviderRowActions
                   provider={provider}
-                  clearingAssociation={clearingAssociation}
-                  deleting={deleting}
                   compact
                   onEditProvider={onEditProvider}
                   onOpenModelsDialog={onOpenModelsDialog}
-                  onOpenClearAssociationsDialog={onOpenClearAssociationsDialog}
-                  onCancelClearAssociationsDialog={
-                    onCancelClearAssociationsDialog
-                  }
                   onHandleClearAssociations={onHandleClearAssociations}
-                  onOpenDeleteDialog={onOpenDeleteDialog}
-                  onCancelDeleteDialog={onCancelDeleteDialog}
                   onHandleDelete={onHandleDelete}
                 />
               </div>

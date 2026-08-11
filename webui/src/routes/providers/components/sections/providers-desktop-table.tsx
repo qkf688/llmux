@@ -24,8 +24,6 @@ interface ProvidersDesktopTableProps {
   providers: Provider[];
   updatingFilter: Record<number, boolean>;
   updatingAssociationTrigger: Record<number, boolean>;
-  clearingAssociation: boolean;
-  deleting: boolean;
 
   onOpenAllModelsDialog: (provider: Provider) => void | Promise<void>;
   onToggleModelEndpoint: (provider: Provider) => void | Promise<void>;
@@ -40,12 +38,7 @@ interface ProvidersDesktopTableProps {
   onEditProvider: (provider: Provider) => void;
   onOpenModelsDialog: (providerId: number) => void | Promise<void>;
 
-  onOpenClearAssociationsDialog: (providerId: number) => void;
-  onCancelClearAssociationsDialog: () => void;
   onHandleClearAssociations: (providerId: number) => void | Promise<void>;
-
-  onOpenDeleteDialog: (providerId: number) => void;
-  onCancelDeleteDialog: () => void;
   onHandleDelete: (providerId: number) => void | Promise<void>;
 }
 
@@ -53,19 +46,13 @@ export function ProvidersDesktopTable({
   providers,
   updatingFilter,
   updatingAssociationTrigger,
-  clearingAssociation,
-  deleting,
   onOpenAllModelsDialog,
   onToggleModelEndpoint,
   onToggleAssociationTrigger,
   onToggleModelFilter,
   onEditProvider,
   onOpenModelsDialog,
-  onOpenClearAssociationsDialog,
-  onCancelClearAssociationsDialog,
   onHandleClearAssociations,
-  onOpenDeleteDialog,
-  onCancelDeleteDialog,
   onHandleDelete,
 }: ProvidersDesktopTableProps) {
   return (
@@ -144,19 +131,9 @@ export function ProvidersDesktopTable({
                 <TableCell className={STICKY_ACTIONS_CELL_CLS}>
                   <ProviderRowActions
                     provider={provider}
-                    clearingAssociation={clearingAssociation}
-                    deleting={deleting}
                     onEditProvider={onEditProvider}
                     onOpenModelsDialog={onOpenModelsDialog}
-                    onOpenClearAssociationsDialog={
-                      onOpenClearAssociationsDialog
-                    }
-                    onCancelClearAssociationsDialog={
-                      onCancelClearAssociationsDialog
-                    }
                     onHandleClearAssociations={onHandleClearAssociations}
-                    onOpenDeleteDialog={onOpenDeleteDialog}
-                    onCancelDeleteDialog={onCancelDeleteDialog}
                     onHandleDelete={onHandleDelete}
                   />
                 </TableCell>

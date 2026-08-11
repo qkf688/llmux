@@ -9,8 +9,6 @@ interface ProvidersListSectionProps {
   providers: Provider[];
   updatingFilter: Record<number, boolean>;
   updatingAssociationTrigger: Record<number, boolean>;
-  clearingAssociation: boolean;
-  deleting: boolean;
 
   onOpenAllModelsDialog: (provider: Provider) => void | Promise<void>;
   onToggleModelEndpoint: (provider: Provider) => void | Promise<void>;
@@ -19,12 +17,7 @@ interface ProvidersListSectionProps {
   onEditProvider: (provider: Provider) => void;
   onOpenModelsDialog: (providerId: number) => void | Promise<void>;
 
-  onOpenClearAssociationsDialog: (providerId: number) => void;
-  onCancelClearAssociationsDialog: () => void;
   onHandleClearAssociations: (providerId: number) => void | Promise<void>;
-
-  onOpenDeleteDialog: (providerId: number) => void;
-  onCancelDeleteDialog: () => void;
   onHandleDelete: (providerId: number) => void | Promise<void>;
 }
 
@@ -34,19 +27,13 @@ export function ProvidersListSection({
   providers,
   updatingFilter,
   updatingAssociationTrigger,
-  clearingAssociation,
-  deleting,
   onOpenAllModelsDialog,
   onToggleModelEndpoint,
   onToggleAssociationTrigger,
   onToggleModelFilter,
   onEditProvider,
   onOpenModelsDialog,
-  onOpenClearAssociationsDialog,
-  onCancelClearAssociationsDialog,
   onHandleClearAssociations,
-  onOpenDeleteDialog,
-  onCancelDeleteDialog,
   onHandleDelete,
 }: ProvidersListSectionProps) {
   return (
@@ -65,38 +52,26 @@ export function ProvidersListSection({
             providers={providers}
             updatingFilter={updatingFilter}
             updatingAssociationTrigger={updatingAssociationTrigger}
-            clearingAssociation={clearingAssociation}
-            deleting={deleting}
             onOpenAllModelsDialog={onOpenAllModelsDialog}
             onToggleModelEndpoint={onToggleModelEndpoint}
             onToggleAssociationTrigger={onToggleAssociationTrigger}
             onToggleModelFilter={onToggleModelFilter}
             onEditProvider={onEditProvider}
             onOpenModelsDialog={onOpenModelsDialog}
-            onOpenClearAssociationsDialog={onOpenClearAssociationsDialog}
-            onCancelClearAssociationsDialog={onCancelClearAssociationsDialog}
             onHandleClearAssociations={onHandleClearAssociations}
-            onOpenDeleteDialog={onOpenDeleteDialog}
-            onCancelDeleteDialog={onCancelDeleteDialog}
             onHandleDelete={onHandleDelete}
           />
           <ProvidersMobileList
             providers={providers}
             updatingFilter={updatingFilter}
             updatingAssociationTrigger={updatingAssociationTrigger}
-            clearingAssociation={clearingAssociation}
-            deleting={deleting}
             onOpenAllModelsDialog={onOpenAllModelsDialog}
             onToggleModelEndpoint={onToggleModelEndpoint}
             onToggleAssociationTrigger={onToggleAssociationTrigger}
             onToggleModelFilter={onToggleModelFilter}
             onEditProvider={onEditProvider}
             onOpenModelsDialog={onOpenModelsDialog}
-            onOpenClearAssociationsDialog={onOpenClearAssociationsDialog}
-            onCancelClearAssociationsDialog={onCancelClearAssociationsDialog}
             onHandleClearAssociations={onHandleClearAssociations}
-            onOpenDeleteDialog={onOpenDeleteDialog}
-            onCancelDeleteDialog={onCancelDeleteDialog}
             onHandleDelete={onHandleDelete}
           />
         </div>

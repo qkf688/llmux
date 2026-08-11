@@ -9,7 +9,6 @@ export type ProvidersPageState = {
   debouncedNameFilter: string;
   typeFilter: string;
 
-  clearingAssociation: boolean;
   modelsLoading: boolean;
   addingModels: boolean;
   syncingModels: boolean;
@@ -21,8 +20,6 @@ export type ProvidersPageState = {
 
   providerDialogOpen: boolean;
   editingProvider: Provider | null;
-  deleteId: number | null;
-  clearAssociationId: number | null;
 
   modelsOpen: boolean;
   modelsOpenId: number | null;
@@ -50,7 +47,6 @@ export type ProvidersPageState = {
   flushNameFilter: () => void;
   setTypeFilter: (value: string) => void;
 
-  setClearingAssociation: (clearing: boolean) => void;
   setModelsLoading: (loading: boolean) => void;
   setAddingModels: (adding: boolean) => void;
   setSyncingModels: (syncing: boolean) => void;
@@ -62,19 +58,11 @@ export type ProvidersPageState = {
   toggleShowApiKey: () => void;
 
   setEditingProvider: (provider: Provider | null) => void;
-  setDeleteId: (id: number | null) => void;
-  setClearAssociationId: (id: number | null) => void;
   setModelsOpenId: (id: number | null) => void;
 
   setProviderDialogOpen: (open: boolean) => void;
   openCreateProvider: () => void;
   openEditProvider: (provider: Provider) => void;
-
-  openDeleteProvider: (id: number) => void;
-  clearDeleteProvider: () => void;
-
-  openClearAssociation: (id: number) => void;
-  clearClearAssociation: () => void;
 
   openProviderModels: (providerId: number) => void;
   setModelsOpen: (open: boolean) => void;
@@ -107,7 +95,6 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
   debouncedNameFilter: preferences.nameFilter,
   typeFilter: preferences.typeFilter,
 
-  clearingAssociation: false,
   modelsLoading: false,
   addingModels: false,
   syncingModels: false,
@@ -119,8 +106,6 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
 
   providerDialogOpen: false,
   editingProvider: null,
-  deleteId: null,
-  clearAssociationId: null,
 
   modelsOpen: false,
   modelsOpenId: null,
@@ -159,7 +144,6 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
     writeProvidersPagePreferences({ nameFilter: current.nameFilter, typeFilter: value });
   },
 
-  setClearingAssociation: (clearing: boolean) => set({ clearingAssociation: clearing }),
   setModelsLoading: (loading: boolean) => set({ modelsLoading: loading }),
   setAddingModels: (adding: boolean) => set({ addingModels: adding }),
   setSyncingModels: (syncing: boolean) => set({ syncingModels: syncing }),
@@ -175,20 +159,12 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
   },
 
   setEditingProvider: (provider: Provider | null) => set({ editingProvider: provider }),
-  setDeleteId: (id: number | null) => set({ deleteId: id }),
-  setClearAssociationId: (id: number | null) => set({ clearAssociationId: id }),
   setModelsOpenId: (id: number | null) => set({ modelsOpenId: id }),
 
   setProviderDialogOpen: (open: boolean) =>
     set(open ? { providerDialogOpen: true } : { providerDialogOpen: false, editingProvider: null, showApiKey: false }),
   openCreateProvider: () => set({ providerDialogOpen: true, editingProvider: null, showApiKey: false }),
   openEditProvider: (provider: Provider) => set({ providerDialogOpen: true, editingProvider: provider, showApiKey: false }),
-
-  openDeleteProvider: (id: number) => set({ deleteId: id }),
-  clearDeleteProvider: () => set({ deleteId: null }),
-
-  openClearAssociation: (id: number) => set({ clearAssociationId: id }),
-  clearClearAssociation: () => set({ clearAssociationId: null }),
 
   openProviderModels: (providerId: number) =>
     set({
@@ -250,8 +226,6 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
     set({
       providerDialogOpen: false,
       editingProvider: null,
-      deleteId: null,
-      clearAssociationId: null,
       modelsOpen: false,
       modelsOpenId: null,
       allModelsOpen: false,
@@ -268,7 +242,6 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
       upstreamBatchTesting: false,
       upstreamBatchTestProgress: { ...DEFAULT_BATCH_TEST_PROGRESS },
       showApiKey: false,
-      clearingAssociation: false,
       modelsLoading: false,
       addingModels: false,
       syncingModels: false,

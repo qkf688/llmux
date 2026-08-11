@@ -27,20 +27,13 @@ import type { Provider } from "@/lib/api";
 
 interface ProviderRowActionsProps {
   provider: Provider;
-  clearingAssociation: boolean;
-  deleting: boolean;
   /** 移动端用更小的控件尺寸；桌面端保持默认 */
   compact?: boolean;
 
   onEditProvider: (provider: Provider) => void;
   onOpenModelsDialog: (providerId: number) => void | Promise<void>;
 
-  onOpenClearAssociationsDialog: (providerId: number) => void;
-  onCancelClearAssociationsDialog: () => void;
   onHandleClearAssociations: (providerId: number) => void | Promise<void>;
-
-  onOpenDeleteDialog: (providerId: number) => void;
-  onCancelDeleteDialog: () => void;
   onHandleDelete: (providerId: number) => void | Promise<void>;
 }
 
@@ -50,21 +43,15 @@ interface ProviderRowActionsProps {
  * 确认弹窗必须受控且渲染在 DropdownMenu 之外——菜单项被选中后 Radix 会卸载
  * 菜单内容，若把 AlertDialog 嵌在菜单里会随之卸载，弹窗永远来不及出现。
  *
- * onHandle{Delete,ClearAssociations} 接收 providerId 参数：hook 内不再依赖全局
- * dialog id，避免多行 open 弹窗竞争同一全局 id 时错删相邻 provider。
+ * 弹窗 open 由本组件本地 state（deleteOpen/clearOpen）控制；确认 handler
+ * 接收 providerId 参数，防重复提交由 hook 内 guard 负责。
  */
 export function ProviderRowActions({
   provider,
-  clearingAssociation,
-  deleting,
   compact = false,
   onEditProvider,
   onOpenModelsDialog,
-  onOpenClearAssociationsDialog,
-  onCancelClearAssociationsDialog,
   onHandleClearAssociations,
-  onOpenDeleteDialog,
-  onCancelDeleteDialog,
   onHandleDelete,
 }: ProviderRowActionsProps) {
   const [clearOpen, setClearOpen] = useState(false);
@@ -116,23 +103,12 @@ export function ProviderRowActions({
               <RefreshCw />
               获取模型
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => {
-                onOpenClearAssociationsDialog(provider.ID);
-                setClearOpen(true);
-              }}
-            >
+            <DropdownMenuItem onSelect={() => setClearOpen(true)}>
               <Unlink />
               清除关联
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              variant="destructive"
-              onSelect={() => {
-                onOpenDeleteDialog(provider.ID);
-                setDeleteOpen(true);
-              }}
-            >
+            <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
               <Trash2 />
               删除提供商
             </DropdownMenuItem>
@@ -140,15 +116,7 @@ export function ProviderRowActions({
         </DropdownMenu>
       </div>
 
-      <AlertDialog
-        open={clearOpen}
-        onOpenChange={(open) => {
-          setClearOpen(open);
-          if (!open) {
-            onCancelClearAssociationsDialog();
-          }
-        }}
-      >
+      <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
@@ -160,26 +128,19 @@ export function ProviderRowActions({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
+            {/* 点击后 Radix 立即关闭弹窗，首次点击看不到 disabled/loading 态：
+                loading 反馈交给 toast，防重复提交由 hook 内 guard 负责 */}
             <AlertDialogAction
               onClick={() => onHandleClearAssociations(provider.ID)}
-              disabled={clearingAssociation}
               className="bg-destructive hover:bg-destructive/90"
             >
-              {clearingAssociation ? "清除中..." : "确认清除"}
+              确认清除
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog
-        open={deleteOpen}
-        onOpenChange={(open) => {
-          setDeleteOpen(open);
-          if (!open) {
-            onCancelDeleteDialog();
-          }
-        }}
-      >
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>确定要删除这个提供商吗？</AlertDialogTitle>
@@ -189,11 +150,9 @@ export function ProviderRowActions({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => onHandleDelete(provider.ID)}
-              disabled={deleting}
-            >
-              {deleting ? "删除中..." : "确认删除"}
+            {/* 同上：loading 反馈交给 toast，防重复提交由 hook 内 guard 负责 */}
+            <AlertDialogAction onClick={() => onHandleDelete(provider.ID)}>
+              确认删除
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -4,7 +4,6 @@ export const selectNameFilter = (state: ProvidersPageState) => state.nameFilter;
 export const selectDebouncedNameFilter = (state: ProvidersPageState) => state.debouncedNameFilter;
 export const selectTypeFilter = (state: ProvidersPageState) => state.typeFilter;
 
-export const selectClearingAssociation = (state: ProvidersPageState) => state.clearingAssociation;
 export const selectModelsLoading = (state: ProvidersPageState) => state.modelsLoading;
 export const selectAddingModels = (state: ProvidersPageState) => state.addingModels;
 export const selectSyncingModels = (state: ProvidersPageState) => state.syncingModels;
@@ -16,8 +15,6 @@ export const selectShowApiKey = (state: ProvidersPageState) => state.showApiKey;
 
 export const selectProviderDialogOpen = (state: ProvidersPageState) => state.providerDialogOpen;
 export const selectEditingProvider = (state: ProvidersPageState) => state.editingProvider;
-export const selectDeleteId = (state: ProvidersPageState) => state.deleteId;
-export const selectClearAssociationId = (state: ProvidersPageState) => state.clearAssociationId;
 
 export const selectModelsOpen = (state: ProvidersPageState) => state.modelsOpen;
 export const selectModelsOpenId = (state: ProvidersPageState) => state.modelsOpenId;
@@ -45,7 +42,6 @@ export const selectSetDebouncedNameFilter = (state: ProvidersPageState) => state
 export const selectFlushNameFilter = (state: ProvidersPageState) => state.flushNameFilter;
 export const selectSetTypeFilter = (state: ProvidersPageState) => state.setTypeFilter;
 
-export const selectSetClearingAssociation = (state: ProvidersPageState) => state.setClearingAssociation;
 export const selectSetModelsLoading = (state: ProvidersPageState) => state.setModelsLoading;
 export const selectSetAddingModels = (state: ProvidersPageState) => state.setAddingModels;
 export const selectSetSyncingModels = (state: ProvidersPageState) => state.setSyncingModels;
@@ -58,16 +54,8 @@ export const selectToggleShowApiKey = (state: ProvidersPageState) => state.toggl
 
 export const selectSetProviderDialogOpen = (state: ProvidersPageState) => state.setProviderDialogOpen;
 export const selectSetEditingProvider = (state: ProvidersPageState) => state.setEditingProvider;
-export const selectSetDeleteId = (state: ProvidersPageState) => state.setDeleteId;
-export const selectSetClearAssociationId = (state: ProvidersPageState) => state.setClearAssociationId;
 export const selectOpenCreateProvider = (state: ProvidersPageState) => state.openCreateProvider;
 export const selectOpenEditProvider = (state: ProvidersPageState) => state.openEditProvider;
-
-export const selectOpenDeleteProvider = (state: ProvidersPageState) => state.openDeleteProvider;
-export const selectClearDeleteProvider = (state: ProvidersPageState) => state.clearDeleteProvider;
-
-export const selectOpenClearAssociation = (state: ProvidersPageState) => state.openClearAssociation;
-export const selectClearClearAssociation = (state: ProvidersPageState) => state.clearClearAssociation;
 
 export const selectOpenProviderModels = (state: ProvidersPageState) => state.openProviderModels;
 export const selectSetModelsOpen = (state: ProvidersPageState) => state.setModelsOpen;

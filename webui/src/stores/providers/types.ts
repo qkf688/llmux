@@ -39,8 +39,6 @@ export type ProvidersPagePreferences = Pick<ProvidersFilters, "nameFilter" | "ty
 export type ProvidersDialogsState = {
   providerDialogOpen: boolean;
   editingProvider: Provider | null;
-  deleteId: number | null;
-  clearAssociationId: number | null;
   modelsOpen: boolean;
   modelsOpenId: number | null;
   allModelsOpen: boolean;

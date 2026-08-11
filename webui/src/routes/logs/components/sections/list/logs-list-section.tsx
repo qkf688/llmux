@@ -7,6 +7,8 @@ type LogsListSectionProps = {
   loading: boolean;
   hasLogs: boolean;
   logs: ChatLog[];
+  /** 当前页码：透传到 mobile 列表用于翻页触发 stagger 重播 */
+  page: number;
   selectedIds: Set<number>;
   isAllSelected: boolean;
   isSomeSelected: boolean;
@@ -23,6 +25,7 @@ export function LogsListSection({
   loading,
   hasLogs,
   logs,
+  page,
   selectedIds,
   isAllSelected,
   isSomeSelected,
@@ -59,6 +62,7 @@ export function LogsListSection({
           />
           <LogsMobileList
             logs={logs}
+            page={page}
             selectedIds={selectedIds}
             deleting={deleting}
             canViewChatIO={canViewChatIO}

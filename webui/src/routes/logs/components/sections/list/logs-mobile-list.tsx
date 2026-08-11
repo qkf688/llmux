@@ -1,12 +1,15 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { StaggerItem, StaggerList } from "@/components/ui/stagger-list";
 import type { ChatLog } from "@/lib/api";
 import { Trash2 } from "lucide-react";
 import { formatByteLength, formatDateTime, formatTime } from "../../../utils/formatters";
 
 type LogsMobileListProps = {
   logs: ChatLog[];
+  /** 当前页码，作为 stagger 重播的触发标识 */
+  page: number;
   selectedIds: Set<number>;
   deleting: boolean;
   canViewChatIO: (log: ChatLog) => boolean;
@@ -18,6 +21,7 @@ type LogsMobileListProps = {
 
 export function LogsMobileList({
   logs,
+  page,
   selectedIds,
   deleting,
   canViewChatIO,
@@ -27,9 +31,14 @@ export function LogsMobileList({
   onOpenDelete,
 }: LogsMobileListProps) {
   return (
-    <div className="sm:hidden flex-1 min-h-0 overflow-y-auto px-2 py-2 divide-y divide-border">
+    // resetKey 用页码而非数据内容：翻页时整批错峰重现，页内单条删除不会重挂载容器
+    //（本元素同时是滚动容器，重挂载会把滚动位置重置到顶部）
+    <StaggerList
+      className="sm:hidden flex-1 min-h-0 overflow-y-auto px-2 py-2 divide-y divide-border"
+      resetKey={page}
+    >
       {logs.map((log) => (
-        <div
+        <StaggerItem
           key={log.ID}
           className={`py-2 space-y-2 my-0.5 px-1 ${selectedIds.has(log.ID) ? "bg-muted/50 rounded" : ""}`}
         >
@@ -125,8 +134,8 @@ export function LogsMobileList({
               <Trash2 className="size-4" />
             </Button>
           </div>
-        </div>
+        </StaggerItem>
       ))}
-    </div>
+    </StaggerList>
   );
 }

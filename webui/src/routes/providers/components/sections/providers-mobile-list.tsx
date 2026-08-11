@@ -1,6 +1,7 @@
 import { Boxes } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 import { AnimatedListItem } from "@/components/ui/animated-list-item";
+import { StaggerList } from "@/components/ui/stagger-list";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -53,14 +54,17 @@ export function ProvidersMobileList({
 }: ProvidersMobileListProps) {
   return (
     // 分隔线挂在每张卡片上（而非容器 divide-y）：退场动画会把卡片高度收起，
-    // 容器级 divide-y 会在收起过程中留下一条无主的残线
-    <div className="sm:hidden flex-1 min-h-0 overflow-y-auto px-2 py-2">
-      <AnimatePresence initial={false}>
+    // 容器级 divide-y 会在收起过程中留下一条无主的残线。
+    // 外层 StaggerList 编排首屏错峰入场（子项传 staggered 才会参与编排）；AnimatePresence 不设
+    // initial={false}，首屏交由 stagger 编排，运行时增删仍逐项进出场。不传 resetKey：否则每次增删都整体重播。
+    <StaggerList className="sm:hidden flex-1 min-h-0 overflow-y-auto px-2 py-2">
+      <AnimatePresence>
         {providers.map((provider) => {
           const allModels = extractAllModels(provider.Config);
           return (
             <AnimatedListItem
               key={provider.ID}
+              staggered
               className="py-2 space-y-2 border-b last:border-b-0"
             >
               <div className="flex items-start justify-between gap-2">
@@ -141,6 +145,6 @@ export function ProvidersMobileList({
           );
         })}
       </AnimatePresence>
-    </div>
+    </StaggerList>
   );
 }

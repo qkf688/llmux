@@ -2,14 +2,13 @@
 
 import type { ComponentType, ReactNode } from "react";
 import { Suspense, lazy } from "react";
-import { motion, useReducedMotion } from "motion/react";
 import { Activity, BarChart3, Bot, CalendarDays, Database, HardDrive, MessageSquare } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AnimatedNumber } from "@/components/ui/animated-number";
+import { StaggerItem, StaggerList } from "@/components/ui/stagger-list";
 import Loading from "@/components/loading";
 import { useHomeMetrics } from "@/hooks/api/use-home";
 import { formatCompactCount } from "@/lib/formatters";
-import { EASING } from "@/lib/animations/fluid-transitions";
 
 // 懒加载图表组件
 const ModelRankingList = lazy(() => import("@/components/charts/model-ranking").then(module => ({ default: module.ModelRankingList })));
@@ -35,31 +34,18 @@ const AnimatedMetric = ({
 type IconComponent = ComponentType<{ className?: string }>;
 
 function TopMetricCard({
-  index,
   title,
   headerIcon: HeaderIcon,
   children,
 }: {
-  index: number;
   title: string;
   headerIcon: IconComponent;
   children: ReactNode;
 }) {
-  // 系统开启"减少动态"时跳过入场动画（motion 由 JS 驱动，CSS 兜底拦不住）
-  const shouldReduceMotion = useReducedMotion();
-
   return (
-    // motion 入场后会在元素上残留内联 transform，会覆盖 hover-lift 的 CSS hover 变换，
-    // 因此卡片样式与 hover 微交互放在内层非 motion 的 div 上，motion.section 只做入场动画载体。
-    <motion.section
-      initial={shouldReduceMotion ? false : { opacity: 0, y: 20, filter: "blur(8px)" }}
-      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-      transition={
-        shouldReduceMotion
-          ? { duration: 0 }
-          : { duration: 0.5, ease: EASING.easeOutExpo, delay: index * 0.08 }
-      }
-    >
+    // StaggerItem 是入场动画载体，motion 会在其上残留内联 transform，覆盖 hover-lift 的 CSS hover 变换，
+    // 因此卡片样式与 hover 微交互放在内层非 motion 的 div 上。错峰节奏由外层 StaggerList 编排。
+    <StaggerItem>
       <div className="rounded-3xl bg-card border p-5 text-card-foreground flex flex-row items-center gap-4 shadow-3xl hover-lift hover-border">
         <div className="flex flex-col items-center justify-center gap-3 border-r border-border/50 pr-4 py-1 self-stretch">
           <HeaderIcon className="w-4 h-4" />
@@ -67,7 +53,7 @@ function TopMetricCard({
         </div>
         <div className="flex flex-col gap-4 flex-1 min-w-0">{children}</div>
       </div>
-    </motion.section>
+    </StaggerItem>
   );
 }
 
@@ -133,8 +119,8 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <TopMetricCard index={0} title="今日" headerIcon={Activity}>
+      <StaggerList className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <TopMetricCard title="今日" headerIcon={Activity}>
           <MetricItem icon={MessageSquare} label="请求" toneClassName="bg-primary/10 text-primary">
             <AnimatedMetric value={todayMetrics.reqs} formatter={compactCountFormatter} />
           </MetricItem>
@@ -143,7 +129,7 @@ export default function Home() {
           </MetricItem>
         </TopMetricCard>
 
-        <TopMetricCard index={1} title="本月" headerIcon={CalendarDays}>
+        <TopMetricCard title="本月" headerIcon={CalendarDays}>
           <MetricItem icon={MessageSquare} label="请求" toneClassName="bg-[color:var(--chart-6)]/10 text-[color:var(--chart-6)]">
             <AnimatedMetric value={totalMetrics.reqs} formatter={compactCountFormatter} />
           </MetricItem>
@@ -152,7 +138,7 @@ export default function Home() {
           </MetricItem>
         </TopMetricCard>
 
-        <TopMetricCard index={2} title="全部" headerIcon={BarChart3}>
+        <TopMetricCard title="全部" headerIcon={BarChart3}>
           <MetricItem icon={MessageSquare} label="请求" toneClassName="bg-[color:var(--chart-9)]/10 text-[color:var(--chart-9)]">
             <AnimatedMetric value={allMetrics.reqs} formatter={compactCountFormatter} />
           </MetricItem>
@@ -161,7 +147,7 @@ export default function Home() {
           </MetricItem>
         </TopMetricCard>
 
-        <TopMetricCard index={3} title="数据库" headerIcon={Database}>
+        <TopMetricCard title="数据库" headerIcon={Database}>
           <MetricItem icon={HardDrive} label="大小" toneClassName="bg-[color:var(--chart-3)]/10 text-[color:var(--chart-3)]">
             <div className="text-xl sm:text-2xl font-semibold leading-none tabular-nums">
               {dbStats?.file_size_human ?? "-"}
@@ -174,7 +160,7 @@ export default function Home() {
             />
           </MetricItem>
         </TopMetricCard>
-      </div>
+      </StaggerList>
 
       <Suspense fallback={<div className="py-10 flex items-center justify-center">
         <Loading message="加载一年活跃度..." />

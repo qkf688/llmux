@@ -39,6 +39,7 @@ export default function LogsPage() {
         loading={page.loading}
         hasLogs={page.hasLogs}
         logs={page.logs}
+        page={page.page}
         selectedIds={page.selectedIds}
         isAllSelected={page.isAllSelected}
         isSomeSelected={page.isSomeSelected}

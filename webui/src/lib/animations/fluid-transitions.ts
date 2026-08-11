@@ -19,7 +19,32 @@ export const DURATION = {
   listExit: 0.24,
   /** 相邻项因增删而位移（layout 动画）的时长 */
   listLayout: 0.3,
+  /** stagger 入场单项时长（比增删入场稍长，配合较大位移铺开错峰节奏） */
+  staggerItemEnter: 0.5,
 } as const;
+
+// stagger（错峰）入场参数：用于批量内容首屏渐现。
+export const STAGGER = {
+  /** 相邻项延迟间隔（秒） */
+  interval: 0.08,
+} as const;
+
+// stagger 入场容器 variants：children 错峰浮现，容器本身无视觉变化。
+export const STAGGER_CONTAINER_VARIANTS: Variants = {
+  initial: {},
+  animate: { transition: { staggerChildren: STAGGER.interval } },
+};
+
+// stagger 入场单项 variants：淡入 + 上移（从 home.tsx KPI 卡片抽出）。
+// 注：不用 filter: blur，因为 CSS filter 动画逐帧重绘成本高，列表项多时低端移动端掉帧。
+export const STAGGER_ITEM_VARIANTS: Variants = {
+  initial: { opacity: 0, y: 20 },
+  animate: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: DURATION.staggerItemEnter, ease: EASING.easeOutExpo },
+  },
+};
 
 // 列表项进出场 variants：新增项淡入下滑，删除项淡出右移并收起高度，后续项由 layout 动画平滑上移。
 // 高度与内外边距、边框在 exit 归零，配合 overflow hidden 避免收起过程露出内容；

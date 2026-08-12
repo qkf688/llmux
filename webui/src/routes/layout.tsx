@@ -46,15 +46,14 @@ export default function Layout() {
     icon: route.nav.icon,
   }));
 
-  // 侧边栏宽度常量，方便统一管理
-  const WIDTH_EXPANDED = "min-w-48";
-  const WIDTH_COLLAPSED = "min-w-14";
-
   return (
-    <div className="flex flex-col h-screen w-full bg-background transition-colors duration-300">
+    // 外层通栏铺 background 底色，提供宽屏下的双侧留白
+    <div className="h-screen w-full bg-background transition-colors duration-300">
+      {/* shell：整体限宽居中，header + body 都在其内 */}
+      <div className="mx-auto flex h-full max-w-[92rem] flex-col px-4 md:px-6">
 
       {/* 1. 顶部栏 Header */}
-      <header className="h-16 border-b bg-background flex items-center justify-between px-6 flex-shrink-0 shadow-sm z-20">
+      <header className="h-16 border-b flex items-center justify-between flex-shrink-0 z-20">
         <div className="font-bold text-xl flex items-center gap-2">
           <span className="text-primary text-2xl">LLMux</span>
         </div>
@@ -108,16 +107,17 @@ export default function Layout() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* 2. 下方主体区域 */}
-      <div className="flex overflow-y-hidden flex-1 min-w-0">
+      {/* 2. 下方主体区域：grid 两列 + 平滑列宽过渡 */}
+      <div
+        className={`grid flex-1 min-h-0 overflow-hidden transition-[grid-template-columns] duration-300 ease-in-out ${
+          sidebarOpen
+            ? "grid-cols-[200px_minmax(0,1fr)]"
+            : "grid-cols-[56px_minmax(0,1fr)]"
+        }`}
+      >
 
         {/* 左侧侧边栏 Sidebar */}
-        <aside
-          className={`
-            flex flex-col border-r bg-background/95 transition-all duration-200 ease-in-out
-            ${sidebarOpen ? WIDTH_EXPANDED : WIDTH_COLLAPSED}
-          `}
-        >
+        <aside className="flex flex-col border-r bg-background/95 overflow-hidden min-w-0">
           <nav className="flex-1 overflow-y-auto py-4">
             <ul className="space-y-1">
               {navItems.map((item) => {
@@ -218,11 +218,12 @@ export default function Layout() {
         </aside>
 
         {/* 右侧主内容区域 */}
-        <main className="flex-1 min-w-0 bg-muted/20 p-2 md:p-3 transition-all duration-300">
+        <main className="min-w-0 overflow-y-auto bg-muted/20 p-2 md:p-3">
           <div className="mx-auto max-w-full h-full min-w-0 overflow-x-hidden">
              <AnimatedOutlet />
           </div>
         </main>
+      </div>
       </div>
     </div>
   );

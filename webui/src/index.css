@@ -35,6 +35,11 @@
   --warning-tint: color-mix(in oklch, var(--warning) 14%, var(--background));
   --info-tint: color-mix(in oklch, var(--info) 12%, var(--background));
   --destructive-tint: color-mix(in oklch, var(--destructive) 12%, var(--background));
+  /* 表格表头/行 hover 底色：必须混在 card 上得到「不透明」色。
+     sticky 表头与钉右操作列若用半透明（bg-muted/55 之类），滚动时底层单元格文字会透出来。
+     只在 :root 定义一次——CSS 变量延迟求值，dark 下 --muted/--card 被覆盖后会自动重算 */
+  --table-head-bg: color-mix(in oklch, var(--muted) 55%, var(--card));
+  --table-row-hover-bg: color-mix(in oklch, var(--muted) 32%, var(--card));
   --border: oklch(0.90 0.004 90);
   --input: oklch(0.90 0.004 90);
   --ring: oklch(0.62 0.08 160);

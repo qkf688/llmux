@@ -16,6 +16,7 @@ import {
 import {
   STICKY_ACTIONS_CELL_CLS,
   STICKY_ACTIONS_HEAD_CLS,
+  STICKY_HEADER_CLS,
   Table,
   TableBody,
   TableCell,
@@ -74,7 +75,7 @@ export function DesktopAssociationTable({
   return (
     <div className="hidden lg:block w-full overflow-x-auto">
       <Table className="min-w-[950px]">
-        <TableHeader className="z-20 sticky top-0 bg-secondary/80 text-secondary-foreground">
+        <TableHeader className={`z-20 ${STICKY_HEADER_CLS}`}>
           <TableRow className="group">
             <TableHead className="w-[50px]">
               <Checkbox

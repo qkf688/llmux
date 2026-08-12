@@ -54,7 +54,7 @@ export function AssociationListSection({
   onTest,
 }: AssociationListSectionProps) {
   return (
-    <div className="flex-1 min-h-0 border rounded-md bg-background">
+    <div className="flex-1 min-h-0 border rounded-md bg-card overflow-hidden">
       {loading ? (
         <div className="flex h-full items-center justify-center">
           <Loading message="加载关联数据" />

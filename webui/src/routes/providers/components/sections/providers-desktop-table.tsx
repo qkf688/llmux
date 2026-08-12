@@ -4,6 +4,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   STICKY_ACTIONS_CELL_CLS,
   STICKY_ACTIONS_HEAD_CLS,
+  STICKY_HEADER_CLS,
   Table,
   TableBody,
   TableCell,
@@ -58,7 +59,7 @@ export function ProvidersDesktopTable({
   return (
     <div className="hidden sm:block w-full overflow-x-auto">
       <Table className="min-w-[860px]">
-        <TableHeader className="z-10 sticky top-0 bg-secondary/80 text-secondary-foreground">
+        <TableHeader className={`z-10 ${STICKY_HEADER_CLS}`}>
           <TableRow>
             <TableHead>ID</TableHead>
             <TableHead>名称</TableHead>
@@ -85,7 +86,17 @@ export function ProvidersDesktopTable({
                   </span>
                 </TableCell>
                 <TableCell className="font-medium">{provider.Name}</TableCell>
-                <TableCell className="text-sm">{provider.Type}</TableCell>
+                <TableCell>
+                  {/* pill 标签：与 HTML 基准 .tag 对齐 */}
+                  <span
+                    className={
+                      "inline-flex items-center rounded-full border bg-card " +
+                      "px-2 py-0.5 text-[10.5px] font-medium text-muted-foreground"
+                    }
+                  >
+                    {provider.Type}
+                  </span>
+                </TableCell>
                 <TableCell>
                   <Button
                     variant="outline"

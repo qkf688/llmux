@@ -50,6 +50,8 @@ models/retention.go
 - `EnforceRetentionByOldestID` 的 `BeforeDelete` 回调与主表删除在同一事务内执行；回调收 `tx *gorm.DB`，必须用 tx 操作子表，返回 error 会回滚整个事务（主表不删）。ChatLog 的 `EnforceRetention` 用此机制保证 ChatIO 与 ChatLog 同生共死，不产生孤儿 ChatIO 行（db 体积单调增长的根因修复）
 - `ChatLog.RawResponseBody` 的截断语义按来源分两种：**流式转换路径**经 `service/transform/streaming` 的头尾双段累积器（头 512KB + 尾 512KB），超出部分丢弃中间段并在文本中插入 `...[llmux truncated N bytes ...]...` 标记、同时打一条 `slog.Warn`；保留尾段是为了不丢 `finish_reason` / `usage` / `[DONE]` / `message_stop` 等收尾事件。**非流式路径**（`service/chat/chat_attempt_log.go` 的 `captureRawResponseBody`）全量记录、无上限。故同一字段可能来自两种策略，排查时以有无截断标记为准；另注意累积体不是字节级保真（多行 data 已被合成单行）
 - processer 出错时（`service/chat/chat_record.go` 错误分支）只写 `Status`/`Error` 就返回，**不消费流式累积体**，失败流的 `RawResponseBody` 目前为空
+- **流式 token 统计的提取来源是「转换后发给客户端的流」，不是上游原始流**：`handler/v1/chat.go` 用 `io.TeeReader` 从 `res.Body` 分流给 `RecordLog`，而跨协议场景下该 `res.Body` 已被 `service/transform` 替换为转换管道的输出（上游原始字节只旁路给 `rawAccumulator` 写 `RawResponseBody`，不参与 usage 提取）。因此 `ChatLog` 的 `prompt_tokens`/`completion_tokens`/`total_tokens`/`tps` 正确性依赖转换层是否把上游 usage 完整带过来——转换层丢 usage 会直接表现为这些字段全 0（`tps` 由 `TotalTokens` 派生，故同步为 0）。各 style processer 认的字段不同：openai 取根级 `usage`（不解析 `choices`，故天然免疫 OpenAI 的 `choices:[]` usage 尾包）、anthropic 取 `message_delta.usage`、openai-res 取 `response.completed` 内的 usage
+- **`reasoning_tokens` 在 anthropic / openai-res style 下仍恒为 0**（已知缺口）：`service/chat/process.go` 这两个 style 的 `parseUsage` 手工构造 `models.Usage` 且从不赋值 `CompletionTokensDetails`。转换层侧 `streaming/openai_to_responses.go` 已透传上游真值（`buildResponsesUsage` 同时透传 `cached_tokens`，该列经 openai-res `parseUsage` 会落库），但 `streaming/anthropic_to_responses.go` 仍把 `reasoning_tokens` 硬编码为 0。仅 openai 直通路径（整体 `json.Unmarshal` 到 `models.Usage`）能落到上游真实值
 
 
 ---

@@ -53,6 +53,12 @@ models/
 
 - 转换矩阵以统一模型为中枢，避免 N×M 直接互转
 - 同格式路径可短路；流式与非流式分路径
+- **流式 usage 时序（OpenAI 上游）**：`stream_options.include_usage` 的 usage 在 `finish_reason` **之后**单独发一个 `choices:[]` 的尾部 chunk，这是 OpenAI 规范行为而非个别上游怪癖。因此 `streaming/openai_to_responses.go` 不在看到 `finish_reason` 时立即发 `response.completed`，而是把事件缓存进 `state.pendingCompleted`、把各 chunk 的 usage 收进 `state.pendingUsage`（`captureOpenAIUsage`，`len>0` 才覆盖，故 finish 包的 `usage:null` 不会清掉真值）。终态在 usage 尾包**到达时**即交付（`flushPendingOpenAIToResponsesCompleted`），`[DONE]` 与流末 finalize 退化为幂等兜底——三入口清空 `pendingCompleted` 保证只发一次。usage 尾包到达就 flush（而非等 `[DONE]`）是活性保障：避免上游发完 usage 后挂住连接时客户端空等，也避免第二跳 anthropic 拿到未关闭的 content_block。空 `choices` 分支**不得**在收走 usage 前提前 return。`buildResponsesUsage` 透传尾包里的 `prompt_tokens_details.cached_tokens` / `completion_tokens_details.reasoning_tokens` 真值，不写死 0
+- **`realtimeStreamState.finalize`**：为上述延后发送引入的流末收尾钩子，由路由 handler 在确有延后内容时设置，`transformStreamBodyRealtime` 在 scanner 结束时调用一次；上游读取出错（`scanner.Err()`）时也会尽力调用一次以交付终态（下游 pipe 此时仍可写；`flushEvent` 出错分支则不调，因那是写下游失败）。其它 realtime 路由无延后需求，`finalize` 保持 nil
+- **Anthropic 出站的 usage 权威位置是 `message_delta.usage`**：`message_start.usage` 在 OpenAI 上游场景只能兜底 `1/1`——OpenAI 到流末才给 `prompt_tokens`，而 `message_start` 必须立即发。这是协议桥接的固有限制而非缺陷；`service/chat` 的 anthropic processer 同样只认 `message_delta.usage`
+- **出站 usage 时序不对称（已知债务）**：`streaming/responses_to_openai.go` 给 openai 客户端出站时把 usage 塞进带 `finish_reason` 的同一个 chunk，与入站侧刚判定「不可假设」的形状相反。对官方 SDK 无害（两种都能解析），属一致性债务，见 next-do
+
+
 - **扩展最小改动集（现状）**：新外部格式通常同时需要 `RegisterAdapter`、流式 `RegisterRealtimeRoute`（若涉及 SSE）、chat 侧 `Beforer`/`Processer`、`register_v1` 路由与 `consts.Style*`；Realtime 矩阵当前未覆盖全部协议组合，部分路径走 pivot/遗留逻辑
 - **Responses `function_call_output.output` 多模态**：`ResponsesItem.Output` 为 `interface{}`——纯文本 tool result 输出 `string`（老上游兼容），含图片块输出 `input_text`/`input_image` 数组（OpenAI Responses 协议规范）。编解码 helper 在 `service/responses/tool_content_codec.go`，入站解析复用 `parsePartsToUnifiedContent`（纯文本→string、含图片→块数组，与 Anthropic 路径行为一致）
 - 专题细节可参考历史图示（本地 `local/架构文档/格式转换架构图.md`，未入库）

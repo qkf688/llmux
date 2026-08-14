@@ -89,3 +89,88 @@ func runRealtimeTransform(t *testing.T, in, from, to string) []sseEvent {
 	}
 	return events
 }
+
+// findEvent 返回首个匹配 typ 的事件，找不到即 Fatal。
+func findEvent(t *testing.T, events []sseEvent, typ string) sseEvent {
+	t.Helper()
+	for _, ev := range events {
+		if ev.typ() == typ {
+			return ev
+		}
+	}
+	t.Fatalf("输出流中未出现事件 %q，实际事件序列: %v", typ, eventTypes(events))
+	return sseEvent{}
+}
+
+// countEvents 统计匹配 typ 的事件数量。
+func countEvents(events []sseEvent, typ string) int {
+	n := 0
+	for _, ev := range events {
+		if ev.typ() == typ {
+			n++
+		}
+	}
+	return n
+}
+
+func eventTypes(events []sseEvent) []string {
+	types := make([]string, 0, len(events))
+	for _, ev := range events {
+		types = append(types, ev.typ())
+	}
+	return types
+}
+
+// nestedMap 沿 keys 逐层取嵌套对象字段，任一层缺失或非对象即 Fatal。
+func nestedMap(t *testing.T, m map[string]interface{}, keys ...string) map[string]interface{} {
+	t.Helper()
+	cur := m
+	for _, k := range keys {
+		next, ok := cur[k].(map[string]interface{})
+		if !ok {
+			t.Fatalf("字段路径 %v 在 %q 处缺失或非对象: %v", keys, k, cur)
+		}
+		cur = next
+	}
+	return cur
+}
+
+// assertNumber 断言裸 map 上的数值字段等于 want。
+// 与 sseEvent.intField 的区别：后者是事件方法且只取值不比较。
+func assertNumber(t *testing.T, m map[string]interface{}, key string, want int) {
+	t.Helper()
+	v, ok := m[key].(float64)
+	if !ok {
+		t.Fatalf("缺少数值字段 %q: %v", key, m)
+	}
+	if int(v) != want {
+		t.Fatalf("字段 %q = %d，期望 %d", key, int(v), want)
+	}
+}
+
+// newTestRealtimeState 构造一个把输出丢弃的 state，供需要直接驱动
+// handler 并检查 state 内部字段的白盒测试使用。
+// 返回的 cleanup 必须调用，否则 drain goroutine 泄漏。
+func newTestRealtimeState(t *testing.T, providerType, clientType string) (*realtimeStreamState, func()) {
+	t.Helper()
+
+	pr, pw := io.Pipe()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = io.Copy(io.Discard, pr)
+	}()
+
+	state := &realtimeStreamState{
+		writer:                     pw,
+		providerType:               providerType,
+		clientType:                 clientType,
+		anthropicActiveBlockIndex:  -1,
+		anthropicActiveOutputIndex: -1,
+	}
+
+	return state, func() {
+		_ = pw.Close()
+		<-done
+	}
+}

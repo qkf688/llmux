@@ -54,6 +54,22 @@ type realtimeStreamState struct {
 	hasReasoningItem     bool
 	reasoningOutputIndex int
 
+	// OpenAI 流式规范里 stream_options.include_usage 的 usage 是在 finish_reason
+	// **之后**单独发一个 choices:[] 的尾包，而非与 finish_reason 同包。因此
+	// response.completed 不能在看到 finish_reason 时就发出——那时读到的 usage 是
+	// null，跨协议后 token 统计会全为 0（待办 #18）。
+	//
+	// pendingCompleted 缓存已构建好但尚未写出的 response.completed 事件，
+	// pendingUsage 缓存最后见到的 OpenAI 格式 usage（可能来自 finish 包本身，
+	// 也可能来自之后的尾包）。二者在 [DONE] 或流末合并后一次性写出。
+	pendingCompleted map[string]interface{}
+	pendingUsage     map[string]interface{}
+
+	// finalize 在上游流结束（含 EOF 且无 [DONE] 的非规范上游）时被调用一次，
+	// 用于 flush 上面的延后事件。仅在确有延后内容时由路由 handler 设置；
+	// nil 表示该路由无需收尾。
+	finalize func(*realtimeStreamState) error
+
 	// Responses -> Anthropic: map output_index to Anthropic content_block index.
 	anthropicActiveBlockIndex                 int
 	anthropicNextBlockIndex                   int
@@ -263,6 +279,17 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, provider
 	}
 
 	if err := scanner.Err(); err != nil {
+		// 读上游失败，但下游 pipe 仍可写：尽力把延后的终态事件交付出去，
+		// 否则「finish 之后、流末之前断流」这一窗口内客户端连 completed 都收不到
+		// （旧实现在 finish 时立即发出，此处保持同等的尽力交付语义）。
+		if state.finalize != nil {
+			if ferr := state.finalize(state); ferr != nil {
+				slog.Warn("failed to deliver pending completion after upstream read error",
+					"provider_type", state.providerType,
+					"client_type", state.clientType,
+					"error", ferr)
+			}
+		}
 		slog.Error("scanner error in stream transformation",
 			"provider_type", state.providerType,
 			"client_type", state.clientType,
@@ -274,6 +301,8 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, provider
 
 	// EOF but without trailing blank line: flush last event once.
 	if err := flushEvent(); err != nil {
+		// 这里不像 scanner.Err() 分支那样再尝试 finalize：该错误来自**写下游** pipe 失败，
+		// finalize 同样是写下游，必然一起失败；而 scanner.Err() 是读上游失败、下游仍可写。
 		slog.Error("failed to flush last SSE event in stream transformation",
 			"provider_type", state.providerType,
 			"client_type", state.clientType,
@@ -281,6 +310,19 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, provider
 			"errors_encountered", state.errorCount,
 			"error", err)
 		return err
+	}
+
+	// 上游可能不发 [DONE] 就直接 EOF，此时延后的事件（如等 usage 尾包的
+	// response.completed）还压在 state 里，必须在此收尾，否则客户端收不到终态。
+	if state.finalize != nil {
+		if err := state.finalize(state); err != nil {
+			slog.Error("failed to finalize stream transformation",
+				"provider_type", state.providerType,
+				"client_type", state.clientType,
+				"lines_processed", state.lineCount,
+				"error", err)
+			return err
+		}
 	}
 
 	slog.Debug("stream transformation completed",
@@ -344,6 +386,12 @@ func logRealtimeChunkParseError(state *realtimeStreamState, data string, err err
 		}())
 }
 
+// nextRealtimeSequence 取下一个 Responses 事件序号。
+//
+// 不变量：**取号顺序必须等于写出顺序**。序号是流内单调计数，没有重排缓冲
+// （writeRealtimeOrderedData 只负责把 payload["type"] 同时写成 SSE event: 行，
+// 与排序无关）。因此延后写出的事件必须延后取号——在构建时取号、写出时才发，
+// 会让它的序号小于中间插入的事件，造成错序。
 func nextRealtimeSequence(state *realtimeStreamState) int {
 	seq := state.sequenceNumber
 	state.sequenceNumber++

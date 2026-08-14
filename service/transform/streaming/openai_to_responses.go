@@ -11,9 +11,11 @@ func init() {
 }
 
 func handleRealtimeOpenAIToResponses(state *realtimeStreamState, data string) error {
-	// OpenAI 的 [DONE] 不需要转换
+	// OpenAI 的 [DONE] 不需要转换，但它是「上游已结束」的信号：
+	// 此时把延后的 response.completed（携带尾包 usage）flush 出去。
+	// 正常路径下 usage 尾包到达时已交付，这里退化为幂等兜底。
 	if data == "[DONE]" {
-		return nil
+		return flushPendingOpenAIToResponsesCompleted(state)
 	}
 
 	var chunk map[string]interface{}
@@ -22,8 +24,26 @@ func handleRealtimeOpenAIToResponses(state *realtimeStreamState, data string) er
 		return nil
 	}
 
+	// usage 可能出现在任意 chunk（含 finish 之后的 choices:[] 尾包）。
+	// 先无条件抓取，供延后的 response.completed 使用（待办 #18）。
+	captureOpenAIUsage(state, chunk)
+
+	// usage 一到即可交付终态，不必再等 [DONE]。
+	// 这一步是活性保障而非优化：若上游发完 usage 后既不发 [DONE] 也不关连接
+	// （keep-alive 挂住、代理层半开），而终态只在 [DONE]/EOF 交付，客户端要等到
+	// 读超时；且第二跳 responses_to_anthropic 的收尾只由 response.completed 驱动、
+	// 无 EOF 兜底，届时 anthropic 客户端会拿到未关闭的 content_block。
+	// 对「usage 与 finish 同包」的上游不触发：那时 pendingCompleted 尚为 nil。
+	if state.pendingCompleted != nil && len(state.pendingUsage) > 0 {
+		if err := flushPendingOpenAIToResponsesCompleted(state); err != nil {
+			return err
+		}
+	}
+
 	choices, ok := chunk["choices"].([]interface{})
 	if !ok || len(choices) == 0 {
+		// choices:[] 的尾包（stream_options.include_usage 的 usage 载体）到此为止：
+		// usage 已被 captureOpenAIUsage 收走，无 delta/finish 可处理。
 		return nil
 	}
 
@@ -392,8 +412,7 @@ func finishOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]
 	}
 
 	responseCompleted := map[string]interface{}{
-		"type":            "response.completed",
-		"sequence_number": nextRealtimeSequence(state),
+		"type": "response.completed",
 		"response": map[string]interface{}{
 			"object":     "response",
 			"id":         state.responseID,
@@ -405,27 +424,90 @@ func finishOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]
 		},
 	}
 
-	// 添加 usage 信息
-	if usage, ok := chunk["usage"].(map[string]interface{}); ok {
-		usageMap := map[string]interface{}{
-			"input_tokens":  int(maputil.Float64(usage, "prompt_tokens")),
-			"output_tokens": int(maputil.Float64(usage, "completion_tokens")),
-			"total_tokens":  int(maputil.Float64(usage, "total_tokens")),
+	// 不能在此直接写出：OpenAI 把 usage 放在 finish_reason 之后的独立尾包里，
+	// 现在发就永远带不上真实 token 数（待办 #18）。缓存起来，等 [DONE] 或流末
+	// 由 flushPendingOpenAIToResponsesCompleted 合并 usage 后统一发出。
+	state.pendingCompleted = responseCompleted
+	state.finalize = flushPendingOpenAIToResponsesCompleted
+	return nil
+}
+
+// captureOpenAIUsage 记录 chunk 里的 OpenAI 格式 usage。
+// usage 既可能与 finish_reason 同包（部分上游的实现），也可能在其后的
+// choices:[] 尾包里（OpenAI 规范行为），故对每个 chunk 都尝试抓取；
+// 后到的非空 usage 覆盖先前的，保证拿到最终值。
+func captureOpenAIUsage(state *realtimeStreamState, chunk map[string]interface{}) {
+	usage, ok := chunk["usage"].(map[string]interface{})
+	if !ok || len(usage) == 0 {
+		return
+	}
+	state.pendingUsage = usage
+}
+
+// flushPendingOpenAIToResponsesCompleted 把延后的 response.completed 合并 usage 后写出。
+// 幂等：写出后清空全部延后状态。三个入口（usage 尾包到达 / [DONE] / 流末 finalize）
+// 只有第一个真正写出，其余因 pendingCompleted == nil 直接返回。
+//
+// 注：唯一的理论例外是上游在 [DONE] 之后仍发含 finish_reason 的帧（协议违规，会重新
+// set pending 并在流末再发一次）；重试是整流重发而非流内续传，项目内无此路径，故不防御。
+func flushPendingOpenAIToResponsesCompleted(state *realtimeStreamState) error {
+	completed := state.pendingCompleted
+	if completed == nil {
+		return nil
+	}
+	// 三个字段生命周期一致（「已消费」）：一并清空，避免读代码时误判还需收尾。
+	usage := state.pendingUsage
+	state.pendingCompleted = nil
+	state.pendingUsage = nil
+	state.finalize = nil
+
+	// sequence_number 在此刻才分配：它必须反映真实发出顺序，而非构建顺序。
+	// 依赖 nextRealtimeSequence 的不变量「取号顺序 == 写出顺序」。
+	completed["sequence_number"] = nextRealtimeSequence(state)
+
+	if response, ok := completed["response"].(map[string]interface{}); ok {
+		if u := buildResponsesUsage(usage); u != nil {
+			response["usage"] = u
 		}
-		// 添加 input_tokens_details
-		if promptTokens := int(maputil.Float64(usage, "prompt_tokens")); promptTokens > 0 {
-			usageMap["input_tokens_details"] = map[string]interface{}{
-				"cached_tokens": 0,
-			}
-		}
-		// 添加 output_tokens_details
-		if completionTokens := int(maputil.Float64(usage, "completion_tokens")); completionTokens > 0 {
-			usageMap["output_tokens_details"] = map[string]interface{}{
-				"reasoning_tokens": 0,
-			}
-		}
-		responseCompleted["response"].(map[string]interface{})["usage"] = usageMap
 	}
 
-	return writeRealtimeOrderedData(state, responseCompleted)
+	return writeRealtimeOrderedData(state, completed)
+}
+
+// buildResponsesUsage 把 OpenAI Chat 的 usage 映射为 Responses 的 usage。
+// 入参为 nil / 空时返回 nil，表示无 usage 可写（不写出零值，避免下游把 0 当真实统计）。
+func buildResponsesUsage(usage map[string]interface{}) map[string]interface{} {
+	if len(usage) == 0 {
+		return nil
+	}
+
+	promptTokens := int(maputil.Float64(usage, "prompt_tokens"))
+	completionTokens := int(maputil.Float64(usage, "completion_tokens"))
+
+	usageMap := map[string]interface{}{
+		"input_tokens":  promptTokens,
+		"output_tokens": completionTokens,
+		"total_tokens":  int(maputil.Float64(usage, "total_tokens")),
+	}
+	// cached_tokens / reasoning_tokens 取上游尾包里的真值而非写死 0——
+	// openai-res processer 会把 cached_tokens 落库，写死 0 与 #18 同源。
+	if promptTokens > 0 {
+		cached := 0
+		if d, ok := usage["prompt_tokens_details"].(map[string]interface{}); ok {
+			cached = int(maputil.Float64(d, "cached_tokens"))
+		}
+		usageMap["input_tokens_details"] = map[string]interface{}{
+			"cached_tokens": cached,
+		}
+	}
+	if completionTokens > 0 {
+		reasoning := 0
+		if d, ok := usage["completion_tokens_details"].(map[string]interface{}); ok {
+			reasoning = int(maputil.Float64(d, "reasoning_tokens"))
+		}
+		usageMap["output_tokens_details"] = map[string]interface{}{
+			"reasoning_tokens": reasoning,
+		}
+	}
+	return usageMap
 }

@@ -24,11 +24,10 @@ type realtimeStreamState struct {
 	accumulatedText      string
 	accumulatedReasoning string
 
-	// rawAccumulator 可选地累积上游原始 SSE 字节流（含 data: 前缀和 \n\n 分隔），
+	// rawAcc 可选地累积上游原始 SSE 字节流（含 event/data 前缀和 \n\n 分隔），
 	// 供日志记录 RawResponseBody 用。nil 时不累积（非日志场景避免内存开销）。
 	// 仅在转换 goroutine 内写入；goroutine 结束（pipe Close）后调用方才读取，无并发。
-	rawAccumulator     *strings.Builder
-	rawAccumulatorFull bool
+	rawAcc *rawSSEAccumulator
 
 	// OpenAI Chat streaming meta (used when the output format is OpenAI Chat).
 	openAIID                                  string
@@ -173,7 +172,29 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, provider
 		clientType:                 clientType,
 		anthropicActiveBlockIndex:  -1,
 		anthropicActiveOutputIndex: -1,
-		rawAccumulator:             rawAccumulator,
+	}
+
+	// 累积结果在本函数所有返回路径上都要落到调用方的 builder，故用 defer 统一 flush。
+	// 注意：出错路径虽然也会 flush，但消费方 RecordLog 在 processer 出错时不读取
+	// 累积体（见 service/chat/chat_record.go 错误分支），失败流的 RawResponseBody
+	// 目前仍为空——此处只保证累积器侧不丢数据。
+	if rawAccumulator != nil {
+		state.rawAcc = &rawSSEAccumulator{}
+		defer func() {
+			body, dropped := state.rawAcc.finalize()
+			rawAccumulator.WriteString(body)
+			if dropped > 0 {
+				// 截断只影响日志字段、不影响转发，但必须留下运行时信号，
+				// 否则运维不查 DB 就无从知晓发生过截断。
+				slog.Warn("raw SSE log truncated, middle section dropped",
+					"dropped_bytes", dropped,
+					"head_limit", rawAccumulatorHeadSize,
+					"tail_limit", rawAccumulatorTailSize,
+					"provider_type", providerType,
+					"client_type", clientType,
+				)
+			}
+		}()
 	}
 
 	var eventName string
@@ -199,8 +220,8 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, provider
 			return nil
 		}
 
-		// 累积原始 SSE 字节流供日志记录 RawResponseBody。达到上限后停止累积。
-		accumulateRawSSE(state, eventName, data)
+		// 累积原始 SSE 字节流供日志记录 RawResponseBody（头尾双段保留，见 raw_accumulator.go）。
+		accumulateRawSSE(state, data)
 
 		if err := dispatchRealtimeStreamChunk(state, data); err != nil {
 			return err
@@ -327,37 +348,4 @@ func nextRealtimeSequence(state *realtimeStreamState) int {
 	seq := state.sequenceNumber
 	state.sequenceNumber++
 	return seq
-}
-
-// accumulateRawSSE 把原始 SSE event 追加到累积器，达到 maxRawAccumulatorSize 后停止。
-// 累积格式与上游原始 SSE 一致：event 行（若有）+ data 行 + 空行，便于事后整段查看或解析。
-func accumulateRawSSE(state *realtimeStreamState, eventName, data string) {
-	if state.rawAccumulator == nil || state.rawAccumulatorFull {
-		return
-	}
-	// 估算本次追加大小：event 行 + data 行 + 空行。
-	chunk := 0
-	if eventName != "" {
-		chunk += len("event: ") + len(eventName) + 1
-	}
-	chunk += len("data: ") + len(data) + 2 // "data: <data>\n\n"
-
-	if state.rawAccumulator.Len()+chunk > maxRawAccumulatorSize {
-		state.rawAccumulatorFull = true
-		slog.Warn("raw response body accumulator reached size limit, truncating",
-			"limit", maxRawAccumulatorSize,
-			"provider_type", state.providerType,
-			"client_type", state.clientType,
-		)
-		return
-	}
-
-	if eventName != "" {
-		state.rawAccumulator.WriteString("event: ")
-		state.rawAccumulator.WriteString(eventName)
-		state.rawAccumulator.WriteByte('\n')
-	}
-	state.rawAccumulator.WriteString("data: ")
-	state.rawAccumulator.WriteString(data)
-	state.rawAccumulator.WriteString("\n\n")
 }

@@ -58,13 +58,13 @@ export const appRoutes: AppRouteConfig[] = [
     path: "/providers",
     layout: "app",
     lazy: () => import("./providers"),
-    nav: { label: "提供商管理", order: 20, icon: Cloud },
+    nav: { label: "提供商", order: 20, icon: Cloud },
   },
   {
     path: "/models",
     layout: "app",
     lazy: () => import("./models"),
-    nav: { label: "模型管理", order: 30, icon: Bot },
+    nav: { label: "模型", order: 30, icon: Bot },
   },
   {
     path: "/virtual-models",
@@ -76,7 +76,7 @@ export const appRoutes: AppRouteConfig[] = [
     path: "/model-providers",
     layout: "app",
     lazy: () => import("./model-providers"),
-    nav: { label: "模型提供商关联", order: 50, icon: LinkIcon },
+    nav: { label: "模型关联", order: 50, icon: LinkIcon },
   },
   {
     path: "/logs",
@@ -93,25 +93,25 @@ export const appRoutes: AppRouteConfig[] = [
     path: "/health-check-logs",
     layout: "app",
     lazy: () => import("./health-check-logs"),
-    nav: { label: "健康检测日志", order: 70, icon: HeartPulse },
+    nav: { label: "健康检测", order: 70, icon: HeartPulse },
   },
   {
     path: "/model-sync-logs",
     layout: "app",
     lazy: () => import("./model-sync-logs"),
-    nav: { label: "模型同步日志", order: 80, icon: RefreshCw },
+    nav: { label: "模型同步", order: 80, icon: RefreshCw },
   },
   {
     path: "/database",
     layout: "app",
     lazy: () => import("./database"),
-    nav: { label: "数据库管理", order: 90, icon: Database },
+    nav: { label: "数据库", order: 90, icon: Database },
   },
   {
     path: "/settings",
     layout: "app",
     lazy: () => import("./settings"),
-    nav: { label: "系统设置", order: 100, icon: Settings },
+    nav: { label: "设置", order: 100, icon: Settings },
   },
 ];
 

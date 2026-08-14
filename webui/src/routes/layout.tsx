@@ -107,18 +107,18 @@ export default function Layout() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* 2. 下方主体区域：grid 两列 + 平滑列宽过渡 */}
+      {/* 2. 下方主体区域：grid 两列 + 平滑列宽过渡；gap/上下留白让侧边栏成悬浮卡片 */}
       <div
-        className={`grid flex-1 min-h-0 overflow-hidden transition-[grid-template-columns] duration-300 ease-in-out ${
+        className={`grid flex-1 min-h-0 overflow-hidden gap-[18px] pt-[18px] pb-6 transition-[grid-template-columns] duration-300 ease-in-out ${
           sidebarOpen
-            ? "grid-cols-[200px_minmax(0,1fr)]"
+            ? "grid-cols-[160px_minmax(0,1fr)]"
             : "grid-cols-[56px_minmax(0,1fr)]"
         }`}
       >
 
-        {/* 左侧侧边栏 Sidebar */}
-        <aside className="flex flex-col border-r bg-background/95 overflow-hidden min-w-0">
-          <nav className="flex-1 overflow-y-auto py-4">
+        {/* 左侧侧边栏 Sidebar：卡片式（圆角 + 边框 + 悬浮阴影），与主内容区上下对齐 */}
+        <aside className="flex flex-col bg-card border rounded-lg shadow-[0_1px_2px_rgb(0_0_0/0.05),0_16px_40px_-20px_rgb(0_0_0/0.18)] overflow-hidden min-w-0 dark:shadow-[0_1px_2px_rgb(0_0_0/0.25),0_16px_40px_-20px_rgb(0_0_0/0.5)]">
+          <nav className="flex-1 overflow-y-auto py-3 border-b border-border">
             <ul className="space-y-1">
               {navItems.map((item) => {
                 const isActive = location.pathname === item.to;
@@ -127,20 +127,20 @@ export default function Layout() {
                     <Link to={item.to}>
                       <div
                         className={`
-                          group flex items-center h-10 mx-2 rounded-md transition-colors relative whitespace-nowrap
+                          group flex items-center h-9 mx-1.5 rounded-md transition-colors relative whitespace-nowrap
                           ${isActive
-                            ? "text-primary-foreground shadow-sm"
+                            ? "text-primary font-semibold"
                             : "hover:bg-muted text-muted-foreground"
                           }
                         `}
                         title={!sidebarOpen ? item.label : ""}
                       >
-                        {/* layoutId 滑块：active 项条件渲染一个绝对定位背景层，
+                        {/* layoutId 滑块：active 项条件渲染一个绝对定位背景层（主色 tint，非整块填充），
                             motion 自动在不同 li 间补间位移。与文字/图标分层，避免 motion 残留 transform 影响 hover */}
                         {isActive && (
                           <motion.div
                             layoutId="sidebar-active"
-                            className="absolute inset-0 bg-primary rounded-md"
+                            className="absolute inset-0 bg-primary/10 rounded-md"
                             transition={prefersReducedMotion
                               ? { duration: 0 }
                               : { duration: 0.32, ease: EASING.easeOutExpo }
@@ -155,7 +155,7 @@ export default function Layout() {
                         */}
                         <div className={`
                            relative z-10 flex items-center justify-center flex-shrink-0 h-full
-                           ${sidebarOpen ? "w-10" : "w-full"}
+                           ${sidebarOpen ? "w-9" : "w-full"}
                            transition-all duration-300
                         `}>
                           {/* 显式限尺寸：lucide 默认 24px 且带 width/height，父级 font-size 管不到 */}
@@ -185,19 +185,19 @@ export default function Layout() {
             </ul>
           </nav>
 
-          {/* 底部切换按钮 */}
-          <div className="p-2 mt-auto">
+          {/* 底部切换按钮（导航分隔线下方） */}
+          <div className="p-1.5 pt-2.5 mt-auto">
             <Button
               variant="ghost"
               onClick={toggleSidebar}
               className={`
-                w-full h-12 flex items-center p-0 hover:bg-muted transition-all duration-300
+                w-full h-10 flex items-center p-0 hover:bg-muted transition-all duration-300
               `}
             >
               {/* 同样的逻辑：图标容器固定宽度 */}
               <div className={`
                  flex items-center justify-center flex-shrink-0 h-full
-                 ${sidebarOpen ? "w-12" : "w-full"}
+                 ${sidebarOpen ? "w-9" : "w-full"}
                  transition-all duration-300
               `}>
                  {sidebarOpen ? <ChevronLeft className="size-[18px]" /> : <ChevronRight className="size-[18px]" />}
@@ -217,8 +217,8 @@ export default function Layout() {
 
         </aside>
 
-        {/* 右侧主内容区域 */}
-        <main className="min-w-0 overflow-y-auto bg-muted/20 p-2 md:p-3">
+        {/* 右侧主内容区域（背景透明，内容卡片自成面板） */}
+        <main className="min-w-0 overflow-y-auto p-2 md:p-3">
           <div className="mx-auto max-w-full h-full min-w-0 overflow-x-hidden">
              <AnimatedOutlet />
           </div>

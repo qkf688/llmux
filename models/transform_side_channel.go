@@ -69,17 +69,19 @@ func (c *TransformSideChannel) RawBody() string {
 	return c.rawBody.String()
 }
 
-// SetUpstreamUsage 记录上游原始 usage。流式场景下可能被多次调用
-// （如 Anthropic 的 message_start 与 message_delta 各带一部分），
-// 采用「最后一次观测胜出」：调用方应传入已合并的完整快照。
+// SetUpstreamUsage 记录上游原始 usage。
 //
-// token 全为 0 的快照会被丢弃：上游只要回包里带 usage 对象（哪怕字段全 0
-// 或键名不认识），各协议适配器都会产出一个非 nil 的全零 Usage。若照收，
-// 落库侧会把它当成最可信来源并跳过 missing 告警——而 UsageSource 存在的
-// 意义正是区分「上游没给」与「归集链路丢了」。在此收口，避免各捕获点
-// 各写一遍零值判断。
+// 允许被多次调用（Anthropic 的 usage 就拆在 message_start 与 message_delta 两处），
+// 语义是**最后一次有效观测胜出**。约束在调用方：后写的快照必须是先写快照的超集，
+// 否则会把已观测到的字段覆盖成 0。之所以不做逐字段合并——合并需要区分「上游报了 0」
+// 与「上游没报」，而 map 解析后两者不可分；把超集责任交给最了解协议时序的转换器更可靠。
+//
+// token 全为 0 的快照会被丢弃（见 Usage.HasTokens）：上游只要回包里带 usage 对象，
+// 各协议适配器都会产出非 nil 的全零 Usage。若照收，落库侧会把它当成最可信来源并
+// 跳过 missing 告警——而 UsageSource 存在的意义正是区分「上游没给」与「归集链路丢了」。
+// 在此收口，避免各捕获点各写一遍零值判断，也保证全零快照不会抹掉先前的有效观测。
 func (c *TransformSideChannel) SetUpstreamUsage(u Usage) {
-	if c == nil || (u.TotalTokens == 0 && u.PromptTokens == 0 && u.CompletionTokens == 0) {
+	if c == nil || !u.HasTokens() {
 		return
 	}
 	c.mu.Lock()

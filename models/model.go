@@ -380,6 +380,21 @@ type Usage struct {
 	CompletionTokensDetails CompletionTokensDetails `json:"completion_tokens_details" gorm:"serializer:json"`
 }
 
+// HasTokens 表示这份 usage 是否包含有效的 token 计数。
+//
+// 用来区分「上游明确报告了用量」与「拿到一个空壳 usage 对象」——各协议适配器
+// 只要在回包里看到 usage 字段就会产出非 nil 的 Usage，字段可能全是 0，或键名
+// 根本没被候选路径识别。侧信道的写入门禁与落库侧的 UsageSource 判定必须用
+// 同一个谓词，否则会出现「侧信道丢弃了快照、落库侧却认为有值」的口径错配。
+//
+// 只看 Total / Prompt / Completion，不看 details：details 是明细而非计数总量，
+// 且 total 口径本身就不含缓存 token（见 service/chat/process.go）。若只有
+// CachedTokens 非零而三个总量全为 0，即便保留该快照 TotalTokens 仍是 0，
+// 计费拿不到任何东西，反而会被标成 upstream 而压掉 missing 告警。
+func (u Usage) HasTokens() bool {
+	return u.TotalTokens > 0 || u.PromptTokens > 0 || u.CompletionTokens > 0
+}
+
 // StatsTotal 系统统计（全量累计）
 // 注意：该表用于仪表盘统计，不依赖 chat_logs，避免清空日志影响仪表盘。
 type StatsTotal struct {

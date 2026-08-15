@@ -494,22 +494,24 @@ func buildResponsesUsage(usage map[string]interface{}) map[string]interface{} {
 	}
 	// cached_tokens / reasoning_tokens 取上游尾包里的真值而非写死 0——
 	// openai-res processer 会把 cached_tokens 落库，写死 0 与 #18 同源。
+	// 只有真值 >0 才写 details：写出 cached_tokens:0 会被下游误读为「上游明确报告
+	// 无缓存命中」，与「字段缺失＝未知」是两种语义（与 anthropic 路径一致）。
 	if promptTokens > 0 {
-		cached := 0
 		if d, ok := usage["prompt_tokens_details"].(map[string]interface{}); ok {
-			cached = int(maputil.Float64(d, "cached_tokens"))
-		}
-		usageMap["input_tokens_details"] = map[string]interface{}{
-			"cached_tokens": cached,
+			if cached := int(maputil.Float64(d, "cached_tokens")); cached > 0 {
+				usageMap["input_tokens_details"] = map[string]interface{}{
+					"cached_tokens": cached,
+				}
+			}
 		}
 	}
 	if completionTokens > 0 {
-		reasoning := 0
 		if d, ok := usage["completion_tokens_details"].(map[string]interface{}); ok {
-			reasoning = int(maputil.Float64(d, "reasoning_tokens"))
-		}
-		usageMap["output_tokens_details"] = map[string]interface{}{
-			"reasoning_tokens": reasoning,
+			if reasoning := int(maputil.Float64(d, "reasoning_tokens")); reasoning > 0 {
+				usageMap["output_tokens_details"] = map[string]interface{}{
+					"reasoning_tokens": reasoning,
+				}
+			}
 		}
 	}
 	return usageMap

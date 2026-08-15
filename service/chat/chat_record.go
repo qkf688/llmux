@@ -111,7 +111,7 @@ func resolveUsageSource(logUpdate *models.ChatLog, sideChannel *models.Transform
 		return
 	}
 
-	if logUpdate.Usage.TotalTokens > 0 || logUpdate.Usage.PromptTokens > 0 || logUpdate.Usage.CompletionTokens > 0 {
+	if logUpdate.Usage.HasTokens() {
 		if transformed {
 			logUpdate.UsageSource = models.UsageSourceDownstream
 			slog.Warn("usage fell back to downstream stream (transform side channel had none)",

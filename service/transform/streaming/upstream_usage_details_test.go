@@ -105,6 +105,34 @@ func TestAnthropicUsage_NoDetailsWhenUpstreamHasNone(t *testing.T) {
 	}
 }
 
+// TestOpenAIUsage_NoZeroDetailsWhenUpstreamHasNone 断言 openai 上游没给 details 时
+// 不写出 cached_tokens:0 / reasoning_tokens:0。与 anthropic 路径同一规则：显式 0
+// 会被下游读成「上游明确报告为 0」，而字段缺失才表示「未知」。
+func TestOpenAIUsage_NoZeroDetailsWhenUpstreamHasNone(t *testing.T) {
+	sse := `data: {"id":"c1","object":"chat.completion.chunk","created":1,"model":"m",` +
+		`"choices":[{"index":0,"delta":{"content":"hi"}}]}` + "\n\n" +
+		`data: {"id":"c1","object":"chat.completion.chunk","created":1,"model":"m",` +
+		`"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}` + "\n\n" +
+		`data: {"id":"c1","object":"chat.completion.chunk","created":1,"model":"m",` +
+		`"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}` + "\n\n" +
+		"data: [DONE]\n\n"
+
+	events := runRealtimeTransform(t, sse, "openai", "openai-res")
+
+	completed := findEvent(t, events, "response.completed")
+	usage := nestedMap(t, completed.data, "response", "usage")
+
+	assertNumber(t, usage, "input_tokens", 10)
+	assertNumber(t, usage, "output_tokens", 5)
+
+	if _, ok := usage["input_tokens_details"]; ok {
+		t.Fatalf("上游无 prompt_tokens_details 时不应输出 input_tokens_details: %v", usage)
+	}
+	if _, ok := usage["output_tokens_details"]; ok {
+		t.Fatalf("上游无 completion_tokens_details 时不应输出 output_tokens_details: %v", usage)
+	}
+}
+
 // TestResponsesUsage_DetailsReachOpenAIClient 断言 openai-res 上游的 cache / reasoning
 // 明细能到达 OpenAI Chat 客户端。此前 ResponsesUsage 的 json tag 误用单数
 // input_token_details，解码恒 nil，本测试同时锁定 tag 修复。

@@ -98,9 +98,9 @@ func usageFromUpstreamMap(usage map[string]interface{}) models.Usage {
 
 // captureUpstreamUsageMap 在本跳持有侧信道时，记录上游原始 usage。
 //
-// 流式下可被多次调用（Anthropic 的 usage 拆在 message_start / message_delta 两处），
-// 侧信道语义是「最后一次观测胜出」，故调用方必须传入**已合并的完整快照**，
-// 不能分两次分别只带 input 侧和 output 侧。
+// 允许对同一条流多次调用（Anthropic 的 usage 拆在 message_start 与 message_delta
+// 两处，两处都要交），但**后一次传入的快照必须是前一次的超集**——侧信道语义是
+// 「最后一次有效观测胜出」，传一个只带 output 侧的快照会把先前的 input 侧抹成 0。
 //
 // 全零 / 无法识别的快照由 SetUpstreamUsage 内部丢弃，此处不再重复判断。
 func captureUpstreamUsageMap(state *realtimeStreamState, usage map[string]interface{}) {

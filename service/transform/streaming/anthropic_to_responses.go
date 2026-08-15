@@ -57,6 +57,12 @@ func handleAnthropicToResponsesMessageStart(state *realtimeStreamState, chunk ma
 	if message, ok := chunk["message"].(map[string]interface{}); ok {
 		if usage, ok := message["usage"].(map[string]interface{}); ok {
 			state.anthropicStartUsage = usage
+			// 同时立刻交一份给侧信道：上游若在 message_start 之后异常结束
+			// （连接中断 / error 事件 / 无 delta 的空回复），message_delta 分支
+			// 不会执行，input 侧真值（缓存命中数是计费大头）就永久丢了。
+			// 后续 message_delta 交的是含 input 侧的合并快照，是本次的超集，
+			// 「最后观测胜出」不会造成降级。
+			captureUpstreamUsageMap(state, usage)
 		}
 	}
 
@@ -378,11 +384,9 @@ func handleAnthropicToResponsesMessageDelta(state *realtimeStreamState, chunk ma
 		inputTokens := pick("input_tokens")
 		outputTokens := pick("output_tokens")
 		cacheRead := pick("cache_read_input_tokens")
-		cacheCreation := pick("cache_creation_input_tokens")
 
-		// 合并后的 anthropic 原生 usage 旁路交给落库侧。必须在此（而非
-		// message_start / message_delta 各发一次）：侧信道是「最后观测胜出」，
-		// 分两次会让先写的 input 侧被只带 output 侧的快照覆盖掉。
+		// 合并后的 anthropic 原生 usage 交给侧信道。这里交的是含 input 侧的
+		// 完整快照，是 message_start 那次的超集，故覆盖不会降级。
 		captureUpstreamUsageMap(state, map[string]interface{}{
 			"input_tokens":            inputTokens,
 			"output_tokens":           outputTokens,
@@ -396,8 +400,11 @@ func handleAnthropicToResponsesMessageDelta(state *realtimeStreamState, chunk ma
 			// 但落库口径统一为 input+output（见 process.go），此处 total 保持同口径。
 			"total_tokens": int(inputTokens + outputTokens),
 		}
-		// cache_read_input_tokens 对应统一模型的 cached_tokens；有真值才写 details。
-		if cacheRead > 0 || cacheCreation > 0 {
+		// 只有 cache_read 有真值才写 details：它是唯一能映射到 cached_tokens 的量。
+		// 不能把 cache_creation 也当门禁——上游首次写缓存时 cache_creation>0 而
+		// cache_read=0，那样会输出 cached_tokens:0，正是下面注释要避免的情况。
+		// cache_creation（缓存写入数）本网关不统计，与 total 口径一致地丢弃。
+		if cacheRead > 0 {
 			usageMap["input_tokens_details"] = map[string]interface{}{
 				"cached_tokens": int(cacheRead),
 			}

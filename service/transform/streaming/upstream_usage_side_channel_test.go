@@ -57,7 +57,7 @@ func TestSideChannel_UpstreamResponsesUsageCaptured(t *testing.T) {
 		t.Fatalf("TransformResponseRealtime: %v", err)
 	}
 	defer out.Body.Close()
-	io.Copy(io.Discard, out.Body)
+	_, _ = io.Copy(io.Discard, out.Body)
 
 	u, ok := sc.UpstreamUsage()
 	if !ok {
@@ -88,7 +88,7 @@ func TestSideChannel_AnthropicUpstreamUsageIsMergedNotOverwritten(t *testing.T) 
 		t.Fatalf("TransformResponseRealtime: %v", err)
 	}
 	defer out.Body.Close()
-	io.Copy(io.Discard, out.Body)
+	_, _ = io.Copy(io.Discard, out.Body)
 
 	u, ok := sc.UpstreamUsage()
 	if !ok {
@@ -118,5 +118,56 @@ func TestSideChannel_NilIsNoOp(t *testing.T) {
 		t.Fatalf("TransformResponseRealtime: %v", err)
 	}
 	defer out.Body.Close()
-	io.Copy(io.Discard, out.Body)
+	_, _ = io.Copy(io.Discard, out.Body)
+}
+
+// 上游首次写缓存时形态是 cache_creation>0 而 cache_read=0。此时不能输出
+// input_tokens_details.cached_tokens:0——显式 0 会被下游误读为「上游报告无缓存命中」，
+// 与「字段缺失＝未知」是两种语义。
+func TestAnthropicUsage_CacheCreationOnlyWritesNoDetails(t *testing.T) {
+	sse := "event: message_start\n" +
+		`data: {"type":"message_start","message":{"id":"m1","model":"claude",` +
+		`"usage":{"input_tokens":400,"cache_creation_input_tokens":1024,` +
+		`"cache_read_input_tokens":0}}}` + "\n\n" +
+		"event: message_delta\n" +
+		`data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},` +
+		`"usage":{"output_tokens":70}}` + "\n\n"
+
+	out, err := TransformResponseRealtime(newSSEResponse(sse), "anthropic", "openai-res", nil)
+	if err != nil {
+		t.Fatalf("TransformResponseRealtime: %v", err)
+	}
+	defer out.Body.Close()
+	body, _ := io.ReadAll(out.Body)
+
+	if strings.Contains(string(body), "input_tokens_details") {
+		t.Errorf("cache_creation-only upstream must not emit input_tokens_details:\n%s", body)
+	}
+}
+
+// 上游发完 message_start 后异常结束（无 message_delta）：input 侧真值只出现过一次，
+// 若只在 message_delta 分支写侧信道，缓存命中数这类计费大头会永久丢失。
+func TestSideChannel_AnthropicMessageStartOnlyStillCaptured(t *testing.T) {
+	sse := "event: message_start\n" +
+		`data: {"type":"message_start","message":{"id":"m1","model":"claude",` +
+		`"usage":{"input_tokens":800,"cache_read_input_tokens":512}}}` + "\n\n"
+
+	sc := models.NewTransformSideChannel(false)
+	out, err := TransformResponseRealtime(newSSEResponse(sse), "anthropic", "openai", sc)
+	if err != nil {
+		t.Fatalf("TransformResponseRealtime: %v", err)
+	}
+	defer out.Body.Close()
+	_, _ = io.Copy(io.Discard, out.Body)
+
+	u, ok := sc.UpstreamUsage()
+	if !ok {
+		t.Fatal("side channel captured nothing; message_start usage was lost")
+	}
+	if u.PromptTokens != 800 {
+		t.Errorf("PromptTokens = %d, want 800", u.PromptTokens)
+	}
+	if u.PromptTokensDetails.CachedTokens != 512 {
+		t.Errorf("CachedTokens = %d, want 512", u.PromptTokensDetails.CachedTokens)
+	}
 }

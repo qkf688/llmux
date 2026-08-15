@@ -101,17 +101,13 @@ func usageFromUpstreamMap(usage map[string]interface{}) models.Usage {
 // 流式下可被多次调用（Anthropic 的 usage 拆在 message_start / message_delta 两处），
 // 侧信道语义是「最后一次观测胜出」，故调用方必须传入**已合并的完整快照**，
 // 不能分两次分别只带 input 侧和 output 侧。
+//
+// 全零 / 无法识别的快照由 SetUpstreamUsage 内部丢弃，此处不再重复判断。
 func captureUpstreamUsageMap(state *realtimeStreamState, usage map[string]interface{}) {
 	if state.sideChannel == nil || len(usage) == 0 {
 		return
 	}
-	u := usageFromUpstreamMap(usage)
-	if u.TotalTokens == 0 && u.PromptTokens == 0 && u.CompletionTokens == 0 {
-		// 上游给了 usage 对象但全是 0/无法识别：不覆盖，避免把「没解析出来」
-		// 记成「上游明确报告 0」，让落库侧还能回退到 processer 的解析结果。
-		return
-	}
-	state.sideChannel.SetUpstreamUsage(u)
+	state.sideChannel.SetUpstreamUsage(usageFromUpstreamMap(usage))
 }
 
 // captureUpstreamUsageResponses 记录 openai-res 上游的原始 usage。

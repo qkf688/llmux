@@ -72,8 +72,14 @@ func (c *TransformSideChannel) RawBody() string {
 // SetUpstreamUsage 记录上游原始 usage。流式场景下可能被多次调用
 // （如 Anthropic 的 message_start 与 message_delta 各带一部分），
 // 采用「最后一次观测胜出」：调用方应传入已合并的完整快照。
+//
+// token 全为 0 的快照会被丢弃：上游只要回包里带 usage 对象（哪怕字段全 0
+// 或键名不认识），各协议适配器都会产出一个非 nil 的全零 Usage。若照收，
+// 落库侧会把它当成最可信来源并跳过 missing 告警——而 UsageSource 存在的
+// 意义正是区分「上游没给」与「归集链路丢了」。在此收口，避免各捕获点
+// 各写一遍零值判断。
 func (c *TransformSideChannel) SetUpstreamUsage(u Usage) {
-	if c == nil {
+	if c == nil || (u.TotalTokens == 0 && u.PromptTokens == 0 && u.CompletionTokens == 0) {
 		return
 	}
 	c.mu.Lock()

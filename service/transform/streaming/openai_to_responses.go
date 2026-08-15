@@ -442,6 +442,9 @@ func captureOpenAIUsage(state *realtimeStreamState, chunk map[string]interface{}
 		return
 	}
 	state.pendingUsage = usage
+	// 同一份原始 usage 也旁路交给落库侧：转换输出会被目标协议裁剪，
+	// 这里是 openai 上游 usage 唯一未失真的观测点。
+	captureUpstreamUsageMap(state, usage)
 }
 
 // flushPendingOpenAIToResponsesCompleted 把延后的 response.completed 合并 usage 后写出。

@@ -521,10 +521,19 @@ func handleResponsesToAnthropicCompletedEvent(state *realtimeStreamState, ev *re
 
 	// 添加 usage 信息
 	if ev.Response != nil && ev.Response.Usage != nil {
-		messageDelta["usage"] = map[string]interface{}{
+		// 上游 openai-res 原始 usage 旁路交给落库侧（本跳读上游时才持有 sideChannel）。
+		captureUpstreamUsageResponses(state, ev.Response.Usage)
+		usageMap := map[string]interface{}{
 			"input_tokens":  int(ev.Response.Usage.InputTokens),
 			"output_tokens": int(ev.Response.Usage.OutputTokens),
 		}
+		// Responses 的 cached_tokens 对应 Anthropic 的 cache_read_input_tokens。
+		// reasoning_tokens 在 Anthropic 协议无对应位置（thinking 计入 output_tokens），
+		// 按协议能力裁剪后丢弃，不塞非标准扩展字段——落库侧另有上游真值来源。
+		if d := ev.Response.Usage.InputTokenDetails; d != nil && d.CachedTokens > 0 {
+			usageMap["cache_read_input_tokens"] = int(d.CachedTokens)
+		}
+		messageDelta["usage"] = usageMap
 	}
 
 	if err := writeRealtimeEventJSONData(state, "message_delta", messageDelta); err != nil {

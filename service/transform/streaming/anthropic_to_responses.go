@@ -52,6 +52,14 @@ func handleAnthropicToResponsesMessageStart(state *realtimeStreamState, chunk ma
 	state.itemID = fmt.Sprintf("msg_%s", state.responseID)
 	createdAt := int(shared.GetNestedFloat(chunk, "message.created_at"))
 
+	// input 侧 token 只在 message_start 出现（旧版上游的 message_delta 不重复带），
+	// 缓存下来供 message_delta 构建 response.completed.usage 时合并。
+	if message, ok := chunk["message"].(map[string]interface{}); ok {
+		if usage, ok := message["usage"].(map[string]interface{}); ok {
+			state.anthropicStartUsage = usage
+		}
+	}
+
 	// 发送 response.created 事件
 	responseCreated := map[string]interface{}{
 		"type":            "response.created",
@@ -351,25 +359,51 @@ func handleAnthropicToResponsesMessageDelta(state *realtimeStreamState, chunk ma
 		},
 	}
 
-	// 添加 usage 信息
-	if usage, ok := chunk["usage"].(map[string]interface{}); ok {
+	// 合并 usage：output 侧来自本 message_delta，input 侧优先取 message_delta，
+	// 缺失时回退到 message_start 缓存（旧版上游只在 message_start 给 input_tokens）。
+	deltaUsage, _ := chunk["usage"].(map[string]interface{})
+	if deltaUsage != nil || state.anthropicStartUsage != nil {
+		pick := func(key string) float64 {
+			if deltaUsage != nil {
+				if v := maputil.Float64(deltaUsage, key); v > 0 {
+					return v
+				}
+			}
+			if state.anthropicStartUsage != nil {
+				return maputil.Float64(state.anthropicStartUsage, key)
+			}
+			return 0
+		}
+
+		inputTokens := pick("input_tokens")
+		outputTokens := pick("output_tokens")
+		cacheRead := pick("cache_read_input_tokens")
+		cacheCreation := pick("cache_creation_input_tokens")
+
+		// 合并后的 anthropic 原生 usage 旁路交给落库侧。必须在此（而非
+		// message_start / message_delta 各发一次）：侧信道是「最后观测胜出」，
+		// 分两次会让先写的 input 侧被只带 output 侧的快照覆盖掉。
+		captureUpstreamUsageMap(state, map[string]interface{}{
+			"input_tokens":            inputTokens,
+			"output_tokens":           outputTokens,
+			"cache_read_input_tokens": cacheRead,
+		})
+
 		usageMap := map[string]interface{}{
-			"input_tokens":  int(maputil.Float64(usage, "input_tokens")),
-			"output_tokens": int(maputil.Float64(usage, "output_tokens")),
-			"total_tokens":  int(maputil.Float64(usage, "input_tokens") + maputil.Float64(usage, "output_tokens")),
+			"input_tokens":  int(inputTokens),
+			"output_tokens": int(outputTokens),
+			// Anthropic 的 cache_read / cache_creation 与 input_tokens 并列计数，
+			// 但落库口径统一为 input+output（见 process.go），此处 total 保持同口径。
+			"total_tokens": int(inputTokens + outputTokens),
 		}
-		// 添加 input_tokens_details
-		if inputTokens := int(maputil.Float64(usage, "input_tokens")); inputTokens > 0 {
+		// cache_read_input_tokens 对应统一模型的 cached_tokens；有真值才写 details。
+		if cacheRead > 0 || cacheCreation > 0 {
 			usageMap["input_tokens_details"] = map[string]interface{}{
-				"cached_tokens": 0,
+				"cached_tokens": int(cacheRead),
 			}
 		}
-		// 添加 output_tokens_details
-		if outputTokens := int(maputil.Float64(usage, "output_tokens")); outputTokens > 0 {
-			usageMap["output_tokens_details"] = map[string]interface{}{
-				"reasoning_tokens": 0,
-			}
-		}
+		// Anthropic 协议无 reasoning token（thinking 计入 output_tokens），
+		// 故不输出 output_tokens_details（写 reasoning_tokens:0 会让下游误以为上游明确报告了 0）。
 		responseCompleted["response"].(map[string]interface{})["usage"] = usageMap
 	}
 

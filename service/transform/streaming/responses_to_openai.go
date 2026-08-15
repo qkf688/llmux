@@ -219,11 +219,26 @@ func handleResponsesToOpenAICompletedEvent(state *realtimeStreamState, ev *respo
 
 	// 添加 usage 信息
 	if ev.Response != nil && ev.Response.Usage != nil {
-		finalChunk["usage"] = map[string]interface{}{
+		// 上游 openai-res 原始 usage 旁路交给落库侧（本跳读上游时才持有 sideChannel）。
+		captureUpstreamUsageResponses(state, ev.Response.Usage)
+		usageMap := map[string]interface{}{
 			"prompt_tokens":     int(ev.Response.Usage.InputTokens),
 			"completion_tokens": int(ev.Response.Usage.OutputTokens),
 			"total_tokens":      int(ev.Response.Usage.TotalTokens),
 		}
+		// 透传 cache / reasoning 明细，映射为 OpenAI Chat 的嵌套 details，
+		// 避免跨协议转换后 token 明细丢失（有真值才写，不写零值 details）。
+		if d := ev.Response.Usage.InputTokenDetails; d != nil && d.CachedTokens > 0 {
+			usageMap["prompt_tokens_details"] = map[string]interface{}{
+				"cached_tokens": int(d.CachedTokens),
+			}
+		}
+		if d := ev.Response.Usage.OutputTokenDetails; d != nil && d.ReasoningTokens > 0 {
+			usageMap["completion_tokens_details"] = map[string]interface{}{
+				"reasoning_tokens": int(d.ReasoningTokens),
+			}
+		}
+		finalChunk["usage"] = usageMap
 	}
 
 	if err := writeRealtimeJSONData(state, finalChunk); err != nil {

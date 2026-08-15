@@ -88,6 +88,9 @@ func ParseResponse(body []byte) (*models.UnifiedResponse, error) {
 			CompletionTokens: int64(maputil.Float64(usage, "output_tokens")),
 			TotalTokens:      int64(maputil.Float64(usage, "input_tokens") + maputil.Float64(usage, "output_tokens")),
 		}
+		// cache_read_input_tokens 是 Anthropic prompt caching 的读取命中数，
+		// 对应统一模型的 cached_tokens。reasoning 无对应字段（thinking 计入 output_tokens）。
+		unified.Usage.PromptTokensDetails.CachedTokens = int64(maputil.Float64(usage, "cache_read_input_tokens"))
 	}
 
 	return unified, nil

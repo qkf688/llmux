@@ -201,6 +201,9 @@ func ParseResponse(body []byte) (*models.UnifiedResponse, error) {
 		if resp.Usage.InputTokenDetails != nil {
 			unified.Usage.PromptTokensDetails.CachedTokens = resp.Usage.InputTokenDetails.CachedTokens
 		}
+		if resp.Usage.OutputTokenDetails != nil {
+			unified.Usage.CompletionTokensDetails.ReasoningTokens = resp.Usage.OutputTokenDetails.ReasoningTokens
+		}
 	}
 
 	return unified, nil

@@ -50,8 +50,15 @@ models/retention.go
 - `EnforceRetentionByOldestID` 的 `BeforeDelete` 回调与主表删除在同一事务内执行；回调收 `tx *gorm.DB`，必须用 tx 操作子表，返回 error 会回滚整个事务（主表不删）。ChatLog 的 `EnforceRetention` 用此机制保证 ChatIO 与 ChatLog 同生共死，不产生孤儿 ChatIO 行（db 体积单调增长的根因修复）
 - `ChatLog.RawResponseBody` 的截断语义按来源分两种：**流式转换路径**经 `service/transform/streaming` 的头尾双段累积器（头 512KB + 尾 512KB），超出部分丢弃中间段并在文本中插入 `...[llmux truncated N bytes ...]...` 标记、同时打一条 `slog.Warn`；保留尾段是为了不丢 `finish_reason` / `usage` / `[DONE]` / `message_stop` 等收尾事件。**非流式路径**（`service/chat/chat_attempt_log.go` 的 `captureRawResponseBody`）全量记录、无上限。故同一字段可能来自两种策略，排查时以有无截断标记为准；另注意累积体不是字节级保真（多行 data 已被合成单行）
 - processer 出错时（`service/chat/chat_record.go` 错误分支）只写 `Status`/`Error` 就返回，**不消费流式累积体**，失败流的 `RawResponseBody` 目前为空
-- **流式 token 统计的提取来源是「转换后发给客户端的流」，不是上游原始流**：`handler/v1/chat.go` 用 `io.TeeReader` 从 `res.Body` 分流给 `RecordLog`，而跨协议场景下该 `res.Body` 已被 `service/transform` 替换为转换管道的输出（上游原始字节只旁路给 `rawAccumulator` 写 `RawResponseBody`，不参与 usage 提取）。因此 `ChatLog` 的 `prompt_tokens`/`completion_tokens`/`total_tokens`/`tps` 正确性依赖转换层是否把上游 usage 完整带过来——转换层丢 usage 会直接表现为这些字段全 0（`tps` 由 `TotalTokens` 派生，故同步为 0）。各 style processer 认的字段不同：openai 取根级 `usage`（不解析 `choices`，故天然免疫 OpenAI 的 `choices:[]` usage 尾包）、anthropic 取 `message_delta.usage`、openai-res 取 `response.completed` 内的 usage
-- **`reasoning_tokens` 在 anthropic / openai-res style 下仍恒为 0**（已知缺口）：`service/chat/process.go` 这两个 style 的 `parseUsage` 手工构造 `models.Usage` 且从不赋值 `CompletionTokensDetails`。转换层侧 `streaming/openai_to_responses.go` 已透传上游真值（`buildResponsesUsage` 同时透传 `cached_tokens`，该列经 openai-res `parseUsage` 会落库），但 `streaming/anthropic_to_responses.go` 仍把 `reasoning_tokens` 硬编码为 0。仅 openai 直通路径（整体 `json.Unmarshal` 到 `models.Usage`）能落到上游真实值
+- **usage 归集有三条来源，优先级由 `service/chat/chat_record.go` 的 `resolveUsageSource` 决定，来源记在 `ChatLog.UsageSource` 列**（取值常量见 `models/model.go` 的 `UsageSource*`）：
+  1. `upstream`——跨协议场景下由 `models.TransformSideChannel` 旁路交出的**上游原始 usage**。转换层在读上游那一跳就地捕获（流式在 `service/transform/streaming/upstream_usage.go`，非流式在 `service/transform/transform_provider_response.go` 解析 `ParseResponse` 结果后），不经目标协议裁剪，最可信。多跳转换（provider → openai-res → client）只有**第一跳**持有侧信道，第二跳传 nil，避免把中间格式当成上游真值。
+  2. `passthrough`——`style == provider.Type`，无转换层，processer 读的就是上游响应本身。
+  3. `downstream`——走了转换但旁路没拿到 usage，退化为从**转换后**的下游流反解。此路径会打 `slog.Warn`，因为它可能因目标协议缺字段而失真。
+  
+  三条都拿不到有效 token 时记 `missing` 并告警——token 恒为 0 会静默影响计费与配额，不能沉在 DB 里。usage 修正发生在 `chatstats.Record*` **之前**，故统计与日志读到的是同一份数字。
+- **上游 usage 字段容错**：`streaming/upstream_usage.go` 的 `usageFromUpstreamMap` 用有序候选路径表（`promptTokenPaths` / `cachedTokenPaths` / `reasoningTokenPaths` 等）归一各家写法——含 `completion_tokens_details.reasoning_tokens`、`output_tokens_details.reasoning_tokens`、usage 顶层 `reasoning_tokens`、`prompt_cache_hit_tokens`、Anthropic 的 `cache_read_input_tokens`。新增一种非标准写法只加一行候选，不改控制流（OCP）；解析不出任何 token 时**不写入**侧信道，避免把「没解析出来」记成「上游明确报 0」
+- `total_tokens` 的落库口径统一为 `prompt + completion`（不把 Anthropic 的 cache_read / cache_creation 额外计入），转换层与 `resolveUsageSource` 两侧一致
+- 各 style processer 认的字段不同：openai 取根级 `usage`（不解析 `choices`，故天然免疫 OpenAI 的 `choices:[]` usage 尾包）、anthropic 取 `message_delta.usage`、openai-res 取 `response.completed` 内的 usage。这些只在 `downstream` / `passthrough` 路径生效
 
 
 ---

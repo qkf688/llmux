@@ -16,11 +16,16 @@ type ResponsesResponse struct {
 }
 
 // ResponsesUsage token 使用统计。
+//
+// details 的 key 必须是复数 input_tokens_details / output_tokens_details——
+// 这是 OpenAI Responses API 的线格式，也是 streaming 侧编码与 chat processer 解码
+// （service/chat/process.go 的 OpenAIResUsage）一直在用的写法。此处曾误用单数
+// input_token_details，导致解码恒 nil（读侧成死代码）、编码输出不合规。
 type ResponsesUsage struct {
 	InputTokens        int64                        `json:"input_tokens"`
-	InputTokenDetails  *ResponsesInputTokenDetails  `json:"input_token_details,omitempty"`
+	InputTokenDetails  *ResponsesInputTokenDetails  `json:"input_tokens_details,omitempty"`
 	OutputTokens       int64                        `json:"output_tokens"`
-	OutputTokenDetails *ResponsesOutputTokenDetails `json:"output_token_details,omitempty"`
+	OutputTokenDetails *ResponsesOutputTokenDetails `json:"output_tokens_details,omitempty"`
 	TotalTokens        int64                        `json:"total_tokens"`
 }
 

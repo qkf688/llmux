@@ -17,7 +17,7 @@ import (
 //
 // sideChannel 是转换层旁路：携带流式响应的原始 SSE 累积体（流结束后已写满）与上游原始 usage。
 // 未经协议转换（style == provider type）或未开启记录时为 nil，方法均 nil-safe。
-func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, processer Processer, logId uint, before Before, ioLog bool, providerName string, sideChannel *models.TransformSideChannel) {
+func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, processer Processer, logID uint, before Before, ioLog bool, providerName string, sideChannel *models.TransformSideChannel) {
 	recordFunc := func() error {
 		defer reader.Close()
 
@@ -27,13 +27,13 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 
 		log, output, err := processer(ctx, reader, before.Stream, reqStart, disablePerformanceTracking, disableTokenCounting)
 		if err != nil {
-			slog.Error("processer error", "log_id", logId, "error", err)
-			if logId != 0 {
-				if _, updateErr := repos().ChatLog.UpdateByID(ctx, logId, models.ChatLog{
+			slog.Error("processer error", "log_id", logID, "error", err)
+			if logID != 0 {
+				if _, updateErr := repos().ChatLog.UpdateByID(ctx, logID, models.ChatLog{
 					Status: "error",
 					Error:  fmt.Sprintf("processer error: %v", err),
 				}); updateErr != nil {
-					slog.Error("failed to update log status on processer error", "log_id", logId, "error", updateErr)
+					slog.Error("failed to update log status on processer error", "log_id", logID, "error", updateErr)
 				}
 			}
 
@@ -50,7 +50,7 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 		// logUpdate.Usage.TotalTokens，晚于它们修正就只修了日志、没修计量。
 		resolveUsageSource(&logUpdate, sideChannel, providerName)
 
-		// 统计独立于日志存储：即使关闭日志记录（logId==0），也要写入 tokens 统计。
+		// 统计独立于日志存储：即使关闭日志记录（logID==0），也要写入 tokens 统计。
 		if err := chatstats.RecordTokenStats(ctx, reqStart, logUpdate.Usage.TotalTokens); err != nil {
 			slog.Warn("failed to record token stats", "error", err)
 		}
@@ -61,7 +61,7 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 		}
 
 		// 若未记录 ChatLog（例如 disable_all_logs=true），这里不再进行任何日志表更新/写入。
-		if logId == 0 {
+		if logID == 0 {
 			return nil
 		}
 
@@ -79,16 +79,16 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 		}
 
 		// IO 落库：更新 ChatLog + 可选写 ChatIO。
-		if err := persistChatLog(ctx, logId, logUpdate, before, output, ioLog, logRawOptions); err != nil {
+		if err := persistChatLog(ctx, logID, logUpdate, before, output, ioLog, logRawOptions); err != nil {
 			return err
 		}
 
 		// 成功日志的 raw 字段清理策略（errors-only）。
-		maybeClearRawOnSuccess(ctx, logId, logRawErrorsOnly, rawLogEnabled)
+		maybeClearRawOnSuccess(ctx, logID, logRawErrorsOnly, rawLogEnabled)
 		return nil
 	}
 	if err := recordFunc(); err != nil {
-		slog.Error("record log error", "log_id", logId, "error", err)
+		slog.Error("record log error", "log_id", logID, "error", err)
 	}
 }
 

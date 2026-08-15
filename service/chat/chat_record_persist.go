@@ -13,18 +13,18 @@ import (
 //  3. 若 ioLog=true，写入 ChatIO（输入 + 输出联合体）。
 //
 // 与 stats.go（统计）各司其职；raw 清理（maybeClearRawOnSuccess）已合入本文件。
-func persistChatLog(ctx context.Context, logId uint, logUpdate models.ChatLog, before Before, output *models.OutputUnion, ioLog bool, opts models.RawLogOptions) error {
+func persistChatLog(ctx context.Context, logID uint, logUpdate models.ChatLog, before Before, output *models.OutputUnion, ioLog bool, opts models.RawLogOptions) error {
 	if opts.ResponseBody {
 		applyResponseBodyToLog(&logUpdate, output)
 	}
 
-	if _, err := repos().ChatLog.UpdateByID(ctx, logId, logUpdate); err != nil {
-		slog.Error("failed to update log", "log_id", logId, "error", err)
+	if _, err := repos().ChatLog.UpdateByID(ctx, logID, logUpdate); err != nil {
+		slog.Error("failed to update log", "log_id", logID, "error", err)
 		return err
 	}
 
 	if ioLog {
-		if err := createChatIO(ctx, logId, before.raw, output); err != nil {
+		if err := createChatIO(ctx, logID, before.raw, output); err != nil {
 			return err
 		}
 	}
@@ -55,16 +55,16 @@ func applyResponseBodyToLog(log *models.ChatLog, output *models.OutputUnion) {
 }
 
 // createChatIO 写入一条 ChatIO 记录（原始输入 + 转换后输出联合体）。
-func createChatIO(ctx context.Context, logId uint, input []byte, output *models.OutputUnion) error {
+func createChatIO(ctx context.Context, logID uint, input []byte, output *models.OutputUnion) error {
 	if output == nil {
 		output = &models.OutputUnion{}
 	}
 	if err := repos().ChatIO.Create(ctx, &models.ChatIO{
 		Input:       string(input),
-		LogId:       logId,
+		LogId:       logID,
 		OutputUnion: *output,
 	}); err != nil {
-		slog.Error("failed to create chat io", "log_id", logId, "error", err)
+		slog.Error("failed to create chat io", "log_id", logID, "error", err)
 		return err
 	}
 	return nil
@@ -74,17 +74,17 @@ func createChatIO(ctx context.Context, logId uint, input []byte, output *models.
 // 若 errorsOnly=true 且 rawLogEnabled，则查询该日志当前状态；
 // 状态非 error（即成功）时清空 raw 字段，避免成功日志长期占用存储。
 // 错误状态下保留 raw 字段以便排查。
-func maybeClearRawOnSuccess(ctx context.Context, logId uint, errorsOnly bool, rawLogEnabled bool) {
-	if !errorsOnly || !rawLogEnabled || logId == 0 {
+func maybeClearRawOnSuccess(ctx context.Context, logID uint, errorsOnly bool, rawLogEnabled bool) {
+	if !errorsOnly || !rawLogEnabled || logID == 0 {
 		return
 	}
 
-	status, err := repos().ChatLog.GetStatus(ctx, logId)
+	status, err := repos().ChatLog.GetStatus(ctx, logID)
 	if err != nil || status == "error" {
 		return
 	}
 
-	if err := repos().ChatLog.ClearRawFields(ctx, logId); err != nil {
-		slog.Error("failed to clear raw request/response fields", "log_id", logId, "error", err)
+	if err := repos().ChatLog.ClearRawFields(ctx, logID); err != nil {
+		slog.Error("failed to clear raw request/response fields", "log_id", logID, "error", err)
 	}
 }

@@ -7,10 +7,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/transform/streaming"
 )
 
-func TransformProviderResponse(response *http.Response, providerType, clientType string, rawAccumulator *strings.Builder) (*http.Response, error) {
+func TransformProviderResponse(response *http.Response, providerType, clientType string, sideChannel *models.TransformSideChannel) (*http.Response, error) {
 	if providerType == clientType {
 		return response, nil
 	}
@@ -21,7 +22,7 @@ func TransformProviderResponse(response *http.Response, providerType, clientType
 
 	if isStream {
 		// 流式响应：直接从 Body 读取器进行实时转换
-		return streaming.TransformResponseRealtime(response, providerType, clientType, rawAccumulator)
+		return streaming.TransformResponseRealtime(response, providerType, clientType, sideChannel)
 	}
 
 	// 非流式响应：读取完整响应体后转换
@@ -31,10 +32,10 @@ func TransformProviderResponse(response *http.Response, providerType, clientType
 	}
 	response.Body.Close()
 
-	return transformNonStreamResponse(response, body, providerType, clientType)
+	return transformNonStreamResponse(response, body, providerType, clientType, sideChannel)
 }
 
-func transformNonStreamResponse(response *http.Response, body []byte, providerType, clientType string) (*http.Response, error) {
+func transformNonStreamResponse(response *http.Response, body []byte, providerType, clientType string, sideChannel *models.TransformSideChannel) (*http.Response, error) {
 	providerAdapter, err := getAdapterOrDefault(providerType)
 	if err != nil {
 		return nil, err
@@ -42,6 +43,12 @@ func transformNonStreamResponse(response *http.Response, body []byte, providerTy
 	unified, err := providerAdapter.ParseResponse(body)
 	if err != nil {
 		return nil, err
+	}
+
+	// 上游 usage 在此旁路交给落库侧：解析上游响应即得到，无 goroutine、无时序问题。
+	// 落库优先用它而非从转换后的下游体反解（下游受目标协议表达能力限制）。
+	if sideChannel != nil && unified != nil && unified.Usage != nil {
+		sideChannel.SetUpstreamUsage(*unified.Usage)
 	}
 
 	clientAdapter, err := getAdapterOrDefault(clientType)

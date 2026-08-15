@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/qkf688/llmux/models"
@@ -118,16 +117,17 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 
 	rawResponseBodyStr := captureRawResponseBody(logRawOptions, res)
 
-	// 流式响应的原始 body 不能在入口读取（会阻塞流），改用累积器在转换 goroutine 内旁路记录。
-	// 仅在需要转换且开启了 RawResponseBody 记录时创建累积器。
-	var rawAccumulator *strings.Builder
-	if logRawOptions.RawResponseBody && rawResponseBodyStr == "" {
-		rawAccumulator = &strings.Builder{}
-	}
+	// 流式响应的原始 body 不能在入口读取（会阻塞流），改用侧信道在转换 goroutine 内旁路记录。
+	// 侧信道同时承载**上游原始 usage**：转换后的下游流受目标协议表达能力限制，
+	// 从它反解 usage 必然有损，故由转换层在解析上游时旁路交出真值（见 models.TransformSideChannel）。
+	// 仅在需要转换时创建——直通路径没有转换层可供旁路，落库回退 processer 解析（该路径本就完整）。
+	captureRawBody := logRawOptions.RawResponseBody && rawResponseBodyStr == ""
 
+	var sideChannel *models.TransformSideChannel
 	if input.Style != input.Provider.Type {
+		sideChannel = models.NewTransformSideChannel(captureRawBody)
 		tm := transform.NewTransformerManager(input.Style, input.Provider.Type)
-		convertedRes, err := tm.ProcessResponse(res, rawAccumulator)
+		convertedRes, err := tm.ProcessResponse(res, sideChannel)
 		if err != nil {
 			errorUpdate := models.ChatLog{
 				Status: "error",
@@ -171,9 +171,9 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 	adjustment.ResetConsecutiveFailures(input.Ctx, input.ModelWithProvider.ID)
 	adjustment.ApplySuccessAdjustments(input.Ctx, input.ModelWithProvider.ID)
 	return singleProviderAttemptResult{
-		Response:       res,
-		LogID:          logID,
-		Success:        true,
-		RawAccumulator: rawAccumulator,
+		Response:    res,
+		LogID:       logID,
+		Success:     true,
+		SideChannel: sideChannel,
 	}
 }

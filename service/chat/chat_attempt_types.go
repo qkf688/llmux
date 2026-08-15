@@ -3,7 +3,6 @@ package chat
 import (
 	"context"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/qkf688/llmux/models"
@@ -36,9 +35,10 @@ type singleProviderAttemptResult struct {
 	RemovePriority bool
 	ReduceWeight   bool
 
-	// RawAccumulator 流式响应时累积上游原始 SSE 字节流，供 RecordLog 写入 RawResponseBody。
-	// 非流式或未开启记录时为 nil。goroutine 写、流结束后读，无并发。
-	RawAccumulator *strings.Builder
+	// SideChannel 承载转换旁路产物：上游原始 SSE 累积体（供 RawResponseBody）
+	// 与上游原始 usage（供落库统计）。直通路径无转换层可旁路，故为 nil。
+	// 转换 goroutine 写、流结束后读，内部自带互斥。
+	SideChannel *models.TransformSideChannel
 }
 
 type requestLogSnapshot struct {

@@ -336,6 +336,13 @@ type ChatLog struct {
 	Tps            float64
 	Usage
 
+	// UsageSource 标记本条 usage 的来源，用于排查「token 全为 0」是上游没给
+	// 还是归集链路丢了。取值见 UsageSource* 常量。
+	//
+	// 放在 ChatLog 而不是内嵌的 Usage 上：Usage 会被序列化进对外响应，
+	// 混入非 token 字段会污染协议形状。
+	UsageSource string `gorm:"index"`
+
 	// 原始请求和响应内容
 	RequestHeaders  string // 请求头JSON字符串
 	RequestBody     string // 请求体（转换后，发给上游的）
@@ -344,6 +351,20 @@ type ChatLog struct {
 	ResponseBody    string // 响应体（转换后）
 	RawResponseBody string // 原始响应体（转换前）
 }
+
+// ChatLog.UsageSource 的取值。
+const (
+	// UsageSourceUpstream：转换层旁路交出的上游原始 usage，最可信。
+	UsageSourceUpstream = "upstream"
+	// UsageSourcePassthrough：无协议转换（style == provider type），
+	// usage 由 processer 直接解析上游响应得到，同样未经转换失真。
+	UsageSourcePassthrough = "passthrough"
+	// UsageSourceDownstream：走了协议转换但旁路没拿到 usage，退化为从
+	// 转换后的下游流反解——可能因目标协议缺字段而失真，需要关注。
+	UsageSourceDownstream = "downstream"
+	// UsageSourceMissing：所有路径都没拿到有效 token 数。
+	UsageSourceMissing = "missing"
+)
 
 func (l ChatLog) WithError(err error) ChatLog {
 	l.Error = err.Error()

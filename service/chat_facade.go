@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/qkf688/llmux/models"
@@ -42,12 +41,12 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 	return chat.ProvidersWithMetaBymodelsName(ctx, style, before)
 }
 
-func BalanceChat(ctx context.Context, start time.Time, style string, before Before, providersWithMeta ProvidersWithMeta, reqMeta models.ReqMeta) (*http.Response, uint, string, *strings.Builder, error) {
+func BalanceChat(ctx context.Context, start time.Time, style string, before Before, providersWithMeta ProvidersWithMeta, reqMeta models.ReqMeta) (*http.Response, uint, string, *models.TransformSideChannel, error) {
 	return chat.BalanceChat(ctx, start, style, before, providersWithMeta, reqMeta)
 }
 
-func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, processer Processer, logId uint, before Before, ioLog bool, providerName string, rawAccumulator *strings.Builder) {
-	chat.RecordLog(ctx, reqStart, reader, processer, logId, before, ioLog, providerName, rawAccumulator)
+func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, processer Processer, logId uint, before Before, ioLog bool, providerName string, sideChannel *models.TransformSideChannel) {
+	chat.RecordLog(ctx, reqStart, reader, processer, logId, before, ioLog, providerName, sideChannel)
 }
 
 func GetStripResponseHeaders(ctx context.Context) bool { return chat.GetStripResponseHeaders(ctx) }

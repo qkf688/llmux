@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/qkf688/llmux/models"
@@ -16,7 +15,7 @@ import (
 	"github.com/samber/lo"
 )
 
-func balanceChatVirtual(ctx context.Context, start time.Time, style string, before Before, providersWithMeta ProvidersWithMeta, reqMeta models.ReqMeta) (*http.Response, uint, string, *strings.Builder, error) {
+func balanceChatVirtual(ctx context.Context, start time.Time, style string, before Before, providersWithMeta ProvidersWithMeta, reqMeta models.ReqMeta) (*http.Response, uint, string, *models.TransformSideChannel, error) {
 	slog.Info("virtual model request", "virtual_model", providersWithMeta.VirtualModelName, "strategy", providersWithMeta.VirtualStrategy, "real_models_count", len(providersWithMeta.OrderedRealModels))
 
 	globalTimer := time.NewTimer(time.Second * time.Duration(providersWithMeta.TimeOut))
@@ -134,7 +133,7 @@ func balanceChatVirtual(ctx context.Context, start time.Time, style string, befo
 				}
 				close(retryLog)
 				slog.Info("virtual model request succeeded", "virtual_model", providersWithMeta.VirtualModelName, "real_model", realModel.Name, "provider", provider.Name)
-				return result.Response, result.LogID, provider.Name, result.RawAccumulator, nil
+				return result.Response, result.LogID, provider.Name, result.SideChannel, nil
 			}
 
 			applyProviderSelectionResult(weightItems, priorityItems, *id, result)

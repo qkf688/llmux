@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/qkf688/llmux/models"
 )
 
 func newSSEResponse(body string) *http.Response {
@@ -22,15 +24,15 @@ func TestRawAccumulator_CapturesOriginalSSE(t *testing.T) {
 		"data: {\"type\":\"response.completed\"}\n\n"
 
 	resp := newSSEResponse(sse)
-	var acc strings.Builder
-	out, err := TransformResponseRealtime(resp, "openai-res", "openai", &acc)
+	sc := models.NewTransformSideChannel(true)
+	out, err := TransformResponseRealtime(resp, "openai-res", "openai", sc)
 	if err != nil {
 		t.Fatalf("TransformResponseRealtime: %v", err)
 	}
 	defer out.Body.Close()
 	io.Copy(io.Discard, out.Body) // 读完整流，让 goroutine 结束
 
-	got := acc.String()
+	got := sc.RawBody()
 	// 累积的是原始 SSE（含 data: 前缀和 \n\n），不是转换后的。
 	if !strings.Contains(got, "response.created") {
 		t.Errorf("accumulator missing original event 'response.created': %q", got)
@@ -68,15 +70,15 @@ func TestRawAccumulator_PreservesEventName(t *testing.T) {
 		"data: {\"type\":\"message_stop\"}\n\n"
 
 	resp := newSSEResponse(sse)
-	var acc strings.Builder
-	out, err := TransformResponseRealtime(resp, "anthropic", "openai", &acc)
+	sc := models.NewTransformSideChannel(true)
+	out, err := TransformResponseRealtime(resp, "anthropic", "openai", sc)
 	if err != nil {
 		t.Fatalf("TransformResponseRealtime: %v", err)
 	}
 	defer out.Body.Close()
 	io.Copy(io.Discard, out.Body)
 
-	got := acc.String()
+	got := sc.RawBody()
 	if !strings.Contains(got, "event: message_start") {
 		t.Errorf("accumulator missing event line 'message_start': %q", got)
 	}
@@ -99,15 +101,15 @@ func TestRawAccumulator_TruncatesMiddleKeepingHeadAndTail(t *testing.T) {
 	sseBuilder.WriteString("data: {\"type\":\"response.completed\",\"usage\":{\"total_tokens\":42},\"marker\":\"LAST_EVENT_MARKER\"}\n\n")
 
 	resp := newSSEResponse(sseBuilder.String())
-	var acc strings.Builder
-	out, err := TransformResponseRealtime(resp, "openai-res", "openai", &acc)
+	sc := models.NewTransformSideChannel(true)
+	out, err := TransformResponseRealtime(resp, "openai-res", "openai", sc)
 	if err != nil {
 		t.Fatalf("TransformResponseRealtime: %v", err)
 	}
 	defer out.Body.Close()
 	io.Copy(io.Discard, out.Body)
 
-	got := acc.String()
+	got := sc.RawBody()
 
 	// 头段保留：起始事件在。
 	if !strings.Contains(got, "FIRST_EVENT_MARKER") {
@@ -139,15 +141,15 @@ func TestRawAccumulator_NoMarkerWhenWithinBudget(t *testing.T) {
 		"data: {\"type\":\"response.completed\"}\n\n"
 
 	resp := newSSEResponse(sse)
-	var acc strings.Builder
-	out, err := TransformResponseRealtime(resp, "openai-res", "openai", &acc)
+	sc := models.NewTransformSideChannel(true)
+	out, err := TransformResponseRealtime(resp, "openai-res", "openai", sc)
 	if err != nil {
 		t.Fatalf("TransformResponseRealtime: %v", err)
 	}
 	defer out.Body.Close()
 	io.Copy(io.Discard, out.Body)
 
-	if got := acc.String(); strings.Contains(got, "truncated") {
+	if got := sc.RawBody(); strings.Contains(got, "truncated") {
 		t.Errorf("unexpected truncation marker for small stream: %q", got)
 	}
 }

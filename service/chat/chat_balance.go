@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/qkf688/llmux/models"
@@ -13,7 +12,7 @@ import (
 	"github.com/qkf688/llmux/service/chatcore"
 )
 
-func BalanceChat(ctx context.Context, start time.Time, style string, before Before, providersWithMeta ProvidersWithMeta, reqMeta models.ReqMeta) (*http.Response, uint, string, *strings.Builder, error) {
+func BalanceChat(ctx context.Context, start time.Time, style string, before Before, providersWithMeta ProvidersWithMeta, reqMeta models.ReqMeta) (*http.Response, uint, string, *models.TransformSideChannel, error) {
 	slog.Info("request", "model", before.Model, "stream", before.Stream, "tool_call", before.toolCall, "structured_output", before.structuredOutput, "image", before.image)
 
 	// 检查是否是虚拟模型
@@ -81,7 +80,7 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 			return nil, 0, "", nil, result.FatalErr
 		}
 		if result.Success {
-			return result.Response, result.LogID, provider.Name, result.RawAccumulator, nil
+			return result.Response, result.LogID, provider.Name, result.SideChannel, nil
 		}
 
 		applyProviderSelectionResult(weightItems, priorityItems, *id, result)

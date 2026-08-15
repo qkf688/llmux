@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"github.com/qkf688/llmux/models"
 )
 
 type realtimeStreamState struct {
@@ -28,6 +30,11 @@ type realtimeStreamState struct {
 	// 供日志记录 RawResponseBody 用。nil 时不累积（非日志场景避免内存开销）。
 	// 仅在转换 goroutine 内写入；goroutine 结束（pipe Close）后调用方才读取，无并发。
 	rawAcc *rawSSEAccumulator
+
+	// sideChannel 是转换旁路产物的出口：上游原始体与**上游原始 usage** 都经它
+	// 交给落库侧。只有读上游原始流的那一跳持有它（多跳时第二跳为 nil），
+	// 否则捕获到的会是中间格式而非上游真值。
+	sideChannel *models.TransformSideChannel
 
 	// OpenAI Chat streaming meta (used when the output format is OpenAI Chat).
 	openAIID                                  string
@@ -65,6 +72,13 @@ type realtimeStreamState struct {
 	pendingCompleted map[string]interface{}
 	pendingUsage     map[string]interface{}
 
+	// Anthropic 把 usage 拆在两个事件里：message_start.message.usage 给 input 侧
+	// （input_tokens / cache_read_input_tokens / cache_creation_input_tokens），
+	// message_delta.usage 给 output_tokens——旧版上游的 message_delta 甚至不重复
+	// 带 input_tokens。只读 message_delta 会让转换后的 input 侧 token 全为 0，
+	// 故在此跨事件缓存 message_start 的 usage，供 message_delta 合并。
+	anthropicStartUsage map[string]interface{}
+
 	// finalize 在上游流结束（含 EOF 且无 [DONE] 的非规范上游）时被调用一次，
 	// 用于 flush 上面的延后事件。仅在确有延后内容时由路由 handler 设置；
 	// nil 表示该路由无需收尾。
@@ -100,21 +114,21 @@ type realtimeStreamState struct {
 // TransformResponseRealtime performs real-time streaming response conversion
 // directly from the response Body reader.
 //
-// rawAccumulator 可选地累积上游原始 SSE 字节流；nil 时不累积。
-func TransformResponseRealtime(response *http.Response, providerType, clientType string, rawAccumulator *strings.Builder) (*http.Response, error) {
+// sideChannel 承载转换旁路产物（上游原始体 + 上游原始 usage）；nil 表示不需要旁路。
+func TransformResponseRealtime(response *http.Response, providerType, clientType string, sideChannel *models.TransformSideChannel) (*http.Response, error) {
 	// Reduce N×N streaming conversions to N+N by routing through OpenAI Responses
 	// streaming format when neither side is already using it.
 	//
 	// provider -> openai-res (canonical) -> client
 	if providerType != "openai-res" && clientType != "openai-res" {
-		return transformResponseRealtimeViaResponses(response, providerType, clientType, rawAccumulator)
+		return transformResponseRealtimeViaResponses(response, providerType, clientType, sideChannel)
 	}
 
 	pr, pw := io.Pipe()
 
 	go func() {
 		defer response.Body.Close()
-		err := transformStreamBodyRealtime(response.Body, pw, providerType, clientType, rawAccumulator)
+		err := transformStreamBodyRealtime(response.Body, pw, providerType, clientType, sideChannel)
 		if err != nil {
 			pw.CloseWithError(err)
 			return
@@ -136,15 +150,16 @@ func TransformResponseRealtime(response *http.Response, providerType, clientType
 	return newResponse, nil
 }
 
-func transformResponseRealtimeViaResponses(response *http.Response, providerType, clientType string, rawAccumulator *strings.Builder) (*http.Response, error) {
+func transformResponseRealtimeViaResponses(response *http.Response, providerType, clientType string, sideChannel *models.TransformSideChannel) (*http.Response, error) {
 	midReader, midWriter := io.Pipe()
 	outReader, outWriter := io.Pipe()
 
 	go func() {
 		defer response.Body.Close()
 
-		// 第一个 goroutine 读上游原始 body，传累积器；第二个 goroutine 读中间格式，不累积。
-		err := transformStreamBodyRealtime(response.Body, midWriter, providerType, "openai-res", rawAccumulator)
+		// 第一个 goroutine 读上游原始 body，持有 sideChannel（旁路捕获上游原始体与 usage）；
+		// 第二个 goroutine 读中间格式，传 nil——否则捕获的会是中间格式而非上游真值。
+		err := transformStreamBodyRealtime(response.Body, midWriter, providerType, "openai-res", sideChannel)
 		if err != nil {
 			midWriter.CloseWithError(err)
 			return
@@ -177,7 +192,7 @@ func transformResponseRealtimeViaResponses(response *http.Response, providerType
 	return newResponse, nil
 }
 
-func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, providerType, clientType string, rawAccumulator *strings.Builder) error {
+func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, providerType, clientType string, sideChannel *models.TransformSideChannel) error {
 	scanner := bufio.NewScanner(src)
 	// Increase initial buffer to 64KB, and cap at maxSSEEventSize (avoid "token too long").
 	scanner.Buffer(make([]byte, 0, 64*1024), maxSSEEventSize)
@@ -188,17 +203,18 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, provider
 		clientType:                 clientType,
 		anthropicActiveBlockIndex:  -1,
 		anthropicActiveOutputIndex: -1,
+		sideChannel:                sideChannel,
 	}
 
-	// 累积结果在本函数所有返回路径上都要落到调用方的 builder，故用 defer 统一 flush。
+	// 累积结果在本函数所有返回路径上都要落到侧信道，故用 defer 统一 flush。
 	// 注意：出错路径虽然也会 flush，但消费方 RecordLog 在 processer 出错时不读取
 	// 累积体（见 service/chat/chat_record.go 错误分支），失败流的 RawResponseBody
 	// 目前仍为空——此处只保证累积器侧不丢数据。
-	if rawAccumulator != nil {
+	if sideChannel.WantsRawBody() {
 		state.rawAcc = &rawSSEAccumulator{}
 		defer func() {
 			body, dropped := state.rawAcc.finalize()
-			rawAccumulator.WriteString(body)
+			sideChannel.AppendRawBody(body)
 			if dropped > 0 {
 				// 截断只影响日志字段、不影响转发，但必须留下运行时信号，
 				// 否则运维不查 DB 就无从知晓发生过截断。

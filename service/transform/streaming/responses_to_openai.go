@@ -224,7 +224,11 @@ func handleResponsesToOpenAICompletedEvent(state *realtimeStreamState, ev *respo
 		usageMap := map[string]interface{}{
 			"prompt_tokens":     int(ev.Response.Usage.InputTokens),
 			"completion_tokens": int(ev.Response.Usage.OutputTokens),
-			"total_tokens":      int(ev.Response.Usage.TotalTokens),
+			"total_tokens": int(resolveTotalTokens(
+				ev.Response.Usage.InputTokens,
+				ev.Response.Usage.OutputTokens,
+				ev.Response.Usage.TotalTokens,
+			)),
 		}
 		// 透传 cache / reasoning 明细，映射为 OpenAI Chat 的嵌套 details，
 		// 避免跨协议转换后 token 明细丢失（有真值才写，不写零值 details）。

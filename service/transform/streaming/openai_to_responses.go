@@ -490,7 +490,11 @@ func buildResponsesUsage(usage map[string]interface{}) map[string]interface{} {
 	usageMap := map[string]interface{}{
 		"input_tokens":  promptTokens,
 		"output_tokens": completionTokens,
-		"total_tokens":  int(maputil.Float64(usage, "total_tokens")),
+		"total_tokens": int(resolveTotalTokens(
+			int64(promptTokens),
+			int64(completionTokens),
+			int64(maputil.Float64(usage, "total_tokens")),
+		)),
 	}
 	// cached_tokens / reasoning_tokens 取上游尾包里的真值而非写死 0——
 	// openai-res processer 会把 cached_tokens 落库，写死 0 与 #18 同源。

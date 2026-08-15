@@ -88,12 +88,23 @@ func usageFromUpstreamMap(usage map[string]interface{}) models.Usage {
 		CompletionTokens: pickUsageField(usage, completionTokenPaths),
 		TotalTokens:      pickUsageField(usage, totalTokenPaths),
 	}
-	if u.TotalTokens == 0 {
-		u.TotalTokens = u.PromptTokens + u.CompletionTokens
-	}
+	u.TotalTokens = resolveTotalTokens(u.PromptTokens, u.CompletionTokens, u.TotalTokens)
 	u.PromptTokensDetails.CachedTokens = pickUsageField(usage, cachedTokenPaths)
 	u.CompletionTokensDetails.ReasoningTokens = pickUsageField(usage, reasoningTokenPaths)
 	return u
+}
+
+// resolveTotalTokens 统一 total 口径：上游省略 total（==0）时回退为 prompt+completion。
+//
+// 纯函数。收口这条回退，避免「发给客户端的 total」与「侧信道交给落库侧的 total」分叉——
+// 客户端写出点（responses_to_openai / openai_to_responses）此前直写上游原值，
+// 缺失时写出 0，而侧信道这侧有回退，结果客户端看 0、DB 记回退值（review-03 #6）。
+// 不含 Anthropic 的 cache token，与 service/chat/process.go 落库口径一致。
+func resolveTotalTokens(prompt, completion, total int64) int64 {
+	if total > 0 {
+		return total
+	}
+	return prompt + completion
 }
 
 // captureUpstreamUsageMap 在本跳持有侧信道时，记录上游原始 usage。

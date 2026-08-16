@@ -2,6 +2,7 @@ package models
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -23,6 +24,19 @@ func Init(ctx context.Context, path string) {
 	DB = db
 	migrate(ctx)
 	seed(ctx)
+}
+
+// Close 关闭数据库连接，供进程优雅关闭时在**排空后台写库任务之后**调用。
+// 提前调用会让仍在排空的任务撞上「数据库已关闭」。
+func Close() error {
+	if DB == nil {
+		return nil
+	}
+	sqlDB, err := DB.DB()
+	if err != nil {
+		return fmt.Errorf("get underlying sql.DB: %w", err)
+	}
+	return sqlDB.Close()
 }
 
 var dbPath string

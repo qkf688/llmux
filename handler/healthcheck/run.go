@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/qkf688/llmux/common/bgtask"
 	"github.com/qkf688/llmux/handler/httpx"
 	"github.com/qkf688/llmux/httpresp"
 	"github.com/qkf688/llmux/models"
@@ -35,14 +36,12 @@ func RunHealthCheck(c *gin.Context) {
 func RunHealthCheckAll(c *gin.Context) {
 	batchID := uuid.New().String()
 
-	go func() {
-		checker := service.GetHealthChecker()
-		ctx := context.Background()
-
-		if err := checker.CheckAllWithBatch(ctx, batchID); err != nil {
+	// 经 bgtask 登记：批量检测会落库，进程关闭时须排空而非被硬切。
+	bgtask.Go(func(ctx context.Context) {
+		if err := service.GetHealthChecker().CheckAllWithBatch(ctx, batchID); err != nil {
 			slog.Error("failed to run batch health check", "error", err, "batch_id", batchID)
 		}
-	}()
+	})
 
 	httpresp.Success(c, map[string]string{
 		"batch_id": batchID,

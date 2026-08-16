@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/common/bgtask"
 	"github.com/qkf688/llmux/httpresp"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service"
@@ -144,11 +145,11 @@ func UpdateHealthCheckSettings(c *gin.Context) {
 		return
 	}
 
-	// 重启健康检测服务
-	go service.GetHealthChecker().Restart(context.Background())
+	// 重启健康检测服务（沿用启动时的进程级 ctx，不再从请求侧注入 Background）
+	bgtask.Go(func(context.Context) { service.GetHealthChecker().Restart() })
 
 	// 执行日志清理以满足新的保留策略
-	go service.EnforceHealthCheckLogRetention(context.Background())
+	bgtask.Go(service.EnforceHealthCheckLogRetention)
 
 	// 返回更新后的设置
 	GetHealthCheckSettings(c)

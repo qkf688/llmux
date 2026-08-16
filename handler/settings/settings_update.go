@@ -8,6 +8,7 @@ import (
 	"reflect"
 
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/common/bgtask"
 	"github.com/qkf688/llmux/httpresp"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/settings"
@@ -42,7 +43,8 @@ func UpdateSettings(c *gin.Context) {
 
 	// 如果设置了保留条数限制，立即执行清理
 	if req.LogRetentionCount > 0 {
-		go cleanupExcessLogs(req.LogRetentionCount)
+		retentionCount := req.LogRetentionCount
+		bgtask.Go(func(context.Context) { cleanupExcessLogs(retentionCount) })
 	}
 
 	// 返回更新后的设置
@@ -62,7 +64,7 @@ func handleUpdateSettingsError(c *gin.Context, err error) {
 // triggerBatchImportForAutoSave 是「首次开启自动保存模板」的副作用出口。
 // 声明为变量以便测试替换（异步 goroutine 无法直接断言）。
 var triggerBatchImportForAutoSave = func() {
-	go batchImportExistingAssociations(context.Background())
+	bgtask.Go(batchImportExistingAssociations)
 }
 
 // updateSettingsFromRequest 根据 SettingSchema 反射遍历 UpdateSettingsRequest 字段并写入数据库。

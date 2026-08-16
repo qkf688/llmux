@@ -1,10 +1,10 @@
 package providerapi
 
 import (
-	"context"
 	"errors"
 
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/common/bgtask"
 	"github.com/qkf688/llmux/handler/autoassoc"
 	"github.com/qkf688/llmux/handler/httpx"
 	"github.com/qkf688/llmux/handler/settings"
@@ -78,7 +78,7 @@ func CreateProvider(c *gin.Context) {
 		return
 	}
 
-	go autoassoc.TriggerAutoAssociate(context.Background())
+	bgtask.Go(autoassoc.TriggerAutoAssociate)
 
 	httpresp.Success(c, provider)
 }
@@ -130,8 +130,8 @@ func UpdateProvider(c *gin.Context) {
 		return
 	}
 
-	go autoassoc.TriggerAutoAssociate(context.Background())
-	go autoassoc.TriggerAutoClean(context.Background())
+	bgtask.Go(autoassoc.TriggerAutoAssociate)
+	bgtask.Go(autoassoc.TriggerAutoClean)
 
 	httpresp.Success(c, updatedProvider)
 }
@@ -152,7 +152,7 @@ func DeleteProvider(c *gin.Context) {
 
 	autoClean := settings.GetSettingBool(ctx, models.SettingKeyAutoCleanOnDelete)
 	if autoClean {
-		go autoassoc.TriggerAutoClean(context.Background())
+		bgtask.Go(autoassoc.TriggerAutoClean)
 	} else {
 		if _, err := repos().ModelWithProvider.DeleteByProviderID(ctx, id); err != nil {
 			httpresp.InternalServerError(c, "Failed to delete provider: "+err.Error())

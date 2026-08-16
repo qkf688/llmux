@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/qkf688/llmux/common/bgtask"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/providers"
@@ -143,7 +144,7 @@ func (h *HealthChecker) saveHealthCheckLog(ctx context.Context, logEntry *models
 		return err
 	}
 
-	go EnforceHealthCheckLogRetention(context.Background())
+	bgtask.Go(EnforceHealthCheckLogRetention)
 	return nil
 }
 

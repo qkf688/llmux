@@ -217,40 +217,76 @@ func handleResponsesToOpenAICompletedEvent(state *realtimeStreamState, ev *respo
 		},
 	}
 
-	// 添加 usage 信息
-	if ev.Response != nil && ev.Response.Usage != nil {
-		// 上游 openai-res 原始 usage 旁路交给落库侧（本跳读上游时才持有 sideChannel）。
-		captureUpstreamUsageResponses(state, ev.Response.Usage)
-		usageMap := map[string]interface{}{
-			"prompt_tokens":     int(ev.Response.Usage.InputTokens),
-			"completion_tokens": int(ev.Response.Usage.OutputTokens),
-			"total_tokens": int(resolveTotalTokens(
-				ev.Response.Usage.InputTokens,
-				ev.Response.Usage.OutputTokens,
-				ev.Response.Usage.TotalTokens,
-			)),
-		}
-		// 透传 cache / reasoning 明细，映射为 OpenAI Chat 的嵌套 details，
-		// 避免跨协议转换后 token 明细丢失（有真值才写，不写零值 details）。
-		if d := ev.Response.Usage.InputTokenDetails; d != nil && d.CachedTokens > 0 {
-			usageMap["prompt_tokens_details"] = map[string]interface{}{
-				"cached_tokens": int(d.CachedTokens),
-			}
-		}
-		if d := ev.Response.Usage.OutputTokenDetails; d != nil && d.ReasoningTokens > 0 {
-			usageMap["completion_tokens_details"] = map[string]interface{}{
-				"reasoning_tokens": int(d.ReasoningTokens),
-			}
-		}
-		finalChunk["usage"] = usageMap
-	}
-
 	if err := writeRealtimeJSONData(state, finalChunk); err != nil {
 		return err
 	}
 
+	// usage 独立成尾包，不与 finish_reason 同包：OpenAI 流式规范里
+	// stream_options.include_usage 的 usage 是在 finish_reason **之后**单独发一个
+	// choices:[] 的包。本仓入站侧已按此规范实现（realtime.go 的 pendingUsage 为此
+	// 延后 response.completed），出站若塞进 finish 包，等于对同一协议事实持两套
+	// 相反假设，按规范只在尾包找 usage 的下游会读到 0。
+	if ev.Response != nil && ev.Response.Usage != nil {
+		u := ev.Response.Usage
+		// 上游 openai-res 原始 usage 旁路交给落库侧（本跳读上游时才持有 sideChannel）。
+		// 全零快照由 SetUpstreamUsage 判据丢弃，故此处无条件交，判空交给侧信道收口。
+		captureUpstreamUsageResponses(state, u)
+
+		// 全零 usage 不单独发尾包：拆包后尾包独占一个 chunk，下游会把「尾包存在」
+		// 读成「上游明确报告了 token 数」。与仓内既有口径一致——buildResponsesUsage
+		// 空则不写、侧信道全零丢弃、processer 要求 total!=0——全零不是有效观测。
+		if responsesUsageHasTokens(u) {
+			usageChunk := map[string]interface{}{
+				"id":      state.openAIID,
+				"object":  "chat.completion.chunk",
+				"created": state.openAICreated,
+				"model":   state.openAIModel,
+				"choices": []map[string]interface{}{},
+				"usage":   buildOpenAIUsageFromResponses(u),
+			}
+			if err := writeRealtimeJSONData(state, usageChunk); err != nil {
+				return err
+			}
+		}
+	}
+
 	// 发送 [DONE]
 	return writeRealtimeData(state, "[DONE]")
+}
+
+// buildOpenAIUsageFromResponses 把 Responses 的 usage 映射为 OpenAI Chat 的 usage 对象。
+// 纯函数：不读写 state、不碰流，便于直测。调用方保证 u != nil。
+//
+// total 缺失时走 resolveTotalTokens 回退，与侧信道交给落库侧的口径同源——两处各写
+// 一遍必然漂移（客户端看 0 而 DB 记回退值）。
+// cache / reasoning 明细映射为 OpenAI Chat 的嵌套 details，避免跨协议后明细丢失；
+// 只在有真值时才写，不产出零值 details。
+func buildOpenAIUsageFromResponses(u *responses.ResponsesUsage) map[string]interface{} {
+	usage := map[string]interface{}{
+		"prompt_tokens":     int(u.InputTokens),
+		"completion_tokens": int(u.OutputTokens),
+		"total_tokens":      int(resolveTotalTokens(u.InputTokens, u.OutputTokens, u.TotalTokens)),
+	}
+
+	if d := u.InputTokenDetails; d != nil && d.CachedTokens > 0 {
+		usage["prompt_tokens_details"] = map[string]interface{}{
+			"cached_tokens": int(d.CachedTokens),
+		}
+	}
+	if d := u.OutputTokenDetails; d != nil && d.ReasoningTokens > 0 {
+		usage["completion_tokens_details"] = map[string]interface{}{
+			"reasoning_tokens": int(d.ReasoningTokens),
+		}
+	}
+
+	return usage
+}
+
+// responsesUsageHasTokens 判定 usage 是否含有效 token，与 models.Usage.HasTokens 同口径：
+// 只看总量三字段，不看 cache / reasoning 明细——只有 cache 命中时总量仍为 0
+// （total 口径不含 Anthropic cache token），保留也拿不到计费值。调用方保证 u != nil。
+func responsesUsageHasTokens(u *responses.ResponsesUsage) bool {
+	return u.InputTokens > 0 || u.OutputTokens > 0 || u.TotalTokens > 0
 }
 
 func ensureOpenAIStreamMetaFromResponsesEvent(state *realtimeStreamState, ev *responses.ResponsesStreamEvent) {

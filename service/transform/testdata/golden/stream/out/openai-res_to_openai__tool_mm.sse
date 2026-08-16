@@ -10,7 +10,9 @@ data: {"choices":[{"delta":{"tool_calls":[{"function":{"arguments":"{\"location\
 
 data: {"choices":[{"delta":{"tool_calls":[{"function":{"arguments":":\"Beijing\"}"},"index":0}]},"finish_reason":null,"index":0}],"created":111,"id":"chatcmpl-resp_tool_mm","model":"responses-api","object":"chat.completion.chunk"}
 
-data: {"choices":[{"delta":{},"finish_reason":"tool_calls","index":0}],"created":111,"id":"chatcmpl-resp_tool_mm","model":"responses-api","object":"chat.completion.chunk","usage":{"completion_tokens":5,"prompt_tokens":10,"total_tokens":15}}
+data: {"choices":[{"delta":{},"finish_reason":"tool_calls","index":0}],"created":111,"id":"chatcmpl-resp_tool_mm","model":"responses-api","object":"chat.completion.chunk"}
+
+data: {"choices":[],"created":111,"id":"chatcmpl-resp_tool_mm","model":"responses-api","object":"chat.completion.chunk","usage":{"completion_tokens":5,"prompt_tokens":10,"total_tokens":15}}
 
 data: [DONE]
 

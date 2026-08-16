@@ -63,7 +63,7 @@ models/
   - 侧信道语义是「最后一次**有效**观测胜出」：**允许多次调用**，但后写的快照必须是先写快照的**超集**，否则会把已观测到的字段覆盖成 0。Anthropic 正是分两次交——`message_start` 先交 input 侧（上游若在此后异常结束，这是唯一一次机会），`message_delta` 再交含 input 侧的合并快照。之所以不做逐字段合并：合并需要区分「上游报了 0」与「上游没报」，map 解析后两者不可分，把超集责任交给最了解协议时序的转换器更可靠。全零快照的丢弃统一收口在 `models.TransformSideChannel.SetUpstreamUsage`（判据 `models.Usage.HasTokens`），各捕获点无需自行判空。落库侧消费见 [logs-metrics.md](logs-metrics.md) 的 `UsageSource`。
 - **上游 usage 字段容错走有序候选路径表**（`streaming/upstream_usage.go` 的 `usageFieldCandidates`），不是 per-provider if-else：新增一种非标准写法只加一行候选。已覆盖 usage 顶层 `reasoning_tokens`、`prompt_cache_hit_tokens`、Anthropic 的 `cache_read_input_tokens` 等
 - **`ResponsesUsage` 的 details 键名必须是复数**（`input_tokens_details` / `output_tokens_details`）：这是 OpenAI Responses 的线格式，也是 streaming 编码侧与 `service/chat/process.go` 的 `OpenAIResUsage` 解码侧一直在用的写法。曾误写单数 `input_token_details`，导致解码恒 nil（读侧成死代码）且编码输出不合规
-- **出站 usage 时序不对称（已知债务）**：`streaming/responses_to_openai.go` 给 openai 客户端出站时把 usage 塞进带 `finish_reason` 的同一个 chunk，与入站侧刚判定「不可假设」的形状相反。对官方 SDK 无害（两种都能解析），属一致性债务，见 next-do
+- **出站 usage 与入站同口径：独立尾包**：`streaming/responses_to_openai.go` 给 openai 客户端出站时，`finish_reason` 那包**不带** usage，usage 单独发一个 `choices:[]` 的尾部 chunk（仍带 `id`/`object`/`created`/`model`——是完整 chunk 而非裸 usage 对象），随后才是 `[DONE]`。与上方入站侧的规范认定对称：出站若塞进 finish 包，同一 codebase 就对同一协议事实持两套相反假设。usage 对象由纯函数 `buildOpenAIUsageFromResponses` 构建（total 缺失回退复用 `resolveTotalTokens`，与侧信道落库同源；cache / reasoning details 仅在有真值时写）。`captureUpstreamUsageResponses` 仍在该分支内恰好调用一次——落库值来自侧信道，与出站 chunk 形状无关。注：`service/chat/process.go` 的 openai processer `streamUsageExtract` 逐 chunk 扫 usage、不假设位置，故 downstream 兜底路径不受影响。`anthropic → openai` 走 anthropic→responses→openai 双跳，出站形状同此
 
 
 

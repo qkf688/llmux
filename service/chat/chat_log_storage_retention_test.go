@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"testing"
 
 	"github.com/qkf688/llmux/models"
@@ -63,7 +64,7 @@ func TestCleanupLogsIfNeeded_HardDeletesSoftDeletedBeyondRetention(t *testing.T)
 		t.Fatalf("total logs = %d, want 200", total)
 	}
 
-	cleanupLogsIfNeeded()
+	cleanupLogsIfNeeded(context.Background())
 
 	var afterTotal int64
 	if err := models.DB.Unscoped().Model(&models.ChatLog{}).Count(&afterTotal).Error; err != nil {

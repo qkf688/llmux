@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/qkf688/llmux/common/bgtask"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/providers"
 	"github.com/qkf688/llmux/service/chatcore"
@@ -71,10 +72,14 @@ type retryLoopOutcome struct {
 // retryLog 通道的生命周期完全由本函数持有：一个候选池对应一条通道，循环退出即
 // 关闭。调用方无需（也不应）手动 close——虚拟路径此前在 5 个返回分支各写一次
 // close，漏一处即泄漏 RecordRetryLog goroutine。
+//
+// RecordRetryLog 经 bgtask 登记：其 ctx 不随请求取消（写库/权重衰减必须跑完，见
+// bgtask 包注释），且进程关闭时会等它把通道剩余元素排空落库。
 func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 	retryLog := make(chan models.ChatLog, in.MaxRetry)
 	defer close(retryLog)
-	go RecordRetryLog(context.Background(), retryLog, in.Pool.ModelWithProviderMap)
+	modelWithProviderMap := in.Pool.ModelWithProviderMap
+	bgtask.Go(func(ctx context.Context) { RecordRetryLog(ctx, retryLog, modelWithProviderMap) })
 
 	for retry := range in.MaxRetry {
 		select {

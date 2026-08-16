@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/qkf688/llmux/common/bgtask"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/chatstats"
 )
@@ -31,15 +32,13 @@ func SaveChatLog(ctx context.Context, log models.ChatLog) (uint, error) {
 	if err := repos().ChatLog.Create(ctx, &log); err != nil {
 		return 0, err
 	}
-	// 异步执行日志清理，避免阻塞主流程
-	go cleanupLogsIfNeeded()
+	// 异步执行日志清理，避免阻塞主流程；经 bgtask 登记以便进程关闭时排空。
+	bgtask.Go(cleanupLogsIfNeeded)
 	return log.ID, nil
 }
 
 // cleanupLogsIfNeeded 检查并清理超出保留条数的日志
-func cleanupLogsIfNeeded() {
-	ctx := context.Background()
-
+func cleanupLogsIfNeeded(ctx context.Context) {
 	// 获取日志保留条数设置
 	retentionCount := getLogRetentionCount(ctx)
 	if retentionCount <= 0 {

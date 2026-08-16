@@ -10,21 +10,23 @@ import (
 // persistChatLog 负责响应后处理中的 IO 落库：
 //  1. 若开启 ResponseBody 记录，将 output 拼装为字符串写入 logUpdate.ResponseBody；
 //  2. 更新 ChatLog 记录（status / usage / timing / response_body 等）；
-//  3. 若 ioLog=true，写入 ChatIO（输入 + 输出联合体）。
+//  3. 若 in.IOLog=true，写入 ChatIO（输入 + 输出联合体）。
 //
+// 复用 RecordLogInput 取 LogID / Before / IOLog，另外三个参数是后处理运行时产物，
+// 不属于入参快照，故并列传入而非塞进结构体。
 // 与 stats.go（统计）各司其职；raw 清理（maybeClearRawOnSuccess）已合入本文件。
-func persistChatLog(ctx context.Context, logID uint, logUpdate models.ChatLog, before Before, output *models.OutputUnion, ioLog bool, opts models.RawLogOptions) error {
+func persistChatLog(ctx context.Context, in RecordLogInput, logUpdate models.ChatLog, output *models.OutputUnion, opts models.RawLogOptions) error {
 	if opts.ResponseBody {
 		applyResponseBodyToLog(&logUpdate, output)
 	}
 
-	if _, err := repos().ChatLog.UpdateByID(ctx, logID, logUpdate); err != nil {
-		slog.Error("failed to update log", "log_id", logID, "error", err)
+	if _, err := repos().ChatLog.UpdateByID(ctx, in.LogID, logUpdate); err != nil {
+		slog.Error("failed to update log", "log_id", in.LogID, "error", err)
 		return err
 	}
 
-	if ioLog {
-		if err := createChatIO(ctx, logID, before.raw, output); err != nil {
+	if in.IOLog {
+		if err := createChatIO(ctx, in.LogID, in.Before.raw, output); err != nil {
 			return err
 		}
 	}

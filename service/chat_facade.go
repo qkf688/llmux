@@ -45,8 +45,10 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 	return chat.BalanceChat(ctx, start, style, before, providersWithMeta, reqMeta)
 }
 
-func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, processer Processer, logID uint, before Before, ioLog bool, providerName string, sideChannel *models.TransformSideChannel) {
-	chat.RecordLog(ctx, reqStart, reader, processer, logID, before, ioLog, providerName, sideChannel)
+type RecordLogInput = chat.RecordLogInput
+
+func RecordLog(ctx context.Context, in RecordLogInput) {
+	chat.RecordLog(ctx, in)
 }
 
 func GetStripResponseHeaders(ctx context.Context) bool { return chat.GetStripResponseHeaders(ctx) }

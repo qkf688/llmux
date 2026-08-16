@@ -61,7 +61,14 @@ func TestRecordLog_ErrorsOnly_ClearsRawFieldsOnSuccess(t *testing.T) {
 		return &models.ChatLog{}, &models.OutputUnion{OfString: `{"ok":true}`}, nil
 	}
 
-	RecordLog(context.Background(), time.Now(), io.NopCloser(strings.NewReader("x")), proc, log.ID, Before{Stream: false, raw: []byte(`{}`)}, false, "p", nil)
+	RecordLog(context.Background(), RecordLogInput{
+		ReqStart:     time.Now(),
+		Reader:       io.NopCloser(strings.NewReader("x")),
+		Processer:    proc,
+		LogID:        log.ID,
+		Before:       Before{Stream: false, raw: []byte(`{}`)},
+		ProviderName: "p",
+	})
 
 	var got models.ChatLog
 	if err := models.DB.First(&got, log.ID).Error; err != nil {
@@ -110,7 +117,14 @@ func TestRecordLog_ErrorsOnly_DoesNotClearRawFieldsOnErrorStatus(t *testing.T) {
 		return &models.ChatLog{}, &models.OutputUnion{OfString: `{"ok":true}`}, nil
 	}
 
-	RecordLog(context.Background(), time.Now(), io.NopCloser(strings.NewReader("x")), proc, log.ID, Before{Stream: false, raw: []byte(`{}`)}, false, "p", nil)
+	RecordLog(context.Background(), RecordLogInput{
+		ReqStart:     time.Now(),
+		Reader:       io.NopCloser(strings.NewReader("x")),
+		Processer:    proc,
+		LogID:        log.ID,
+		Before:       Before{Stream: false, raw: []byte(`{}`)},
+		ProviderName: "p",
+	})
 
 	var got models.ChatLog
 	if err := models.DB.First(&got, log.ID).Error; err != nil {

@@ -11,33 +11,46 @@ import (
 	"github.com/qkf688/llmux/service/chatstats"
 )
 
+// RecordLogInput 收敛 RecordLog 的后处理入参，避免签名膨胀成超长参数列表。
+// ctx 按 Go 惯例保留在 RecordLog 外层，不进结构体。
+//
+// SideChannel 是转换层旁路：携带流式响应的原始 SSE 累积体（流结束后已写满）与上游原始 usage。
+// 未经协议转换（style == provider type）或未开启记录时为 nil，读取方法均 nil-safe。
+type RecordLogInput struct {
+	ReqStart     time.Time
+	Reader       io.ReadCloser
+	Processer    Processer
+	LogID        uint
+	Before       Before
+	IOLog        bool
+	ProviderName string
+	SideChannel  *models.TransformSideChannel
+}
+
 // RecordLog 是后处理编排器：processer 解析 → stats 统计 → 日志落库 → raw 字段清理。
 // 各关注点的实现分散在 stats.go / chat_record_persist.go（含 raw 清理），
 // 本函数仅负责按正确顺序串联并处理错误传播。
-//
-// sideChannel 是转换层旁路：携带流式响应的原始 SSE 累积体（流结束后已写满）与上游原始 usage。
-// 未经协议转换（style == provider type）或未开启记录时为 nil，方法均 nil-safe。
-func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, processer Processer, logID uint, before Before, ioLog bool, providerName string, sideChannel *models.TransformSideChannel) {
+func RecordLog(ctx context.Context, in RecordLogInput) {
 	recordFunc := func() error {
-		defer reader.Close()
+		defer in.Reader.Close()
 
 		// 配置开关经 chat_settings getter → 包级 settingsReader（默认 ModelsReader）。
 		disablePerformanceTracking := getDisablePerformanceTracking(ctx)
 		disableTokenCounting := getDisableTokenCounting(ctx)
 
-		log, output, err := processer(ctx, reader, before.Stream, reqStart, disablePerformanceTracking, disableTokenCounting)
+		log, output, err := in.Processer(ctx, in.Reader, in.Before.Stream, in.ReqStart, disablePerformanceTracking, disableTokenCounting)
 		if err != nil {
-			slog.Error("processer error", "log_id", logID, "error", err)
-			if logID != 0 {
-				if _, updateErr := repos().ChatLog.UpdateByID(ctx, logID, models.ChatLog{
+			slog.Error("processer error", "log_id", in.LogID, "error", err)
+			if in.LogID != 0 {
+				if _, updateErr := repos().ChatLog.UpdateByID(ctx, in.LogID, models.ChatLog{
 					Status: "error",
 					Error:  fmt.Sprintf("processer error: %v", err),
 				}); updateErr != nil {
-					slog.Error("failed to update log status on processer error", "log_id", logID, "error", updateErr)
+					slog.Error("failed to update log status on processer error", "log_id", in.LogID, "error", updateErr)
 				}
 			}
 
-			if statErr := chatstats.RecordProviderStats(ctx, providerName, false, 0, 0); statErr != nil {
+			if statErr := chatstats.RecordProviderStats(ctx, in.ProviderName, false, 0, 0); statErr != nil {
 				slog.Warn("failed to record provider stats on processer error", "error", statErr)
 			}
 			return err
@@ -48,20 +61,20 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 		// usage 归集：优先采用转换层旁路交出的上游原始 usage。
 		// 必须在统计之前完成——RecordTokenStats / RecordProviderStats 都读
 		// logUpdate.Usage.TotalTokens，晚于它们修正就只修了日志、没修计量。
-		resolveUsageSource(&logUpdate, sideChannel, providerName)
+		resolveUsageSource(&logUpdate, in.SideChannel, in.ProviderName)
 
 		// 统计独立于日志存储：即使关闭日志记录（logID==0），也要写入 tokens 统计。
-		if err := chatstats.RecordTokenStats(ctx, reqStart, logUpdate.Usage.TotalTokens); err != nil {
+		if err := chatstats.RecordTokenStats(ctx, in.ReqStart, logUpdate.Usage.TotalTokens); err != nil {
 			slog.Warn("failed to record token stats", "error", err)
 		}
 
 		responseTimeMs := int64(logUpdate.FirstChunkTime.Milliseconds())
-		if statErr := chatstats.RecordProviderStats(ctx, providerName, true, responseTimeMs, logUpdate.Usage.TotalTokens); statErr != nil {
+		if statErr := chatstats.RecordProviderStats(ctx, in.ProviderName, true, responseTimeMs, logUpdate.Usage.TotalTokens); statErr != nil {
 			slog.Warn("failed to record provider stats", "error", statErr)
 		}
 
 		// 若未记录 ChatLog（例如 disable_all_logs=true），这里不再进行任何日志表更新/写入。
-		if logID == 0 {
+		if in.LogID == 0 {
 			return nil
 		}
 
@@ -73,22 +86,22 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 		// 流式响应的原始 body 由转换层旁路提供（非流式已在 chat_attempt 层写入）。
 		// goroutine 已结束（processer 读到 EOF = 流结束），此处读取旁路无并发。
 		if logRawOptions.RawResponseBody && logUpdate.RawResponseBody == "" {
-			if raw := sideChannel.RawBody(); raw != "" {
+			if raw := in.SideChannel.RawBody(); raw != "" {
 				logUpdate.RawResponseBody = raw
 			}
 		}
 
 		// IO 落库：更新 ChatLog + 可选写 ChatIO。
-		if err := persistChatLog(ctx, logID, logUpdate, before, output, ioLog, logRawOptions); err != nil {
+		if err := persistChatLog(ctx, in, logUpdate, output, logRawOptions); err != nil {
 			return err
 		}
 
 		// 成功日志的 raw 字段清理策略（errors-only）。
-		maybeClearRawOnSuccess(ctx, logID, logRawErrorsOnly, rawLogEnabled)
+		maybeClearRawOnSuccess(ctx, in.LogID, logRawErrorsOnly, rawLogEnabled)
 		return nil
 	}
 	if err := recordFunc(); err != nil {
-		slog.Error("record log error", "log_id", logID, "error", err)
+		slog.Error("record log error", "log_id", in.LogID, "error", err)
 	}
 }
 

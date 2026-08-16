@@ -142,7 +142,16 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 	// 异步处理输出并记录 tokens
 	go func() {
 		defer wg.Done()
-		service.RecordLog(context.Background(), startReq, pr, postProcessor, logID, *before, providersWithMeta.IOLog, providerName, sideChannel)
+		service.RecordLog(context.Background(), service.RecordLogInput{
+			ReqStart:     startReq,
+			Reader:       pr,
+			Processer:    postProcessor,
+			LogID:        logID,
+			Before:       *before,
+			IOLog:        providersWithMeta.IOLog,
+			ProviderName: providerName,
+			SideChannel:  sideChannel,
+		})
 	}()
 
 	writeHeader(c, ctx, before.Stream, res.Header)

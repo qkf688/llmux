@@ -5,7 +5,12 @@ services:
       - 7070:7070
     volumes:
       - ./db:/app/db
+    # 必须 > main.go 的关闭预算（serverShutdownTimeout 30s + bgtaskDrainTimeout 10s）。
+    # Docker 默认只给 10s，SIGTERM 后进程会在排空后台写库任务前被 SIGKILL，
+    # 优雅关闭形同虚设。k8s 部署同步设 terminationGracePeriodSeconds: 45。
+    stop_grace_period: 45s
     environment:
       - GIN_MODE=release
-      - TOKEN=<YOUR_TOKEN>
+      - JWT_SECRET=<YOUR_JWT_SECRET>
+      - ADMIN_PASSWORD=<YOUR_ADMIN_PASSWORD>
       - TZ=Asia/Shanghai

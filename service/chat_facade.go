@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"io"
-	"net/http"
 	"time"
 
 	"github.com/qkf688/llmux/models"
@@ -41,8 +40,11 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 	return chat.ProvidersWithMetaBymodelsName(ctx, style, before)
 }
 
-func BalanceChat(ctx context.Context, start time.Time, style string, before Before, providersWithMeta ProvidersWithMeta, reqMeta models.ReqMeta) (*http.Response, uint, string, *models.TransformSideChannel, error) {
-	return chat.BalanceChat(ctx, start, style, before, providersWithMeta, reqMeta)
+type BalanceInput = chat.BalanceInput
+type BalanceResult = chat.BalanceResult
+
+func BalanceChat(ctx context.Context, in BalanceInput) (*BalanceResult, error) {
+	return chat.BalanceChat(ctx, in)
 }
 
 type RecordLogInput = chat.RecordLogInput

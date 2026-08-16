@@ -29,7 +29,8 @@ service/
 │   ├── registry.go         # Beforer/Processer 注册表
 │   ├── before.go           # 请求前处理
 │   ├── process.go          # 响应/SSE 处理
-│   ├── chat_balance*.go    # 选路与虚拟模型故障转移
+│   ├── chat_balance*.go    # 选路入口与虚拟模型故障转移（真实/虚拟两条路径的编排）
+│   ├── chat_retry_loop.go  # 单候选池上的重试循环（两条 balance 路径共用）
 │   ├── chat_attempt*.go    # 单次上游尝试（types/request/log/error 按职责拆分）
 │   ├── chat_record*.go     # 日志后处理编排与 raw 清理
 │   ├── chat_provider_meta.go # 供应商元数据装配 + 模型-供应商查询
@@ -54,7 +55,8 @@ balancer/                   # 加权随机纯算法
 | 契约 | 职责 | 定义位置 | 实现方 |
 |------|------|----------|--------|
 | `Beforer` / `Processer` | 按 style 预处理请求 / 处理上游响应 | `service/chat`（门面 re-export） | style 注册实现 |
-| `BalanceChat` | 在候选供应商上执行带重试的转发 | `service/chat_facade.go` | `service/chat` |
+| `BalanceChat` | 在候选供应商上执行带重试的转发；入参 `BalanceInput`、返回 `*BalanceResult` | `service/chat_facade.go` | `service/chat` |
+| `runProviderRetryLoop` | 在**单个候选池**上执行「选路 → 尝试 → 淘汰」重试循环，产出 `retryLoopOutcome`（成功/穷尽/中止） | `service/chat/chat_retry_loop.go` | `service/chat`（包内，真实与虚拟路径共用） |
 | `ProvidersWithMetaBymodelsName` | 按模型名解析候选供应商元信息（含虚拟模型分支） | `service/chat` | `service/chat` |
 | `chatcore.SelectByPriorityAndWeight` | 在关联列表上按优先级与权重选供应商 | `service/chatcore/` | `service/chatcore` |
 | `balancer.WeightedRandom` | 加权随机选取 | `balancer/balancer.go` | 泛型算法 |
@@ -66,8 +68,9 @@ balancer/                   # 加权随机纯算法
 - **扩展最小改动集（现状）**：style 注册 `Beforer`/`Processer` + `register_v1` 路由 + transform 适配/流路由 + `consts`；不在 `main.go` 写业务路由
 - **数据访问**：统一经 `repos()`（`service/chat/repos.go` → `repository.Default()`），**禁止**直连 `models.DB`/`gorm.G`；旁路包 `chatstats` 同样经 `repos().Stats`（`repository.StatsRepo`）
 - **职责拆分（现状）**：选路/重试/协议/日志落库编排仍在 `service/chat`；Stats 在 `chatstats`；权重调整在 `adjustment`。改统计策略与改选路策略不再同文件碰撞；日志 IO 存储仍可后续下沉
-- 虚拟模型路径：先由 `virtualmodel` 产出有序真实模型，再在真实模型层做 provider 级选路（两层 LB）
-- **thinking 裁剪（能力标记联动）**：`ProvidersWithMeta` 携带 `Model`（真实路径为查询到的 model；虚拟路径为正在尝试的 ordered model），经 `singleProviderAttemptInput.Model` 传入单次尝试；`buildRequestBodyForProvider` 在入口处调用纯函数 `stripThinkingFields`（`chat_attempt_request.go`）——当 `ModelWithProvider.SupportsThinkingResolved(model)` 为 `false` 时删除请求体中的 `thinking`/`reasoning_effort`/`reasoning`/`output_config.effort` 字段（Anthropic adaptive thinking 字段），避免不支持 thinking 的上游报 400/静默忽略；`output_config.effort` 删除后若 `output_config` 变空对象则连壳删除，避免残留空对象；失败仅记录日志不阻断主流程。裁剪与 `clampMaxTokens` 同属"构建请求体时的保护性改写"，两条路径（真实/虚拟模型）共享同一入口
+- 虚拟模型路径：先由 `virtualmodel` 产出有序真实模型，再在真实模型层做 provider 级选路（两层 LB）。两条路径的差异只体现在**候选池如何构建**与**穷尽后如何处置**（真实路径整体失败；虚拟路径换下一个真实模型），provider 级重试循环本身由 `runProviderRetryLoop` 单点承载，不再各写一份
+- **retryLog 生命周期**：`RecordRetryLog` 消费的通道由 `runProviderRetryLoop` 独占持有（一候选池一通道，`defer close`），调用方**禁止**手动 close——此前虚拟路径在多个返回分支各写一次 close，漏一处即泄漏 goroutine
+- **thinking 裁剪（能力标记联动）**：`ProvidersWithMeta` 携带 `Model`（真实路径为查询到的 model；虚拟路径为正在尝试的 ordered model），经 `retryLoopInput.Model` → `singleProviderAttemptInput.Model` 传入单次尝试；`buildRequestBodyForProvider` 在入口处调用纯函数 `stripThinkingFields`（`chat_attempt_request.go`）——当 `ModelWithProvider.SupportsThinkingResolved(model)` 为 `false` 时删除请求体中的 `thinking`/`reasoning_effort`/`reasoning`/`output_config.effort` 字段（Anthropic adaptive thinking 字段），避免不支持 thinking 的上游报 400/静默忽略；`output_config.effort` 删除后若 `output_config` 变空对象则连壳删除，避免残留空对象；失败仅记录日志不阻断主流程。裁剪与 `clampMaxTokens` 同属"构建请求体时的保护性改写"，两条路径（真实/虚拟模型）共享同一入口
 - **思考档位钳制（Stage B 扩档）**：`buildRequestBodyForProvider` 重构为接收 `ProviderRequestCaps` 结构体（含 `Style`/`ProviderType`/`Raw`/`MaxTokensLimit`/`SupportsThinking`/`ThinkingClamp`），避免位置参数横向膨胀。`SupportsThinking=true` 时由 `buildThinkingClampConfig`（`chat_settings.go`）从 ctx 读取设置 + `ThinkingLevelsResolved` 白名单构建 `transform.ThinkingClampConfig`，传入 `ProcessRequest`（transform 路径）或 `clampPassthroughReasoning`（passthrough 路径）执行就近钳制 + budget 联动（方案 E）。`SupportsThinking=false` 时 `ThinkingClamp` 为 nil（thinking 已被 `stripThinkingFields` 剥离，钳制无意义）。钳制规则详见 `protocol-transform.md`。
 - `service/chat_facade.go` 为兼容 re-export，不是第二实现
 - `chatstats` / `adjustment` 为叶子包，**禁止** import `service/chat`

@@ -8,83 +8,70 @@ import (
 	"time"
 
 	"github.com/qkf688/llmux/models"
-	"github.com/qkf688/llmux/providers"
-	"github.com/qkf688/llmux/service/chatcore"
 )
 
-func BalanceChat(ctx context.Context, start time.Time, style string, before Before, providersWithMeta ProvidersWithMeta, reqMeta models.ReqMeta) (*http.Response, uint, string, *models.TransformSideChannel, error) {
-	slog.Info("request", "model", before.Model, "stream", before.Stream, "tool_call", before.toolCall, "structured_output", before.structuredOutput, "image", before.image)
+// BalanceInput 是 BalanceChat 的入参集合。
+type BalanceInput struct {
+	Start             time.Time
+	Style             string
+	Before            Before
+	ProvidersWithMeta ProvidersWithMeta
+	ReqMeta           models.ReqMeta
+}
+
+// BalanceResult 是转发成功后的产物：待回写给客户端的响应，以及后处理落库
+// （RecordLog）所需的关联信息。
+type BalanceResult struct {
+	Response     *http.Response
+	LogID        uint
+	ProviderName string
+
+	// SideChannel 承载转换旁路产物：上游原始 SSE 累积体与上游原始 usage。
+	// 直通路径无转换层可旁路，故为 nil。
+	SideChannel *models.TransformSideChannel
+}
+
+func BalanceChat(ctx context.Context, in BalanceInput) (*BalanceResult, error) {
+	slog.Info("request",
+		"model", in.Before.Model,
+		"stream", in.Before.Stream,
+		"tool_call", in.Before.toolCall,
+		"structured_output", in.Before.structuredOutput,
+		"image", in.Before.image,
+	)
 
 	// 检查是否是虚拟模型
-	if providersWithMeta.IsVirtualModel {
-		return balanceChatVirtual(ctx, start, style, before, providersWithMeta, reqMeta)
+	if in.ProvidersWithMeta.IsVirtualModel {
+		return balanceChatVirtual(ctx, in)
 	}
 
-	providerMap := providersWithMeta.ProviderMap
-	weightItems := providersWithMeta.WeightItems
-	priorityItems := providersWithMeta.PriorityItems
+	pwm := in.ProvidersWithMeta
 
-	retryLog := make(chan models.ChatLog, providersWithMeta.MaxRetry)
-	defer close(retryLog)
-	go RecordRetryLog(context.Background(), retryLog, providersWithMeta.ModelWithProviderMap)
-
-	timer := time.NewTimer(time.Second * time.Duration(providersWithMeta.TimeOut))
+	timer := time.NewTimer(time.Second * time.Duration(pwm.TimeOut))
 	defer timer.Stop()
 
-	for retry := range providersWithMeta.MaxRetry {
-		select {
-		case <-ctx.Done():
-			return nil, 0, "", nil, ctx.Err()
-		case <-timer.C:
-			return nil, 0, "", nil, errors.New("retry time out")
-		default:
-		}
+	outcome := runProviderRetryLoop(retryLoopInput{
+		Ctx:           ctx,
+		Start:         in.Start,
+		Style:         in.Style,
+		Before:        in.Before,
+		ReqMeta:       in.ReqMeta,
+		IOLog:         pwm.IOLog,
+		Pool:          pwm.CandidatePool,
+		RealModelName: in.Before.Model,
+		Model:         pwm.Model,
+		MaxRetry:      pwm.MaxRetry,
+		ClientTimeout: time.Second * time.Duration(pwm.TimeOut),
+		Deadline:      timer.C,
+		DeadlineErr:   errors.New("retry time out"),
+	})
 
-		id, err := chatcore.SelectByPriorityAndWeight(weightItems, priorityItems)
-		if err != nil {
-			return nil, 0, "", nil, err
-		}
-
-		modelWithProvider, ok := providersWithMeta.ModelWithProviderMap[*id]
-		if !ok {
-			delete(weightItems, *id)
-			continue
-		}
-
-		provider := providerMap[modelWithProvider.ProviderID]
-		chatModel, err := providers.New(provider.Type, provider.Config, provider.Proxy)
-		if err != nil {
-			return nil, 0, "", nil, err
-		}
-
-		client := providers.GetClientWithProxy(time.Second*time.Duration(providersWithMeta.TimeOut), chatModel.GetProxy())
-		slog.Info("using provider", "provider", provider.Name, "model", modelWithProvider.ProviderModel, "proxy", chatModel.GetProxy())
-
-		result := executeSingleProviderAttempt(singleProviderAttemptInput{
-			Ctx:               ctx,
-			Start:             start,
-			Style:             style,
-			Before:            before,
-			RealModelName:     before.Model,
-			ReqMeta:           reqMeta,
-			IOLog:             providersWithMeta.IOLog,
-			Retry:             retry,
-			Provider:          provider,
-			ModelWithProvider: modelWithProvider,
-			Model:             providersWithMeta.Model,
-			ChatModel:         chatModel,
-			Client:            client,
-		}, retryLog)
-
-		if result.FatalErr != nil {
-			return nil, 0, "", nil, result.FatalErr
-		}
-		if result.Success {
-			return result.Response, result.LogID, provider.Name, result.SideChannel, nil
-		}
-
-		applyProviderSelectionResult(weightItems, priorityItems, *id, result)
+	switch outcome.Status {
+	case retryLoopSucceeded:
+		return outcome.Result, nil
+	case retryLoopAborted:
+		return nil, outcome.Err
+	default:
+		return nil, errors.New("maximum retry attempts reached")
 	}
-
-	return nil, 0, "", nil, errors.New("maximum retry attempts reached")
 }

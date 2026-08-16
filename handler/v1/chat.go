@@ -115,10 +115,16 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 
 	startReq := time.Now()
 	// 调用负载均衡后的 provider 并转发
-	res, logID, providerName, sideChannel, err := service.BalanceChat(ctx, startReq, style, *before, *providersWithMeta, models.ReqMeta{
-		Header:    c.Request.Header,
-		RemoteIP:  c.ClientIP(),
-		UserAgent: c.Request.UserAgent(),
+	balanced, err := service.BalanceChat(ctx, service.BalanceInput{
+		Start:             startReq,
+		Style:             style,
+		Before:            *before,
+		ProvidersWithMeta: *providersWithMeta,
+		ReqMeta: models.ReqMeta{
+			Header:    c.Request.Header,
+			RemoteIP:  c.ClientIP(),
+			UserAgent: c.Request.UserAgent(),
+		},
 	})
 	if err != nil {
 		var statusCoder interface{ StatusCode() int }
@@ -130,6 +136,7 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 		httpresp.InternalServerError(c, err.Error())
 		return
 	}
+	res := balanced.Response
 	defer res.Body.Close()
 
 	pr, pw := io.Pipe()
@@ -146,11 +153,11 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 			ReqStart:     startReq,
 			Reader:       pr,
 			Processer:    postProcessor,
-			LogID:        logID,
+			LogID:        balanced.LogID,
 			Before:       *before,
 			IOLog:        providersWithMeta.IOLog,
-			ProviderName: providerName,
-			SideChannel:  sideChannel,
+			ProviderName: balanced.ProviderName,
+			SideChannel:  balanced.SideChannel,
 		})
 	}()
 

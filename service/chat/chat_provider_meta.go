@@ -14,17 +14,42 @@ import (
 	"gorm.io/gorm"
 )
 
-type ProvidersWithMeta struct {
+// CandidatePool 是「某个真实模型下的可用供应商候选集」：选路重试循环所需的全部候选数据。
+// 真实路径在解析请求时构建一次；虚拟路径为每个 ordered model 各构建一次。
+type CandidatePool struct {
 	ModelWithProviderMap map[uint]models.ModelWithProvider
+	ProviderMap          map[uint]models.Provider
 	WeightItems          map[uint]int
 	PriorityItems        map[uint]int
-	ProviderMap          map[uint]models.Provider
-	MaxRetry             int
-	TimeOut              int
-	IOLog                bool
+}
+
+// buildCandidatePool 由关联列表装配候选池。err 只上抛不处理——真实路径据此中断请求、
+// 虚拟路径据此跳过当前真实模型，两种分歧留在各自调用点（本函数不含路径判断）。
+func buildCandidatePool(ctx context.Context, modelWithProviders []models.ModelWithProvider) (CandidatePool, error) {
+	providerMap, err := buildProviderMapByModelProviders(ctx, modelWithProviders)
+	if err != nil {
+		return CandidatePool{}, err
+	}
+	weightItems, priorityItems := buildSelectionItemsByModelProviders(modelWithProviders, providerMap)
+	return CandidatePool{
+		ModelWithProviderMap: lo.KeyBy(modelWithProviders, func(mp models.ModelWithProvider) uint { return mp.ID }),
+		ProviderMap:          providerMap,
+		WeightItems:          weightItems,
+		PriorityItems:        priorityItems,
+	}, nil
+}
+
+type ProvidersWithMeta struct {
+	// CandidatePool 真实路径的候选供应商集合；虚拟路径为零值——其候选池在
+	// balanceChatVirtual 循环内按当前 ordered model 逐个构建，不经本字段。
+	CandidatePool CandidatePool
+
+	MaxRetry int
+	TimeOut  int
+	IOLog    bool
 
 	// Model 当前请求关联的真实模型：真实路径为查询到的 model；虚拟路径不设置本字段
-	//（虚拟分支在 balanceChatVirtual 循环内经 singleProviderAttemptInput.Model 注入正在尝试的 ordered model）。
+	//（虚拟分支在 balanceChatVirtual 循环内经 retryLoopInput.Model 注入正在尝试的 ordered model）。
 	// 供裁剪 thinking 字段时解析 ModelWithProvider.SupportsThinkingResolved（关联 override → model 继承）。
 	Model *models.Model
 
@@ -85,13 +110,9 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 		}
 
 		return &ProvidersWithMeta{
-			ModelWithProviderMap: map[uint]models.ModelWithProvider{},
-			WeightItems:          map[uint]int{},
-			PriorityItems:        map[uint]int{},
-			ProviderMap:          map[uint]models.Provider{},
-			MaxRetry:             firstModel.MaxRetry,
-			TimeOut:              firstModel.TimeOut,
-			IOLog:                *firstModel.IOLog,
+			MaxRetry: firstModel.MaxRetry,
+			TimeOut:  firstModel.TimeOut,
+			IOLog:    *firstModel.IOLog,
 			// 虚拟模型相关字段
 			IsVirtualModel:    true,
 			VirtualModelID:    virtualModel.ID,
@@ -128,16 +149,12 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 		return nil, errors.New("not provider for model " + before.Model)
 	}
 
-	modelWithProviderMap := lo.KeyBy(modelWithProviders, func(mp models.ModelWithProvider) uint { return mp.ID })
-
 	// 不再按 style 过滤供应商，因为现在支持格式转换
 	// 客户端可以使用任意格式请求任意类型的供应商
-	providerMap, err := buildProviderMapByModelProviders(ctx, modelWithProviders)
+	pool, err := buildCandidatePool(ctx, modelWithProviders)
 	if err != nil {
 		return nil, err
 	}
-
-	weightItems, priorityItems := buildSelectionItemsByModelProviders(modelWithProviders, providerMap)
 
 	// 按优先级排序供应商（用于日志输出）
 	type providerPriority struct {
@@ -145,7 +162,7 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 		Priority int
 	}
 	var sortedProviders []providerPriority
-	for id, priority := range priorityItems {
+	for id, priority := range pool.PriorityItems {
 		sortedProviders = append(sortedProviders, providerPriority{ID: id, Priority: priority})
 	}
 	sort.Slice(sortedProviders, func(i, j int) bool {
@@ -158,14 +175,11 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 	}
 
 	return &ProvidersWithMeta{
-		ModelWithProviderMap: modelWithProviderMap,
-		WeightItems:          weightItems,
-		PriorityItems:        priorityItems,
-		ProviderMap:          providerMap,
-		MaxRetry:             model.MaxRetry,
-		TimeOut:              model.TimeOut,
-		IOLog:                *model.IOLog,
-		Model:                model,
+		CandidatePool: pool,
+		MaxRetry:      model.MaxRetry,
+		TimeOut:       model.TimeOut,
+		IOLog:         *model.IOLog,
+		Model:         model,
 	}, nil
 }
 

@@ -5,14 +5,17 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/qkf688/llmux/common/bgtask"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/repository"
 	"gorm.io/gorm"
 )
 
-// StartAutoSync 启动自动同步定时任务。
+// StartAutoSync 启动自动同步定时任务。ctx 为进程级 ctx，其取消即本循环的退出信号。
 func (s *Service) StartAutoSync(ctx context.Context) {
-	go func() {
+	// 经 bgtask 登记：何时停仍由传入的 ctx 决定，Manager 只保证关闭时等到它停干净，
+	// 不会在一轮同步写库中途被硬切。
+	bgtask.Go(func(context.Context) {
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
 
@@ -24,7 +27,7 @@ func (s *Service) StartAutoSync(ctx context.Context) {
 				s.checkAndSync(ctx)
 			}
 		}
-	}()
+	})
 }
 
 func (s *Service) checkAndSync(ctx context.Context) {

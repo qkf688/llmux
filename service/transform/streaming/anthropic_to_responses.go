@@ -379,24 +379,20 @@ func handleAnthropicToResponsesMessageDelta(state *realtimeStreamState, chunk ma
 		captureUpstreamUsageMap(state, mergedUsage)
 
 		// 出站 usage 走同一归一入口 models.UsageFromMap，与落库口径同源
-		// （含 total 采用上游值的回退），避免「客户端看 X、DB 记 Y」的分叉。
-		u := models.UsageFromMap(mergedUsage)
-		usageMap := map[string]interface{}{
-			"input_tokens":  int(u.PromptTokens),
-			"output_tokens": int(u.CompletionTokens),
-			"total_tokens":  int(u.TotalTokens),
-		}
-		// 只有 cached_tokens 有真值才写 details：它是唯一能映射到 cached_tokens 的量。
-		// 不能把 cache_creation 也当门禁——上游首次写缓存时 cache_creation>0 而
-		// cache_read=0，那样会输出 cached_tokens:0，正是下面注释要避免的情况。
-		if u.PromptTokensDetails.CachedTokens > 0 {
-			usageMap["input_tokens_details"] = map[string]interface{}{
-				"cached_tokens": int(u.PromptTokensDetails.CachedTokens),
-			}
-		}
-		// Anthropic 协议无 reasoning token（thinking 计入 output_tokens），
-		// 故不输出 output_tokens_details（写 reasoning_tokens:0 会让下游误以为上游明确报告了 0）。
-		responseCompleted["response"].(map[string]interface{})["usage"] = usageMap
+		// （含 total 采用上游值的回退），避免「客户端看 X、DB 记 Y」的分叉；
+		// 装配交 responsesUsageFromModel，零值明细判据与另两个写出点共用一份实现。
+		//
+		// 两条 anthropic 专属结论（判据本身在被复用的实现里，此处只记为什么成立）：
+		// ① cache_creation 不参与 cached_tokens——上游首次写缓存时 cache_creation>0
+		// 而 cache_read=0，认它就会写出 cached_tokens:0；models 的候选表只收
+		// cache_read_input_tokens，故不会误取。
+		// ② 原生 Anthropic 协议无 reasoning 槽位（thinking 计入 output_tokens），
+		// 归一结果 reasoning 通常为 0，装配器不写出 output_tokens_details（写
+		// reasoning_tokens:0 会让下游误以为上游明确报告了 0）。若混合形状上游
+		// （走 anthropic 协议但附带 openai 兼容键）经候选表带出 reasoning 真值，
+		// 装配器会按与落库同口径写出——这正是本系列要的「客户端与 DB 同源」。
+		responseCompleted["response"].(map[string]interface{})["usage"] =
+			responsesUsageFromModel(models.UsageFromMap(mergedUsage))
 	}
 
 	return writeRealtimeOrderedData(state, responseCompleted)

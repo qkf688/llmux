@@ -3,7 +3,6 @@ package streaming
 import (
 	"encoding/json"
 
-	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/responses"
 )
 
@@ -243,7 +242,8 @@ func handleResponsesToOpenAICompletedEvent(state *realtimeStreamState, ev *respo
 				"created": state.openAICreated,
 				"model":   state.openAIModel,
 				"choices": []map[string]interface{}{},
-				"usage":   buildOpenAIUsageFromResponses(u),
+				// 与另两个写出点共用装配实现：total 回退、零值明细判据只有一份。
+				"usage": openAIUsageFromModel(usageFromResponses(u)),
 			}
 			if err := writeRealtimeJSONData(state, usageChunk); err != nil {
 				return err
@@ -253,34 +253,6 @@ func handleResponsesToOpenAICompletedEvent(state *realtimeStreamState, ev *respo
 
 	// 发送 [DONE]
 	return writeRealtimeData(state, "[DONE]")
-}
-
-// buildOpenAIUsageFromResponses 把 Responses 的 usage 映射为 OpenAI Chat 的 usage 对象。
-// 纯函数：不读写 state、不碰流，便于直测。调用方保证 u != nil。
-//
-// total 缺失时走 models.ResolveTotalTokens 回退，与侧信道交给落库侧的口径同源——
-// 两处各写一遍必然漂移（客户端看 0 而 DB 记回退值）。
-// cache / reasoning 明细映射为 OpenAI Chat 的嵌套 details，避免跨协议后明细丢失；
-// 只在有真值时才写，不产出零值 details。
-func buildOpenAIUsageFromResponses(u *responses.ResponsesUsage) map[string]interface{} {
-	usage := map[string]interface{}{
-		"prompt_tokens":     int(u.InputTokens),
-		"completion_tokens": int(u.OutputTokens),
-		"total_tokens":      int(models.ResolveTotalTokens(u.InputTokens, u.OutputTokens, u.TotalTokens)),
-	}
-
-	if d := u.InputTokenDetails; d != nil && d.CachedTokens > 0 {
-		usage["prompt_tokens_details"] = map[string]interface{}{
-			"cached_tokens": int(d.CachedTokens),
-		}
-	}
-	if d := u.OutputTokenDetails; d != nil && d.ReasoningTokens > 0 {
-		usage["completion_tokens_details"] = map[string]interface{}{
-			"reasoning_tokens": int(d.ReasoningTokens),
-		}
-	}
-
-	return usage
 }
 
 // responsesUsageHasTokens 判定 usage 是否含有效 token，与 models.Usage.HasTokens 同口径：

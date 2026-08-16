@@ -46,8 +46,8 @@ func TestResponsesToOpenAI_TotalTokensFallback(t *testing.T) {
 	}
 }
 
-// TestOpenAIToResponses_TotalTokensFallback 覆盖 openai → openai-res：
-// buildResponsesUsage 同样直写上游 total_tokens，缺失时也会写出 0。
+// TestOpenAIToResponses_TotalTokensFallback 覆盖 openai → openai-res：同一条回退
+// 口径在这条线上也必须成立（装配与 responses→openai 共用 usageWireFromModel）。
 func TestOpenAIToResponses_TotalTokensFallback(t *testing.T) {
 	events := runRealtimeTransform(t, fixtureOpenAIUsageNoTotal, "openai", "openai-res")
 

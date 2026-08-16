@@ -66,7 +66,7 @@ models/retention.go
   - **回退口径**——上游省略 `total_tokens` 时取 `prompt + completion`，不把 Anthropic 的 `cache_read` / `cache_creation` 额外计入，与 `models.Usage.HasTokens` 一致。
   - **上游优先**——上游显式给了 `total_tokens`（>0）时一律原样采用、不重算，即使该值含 cache token（贴近上游真值）。故 anthropic 形状 usage 的 total 不再被强制重算为 `prompt+completion`。
 
-  侧信道 / processer 落库（经 `models.UsageFromMap`）与流式客户端写出点（`responses_to_openai.go` 的 `buildOpenAIUsageFromResponses`、`openai_to_responses.go` 的 `buildResponsesUsage`、`anthropic_to_responses.go` 的 `response.completed` usage）共用这一判据——此前写出点直写上游原值、缺失时写出 0（anthropic 出站更是硬算 `input+output`），与落库侧分叉，造成同一次请求「客户端看到的 total 与 DB 记录不一致」。**已知缺口**：非流入站的两处 DTO→unified 映射（`service/responses/response_parse.go`、`service/transform/openai/response.go`）仍直取上游原值未过该函数
+  侧信道 / processer 落库（经 `models.UsageFromMap`）与流式客户端写出点（三处统一走 `streaming/usage_wire.go` 的 `usageWireFromModel`：`responses_to_openai.go` 的 usage 尾包、`openai_to_responses.go` 与 `anthropic_to_responses.go` 的 `response.completed`）共用这一判据——此前写出点直写上游原值、缺失时写出 0（anthropic 出站更是硬算 `input+output`），与落库侧分叉，造成同一次请求「客户端看到的 total 与 DB 记录不一致」。**已知缺口**：非流入站的两处 DTO→unified 映射（`service/responses/response_parse.go`、`service/transform/openai/response.go`）仍直取上游原值未过该函数
 - 各 style processer 认的字段不同：openai 取根级 `usage`（不解析 `choices`，故天然免疫 OpenAI 的 `choices:[]` usage 尾包）、anthropic 取 `message_delta.usage`、openai-res 取 `response.completed` 内的 usage。这些只在 `downstream` / `passthrough` 路径生效
 
 

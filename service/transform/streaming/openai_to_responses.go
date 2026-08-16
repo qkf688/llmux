@@ -478,45 +478,17 @@ func flushPendingOpenAIToResponsesCompleted(state *realtimeStreamState) error {
 	return writeRealtimeOrderedData(state, completed)
 }
 
-// buildResponsesUsage 把 OpenAI Chat 的 usage 映射为 Responses 的 usage。
+// buildResponsesUsage 把上游原始 usage map 映射为 Responses 线的 usage 对象。
 // 入参为 nil / 空时返回 nil，表示无 usage 可写（不写出零值，避免下游把 0 当真实统计）。
+//
+// 先过 models.UsageFromMap 归一再交 responsesUsageFromModel 装配：与落库侧、
+// anthropic→responses 写出点共用同一份归一 + 装配实现，键名 / total 回退 / 零值
+// 明细判据不再各写一遍。归一比旧实现多认几种上游写法（cached 的
+// cache_read_input_tokens / prompt_cache_hit_tokens、reasoning 的顶层键等），
+// 是修掉 openai→responses 此前漏认这些兼容字段的潜在缺口，方向与落库口径一致。
 func buildResponsesUsage(usage map[string]interface{}) map[string]interface{} {
 	if len(usage) == 0 {
 		return nil
 	}
-
-	promptTokens := int(maputil.Float64(usage, "prompt_tokens"))
-	completionTokens := int(maputil.Float64(usage, "completion_tokens"))
-
-	usageMap := map[string]interface{}{
-		"input_tokens":  promptTokens,
-		"output_tokens": completionTokens,
-		"total_tokens": int(models.ResolveTotalTokens(
-			int64(promptTokens),
-			int64(completionTokens),
-			int64(maputil.Float64(usage, "total_tokens")),
-		)),
-	}
-	// cached_tokens / reasoning_tokens 取上游尾包里的真值而非写死 0——
-	// openai-res processer 会把 cached_tokens 落库，写死 0 与 #18 同源。
-	// 只有真值 >0 才写 details：写出 cached_tokens:0 会被下游误读为「上游明确报告
-	// 无缓存命中」，与「字段缺失＝未知」是两种语义（与 anthropic 路径一致）。
-	// 判据只看 detail 本身，不附加父级 prompt/completion >0 的前置条件——出站两处
-	// （另一处是 responses_to_openai 的 buildOpenAIUsageFromResponses）与入站归一
-	// models.UsageFromMap 必须同口径，否则 cached>0 && prompt==0 这类异常上游下发散。
-	if d, ok := usage["prompt_tokens_details"].(map[string]interface{}); ok {
-		if cached := int(maputil.Float64(d, "cached_tokens")); cached > 0 {
-			usageMap["input_tokens_details"] = map[string]interface{}{
-				"cached_tokens": cached,
-			}
-		}
-	}
-	if d, ok := usage["completion_tokens_details"].(map[string]interface{}); ok {
-		if reasoning := int(maputil.Float64(d, "reasoning_tokens")); reasoning > 0 {
-			usageMap["output_tokens_details"] = map[string]interface{}{
-				"reasoning_tokens": reasoning,
-			}
-		}
-	}
-	return usageMap
+	return responsesUsageFromModel(models.UsageFromMap(usage))
 }

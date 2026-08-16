@@ -11,10 +11,10 @@ import (
 // reasoning token 槽位、message_start 必须早于真实 prompt_tokens 发出），
 // 从下游流反解必然有损。故在**读上游那一跳**就地捕获。
 //
-// 归一本身（各家非标准 usage 形状 → models.Usage）不在本包实现，统一走
+// 各家非标准 usage 形状（map）→ models.Usage 的归一不在本文件，统一走
 // models.UsageFromMap——同一份归一还被 chat 的 processer 落库路径与 anthropic
-// 非流入站复用，四处各写一套必然漂移成残缺子集。本文件只负责「什么时候、
-// 从哪一跳交出去」。
+// 非流入站复用，四处各写一套必然漂移成残缺子集。强类型 ResponsesUsage 的转换
+// 见 usage_wire.go。本文件只负责「什么时候、从哪一跳交出去」。
 //
 // 只有持有 sideChannel 的那一跳会真正写入：多跳转换里第二跳的 sideChannel 为 nil，
 // 这些函数退化为 no-op，不会用中间格式污染上游真值。
@@ -36,22 +36,14 @@ func captureUpstreamUsageMap(state *realtimeStreamState, usage map[string]interf
 // captureUpstreamUsageResponses 记录 openai-res 上游的原始 usage。
 //
 // 当上游本身就是 openai-res（provider=openai-res 的单跳转换）时，usage 已是
-// 结构化的 ResponsesUsage；转成 map 走同一条归一 / 写入路径，避免另开一份逻辑。
+// 结构化的 ResponsesUsage，经 usageFromResponses 直接转 models.Usage——该转换
+// 与 responses→openai 写出点共用，不必先摊成 map 再交候选表按键名反认一遍。
 // 多跳转换里第二跳（openai-res → client）的 sideChannel 为 nil，此处退化为 no-op。
+//
+// 全零快照由 SetUpstreamUsage 判据丢弃，故此处不判空。
 func captureUpstreamUsageResponses(state *realtimeStreamState, usage *responses.ResponsesUsage) {
 	if state.sideChannel == nil || usage == nil {
 		return
 	}
-	m := map[string]interface{}{
-		"input_tokens":  float64(usage.InputTokens),
-		"output_tokens": float64(usage.OutputTokens),
-		"total_tokens":  float64(usage.TotalTokens),
-	}
-	if d := usage.InputTokenDetails; d != nil {
-		m["input_tokens_details"] = map[string]interface{}{"cached_tokens": float64(d.CachedTokens)}
-	}
-	if d := usage.OutputTokenDetails; d != nil {
-		m["output_tokens_details"] = map[string]interface{}{"reasoning_tokens": float64(d.ReasoningTokens)}
-	}
-	captureUpstreamUsageMap(state, m)
+	state.sideChannel.SetUpstreamUsage(usageFromResponses(usage))
 }

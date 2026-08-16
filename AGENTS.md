@@ -17,7 +17,7 @@
 | 模块详情 | [docs/architecture/modules/](docs/architecture/modules/) | 各业务模块的职责、边界、接口契约（现状描述） |
 | 模块间交互 | [docs/architecture/interactions.md](docs/architecture/interactions.md) | 同步调用 / Hook / 注册表 / 共享模型（现状描述） |
 | 命名规范 | [docs/architecture/conventions.md](docs/architecture/conventions.md) | 文件 / 目录 / 变量命名约定（现状描述） |
-| 目录树 | [docs/architecture/dir-tree.txt](docs/architecture/dir-tree.txt) | 项目目录结构（脚本自动生成） |
+| 目录树 | [docs/architecture/dir-tree.txt](docs/architecture/dir-tree.txt) | 项目目录结构（生成脚本已不在仓库，现手工维护） |
 | 虚拟模型用户指南 | [docs/virtual-models-guide.md](docs/virtual-models-guide.md) | 虚拟模型使用说明（用户向，非架构） |
 
 > AGENTS.md 是操作规范（「该怎么改」）；架构文档是现状描述（「系统长什么样」）。两者互补，不重复。
@@ -28,7 +28,7 @@
 
 | 改动类型 | 需更新的文档 |
 |---|---|
-| 新增/删除/重命名目录、文件 | 架构文档（重跑目录树脚本更新 `dir-tree.txt`）+ 涉及的 `modules/{x}.md` 内部结构 |
+| 新增/删除/重命名目录、文件 | 架构文档（**手工**同步 `dir-tree.txt`——生成脚本已不在仓库）+ 涉及的 `modules/{x}.md` 内部结构 |
 | 新增/删除/重命名业务模块 | `docs/architecture/README.md` 模块索引 + 新建/删除 `modules/{x}.md` + 本文件第 2.1 节任务导航（如影响） |
 | 修改核心接口契约 | `modules/{x}.md` 的「关键接口契约」节 |
 | 修改模块职责边界 | `modules/{x}.md` 的「职责与边界」节 |
@@ -293,7 +293,7 @@ make webui            # cd webui && pnpm install && pnpm run build
 ### 共享层位置
 
 ```
-common/           # 纯工具（maputil、sse、dataurl…）；禁止依赖 Gin/业务包
+common/           # 纯工具（maputil、dataurl、bgtask…）；禁止依赖 Gin/业务包
 consts/           # 全局常量（Style*、SettingKey* 等）
 balancer/         # 无状态加权随机算法
 httpresp/         # 管理端统一响应信封
@@ -320,7 +320,12 @@ webui/src/components/ui/  # 基础 UI
 
 - 路由：`RegisterAll` 建 `/v1` 与 `/api`；`/v1` 挂 `middleware.AuthAPIKey(repo)`，`/api` 登录路由免鉴权，其余挂 `middleware.AuthJWT(secret, repo)`。
 - 子包注册函数只接收 `gin.IRoutes`（或项目既有签名），**不**在子包内 `Group` 出与全局不一致的鉴权边界。
-- 后台任务在 `main` 启动：`HealthChecker.Start`、`ModelSyncService.StartAutoSync`；**禁止**在 handler 请求路径里偷偷起无生命周期管理的全局 goroutine（除非既有模式且有 ctx 取消）。
+- 后台任务在 `main` 启动：`HealthChecker.Start`、`ModelSyncService.StartAutoSync`，两者的 ctx 均派生自 `signal.NotifyContext`（取消即退出信号）。
+- **禁止**用裸 `go f(context.Background())` 启动会写库的后台 goroutine；**必须**经 `common/bgtask` 的 `bgtask.Go` 登记，否则进程关闭时落库/权重衰减会被硬切。请求内且已用 `sync.WaitGroup` 等待完成的 goroutine 不在此列（由 `srv.Shutdown` 等在途请求覆盖）。
+- 优雅关闭序在 `main.shutdown`：`srv.Shutdown`（停收新请求 + 等在途）→ `bgtask.Default().Shutdown`（排空后台写库）→ `models.Close()`。每步各有超时上限且失败不提前返回；**禁止**去掉 `srv.Shutdown` 的 timeout——SSE 回写无 deadline，不设上限会让关闭无限挂起。ticker 服务的停止由信号 ctx 取消驱动，与「等在途请求」**并行**发生，不在这三步之内。
+- 关闭的**唯一入口**是取消 `main` 的可取消 ctx（由信号 ctx 派生）：信号与 `ListenAndServe` 启动失败共用此路径。**禁止**用 `os.Exit` 旁路 `shutdown`——会硬切已登记的后台写库任务。注意 `signal.NotifyContext` 返回的 `stop()` 只停信号投递、**不**取消 ctx，故必须自己包一层 `context.WithCancel`。
+- 容器/编排部署**必须**把宽限期设到大于关闭预算（`serverShutdownTimeout` + `bgtaskDrainTimeout`，当前 30s+10s）：compose 用 `stop_grace_period`、k8s 用 `terminationGracePeriodSeconds`；否则进程在排空完成前被 SIGKILL，本机制形同虚设。
+- 长驻循环的取消源**只能有一个**：其自身由信号 ctx 派生的 ctx。`bgtask` 只负责「等它停干净」，不提供第二个取消源。
 - 前端产物：`//go:embed webui/dist`；改前端后未 rebuild 则二进制仍是旧 UI。
 - 并发：虚拟模型轮询等共享计数**必须**用 `sync.Mutex`（或等价）保护，与现实现一致。
 

@@ -79,7 +79,8 @@ LLMux 是多供应商 LLM API 网关/代理：对外提供 OpenAI / Anthropic �
 
 1. **代理路径**：`POST /v1/chat/completions|responses|messages` → `handler/v1` → `service` 门面 → `service/chat`（可选虚拟模型解析）→ `transform` → `providers.BuildReq` → 上游 → 流式/非流式回写 + `ChatLog`/`Stats`
 2. **管理路径**：`/api/*` + `middleware.Auth` → 各 `handler/*` 子包 → `repository` 和/或 `service` → `models`/SQLite
-3. **后台任务**：`main` 启动 `HealthChecker` 与 `ModelSyncService.StartAutoSync`
+3. **后台任务**：`main` 启动 `HealthChecker` 与 `ModelSyncService.StartAutoSync`，ctx 派生自 `signal.NotifyContext`；请求路径里 fire-and-forget 的写库任务经 `common/bgtask` 登记
+4. **优雅关闭**：SIGINT/SIGTERM → 信号 ctx 取消（ticker 服务的停止与「等在途请求」**并行**收敛，不在下述三步之内）→ `srv.Shutdown`（等在途请求）→ `bgtask.Default().Shutdown`（排空后台写库）→ `models.Close()`，逐步限时。`ListenAndServe` 启动失败取消同一 ctx，走同一条关闭序
 
 ### 现状备注（依赖事实）
 

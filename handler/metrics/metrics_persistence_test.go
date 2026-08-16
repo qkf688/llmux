@@ -32,7 +32,7 @@ func TestMetricsAndCounts_NotAffectedByClearAllLogs(t *testing.T) {
 	if err := models.DB.Create(&log).Error; err != nil {
 		t.Fatalf("create chat log: %v", err)
 	}
-	if err := models.DB.Create(&models.ChatIO{LogId: log.ID, Input: "in"}).Error; err != nil {
+	if err := models.DB.Create(&models.ChatIO{LogID: log.ID, Input: "in"}).Error; err != nil {
 		t.Fatalf("create chat io: %v", err)
 	}
 

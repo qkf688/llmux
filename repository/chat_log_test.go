@@ -41,7 +41,7 @@ func TestChatLogRepo_ListAndHardDeleteFiltered(t *testing.T) {
 	if err := db.Create(&log2).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Create(&models.ChatIO{LogId: log1.ID, Input: "in"}).Error; err != nil {
+	if err := db.Create(&models.ChatIO{LogID: log1.ID, Input: "in"}).Error; err != nil {
 		t.Fatal(err)
 	}
 
@@ -83,7 +83,7 @@ func TestChatLogRepo_HardDeleteFilteredRejectsEmptyFilter(t *testing.T) {
 	if err := db.Create(&keep).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Create(&models.ChatIO{LogId: keep.ID, Input: "in"}).Error; err != nil {
+	if err := db.Create(&models.ChatIO{LogID: keep.ID, Input: "in"}).Error; err != nil {
 		t.Fatal(err)
 	}
 
@@ -113,7 +113,7 @@ func TestChatIORepo_GetByLogID(t *testing.T) {
 	db := newLogTestDB(t)
 	repo := NewChatIORepo(db)
 
-	_ = db.Create(&models.ChatIO{LogId: 42, Input: "x"}).Error
+	_ = db.Create(&models.ChatIO{LogID: 42, Input: "x"}).Error
 	got, err := repo.GetByLogID(ctx, 42)
 	if err != nil {
 		t.Fatalf("GetByLogID: %v", err)
@@ -159,7 +159,7 @@ func TestChatLogRepo_EnforceRetentionDeletesChatIO(t *testing.T) {
 		if err := db.Create(&log).Error; err != nil {
 			t.Fatal(err)
 		}
-		if err := db.Create(&models.ChatIO{LogId: log.ID, Input: "in"}).Error; err != nil {
+		if err := db.Create(&models.ChatIO{LogID: log.ID, Input: "in"}).Error; err != nil {
 			t.Fatal(err)
 		}
 	}

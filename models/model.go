@@ -466,7 +466,7 @@ type CompletionTokensDetails struct {
 
 type ChatIO struct {
 	gorm.Model
-	LogId uint
+	LogID uint
 	Input string
 	OutputUnion
 }

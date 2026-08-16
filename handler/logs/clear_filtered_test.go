@@ -41,7 +41,7 @@ func TestClearFilteredLogs_StatusSuccess(t *testing.T) {
 	}
 
 	chatIO := models.ChatIO{
-		LogId: chatLogs[0].ID,
+		LogID: chatLogs[0].ID,
 		Input: "hi",
 		OutputUnion: models.OutputUnion{
 			OfString: "out",

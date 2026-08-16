@@ -63,7 +63,7 @@ func createChatIO(ctx context.Context, logID uint, input []byte, output *models.
 	}
 	if err := repos().ChatIO.Create(ctx, &models.ChatIO{
 		Input:       string(input),
-		LogId:       logID,
+		LogID:       logID,
 		OutputUnion: *output,
 	}); err != nil {
 		slog.Error("failed to create chat io", "log_id", logID, "error", err)

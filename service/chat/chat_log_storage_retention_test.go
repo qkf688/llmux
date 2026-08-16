@@ -28,7 +28,7 @@ func TestCleanupLogsIfNeeded_HardDeletesSoftDeletedBeyondRetention(t *testing.T)
 			t.Fatalf("create log %d: %v", i, err)
 		}
 		if err := models.DB.Create(&models.ChatIO{
-			LogId: logs[i].ID,
+			LogID: logs[i].ID,
 			Input: "in",
 			OutputUnion: models.OutputUnion{
 				OfString: "out",

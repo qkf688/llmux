@@ -11,33 +11,35 @@ export interface CompletionTokensDetails {
 }
 
 export interface ChatLog {
-  ID: number;
-  CreatedAt: string;
-  Name: string;
-  ProviderModel: string;
-  ProviderName: string;
-  Status: string;
-  Style: string;
-  UserAgent: string;
-  RemoteIP?: string;
-  Error: string;
-  Retry: number;
-  ProxyTime: number;
-  FirstChunkTime: number;
-  ChunkTime: number;
-  Tps: number;
-  ChatIO: boolean;
+  id: number;
+  created_at: string;
+  name: string;
+  provider_model: string;
+  provider_name: string;
+  status: string;
+  style: string;
+  user_agent: string;
+  remote_ip?: string;
+  error: string;
+  retry: number;
+  proxy_time: number;
+  first_chunk_time: number;
+  chunk_time: number;
+  tps: number;
+  chat_io: boolean;
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
   prompt_tokens_details: PromptTokensDetails;
   completion_tokens_details: CompletionTokensDetails;
-  RequestHeaders?: string;
-  RequestBody?: string;
-  RawRequestBody?: string;
-  ResponseHeaders?: string;
-  ResponseBody?: string;
-  RawResponseBody?: string;
+  /** usage 归集来源：upstream / passthrough / downstream / missing */
+  usage_source: string;
+  request_headers?: string;
+  request_body?: string;
+  raw_request_body?: string;
+  response_headers?: string;
+  response_body?: string;
+  raw_response_body?: string;
   is_virtual_model: boolean;
   has_format_conversion: boolean;
   source_format?: string;
@@ -45,14 +47,10 @@ export interface ChatLog {
 }
 
 export interface ChatIO {
-  ID: number;
-  CreatedAt: string;
-  UpdatedAt: string;
-  DeletedAt?: unknown;
-  LogId: number;
-  Input: string;
-  OfString?: string | null;
-  OfStringArray?: string[] | null;
+  log_id: number;
+  input: string;
+  of_string?: string | null;
+  of_string_array?: string[] | null;
 }
 
 export interface LogsResponse {

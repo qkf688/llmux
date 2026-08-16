@@ -13,12 +13,12 @@ import {
 } from "@/hooks/api/use-logs";
 
 const needsLogDetail = (log: ChatLog) =>
-  log.RequestHeaders === undefined &&
-  log.RequestBody === undefined &&
-  log.RawRequestBody === undefined &&
-  log.ResponseHeaders === undefined &&
-  log.ResponseBody === undefined &&
-  log.RawResponseBody === undefined;
+  log.request_headers === undefined &&
+  log.request_body === undefined &&
+  log.raw_request_body === undefined &&
+  log.response_headers === undefined &&
+  log.response_body === undefined &&
+  log.raw_response_body === undefined;
 
 const shouldIncludeRequestResponse = (sections: ChatLogExportSections) => sections.request || sections.response;
 
@@ -55,19 +55,19 @@ export function useLogsActions({
   const clearAllMutation = useClearAllLogs();
   const clearFilteredMutation = useClearFilteredLogs();
 
-  const canViewChatIO = (log: ChatLog) => log.Status === "success" && Boolean(log.ChatIO);
+  const canViewChatIO = (log: ChatLog) => log.status === "success" && Boolean(log.chat_io);
 
   const handleViewChatIO = (log: ChatLog) => {
     if (!canViewChatIO(log)) {
       return;
     }
-    navigate(`/logs/${log.ID}/chat-io`);
+    navigate(`/logs/${log.id}/chat-io`);
   };
 
   const handleExportLog = async (log: ChatLog, sections: ChatLogExportSections) => {
     try {
       const exportLog =
-        shouldIncludeRequestResponse(sections) && needsLogDetail(log) ? await getLogDetail(log.ID) : log;
+        shouldIncludeRequestResponse(sections) && needsLogDetail(log) ? await getLogDetail(log.id) : log;
       exportChatLog(exportLog, sections);
       toast.success("导出成功");
     } catch (error) {

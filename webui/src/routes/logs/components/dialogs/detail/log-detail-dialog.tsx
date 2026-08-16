@@ -20,12 +20,12 @@ type LogDetailDialogProps = {
 };
 
 const needsLogDetail = (log: ChatLog) =>
-  log.RequestHeaders === undefined &&
-  log.RequestBody === undefined &&
-  log.RawRequestBody === undefined &&
-  log.ResponseHeaders === undefined &&
-  log.ResponseBody === undefined &&
-  log.RawResponseBody === undefined;
+  log.request_headers === undefined &&
+  log.request_body === undefined &&
+  log.raw_request_body === undefined &&
+  log.response_headers === undefined &&
+  log.response_body === undefined &&
+  log.raw_response_body === undefined;
 
 export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDetailDialogProps) {
   const [detailLog, setDetailLog] = useState<ChatLog | null>(log);
@@ -50,7 +50,7 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDet
     setDetailLoading(true);
     void (async () => {
       try {
-        const full = await getLogDetail(log.ID);
+        const full = await getLogDetail(log.id);
         if (!cancelled) {
           setDetailLog(full);
         }
@@ -79,7 +79,7 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDet
       <DialogContent className="w-[95vw] sm:w-auto sm:max-w-2xl max-h-[85vh] sm:max-h-[90vh] flex flex-col p-4">
         <div className="p-3 border-b flex-shrink-0 sm:p-4">
           <DialogHeader className="p-0">
-            <DialogTitle>日志详情: {detailLog.ID}</DialogTitle>
+            <DialogTitle>日志详情: {detailLog.id}</DialogTitle>
             <DialogDescription>查看请求/响应内容、性能指标与错误信息</DialogDescription>
           </DialogHeader>
         </div>
@@ -89,31 +89,31 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDet
             <div className="space-y-2">
               <div className="text-sm">
                 <span className="text-muted-foreground">创建时间：</span>
-                <span>{formatDateTime(detailLog.CreatedAt)}</span>
+                <span>{formatDateTime(detailLog.created_at)}</span>
               </div>
               <div className="text-sm">
                 <span className="text-muted-foreground">状态：</span>
-                <span className={detailLog.Status === "success" ? "text-success" : "text-destructive"}>
-                  {detailLog.Status}
+                <span className={detailLog.status === "success" ? "text-success" : "text-destructive"}>
+                  {detailLog.status}
                 </span>
               </div>
             </div>
 
-            {detailLog.Error && (
+            {detailLog.error && (
               <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 sm:p-3">
                 <p className="text-xs text-destructive uppercase tracking-wide">错误信息</p>
-                <div className="text-destructive whitespace-pre-wrap break-words text-sm">{detailLog.Error}</div>
+                <div className="text-destructive whitespace-pre-wrap break-words text-sm">{detailLog.error}</div>
               </div>
             )}
 
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">基本信息</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <DetailCard label="模型名称" value={detailLog.Name} />
+                <DetailCard label="模型名称" value={detailLog.name} />
                 <DetailCard label="模型类型" value={detailLog.is_virtual_model ? "虚拟模型" : "真实模型"} />
-                <DetailCard label="提供商" value={detailLog.ProviderName || "-"} />
-                <DetailCard label="提供商模型" value={detailLog.ProviderModel || "-"} mono />
-                <DetailCard label="客户端类型" value={detailLog.Style || "-"} />
+                <DetailCard label="提供商" value={detailLog.provider_name || "-"} />
+                <DetailCard label="提供商模型" value={detailLog.provider_model || "-"} mono />
+                <DetailCard label="客户端类型" value={detailLog.style || "-"} />
                   <DetailCard
                    label="格式"
                    value={
@@ -122,10 +122,10 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDet
                         : "未发生转换"
                     }
                   />
-                <DetailCard label="用户代理" value={detailLog.UserAgent || "-"} mono />
-                <DetailCard label="远端 IP" value={detailLog.RemoteIP || "-"} mono />
-                <DetailCard label="记录 IO" value={detailLog.ChatIO ? "是" : "否"} />
-                <DetailCard label="重试次数" value={detailLog.Retry ?? 0} />
+                <DetailCard label="用户代理" value={detailLog.user_agent || "-"} mono />
+                <DetailCard label="远端 IP" value={detailLog.remote_ip || "-"} mono />
+                <DetailCard label="记录 IO" value={detailLog.chat_io ? "是" : "否"} />
+                <DetailCard label="重试次数" value={detailLog.retry ?? 0} />
               </div>
             </div>
 
@@ -145,16 +145,16 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDet
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">性能指标</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                <DetailCard label="代理耗时" value={formatDurationValue(detailLog.ProxyTime)} />
-                <DetailCard label="首包耗时" value={formatDurationValue(detailLog.FirstChunkTime)} />
-                <DetailCard label="完成耗时" value={formatDurationValue(detailLog.ChunkTime)} />
-                <DetailCard label="TPS" value={formatTpsValue(detailLog.Tps)} />
+                <DetailCard label="代理耗时" value={formatDurationValue(detailLog.proxy_time)} />
+                <DetailCard label="首包耗时" value={formatDurationValue(detailLog.first_chunk_time)} />
+                <DetailCard label="完成耗时" value={formatDurationValue(detailLog.chunk_time)} />
+                <DetailCard label="TPS" value={formatTpsValue(detailLog.tps)} />
               </div>
             </div>
 
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Token 使用</p>
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                 <DetailCard label="输入" value={formatTokenValue(detailLog.prompt_tokens)} />
                 <DetailCard label="输出" value={formatTokenValue(detailLog.completion_tokens)} />
                 <DetailCard label="总计" value={formatTokenValue(detailLog.total_tokens)} />
@@ -162,6 +162,11 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDet
                   label="缓存"
                   value={formatTokenValue(detailLog.prompt_tokens_details?.cached_tokens)}
                 />
+                <DetailCard
+                  label="推理"
+                  value={formatTokenValue(detailLog.completion_tokens_details?.reasoning_tokens)}
+                />
+                <DetailCard label="usage 来源" value={detailLog.usage_source || "-"} mono />
               </div>
             </div>
           </div>

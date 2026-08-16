@@ -15,7 +15,7 @@ export function useLogsSelection({ logs, selectedIds, setSelectedIds, clearSelec
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedIds(new Set(logs.map((log) => log.ID)));
+      setSelectedIds(new Set(logs.map((log) => log.id)));
       return;
     }
     clearSelection();

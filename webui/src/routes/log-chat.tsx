@@ -184,9 +184,9 @@ export default function LogChatPage() {
   const [chatIO, setChatIO] = useState<ChatIO | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadErrorMessage, setLoadErrorMessage] = useState<string | null>(null);
-  const outputList = chatIO?.OfStringArray ?? [];
+  const outputList = chatIO?.of_string_array ?? [];
   const hasArrayOutput = outputList.length > 0;
-  const singleOutput = chatIO?.OfString ?? "";
+  const singleOutput = chatIO?.of_string ?? "";
   const syntaxStyle = useSyntaxStyle();
 
   useEffect(() => {
@@ -261,7 +261,7 @@ export default function LogChatPage() {
 
       {!loadErrorMessage && chatIO && (
         <div className="space-y-6">
-          <JsonBlock title="请求输入" raw={chatIO.Input} syntaxStyle={syntaxStyle} />
+          <JsonBlock title="请求输入" raw={chatIO.input} syntaxStyle={syntaxStyle} />
 
           <Card>
             <CardHeader>

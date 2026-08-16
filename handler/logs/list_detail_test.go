@@ -67,22 +67,22 @@ func TestGetRequestLogs_DefaultOmitRawFields(t *testing.T) {
 	}
 
 	item := payload.Data.Data[0]
-	if _, ok := item["RequestHeaders"]; ok {
+	if _, ok := item["request_headers"]; ok {
 		t.Fatalf("expected RequestHeaders omitted in list response")
 	}
-	if _, ok := item["RequestBody"]; ok {
+	if _, ok := item["request_body"]; ok {
 		t.Fatalf("expected RequestBody omitted in list response")
 	}
-	if _, ok := item["RawRequestBody"]; ok {
+	if _, ok := item["raw_request_body"]; ok {
 		t.Fatalf("expected RawRequestBody omitted in list response")
 	}
-	if _, ok := item["ResponseHeaders"]; ok {
+	if _, ok := item["response_headers"]; ok {
 		t.Fatalf("expected ResponseHeaders omitted in list response")
 	}
-	if _, ok := item["ResponseBody"]; ok {
+	if _, ok := item["response_body"]; ok {
 		t.Fatalf("expected ResponseBody omitted in list response")
 	}
-	if _, ok := item["RawResponseBody"]; ok {
+	if _, ok := item["raw_response_body"]; ok {
 		t.Fatalf("expected RawResponseBody omitted in list response")
 	}
 
@@ -138,23 +138,23 @@ func TestGetRequestLogs_IncludeRawReturnsRawFields(t *testing.T) {
 	}
 
 	item := payload.Data.Data[0]
-	if item["RequestHeaders"] != log.RequestHeaders {
-		t.Fatalf("RequestHeaders = %v, want %v", item["RequestHeaders"], log.RequestHeaders)
+	if item["request_headers"] != log.RequestHeaders {
+		t.Fatalf("RequestHeaders = %v, want %v", item["request_headers"], log.RequestHeaders)
 	}
-	if item["RequestBody"] != log.RequestBody {
-		t.Fatalf("RequestBody = %v, want %v", item["RequestBody"], log.RequestBody)
+	if item["request_body"] != log.RequestBody {
+		t.Fatalf("RequestBody = %v, want %v", item["request_body"], log.RequestBody)
 	}
-	if item["RawRequestBody"] != log.RawRequestBody {
-		t.Fatalf("RawRequestBody = %v, want %v", item["RawRequestBody"], log.RawRequestBody)
+	if item["raw_request_body"] != log.RawRequestBody {
+		t.Fatalf("RawRequestBody = %v, want %v", item["raw_request_body"], log.RawRequestBody)
 	}
-	if item["ResponseHeaders"] != log.ResponseHeaders {
-		t.Fatalf("ResponseHeaders = %v, want %v", item["ResponseHeaders"], log.ResponseHeaders)
+	if item["response_headers"] != log.ResponseHeaders {
+		t.Fatalf("ResponseHeaders = %v, want %v", item["response_headers"], log.ResponseHeaders)
 	}
-	if item["ResponseBody"] != log.ResponseBody {
-		t.Fatalf("ResponseBody = %v, want %v", item["ResponseBody"], log.ResponseBody)
+	if item["response_body"] != log.ResponseBody {
+		t.Fatalf("ResponseBody = %v, want %v", item["response_body"], log.ResponseBody)
 	}
-	if item["RawResponseBody"] != log.RawResponseBody {
-		t.Fatalf("RawResponseBody = %v, want %v", item["RawResponseBody"], log.RawResponseBody)
+	if item["raw_response_body"] != log.RawResponseBody {
+		t.Fatalf("RawResponseBody = %v, want %v", item["raw_response_body"], log.RawResponseBody)
 	}
 }
 
@@ -193,23 +193,23 @@ func TestGetRequestLogDetail_ReturnsRawFields(t *testing.T) {
 		t.Fatalf("payload code = %d, want 200, body=%s", payload.Code, w.Body.String())
 	}
 
-	if payload.Data["RequestHeaders"] != log.RequestHeaders {
-		t.Fatalf("RequestHeaders = %v, want %v", payload.Data["RequestHeaders"], log.RequestHeaders)
+	if payload.Data["request_headers"] != log.RequestHeaders {
+		t.Fatalf("RequestHeaders = %v, want %v", payload.Data["request_headers"], log.RequestHeaders)
 	}
-	if payload.Data["RequestBody"] != log.RequestBody {
-		t.Fatalf("RequestBody = %v, want %v", payload.Data["RequestBody"], log.RequestBody)
+	if payload.Data["request_body"] != log.RequestBody {
+		t.Fatalf("RequestBody = %v, want %v", payload.Data["request_body"], log.RequestBody)
 	}
-	if payload.Data["RawRequestBody"] != log.RawRequestBody {
-		t.Fatalf("RawRequestBody = %v, want %v", payload.Data["RawRequestBody"], log.RawRequestBody)
+	if payload.Data["raw_request_body"] != log.RawRequestBody {
+		t.Fatalf("RawRequestBody = %v, want %v", payload.Data["raw_request_body"], log.RawRequestBody)
 	}
-	if payload.Data["ResponseHeaders"] != log.ResponseHeaders {
-		t.Fatalf("ResponseHeaders = %v, want %v", payload.Data["ResponseHeaders"], log.ResponseHeaders)
+	if payload.Data["response_headers"] != log.ResponseHeaders {
+		t.Fatalf("ResponseHeaders = %v, want %v", payload.Data["response_headers"], log.ResponseHeaders)
 	}
-	if payload.Data["ResponseBody"] != log.ResponseBody {
-		t.Fatalf("ResponseBody = %v, want %v", payload.Data["ResponseBody"], log.ResponseBody)
+	if payload.Data["response_body"] != log.ResponseBody {
+		t.Fatalf("ResponseBody = %v, want %v", payload.Data["response_body"], log.ResponseBody)
 	}
-	if payload.Data["RawResponseBody"] != log.RawResponseBody {
-		t.Fatalf("RawResponseBody = %v, want %v", payload.Data["RawResponseBody"], log.RawResponseBody)
+	if payload.Data["raw_response_body"] != log.RawResponseBody {
+		t.Fatalf("RawResponseBody = %v, want %v", payload.Data["raw_response_body"], log.RawResponseBody)
 	}
 }
 
@@ -229,5 +229,67 @@ func TestGetRequestLogDetail_NotFound(t *testing.T) {
 	}
 	if payload.Code != 404 {
 		t.Fatalf("payload code = %d, want 404, body=%s", payload.Code, w.Body.String())
+	}
+}
+
+// TestGetRequestLogs_ReturnsUsageDetailsAndSource 回归保护：早期用 map[string]any
+// 手拼响应时漏写了 completion_tokens_details——reasoning_tokens 已落库但 API 永不返回，
+// 前端类型声明成了谎言；usage_source 同样从未暴露，管理端无法区分「上游没给 token」
+// 与「归集链路丢了」。改用结构体 DTO 后编译器保证字段齐全，此测试锁住这两个字段。
+func TestGetRequestLogs_ReturnsUsageDetailsAndSource(t *testing.T) {
+	testsupport.InitTestDB(t)
+
+	log := models.ChatLog{
+		Name:         "m1",
+		ProviderName: "p1",
+		Status:       "success",
+		Style:        "openai",
+		Usage: models.Usage{
+			PromptTokens:            10,
+			CompletionTokens:        20,
+			TotalTokens:             30,
+			PromptTokensDetails:     models.PromptTokensDetails{CachedTokens: 3},
+			CompletionTokensDetails: models.CompletionTokensDetails{ReasoningTokens: 7},
+		},
+		UsageSource: models.UsageSourceUpstream,
+	}
+	if err := models.DB.Create(&log).Error; err != nil {
+		t.Fatalf("create log: %v", err)
+	}
+
+	c, w := testsupport.NewTestContext("GET", "/logs?page=1&page_size=20")
+	GetRequestLogs(c)
+	if w.Code != 200 {
+		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+
+	var payload testsupport.APIEnvelope[requestLogsResponse]
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
+	}
+	if len(payload.Data.Data) != 1 {
+		t.Fatalf("logs length = %d, want 1", len(payload.Data.Data))
+	}
+
+	item := payload.Data.Data[0]
+
+	completionDetails, ok := item["completion_tokens_details"].(map[string]any)
+	if !ok {
+		t.Fatalf("completion_tokens_details missing or not an object: %v", item["completion_tokens_details"])
+	}
+	if completionDetails["reasoning_tokens"] != float64(7) {
+		t.Fatalf("reasoning_tokens = %v, want 7", completionDetails["reasoning_tokens"])
+	}
+
+	promptDetails, ok := item["prompt_tokens_details"].(map[string]any)
+	if !ok {
+		t.Fatalf("prompt_tokens_details missing or not an object: %v", item["prompt_tokens_details"])
+	}
+	if promptDetails["cached_tokens"] != float64(3) {
+		t.Fatalf("cached_tokens = %v, want 3", promptDetails["cached_tokens"])
+	}
+
+	if item["usage_source"] != models.UsageSourceUpstream {
+		t.Fatalf("usage_source = %v, want %v", item["usage_source"], models.UsageSourceUpstream)
 	}
 }

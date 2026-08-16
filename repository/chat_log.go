@@ -194,28 +194,18 @@ func (r *chatLogRepo) List(ctx context.Context, opts ChatLogListOptions) (*ChatL
 
 	query := baseQuery
 	if !opts.IncludeRaw {
-		query = query.Select(
-			"id",
-			"created_at",
-			"name",
-			"provider_model",
-			"provider_name",
-			"status",
-			"style",
-			"user_agent",
-			"remote_ip",
-			"chat_io",
-			"error",
-			"retry",
-			"proxy_time",
-			"first_chunk_time",
-			"chunk_time",
-			"tps",
-			"prompt_tokens",
-			"completion_tokens",
-			"total_tokens",
-			"prompt_tokens_details",
-			"completion_tokens_details",
+		// 用 Omit 排除 raw 大字段，而非 Select 白名单列举保留字段。
+		// 白名单的失效模式是静默的：ChatLog 新增字段时忘记加进来，查询结果里
+		// 该字段恒为零值，调用方无从察觉（usage_source 就这样漏过一轮）。
+		// 黑名单只需描述「不要什么」，语义与「列表不返回大字段」的意图一致，
+		// 且新增字段自动包含。
+		query = query.Omit(
+			"request_headers",
+			"request_body",
+			"raw_request_body",
+			"response_headers",
+			"response_body",
+			"raw_response_body",
 		)
 	}
 

@@ -14,53 +14,10 @@ type chatLogEnrichResult struct {
 	targetFormat        string
 }
 
-func buildEnrichedChatLog(log models.ChatLog, enrich chatLogEnrichResult, includeRaw bool) map[string]any {
-	enrichedLog := map[string]any{
-		"ID":                    log.ID,
-		"CreatedAt":             log.CreatedAt,
-		"Name":                  log.Name,
-		"ProviderModel":         log.ProviderModel,
-		"ProviderName":          log.ProviderName,
-		"Status":                log.Status,
-		"Style":                 log.Style,
-		"UserAgent":             log.UserAgent,
-		"RemoteIP":              log.RemoteIP,
-		"Error":                 log.Error,
-		"Retry":                 log.Retry,
-		"ProxyTime":             log.ProxyTime,
-		"FirstChunkTime":        log.FirstChunkTime,
-		"ChunkTime":             log.ChunkTime,
-		"Tps":                   log.Tps,
-		"ChatIO":                log.ChatIO,
-		"prompt_tokens":         log.PromptTokens,
-		"completion_tokens":     log.CompletionTokens,
-		"total_tokens":          log.TotalTokens,
-		"prompt_tokens_details": log.PromptTokensDetails,
-		"is_virtual_model":      enrich.isVirtualModel,
-		"has_format_conversion": enrich.hasFormatConversion,
-	}
-
-	if enrich.hasFormatConversion {
-		enrichedLog["source_format"] = enrich.sourceFormat
-		enrichedLog["target_format"] = enrich.targetFormat
-	}
-
-	if includeRaw {
-		enrichedLog["RequestHeaders"] = log.RequestHeaders
-		enrichedLog["RequestBody"] = log.RequestBody
-		enrichedLog["RawRequestBody"] = log.RawRequestBody
-		enrichedLog["ResponseHeaders"] = log.ResponseHeaders
-		enrichedLog["ResponseBody"] = log.ResponseBody
-		enrichedLog["RawResponseBody"] = log.RawResponseBody
-	}
-
-	return enrichedLog
-}
-
 // enrichChatLogs 多表只读富化：VirtualModel / Provider 查询暂留此处（plan 白名单例外）。
-func enrichChatLogs(ctx context.Context, logs []models.ChatLog, includeRaw bool) []map[string]any {
+func enrichChatLogs(ctx context.Context, logs []models.ChatLog, includeRaw bool) []chatLogResponse {
 	if len(logs) == 0 {
-		return []map[string]any{}
+		return []chatLogResponse{}
 	}
 
 	nameSet := make(map[string]struct{}, len(logs))
@@ -115,7 +72,7 @@ func enrichChatLogs(ctx context.Context, logs []models.ChatLog, includeRaw bool)
 		}
 	}
 
-	enrichedLogs := make([]map[string]any, 0, len(logs))
+	enrichedLogs := make([]chatLogResponse, 0, len(logs))
 	for _, log := range logs {
 		_, isVirtual := virtualNameSet[log.Name]
 		providerType := providerTypeByName[log.ProviderName]
@@ -128,7 +85,7 @@ func enrichChatLogs(ctx context.Context, logs []models.ChatLog, includeRaw bool)
 			targetFormat:        providerType,
 		}
 
-		enrichedLogs = append(enrichedLogs, buildEnrichedChatLog(log, enrich, includeRaw))
+		enrichedLogs = append(enrichedLogs, buildChatLogResponse(log, enrich, includeRaw))
 	}
 
 	return enrichedLogs

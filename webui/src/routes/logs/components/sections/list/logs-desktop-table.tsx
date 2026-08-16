@@ -64,20 +64,20 @@ export function LogsDesktopTable({
         </TableHeader>
         <TableBody>
           {logs.map((log) => (
-            <TableRow key={log.ID} className={selectedIds.has(log.ID) ? "bg-muted/50" : ""}>
+            <TableRow key={log.id} className={selectedIds.has(log.id) ? "bg-muted/50" : ""}>
               <TableCell>
                 <Checkbox
-                  checked={selectedIds.has(log.ID)}
-                  onCheckedChange={(checked) => onSelectOne(log.ID, checked === true)}
-                  aria-label={`选择日志 ${log.ID}`}
+                  checked={selectedIds.has(log.id)}
+                  onCheckedChange={(checked) => onSelectOne(log.id, checked === true)}
+                  aria-label={`选择日志 ${log.id}`}
                 />
               </TableCell>
               <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                {formatDateTime(log.CreatedAt)}
+                {formatDateTime(log.created_at)}
               </TableCell>
               <TableCell className="font-medium">
                 <div className="flex items-center gap-2">
-                  <span>{log.Name}</span>
+                  <span>{log.name}</span>
                   {log.is_virtual_model && (
                     <Badge variant="secondary" className="text-xs">
                       虚拟
@@ -88,15 +88,15 @@ export function LogsDesktopTable({
               <TableCell>
                 <span
                   className={`inline-flex items-center px-2 py-1 ${
-                    log.Status === "success" ? "text-success" : "text-destructive"
+                    log.status === "success" ? "text-success" : "text-destructive"
                   }`}
                 >
-                  {log.Status}
+                  {log.status}
                 </span>
               </TableCell>
-              <TableCell>{formatTime(log.ChunkTime)}</TableCell>
-              <TableCell className="max-w-[120px] truncate text-xs" title={log.ProviderModel}>
-                {log.ProviderModel}
+              <TableCell>{formatTime(log.chunk_time)}</TableCell>
+              <TableCell className="max-w-[120px] truncate text-xs" title={log.provider_model}>
+                {log.provider_model}
               </TableCell>
                <TableCell className="text-xs">
                  {log.has_format_conversion ? (
@@ -105,11 +105,11 @@ export function LogsDesktopTable({
                    </Badge>
                  ) : (
                   <Badge variant="outline" className="text-xs">
-                    {log.Style || "-"}
+                    {log.style || "-"}
                   </Badge>
                  )}
                </TableCell>
-              <TableCell className="text-xs">{log.ProviderName}</TableCell>
+              <TableCell className="text-xs">{log.provider_name}</TableCell>
               <TableCell>
                 <div className="flex gap-1">
                   <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => onOpenDetail(log)}>
@@ -128,7 +128,7 @@ export function LogsDesktopTable({
                     variant="ghost"
                     size="sm"
                     className="h-8 px-2 text-destructive hover:text-destructive"
-                    onClick={() => onOpenDelete(log.ID)}
+                    onClick={() => onOpenDelete(log.id)}
                     disabled={deleting}
                   >
                     <Trash2 className="size-4" />

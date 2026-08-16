@@ -22,6 +22,7 @@
 
 ```
 handler/logs/          # 列表、详情、chat-io、删除、enrich
+handler/logs/dto.go    # 对外响应契约（chatLogResponse / chatIOResponse）+ 映射
 handler/metrics/       # dashboard 计数与时序
 service/chat/*record* / chat_log_storage.go  # 日志落库编排
 service/chatstats/     # Stats* 写入组合（叶子包，经 StatsRepo）
@@ -35,6 +36,7 @@ models/retention.go
 
 | 契约 | 职责 | 定义位置 | 实现方 |
 |------|------|----------|--------|
+| `chatLogResponse` / `chatIOResponse` | `/api/logs*` 与 `/api/logs/:id/chat-io` 的对外响应契约（全 snake_case），与 `models.ChatLog`/`ChatIO` 解耦 | `handler/logs/dto.go` | 同文件的 `buildChatLogResponse` / `buildChatIOResponse` |
 | `ChatLogRepo` / `ChatIORepo` | 日志与 IO 持久化访问 | `repository/chat_log.go` | GORM |
 | `StatsRepo` | 六张 Stats* 表的写入（`AddTimeBased`/`IncModelCalls`/`IncRealModelCalls`/`AddProviderStats`）与读侧聚合（`GetTotal`/`SumDailiesSince`/`List*`） | `repository/stats.go` | GORM（`clause.OnConflict` upsert） |
 | `RecordLog` / 落库编排 | 请求结束后 processer + 落库 | `service/chat` | 同包 |
@@ -43,6 +45,9 @@ models/retention.go
 
 ## 5. 特殊约定
 
+- **对外响应必须经 `handler/logs/dto.go` 的 DTO，禁止裸序列化 `models.ChatLog`/`ChatIO`**。理由是历史教训而非洁癖：`ChatIO` 曾直接 `httpresp.Success(c, chatIO)` 返回，GORM 模型的 Go 字段名就是 JSON key，改一个字段名（`LogId`→`LogID`）即破坏前端契约；`ChatLog` 曾用 `map[string]any` 手拼，漏写 `completion_tokens_details` 导致 reasoning_tokens 落库有值但 API 永不返回、前端类型声明成为谎言。结构体 DTO 让编译器兜住字段齐全，模型层字段改名不再波及 API
+- API 字段一律 snake_case（含 `id` / `created_at` / `chat_io` 等，AGENTS.md 3.1）；`raw` 六字段用 `*string`+`omitempty`——空字符串是合法值，必须与「include_raw=false 未返回」区分
+- `ChatLogRepo.List` 在 `!IncludeRaw` 时用 **Omit 排除 raw 大字段**，不用 Select 白名单：白名单的失效模式是静默的（新增字段忘记加进来 → 该字段恒为零值，调用方无从察觉，`usage_source` 就这样漏过一轮）
 - `logs/enrich.go` 允许多表只读富化直连（repository 白名单例外之一）
 - 统计表的日期列格式（`2006-01-02`）与「时间维度 = total/daily/hourly 三表」属存储细节，只在 `repository/stats.go` 内出现；调用方一律传 `time.Time`
 - `StatsProviderTotal.AvgResponseTime` 存的是**累计**耗时，均值由 `handler/metrics` 除以 `TotalRequests` 得到；补零/除零保护等展示计算不下沉仓储

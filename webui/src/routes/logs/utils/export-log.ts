@@ -42,6 +42,7 @@ export type ChatLogExportPayload = {
     total_tokens: number;
     prompt_tokens_details: ChatLog["prompt_tokens_details"] | null;
     completion_tokens_details: ChatLog["completion_tokens_details"] | null;
+    usage_source: string | null;
   };
   request?: {
     headers: string | null;
@@ -64,17 +65,17 @@ export function buildChatLogExportPayload(log: ChatLog, sections: ChatLogExportS
   const payload: ChatLogExportPayload = {};
 
   if (sections.basic) {
-    payload.log_id = log.ID;
-    payload.created_at = log.CreatedAt;
-    payload.model_name = log.Name;
-    payload.provider_name = log.ProviderName;
-    payload.provider_model = log.ProviderModel;
-    payload.status = log.Status;
-    payload.style = log.Style;
-    payload.user_agent = log.UserAgent;
-    payload.remote_ip = toNullableString(log.RemoteIP);
-    payload.retry = log.Retry;
-    payload.chat_io = log.ChatIO;
+    payload.log_id = log.id;
+    payload.created_at = log.created_at;
+    payload.model_name = log.name;
+    payload.provider_name = log.provider_name;
+    payload.provider_model = log.provider_model;
+    payload.status = log.status;
+    payload.style = log.style;
+    payload.user_agent = log.user_agent;
+    payload.remote_ip = toNullableString(log.remote_ip);
+    payload.retry = log.retry;
+    payload.chat_io = log.chat_io;
     payload.is_virtual_model = log.is_virtual_model;
     payload.has_format_conversion = log.has_format_conversion;
     payload.source_format = toNullableString(log.source_format);
@@ -82,15 +83,15 @@ export function buildChatLogExportPayload(log: ChatLog, sections: ChatLogExportS
   }
 
   if (sections.error) {
-    payload.error = toNullableString(log.Error);
+    payload.error = toNullableString(log.error);
   }
 
   if (sections.performance) {
     payload.performance = {
-      proxy_time: log.ProxyTime,
-      first_chunk_time: log.FirstChunkTime,
-      chunk_time: log.ChunkTime,
-      tps: log.Tps,
+      proxy_time: log.proxy_time,
+      first_chunk_time: log.first_chunk_time,
+      chunk_time: log.chunk_time,
+      tps: log.tps,
     };
   }
 
@@ -101,22 +102,23 @@ export function buildChatLogExportPayload(log: ChatLog, sections: ChatLogExportS
       total_tokens: log.total_tokens,
       prompt_tokens_details: log.prompt_tokens_details ?? null,
       completion_tokens_details: log.completion_tokens_details ?? null,
+      usage_source: toNullableString(log.usage_source),
     };
   }
 
   if (sections.request) {
     payload.request = {
-      headers: toNullableString(log.RequestHeaders),
-      body: toNullableString(log.RequestBody),
-      raw_body: toNullableString(log.RawRequestBody),
+      headers: toNullableString(log.request_headers),
+      body: toNullableString(log.request_body),
+      raw_body: toNullableString(log.raw_request_body),
     };
   }
 
   if (sections.response) {
     payload.response = {
-      headers: toNullableString(log.ResponseHeaders),
-      body: toNullableString(log.ResponseBody),
-      raw_body: toNullableString(log.RawResponseBody),
+      headers: toNullableString(log.response_headers),
+      body: toNullableString(log.response_body),
+      raw_body: toNullableString(log.raw_response_body),
     };
   }
 
@@ -134,7 +136,7 @@ export function exportChatLog(
 
   const link = document.createElement("a");
   link.href = url;
-  link.download = `log-${log.ID}-export-${Date.now()}.json`;
+  link.download = `log-${log.id}-export-${Date.now()}.json`;
 
   document.body.appendChild(link);
   link.click();

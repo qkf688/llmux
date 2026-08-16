@@ -31,7 +31,7 @@ export function RequestResponseSection({
   }
 
   const hasRequestResponseContent = Boolean(
-    log.RequestHeaders || log.RequestBody || log.RawRequestBody || log.ResponseHeaders || log.RawResponseBody || log.ResponseBody
+    log.request_headers || log.request_body || log.raw_request_body || log.response_headers || log.raw_response_body || log.response_body
   );
 
   if (!hasRequestResponseContent) {
@@ -72,68 +72,68 @@ export function RequestResponseSection({
       </div>
 
       <div className="space-y-3">
-        {log.RequestHeaders && (
+        {log.request_headers && (
           <div className="rounded-md border bg-muted/20 p-2 space-y-1 sm:p-3">
             <p className="text-[11px] text-muted-foreground uppercase tracking-wide">
-              请求头 ({formatByteLength(log.RequestHeaders)})
+              请求头 ({formatByteLength(log.request_headers)})
             </p>
             <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
-              {log.RequestHeaders}
+              {log.request_headers}
             </pre>
           </div>
         )}
 
-        {log.RawRequestBody && (
+        {log.raw_request_body && (
           <div className="rounded-md border bg-info-tint p-2 space-y-1 sm:p-3">
             <p className="text-[11px] text-info-foreground uppercase tracking-wide">
-              {log.RequestBody ? "原始请求体 - 转换前" : "请求体"} ({formatByteLength(log.RawRequestBody)})
+              {log.request_body ? "原始请求体 - 转换前" : "请求体"} ({formatByteLength(log.raw_request_body)})
             </p>
             <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-info-foreground">
-              {log.RawRequestBody}
+              {log.raw_request_body}
             </pre>
           </div>
         )}
 
-        {log.RequestBody && (
+        {log.request_body && (
           <div className="rounded-md border bg-success-tint p-2 space-y-1 sm:p-3">
             <p className="text-[11px] text-success-foreground uppercase tracking-wide">
-              {log.RawRequestBody ? "请求体 - 转换后" : "请求体"} ({formatByteLength(log.RequestBody)})
+              {log.raw_request_body ? "请求体 - 转换后" : "请求体"} ({formatByteLength(log.request_body)})
             </p>
             <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-success-foreground">
-              {log.RequestBody}
+              {log.request_body}
             </pre>
           </div>
         )}
 
-        {log.ResponseHeaders && (
+        {log.response_headers && (
           <div className="rounded-md border bg-muted/20 p-2 space-y-1 sm:p-3">
             <p className="text-[11px] text-muted-foreground uppercase tracking-wide">
-              响应头 ({formatByteLength(log.ResponseHeaders)})
+              响应头 ({formatByteLength(log.response_headers)})
             </p>
             <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
-              {log.ResponseHeaders}
+              {log.response_headers}
             </pre>
           </div>
         )}
 
-        {log.RawResponseBody && (
+        {log.raw_response_body && (
           <div className="rounded-md border bg-info-tint p-2 space-y-1 sm:p-3">
             <p className="text-[11px] text-info-foreground uppercase tracking-wide">
-              {log.ResponseBody ? "原始响应体 - 转换前" : "响应体"} ({formatByteLength(log.RawResponseBody)})
+              {log.response_body ? "原始响应体 - 转换前" : "响应体"} ({formatByteLength(log.raw_response_body)})
             </p>
             <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-info-foreground">
-              {log.RawResponseBody}
+              {log.raw_response_body}
             </pre>
           </div>
         )}
 
-        {log.ResponseBody && (
+        {log.response_body && (
           <div className="rounded-md border bg-success-tint p-2 space-y-1 sm:p-3">
             <p className="text-[11px] text-success-foreground uppercase tracking-wide">
-              响应体 - 转换后 ({formatByteLength(log.ResponseBody)})
+              响应体 - 转换后 ({formatByteLength(log.response_body)})
             </p>
             <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-success-foreground">
-              {log.ResponseBody}
+              {log.response_body}
             </pre>
           </div>
         )}

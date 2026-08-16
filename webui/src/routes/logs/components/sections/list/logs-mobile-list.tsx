@@ -39,20 +39,20 @@ export function LogsMobileList({
     >
       {logs.map((log) => (
         <StaggerItem
-          key={log.ID}
-          className={`py-2 space-y-2 my-0.5 px-1 ${selectedIds.has(log.ID) ? "bg-muted/50 rounded" : ""}`}
+          key={log.id}
+          className={`py-2 space-y-2 my-0.5 px-1 ${selectedIds.has(log.id) ? "bg-muted/50 rounded" : ""}`}
         >
           <div className="flex items-start gap-2 min-w-0">
             <div className="flex items-start gap-2 min-w-0 flex-1">
               <Checkbox
-                checked={selectedIds.has(log.ID)}
-                onCheckedChange={(checked) => onSelectOne(log.ID, checked === true)}
+                checked={selectedIds.has(log.id)}
+                onCheckedChange={(checked) => onSelectOne(log.id, checked === true)}
                 className="mt-0.5 shrink-0"
               />
               <div className="min-w-0 flex-1">
                 <div className="flex items-start gap-2 min-w-0">
                   <h3 className="font-semibold text-[13px] leading-snug break-words overflow-hidden [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical]">
-                    {log.Name}
+                    {log.name}
                   </h3>
                   {log.is_virtual_model && (
                     <Badge variant="secondary" className="shrink-0 text-[10px] px-1.5 py-0.5">
@@ -62,16 +62,16 @@ export function LogsMobileList({
                 </div>
                 <div className="flex items-center gap-2 pt-0.5">
                   <p className="min-w-0 text-[10px] text-muted-foreground leading-tight truncate">
-                    {formatDateTime(log.CreatedAt)}
+                    {formatDateTime(log.created_at)}
                   </p>
                   <span
                     className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                      log.Status === "success"
+                      log.status === "success"
                         ? "bg-success-tint text-success-foreground"
                         : "bg-destructive-tint text-destructive-tint-foreground"
                     }`}
                   >
-                    {log.Status}
+                    {log.status}
                   </span>
                 </div>
               </div>
@@ -81,11 +81,11 @@ export function LogsMobileList({
           <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px] ml-6">
             <div className="space-y-0.5">
               <p className="text-muted-foreground text-[10px] uppercase tracking-wide">耗时</p>
-              <p className="font-medium">{formatTime(log.ChunkTime)}</p>
+              <p className="font-medium">{formatTime(log.chunk_time)}</p>
             </div>
             <div className="space-y-0.5">
               <p className="text-muted-foreground text-[10px] uppercase tracking-wide">提供商</p>
-              <p className="truncate">{log.ProviderName}</p>
+              <p className="truncate">{log.provider_name}</p>
             </div>
             <div className="space-y-0.5">
               <p className="text-muted-foreground text-[10px] uppercase tracking-wide">格式</p>
@@ -96,18 +96,18 @@ export function LogsMobileList({
                    </Badge>
                  ) : (
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
-                    {log.Style || "-"}
+                    {log.style || "-"}
                   </Badge>
                  )}
                </p>
              </div>
             <div className="space-y-0.5">
               <p className="text-muted-foreground text-[10px] uppercase tracking-wide">请求头</p>
-              <p className="font-medium">{formatByteLength(log.RequestHeaders)}</p>
+              <p className="font-medium">{formatByteLength(log.request_headers)}</p>
             </div>
             <div className="space-y-0.5 col-span-2">
               <p className="text-muted-foreground text-[10px] uppercase tracking-wide">响应头</p>
-              <p className="font-medium">{formatByteLength(log.ResponseHeaders)}</p>
+              <p className="font-medium">{formatByteLength(log.response_headers)}</p>
             </div>
           </div>
 
@@ -127,7 +127,7 @@ export function LogsMobileList({
               variant="ghost"
               size="sm"
               className="h-6 px-1.5 text-destructive"
-              onClick={() => onOpenDelete(log.ID)}
+              onClick={() => onOpenDelete(log.id)}
               disabled={deleting}
               aria-label="删除日志"
             >

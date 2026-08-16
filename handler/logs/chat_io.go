@@ -22,7 +22,7 @@ func GetChatIO(c *gin.Context) {
 		return
 	}
 
-	httpresp.Success(c, chatIO)
+	httpresp.Success(c, buildChatIOResponse(*chatIO))
 }
 
 // GetUserAgents 获取所有不重复的用户代理种类。

@@ -294,13 +294,29 @@ var processerAnthropic = createProcesser(processerConfig{
 				return models.Usage{}, err
 			}
 		}
-		totalTokens := u.InputTokens + u.OutputTokens
+		// 某些 OpenAI 兼容供应商（如 kimi）走 anthropic 直通时只回填 openai 兼容字段
+		// （prompt_tokens / completion_tokens / cached_tokens），不给 anthropic 原生字段。
+		// 缺原生字段时回退到兼容字段，避免这类上游 token 统计恒为 0。
+		prompt := u.InputTokens
+		if prompt == 0 {
+			prompt = u.PromptTokens
+		}
+		completion := u.OutputTokens
+		if completion == 0 {
+			completion = u.CompletionTokens
+		}
+		cached := u.CacheReadInputTokens
+		if cached == 0 {
+			cached = u.CachedTokens
+		}
+		// total 口径仍为 prompt+completion（不含 Anthropic cache token），与全仓一致。
+		totalTokens := prompt + completion
 		return models.Usage{
-			PromptTokens:     u.InputTokens,
-			CompletionTokens: u.OutputTokens,
+			PromptTokens:     prompt,
+			CompletionTokens: completion,
 			TotalTokens:      totalTokens,
 			PromptTokensDetails: models.PromptTokensDetails{
-				CachedTokens: u.CacheReadInputTokens,
+				CachedTokens: cached,
 			},
 		}, nil
 	},

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/qkf688/llmux/common/maputil"
+	"github.com/qkf688/llmux/models"
 )
 
 func init() {
@@ -490,7 +491,7 @@ func buildResponsesUsage(usage map[string]interface{}) map[string]interface{} {
 	usageMap := map[string]interface{}{
 		"input_tokens":  promptTokens,
 		"output_tokens": completionTokens,
-		"total_tokens": int(resolveTotalTokens(
+		"total_tokens": int(models.ResolveTotalTokens(
 			int64(promptTokens),
 			int64(completionTokens),
 			int64(maputil.Float64(usage, "total_tokens")),
@@ -500,21 +501,20 @@ func buildResponsesUsage(usage map[string]interface{}) map[string]interface{} {
 	// openai-res processer 会把 cached_tokens 落库，写死 0 与 #18 同源。
 	// 只有真值 >0 才写 details：写出 cached_tokens:0 会被下游误读为「上游明确报告
 	// 无缓存命中」，与「字段缺失＝未知」是两种语义（与 anthropic 路径一致）。
-	if promptTokens > 0 {
-		if d, ok := usage["prompt_tokens_details"].(map[string]interface{}); ok {
-			if cached := int(maputil.Float64(d, "cached_tokens")); cached > 0 {
-				usageMap["input_tokens_details"] = map[string]interface{}{
-					"cached_tokens": cached,
-				}
+	// 判据只看 detail 本身，不附加父级 prompt/completion >0 的前置条件——出站两处
+	// （另一处是 responses_to_openai 的 buildOpenAIUsageFromResponses）与入站归一
+	// models.UsageFromMap 必须同口径，否则 cached>0 && prompt==0 这类异常上游下发散。
+	if d, ok := usage["prompt_tokens_details"].(map[string]interface{}); ok {
+		if cached := int(maputil.Float64(d, "cached_tokens")); cached > 0 {
+			usageMap["input_tokens_details"] = map[string]interface{}{
+				"cached_tokens": cached,
 			}
 		}
 	}
-	if completionTokens > 0 {
-		if d, ok := usage["completion_tokens_details"].(map[string]interface{}); ok {
-			if reasoning := int(maputil.Float64(d, "reasoning_tokens")); reasoning > 0 {
-				usageMap["output_tokens_details"] = map[string]interface{}{
-					"reasoning_tokens": reasoning,
-				}
+	if d, ok := usage["completion_tokens_details"].(map[string]interface{}); ok {
+		if reasoning := int(maputil.Float64(d, "reasoning_tokens")); reasoning > 0 {
+			usageMap["output_tokens_details"] = map[string]interface{}{
+				"reasoning_tokens": reasoning,
 			}
 		}
 	}

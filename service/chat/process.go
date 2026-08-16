@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"iter"
 	"strings"
@@ -91,8 +92,27 @@ type processerConfig struct {
 	// streamUsageExtract 从流式 chunk 中提取 usage 字符串。
 	// 返回非空字符串表示找到 usage。仅在 usageStr == "" 时调用。
 	streamUsageExtract func(ev SSEEvent) string
-	// parseUsage 将 usage JSON 字符串解析为 models.Usage。
-	parseUsage func(usageStr string) (models.Usage, error)
+}
+
+// parseUsageJSON 把上游 usage 的 JSON 片段解析并归一为 models.Usage。
+//
+// 三个协议共用一份：usage 的形状差异（input_tokens vs prompt_tokens、
+// 嵌套 details vs 顶层字段、anthropic 与 openai 兼容字段并存）全部由
+// models.UsageFromMap 的候选路径表吸收，故这里不是 per-protocol 配置项——
+// 新增一种上游写法只该往候选表加一行，不该在此再分叉一份解析（OCP/DRY）。
+//
+// usageStr 非合法 JSON（含空串，即上游未给 usage）时返回零值 Usage 与 nil error，
+// 与「上游明确报 0」同为零值：落库侧靠 UsageSource 区分可信度，不在此处编造。
+func parseUsageJSON(usageStr string) (models.Usage, error) {
+	raw := []byte(usageStr)
+	if !json.Valid(raw) {
+		return models.Usage{}, nil
+	}
+	var usage map[string]interface{}
+	if err := json.Unmarshal(raw, &usage); err != nil {
+		return models.Usage{}, fmt.Errorf("parse upstream usage: %w", err)
+	}
+	return models.UsageFromMap(usage), nil
 }
 
 // createProcesser 根据配置创建一个 Processer，统一 stream/non-stream、首包时间、TPS 逻辑。
@@ -167,7 +187,7 @@ func createProcesser(cfg processerConfig) Processer {
 
 		var usage models.Usage
 		if !disableTokenCounting {
-			u, err := cfg.parseUsage(usageStr)
+			u, err := parseUsageJSON(usageStr)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -207,41 +227,7 @@ var processerOpenAI = createProcesser(processerConfig{
 		}
 		return ""
 	},
-	parseUsage: func(usageStr string) (models.Usage, error) {
-		var u models.Usage
-		usage := []byte(usageStr)
-		if json.Valid(usage) {
-			if err := json.Unmarshal(usage, &u); err != nil {
-				return models.Usage{}, err
-			}
-		}
-		return u, nil
-	},
 })
-
-type OpenAIResUsage struct {
-	InputTokens        int64              `json:"input_tokens"`
-	OutputTokens       int64              `json:"output_tokens"`
-	TotalTokens        int64              `json:"total_tokens"`
-	InputTokensDetails InputTokensDetails `json:"input_tokens_details"`
-}
-
-type InputTokensDetails struct {
-	CachedTokens int64 `json:"cached_tokens"`
-}
-
-type AnthropicUsage struct {
-	InputTokens              int64  `json:"input_tokens"`
-	CacheCreationInputTokens int64  `json:"cache_creation_input_tokens"`
-	CacheReadInputTokens     int64  `json:"cache_read_input_tokens"`
-	OutputTokens             int64  `json:"output_tokens"`
-	ServiceTier              string `json:"service_tier"`
-	// OpenAI 兼容字段（某些提供商如 kimi 会同时返回）
-	PromptTokens     int64 `json:"prompt_tokens"`
-	CompletionTokens int64 `json:"completion_tokens"`
-	TotalTokens      int64 `json:"total_tokens"`
-	CachedTokens     int64 `json:"cached_tokens"`
-}
 
 func ProcesserOpenAiRes(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
 	return processerOpenAiRes(ctx, pr, stream, start, disablePerformanceTracking, disableTokenCounting)
@@ -254,23 +240,6 @@ var processerOpenAiRes = createProcesser(processerConfig{
 			return gjson.Get(ev.Data, "response.usage").String()
 		}
 		return ""
-	},
-	parseUsage: func(usageStr string) (models.Usage, error) {
-		var u OpenAIResUsage
-		usage := []byte(usageStr)
-		if json.Valid(usage) {
-			if err := json.Unmarshal(usage, &u); err != nil {
-				return models.Usage{}, err
-			}
-		}
-		return models.Usage{
-			PromptTokens:     u.InputTokens,
-			CompletionTokens: u.OutputTokens,
-			TotalTokens:      u.TotalTokens,
-			PromptTokensDetails: models.PromptTokensDetails{
-				CachedTokens: u.InputTokensDetails.CachedTokens,
-			},
-		}, nil
 	},
 })
 
@@ -285,40 +254,6 @@ var processerAnthropic = createProcesser(processerConfig{
 			return gjson.Get(ev.Data, "usage").String()
 		}
 		return ""
-	},
-	parseUsage: func(usageStr string) (models.Usage, error) {
-		var u AnthropicUsage
-		usage := []byte(usageStr)
-		if json.Valid(usage) {
-			if err := json.Unmarshal(usage, &u); err != nil {
-				return models.Usage{}, err
-			}
-		}
-		// 某些 OpenAI 兼容供应商（如 kimi）走 anthropic 直通时只回填 openai 兼容字段
-		// （prompt_tokens / completion_tokens / cached_tokens），不给 anthropic 原生字段。
-		// 缺原生字段时回退到兼容字段，避免这类上游 token 统计恒为 0。
-		prompt := u.InputTokens
-		if prompt == 0 {
-			prompt = u.PromptTokens
-		}
-		completion := u.OutputTokens
-		if completion == 0 {
-			completion = u.CompletionTokens
-		}
-		cached := u.CacheReadInputTokens
-		if cached == 0 {
-			cached = u.CachedTokens
-		}
-		// total 口径仍为 prompt+completion（不含 Anthropic cache token），与全仓一致。
-		totalTokens := prompt + completion
-		return models.Usage{
-			PromptTokens:     prompt,
-			CompletionTokens: completion,
-			TotalTokens:      totalTokens,
-			PromptTokensDetails: models.PromptTokensDetails{
-				CachedTokens: cached,
-			},
-		}, nil
 	},
 })
 

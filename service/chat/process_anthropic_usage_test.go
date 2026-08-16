@@ -44,6 +44,16 @@ func TestProcesserAnthropic_ParseUsageFallsBackToOpenAICompatFields(t *testing.T
 			wantTotal:    240,
 			wantCached:   0,
 		},
+		{
+			// 原生 Anthropic 不返回 total_tokens，但 kimi 一类混合返回会给；
+			// 归一收敛后口径统一为「上游给了 total 就采用」，不再硬算 input+output。
+			name:         "上游给了 total：直接采用，不重算",
+			body:         `{"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":99}}`,
+			wantPrompt:   10,
+			wantComplete: 5,
+			wantTotal:    99,
+			wantCached:   0,
+		},
 	}
 
 	for _, tt := range tests {

@@ -78,7 +78,7 @@ func TestAnthropicUsage_InputSideComesFromMessageStart(t *testing.T) {
 
 	assertNumber(t, usage, "input_tokens", 100)
 	assertNumber(t, usage, "output_tokens", 42)
-	// total 沿用全仓统一口径 input+output（cache 明细不计入 total，见 process.go）。
+	// total 沿用全仓统一口径 input+output（cache 明细不计入 total，见 models.ResolveTotalTokens）。
 	assertNumber(t, usage, "total_tokens", 142)
 
 	inputDetails := nestedMap(t, completed.data, "response", "usage", "input_tokens_details")

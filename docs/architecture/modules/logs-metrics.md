@@ -59,10 +59,14 @@ models/retention.go
   1. `upstream`——跨协议场景下由 `models.TransformSideChannel` 旁路交出的**上游原始 usage**。转换层在读上游那一跳就地捕获（流式在 `service/transform/streaming/upstream_usage.go`，非流式在 `service/transform/transform_provider_response.go` 解析 `ParseResponse` 结果后），不经目标协议裁剪，最可信。多跳转换（provider → openai-res → client）只有**第一跳**持有侧信道，第二跳传 nil，避免把中间格式当成上游真值。
   2. `passthrough`——`style == provider.Type`，无转换层，processer 读的就是上游响应本身。
   3. `downstream`——走了转换但旁路没拿到 usage，退化为从**转换后**的下游流反解。此路径会打 `slog.Warn`，因为它可能因目标协议缺字段而失真。
-  
+
   三条都拿不到有效 token 时记 `missing` 并告警——token 恒为 0 会静默影响计费与配额，不能沉在 DB 里。usage 修正发生在 `chatstats.Record*` **之前**，故统计与日志读到的是同一份数字。
-- **上游 usage 字段容错**：`streaming/upstream_usage.go` 的 `usageFromUpstreamMap` 用有序候选路径表（`promptTokenPaths` / `cachedTokenPaths` / `reasoningTokenPaths` 等）归一各家写法——含 `completion_tokens_details.reasoning_tokens`、`output_tokens_details.reasoning_tokens`、usage 顶层 `reasoning_tokens`、`prompt_cache_hit_tokens`、Anthropic 的 `cache_read_input_tokens`。新增一种非标准写法只加一行候选，不改控制流（OCP）。**全零快照的丢弃收口在 `models.TransformSideChannel.SetUpstreamUsage`**（判据是 `models.Usage.HasTokens`，只看 Total/Prompt/Completion），流式与非流式共用同一道门禁——避免把「没解析出来」记成「上游明确报 0」而压掉 `missing` 告警。`resolveUsageSource` 判定有效性用的是同一个 `HasTokens`，两侧口径不会漂移
-- `total_tokens` 的落库口径统一为 `prompt + completion`（不把 Anthropic 的 cache_read / cache_creation 额外计入），转换层与 `resolveUsageSource` 两侧一致。上游省略 `total_tokens` 时的回退**收口在 `streaming/upstream_usage.go` 的 `resolveTotalTokens`**（纯函数），侧信道（落库侧的 `usageFromUpstreamMap`）与客户端写出点（`responses_to_openai.go`、`openai_to_responses.go` 的 `buildResponsesUsage`）共用同一判据——此前后者直写上游原值、缺失时写出 0，与侧信道的回退值分叉，造成同一次请求「客户端看 0、DB 记回退值」
+- **上游 usage 字段容错**：全仓单一归一入口 `models.UsageFromMap`（`models/usage_normalize.go`）用有序候选路径表（`promptTokenPaths` / `cachedTokenPaths` / `reasoningTokenPaths` 等）归一各家写法——含 `completion_tokens_details.reasoning_tokens`、`output_tokens_details.reasoning_tokens`、usage 顶层 `reasoning_tokens`、`prompt_cache_hit_tokens`、Anthropic 的 `cache_read_input_tokens`。新增一种非标准写法只加一行候选，不改控制流（OCP）。流式侧信道（`streaming/upstream_usage.go`）、非流 anthropic 入站（`service/anthropic/response_inbound.go`）与 `service/chat/process.go` 的三个 processer（合并为单一 `parseUsageJSON`）共用这一份；此前四处各写一套，退化成同一概念的四个残缺子集（openai-res processer 不读 reasoning、anthropic 非流入站不认 openai 兼容字段）。**全零快照的丢弃收口在 `models.TransformSideChannel.SetUpstreamUsage`**（判据是 `models.Usage.HasTokens`，只看 Total/Prompt/Completion），流式与非流式共用同一道门禁——避免把「没解析出来」记成「上游明确报 0」而压掉 `missing` 告警。`resolveUsageSource` 判定有效性用的是同一个 `HasTokens`，两侧口径不会漂移
+- **`total_tokens` 的口径分两种，收口在 `models.ResolveTotalTokens`（纯函数）**：
+  - **回退口径**——上游省略 `total_tokens` 时取 `prompt + completion`，不把 Anthropic 的 `cache_read` / `cache_creation` 额外计入，与 `models.Usage.HasTokens` 一致。
+  - **上游优先**——上游显式给了 `total_tokens`（>0）时一律原样采用、不重算，即使该值含 cache token（贴近上游真值）。故 anthropic 形状 usage 的 total 不再被强制重算为 `prompt+completion`。
+
+  侧信道 / processer 落库（经 `models.UsageFromMap`）与流式客户端写出点（`responses_to_openai.go` 的 `buildOpenAIUsageFromResponses`、`openai_to_responses.go` 的 `buildResponsesUsage`、`anthropic_to_responses.go` 的 `response.completed` usage）共用这一判据——此前写出点直写上游原值、缺失时写出 0（anthropic 出站更是硬算 `input+output`），与落库侧分叉，造成同一次请求「客户端看到的 total 与 DB 记录不一致」。**已知缺口**：非流入站的两处 DTO→unified 映射（`service/responses/response_parse.go`、`service/transform/openai/response.go`）仍直取上游原值未过该函数
 - 各 style processer 认的字段不同：openai 取根级 `usage`（不解析 `choices`，故天然免疫 OpenAI 的 `choices:[]` usage 尾包）、anthropic 取 `message_delta.usage`、openai-res 取 `response.completed` 内的 usage。这些只在 `downstream` / `passthrough` 路径生效
 
 

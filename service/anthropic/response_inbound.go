@@ -83,14 +83,11 @@ func ParseResponse(body []byte) (*models.UnifiedResponse, error) {
 	}}
 
 	if usage, ok := asMap(resp["usage"]); ok {
-		unified.Usage = &models.Usage{
-			PromptTokens:     int64(maputil.Float64(usage, "input_tokens")),
-			CompletionTokens: int64(maputil.Float64(usage, "output_tokens")),
-			TotalTokens:      int64(maputil.Float64(usage, "input_tokens") + maputil.Float64(usage, "output_tokens")),
-		}
-		// cache_read_input_tokens 是 Anthropic prompt caching 的读取命中数，
-		// 对应统一模型的 cached_tokens。reasoning 无对应字段（thinking 计入 output_tokens）。
-		unified.Usage.PromptTokensDetails.CachedTokens = int64(maputil.Float64(usage, "cache_read_input_tokens"))
+		// 归一走 models.UsageFromMap：anthropic 原生 input/output/cache_read 字段、
+		// kimi 一类混合返回的 openai 兼容字段、上游给定的 total 口径，全部由候选路径表
+		// 统一吸收，与流式侧信道 / chat processer 落库同源，不再本地手写一套解析。
+		u := models.UsageFromMap(usage)
+		unified.Usage = &u
 	}
 
 	return unified, nil

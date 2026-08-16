@@ -1,4 +1,4 @@
-package streaming
+package models
 
 import (
 	"testing"
@@ -6,15 +6,17 @@ import (
 
 // 上游 usage 归一化：有序候选路径必须能吃下各家非标准写法，
 // 且不会把「解析不出来」和「上游明确报 0」混在一起。
-func TestUsageFromUpstreamMap_ToleratesNonStandardShapes(t *testing.T) {
+func TestUsageFromMap_ToleratesNonStandardShapes(t *testing.T) {
 	tests := []struct {
-		name          string
-		usage         map[string]interface{}
-		wantPrompt    int64
-		wantComplete  int64
-		wantTotal     int64
-		wantCached    int64
-		wantReasoning int64
+		name              string
+		usage             map[string]interface{}
+		wantPrompt        int64
+		wantComplete      int64
+		wantTotal         int64
+		wantCached        int64
+		wantReasoning     int64
+		wantPromptAudio   int64
+		wantCompleteAudio int64
 	}{
 		{
 			name: "openai chat 标准嵌套 details",
@@ -67,12 +69,36 @@ func TestUsageFromUpstreamMap_ToleratesNonStandardShapes(t *testing.T) {
 			wantPrompt: 300, wantComplete: 60, wantTotal: 360, wantCached: 256,
 		},
 		{
+			// kimi 一类供应商走 anthropic 协议时只回填 openai 兼容字段，
+			// 不给 anthropic 原生 input_tokens / output_tokens。
+			name: "anthropic 协议但只有 openai 兼容字段",
+			usage: map[string]interface{}{
+				"prompt_tokens":     float64(11),
+				"completion_tokens": float64(22),
+				"cached_tokens":     float64(9),
+			},
+			wantPrompt: 11, wantComplete: 22, wantTotal: 33, wantCached: 9,
+		},
+		{
 			name: "total_tokens 缺失时回退为 prompt+completion",
 			usage: map[string]interface{}{
 				"prompt_tokens":     float64(7),
 				"completion_tokens": float64(3),
 			},
 			wantPrompt: 7, wantComplete: 3, wantTotal: 10,
+		},
+		{
+			// 原生与兼容并存（kimi 一类混合返回）：兼容位常是垃圾值，原生必须胜出。
+			name: "原生与顶层兼容字段并存：原生优先",
+			usage: map[string]interface{}{
+				"input_tokens":            float64(200),
+				"output_tokens":           float64(40),
+				"cache_read_input_tokens": float64(32),
+				"prompt_tokens":           float64(1),
+				"completion_tokens":       float64(1),
+				"cached_tokens":           float64(1),
+			},
+			wantPrompt: 200, wantComplete: 40, wantTotal: 240, wantCached: 32,
 		},
 		{
 			name: "details 存在但为 0：不虚构数值",
@@ -83,11 +109,38 @@ func TestUsageFromUpstreamMap_ToleratesNonStandardShapes(t *testing.T) {
 			},
 			wantPrompt: 5, wantComplete: 5, wantTotal: 10,
 		},
+		{
+			// audio 明细：旧 openai processer 靠 json tag 能读到，收敛后必须由候选表补齐。
+			name: "openai 音频明细：prompt/completion 两侧 audio_tokens",
+			usage: map[string]interface{}{
+				"prompt_tokens":             float64(50),
+				"completion_tokens":         float64(20),
+				"total_tokens":              float64(70),
+				"prompt_tokens_details":     map[string]interface{}{"audio_tokens": float64(12)},
+				"completion_tokens_details": map[string]interface{}{"audio_tokens": float64(6)},
+			},
+			wantPrompt: 50, wantComplete: 20, wantTotal: 70, wantPromptAudio: 12, wantCompleteAudio: 6,
+		},
+		{
+			name: "openai-res 复数键名 audio 明细",
+			usage: map[string]interface{}{
+				"input_tokens":          float64(50),
+				"output_tokens":         float64(20),
+				"total_tokens":          float64(70),
+				"input_tokens_details":  map[string]interface{}{"audio_tokens": float64(4)},
+				"output_tokens_details": map[string]interface{}{"audio_tokens": float64(2)},
+			},
+			wantPrompt: 50, wantComplete: 20, wantTotal: 70, wantPromptAudio: 4, wantCompleteAudio: 2,
+		},
+		{
+			name:  "空 usage：全零，不 panic",
+			usage: map[string]interface{}{},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := usageFromUpstreamMap(tt.usage)
+			got := UsageFromMap(tt.usage)
 			if got.PromptTokens != tt.wantPrompt {
 				t.Errorf("PromptTokens = %d, want %d", got.PromptTokens, tt.wantPrompt)
 			}
@@ -102,6 +155,12 @@ func TestUsageFromUpstreamMap_ToleratesNonStandardShapes(t *testing.T) {
 			}
 			if got.CompletionTokensDetails.ReasoningTokens != tt.wantReasoning {
 				t.Errorf("ReasoningTokens = %d, want %d", got.CompletionTokensDetails.ReasoningTokens, tt.wantReasoning)
+			}
+			if got.PromptTokensDetails.AudioTokens != tt.wantPromptAudio {
+				t.Errorf("PromptTokensDetails.AudioTokens = %d, want %d", got.PromptTokensDetails.AudioTokens, tt.wantPromptAudio)
+			}
+			if got.CompletionTokensDetails.AudioTokens != tt.wantCompleteAudio {
+				t.Errorf("CompletionTokensDetails.AudioTokens = %d, want %d", got.CompletionTokensDetails.AudioTokens, tt.wantCompleteAudio)
 			}
 		})
 	}
@@ -126,5 +185,15 @@ func TestPickUsageField_SkipsMalformedNode(t *testing.T) {
 	}
 	if got := pickUsageField(usage, reasoningTokenPaths); got != 12 {
 		t.Errorf("pickUsageField = %d, want 12 (must fall through malformed node)", got)
+	}
+}
+
+// total 口径：上游给了 total 就用上游的，没给才回退 prompt+completion。
+func TestResolveTotalTokens(t *testing.T) {
+	if got := ResolveTotalTokens(10, 5, 99); got != 99 {
+		t.Errorf("ResolveTotalTokens(10,5,99) = %d, want 99 (upstream total wins)", got)
+	}
+	if got := ResolveTotalTokens(10, 5, 0); got != 15 {
+		t.Errorf("ResolveTotalTokens(10,5,0) = %d, want 15 (fallback)", got)
 	}
 }

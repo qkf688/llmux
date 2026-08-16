@@ -388,7 +388,7 @@ type Usage struct {
 // 同一个谓词，否则会出现「侧信道丢弃了快照、落库侧却认为有值」的口径错配。
 //
 // 只看 Total / Prompt / Completion，不看 details：details 是明细而非计数总量，
-// 且 total 口径本身就不含缓存 token（见 service/chat/process.go）。若只有
+// 且 total 的回退口径本身就不含缓存 token（见 ResolveTotalTokens）。若只有
 // CachedTokens 非零而三个总量全为 0，即便保留该快照 TotalTokens 仍是 0，
 // 计费拿不到任何东西，反而会被标成 upstream 而压掉 missing 告警。
 func (u Usage) HasTokens() bool {

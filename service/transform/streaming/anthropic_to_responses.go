@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/qkf688/llmux/common/maputil"
+	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/transform/shared"
 )
 
@@ -365,48 +366,32 @@ func handleAnthropicToResponsesMessageDelta(state *realtimeStreamState, chunk ma
 		},
 	}
 
-	// 合并 usage：output 侧来自本 message_delta，input 侧优先取 message_delta，
-	// 缺失时回退到 message_start 缓存（旧版上游只在 message_start 给 input_tokens）。
+	// 合并 usage：input 侧在 message_start，output 侧在 message_delta，两处各带一部分，
+	// 且各家上游键名不一（anthropic 原生用 input_tokens/cache_read_input_tokens，
+	// kimi 一类只回 openai 兼容的 completion_tokens/cached_tokens）。合并成完整快照后
+	// 整体交候选表识别——**不在此白名单键名**，否则只回兼容字段的上游会被过滤成全零
+	// 并被侧信道丢弃（正是非流 ParseResponse 修掉的那个分叉）。
 	deltaUsage, _ := chunk["usage"].(map[string]interface{})
 	if deltaUsage != nil || state.anthropicStartUsage != nil {
-		pick := func(key string) float64 {
-			if deltaUsage != nil {
-				if v := maputil.Float64(deltaUsage, key); v > 0 {
-					return v
-				}
-			}
-			if state.anthropicStartUsage != nil {
-				return maputil.Float64(state.anthropicStartUsage, key)
-			}
-			return 0
-		}
+		mergedUsage := mergeAnthropicUsage(state.anthropicStartUsage, deltaUsage)
 
-		inputTokens := pick("input_tokens")
-		outputTokens := pick("output_tokens")
-		cacheRead := pick("cache_read_input_tokens")
+		// 完整快照交侧信道：它是 message_start 那次的超集，覆盖不会降级。
+		captureUpstreamUsageMap(state, mergedUsage)
 
-		// 合并后的 anthropic 原生 usage 交给侧信道。这里交的是含 input 侧的
-		// 完整快照，是 message_start 那次的超集，故覆盖不会降级。
-		captureUpstreamUsageMap(state, map[string]interface{}{
-			"input_tokens":            inputTokens,
-			"output_tokens":           outputTokens,
-			"cache_read_input_tokens": cacheRead,
-		})
-
+		// 出站 usage 走同一归一入口 models.UsageFromMap，与落库口径同源
+		// （含 total 采用上游值的回退），避免「客户端看 X、DB 记 Y」的分叉。
+		u := models.UsageFromMap(mergedUsage)
 		usageMap := map[string]interface{}{
-			"input_tokens":  int(inputTokens),
-			"output_tokens": int(outputTokens),
-			// Anthropic 的 cache_read / cache_creation 与 input_tokens 并列计数，
-			// 但落库口径统一为 input+output（见 process.go），此处 total 保持同口径。
-			"total_tokens": int(inputTokens + outputTokens),
+			"input_tokens":  int(u.PromptTokens),
+			"output_tokens": int(u.CompletionTokens),
+			"total_tokens":  int(u.TotalTokens),
 		}
-		// 只有 cache_read 有真值才写 details：它是唯一能映射到 cached_tokens 的量。
+		// 只有 cached_tokens 有真值才写 details：它是唯一能映射到 cached_tokens 的量。
 		// 不能把 cache_creation 也当门禁——上游首次写缓存时 cache_creation>0 而
 		// cache_read=0，那样会输出 cached_tokens:0，正是下面注释要避免的情况。
-		// cache_creation（缓存写入数）本网关不统计，与 total 口径一致地丢弃。
-		if cacheRead > 0 {
+		if u.PromptTokensDetails.CachedTokens > 0 {
 			usageMap["input_tokens_details"] = map[string]interface{}{
-				"cached_tokens": int(cacheRead),
+				"cached_tokens": int(u.PromptTokensDetails.CachedTokens),
 			}
 		}
 		// Anthropic 协议无 reasoning token（thinking 计入 output_tokens），
@@ -415,6 +400,28 @@ func handleAnthropicToResponsesMessageDelta(state *realtimeStreamState, chunk ma
 	}
 
 	return writeRealtimeOrderedData(state, responseCompleted)
+}
+
+// mergeAnthropicUsage 合并 message_start 与 message_delta 两处 usage 为一份完整快照。
+//
+// Anthropic 把 usage 拆两处：input 侧（含缓存命中，计费大头）在 message_start，
+// output 侧在 message_delta。合并后整体交 models.UsageFromMap 的候选表识别键名，
+// 而非在调用点白名单——否则只回 openai 兼容字段的上游会漏统计。
+//
+// delta 是更晚的观测，其非零值覆盖 start；delta 缺失或显式带 0 的键保留 start 真值
+// （旧版上游的 message_delta 不重复带 input 侧，不能用 0 抹掉 start 的 input）。
+func mergeAnthropicUsage(start, delta map[string]interface{}) map[string]interface{} {
+	merged := make(map[string]interface{}, len(start)+len(delta))
+	for k, v := range start {
+		merged[k] = v
+	}
+	for k, v := range delta {
+		if f, ok := v.(float64); ok && f <= 0 {
+			continue
+		}
+		merged[k] = v
+	}
+	return merged
 }
 
 // emitMessageStreamFinalization 发出 message 类型 content 块的收尾事件集：

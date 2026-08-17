@@ -1,4 +1,6 @@
+import type { ReactNode } from "react";
 import Loading from "@/components/loading";
+import { TableCard } from "@/components/table-card";
 import type { ModelSyncLog } from "@/lib/api";
 import { LogsMobileList } from "./logs-mobile-list";
 import { LogsTableDesktop } from "./logs-table-desktop";
@@ -7,6 +9,8 @@ type LogsListSectionProps = {
   loading: boolean;
   logs: ModelSyncLog[];
   allSelected: boolean;
+  /** 分页器：渲染在卡片内底部 */
+  footer?: ReactNode;
   isLogSelected: (id: number) => boolean;
   onToggleSelectAll: () => void;
   onToggleSelectLog: (id: number, checked: boolean) => void;
@@ -17,13 +21,14 @@ export function LogsListSection({
   loading,
   logs,
   allSelected,
+  footer,
   isLogSelected,
   onToggleSelectAll,
   onToggleSelectLog,
   onOpenDetail,
 }: LogsListSectionProps) {
   return (
-    <div className="flex-1 min-h-0 border rounded-md bg-background shadow-sm">
+    <TableCard footer={footer}>
       {loading ? (
         <div className="flex h-full items-center justify-center">
           <Loading message="加载日志" />
@@ -48,6 +53,6 @@ export function LogsListSection({
           />
         </div>
       )}
-    </div>
+    </TableCard>
   );
 }

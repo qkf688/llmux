@@ -1,6 +1,7 @@
 import type { AssociationBatchTestResult } from "../../../types";
 import type { ModelWithProvider, Provider } from "@/lib/api";
 import Loading from "@/components/loading";
+import { TableCard } from "@/components/table-card";
 import { DesktopAssociationTable } from "./desktop-association-table";
 import { MobileAssociationList } from "./mobile-association-list";
 
@@ -54,7 +55,7 @@ export function AssociationListSection({
   onTest,
 }: AssociationListSectionProps) {
   return (
-    <div className="flex-1 min-h-0 border rounded-md bg-card overflow-hidden">
+    <TableCard>
       {loading ? (
         <div className="flex h-full items-center justify-center">
           <Loading message="加载关联数据" />
@@ -112,6 +113,6 @@ export function AssociationListSection({
           />
         </div>
       )}
-    </div>
+    </TableCard>
   );
 }

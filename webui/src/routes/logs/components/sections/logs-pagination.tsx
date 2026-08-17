@@ -24,7 +24,7 @@ export function LogsPagination({
   const displayPage = hasPages ? page : 0;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 flex-shrink-0 border-t pt-2">
+    <div className="flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
       <div className="text-sm text-muted-foreground whitespace-nowrap">
         共 {total} 条，第 {displayPage} / {pages} 页
       </div>

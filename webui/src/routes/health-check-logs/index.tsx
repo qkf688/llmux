@@ -43,15 +43,16 @@ export default function HealthCheckLogsPage() {
         hasLogs={page.hasLogs}
         logs={page.logs}
         onOpenDetail={page.openDetailDialog}
-      />
-
-      <HealthCheckPagination
-        total={page.total}
-        page={page.page}
-        pages={page.pages}
-        pageSize={page.pageSize}
-        onPageChange={page.handlePageChange}
-        onPageSizeChange={page.handlePageSizeChange}
+        footer={
+          <HealthCheckPagination
+            total={page.total}
+            page={page.page}
+            pages={page.pages}
+            pageSize={page.pageSize}
+            onPageChange={page.handlePageChange}
+            onPageSizeChange={page.handlePageSizeChange}
+          />
+        }
       />
 
       <HealthCheckLogDetailDialog

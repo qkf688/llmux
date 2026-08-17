@@ -1,4 +1,5 @@
 import Loading from "@/components/loading";
+import { TableCard } from "@/components/table-card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { AddedModel } from "@/lib/api";
 import { formatSyncDate } from "../../../utils/formatters";
@@ -11,7 +12,7 @@ type RecentModelsSectionProps = {
 
 export function RecentModelsSection({ loading, syncTime, models }: RecentModelsSectionProps) {
   return (
-    <div className="flex-1 min-h-0 border rounded-md bg-background shadow-sm">
+    <TableCard>
       {loading ? (
         <div className="flex h-full items-center justify-center">
           <Loading message="加载最近新增模型" />
@@ -63,6 +64,6 @@ export function RecentModelsSection({ loading, syncTime, models }: RecentModelsS
           </div>
         </>
       )}
-    </div>
+    </TableCard>
   );
 }

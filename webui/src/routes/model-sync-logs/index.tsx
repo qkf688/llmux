@@ -49,13 +49,16 @@ export default function ModelSyncLogsPage() {
             onToggleSelectAll={page.handleToggleSelectAll}
             onToggleSelectLog={page.handleToggleSelectLog}
             onOpenDetail={page.openDetailLog}
-          />
-
-          <LogsPagination
-            page={page.page}
-            totalPages={page.totalPages}
-            paginationText={page.paginationText}
-            onPageChange={page.handlePageChange}
+            footer={
+              page.totalPages > 1 ? (
+                <LogsPagination
+                  page={page.page}
+                  totalPages={page.totalPages}
+                  paginationText={page.paginationText}
+                  onPageChange={page.handlePageChange}
+                />
+              ) : undefined
+            }
           />
         </>
       ) : page.activeTab === "errors" ? (

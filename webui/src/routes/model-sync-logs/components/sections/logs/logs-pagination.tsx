@@ -8,10 +8,6 @@ type LogsPaginationProps = {
 };
 
 export function LogsPagination({ page, totalPages, paginationText, onPageChange }: LogsPaginationProps) {
-  if (totalPages <= 1) {
-    return null;
-  }
-
   return (
     <div className="flex items-center justify-center gap-2 flex-shrink-0">
       <Button

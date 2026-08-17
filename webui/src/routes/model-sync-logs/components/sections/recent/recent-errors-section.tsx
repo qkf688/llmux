@@ -1,4 +1,5 @@
 import Loading from "@/components/loading";
+import { TableCard } from "@/components/table-card";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -94,7 +95,7 @@ export function RecentErrorsSection({
   const isSomeSelected = selectedCount > 0 && !allSelected;
 
   return (
-    <div className="flex-1 min-h-0 border rounded-md bg-background shadow-sm flex flex-col">
+    <TableCard>
       {loading ? (
         <div className="flex flex-1 items-center justify-center">
           <Loading message="加载最近错误" />
@@ -396,6 +397,6 @@ export function RecentErrorsSection({
           </div>
         </>
       )}
-    </div>
+    </TableCard>
   );
 }

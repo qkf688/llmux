@@ -1,4 +1,5 @@
 import Loading from "@/components/loading";
+import { TableCard } from "@/components/table-card";
 import type { Provider } from "@/lib/api";
 import { ProvidersDesktopTable } from "./providers-desktop-table";
 import { ProvidersMobileList } from "./providers-mobile-list";
@@ -37,7 +38,7 @@ export function ProvidersListSection({
   onHandleDelete,
 }: ProvidersListSectionProps) {
   return (
-    <div className="flex-1 min-h-0 border rounded-xl bg-card shadow-sm overflow-hidden">
+    <TableCard>
       {loading ? (
         <div className="flex h-full items-center justify-center">
           <Loading message="加载提供商列表" />
@@ -76,7 +77,7 @@ export function ProvidersListSection({
           />
         </div>
       )}
-    </div>
+    </TableCard>
   );
 }
 

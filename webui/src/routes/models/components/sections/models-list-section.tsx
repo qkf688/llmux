@@ -1,4 +1,5 @@
 import Loading from "@/components/loading";
+import { TableCard } from "@/components/table-card";
 import type { Model } from "@/lib/api";
 import { ModelsDesktopTable } from "./models-desktop-table";
 import { ModelsMobileList } from "./models-mobile-list";
@@ -39,7 +40,7 @@ export function ModelsListSection({
   onDelete,
 }: ModelsListSectionProps) {
   return (
-    <div className="flex-1 min-h-0 border rounded-md bg-background shadow-sm">
+    <TableCard>
       {loading ? (
         <div className="flex h-full items-center justify-center">
           <Loading message="加载模型列表" />
@@ -80,6 +81,6 @@ export function ModelsListSection({
           />
         </div>
       )}
-    </div>
+    </TableCard>
   );
 }

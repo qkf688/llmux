@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { TableCard } from "@/components/table-card";
 import {
   Table,
   TableBody,
@@ -42,14 +43,14 @@ export function VirtualModelsTable({
 }: VirtualModelsTableProps) {
   if (virtualModels.length === 0) {
     return (
-      <div className="rounded-lg border bg-background">
+      <TableCard className="flex-none">
         <div className="flex items-center justify-center py-10 text-muted-foreground">暂无虚拟模型</div>
-      </div>
+      </TableCard>
     );
   }
 
   return (
-    <div className="rounded-lg border bg-background">
+    <TableCard className="flex-none">
       {/* Desktop / Tablet */}
       <div className="hidden sm:block w-full overflow-x-auto">
         <Table className="min-w-[980px]">
@@ -153,6 +154,6 @@ export function VirtualModelsTable({
           </div>
         ))}
       </div>
-    </div>
+    </TableCard>
   );
 }

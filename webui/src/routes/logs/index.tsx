@@ -51,15 +51,16 @@ export default function LogsPage() {
         onOpenDetail={page.openDetailDialog}
         onViewChatIO={page.handleViewChatIO}
         onOpenDelete={page.openDeleteDialog}
-      />
-
-      <LogsPagination
-        total={page.total}
-        page={page.page}
-        pages={page.pages}
-        pageSize={page.pageSize}
-        onPageChange={page.handlePageChange}
-        onPageSizeChange={page.handlePageSizeChange}
+        footer={
+          <LogsPagination
+            total={page.total}
+            page={page.page}
+            pages={page.pages}
+            pageSize={page.pageSize}
+            onPageChange={page.handlePageChange}
+            onPageSizeChange={page.handlePageSizeChange}
+          />
+        }
       />
 
       <LogDetailDialog

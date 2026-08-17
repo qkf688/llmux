@@ -1,4 +1,6 @@
+import type { ReactNode } from "react";
 import Loading from "@/components/loading";
+import { TableCard } from "@/components/table-card";
 import type { ChatLog } from "@/lib/api";
 import { LogsDesktopTable } from "./logs-desktop-table";
 import { LogsMobileList } from "./logs-mobile-list";
@@ -13,6 +15,8 @@ type LogsListSectionProps = {
   isAllSelected: boolean;
   isSomeSelected: boolean;
   deleting: boolean;
+  /** 分页器：渲染在卡片内底部 */
+  footer?: ReactNode;
   canViewChatIO: (log: ChatLog) => boolean;
   onSelectAll: (checked: boolean) => void;
   onSelectOne: (id: number, checked: boolean) => void;
@@ -30,6 +34,7 @@ export function LogsListSection({
   isAllSelected,
   isSomeSelected,
   deleting,
+  footer,
   canViewChatIO,
   onSelectAll,
   onSelectOne,
@@ -38,7 +43,7 @@ export function LogsListSection({
   onOpenDelete,
 }: LogsListSectionProps) {
   return (
-    <div className="flex-1 min-h-0 border rounded-xl bg-background shadow-sm">
+    <TableCard footer={footer}>
       {loading ? (
         <div className="flex h-full items-center justify-center">
           <Loading message="加载日志数据" />
@@ -73,6 +78,6 @@ export function LogsListSection({
           />
         </div>
       )}
-    </div>
+    </TableCard>
   );
 }

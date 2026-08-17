@@ -77,8 +77,6 @@
   --shadow-lg: 0 6px 16px rgb(0 0 0 / 0.10);
   --shadow-xl: 0 10px 24px rgb(0 0 0 / 0.11);
   --shadow-2xl: 0 16px 40px rgb(0 0 0 / 0.12);
-  /* shadow-3xl：LLMux 特有档，按 octopus 阴影梯度外推一档 */
-  --shadow-3xl: 0 22px 56px rgb(0 0 0 / 0.14);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 }
@@ -144,7 +142,6 @@ html.dark,
   --shadow-lg: 0 8px 18px 0px rgb(0 0 0 / 0.30), 0 0 8px rgb(110 180 160 / 0.14);
   --shadow-xl: 0 12px 28px 0px rgb(0 0 0 / 0.32), 0 0 12px rgb(110 180 160 / 0.14);
   --shadow-2xl: 0 18px 44px 0px rgb(0 0 0 / 0.34), 0 0 16px rgb(110 180 160 / 0.16);
-  --shadow-3xl: 0 24px 60px -8px rgb(0 0 0 / 0.36), 0 0 20px rgb(110 180 160 / 0.18);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 }
@@ -212,7 +209,6 @@ html.dark,
   --shadow-lg: var(--shadow-lg);
   --shadow-xl: var(--shadow-xl);
   --shadow-2xl: var(--shadow-2xl);
-  --shadow-3xl: var(--shadow-3xl);
 }
 
 @layer base {

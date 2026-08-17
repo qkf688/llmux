@@ -2,11 +2,12 @@
 
 import type { ComponentType, ReactNode } from "react";
 import { Suspense, lazy } from "react";
-import { Activity, BarChart3, Bot, CalendarDays, Database, HardDrive, MessageSquare } from "lucide-react";
+import { Activity, BarChart3, Bot, CalendarDays, Database, HardDrive, House, MessageSquare } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AnimatedNumber } from "@/components/ui/animated-number";
 import { StaggerItem, StaggerList } from "@/components/ui/stagger-list";
 import Loading from "@/components/loading";
+import { PageHeader } from "@/components/page-header";
 import { useHomeMetrics } from "@/hooks/api/use-home";
 import { formatCompactCount } from "@/lib/formatters";
 
@@ -46,7 +47,7 @@ function TopMetricCard({
     // StaggerItem 是入场动画载体，motion 会在其上残留内联 transform，覆盖 hover-lift 的 CSS hover 变换，
     // 因此卡片样式与 hover 微交互放在内层非 motion 的 div 上。错峰节奏由外层 StaggerList 编排。
     <StaggerItem>
-      <div className="rounded-3xl bg-card border p-5 text-card-foreground flex flex-row items-center gap-4 shadow-3xl hover-lift hover-border">
+      <div className="rounded-xl bg-card border p-5 text-card-foreground flex flex-row items-center gap-4 shadow-sm hover-lift hover-border">
         <div className="flex flex-col items-center justify-center gap-3 border-r border-border/50 pr-4 py-1 self-stretch">
           <HeaderIcon className="w-4 h-4" />
           <h3 className="font-medium text-sm [writing-mode:vertical-lr]">{title}</h3>
@@ -110,14 +111,11 @@ export default function Home() {
 
   return (
     <div className="space-y-4 sm:space-y-6 overflow-auto h-full">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-lg sm:text-2xl font-bold">系统概览</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground">
-            快速查看今日/本月调用、模型统计与数据库状态
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="系统概览"
+        subtitle="快速查看今日/本月调用、模型统计与数据库状态"
+        icon={House}
+      />
 
       <StaggerList className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <TopMetricCard title="今日" headerIcon={Activity}>
@@ -181,13 +179,13 @@ export default function Home() {
         </CardHeader>
         <CardContent className="px-3 sm:px-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            <div className="rounded-2xl border bg-card/50 p-3 sm:p-4">
+            <div className="rounded-lg border bg-card/50 p-3 sm:p-4">
               <div className="text-xs text-muted-foreground mb-2">真实命中模型排行</div>
               <Suspense fallback={<Loading message="加载真实模型排行..." />}>
                 <ModelRankingList data={realModelCounts} />
               </Suspense>
             </div>
-            <div className="rounded-2xl border bg-card/50 p-3 sm:p-4">
+            <div className="rounded-lg border bg-card/50 p-3 sm:p-4">
               <div className="text-xs text-muted-foreground mb-2">用户请求模型排行</div>
               <Suspense fallback={<Loading message="加载请求模型排行..." />}>
                 <ModelRankingList data={requestedModelCounts} />

@@ -109,7 +109,7 @@ export function TrendCard({
   };
 
   return (
-    <div className="rounded-3xl bg-card border pt-4 pb-0 text-card-foreground shadow-3xl hover-border">
+    <div className="rounded-xl bg-card border pt-4 pb-0 text-card-foreground shadow-sm hover-border">
       <div className="px-4 pb-2 space-y-2">
         <div className="flex justify-between items-center">
           <h3 className="font-semibold text-base">趋势</h3>

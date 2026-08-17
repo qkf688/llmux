@@ -104,7 +104,7 @@ export function ProviderRankCard({
   };
 
   return (
-    <div className="rounded-3xl bg-card text-card-foreground border p-4">
+    <div className="rounded-xl bg-card text-card-foreground border shadow-sm p-4">
       <Tabs value={mode} onValueChange={(value) => setMode(value as RankSortMode)}>
         <div className="flex items-center justify-between gap-3">
           <h3 className="font-semibold text-base">供应商排行</h3>

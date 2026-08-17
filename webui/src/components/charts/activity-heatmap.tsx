@@ -223,7 +223,7 @@ export function ActivityHeatmapCard({
 
     return createPortal(
       <div
-        className="fixed z-50 w-fit min-w-max text-sm bg-background text-foreground border rounded-3xl p-3 pointer-events-none"
+        className="fixed z-50 w-fit min-w-max text-sm bg-background text-foreground border rounded-xl p-3 pointer-events-none"
         style={{
           left: tooltip.x,
           top: tooltip.y,
@@ -293,7 +293,7 @@ export function ActivityHeatmapCard({
   );
 
   return (
-    <div className="rounded-3xl bg-card border text-card-foreground shadow-3xl p-4 hover-border">
+    <div className="rounded-xl bg-card border text-card-foreground shadow-sm p-4 hover-border">
       <div className="mb-3 flex items-center gap-2.5">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
           <Activity className="h-4 w-4" />

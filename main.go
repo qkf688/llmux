@@ -29,11 +29,6 @@ import (
 func init() {
 	// 加载 .env（文件不存在则静默跳过，不影响系统环境变量）
 	_ = godotenv.Load()
-
-	ctx := context.Background()
-	models.Init(ctx, "./db/llmux.db")
-	repository.SetDefault(repository.New(models.DB))
-	slog.Info("TZ", "time.Local", time.Local.String())
 }
 
 func main() {
@@ -42,6 +37,13 @@ func main() {
 		slog.Error("JWT_SECRET env is required")
 		os.Exit(1)
 	}
+
+	// 启动装配：建库/迁移与 repository 绑定必须早于任何仓储使用者（BootstrapAdmin 等）。
+	// 放在 main 而非 init：init 里做 IO 会让 package main 的测试一跑就迁移开发库；
+	// 放在 JWT_SECRET 校验之后，缺密钥时也不会白建库。
+	models.Init(context.Background(), "./db/llmux.db")
+	repository.SetDefault(repository.New(models.DB))
+	slog.Info("TZ", "time.Local", time.Local.String())
 
 	// 信号 ctx 是所有长驻后台循环的退出信号源；取消它才能让 healthcheck /
 	// modelsync 的 ticker 循环停下来，进而被 bgtask 等到。
@@ -98,7 +100,7 @@ func main() {
 	slog.Info("server started", "addr", srv.Addr)
 
 	<-ctx.Done()
-	shutdown(srv)
+	shutdown(srv, bgtask.Default(), models.Close)
 }
 
 // 关闭各阶段的等待上限。
@@ -111,9 +113,18 @@ const (
 	bgtaskDrainTimeout    = 10 * time.Second
 )
 
+// serverShutdowner 抽出 *http.Server 的关闭能力：shutdown 只需要「能停机」这一项，
+// 依赖能力而非具体类型（DIP），顺便让关闭顺序可被测试断言而不必真起 HTTP 服务。
+type serverShutdowner interface {
+	Shutdown(ctx context.Context) error
+}
+
 // shutdown 按序收尾：停收新请求并等在途请求 → 排空后台写库任务 → 关闭数据库。
 // 每一步失败都只记日志、不提前返回，否则前一步的失败会导致数据库连接永不关闭。
-func shutdown(srv *http.Server) {
+//
+// 三个依赖一律经参数注入而非包级全局（bgtask.Default / models.Close）：顺序错了会让
+// 在途写库任务撞「数据库已关闭」，注入后这条顺序才能被测试锁定，而不是只有注释在保护。
+func shutdown(srv serverShutdowner, mgr *bgtask.Manager, closeDB func() error) {
 	slog.Info("shutting down")
 
 	srvCtx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout)
@@ -122,14 +133,14 @@ func shutdown(srv *http.Server) {
 		slog.Error("http server shutdown", "error", err)
 	}
 
-	// 必须在 models.Close 之前：排空中的任务仍要写库。
+	// 必须在 closeDB 之前：排空中的任务仍要写库。
 	drainCtx, cancelDrain := context.WithTimeout(context.Background(), bgtaskDrainTimeout)
 	defer cancelDrain()
-	if err := bgtask.Default().Shutdown(drainCtx); err != nil {
+	if err := mgr.Shutdown(drainCtx); err != nil {
 		slog.Error("drain background tasks", "error", err)
 	}
 
-	if err := models.Close(); err != nil {
+	if err := closeDB(); err != nil {
 		slog.Error("close database", "error", err)
 	}
 	slog.Info("shutdown complete")

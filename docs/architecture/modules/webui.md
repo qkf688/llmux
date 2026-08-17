@@ -26,7 +26,7 @@ webui/src/
 ├── routes/                 # 页面 + route-config.ts + layout
 │   ├── providers|models|virtual-models|model-providers|...
 │   └── settings/
-├── components/             # ui/、charts/、page-header.tsx、page-toolbar.tsx、table-card.tsx、共享组件
+├── components/             # ui/、charts/、page-header.tsx、page-toolbar.tsx、table-card.tsx、stat-card.tsx、共享组件
 ├── lib/animations/         # 动效 token 单一来源（EASING / NUMBER_ANIMATION_MS）
 ├── lib/api/                # core client + modules（catalog/logs/system）
 ├── hooks/                  # 含 hooks/api 查询封装
@@ -54,6 +54,7 @@ routes/<page>/
 - `components/page-header.tsx`：全站页头单一数据源（图标 + 标题/副标题 + 右侧动作，卡片外壳 `rounded-xl border bg-card shadow-sm`，标题统一 `h2 text-xl`）；各页页头**必须**复用，禁止再手写裸标题
 - `components/page-toolbar.tsx`：页头之下、列表之上那条工具栏的卡片外壳单一数据源（`rounded-xl border bg-card px-2.5 py-2 shadow-sm`，内距比 page-header 小）；配套导出 `ToolbarFilter`（Label+Select 筛选单元）与 `ToolbarSearch`（带放大镜的搜索框）。各页筛选/操作横条**必须**复用，禁止再手写卡片配方或逐页复制筛选下拉 JSX；布局用 flex-wrap 而非 grid 列数（增减筛选项零改动）
 - `components/table-card.tsx`：列表/表格卡片外壳单一数据源（同一套 `rounded-xl border bg-card shadow-sm` 配方 + 可选 `footer`，传入时自动补 `border-t` 把分页器收进卡内）；各页列表容器**必须**复用，禁止再手写卡片配方或把分页器裸放卡外
+- `components/stat-card.tsx`：单指标统计卡单一数据源（`StatCard` = 语义色圆点 + 指标名 + 大号数值 + 可选单位/副说明，卡壳 `rounded-xl border bg-card px-3.5 py-3 shadow-sm`；`StatGrid` = 窄屏 2 列 / 宽屏 4 列网格）。各页统计条**必须**复用，禁止再手写 `rounded-lg border bg-card p-4` 之类的小卡配方；语义色只落在圆点上、数值一律前景色。**不覆盖** home 的分组多指标卡（`TopMetricCard`/`MetricItem`，竖排标题栏 + 多行指标），那是另一种形态，避免为它开一堆可选 props 退化成万能卡
 - `components/shared/`：页面级共享展示组件（如 providers 的批量测试 UI）；不上提到 `components/ui/`（YAGNI，仅模块内复用）
 
 ## 4. 关键接口契约

@@ -14,7 +14,7 @@ export default function ModelSyncLogsPage() {
   const page = useModelSyncLogsPage();
 
   return (
-    <div className="h-full min-h-0 flex flex-col gap-4 p-1">
+    <div className="h-full min-h-0 flex flex-col gap-4">
       <ModelSyncHeader
         syncing={page.syncing}
         onSyncNow={() => {

@@ -20,7 +20,7 @@ export default function ModelsPage() {
   } = useModelsPage();
 
   return (
-    <div className="h-full min-h-0 flex flex-col gap-4 p-1">
+    <div className="h-full min-h-0 flex flex-col gap-4">
       <ModelsHeader {...headerProps} />
       <ModelsToolbar {...toolbarProps} />
       <ModelsListSection {...listSectionProps} />

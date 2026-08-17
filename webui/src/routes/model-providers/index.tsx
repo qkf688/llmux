@@ -32,7 +32,7 @@ export default function ModelProvidersPage() {
   }
 
   return (
-    <div className="h-full min-h-0 flex flex-col gap-3 p-1">
+    <div className="h-full min-h-0 flex flex-col gap-3">
       <ModelProvidersHeader {...pageHeaderProps} />
 
       <AssociationFilterPanel {...associationFilterPanelProps} />

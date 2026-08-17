@@ -13,7 +13,7 @@ export default function LogsPage() {
   const page = useLogsPage();
 
   return (
-    <div className="h-full min-h-0 flex flex-col gap-4 p-1">
+    <div className="h-full min-h-0 flex flex-col gap-4">
       <LogsHeader
         total={page.total}
         selectedCount={page.selectedCount}

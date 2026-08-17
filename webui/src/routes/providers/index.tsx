@@ -18,7 +18,7 @@ export default function ProvidersPage() {
   } = useProvidersPage();
 
   return (
-    <div className="h-full min-h-0 flex flex-col gap-4 p-1">
+    <div className="h-full min-h-0 flex flex-col gap-4">
       <ProvidersHeader {...headerProps} />
       <ProvidersToolbar {...toolbarProps} />
       <ProvidersListSection {...listSectionProps} />

@@ -12,7 +12,7 @@ export default function HealthCheckLogsPage() {
   const page = useHealthCheckLogsPage();
 
   return (
-    <div className="h-full min-h-0 flex flex-col gap-4 p-1">
+    <div className="h-full min-h-0 flex flex-col gap-4">
       <HealthCheckBanner
         batchId={page.backgroundBatchId}
         resultDialogOpen={page.resultDialogOpen}

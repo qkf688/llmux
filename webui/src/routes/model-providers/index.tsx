@@ -7,6 +7,7 @@ import { TemplateEditorDialog } from "./components/dialogs/template-editor-dialo
 import { TestDialog } from "./components/dialogs/test-dialog";
 import { AssociationFilterPanel } from "./components/sections/association-filter-panel";
 import { BatchTestProgressCard } from "./components/sections/batch-test-progress-card";
+import { ModelProvidersHeader } from "./components/sections/model-providers-header";
 import { AssociationListSection } from "./components/sections/associations/association-list-section";
 import { useModelProvidersPage } from "./hooks/use-model-providers-page";
 
@@ -14,6 +15,7 @@ export default function ModelProvidersPage() {
   const {
     shouldShowInitialLoading,
     statusError,
+    pageHeaderProps,
     associationFilterPanelProps,
     batchTestProgressCardProps,
     associationListSectionProps,
@@ -31,9 +33,7 @@ export default function ModelProvidersPage() {
 
   return (
     <div className="h-full min-h-0 flex flex-col gap-3 p-1">
-      <div className="flex flex-col gap-2 flex-shrink-0">
-        <h2 className="text-base font-semibold tracking-tight sm:text-xl">模型提供商关联</h2>
-      </div>
+      <ModelProvidersHeader {...pageHeaderProps} />
 
       <AssociationFilterPanel {...associationFilterPanelProps} />
 

@@ -1,7 +1,11 @@
+import { RefreshCw, ScrollText, Trash2 } from "lucide-react";
+
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Trash2 } from "lucide-react";
 
 type LogsHeaderProps = {
+  /** 日志总条数（全量，非当前页），用于页头副标题 */
+  total: number;
   selectedCount: number;
   deleting: boolean;
   clearingAll: boolean;
@@ -14,6 +18,7 @@ type LogsHeaderProps = {
 };
 
 export function LogsHeader({
+  total,
   selectedCount,
   deleting,
   clearingAll,
@@ -25,32 +30,32 @@ export function LogsHeader({
   onOpenClearFiltered,
 }: LogsHeaderProps) {
   return (
-    <div className="flex flex-col gap-2 flex-shrink-0">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h2 className="text-2xl font-bold tracking-tight">请求日志</h2>
-        </div>
-        <div className="flex gap-2 ml-auto">
+    <PageHeader
+      icon={ScrollText}
+      title="请求日志"
+      subtitle={`共 ${total} 条请求记录`}
+      actions={
+        <>
           <Button
             variant="destructive"
             size="sm"
-            className="shrink-0 h-7 px-2 text-xs gap-1 sm:h-8 sm:px-3 sm:text-sm sm:gap-1.5"
+            className="shrink-0"
             disabled={clearingAll}
             onClick={onOpenClearAll}
           >
-            <Trash2 className="size-3.5 mr-0.5 sm:size-4 sm:mr-1" />
+            <Trash2 className="size-4" />
             {clearingAll ? "清空中..." : "清空所有日志"}
           </Button>
 
           <Button
             variant="destructive"
             size="sm"
-            className="shrink-0 h-7 px-2 text-xs gap-1 sm:h-8 sm:px-3 sm:text-sm sm:gap-1.5"
+            className="shrink-0"
             disabled={!canClearFiltered || clearingFiltered}
             onClick={onOpenClearFiltered}
             title={!canClearFiltered ? "请先设置筛选条件" : undefined}
           >
-            <Trash2 className="size-3.5 mr-0.5 sm:size-4 sm:mr-1" />
+            <Trash2 className="size-4" />
             {clearingFiltered ? "清空中..." : "清空筛选结果"}
           </Button>
 
@@ -62,7 +67,7 @@ export function LogsHeader({
               disabled={deleting}
               className="shrink-0"
             >
-              <Trash2 className="size-4 mr-1" />
+              <Trash2 className="size-4" />
               删除 ({selectedCount})
             </Button>
           )}
@@ -77,8 +82,8 @@ export function LogsHeader({
           >
             <RefreshCw className="size-4" />
           </Button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }

@@ -15,6 +15,7 @@ export default function LogsPage() {
   return (
     <div className="h-full min-h-0 flex flex-col gap-4 p-1">
       <LogsHeader
+        total={page.total}
         selectedCount={page.selectedCount}
         deleting={page.isDeleting}
         clearingAll={page.isClearingAll}

@@ -8,6 +8,10 @@ import type { SectionPropsContext } from "./use-model-providers-page-context";
 export function useModelProvidersPageSectionProps(ctx: SectionPropsContext) {
   const { store, filters, localState, associationStatus, batch, operationScope, preview, modelChange, pageActions, mutations, statusToggle, testing, associationDialog, templateEditor, blacklist, selectedModel, isGlobalScope } = ctx;
 
+  const pageHeaderProps = {
+    associationCount: filters.filteredModelProviders.length,
+  };
+
   const associationFilterPanelProps = {
     filterPanelOpen: store.filterPanelOpen,
     onFilterPanelOpenChange: store.setFilterPanelOpen,
@@ -103,6 +107,7 @@ export function useModelProvidersPageSectionProps(ctx: SectionPropsContext) {
   };
 
   return {
+    pageHeaderProps,
     associationFilterPanelProps,
     batchTestProgressCardProps,
     associationListSectionProps,

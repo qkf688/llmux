@@ -19,6 +19,7 @@ export function useModelsPageViewProps({ data, selection, dialogs, mutations }: 
   const navigate = useNavigate();
 
   const toolbarProps = {
+    totalCount: data.models.length,
     searchQuery: data.searchQuery,
     onSearchQueryChange: data.setSearchQuery,
     selectedCount: data.selectedIds.length,

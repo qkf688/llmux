@@ -1,5 +1,7 @@
+import { Activity, Eye, Play, RefreshCw, Trash2 } from "lucide-react";
+
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { Eye, Play, RefreshCw, Trash2 } from "lucide-react";
 
 type HealthCheckHeaderProps = {
   runningBackgroundCheck: boolean;
@@ -17,23 +19,21 @@ export function HealthCheckHeader({
   onRefresh,
 }: HealthCheckHeaderProps) {
   return (
-    <div className="flex flex-col gap-2 flex-shrink-0">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h2 className="text-2xl font-bold tracking-tight">健康检测日志</h2>
-          <p className="text-sm text-muted-foreground">查看模型提供商的健康检测历史记录</p>
-        </div>
-
-        <div className="flex gap-2 ml-auto">
-          <Button onClick={onRunHealthCheck} variant="default" className="shrink-0">
+    <PageHeader
+      icon={Activity}
+      title="健康检测日志"
+      subtitle="查看模型提供商的健康检测历史记录"
+      actions={
+        <>
+          <Button onClick={onRunHealthCheck} variant="default" size="sm" className="shrink-0">
             {runningBackgroundCheck ? (
               <>
-                <Eye className="size-4 mr-2" />
+                <Eye className="size-4" />
                 查看进度
               </>
             ) : (
               <>
-                <Play className="size-4 mr-2" />
+                <Play className="size-4" />
                 执行检测
               </>
             )}
@@ -41,11 +41,12 @@ export function HealthCheckHeader({
 
           <Button
             variant="destructive"
+            size="sm"
             className="shrink-0"
             disabled={clearingLogs}
             onClick={onOpenClearDialog}
           >
-            <Trash2 className="size-4 mr-2" />
+            <Trash2 className="size-4" />
             {clearingLogs ? "清空中..." : "清空检测日志"}
           </Button>
 
@@ -59,8 +60,8 @@ export function HealthCheckHeader({
           >
             <RefreshCw className="size-4" />
           </Button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }

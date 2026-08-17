@@ -1,5 +1,7 @@
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Settings as SettingsIcon } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { HealthCheckSettings, Settings } from "@/lib/api";
@@ -35,10 +37,7 @@ export default function SettingsPage() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="container mx-auto py-4 md:py-6 space-y-4 md:space-y-6 max-w-5xl px-4">
-        <div>
-          <h1 className="text-xl md:text-2xl font-bold">系统设置</h1>
-          <p className="text-sm text-muted-foreground">管理系统全局配置</p>
-        </div>
+        <PageHeader icon={SettingsIcon} title="系统设置" subtitle="管理系统全局配置" />
 
         <Tabs defaultValue="general" className="w-full">
           <TabsList className="grid w-full grid-cols-6">

@@ -18,10 +18,8 @@ interface UseModelsPageViewPropsParams {
 export function useModelsPageViewProps({ data, selection, dialogs, mutations }: UseModelsPageViewPropsParams) {
   const navigate = useNavigate();
 
-  const toolbarProps = {
+  const headerProps = {
     totalCount: data.models.length,
-    searchQuery: data.searchQuery,
-    onSearchQueryChange: data.setSearchQuery,
     selectedCount: data.selectedIds.length,
     batchDeleteDialogOpen: data.batchDeleteDialogOpen,
     onBatchDeleteDialogOpenChange: data.setBatchDeleteDialogOpen,
@@ -31,6 +29,11 @@ export function useModelsPageViewProps({ data, selection, dialogs, mutations }: 
       void mutations.handleBatchDelete();
     },
     onOpenCreateDialog: dialogs.openCreateDialog,
+  };
+
+  const toolbarProps = {
+    searchQuery: data.searchQuery,
+    onSearchQueryChange: data.setSearchQuery,
   };
 
   const listSectionProps = {
@@ -110,6 +113,7 @@ export function useModelsPageViewProps({ data, selection, dialogs, mutations }: 
   };
 
   return {
+    headerProps,
     toolbarProps,
     listSectionProps,
     modelFormDialogProps,

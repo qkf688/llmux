@@ -304,17 +304,20 @@ export function useProvidersPage() {
 
   const hasFilter = hasActiveProvidersFilter(nameFilter, typeFilter);
 
-  const toolbarProps = {
+  const headerProps = {
     syncingAll,
     onSyncAllProviders: handleSyncAllProviders,
     providerCount: providers.length,
+    onCreateProvider: openCreateDialog,
+  };
+
+  const toolbarProps = {
     nameFilter,
     setNameFilter,
     typeFilter,
     setTypeFilter,
     availableTypes,
     flushNameFilter,
-    onCreateProvider: openCreateDialog,
   };
 
   const listSectionProps = {
@@ -417,6 +420,7 @@ export function useProvidersPage() {
   };
 
   return {
+    headerProps,
     toolbarProps,
     listSectionProps,
     providerFormDialogProps,

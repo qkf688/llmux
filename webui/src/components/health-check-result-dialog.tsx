@@ -9,8 +9,9 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { LoadingState } from "@/components/ui/loading-state";
+import { StatCard, StatGrid } from "@/components/stat-card";
 import { getBatchHealthCheckStatus, type BatchHealthCheckStatus } from "@/lib/api";
-import { CheckCircle2, XCircle, Clock } from "lucide-react";
+import { CheckCircle2, XCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface HealthCheckResultDialogProps {
@@ -119,39 +120,12 @@ export function HealthCheckResultDialog({
           ) : (
             <>
               {/* 统计概览 */}
-              <div className="grid grid-cols-4 gap-4">
-                <div className="rounded-lg border bg-card p-4">
-                  <div className="text-sm text-muted-foreground">总计</div>
-                  <div className="text-2xl font-bold mt-1">{status.total_count}</div>
-                </div>
-                <div className="rounded-lg border bg-card p-4">
-                  <div className="text-sm text-muted-foreground flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" />
-                    成功
-                  </div>
-                  <div className="text-2xl font-bold mt-1 text-success">
-                    {status.success}
-                  </div>
-                </div>
-                <div className="rounded-lg border bg-card p-4">
-                  <div className="text-sm text-muted-foreground flex items-center gap-1">
-                    <XCircle className="w-3 h-3" />
-                    失败
-                  </div>
-                  <div className="text-2xl font-bold mt-1 text-destructive">
-                    {status.failed}
-                  </div>
-                </div>
-                <div className="rounded-lg border bg-card p-4">
-                  <div className="text-sm text-muted-foreground flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    待检测
-                  </div>
-                  <div className="text-2xl font-bold mt-1 text-info">
-                    {status.pending}
-                  </div>
-                </div>
-              </div>
+              <StatGrid>
+                <StatCard label="总计" value={status.total_count} />
+                <StatCard label="成功" value={status.success} tone="success" />
+                <StatCard label="失败" value={status.failed} tone="danger" />
+                <StatCard label="待检测" value={status.pending} tone="info" />
+              </StatGrid>
 
               {/* 进度条 */}
               <div className="space-y-2">

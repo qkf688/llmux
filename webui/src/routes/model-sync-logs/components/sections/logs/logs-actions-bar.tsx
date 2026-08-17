@@ -1,3 +1,4 @@
+import { PageToolbar } from "@/components/page-toolbar";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { CheckSquare2, Trash2 } from "lucide-react";
@@ -24,7 +25,7 @@ export function LogsActionsBar({
   onShowUnchangedChange,
 }: LogsActionsBarProps) {
   return (
-    <div className="flex items-center justify-between flex-shrink-0">
+    <PageToolbar className="flex-row items-center justify-between">
       <div className="flex gap-2">
         <Button
           variant="outline"
@@ -70,6 +71,6 @@ export function LogsActionsBar({
           显示全部
         </label>
       </div>
-    </div>
+    </PageToolbar>
   );
 }

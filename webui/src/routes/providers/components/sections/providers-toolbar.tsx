@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { RefreshCw, Search } from "lucide-react";
+import { Cloud, RefreshCw, Search } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,6 +19,9 @@ interface ProvidersToolbarProps {
   syncingAll: boolean;
   onSyncAllProviders: () => void;
 
+  /** 当前列表中的供应商数量（筛选后），用于页头副标题 */
+  providerCount: number;
+
   nameFilter: string;
   setNameFilter: (value: string) => void;
 
@@ -32,6 +36,7 @@ interface ProvidersToolbarProps {
 export function ProvidersToolbar({
   syncingAll,
   onSyncAllProviders,
+  providerCount,
   nameFilter,
   setNameFilter,
   typeFilter,
@@ -49,25 +54,28 @@ export function ProvidersToolbar({
 
   return (
     <>
-      {/* 页面头：标题 + 右侧动作 */}
-      <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
-        <h2 className="text-2xl font-bold tracking-tight whitespace-nowrap shrink-0">提供商管理</h2>
-
-        <div className="ml-auto flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setSyncConfirmOpen(true)}
-            disabled={syncingAll}
-          >
-            <RefreshCw className={syncingAll ? "animate-spin" : ""} />
-            {syncingAll ? "同步中..." : "同步上游"}
-          </Button>
-          <Button size="sm" onClick={onCreateProvider}>
-            添加提供商
-          </Button>
-        </div>
-      </div>
+      {/* 页面头：卡片外壳 + 图标 + 标题/副标题 + 右侧动作 */}
+      <PageHeader
+        icon={Cloud}
+        title="提供商管理"
+        subtitle={`当前 ${providerCount} 个上游供应商`}
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSyncConfirmOpen(true)}
+              disabled={syncingAll}
+            >
+              <RefreshCw className={syncingAll ? "animate-spin" : ""} />
+              {syncingAll ? "同步中..." : "同步上游"}
+            </Button>
+            <Button size="sm" onClick={onCreateProvider}>
+              添加提供商
+            </Button>
+          </>
+        }
+      />
 
       {/* 搜索 + 筛选 独立卡片：与 HTML 基准 .card.toolbar 对齐 */}
       <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card px-2.5 py-2 shadow-sm flex-shrink-0">

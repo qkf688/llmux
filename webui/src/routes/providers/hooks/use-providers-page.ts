@@ -307,6 +307,7 @@ export function useProvidersPage() {
   const toolbarProps = {
     syncingAll,
     onSyncAllProviders: handleSyncAllProviders,
+    providerCount: providers.length,
     nameFilter,
     setNameFilter,
     typeFilter,

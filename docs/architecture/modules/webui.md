@@ -26,7 +26,7 @@ webui/src/
 ├── routes/                 # 页面 + route-config.ts + layout
 │   ├── providers|models|virtual-models|model-providers|...
 │   └── settings/
-├── components/             # ui/、charts/、共享组件
+├── components/             # ui/、charts/、page-header.tsx、共享组件
 ├── lib/animations/         # 动效 token 单一来源（EASING / NUMBER_ANIMATION_MS）
 ├── lib/api/                # core client + modules（catalog/logs/system）
 ├── hooks/                  # 含 hooks/api 查询封装
@@ -51,6 +51,7 @@ routes/<page>/
 - `lib/api/`：HTTP 客户端与领域 API 函数
 - `stores/`：客户端状态；`Updater` / `Setter` 统一更新模式
 - `components/ui/`：Radix + Tailwind 基础组件
+- `components/page-header.tsx`：全站页头单一数据源（图标 + 标题/副标题 + 右侧动作，卡片外壳 `rounded-xl border bg-card shadow-sm`，标题统一 `h2 text-xl`）；各页页头**必须**复用，禁止再手写裸标题
 - `components/shared/`：页面级共享展示组件（如 providers 的批量测试 UI）；不上提到 `components/ui/`（YAGNI，仅模块内复用）
 
 ## 4. 关键接口契约

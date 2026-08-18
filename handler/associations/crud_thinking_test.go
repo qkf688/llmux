@@ -98,21 +98,21 @@ func TestUpdateModelProvider_SupportsThinkingTriState(t *testing.T) {
 	mp := createAssocForThinkingTest(t)
 
 	// 1) override = true
-	updateAssocViaHandler(t, mp.ID, `{"model_id":1,"provider_id":1,"provider_name":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192,"supports_thinking":true}`)
+	updateAssocViaHandler(t, mp.ID, `{"model_id":1,"provider_id":1,"provider_model":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192,"supports_thinking":true}`)
 	got := reloadAssoc(t, mp.ID)
 	if got.SupportsThinking == nil || !*got.SupportsThinking {
 		t.Fatalf("supports_thinking = %v, want true", got.SupportsThinking)
 	}
 
 	// 2) override = false
-	updateAssocViaHandler(t, mp.ID, `{"model_id":1,"provider_id":1,"provider_name":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192,"supports_thinking":false}`)
+	updateAssocViaHandler(t, mp.ID, `{"model_id":1,"provider_id":1,"provider_model":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192,"supports_thinking":false}`)
 	got = reloadAssoc(t, mp.ID)
 	if got.SupportsThinking == nil || *got.SupportsThinking {
 		t.Fatalf("supports_thinking = %v, want false", got.SupportsThinking)
 	}
 
 	// 3) 缺省（nil）→ 改回"继承"（NULL）
-	updateAssocViaHandler(t, mp.ID, `{"model_id":1,"provider_id":1,"provider_name":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192}`)
+	updateAssocViaHandler(t, mp.ID, `{"model_id":1,"provider_id":1,"provider_model":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192}`)
 	got = reloadAssoc(t, mp.ID)
 	if got.SupportsThinking != nil {
 		t.Fatalf("supports_thinking = %v, want nil (inherit)", got.SupportsThinking)
@@ -126,7 +126,7 @@ func TestUpdateModelProvider_PartialUpdateKeepsUntouchedFields(t *testing.T) {
 	mp := createAssocForThinkingTest(t)
 
 	// 只提交最小字段集（缺省 weight/priority/max_tokens/customer_headers/supports_thinking）
-	updateAssocViaHandler(t, mp.ID, `{"model_id":1,"provider_id":1,"provider_name":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false}`)
+	updateAssocViaHandler(t, mp.ID, `{"model_id":1,"provider_id":1,"provider_model":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false}`)
 
 	got := reloadAssoc(t, mp.ID)
 	if got.Weight != 10 {

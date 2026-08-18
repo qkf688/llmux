@@ -70,7 +70,7 @@ export async function getModelProviderStatus(
 
 export async function createModelProvider(association: {
   model_id: number;
-  provider_name: string;
+  provider_model: string;
   provider_id: number;
   tool_call: boolean;
   structured_output: boolean;
@@ -93,7 +93,7 @@ export async function updateModelProvider(
   id: number,
   association: {
     model_id?: number;
-    provider_name?: string;
+    provider_model?: string;
     provider_id?: number;
     tool_call?: boolean;
     structured_output?: boolean;

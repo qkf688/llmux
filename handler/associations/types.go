@@ -2,8 +2,11 @@ package associations
 
 // ModelWithProviderRequest represents the request body for creating/updating a model-provider association.
 type ModelWithProviderRequest struct {
-	ModelID          uint              `json:"model_id"`
-	ProviderModel    string            `json:"provider_name"`
+	ModelID uint `json:"model_id"`
+	// ProviderModel 是上游模型名（供应商侧的 model 标识），不是供应商名称。
+	// json 键与字段名对齐为 provider_model：旧键名 provider_name 与字段语义错位，
+	// 极易被误读成 Provider.Name（本仓其余域的 provider_name 确实都指供应商名称）。
+	ProviderModel    string            `json:"provider_model"`
 	ProviderID       uint              `json:"provider_id"`
 	ToolCall         bool              `json:"tool_call"`
 	StructuredOutput bool              `json:"structured_output"`

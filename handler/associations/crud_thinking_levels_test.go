@@ -31,7 +31,7 @@ func TestUpdateModelProvider_ThinkingLevelsTriState(t *testing.T) {
 	mp := createAssocForThinkingTest(t)
 
 	// 1) override = ["low","high"]
-	updateAssocViaHandler(t, mp.ID, `{"model_id":1,"provider_id":1,"provider_name":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192,"thinking_levels":["low","high"]}`)
+	updateAssocViaHandler(t, mp.ID, `{"model_id":1,"provider_id":1,"provider_model":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192,"thinking_levels":["low","high"]}`)
 	got := reloadAssoc(t, mp.ID)
 	if got.ThinkingLevels == nil {
 		t.Fatalf("case 1: ThinkingLevels = nil, want non-nil")
@@ -41,7 +41,7 @@ func TestUpdateModelProvider_ThinkingLevelsTriState(t *testing.T) {
 	}
 
 	// 2) 不约束 = []
-	updateAssocViaHandler(t, mp.ID, `{"model_id":1,"provider_id":1,"provider_name":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192,"thinking_levels":[]}`)
+	updateAssocViaHandler(t, mp.ID, `{"model_id":1,"provider_id":1,"provider_model":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192,"thinking_levels":[]}`)
 	got = reloadAssoc(t, mp.ID)
 	if got.ThinkingLevels == nil {
 		t.Fatalf("case 2: ThinkingLevels = nil, want non-nil empty slice")
@@ -51,7 +51,7 @@ func TestUpdateModelProvider_ThinkingLevelsTriState(t *testing.T) {
 	}
 
 	// 3) 继承 = 不发字段（nil）
-	updateAssocViaHandler(t, mp.ID, `{"model_id":1,"provider_id":1,"provider_name":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192}`)
+	updateAssocViaHandler(t, mp.ID, `{"model_id":1,"provider_id":1,"provider_model":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192}`)
 	got = reloadAssoc(t, mp.ID)
 	if got.ThinkingLevels != nil {
 		t.Fatalf("case 3: ThinkingLevels = %v, want nil (inherit)", *got.ThinkingLevels)
@@ -65,14 +65,14 @@ func TestUpdateModelProvider_ThinkingLevelsJSONNullAsInherit(t *testing.T) {
 	mp := createAssocForThinkingTest(t)
 
 	// 先设非空
-	updateAssocViaHandler(t, mp.ID, `{"model_id":1,"provider_id":1,"provider_name":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192,"thinking_levels":["low"]}`)
+	updateAssocViaHandler(t, mp.ID, `{"model_id":1,"provider_id":1,"provider_model":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192,"thinking_levels":["low"]}`)
 	got := reloadAssoc(t, mp.ID)
 	if got.ThinkingLevels == nil || len(*got.ThinkingLevels) != 1 {
 		t.Fatalf("setup: ThinkingLevels = %v, want [low]", got.ThinkingLevels)
 	}
 
 	// 发 null → 继承（nil）
-	updateAssocViaHandler(t, mp.ID, `{"model_id":1,"provider_id":1,"provider_name":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192,"thinking_levels":null}`)
+	updateAssocViaHandler(t, mp.ID, `{"model_id":1,"provider_id":1,"provider_model":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192,"thinking_levels":null}`)
 	got = reloadAssoc(t, mp.ID)
 	if got.ThinkingLevels != nil {
 		t.Fatalf("null case: ThinkingLevels = %v, want nil (inherit)", *got.ThinkingLevels)
@@ -95,20 +95,20 @@ func TestCreateModelProvider_ThinkingLevels(t *testing.T) {
 	}{
 		{
 			name:      "create with override",
-			body:      `{"model_id":1,"provider_id":1,"provider_name":"pm1","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"thinking_levels":["medium","max"]}`,
+			body:      `{"model_id":1,"provider_id":1,"provider_model":"pm1","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"thinking_levels":["medium","max"]}`,
 			wantNil:   false,
 			wantLen:   2,
 			wantFirst: "medium",
 		},
 		{
 			name:    "create with empty (不约束)",
-			body:    `{"model_id":1,"provider_id":1,"provider_name":"pm2","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"thinking_levels":[]}`,
+			body:    `{"model_id":1,"provider_id":1,"provider_model":"pm2","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"thinking_levels":[]}`,
 			wantNil: false,
 			wantLen: 0,
 		},
 		{
 			name:    "create without field (继承)",
-			body:    `{"model_id":1,"provider_id":1,"provider_name":"pm3","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10}`,
+			body:    `{"model_id":1,"provider_id":1,"provider_model":"pm3","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10}`,
 			wantNil: true,
 		},
 	}
@@ -164,7 +164,7 @@ func TestModelProviderResponse_ThinkingLevelsShape(t *testing.T) {
 	testsupport.InitTestDB(t)
 	mp := createAssocForThinkingTest(t)
 
-	const baseFields = `"model_id":1,"provider_id":1,"provider_name":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192`
+	const baseFields = `"model_id":1,"provider_id":1,"provider_model":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192`
 
 	tests := []struct {
 		name     string

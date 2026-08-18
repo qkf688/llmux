@@ -7,7 +7,7 @@ export function useModelProvidersAssociationForm() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       model_id: 0,
-      provider_name: "",
+      provider_model: "",
       provider_id: 0,
       tool_call: true,
       structured_output: true,

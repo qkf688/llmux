@@ -18,7 +18,7 @@ export const buildAssociationPayload = (
 
   return {
     model_id: values.model_id,
-    provider_name: (overrides?.providerModel ?? values.provider_name) || "",
+    provider_model: (overrides?.providerModel ?? values.provider_model) || "",
     provider_id: overrides?.providerId ?? values.provider_id,
     tool_call: values.tool_call,
     structured_output: values.structured_output,

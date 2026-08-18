@@ -7,7 +7,8 @@ export const headerPairSchema = z.object({
 
 export const formSchema = z.object({
   model_id: z.number().positive({ message: "模型ID必须大于0" }),
-  provider_name: z.string().default(""),
+  // 上游模型名（供应商侧的 model 标识），非供应商名称——与后端 provider_model 键同名
+  provider_model: z.string().default(""),
   provider_id: z.number().min(0, { message: "提供商ID必须大于等于0" }),
   tool_call: z.boolean(),
   structured_output: z.boolean(),

@@ -69,7 +69,7 @@ export function useModelProvidersAssociationMutations({
         await Promise.all(promises);
         toast.success(`成功创建 ${selectedProviderModels.length} 个模型提供商关联`);
       } else {
-        const modelName = values.provider_name?.trim();
+        const modelName = values.provider_model?.trim();
         if (!modelName) {
           toast.error("请选择模型或手动输入模型名称");
           return;
@@ -90,7 +90,7 @@ export function useModelProvidersAssociationMutations({
       setOpen(false);
       form.reset({
         model_id: selectedModelId || 0,
-        provider_name: "",
+        provider_model: "",
         provider_id: 0,
         tool_call: true,
         structured_output: false,
@@ -128,7 +128,7 @@ export function useModelProvidersAssociationMutations({
       setEditingAssociation(null);
       form.reset({
         model_id: 0,
-        provider_name: "",
+        provider_model: "",
         provider_id: 0,
         tool_call: false,
         structured_output: false,

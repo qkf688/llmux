@@ -34,7 +34,7 @@ export function useModelProvidersAssociationDialog({
     }));
     form.reset({
       model_id: association.ModelID,
-      provider_name: association.ProviderModel,
+      provider_model: association.ProviderModel,
       provider_id: association.ProviderID,
       tool_call: association.ToolCall,
       structured_output: association.StructuredOutput,
@@ -65,7 +65,7 @@ export function useModelProvidersAssociationDialog({
     const defaultPriority = settings?.auto_priority_decay_default || 100;
     form.reset({
       model_id: selectedModelId || 0,
-      provider_name: "",
+      provider_model: "",
       provider_id: 0,
       tool_call: true,
       structured_output: true,

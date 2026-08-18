@@ -207,7 +207,7 @@ export function AssociationFormDialog({
               {selectedProviderModels.length === 0 && (
                 <FormField
                   control={form.control}
-                  name="provider_name"
+                  name="provider_model"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>手动输入模型名称</FormLabel>

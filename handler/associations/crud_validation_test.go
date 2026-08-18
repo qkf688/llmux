@@ -24,7 +24,7 @@ func TestUpdateModelProvider_RejectsDanglingModelID(t *testing.T) {
 	c.Params = gin.Params{{Key: "id", Value: strconv.FormatUint(uint64(mp.ID), 10)}}
 	// model_id=999 不存在
 	c.Request = httptest.NewRequest("PUT", "/model-providers/"+strconv.FormatUint(uint64(mp.ID), 10),
-		strings.NewReader(`{"model_id":999,"provider_id":1,"provider_name":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192}`))
+		strings.NewReader(`{"model_id":999,"provider_id":1,"provider_model":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192}`))
 	c.Request.Header.Set("Content-Type", "application/json")
 
 	UpdateModelProvider(c)
@@ -48,7 +48,7 @@ func TestUpdateModelProvider_RejectsDanglingProviderID(t *testing.T) {
 	c.Params = gin.Params{{Key: "id", Value: strconv.FormatUint(uint64(mp.ID), 10)}}
 	// provider_id=999 不存在
 	c.Request = httptest.NewRequest("PUT", "/model-providers/"+strconv.FormatUint(uint64(mp.ID), 10),
-		strings.NewReader(`{"model_id":1,"provider_id":999,"provider_name":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192}`))
+		strings.NewReader(`{"model_id":1,"provider_id":999,"provider_model":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192}`))
 	c.Request.Header.Set("Content-Type", "application/json")
 
 	UpdateModelProvider(c)
@@ -72,7 +72,7 @@ func TestUpdateModelProvider_ZeroIDsSkipped(t *testing.T) {
 	c.Params = gin.Params{{Key: "id", Value: strconv.FormatUint(uint64(mp.ID), 10)}}
 	// model_id=0/provider_id=0 → 不校验，GORM 跳过零值保持原值
 	c.Request = httptest.NewRequest("PUT", "/model-providers/"+strconv.FormatUint(uint64(mp.ID), 10),
-		strings.NewReader(`{"model_id":0,"provider_id":0,"provider_name":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":20,"priority":20,"max_tokens":4096}`))
+		strings.NewReader(`{"model_id":0,"provider_id":0,"provider_model":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":20,"priority":20,"max_tokens":4096}`))
 	c.Request.Header.Set("Content-Type", "application/json")
 
 	UpdateModelProvider(c)
@@ -101,7 +101,7 @@ func TestCreateModelProvider_RejectsDanglingProviderID(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest("POST", "/model-providers",
-		strings.NewReader(`{"model_id":1,"provider_id":999,"provider_name":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10}`))
+		strings.NewReader(`{"model_id":1,"provider_id":999,"provider_model":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10}`))
 	c.Request.Header.Set("Content-Type", "application/json")
 
 	CreateModelProvider(c)
@@ -123,7 +123,7 @@ func TestCreateModelProvider_RejectsDanglingModelID(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest("POST", "/model-providers",
-		strings.NewReader(`{"model_id":999,"provider_id":1,"provider_name":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10}`))
+		strings.NewReader(`{"model_id":999,"provider_id":1,"provider_model":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10}`))
 	c.Request.Header.Set("Content-Type", "application/json")
 
 	CreateModelProvider(c)

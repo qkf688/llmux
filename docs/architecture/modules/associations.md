@@ -52,6 +52,10 @@ models.ModelWithProvider
 - 裁剪联动：`SupportsThinkingResolved` 为 `false` 时，`service/chat` 的 `buildRequestBodyForProvider` 会删除请求体中的 `thinking`/`reasoning_effort`/`reasoning`/`output_config.effort` 字段（`stripThinkingFields` 纯函数，`output_config.effort` 删后空对象连壳删除），避免不支持 thinking 的上游报 400/静默忽略。
 - 钳制联动：`SupportsThinkingResolved` 为 `true` 时，`service/chat` 的 `buildRequestBodyForProvider` 会经 `ThinkingLevelsResolved` 解析白名单，构建 `transform.ThinkingClampConfig` 并在 passthrough/transform 两条路径对 `reasoning_effort` 执行就近钳制 + budget 联动（方案 E）。详见 `protocol-transform.md` 钳制章节。
 
+### 响应键契约（`/api/model-providers`）
+
+`handler/associations` 的 Create / Update / List 直接序列化 `models.ModelWithProvider`，对外键名为 **PascalCase**（实体多数字段无 json tag），前端按同名 interface 消费（`webui/src/lib/api/modules/catalog/model-providers.ts`）。三态字段（`ToolCall` / `StructuredOutput` / `Image` / `WithHeader` / `Status` / `CustomerHeaders` / `MaxTokens` / `SupportsThinking` / `ThinkingLevels`）的 nil 必须序列化成 JSON `null` 且键保留——键缺失会让前端把「继承」误判成 override 并回写错误值。该契约由 `crud_response_shape_test.go` 的 `modelWithProviderResponseKeys` 表在响应体 JSON 上断言（gjson `Exists()` + 类型），实体增删字段时同步加/删一行即可。
+
 ## 5. 特殊约定
 
 - chat 与 healthcheck 将关联行视为选路与启停的数据源；本模块是配置写入口

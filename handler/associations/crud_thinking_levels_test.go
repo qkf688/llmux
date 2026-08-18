@@ -1,12 +1,9 @@
 package associations
 
 import (
-	"net/http/httptest"
 	"strconv"
-	"strings"
 	"testing"
 
-	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/handler/testsupport"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/repository"
@@ -115,20 +112,10 @@ func TestCreateModelProvider_ThinkingLevels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gin.SetMode(gin.TestMode)
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest("POST", "/model-providers", strings.NewReader(tt.body))
-			c.Request.Header.Set("Content-Type", "application/json")
-
-			CreateModelProvider(c)
-
-			if w.Code != 200 {
-				t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
-			}
+			respBody := createAssocViaHandler(t, tt.body)
 
 			// 从响应中提取 ID 并 reload
-			idStr := gjson.Get(w.Body.String(), "data.ID").String()
+			idStr := gjson.Get(respBody, "data.ID").String()
 			id, _ := strconv.ParseUint(idStr, 10, 64)
 			got := reloadAssoc(t, uint(id))
 			if tt.wantNil {
@@ -205,17 +192,13 @@ func TestModelProviderResponse_ThinkingLevelsShape(t *testing.T) {
 	}
 }
 
-// assertThinkingLevelsShape 断言响应体指定路径上的 ThinkingLevels 键存在，且类型与原始值符合预期。
+// assertThinkingLevelsShape 在通用键形状契约（assertResponseKeyShape，负责"键必须存在
+// 且类型正确"）之上额外断原始值，用于区分 ThinkingLevels 三态的具体取值：
+// null=继承 / []=显式不约束 / 非空数组=override。
 func assertThinkingLevelsShape(t *testing.T, body, path string, wantType gjson.Type, wantRaw string) {
 	t.Helper()
-	got := gjson.Get(body, path)
-	if !got.Exists() {
-		t.Fatalf("%s 键缺失（继承态被 omitempty 省略会导致前端恒判自定义并写坏数据），body=%s", path, body)
-	}
-	if got.Type != wantType {
-		t.Fatalf("%s type = %v, want %v, raw=%s", path, got.Type, wantType, got.Raw)
-	}
-	if got.Raw != wantRaw {
+	assertResponseKeyShape(t, body, path, wantType)
+	if got := gjson.Get(body, path); got.Raw != wantRaw {
 		t.Fatalf("%s raw = %s, want %s", path, got.Raw, wantRaw)
 	}
 }

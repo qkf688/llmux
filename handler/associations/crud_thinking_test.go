@@ -46,6 +46,23 @@ func createProviderForThinkingTest(t *testing.T) {
 func boolPtr(v bool) *bool { return &v }
 func intPtr(v int) *int    { return &v }
 
+// createAssocViaHandler 走 Create handler 并返回响应体，便于断言响应形状。
+func createAssocViaHandler(t *testing.T, body string) string {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("POST", "/model-providers", strings.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	CreateModelProvider(c)
+
+	if w.Code != 200 {
+		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	return w.Body.String()
+}
+
 // updateAssocViaHandler 走 Update handler 并返回响应体，便于断言响应形状；
 // 只关心落库结果的用例可忽略返回值。
 func updateAssocViaHandler(t *testing.T, id uint, body string) string {

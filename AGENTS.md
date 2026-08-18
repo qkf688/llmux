@@ -370,6 +370,7 @@ webui/src/components/ui/  # 基础 UI
 - [ ] 自动关联规则变更：只改 `service/autoassoc`；handler / modelsync hooks 无重复业务逻辑
 - [ ] HTTP 错误/成功响应走 `httpresp`；未引入第二套响应信封
 - [ ] 直返实体新增/改 json tag：前端 `lib/api` interface 与测试 mock 已同步；三态指针字段无 `omitempty`；已有响应体 JSON 断言覆盖（`rg 'omitempty' models/model.go` 命中的字段须确认非三态）
+- [ ] `models.ModelWithProvider` 增删字段：`handler/associations/crud_response_shape_test.go` 的 `modelWithProviderResponseKeys` 表已同步加/删一行（该表是 `/api/model-providers` 响应键契约的单一数据源，覆盖 Create/Update/List 三路径的键存在性与 null 语义）
 - [ ] 日志为 `slog`；错误带上下文返回
 - [ ] 命名符合第 3.1 节（Go snake_case 文件名、JSON snake_case、前端 kebab-case 路由目录等）
 - [ ] 文档同步义务：目录/模块/契约/纪律变更已更新 `docs/architecture/**` 与本文件相应节

@@ -60,6 +60,10 @@ function DialogOverlay({
 //     上限本身可以给得宽松（md 取 720px，与 xl 的固定高度同值）：它只在内容真的长到
 //     那个程度时才生效，短表单该多高还是多高，不会因此留白。给紧了反而让长表单
 //     （provider-form / association-form 这类十几个字段的）滚动区被压得只剩几行。
+//
+// md 与 lg 宽度相同（都是 sm:max-w-lg）不是复制粘贴漏改：两档的区别在高度行为，不在宽度。
+// 实测 2xl / xl 对列表和详情都偏宽，收到 lg 才合手；而宽度一致恰好让「同一个弹窗从表单档
+// 换到列表档」不会横向跳。别因为两档宽度相同就把它们合并——合并会丢掉固定/上限这个分界。
 
 // 用 dvh 而非 vh，避开移动端地址栏伸缩带来的二次跳动。
 //
@@ -72,7 +76,7 @@ const dialogContentVariants = cva(
       size: {
         sm: "max-h-[85dvh] sm:max-w-md",
         md: "max-h-[min(720px,90dvh)] sm:max-w-lg",
-        lg: "h-[min(640px,90dvh)] sm:max-w-2xl",
+        lg: "h-[min(640px,90dvh)] sm:max-w-lg",
         xl: "h-[min(720px,90dvh)] sm:max-w-3xl",
         menu: "max-h-[80dvh] gap-0 p-0 sm:max-w-[300px]",
         sheet: "max-h-[80dvh] gap-0 p-0 sm:max-w-lg",

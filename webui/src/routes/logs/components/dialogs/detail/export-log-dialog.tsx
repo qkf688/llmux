@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Download } from "lucide-react";
 import type { ChatLogExportSectionKey, ChatLogExportSections } from "../../../utils/export-log";
@@ -39,13 +39,13 @@ export function ExportLogDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>导出日志</DialogTitle>
           <DialogDescription>选择要导出的内容（默认全选）</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3 py-3">
+        <DialogBody className="-mx-1 space-y-3 px-1 py-3">
           {EXPORT_SECTION_OPTIONS.map((option) => {
             const inputId = `log-export-${option.key}`;
             return (
@@ -63,7 +63,7 @@ export function ExportLogDialog({
               </div>
             );
           })}
-        </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={exporting}>

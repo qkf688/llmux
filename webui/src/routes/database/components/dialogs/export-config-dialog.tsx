@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Download } from "lucide-react";
 import type { ExportType } from "@/lib/api";
 import { ExportTypeCheckboxGroup } from "../shared/export-type-checkbox-group";
@@ -23,18 +23,18 @@ export function ExportConfigDialog({
 }: ExportConfigDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>导出配置</DialogTitle>
           <DialogDescription>选择要导出的数据类型，系统将生成 JSON 格式的配置文件</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-4">
+        <DialogBody className="-mx-1 space-y-4 px-1 py-4">
           <ExportTypeCheckboxGroup
             prefix="export"
             selectedTypes={exportTypes}
             onToggleType={onToggleType}
           />
-        </div>
+        </DialogBody>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={exporting}>
             取消

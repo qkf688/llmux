@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -50,7 +51,7 @@ export function BlacklistDialog({
 }: BlacklistDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>拉黑管理</DialogTitle>
           <DialogDescription>
@@ -58,7 +59,7 @@ export function BlacklistDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3 pt-2">
+        <DialogBody className="-mx-1 space-y-3 px-1 pt-2">
           <div className="flex gap-2">
             <Input
               placeholder="搜索供应商名称或类型..."
@@ -77,51 +78,51 @@ export function BlacklistDialog({
               </SelectContent>
             </Select>
           </div>
-        </div>
 
-        {loading ? (
-          <LoadingState text="加载中..." className="py-8 text-sm text-muted-foreground" spinnerClassName="h-4 w-4" />
-        ) : (
-          <div className="space-y-2">
-            {filteredProviders.length === 0 ? (
-              <div className="text-sm text-muted-foreground py-4 text-center h-80 flex items-center justify-center">
-                {searchTerm || filter !== "all" ? "未找到匹配的供应商" : "暂无供应商"}
+          {loading ? (
+            <LoadingState text="加载中..." className="py-8 text-sm text-muted-foreground" spinnerClassName="h-4 w-4" />
+          ) : (
+            <div className="space-y-2">
+              {filteredProviders.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-4 text-center h-80 flex items-center justify-center">
+                  {searchTerm || filter !== "all" ? "未找到匹配的供应商" : "暂无供应商"}
+                </div>
+              ) : (
+                <div className="h-80 overflow-auto rounded-md border divide-y">
+                  {filteredProviders.map((provider) => {
+                    const isBlacklisted = blacklistedIds.includes(provider.ID);
+                    return (
+                      <div
+                        key={provider.ID}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors"
+                      >
+                        <Checkbox
+                          id={`blacklist-provider-${provider.ID}`}
+                          checked={isBlacklisted}
+                          onCheckedChange={(checked) => onToggle(provider.ID, checked === true)}
+                          disabled={saving}
+                        />
+                        <label htmlFor={`blacklist-provider-${provider.ID}`} className="flex-1 cursor-pointer select-none">
+                          <span className="text-sm font-medium">{provider.Name}</span>
+                          <span className="text-xs text-muted-foreground ml-2">({provider.Type})</span>
+                        </label>
+                        {isBlacklisted && <span className="text-xs text-destructive font-medium">已拉黑</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="text-xs text-muted-foreground">
+                {searchTerm || filter !== "all"
+                  ? `筛选到 ${filteredProviders.length} 个供应商，已选 ${blacklistedIds.length} 个加入黑名单`
+                  : `已选 ${blacklistedIds.length} 个供应商加入黑名单`}
               </div>
-            ) : (
-              <div className="max-h-80 overflow-auto rounded-md border divide-y h-80">
-                {filteredProviders.map((provider) => {
-                  const isBlacklisted = blacklistedIds.includes(provider.ID);
-                  return (
-                    <div
-                      key={provider.ID}
-                      className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors"
-                    >
-                      <Checkbox
-                        id={`blacklist-provider-${provider.ID}`}
-                        checked={isBlacklisted}
-                        onCheckedChange={(checked) => onToggle(provider.ID, checked === true)}
-                        disabled={saving}
-                      />
-                      <label htmlFor={`blacklist-provider-${provider.ID}`} className="flex-1 cursor-pointer select-none">
-                        <span className="text-sm font-medium">{provider.Name}</span>
-                        <span className="text-xs text-muted-foreground ml-2">({provider.Type})</span>
-                      </label>
-                      {isBlacklisted && <span className="text-xs text-destructive font-medium">已拉黑</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <div className="text-xs text-muted-foreground">
-              {searchTerm || filter !== "all"
-                ? `筛选到 ${filteredProviders.length} 个供应商，已选 ${blacklistedIds.length} 个加入黑名单`
-                : `已选 ${blacklistedIds.length} 个供应商加入黑名单`}
+              {providers.length === 0 && (
+                <div className="text-xs text-muted-foreground">当前未读取到可管理的供应商。</div>
+              )}
             </div>
-            {providers.length === 0 && (
-              <div className="text-xs text-muted-foreground">当前未读取到可管理的供应商。</div>
-            )}
-          </div>
-        )}
+          )}
+        </DialogBody>
 
         <DialogFooter>
           <Button variant="outline" onClick={onCancel} disabled={saving}>

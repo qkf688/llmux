@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Upload } from "lucide-react";
@@ -43,13 +43,13 @@ export function ImportConfigDialog({
 }: ImportConfigDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>导入配置</DialogTitle>
           <DialogDescription>选择配置文件和导入模式，系统将根据您的选择导入数据</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <DialogBody className="-mx-1 space-y-4 px-1 py-4">
           <div className="space-y-2">
             <Label>选择配置文件</Label>
             <input
@@ -103,7 +103,7 @@ export function ImportConfigDialog({
               ⚠️ 警告：覆盖模式将删除所选类型的所有现有数据！请确保已备份重要数据。
             </div>
           )}
-        </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={importing}>

@@ -24,6 +24,8 @@ local/
 planning-simple
 # .plan/ plan skill 产物，不提交
 .plan/
+# .session/ plan-session skill 产物，不提交
+.session/
 nul
 .trae
 .gomodcache

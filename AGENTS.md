@@ -83,12 +83,12 @@ make webui            # cd webui && pnpm install && pnpm run build
 .\build.bat           # webui build + go build -o llmux.exe
 ```
 
-> makefile **无** `test`/`lint` 目标；Go 用 `go test ./...`，前端用 `pnpm lint` / `pnpm test`。  
+> makefile **无** `test`/`lint` 目标；Go 用 `go test ./...`，前端用 `pnpm lint` / `pnpm test`。
 > 环境变量：`JWT_SECRET`（管理后台 JWT 签名密钥，必填）、`ADMIN_PASSWORD`（首启动 admin 密码，未设则随机生成并打印日志）、`GIN_MODE`、`TZ`。支持 `.env` 文件加载（启动时自动读取项目根 `.env`，文件不存在则跳过；`.env` 已在 `.gitignore`，模板见 `.env.example`）。
 
 ## 2.1 任务导航
 
-> **新会话 AI 接到任务时，先查这张表**——直接定位到该看的文件，不用瞎探索。  
+> **新会话 AI 接到任务时，先查这张表**——直接定位到该看的文件，不用瞎探索。
 > 架构文档按「模块」组织（`modules/{x}.md`），本表按「任务」组织，把两种视角连起来。
 
 | 任务 | 先看这些文件 | 参考 |
@@ -174,7 +174,7 @@ make webui            # cd webui && pnpm install && pnpm run build
 - HTTP 响应统一走 `httpresp`（`Success` / `BadRequest` / `NotFound` / `InternalServerError` 等），**禁止**各 handler 自造不一致信封。
 - 日志用标准库 `log/slog` 结构化键值，**禁止**再引入第二套日志门面（除非全仓迁移）。
 - 注册表重复注册：必须 **panic**（与现有 `Register*` 行为一致），测试用 `TestRegister*_DuplicatePanics` 类用例覆盖。
-- **直返实体的 JSON 形状必须两侧同源。** 被 handler 直接序列化返回的 GORM 实体（`models.Model` / `ModelWithProvider` / `Provider` / `VirtualModel` / 日志类）对外**以 PascalCase 为主**（多数字段无 json tag，走 Go 字段名），少数存量字段带 snake_case tag（如 `Model.auto_associate` / `supports_thinking` / `thinking_levels`）且前端已按 snake_case 消费——形状是混合的，**不要假设整体统一**。给这类实体新增/修改字段时**必须**先确认前端 `lib/api` 的 interface 实际读哪个键名，并保证两侧一致；**禁止**只改一侧。
+- **直返实体的 JSON 形状必须两侧同源。** 被 handler 直接序列化返回的 GORM 实体（`models.Model` / `ModelWithProvider` / `Provider` / `VirtualModel` / 日志类）对外**以 PascalCase 为主**（多数字段无 json tag，走 Go 字段名），少数存量字段带 snake_case tag（限于 `models.Model` 上的 `Model.auto_associate` / `Model.supports_thinking` / `Model.thinking_levels`，前端按 snake_case 消费）——形状是混合的，**不要假设整体统一**。**注意**：`ModelWithProvider` 的同名能力字段 `SupportsThinking` / `ThinkingLevels` 反而是 **PascalCase**（无 snake_case tag，`ThinkingLevels` 显式 `json:"ThinkingLevels"`），前端按 PascalCase 消费；即同一 thinking 语义在 `Model` 与 `ModelWithProvider` 两个实体上键名风格**相反**，跨实体新增/复制字段时**尤其**要逐一核对。给这类实体新增/修改字段时**必须**先确认前端 `lib/api` 的 interface 实际读哪个键名，并保证两侧一致；**禁止**只改一侧。
 - **三态指针字段禁止 `omitempty`。** `*bool` / `*[]string` 等三态字段的 nil 是「继承 / 未设置」的**有效语义**，必须序列化成 JSON `null`。`omitempty` 会把键整个省略，前端无法区分「继承」与「键不存在」，会把继承误判成 override 并在保存时回写错误值——`ModelWithProvider.ThinkingLevels` 曾因此把「继承」静默改写成「显式不约束」，使 `ClampReasoningEffort` 的白名单钳制失效。
 - 契约测试**必须**打在响应体 JSON 上（`gjson` 断言 + `Exists()` 区分「键存在且为 null」与「键缺失」）。只断 repository 读回的 Go 字段值会绕过序列化层，测不出键名/omitempty 类断层。
 

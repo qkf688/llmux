@@ -42,6 +42,16 @@ function AlertDialogOverlay({
   )
 }
 
+// 尺寸策略与 DialogContent 的 sm 档一致：只给 max-h 上限，不固定高度。
+// 确认框的内容量从挂载到卸载基本是常量（无 tab 切换、无流式追加），高度天然不跳，
+// 固定它只换来大片留白。上限用 dvh 而非 vh，避开移动端地址栏伸缩带来的二次跳动。
+//
+// 溢出交给整框 `overflow-y-auto`，不像 Dialog 那样引入 Body 抽象：
+// 这里没有「外框固定 + 内部单一滚动区」的前提，内容也稳定，为 23 个调用点全加一层
+// 包裹只是过度设计。长文案确认框（如列 20 个待删项）能滚到底即达成目标。
+//
+// 宽度沿用 `sm:max-w-lg` 且带 `sm:` 前缀：23 个调用点都不传尺寸 className，
+// 无 DialogContent 当初那种「无前缀类被后置断点规则吃掉」的覆盖问题，别顺手去掉前缀。
 function AlertDialogContent({
   className,
   ...props
@@ -52,7 +62,7 @@ function AlertDialogContent({
       <AlertDialogPrimitive.Content
         data-slot="alert-dialog-content"
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid max-h-[85dvh] w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
           className
         )}
         {...props}

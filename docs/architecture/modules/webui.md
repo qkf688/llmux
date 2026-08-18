@@ -51,6 +51,7 @@ routes/<page>/
 - `lib/api/`：HTTP 客户端与领域 API 函数
 - `stores/`：客户端状态；`Updater` / `Setter` 统一更新模式
 - `components/ui/`：Radix + Tailwind 基础组件
+- `components/ui/dialog.tsx`：全站 dialog 尺寸配方单一数据源（`dialogContentVariants` 六档 `sm`/`md`/`lg`/`xl`/`menu`/`sheet`，宽度一律带 `sm:` 前缀；`lg`/`xl` 固定高度、其余只给 `max-h` 上限——按「内容量在弹窗生命周期内是否会变」分而非按档位一刀切）+ `DialogBody`（Header/Footer 之间唯一的滚动容器）。29 处 `DialogContent` 全部只声明 `size`，页面侧无尺寸类；`alert-dialog.tsx` 的 `AlertDialogContent` 同为确认框单一数据源（固定 `sm:max-w-lg` + `max-h-[85dvh]`，无 body 抽象、整框滚动）
 - `components/page-header.tsx`：全站页头单一数据源（图标 + 标题/副标题 + 右侧动作，卡片外壳 `rounded-xl border bg-card shadow-sm`，标题统一 `h2 text-xl`）；各页页头**必须**复用，禁止再手写裸标题
 - `components/page-toolbar.tsx`：页头之下、列表之上那条工具栏的卡片外壳单一数据源（`rounded-xl border bg-card px-2.5 py-2 shadow-sm`，内距比 page-header 小）；配套导出 `ToolbarFilter`（Label+Select 筛选单元）与 `ToolbarSearch`（带放大镜的搜索框）。各页筛选/操作横条**必须**复用，禁止再手写卡片配方或逐页复制筛选下拉 JSX；布局用 flex-wrap 而非 grid 列数（增减筛选项零改动）
 - `components/table-card.tsx`：列表/表格卡片外壳单一数据源（同一套 `rounded-xl border bg-card shadow-sm` 配方 + 可选 `footer`，传入时自动补 `border-t` 把分页器收进卡内）；各页列表容器**必须**复用，禁止再手写卡片配方或把分页器裸放卡外

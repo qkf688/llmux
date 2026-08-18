@@ -336,6 +336,8 @@ webui/src/components/ui/  # 基础 UI
 - 路径别名：`@/` → `src/`。
 - 开发代理：`/api` → `http://localhost:7070`。
 - 页面**不得**绕过 `lib/api` 核心客户端自造鉴权 header 逻辑（除非扩展 client 本身）。
+- dialog 尺寸**只能**用 `DialogContent` / `AlertDialogContent` 的 `size` 预设（`components/ui/dialog.tsx` 的 CVA 是唯一数据源），页面侧**禁止**再写 `max-w-*` / `max-h-*` / `h-[...]` 等外框尺寸类；`padding` / `gap` / `rounded` 等非尺寸调节不在此列。组件**内部**变长区（列表、日志、表格列宽）的 `max-h-*` / `w-[...]` 是合法内部约束，保留。理由：29 处各写各的尺寸拼装曾导致全站尺寸漂移，收口到单档后调参成本从 N 处降到 1 处。可机械复核：`rg 'DialogContent (size|className)' webui/src` 里 className 不应含外框尺寸类。
+- dialog 的 Header 与 Footer 之间的内容**必须**包一层 `DialogBody`（全站唯一的滚动容器，自带 `min-h-0 flex-1 overflow-y-auto`）；**禁止**让 `DialogContent` 整框滚动或页面自己手写 `flex-1 overflow-y-auto`。固定高度档（`lg`/`xl`）不包 body 会让内容溢出外框，上限档（`sm`/`md`/`menu`/`sheet`）不包 body 则 `max-h` 只是一条没人执行的声明。「固定搜索栏 + 内部滚动列表」这类分区形态，`DialogBody` 套在**真正滚动的那一层**即可，不必是 `DialogContent` 的直接子级。`AlertDialogContent` 例外：它无 body 抽象、内容稳定，走整框滚动（理由见该文件注释）。
 
 ### 7.3 协议与代理
 
@@ -359,6 +361,7 @@ webui/src/components/ui/  # 基础 UI
 - [ ] 新设置项：`setting_schema.go` + handler DTO + 前端类型/表单三处同步；无新魔法字符串键
 - [ ] 新管理 API 域：只通过 `RegisterAll` 挂接，`main.go` 无新业务路由
 - [ ] 新管理页面：`route-config.ts` 已追加；API 在 `lib/api/modules`
+- [ ] 新增/修改 dialog：已声明 `size` 档位且内容包 `DialogBody`；`rg 'DialogContent (size|className)' webui/src` 的 className 无 `max-w-*`/`max-h-*`/`h-[...]`
 - [ ] 依赖方向：无 `repository`→`service`、`providers`→`handler` 等违规 import（可用 go list / 代码审查）
 - [ ] 跨域副作用：healthcheck/modelsync 未直接 import 对方内部函数，而是走 Hook
 - [ ] 自动关联规则变更：只改 `service/autoassoc`；handler / modelsync hooks 无重复业务逻辑

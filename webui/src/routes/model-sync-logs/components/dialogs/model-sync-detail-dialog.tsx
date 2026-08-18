@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { ModelSyncLog } from "@/lib/api";
 import { MinusCircle, XCircle } from "lucide-react";
 import { StatusBadge } from "../shared/status-badge";
@@ -13,7 +13,7 @@ type ModelSyncDetailDialogProps = {
 export function ModelSyncDetailDialog({ log, onClose }: ModelSyncDetailDialogProps) {
   return (
     <Dialog open={log !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[80vh] flex flex-col">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>同步详情</DialogTitle>
           <DialogDescription>
@@ -21,7 +21,7 @@ export function ModelSyncDetailDialog({ log, onClose }: ModelSyncDetailDialogPro
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 overflow-y-auto flex-1">
+        <DialogBody className="space-y-4">
           {log && (
             <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
               <span className="text-sm text-muted-foreground">状态:</span>
@@ -67,7 +67,7 @@ export function ModelSyncDetailDialog({ log, onClose }: ModelSyncDetailDialogPro
               </p>
             </div>
           )}
-        </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getLogDetail, type ChatLog } from "@/lib/api";
 import { toErrorMessage } from "@/lib/errors";
 import {
@@ -76,7 +76,7 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDet
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] sm:w-auto sm:max-w-2xl max-h-[85vh] sm:max-h-[90vh] flex flex-col p-4">
+      <DialogContent size="lg" className="p-4">
         <div className="p-3 border-b flex-shrink-0 sm:p-4">
           <DialogHeader className="p-0">
             <DialogTitle>日志详情: {detailLog.id}</DialogTitle>
@@ -84,7 +84,7 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDet
           </DialogHeader>
         </div>
 
-        <div className="overflow-y-auto p-3 flex-1">
+        <DialogBody className="p-3">
           <div className="space-y-4 text-sm">
             <div className="space-y-2">
               <div className="text-sm">
@@ -170,7 +170,7 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDet
               </div>
             </div>
           </div>
-        </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

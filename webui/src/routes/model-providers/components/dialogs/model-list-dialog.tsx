@@ -60,7 +60,7 @@ export function ModelListDialog({
 }: ModelListDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>选择模型</DialogTitle>
           <DialogDescription>从提供商的全部模型缓存中选择要关联的模型</DialogDescription>

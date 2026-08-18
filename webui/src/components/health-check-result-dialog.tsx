@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -95,7 +96,7 @@ export function HealthCheckResultDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>
             {loading || !status ? "正在启动健康检测..." : "健康检测进度"}
@@ -114,7 +115,7 @@ export function HealthCheckResultDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-4">
+        <DialogBody className="space-y-4">
           {loading || !status ? (
             <LoadingState text="" className="py-8" spinnerClassName="w-8 h-8" />
           ) : (
@@ -206,7 +207,7 @@ export function HealthCheckResultDialog({
               )}
             </>
           )}
-        </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button variant="outline" onClick={handleViewLogs}>

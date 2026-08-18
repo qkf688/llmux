@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { HealthCheckLog } from "@/lib/api";
 import { formatDateTime, formatResponseTime, isHealthCheckSuccess } from "../../utils/formatters";
 import { DetailCard } from "../shared/detail-card";
@@ -22,7 +22,7 @@ export function HealthCheckLogDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="p-0 w-[92vw] sm:w-auto sm:max-w-2xl max-h-[95vh] flex flex-col">
+      <DialogContent size="lg" className="p-0">
         <div className="p-4 border-b flex-shrink-0">
           <DialogHeader className="p-0">
             <DialogTitle>检测详情: {log.ID}</DialogTitle>
@@ -30,7 +30,7 @@ export function HealthCheckLogDetailDialog({
           </DialogHeader>
         </div>
 
-        <div className="overflow-y-auto p-3 flex-1">
+        <DialogBody className="p-3">
           <div className="space-y-6 text-sm">
             <div className="space-y-3">
               <div className="space-y-2">
@@ -65,7 +65,7 @@ export function HealthCheckLogDetailDialog({
               </div>
             </div>
           </div>
-        </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

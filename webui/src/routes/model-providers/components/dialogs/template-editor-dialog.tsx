@@ -44,7 +44,7 @@ export function TemplateEditorDialog({
 }: TemplateEditorDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>模板编辑</DialogTitle>
           <DialogDescription>
@@ -55,7 +55,7 @@ export function TemplateEditorDialog({
         {!selectedModelId ? (
           <div className="text-sm text-muted-foreground">请先选择一个模型</div>
         ) : (
-          <div className="space-y-3">
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
               <div className="text-xs text-muted-foreground">
                 当前模型：<span className="font-mono">{selectedModelId}</span>
@@ -91,7 +91,7 @@ export function TemplateEditorDialog({
             {(templateData?.items ?? []).length === 0 ? (
               <div className="text-xs text-muted-foreground">暂无模板项</div>
             ) : (
-              <div className="max-h-80 overflow-auto rounded-md border">
+              <div className="min-h-0 flex-1 overflow-auto rounded-md border">
                 <Table>
                   <TableHeader className="sticky top-0 bg-background">
                     <TableRow>

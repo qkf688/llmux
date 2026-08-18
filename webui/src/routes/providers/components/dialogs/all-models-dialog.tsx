@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { AnimatePresence } from "motion/react";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -69,8 +70,8 @@ export function AllModelsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
+      <DialogContent size="lg">
+        <DialogHeader>
           <DialogTitle>
             {allModelsProvider?.Name || "当前提供商"}的全部模型
           </DialogTitle>
@@ -111,7 +112,7 @@ export function AllModelsDialog({
               toggleSelectAllModels={toggleSelectAllModels}
             />
 
-            <div className="border rounded-md flex-1 min-h-0 overflow-y-auto">
+            <DialogBody className="rounded-md border">
               {/* AnimatePresence 常驻：不能放进条件分支，否则删除到空列表时 AnimatePresence 会随分支切换整体卸载，正在 exit 的 item 被强制拔掉，退场动画不播 */}
               <AnimatePresence initial={false}>
                 {filteredAllModels.map((model) => {
@@ -154,7 +155,7 @@ export function AllModelsDialog({
                   没有找到匹配的模型
                 </div>
               ) : null}
-            </div>
+            </DialogBody>
 
             <AllModelsCustomAdd
               value={customModelInput}

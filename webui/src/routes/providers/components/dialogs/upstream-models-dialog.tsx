@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -44,8 +45,8 @@ export function UpstreamModelsDialog({
 }: UpstreamModelsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
+      <DialogContent size="lg">
+        <DialogHeader>
           <DialogTitle>{providerName} 上游模型</DialogTitle>
           <DialogDescription>
             从上游拉取的模型列表，勾选后可加入"全部模型"缓存。
@@ -76,48 +77,46 @@ export function UpstreamModelsDialog({
           handleUpstreamSearchChange={handleUpstreamSearchChange}
         />
 
-        {modelsLoading ? (
-          <Loading message="加载模型列表" />
-        ) : (
-          <div className="max-h-96 overflow-y-auto space-y-2 flex-1 min-h-0">
-            {filteredProviderModels.length === 0 ? (
-              <div className="text-center text-muted-foreground py-8">
-                {providerModels.length === 0
-                  ? "暂无模型数据"
-                  : "未找到匹配的模型"}
-              </div>
-            ) : (
-              filteredProviderModels.map((model) => {
-                const isSaved = savedModelSet.has(model.id.toLowerCase());
-                const checked = selectedUpstreamModels.includes(model.id);
-                const testResult = upstreamTestResults[model.id];
-                return (
-                  <UpstreamModelsListItem
-                    key={model.id}
-                    model={model}
-                    checked={checked}
-                    isSaved={isSaved}
-                    testResult={testResult}
-                    batchTesting={upstreamBatchTesting}
-                    onToggle={(value) => {
-                      if (value) {
-                        setSelectedUpstreamModels((prev) =>
-                          Array.from(new Set([...prev, model.id])),
-                        );
-                      } else {
-                        setSelectedUpstreamModels((prev) =>
-                          prev.filter((item) => item !== model.id),
-                        );
-                      }
-                    }}
-                    onTest={() => handleTestUpstreamModel(model.id)}
-                    onCopy={() => copyModelName(model.id)}
-                  />
-                );
-              })
-            )}
-          </div>
-        )}
+        <DialogBody className="space-y-2">
+          {modelsLoading ? (
+            <Loading message="加载模型列表" />
+          ) : filteredProviderModels.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">
+              {providerModels.length === 0
+                ? "暂无模型数据"
+                : "未找到匹配的模型"}
+            </div>
+          ) : (
+            filteredProviderModels.map((model) => {
+              const isSaved = savedModelSet.has(model.id.toLowerCase());
+              const checked = selectedUpstreamModels.includes(model.id);
+              const testResult = upstreamTestResults[model.id];
+              return (
+                <UpstreamModelsListItem
+                  key={model.id}
+                  model={model}
+                  checked={checked}
+                  isSaved={isSaved}
+                  testResult={testResult}
+                  batchTesting={upstreamBatchTesting}
+                  onToggle={(value) => {
+                    if (value) {
+                      setSelectedUpstreamModels((prev) =>
+                        Array.from(new Set([...prev, model.id])),
+                      );
+                    } else {
+                      setSelectedUpstreamModels((prev) =>
+                        prev.filter((item) => item !== model.id),
+                      );
+                    }
+                  }}
+                  onTest={() => handleTestUpstreamModel(model.id)}
+                  onCopy={() => copyModelName(model.id)}
+                />
+              );
+            })
+          )}
+        </DialogBody>
 
         <DialogFooter>
           <Button onClick={() => onOpenChange(false)}>关闭</Button>

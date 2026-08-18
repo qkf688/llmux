@@ -2,6 +2,7 @@ import type { AssociationPreview } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -36,7 +37,7 @@ export function PreviewDialog({
 }: PreviewDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>
             {type === "associate" ? "一键关联预览" : "清除无效关联预览"}
@@ -48,7 +49,7 @@ export function PreviewDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto border rounded-md">
+        <DialogBody className="rounded-md border">
           {data.length === 0 ? (
             <div className="flex items-center justify-center h-32 text-muted-foreground">
               {type === "associate" ? "没有可添加的关联" : "没有无效关联"}
@@ -73,7 +74,7 @@ export function PreviewDialog({
               </TableBody>
             </Table>
           )}
-        </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={executing}>

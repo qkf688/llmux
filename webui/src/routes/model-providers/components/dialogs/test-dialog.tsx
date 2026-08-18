@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -88,110 +89,112 @@ export function TestDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>模型测试</DialogTitle>
           <DialogDescription>选择要执行的测试类型</DialogDescription>
         </DialogHeader>
 
-        <RadioGroup
-          value={testType}
-          onValueChange={(value: string) => onTestTypeChange(value as TestType)}
-          className="gap-2"
-        >
-          {TEST_OPTIONS.map((opt) => (
-            <label
-              key={opt.value}
-              htmlFor={opt.value}
-              className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors",
-                testType === opt.value ? "border-primary bg-primary/5" : "hover:bg-muted/50",
-              )}
-            >
-              <RadioGroupItem value={opt.value} id={opt.value} className="mt-0.5" />
-              <div className="space-y-0.5">
-                <span className="text-sm font-medium leading-none">{opt.label}</span>
-                <p className="text-xs text-muted-foreground">{opt.description}</p>
-              </div>
-            </label>
-          ))}
-        </RadioGroup>
-
-        {/* 固定高度结果区：切换测试类型 / 展开错误 / 追加日志时，dialog 外框尺寸恒定，仅此处内部滚动 */}
-        <div className="h-64 overflow-y-auto rounded-md border bg-muted/20 p-3">
-          {testType === "connectivity" &&
-            (selectedTestId && testResults[selectedTestId]?.loading ? (
-              <LoadingState text="测试中..." />
-            ) : selectedTestId && testResults[selectedTestId] ? (
-              <ExpandableError
-                error={{
-                  message:
-                    testResults[selectedTestId].result?.error ||
-                    testResults[selectedTestId].result?.message ||
-                    "测试成功",
-                  summary: testResults[selectedTestId].result?.error ? "测试失败" : "测试成功",
-                  type: testResults[selectedTestId].result?.error_type,
-                }}
-                isSuccess={!testResults[selectedTestId].result?.error}
-                defaultExpanded={!!testResults[selectedTestId].result?.error}
-              />
-            ) : (
-              <ResultPlaceholder />
+        <DialogBody className="space-y-4">
+          <RadioGroup
+            value={testType}
+            onValueChange={(value: string) => onTestTypeChange(value as TestType)}
+            className="gap-2"
+          >
+            {TEST_OPTIONS.map((opt) => (
+              <label
+                key={opt.value}
+                htmlFor={opt.value}
+                className={cn(
+                  "flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors",
+                  testType === opt.value ? "border-primary bg-primary/5" : "hover:bg-muted/50",
+                )}
+              >
+                <RadioGroupItem value={opt.value} id={opt.value} className="mt-0.5" />
+                <div className="space-y-0.5">
+                  <span className="text-sm font-medium leading-none">{opt.label}</span>
+                  <p className="text-xs text-muted-foreground">{opt.description}</p>
+                </div>
+              </label>
             ))}
+          </RadioGroup>
 
-          {testType === "react" &&
-            (reactTestResult.loading ? (
-              <LoadingState text="测试中..." />
-            ) : reactTestResult.error || reactTestResult.success !== null || reactTestResult.messages ? (
-              <div className="space-y-3">
-                {reactTestResult.error ? (
-                  <ExpandableError error={{ message: reactTestResult.error }} isSuccess={false} defaultExpanded />
-                ) : reactTestResult.success !== null ? (
-                  <ExpandableError
-                    error={{
-                      message: reactTestResult.success ? "React Agent 能力测试通过" : "React Agent 能力测试失败",
-                      summary: reactTestResult.success ? "测试成功" : "测试失败",
-                    }}
-                    isSuccess={reactTestResult.success}
-                    defaultExpanded={false}
-                  />
-                ) : null}
+          {/* 固定高度结果区：切换测试类型 / 展开错误 / 追加日志时，dialog 外框尺寸恒定，仅此处内部滚动 */}
+          <div className="h-64 overflow-y-auto rounded-md border bg-muted/20 p-3">
+            {testType === "connectivity" &&
+              (selectedTestId && testResults[selectedTestId]?.loading ? (
+                <LoadingState text="测试中..." />
+              ) : selectedTestId && testResults[selectedTestId] ? (
+                <ExpandableError
+                  error={{
+                    message:
+                      testResults[selectedTestId].result?.error ||
+                      testResults[selectedTestId].result?.message ||
+                      "测试成功",
+                    summary: testResults[selectedTestId].result?.error ? "测试失败" : "测试成功",
+                    type: testResults[selectedTestId].result?.error_type,
+                  }}
+                  isSuccess={!testResults[selectedTestId].result?.error}
+                  defaultExpanded={!!testResults[selectedTestId].result?.error}
+                />
+              ) : (
+                <ResultPlaceholder />
+              ))}
 
-                {reactTestResult.messages && <LogBlock label="测试日志" value={reactTestResult.messages} />}
-              </div>
-            ) : (
-              <ResultPlaceholder />
-            ))}
-
-          {testType === "structured_output" &&
-            (selectedTestId && structuredTestResults[selectedTestId]?.loading ? (
-              <LoadingState text="测试中..." />
-            ) : selectedTestId && structuredTestResults[selectedTestId]?.result ? (
-              (() => {
-                const result = structuredTestResults[selectedTestId]?.result;
-                const passed = result?.passed === true;
-                const errorType = result?.error_type;
-                const errorMessage =
-                  result?.error || result?.message || (passed ? "结构化输出能力测试通过" : "结构化输出能力测试失败");
-                const rawOutput = result?.raw_output ?? "";
-                const parsed = result?.parsed;
-
-                return (
-                  <div className="space-y-3">
+            {testType === "react" &&
+              (reactTestResult.loading ? (
+                <LoadingState text="测试中..." />
+              ) : reactTestResult.error || reactTestResult.success !== null || reactTestResult.messages ? (
+                <div className="space-y-3">
+                  {reactTestResult.error ? (
+                    <ExpandableError error={{ message: reactTestResult.error }} isSuccess={false} defaultExpanded />
+                  ) : reactTestResult.success !== null ? (
                     <ExpandableError
-                      error={{ message: errorMessage, summary: passed ? "测试成功" : "测试失败", type: errorType }}
-                      isSuccess={passed}
-                      defaultExpanded={!passed}
+                      error={{
+                        message: reactTestResult.success ? "React Agent 能力测试通过" : "React Agent 能力测试失败",
+                        summary: reactTestResult.success ? "测试成功" : "测试失败",
+                      }}
+                      isSuccess={reactTestResult.success}
+                      defaultExpanded={false}
                     />
-                    {rawOutput && <LogBlock label="原始输出" value={rawOutput} />}
-                    {parsed != null && <LogBlock label="解析结果" value={JSON.stringify(parsed, null, 2)} wrap />}
-                  </div>
-                );
-              })()
-            ) : (
-              <ResultPlaceholder />
-            ))}
-        </div>
+                  ) : null}
+
+                  {reactTestResult.messages && <LogBlock label="测试日志" value={reactTestResult.messages} />}
+                </div>
+              ) : (
+                <ResultPlaceholder />
+              ))}
+
+            {testType === "structured_output" &&
+              (selectedTestId && structuredTestResults[selectedTestId]?.loading ? (
+                <LoadingState text="测试中..." />
+              ) : selectedTestId && structuredTestResults[selectedTestId]?.result ? (
+                (() => {
+                  const result = structuredTestResults[selectedTestId]?.result;
+                  const passed = result?.passed === true;
+                  const errorType = result?.error_type;
+                  const errorMessage =
+                    result?.error || result?.message || (passed ? "结构化输出能力测试通过" : "结构化输出能力测试失败");
+                  const rawOutput = result?.raw_output ?? "";
+                  const parsed = result?.parsed;
+
+                  return (
+                    <div className="space-y-3">
+                      <ExpandableError
+                        error={{ message: errorMessage, summary: passed ? "测试成功" : "测试失败", type: errorType }}
+                        isSuccess={passed}
+                        defaultExpanded={!passed}
+                      />
+                      {rawOutput && <LogBlock label="原始输出" value={rawOutput} />}
+                      {parsed != null && <LogBlock label="解析结果" value={JSON.stringify(parsed, null, 2)} wrap />}
+                    </div>
+                  );
+                })()
+              ) : (
+                <ResultPlaceholder />
+              ))}
+          </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

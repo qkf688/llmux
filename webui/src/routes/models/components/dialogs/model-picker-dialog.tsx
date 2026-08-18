@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -46,7 +47,7 @@ export function ModelPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>选择模型</DialogTitle>
           <DialogDescription>
@@ -58,7 +59,7 @@ export function ModelPickerDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-2">
+        <div className="shrink-0 py-2">
           <Input
             placeholder="搜索模型名称..."
             value={searchQuery}
@@ -67,7 +68,7 @@ export function ModelPickerDialog({
           />
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto border rounded-md space-y-2 p-2">
+        <DialogBody className="space-y-2 rounded-md border p-2">
           {loadingProviderModels ? (
             <LoadingState text="加载模型列表..." className="h-32" spinnerClassName="h-6 w-6" />
           ) : providerModels.length === 0 ? (
@@ -118,7 +119,7 @@ export function ModelPickerDialog({
               );
             })
           )}
-        </div>
+        </DialogBody>
 
         <DialogFooter>
           <div className="flex items-center justify-between w-full">

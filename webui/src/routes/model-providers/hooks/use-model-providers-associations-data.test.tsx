@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getModelProviders, type ModelWithProvider } from "@/lib/api";
 
 import { useModelProvidersAssociationsData } from "./use-model-providers-associations-data";
+import { createMockAssociation } from "../test-fixtures";
 
 // 被测链路仅经 useModelProvidersQuery 消费 getModelProviders；
 // 另两个为防御性预置：若未来直接 import useModelProvidersAssociationStatus，其网络依赖不会因缺导出而静默 undefined
@@ -16,26 +17,6 @@ vi.mock("@/lib/api", () => ({
 }));
 
 type LoadProviderStatus = (providers: ModelWithProvider[], modelId: number) => Promise<void>;
-
-function createMockAssociation(ID: number, ProviderID: number): ModelWithProvider {
-  return {
-    ID,
-    ModelID: 1,
-    ProviderModel: "gpt-test",
-    ProviderID,
-    ToolCall: true,
-    StructuredOutput: false,
-    Image: false,
-    WithHeader: false,
-    CustomerHeaders: {},
-    Status: true,
-    Weight: 1,
-    Priority: 0,
-    MaxTokens: null,
-    SupportsThinking: null,
-    ThinkingLevels: null,
-  };
-}
 
 type AssociationDataProps = {
   selectedModelId: number | null;

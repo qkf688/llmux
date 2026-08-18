@@ -46,7 +46,9 @@ func createProviderForThinkingTest(t *testing.T) {
 func boolPtr(v bool) *bool { return &v }
 func intPtr(v int) *int    { return &v }
 
-func updateAssocViaHandler(t *testing.T, id uint, body string) {
+// updateAssocViaHandler 走 Update handler 并返回响应体，便于断言响应形状；
+// 只关心落库结果的用例可忽略返回值。
+func updateAssocViaHandler(t *testing.T, id uint, body string) string {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -60,6 +62,23 @@ func updateAssocViaHandler(t *testing.T, id uint, body string) {
 	if w.Code != 200 {
 		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
+	return w.Body.String()
+}
+
+// listAssocsViaHandler 走 List handler 并返回响应体，用于断言列表响应形状。
+func listAssocsViaHandler(t *testing.T, modelID uint) string {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/model-providers?model_id="+strconv.FormatUint(uint64(modelID), 10), nil)
+
+	GetModelProviders(c)
+
+	if w.Code != 200 {
+		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	return w.Body.String()
 }
 
 func reloadAssoc(t *testing.T, id uint) *models.ModelWithProvider {

@@ -16,7 +16,10 @@ export interface ModelWithProvider {
   Priority: number;
   MaxTokens: number | null;
   SupportsThinking: boolean | null; // 三态：null=继承 model，true/false=override
-  ThinkingLevels: string[] | null; // 三态：null=继承 model，[]=不约束，非空=override
+  // 三态：null=继承 model，[]=不约束，非空=override。
+  // 键名为 PascalCase 且后端保证**始终存在**（`models.ModelWithProvider` 直返，禁 omitempty）；
+  // 若此处键名与后端 tag 失配，读到的会是 undefined，编辑弹窗会把继承误判成自定义。
+  ThinkingLevels: string[] | null;
 }
 
 export interface AssociationPreview {

@@ -76,7 +76,11 @@ type ModelWithProvider struct {
 	// ThinkingLevels 思考档位 override，三态：
 	// nil=继承 Model.ThinkingLevels；空切片=显式不约束（任意档位透传）；非空=override 白名单。
 	// 用 *[]string 而非 []string 以区分"继承"与"显式不约束"。解析语义见 ThinkingLevelsResolved。
-	ThinkingLevels *[]string `json:"thinking_levels,omitempty" gorm:"serializer:json"`
+	// json tag 显式声明为 PascalCase 且**禁止 omitempty**：范式与上方三态兄弟字段
+	// SupportsThinking 对齐——后者无 tag，序列化为 PascalCase 键 + null 表继承，前端一直正常消费。
+	// 本字段曾被单独加 `thinking_levels,omitempty` 成为异类，导致继承态整键消失，
+	// 前端读不到键便把"继承"误判为 override，并在保存时回写成"显式不约束"，静默破坏钳制规则。
+	ThinkingLevels *[]string `json:"ThinkingLevels" gorm:"serializer:json"`
 }
 
 // SupportsThinkingResolved 解析该关联最终是否支持 thinking：

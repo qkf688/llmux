@@ -126,7 +126,7 @@ make webui            # cd webui && pnpm install && pnpm run build
 | Go 导出类型/函数 | UpperCamelCase | `RegisterAll`、`BalanceChat` |
 | Go 局部变量 | lowerCamelCase | `syncService`、`modelID` |
 | Go 接口 | 名词或 `XxxRepo` / 能力名 | `Provider`、`Selector`、`ModelRepo` |
-| JSON / API 字段 | snake_case | `provider_model`、`max_retry` |
+| JSON / API 字段 | snake_case（**例外**：被 handler 直返的 GORM 实体对外以 PascalCase 为主，见 3.4） | `provider_model`、`max_retry` |
 | 协议 style 常量 | `Style` 前缀 | `StyleOpenAI`、`StyleAnthropic` |
 | 设置键常量 | `SettingKey` 前缀 | `SettingKey*` |
 | 虚拟模型策略字符串 | snake_case | `priority`、`round_robin`、`random` |
@@ -174,6 +174,9 @@ make webui            # cd webui && pnpm install && pnpm run build
 - HTTP 响应统一走 `httpresp`（`Success` / `BadRequest` / `NotFound` / `InternalServerError` 等），**禁止**各 handler 自造不一致信封。
 - 日志用标准库 `log/slog` 结构化键值，**禁止**再引入第二套日志门面（除非全仓迁移）。
 - 注册表重复注册：必须 **panic**（与现有 `Register*` 行为一致），测试用 `TestRegister*_DuplicatePanics` 类用例覆盖。
+- **直返实体的 JSON 形状必须两侧同源。** 被 handler 直接序列化返回的 GORM 实体（`models.Model` / `ModelWithProvider` / `Provider` / `VirtualModel` / 日志类）对外**以 PascalCase 为主**（多数字段无 json tag，走 Go 字段名），少数存量字段带 snake_case tag（如 `Model.auto_associate` / `supports_thinking` / `thinking_levels`）且前端已按 snake_case 消费——形状是混合的，**不要假设整体统一**。给这类实体新增/修改字段时**必须**先确认前端 `lib/api` 的 interface 实际读哪个键名，并保证两侧一致；**禁止**只改一侧。
+- **三态指针字段禁止 `omitempty`。** `*bool` / `*[]string` 等三态字段的 nil 是「继承 / 未设置」的**有效语义**，必须序列化成 JSON `null`。`omitempty` 会把键整个省略，前端无法区分「继承」与「键不存在」，会把继承误判成 override 并在保存时回写错误值——`ModelWithProvider.ThinkingLevels` 曾因此把「继承」静默改写成「显式不约束」，使 `ClampReasoningEffort` 的白名单钳制失效。
+- 契约测试**必须**打在响应体 JSON 上（`gjson` 断言 + `Exists()` 区分「键存在且为 null」与「键缺失」）。只断 repository 读回的 Go 字段值会绕过序列化层，测不出键名/omitempty 类断层。
 
 **前端**
 
@@ -366,6 +369,7 @@ webui/src/components/ui/  # 基础 UI
 - [ ] 跨域副作用：healthcheck/modelsync 未直接 import 对方内部函数，而是走 Hook
 - [ ] 自动关联规则变更：只改 `service/autoassoc`；handler / modelsync hooks 无重复业务逻辑
 - [ ] HTTP 错误/成功响应走 `httpresp`；未引入第二套响应信封
+- [ ] 直返实体新增/改 json tag：前端 `lib/api` interface 与测试 mock 已同步；三态指针字段无 `omitempty`；已有响应体 JSON 断言覆盖（`rg 'omitempty' models/model.go` 命中的字段须确认非三态）
 - [ ] 日志为 `slog`；错误带上下文返回
 - [ ] 命名符合第 3.1 节（Go snake_case 文件名、JSON snake_case、前端 kebab-case 路由目录等）
 - [ ] 文档同步义务：目录/模块/契约/纪律变更已更新 `docs/architecture/**` 与本文件相应节

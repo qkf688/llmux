@@ -149,3 +149,73 @@ func TestCreateModelProvider_ThinkingLevels(t *testing.T) {
 		})
 	}
 }
+
+// TestModelProviderResponse_ThinkingLevelsShape 回归 Critical：
+// 关联响应里 ThinkingLevels 键必须**始终存在**，继承态为 JSON null 而非整字段省略。
+//
+// 键缺失会让前端 `association.ThinkingLevels === null` 恒为 false（undefined !== null），
+// 编辑弹窗因此恒判"自定义"，并在保存时把"继承"静默改写成"显式不约束"（[]），
+// 使 ClampReasoningEffort 的白名单钳制失效——是数据破坏，不只是显示错。
+//
+// 断言用 Exists() 区分"键存在且为 null"与"键缺失"：若只断取值为空串，
+// 两种情况都会通过，测不出该 bug。这也是原有测试全走 repository 读 DB、
+// 绕过序列化层，从而漏掉此 bug 的原因——契约断层只在响应体上可见。
+func TestModelProviderResponse_ThinkingLevelsShape(t *testing.T) {
+	testsupport.InitTestDB(t)
+	mp := createAssocForThinkingTest(t)
+
+	const baseFields = `"model_id":1,"provider_id":1,"provider_name":"pm","tool_call":true,"structured_output":true,"image":false,"with_header":false,"weight":10,"priority":10,"max_tokens":8192`
+
+	tests := []struct {
+		name     string
+		body     string
+		wantType gjson.Type
+		wantRaw  string
+	}{
+		{
+			name:     "继承（请求不发字段）→ 响应键存在且为 null",
+			body:     `{` + baseFields + `}`,
+			wantType: gjson.Null,
+			wantRaw:  "null",
+		},
+		{
+			name:     "override → 响应为数组",
+			body:     `{` + baseFields + `,"thinking_levels":["low","high"]}`,
+			wantType: gjson.JSON,
+			wantRaw:  `["low","high"]`,
+		},
+		{
+			name:     "显式不约束 → 响应为空数组",
+			body:     `{` + baseFields + `,"thinking_levels":[]}`,
+			wantType: gjson.JSON,
+			wantRaw:  `[]`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Update 的单个对象响应
+			updateBody := updateAssocViaHandler(t, mp.ID, tt.body)
+			assertThinkingLevelsShape(t, updateBody, "data.ThinkingLevels", tt.wantType, tt.wantRaw)
+
+			// List 的列表响应（前端编辑弹窗回填读的就是这一条）
+			listBody := listAssocsViaHandler(t, 1)
+			assertThinkingLevelsShape(t, listBody, "data.0.ThinkingLevels", tt.wantType, tt.wantRaw)
+		})
+	}
+}
+
+// assertThinkingLevelsShape 断言响应体指定路径上的 ThinkingLevels 键存在，且类型与原始值符合预期。
+func assertThinkingLevelsShape(t *testing.T, body, path string, wantType gjson.Type, wantRaw string) {
+	t.Helper()
+	got := gjson.Get(body, path)
+	if !got.Exists() {
+		t.Fatalf("%s 键缺失（继承态被 omitempty 省略会导致前端恒判自定义并写坏数据），body=%s", path, body)
+	}
+	if got.Type != wantType {
+		t.Fatalf("%s type = %v, want %v, raw=%s", path, got.Type, wantType, got.Raw)
+	}
+	if got.Raw != wantRaw {
+		t.Fatalf("%s raw = %s, want %s", path, got.Raw, wantRaw)
+	}
+}

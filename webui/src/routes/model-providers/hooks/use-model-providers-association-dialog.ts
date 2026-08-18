@@ -45,8 +45,12 @@ export function useModelProvidersAssociationDialog({
       max_tokens: association.MaxTokens ?? 0,
       customer_headers: headerPairs.length ? headerPairs : [],
       supports_thinking: toTriState(association.SupportsThinking),
-      // thinking_levels 三态：null=继承，非 null=自定义（空切片=不约束）
-      thinking_levels_mode: association.ThinkingLevels === null ? "inherit" : "custom",
+      // thinking_levels 三态：null=继承，非 null=自定义（空切片=不约束）。
+      // 用 == null 而非 === null：后端契约保证该键始终存在且继承态为 null，
+      // 但键名一旦漂移（如误加 omitempty 或改 tag）读到的会是 undefined，
+      // 那时严格判等会让此处恒判 custom，并在保存时把"继承"静默改写成"不约束"。
+      // 宽松判等把这类契约故障降级为"显示继承"而非写坏数据。
+      thinking_levels_mode: association.ThinkingLevels == null ? "inherit" : "custom",
       thinking_levels_custom: association.ThinkingLevels ?? [],
     });
     setOpen(true);

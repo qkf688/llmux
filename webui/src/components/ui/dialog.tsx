@@ -57,6 +57,10 @@ function DialogOverlay({
 //     `translate-y-[-50%]` 垂直居中，高度一变整个弹窗就跳位。
 //   - sm / md / menu / sheet 只给上限：确认框和表单的内容量从挂载到卸载基本是常量，
 //     高度天然不跳，固定它只换来大片留白——正是「占地大内容少」这个抱怨的来源。
+//     上限本身可以给得宽松（md 取 720px，与 xl 的固定高度同值）：它只在内容真的长到
+//     那个程度时才生效，短表单该多高还是多高，不会因此留白。给紧了反而让长表单
+//     （provider-form / association-form 这类十几个字段的）滚动区被压得只剩几行。
+
 // 用 dvh 而非 vh，避开移动端地址栏伸缩带来的二次跳动。
 //
 // 无论哪档，Header / Footer 之间的内容都要包一层 DialogBody：上限档顶到上限后同样需要
@@ -67,7 +71,7 @@ const dialogContentVariants = cva(
     variants: {
       size: {
         sm: "max-h-[85dvh] sm:max-w-md",
-        md: "max-h-[min(560px,90dvh)] sm:max-w-lg",
+        md: "max-h-[min(720px,90dvh)] sm:max-w-lg",
         lg: "h-[min(640px,90dvh)] sm:max-w-2xl",
         xl: "h-[min(720px,90dvh)] sm:max-w-3xl",
         menu: "max-h-[80dvh] gap-0 p-0 sm:max-w-[300px]",

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -71,7 +72,7 @@ export function AssociationFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] flex flex-col">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>{editingAssociation ? "编辑关联" : "添加关联"}</DialogTitle>
           <DialogDescription>
@@ -80,8 +81,8 @@ export function AssociationFormDialog({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col gap-4 flex-1 min-h-0">
-            <div className="space-y-4 overflow-y-auto pr-1 sm:pr-2 max-h-[60vh] flex-1 min-h-0">
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex min-h-0 flex-1 flex-col gap-4">
+            <DialogBody className="-mx-1 space-y-4 px-1">
               <FormField
                 control={form.control}
                 name="model_id"
@@ -506,7 +507,7 @@ export function AssociationFormDialog({
                   </FormItem>
                 )}
               />
-            </div>
+            </DialogBody>
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>

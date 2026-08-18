@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -62,8 +63,8 @@ export function ModelFormDialog({
 }: ModelFormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
+      <DialogContent size="md">
+        <DialogHeader>
           <DialogTitle>{editingModel ? "编辑模型" : "添加模型"}</DialogTitle>
           <DialogDescription>{editingModel ? "修改模型信息" : "添加一个新的模型"}</DialogDescription>
         </DialogHeader>
@@ -71,9 +72,9 @@ export function ModelFormDialog({
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(editingModel ? onUpdate : onCreate)}
-            className="flex flex-col gap-4 flex-1 min-h-0"
+            className="flex min-h-0 flex-1 flex-col gap-4"
           >
-            <div className="space-y-4 overflow-y-auto pr-1 sm:pr-2 flex-1 min-h-0">
+            <DialogBody className="-mx-1 space-y-4 px-1">
             {!editingModel && (
               <div className="space-y-2">
                 <label className="text-sm font-medium">从提供商选择（默认全部）</label>
@@ -271,9 +272,9 @@ export function ModelFormDialog({
               )}
             />
 
-            </div>
+            </DialogBody>
 
-            <DialogFooter className="flex-shrink-0">
+            <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 取消
               </Button>

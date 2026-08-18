@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -58,7 +59,7 @@ export function BatchCapabilitiesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>批量设置能力</DialogTitle>
           <DialogDescription>
@@ -66,7 +67,7 @@ export function BatchCapabilitiesDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <DialogBody className="-mx-1 space-y-4 px-1">
           <div className="rounded-md border p-4 space-y-3">
             <div className="text-sm font-medium">工具调用</div>
             <RadioGroup value={toolCall} onValueChange={(value) => setToolCall(value as CapabilityMode)} className="flex gap-4">
@@ -124,7 +125,7 @@ export function BatchCapabilitiesDialog({
               </div>
             </RadioGroup>
           </div>
-        </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={updating}>

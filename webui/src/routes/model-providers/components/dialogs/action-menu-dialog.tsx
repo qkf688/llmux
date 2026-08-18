@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -67,8 +68,8 @@ export function ActionMenuDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[300px] p-0 gap-0 rounded-[10px]" showCloseButton={false}>
-        <div className="flex flex-col max-h-[80vh]">
+      <DialogContent size="menu" className="rounded-[10px]" showCloseButton={false}>
+        <div className="flex min-h-0 flex-1 flex-col">
           <DialogHeader className="px-3.5 py-2.5 border-b">
             <div className="flex items-center justify-between">
               <DialogTitle className="text-sm font-semibold">操作</DialogTitle>
@@ -85,7 +86,7 @@ export function ActionMenuDialog({
             <DialogDescription className="sr-only">操作菜单</DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto py-1">
+          <DialogBody className="py-1">
             {/* 作用域切换（segmented control，高对比选中态） */}
             <div className="mx-2.5 mt-2 mb-1 p-2 bg-secondary rounded-lg">
               <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5">作用域</div>
@@ -187,7 +188,7 @@ export function ActionMenuDialog({
               title="模板编辑"
               desc="管理模型名映射模板"
             />
-          </div>
+          </DialogBody>
         </div>
       </DialogContent>
     </Dialog>

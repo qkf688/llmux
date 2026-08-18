@@ -2,6 +2,7 @@ import type { Provider } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -40,8 +41,8 @@ export function FilterSheet({
 }: FilterSheetProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg p-0 gap-0" showCloseButton={false}>
-        <div className="flex flex-col max-h-[80vh]">
+      <DialogContent size="sheet" showCloseButton={false}>
+        <div className="flex min-h-0 flex-1 flex-col">
           <DialogHeader className="px-4 py-3 border-b">
             <div className="flex items-center justify-between">
               <DialogTitle className="text-base">筛选</DialogTitle>
@@ -59,7 +60,7 @@ export function FilterSheet({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <DialogBody className="p-4 space-y-4">
             <div className="flex flex-col gap-1 text-xs">
               <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">提供商类型</Label>
               <Select value={selectedProviderType} onValueChange={onSelectedProviderTypeChange}>
@@ -107,9 +108,9 @@ export function FilterSheet({
                 </SelectContent>
               </Select>
             </div>
-          </div>
+          </DialogBody>
 
-          <div className="flex gap-2 p-4 border-t">
+          <div className="flex shrink-0 gap-2 p-4 border-t">
             <Button
               variant="outline"
               className="flex-1 h-9"

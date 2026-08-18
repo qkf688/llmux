@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -33,14 +34,14 @@ export function ProviderSelectorDialog({
 }: ProviderSelectorDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[78vh] max-h-[90vh] w-[90vw] max-w-2xl flex-col overflow-hidden">
+      <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>选择提供商</DialogTitle>
           <DialogDescription>选择要拉黑的提供商</DialogDescription>
         </DialogHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-2">
-          <div>
+          <div className="shrink-0">
             <Input
               className="h-9"
               placeholder="搜索提供商名称..."
@@ -49,7 +50,7 @@ export function ProviderSelectorDialog({
             />
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
+          <DialogBody className="rounded-md border">
             <div className="divide-y">
               {providers.map((provider) => {
                 const isSelected = selectedProviderIds.includes(provider.ID);
@@ -87,7 +88,7 @@ export function ProviderSelectorDialog({
                 );
               })}
             </div>
-          </div>
+          </DialogBody>
         </div>
 
         <DialogFooter>

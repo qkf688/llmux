@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -59,13 +60,13 @@ export function MappingManagementDialog({
 }: MappingManagementDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[82vh] max-h-[92vh] w-[96vw] max-w-3xl flex-col gap-3 overflow-hidden p-4 sm:max-w-3xl sm:p-6">
+      <DialogContent size="xl" className="gap-3 p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="text-base sm:text-lg">管理映射 - {virtualModelName}</DialogTitle>
           <DialogDescription className="text-xs sm:text-sm">配置虚拟模型关联的真实模型</DialogDescription>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             <div className="flex-1 min-w-[200px]">
               <Input
                 placeholder="搜索真实模型..."
@@ -91,7 +92,7 @@ export function MappingManagementDialog({
             </Button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
+          <DialogBody className="rounded-md border">
             {/* Desktop/tablet: table layout */}
             <div className="hidden sm:block">
               <Table>
@@ -233,7 +234,7 @@ export function MappingManagementDialog({
                 })
               )}
             </div>
-          </div>
+          </DialogBody>
         </div>
       </DialogContent>
     </Dialog>

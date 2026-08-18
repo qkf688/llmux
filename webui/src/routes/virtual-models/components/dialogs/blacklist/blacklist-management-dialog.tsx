@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -33,18 +34,18 @@ export function BlacklistManagementDialog({
 }: BlacklistManagementDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[560px] max-h-[80vh] max-w-3xl flex-col">
+      <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>拉黑管理</DialogTitle>
           <DialogDescription>管理已拉黑的提供商，拉黑后虚拟模型不会请求该提供商的模型</DialogDescription>
         </DialogHeader>
 
         <div className="flex min-h-0 flex-1 flex-col space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex shrink-0 items-center justify-between">
             <h4 className="font-medium">已拉黑提供商</h4>
             <Button onClick={onOpenProviderSelector}>添加</Button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
+          <DialogBody className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -79,7 +80,7 @@ export function BlacklistManagementDialog({
                 )}
               </TableBody>
             </Table>
-          </div>
+          </DialogBody>
         </div>
       </DialogContent>
     </Dialog>

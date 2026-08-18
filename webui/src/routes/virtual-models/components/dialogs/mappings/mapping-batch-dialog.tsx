@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -59,14 +60,14 @@ export function MappingBatchDialog({
 }: MappingBatchDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[80vh] max-w-3xl overflow-y-auto">
+        <DialogContent size="xl">
           <DialogHeader>
             <DialogTitle>添加映射</DialogTitle>
             <DialogDescription>选择一个或多个真实模型并设置统一参数</DialogDescription>
           </DialogHeader>
 
-        <div className="space-y-4">
-          <div>
+        <div className="flex min-h-0 flex-1 flex-col gap-4">
+          <div className="shrink-0">
             <Input
               placeholder="搜索模型名称..."
               value={searchQuery}
@@ -74,7 +75,7 @@ export function MappingBatchDialog({
             />
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex shrink-0 gap-2">
             <Button variant="outline" size="sm" onClick={onSelectAll}>
               全选
             </Button>
@@ -89,7 +90,7 @@ export function MappingBatchDialog({
             </span>
           </div>
 
-          <div className="max-h-60 overflow-y-auto rounded-lg border">
+          <DialogBody className="rounded-lg border">
             <div className="divide-y">
               {models.map((model) => {
                 const isMapped = mappedModelIds.has(model.ID);
@@ -121,9 +122,9 @@ export function MappingBatchDialog({
                 );
               })}
             </div>
-          </div>
+          </DialogBody>
 
-          <div className="space-y-3 border-t pt-4">
+          <div className="shrink-0 space-y-3 border-t pt-4">
             <h4 className="font-medium">统一参数</h4>
             <div className="grid grid-cols-2 gap-4">
               <div>

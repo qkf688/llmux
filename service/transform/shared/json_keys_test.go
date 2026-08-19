@@ -183,6 +183,24 @@ func TestUnknownTopLevelKeys(t *testing.T) {
 			raw:  `{"Skipped":"s","unexported":"u"}`,
 			want: []string{"Skipped", "unexported"},
 		},
+		{
+			// 兜底：大小写容忍不能退化成「什么都算认领」。
+			name: "case variant of a genuinely unknown key stays unknown",
+			raw:  `{"ZZZ_Vendor":1}`,
+			want: []string{"ZZZ_Vendor"},
+		},
+		{
+			// 回归：encoding/json 对键的匹配是「先精确、后忽略大小写」，
+			// {"Plain":"x"} 会被正常解析进 `plain` 字段，不能报成未知。
+			name: "case-insensitive match of a claimed key is not unknown",
+			raw:  `{"Plain":"x"}`,
+			want: []string{},
+		},
+		{
+			name: "all-caps variant of a claimed key is not unknown",
+			raw:  `{"PLAIN":"x"}`,
+			want: []string{},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -200,5 +218,46 @@ func TestUnknownTopLevelKeys(t *testing.T) {
 func TestUnknownTopLevelKeys_PropagatesParseError(t *testing.T) {
 	if _, err := UnknownTopLevelKeys([]byte(`[1,2]`), ClaimedJSONKeys(tagVariantsFixture{})); err == nil {
 		t.Fatal("expected error for non-object payload")
+	}
+}
+
+// 与 TestClaimedJSONKeys_MatchesEncodingJSONBehavior 同一思路：期望值不靠作者臆测，
+// 而是先用标准库证明「这个大小写变体确实被解析进了同一个字段」，再断言它不进未知
+// 集合。若哪天标准库改掉忽略大小写的回退，前半段的 DeepEqual 会先失败，把「前提
+// 变了」和「实现错了」区分开。
+func TestUnknownTopLevelKeys_MatchesEncodingJSONCaseFolding(t *testing.T) {
+	claimed := ClaimedJSONKeys(tagVariantsFixture{})
+
+	cases := []struct {
+		name      string
+		canonical string
+		variant   string
+	}{
+		{name: "tagged field, initial cap", canonical: `{"plain":"v"}`, variant: `{"Plain":"v"}`},
+		{name: "tagged field, all caps", canonical: `{"plain":"v"}`, variant: `{"PLAIN":"v"}`},
+		{name: "untagged field, lowercased", canonical: `{"NoTag":true}`, variant: `{"notag":true}`},
+		{name: "promoted field, mixed case", canonical: `{"promoted":"v"}`, variant: `{"PrOmOtEd":"v"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var canonical, variant tagVariantsFixture
+			if err := json.Unmarshal([]byte(tc.canonical), &canonical); err != nil {
+				t.Fatalf("unmarshal canonical: %v", err)
+			}
+			if err := json.Unmarshal([]byte(tc.variant), &variant); err != nil {
+				t.Fatalf("unmarshal variant: %v", err)
+			}
+			if !reflect.DeepEqual(canonical, variant) {
+				t.Fatalf("precondition: encoding/json no longer folds case\ncanonical: %+v\nvariant:   %+v", canonical, variant)
+			}
+
+			got, err := UnknownTopLevelKeys([]byte(tc.variant), claimed)
+			if err != nil {
+				t.Fatalf("UnknownTopLevelKeys: %v", err)
+			}
+			if len(got) != 0 {
+				t.Fatalf("%s is parsed by encoding/json but reported unknown: %v", tc.variant, got)
+			}
+		})
 	}
 }

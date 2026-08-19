@@ -99,6 +99,13 @@ func TopLevelJSONKeys(raw []byte) ([]string, error) {
 }
 
 // UnknownTopLevelKeys 返回 raw 里出现、但 claimed 未认领的顶层键，已排序。
+//
+// 比对规则刻意与 encoding/json 的字段匹配对齐：**先精确、精确未命中再忽略大小写**。
+// claimed 是按精确 tag 名派生的，若这里只比精确名，`{"Temperature":0.7}` 这类会被
+// 标准库正常解析进字段的键会被报成未知——诊断功能一上线就假报，比没有更糟。
+//
+// 用 strings.EqualFold 线性兜底而非预建小写索引：折叠语义直接借标准库的实现，不用
+// 自己造一套可能与之漂移的归一化；且本函数是低频诊断路径，键数量级下的 O(n*m) 无意义。
 func UnknownTopLevelKeys(raw []byte, claimed map[string]struct{}) ([]string, error) {
 	keys, err := TopLevelJSONKeys(raw)
 	if err != nil {
@@ -107,9 +114,21 @@ func UnknownTopLevelKeys(raw []byte, claimed map[string]struct{}) ([]string, err
 
 	unknown := make([]string, 0, len(keys))
 	for _, key := range keys {
-		if _, ok := claimed[key]; !ok {
+		if !isClaimedKey(claimed, key) {
 			unknown = append(unknown, key)
 		}
 	}
 	return unknown, nil
+}
+
+func isClaimedKey(claimed map[string]struct{}, key string) bool {
+	if _, ok := claimed[key]; ok {
+		return true
+	}
+	for name := range claimed {
+		if strings.EqualFold(name, key) {
+			return true
+		}
+	}
+	return false
 }

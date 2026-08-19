@@ -49,7 +49,7 @@ models/
 | `UnifiedRequest` / `UnifiedResponse` | 协议中枢类型；`UnifiedMessage.RedactedThinkingData` 独立保存 Anthropic `redacted_thinking.data` 不透明密文，不与 reasoning 文本混用 | `models/unified/` 与 `models/unified.go`（响应等部分类型仍在门面文件） | 被转换器读写 |
 | `ThinkingClampConfig` | 思考档位钳制配置（白名单 + autoFallback + unknownStrategy），由 chat 主路径传入 `ProcessRequest` | `service/transform/transformer.go` | `clampUnifiedReasoning`（transform 路径）+ `clampPassthroughReasoning`（passthrough 路径） |
 | `ClaimedRequestKeys()` | 返回该协议入站解析实际认领的顶层 JSON 键集合（反射请求 DTO 的 json tag 派生，非手写清单） | 各协议子包（`openai/claimed_keys.go`、`responses/claimed_keys.go`） | openai / openai-res；**anthropic 无此函数**（入站走 map + maputil，无 DTO 可反射） |
-| `ClaimedJSONKeys` / `TopLevelJSONKeys` / `UnknownTopLevelKeys` | 「入站 raw 顶层键 − DTO 已认领键」的计算原语，纯函数无状态 | `service/transform/shared/json_keys.go` | 同文件 |
+| `ClaimedJSONKeys` / `TopLevelJSONKeys` / `UnknownTopLevelKeys` | 「入站 raw 顶层键 − DTO 已认领键」的计算原语，纯函数无状态；求差**先精确、再忽略大小写**（与 encoding/json 字段匹配同口径，见下） | `service/transform/shared/json_keys.go` | 同文件 |
 
 ## 5. 特殊约定
 
@@ -100,6 +100,7 @@ models/
 - **消费方必须用「入站 style」的键集合**：用出站协议的键集合去查会把改名字段误报成未知，退化回被否掉的旧方案。当前只提供计算原语，未接生产路径（不落库、不打日志、不进热路径）。
 - **passthrough 路径无转换丢失**：`style == providerType` 时（`chat_attempt_request.go`）请求不进 transform，原样透传。对这类日志跑检测的语义是「网关 DTO 不认领的键」，而非「转换丢失的键」，消费方展示时须区分措辞。
 - 只看顶层：嵌套层（`messages[].xxx`）的键归属需要逐个子 DTO 的映射知识，不在原语职责内。
+- **求差与 encoding/json 同口径（先精确、再忽略大小写）**：`json.Unmarshal` 对键的匹配是「精确优先、精确未命中再忽略大小写」，故 `{"Temperature":0.7}` 会被正常解析进 `temperature` 字段。而认领集合按精确 tag 名派生，若求差只比精确名，这类键会被报成未知——诊断一上线就假报。`UnknownTopLevelKeys` 用 `strings.EqualFold` 线性兜底折叠（借标准库折叠语义，不自造归一化），精确未命中再折叠匹配。低频诊断路径，键数量级下 O(n·m) 无意义。回归测试 `TestUnknownTopLevelKeys_MatchesEncodingJSONCaseFolding` 先用标准库证明变体确实被解析进同一字段，再断言其不进未知集合——标准库若改掉折叠回退，前置 DeepEqual 先失败，区分「前提变了」与「实现错了」。
 
 ---
 

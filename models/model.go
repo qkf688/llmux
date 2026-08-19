@@ -289,6 +289,27 @@ func lowestLevelInWhitelist(levelSet map[string]bool) string {
 	return ""
 }
 
+// HighestEffortInWhitelist 返回白名单中最高的 6 档档位；白名单为空或只含 none/auto 等非 6 档时返回空串。
+// 纯函数，与 lowestLevelInWhitelist 对偶，但对外导出：供 budget-only 请求
+// （客户端只给 reasoning budget、不给 effort）求 budget 上限——白名单最高档决定该模型允许的
+// 最大思考预算；返回空串表示白名单不允许任何正向思考档位（调用方应剥离 thinking）。
+//
+// 为什么不复用 ClampReasoningEffort：那需要先把 budget 反推成 effort，而反推有损
+// （513..19999 全塌到 low，正推只有 1000），会把白名单本已允许的中等 budget 过度降级。
+// budget 数值映射不放在本包（models 禁止依赖 service），调用方拿档位后自行换算。
+func HighestEffortInWhitelist(levels []string) string {
+	levelSet := make(map[string]bool, len(levels))
+	for _, l := range levels {
+		levelSet[l] = true
+	}
+	for i := len(thinkingEffortLevels) - 1; i >= 0; i-- {
+		if levelSet[thinkingEffortLevels[i]] {
+			return thinkingEffortLevels[i]
+		}
+	}
+	return ""
+}
+
 // ModelTemplateItem 模型模板条目：用于将 provider_model 映射到 ModelID（区分大小写、去重）
 type ModelTemplateItem struct {
 	gorm.Model

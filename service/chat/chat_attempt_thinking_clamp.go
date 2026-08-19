@@ -42,6 +42,19 @@ func passthroughBudgetFields(style string) []string {
 	}
 }
 
+// passthroughThinkingContainers 返回剥离 thinking 时必须整体删除的容器键。
+// Anthropic 的 thinking 只有 type + budget_tokens 两个键，删掉 budget 后残留的
+// {"type":"enabled"} 缺 budget_tokens，上游会 400——必须连容器一起删。
+// Responses 的 reasoning 还可能带 summary 等无关键，只能靠空对象清理，不在此列。
+func passthroughThinkingContainers(style string) []string {
+	switch style {
+	case consts.StyleAnthropic:
+		return []string{"thinking"}
+	default:
+		return nil
+	}
+}
+
 // clampPassthroughReasoning 在 passthrough 路径（同格式 1×1）对 raw body 按 style 钳制 effort 字段。
 // 不违反 N×M 禁令：同格式 1×1，只处理一种 style 的字段。
 // 钳制后 effort 为空串 → 删 effort 字段（none 不支持 → 剥离 thinking）。
@@ -60,7 +73,9 @@ func clampPassthroughReasoning(raw []byte, style string, clamp *transform.Thinki
 			effortVal = gjson.GetBytes(raw, effortFields[1]).String()
 		}
 		if effortVal == "" {
-			return raw
+			// budget-only 请求（只给 budget、不给 effort）：effort 缺席时仍须让 budget
+			// 受白名单约束，否则 budget 会完全绕过钳制直达上游。
+			return clampPassthroughBudgetOnly(raw, style, clamp)
 		}
 	}
 
@@ -93,22 +108,7 @@ func clampPassthroughReasoning(raw []byte, style string, clamp *transform.Thinki
 			"original", original,
 			"style", style,
 			"reason", "none_not_in_whitelist")
-		// 删 effort 字段 + 空对象清理
-		for _, field := range effortFields {
-			if next, err := sjson.DeleteBytes(raw, field); err == nil {
-				raw = next
-			}
-		}
-		// 清理空对象（output_config / reasoning 可能变空）
-		raw = cleanupEmptyPassthroughObjects(raw, style)
-		// none 剥离时也删 budget 字段
-		for _, field := range passthroughBudgetFields(style) {
-			if next, err := sjson.DeleteBytes(raw, field); err == nil {
-				raw = next
-			}
-		}
-		raw = cleanupEmptyPassthroughObjects(raw, style)
-		return raw
+		return stripPassthroughThinking(raw, style)
 	}
 
 	slog.Warn("passthrough reasoning effort clamped",
@@ -171,6 +171,75 @@ func clampPassthroughBudget(raw []byte, style string, clampedEffort string) []by
 		}
 	}
 	return raw
+}
+
+// clampPassthroughBudgetOnly 处理 passthrough 路径的 budget-only 请求（有 budget 字段、无 effort）。
+// 上限口径与 transform 路径共用 transform.BudgetLimitForClamp（白名单最高档），不反推 effort。
+//   - 上限为 unconstrained → 原样返回
+//   - 上限为 0（白名单禁思考）→ 剥离 thinking（删 effort/budget 字段 + 清理空对象）
+//   - budget 超上限 → 钳到上限；低于上限不动
+func clampPassthroughBudgetOnly(raw []byte, style string, clamp *transform.ThinkingClampConfig) []byte {
+	budgetFields := passthroughBudgetFields(style)
+	if len(budgetFields) == 0 {
+		return raw // 该协议无 budget 字段（如 OpenAI Chat），无从钳起
+	}
+
+	limit := transform.BudgetLimitForClamp(clamp)
+	if limit == transform.BudgetLimitUnconstrained {
+		return raw
+	}
+
+	if limit == 0 {
+		slog.Warn("passthrough budget-only reasoning stripped",
+			"style", style,
+			"reason", "whitelist_has_no_positive_thinking_level")
+		return stripPassthroughThinking(raw, style)
+	}
+
+	for _, field := range budgetFields {
+		budgetVal := gjson.GetBytes(raw, field).Int()
+		if budgetVal <= 0 {
+			continue
+		}
+		if budgetVal > limit {
+			slog.Warn("passthrough budget-only reasoning budget clamped to whitelist limit",
+				"field", field,
+				"original_budget", budgetVal,
+				"clamped_budget", limit,
+				"style", style,
+				"reason", "budget_exceeds_whitelist_max_level")
+			next, err := sjson.SetBytes(raw, field, limit)
+			if err != nil {
+				slog.Error("passthrough budget-only clamp: sjson set failed, skipping field",
+					"field", field, "error", err, "style", style)
+				continue
+			}
+			raw = next
+		}
+	}
+	return raw
+}
+
+// stripPassthroughThinking 从 raw body 删除该 style 的 effort + budget 字段并清理残留空对象。
+// 供 effort 钳成空串（none 剥离）与 budget-only 白名单禁思考两条路径共用。
+func stripPassthroughThinking(raw []byte, style string) []byte {
+	for _, field := range passthroughEffortFields(style) {
+		if next, err := sjson.DeleteBytes(raw, field); err == nil {
+			raw = next
+		}
+	}
+	raw = cleanupEmptyPassthroughObjects(raw, style)
+	for _, field := range passthroughBudgetFields(style) {
+		if next, err := sjson.DeleteBytes(raw, field); err == nil {
+			raw = next
+		}
+	}
+	for _, container := range passthroughThinkingContainers(style) {
+		if next, err := sjson.DeleteBytes(raw, container); err == nil {
+			raw = next
+		}
+	}
+	return cleanupEmptyPassthroughObjects(raw, style)
 }
 
 // cleanupEmptyPassthroughObjects 删除 effort/budget 字段后可能残留的空对象。

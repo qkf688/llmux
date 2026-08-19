@@ -147,6 +147,15 @@ func TestClampPassthroughReasoning_Anthropic(t *testing.T) {
 			t.Errorf("thinking.budget_tokens should be deleted (none strips thinking)")
 		}
 	})
+
+	t.Run("none 不支持 + thinking.type 存在 → thinking 容器整体删除", func(t *testing.T) {
+		raw := []byte(`{"model":"m","output_config":{"effort":"none"},"thinking":{"type":"enabled","budget_tokens":5000}}`)
+		result := clampPassthroughReasoning(raw, consts.StyleAnthropic, clamp)
+		// 只删 budget_tokens 会残留 {"type":"enabled"}，Anthropic 要求 enabled 必须带 budget_tokens
+		if gjson.GetBytes(result, "thinking").Exists() {
+			t.Errorf("thinking 容器应整体删除, got %s", result)
+		}
+	})
 }
 
 // TestClampPassthroughReasoning_Responses 覆盖 Responses passthrough 双路径：
@@ -276,6 +285,96 @@ func TestBuildRequestBodyForProvider_BudgetNotClampedWhenEffortNotClamped(t *tes
 		budget := gjson.GetBytes(result, "thinking.budget_tokens").Int()
 		if budget != 50000 {
 			t.Errorf("budget = %d, want 50000 (effort not clamped, budget unchanged)", budget)
+		}
+	})
+}
+
+// TestClampPassthroughReasoning_BudgetOnly 回归 passthrough 路径的 budget-only 缺口：
+// clampPassthroughReasoning 曾在 effortVal 为空时直接 return raw，让 budget 绕过白名单。
+// 上限口径与 transform 路径共用（白名单最高档 budget），不反推 effort。
+func TestClampPassthroughReasoning_BudgetOnly(t *testing.T) {
+	t.Run("Anthropic budget 超白名单上限 → 钳到 medium(20000)", func(t *testing.T) {
+		clamp := &transform.ThinkingClampConfig{
+			Levels:          []string{"low", "medium"},
+			AutoFallback:    "low",
+			UnknownStrategy: "clamp_to_default",
+		}
+		raw := []byte(`{"model":"m","thinking":{"budget_tokens":60000}}`)
+		result := clampPassthroughReasoning(raw, consts.StyleAnthropic, clamp)
+		if got := gjson.GetBytes(result, "thinking.budget_tokens").Int(); got != 20000 {
+			t.Errorf("budget = %d, want 20000", got)
+		}
+		if gjson.GetBytes(result, "output_config.effort").Exists() {
+			t.Errorf("budget-only 不应凭空写出 effort 字段")
+		}
+	})
+
+	t.Run("Anthropic budget 未超上限 → 不动", func(t *testing.T) {
+		clamp := &transform.ThinkingClampConfig{
+			Levels:          []string{"low", "medium"},
+			AutoFallback:    "low",
+			UnknownStrategy: "clamp_to_default",
+		}
+		raw := []byte(`{"model":"m","thinking":{"budget_tokens":5000}}`)
+		result := clampPassthroughReasoning(raw, consts.StyleAnthropic, clamp)
+		if got := gjson.GetBytes(result, "thinking.budget_tokens").Int(); got != 5000 {
+			t.Errorf("budget = %d, want 5000 (unchanged)", got)
+		}
+	})
+
+	t.Run("Anthropic 白名单只含 none → 剥离 thinking budget", func(t *testing.T) {
+		clamp := &transform.ThinkingClampConfig{
+			Levels:          []string{"none"},
+			AutoFallback:    "low",
+			UnknownStrategy: "clamp_to_default",
+		}
+		raw := []byte(`{"model":"m","thinking":{"type":"enabled","budget_tokens":5000}}`)
+		result := clampPassthroughReasoning(raw, consts.StyleAnthropic, clamp)
+		if gjson.GetBytes(result, "thinking.budget_tokens").Exists() {
+			t.Errorf("budget 应被剥离")
+		}
+		// thinking 只剩 {"type":"enabled"} 会被上游判为缺 budget_tokens 而 400，容器须一起删
+		if gjson.GetBytes(result, "thinking").Exists() {
+			t.Errorf("thinking 容器应整体删除, got %s", result)
+		}
+	})
+
+	t.Run("Responses budget-only 钳 reasoning.max_tokens", func(t *testing.T) {
+		clamp := &transform.ThinkingClampConfig{
+			Levels:          []string{"low", "medium"},
+			AutoFallback:    "low",
+			UnknownStrategy: "clamp_to_default",
+		}
+		raw := []byte(`{"model":"m","reasoning":{"max_tokens":60000}}`)
+		result := clampPassthroughReasoning(raw, consts.StyleOpenAIRes, clamp)
+		if got := gjson.GetBytes(result, "reasoning.max_tokens").Int(); got != 20000 {
+			t.Errorf("reasoning.max_tokens = %d, want 20000", got)
+		}
+	})
+
+	t.Run("OpenAI 无 budget 字段 → 原样返回", func(t *testing.T) {
+		clamp := &transform.ThinkingClampConfig{
+			Levels:          []string{"low"},
+			AutoFallback:    "low",
+			UnknownStrategy: "clamp_to_default",
+		}
+		raw := []byte(`{"model":"m"}`)
+		result := clampPassthroughReasoning(raw, consts.StyleOpenAI, clamp)
+		if string(result) != string(raw) {
+			t.Errorf("OpenAI budget-only 应原样返回, got %s", result)
+		}
+	})
+
+	t.Run("白名单空 + passthrough → budget 不动", func(t *testing.T) {
+		clamp := &transform.ThinkingClampConfig{
+			Levels:          nil,
+			AutoFallback:    "low",
+			UnknownStrategy: "passthrough",
+		}
+		raw := []byte(`{"model":"m","thinking":{"budget_tokens":999999}}`)
+		result := clampPassthroughReasoning(raw, consts.StyleAnthropic, clamp)
+		if got := gjson.GetBytes(result, "thinking.budget_tokens").Int(); got != 999999 {
+			t.Errorf("budget = %d, want 999999 (unconstrained passthrough)", got)
 		}
 	})
 }

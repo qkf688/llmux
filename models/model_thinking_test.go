@@ -144,3 +144,32 @@ func TestThinkingLevelsGORMSerialization(t *testing.T) {
 		t.Errorf("non-empty case: ThinkingLevels = %v, want %v", *gotNonEmpty.ThinkingLevels, want)
 	}
 }
+
+// TestHighestEffortInWhitelist 覆盖 budget-only 上限口径的档位查询：
+// 取白名单中最高 6 档；不含 6 档（空白名单 / 只含 none-auto）返回空串=不允许思考。
+func TestHighestEffortInWhitelist(t *testing.T) {
+	tests := []struct {
+		name     string
+		levels   []string
+		expected string
+	}{
+		{"nil levels → empty", nil, ""},
+		{"empty slice → empty", []string{}, ""},
+		{"single level", []string{"medium"}, "medium"},
+		{"multiple → highest", []string{"low", "medium"}, "medium"},
+		{"unordered input → highest", []string{"high", "minimal", "medium"}, "high"},
+		{"full 6 levels → max", []string{"minimal", "low", "medium", "high", "xhigh", "max"}, "max"},
+		{"only none → empty", []string{"none"}, ""},
+		{"only none+auto → empty", []string{"none", "auto"}, ""},
+		{"none+auto mixed with 6-level → highest 6-level", []string{"none", "auto", "low"}, "low"},
+		{"unknown garbage only → empty", []string{"garbage"}, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := HighestEffortInWhitelist(tt.levels); got != tt.expected {
+				t.Errorf("HighestEffortInWhitelist(%v) = %q, want %q", tt.levels, got, tt.expected)
+			}
+		})
+	}
+}

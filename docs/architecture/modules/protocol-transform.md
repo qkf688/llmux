@@ -86,9 +86,10 @@ models/
   - 未知档位 + `unknownStrategy=clamp_to_default` → 回退到 `autoFallback`；`passthrough` → 原样透传
 - **budget 互转（`ReasoningEffortToThinkingBudget` / `ThinkingBudgetToReasoningEffort`）**：6 档双向映射，single source of truth 在 `service/anthropic/helpers.go`。保留 Octopus 原值（low→1000, medium→20000, high→50000），新增 minimal→512, xhigh→80000, max→128000。
 - **budget 联动（方案 E）**：effort 被钳制时，budget 按钳制后 effort 对应的 budget 值作上限——超上限则钳到上限 + warn；低于上限不动；effort 未钳制则 budget 不动。防止用户用高 budget 绕过 effort 白名单。
+- **budget-only 钳制**：客户端只给 budget、不给 effort（responses 入站 `reasoning.max_tokens` 与 effort 解耦，是唯一可达来源）时，budget 仍受白名单约束——上限取**白名单最高档**对应的 budget（`models.HighestEffortInWhitelist` + `ReasoningEffortToThinkingBudget`），超限钳到上限；白名单不含任何正向 6 档 → 剥离 thinking；白名单空则按 `unknownStrategy` 分流（passthrough 不约束、clamp_to_default 以 autoFallback 的 budget 为上限）。上限口径**不**把 budget 反推成 effort（反推有损：513..19999 全塌到 low），只钳数值 / 剥离，**不写回** effort（避免凭空补客户端没给的字段）。两条路径共用 `transform.BudgetLimitForClamp`。
 - **分路径钳制**：
-  - transform 路径：`ProcessRequest(ctx, raw, clamp)` 在 ToUnified 后、FromUnified 前对 `unified.ReasoningEffort` 钳制（`clampUnifiedReasoning`）
-  - passthrough 路径：`clampPassthroughReasoning` 对 raw body 按 style 钳制 effort 字段（OpenAI `reasoning_effort`、Anthropic `output_config.effort`、Responses 双路径 `reasoning.effort` + `metadata.reasoning_effort`）+ budget 字段（Anthropic `thinking.budget_tokens`、Responses `reasoning.max_tokens`）。**大小写归一化**：两条路径都在钳制前对 effort 做小写归一化（transform 经 `NormalizeReasoningEffort`，passthrough 经 `strings.ToLower`），避免客户端传 "HIGH" 时白名单命中失败。passthrough 路径在归一化后若值在白名单内但原始大小写不规范，会写回归一化小写值。
+  - transform 路径：`ProcessRequest(ctx, raw, clamp)` 在 ToUnified 后、FromUnified 前对 `unified.ReasoningEffort` 钳制（`clampUnifiedReasoning`）；effort 为 nil 时转入 `clampUnifiedBudgetOnly`
+  - passthrough 路径：`clampPassthroughReasoning` 对 raw body 按 style 钳制 effort 字段（OpenAI `reasoning_effort`、Anthropic `output_config.effort`、Responses 双路径 `reasoning.effort` + `metadata.reasoning_effort`）+ budget 字段（Anthropic `thinking.budget_tokens`、Responses `reasoning.max_tokens`）；effort 字段缺席时转入 `clampPassthroughBudgetOnly`。**大小写归一化**：两条路径都在钳制前对 effort 做小写归一化（transform 经 `NormalizeReasoningEffort`，passthrough 经 `strings.ToLower`），避免客户端传 "HIGH" 时白名单命中失败。passthrough 路径在归一化后若值在白名单内但原始大小写不规范，会写回归一化小写值。**剥离**统一走 `stripPassthroughThinking`：删 effort + budget 字段后还要删 `passthroughThinkingContainers` 列出的容器（Anthropic 的 `thinking` 只有 type + budget_tokens，只删 budget 会残留 `{"type":"enabled"}`，上游会 400）。
 
 ---
 

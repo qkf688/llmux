@@ -48,6 +48,8 @@ models/
 | `RegisterRealtimeRoute` | 注册实时流协议组合 | `service/transform/streaming/` | 各路由实现 |
 | `UnifiedRequest` / `UnifiedResponse` | 协议中枢类型；`UnifiedMessage.RedactedThinkingData` 独立保存 Anthropic `redacted_thinking.data` 不透明密文，不与 reasoning 文本混用 | `models/unified/` 与 `models/unified.go`（响应等部分类型仍在门面文件） | 被转换器读写 |
 | `ThinkingClampConfig` | 思考档位钳制配置（白名单 + autoFallback + unknownStrategy），由 chat 主路径传入 `ProcessRequest` | `service/transform/transformer.go` | `clampUnifiedReasoning`（transform 路径）+ `clampPassthroughReasoning`（passthrough 路径） |
+| `ClaimedRequestKeys()` | 返回该协议入站解析实际认领的顶层 JSON 键集合（反射请求 DTO 的 json tag 派生，非手写清单） | 各协议子包（`openai/claimed_keys.go`、`responses/claimed_keys.go`） | openai / openai-res；**anthropic 无此函数**（入站走 map + maputil，无 DTO 可反射） |
+| `ClaimedJSONKeys` / `TopLevelJSONKeys` / `UnknownTopLevelKeys` | 「入站 raw 顶层键 − DTO 已认领键」的计算原语，纯函数无状态 | `service/transform/shared/json_keys.go` | 同文件 |
 
 ## 5. 特殊约定
 
@@ -89,4 +91,16 @@ models/
 
 ---
 
-*本文档由 Project Architecture Documenter skill 生成，生成日期：2026-07-23；同日审查回写。*
+### 入站未知字段检测（键集合原语）
+
+- **要解决什么**：一眼看出「客户端发来的请求里有哪些顶层键是本网关根本没解析的」——这些键在转换后会静默消失。
+- **为什么不比对入站 body 与出站 body 的键差**：改名与丢失在输出侧不可区分（`unified.Stop` 出到 anthropic 叫 `stop_sequences`、出到 openai 叫 `stop`），靠手工白名单补这个信息缺口等于维护转换逻辑的第二份副本，必然漂移成误报。检测点前移到入口侧——「DTO 认领了哪些键」从 struct tag 反射派生，是事实而非副本，DTO 改了自动跟着改，零维护且不受出站改名影响。
+- **分层**：`shared/json_keys.go` 提供不认识任何协议的通用原语（`ClaimedJSONKeys` 反射 struct tag、`TopLevelJSONKeys` 提 raw 顶层键、`UnknownTopLevelKeys` 求差）；各协议子包用 `ClaimedRequestKeys()` 传入自己的请求 DTO 零值。依赖方向由 import 倒逼：shared ← 协议子包 ← 顶层 transform。
+- **只覆盖 openai / openai-res**：两者都是单 struct + json tag，反射成本相同。**anthropic 无请求 DTO**（`service/anthropic/request_inbound.go` 直接 unmarshal 到 `map[string]interface{}` 再用 `maputil` 逐键取值），已认领键只以散落的字符串字面量存在，无从反射；要支持得先补 DTO 或键常量表，是独立工作量。
+- **消费方必须用「入站 style」的键集合**：用出站协议的键集合去查会把改名字段误报成未知，退化回被否掉的旧方案。当前只提供计算原语，未接生产路径（不落库、不打日志、不进热路径）。
+- **passthrough 路径无转换丢失**：`style == providerType` 时（`chat_attempt_request.go`）请求不进 transform，原样透传。对这类日志跑检测的语义是「网关 DTO 不认领的键」，而非「转换丢失的键」，消费方展示时须区分措辞。
+- 只看顶层：嵌套层（`messages[].xxx`）的键归属需要逐个子 DTO 的映射知识，不在原语职责内。
+
+---
+
+

@@ -1,0 +1,58 @@
+{
+  "input": [
+    {
+      "content": [
+        {
+          "text": "hello",
+          "type": "input_text"
+        }
+      ],
+      "role": "user",
+      "type": "message"
+    }
+  ],
+  "instructions": "You are a coverage probe.",
+  "max_output_tokens": 1024,
+  "metadata": {
+    "reasoning_effort": "high",
+    "trace": "coverage"
+  },
+  "model": "coverage-model",
+  "reasoning": {
+    "effort": "high",
+    "max_tokens": 4096
+  },
+  "stream": true,
+  "temperature": 0.7,
+  "text": {
+    "format": {
+      "json_schema": {
+        "name": "coverage",
+        "schema": {
+          "type": "object"
+        }
+      },
+      "type": "json_schema"
+    }
+  },
+  "tool_choice": "auto",
+  "tools": [
+    {
+      "description": "Get weather by city",
+      "name": "get_weather",
+      "parameters": {
+        "properties": {
+          "city": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "city"
+        ],
+        "type": "object"
+      },
+      "type": "function"
+    }
+  ],
+  "top_p": 0.9
+}

@@ -15,6 +15,10 @@ func ptr(s string) *string {
 	return &s
 }
 
+func boolPtr(b bool) *bool {
+	return &b
+}
+
 func baseOpenAIRequest(t *testing.T) *unified.UnifiedRequest {
 	t.Helper()
 	text := "Hello"

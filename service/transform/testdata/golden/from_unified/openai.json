@@ -1,0 +1,76 @@
+{
+  "audio": {
+    "format": "mp3",
+    "voice": "alloy"
+  },
+  "frequency_penalty": 0.1,
+  "logit_bias": {
+    "1234": -5
+  },
+  "logprobs": true,
+  "max_completion_tokens": 2048,
+  "max_tokens": 1024,
+  "messages": [
+    {
+      "content": "You are a coverage probe.",
+      "role": "system"
+    },
+    {
+      "content": "hello",
+      "role": "user"
+    }
+  ],
+  "metadata": {
+    "trace": "coverage"
+  },
+  "modalities": [
+    "text"
+  ],
+  "model": "coverage-model",
+  "parallel_tool_calls": true,
+  "presence_penalty": 0.2,
+  "reasoning_effort": "high",
+  "response_format": {
+    "json_schema": {
+      "name": "coverage",
+      "schema": {
+        "type": "object"
+      }
+    },
+    "type": "json_schema"
+  },
+  "seed": 42,
+  "stop": [
+    "STOP"
+  ],
+  "store": true,
+  "stream": true,
+  "stream_options": {
+    "include_usage": true
+  },
+  "temperature": 0.7,
+  "tool_choice": "auto",
+  "tools": [
+    {
+      "function": {
+        "description": "Get weather by city",
+        "name": "get_weather",
+        "parameters": {
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "city"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "function"
+    }
+  ],
+  "top_logprobs": 3,
+  "top_p": 0.9,
+  "user": "coverage-user"
+}

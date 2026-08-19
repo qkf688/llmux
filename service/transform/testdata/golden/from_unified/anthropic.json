@@ -1,0 +1,44 @@
+{
+  "max_tokens": 1024,
+  "messages": [
+    {
+      "content": "hello",
+      "role": "user"
+    }
+  ],
+  "metadata": {
+    "trace": "coverage"
+  },
+  "model": "coverage-model",
+  "stop_sequences": [
+    "STOP"
+  ],
+  "stream": true,
+  "system": "You are a coverage probe.",
+  "temperature": 0.7,
+  "thinking": {
+    "budget_tokens": 4096,
+    "type": "enabled"
+  },
+  "tool_choice": {
+    "type": "auto"
+  },
+  "tools": [
+    {
+      "description": "Get weather by city",
+      "input_schema": {
+        "properties": {
+          "city": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "city"
+        ],
+        "type": "object"
+      },
+      "name": "get_weather"
+    }
+  ],
+  "top_p": 0.9
+}

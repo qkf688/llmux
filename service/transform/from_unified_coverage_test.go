@@ -18,7 +18,7 @@ import (
 //  1. Messages 保持最简（单条 user 文本）。消息内部结构（多模态 / tool_calls）已由
 //     TestGolden_RequestConversions 的 request/in/*.json 覆盖，本测试只关心请求级字段。
 //  2. EmbeddingInput 留空：UnifiedRequest.Validate 规定它与 Messages 互斥，
-//     无法在同一 fixture 里共存。embedding 出站路径需要独立 fixture，不在本测试范围。
+//     无法在同一 fixture 里共存。embedding 出站由同级的 embeddingUnifiedRequest 覆盖。
 //  3. SystemParts 留空：它与 System 语义重叠且 Anthropic 会优先取 SystemParts，
 //     两者同时填会掩盖 System 字段的真实去向。
 //
@@ -131,7 +131,59 @@ func TestFullUnifiedRequest_CoversAllSerializableFields(t *testing.T) {
 	}
 }
 
-// TestFromUnifiedCoverage_Golden 把满配统一请求在三个协议下的出站 body 冻结成 golden。
+// reasoningEffortOnlyUnifiedRequest 只给 ReasoningEffort、不给 ReasoningBudget，
+// 用于冻结「effort 单独存在」时各协议的推导/丢弃行为：
+//   - openai：原样 reasoning_effort，无 budget
+//   - anthropic：不 emit effort 字符串，而是由 ReasoningEffortToThinkingBudget 推导出 thinking.budget_tokens
+//   - openai-res：reasoning.effort + 冗余写进 metadata.reasoning_effort，无 reasoning.max_tokens
+//
+// golden 里的 effort 是**原值、未经钳制**：本测试直调 FromUnified，刻意绕开
+// clampUnifiedReasoning（那是 ProcessRequest 的另一层语义）。不要把 golden 里的
+// 原值误读成钳制失效。
+func reasoningEffortOnlyUnifiedRequest(t *testing.T) *models.UnifiedRequest {
+	t.Helper()
+
+	return &models.UnifiedRequest{
+		Model:           "coverage-reasoning-model",
+		Messages:        []models.UnifiedMessage{{Role: "user", Content: "hello"}},
+		ReasoningEffort: ptr("high"),
+	}
+}
+
+// embeddingUnifiedRequest 构造一个 embedding 请求（EmbeddingInput 非空、Messages 为空）。
+//
+// 为什么需要独立 fixture：UnifiedRequest.Validate 规定 EmbeddingInput 与 Messages 互斥，
+// 无法塞进 fullUnifiedRequest。
+//
+// 这份 fixture 的 golden 冻结的是**功能缺失**，不是字段映射：三个协议的 FromUnified
+// 目前都不读 EmbeddingInput / EmbeddingDimensions / EmbeddingEncodingFormat，
+// 且全仓没有 /v1/embeddings 路由。openai 出站还会因 messages 为空直接返错。
+// 读 golden 时不要把它误当成 bug 基线——它记录的是「embedding 出站尚未接线」这个现状，
+// 一旦接线，golden 会 diff。
+func embeddingUnifiedRequest(t *testing.T) *models.UnifiedRequest {
+	t.Helper()
+
+	return &models.UnifiedRequest{
+		Model:                   "coverage-embedding-model",
+		EmbeddingInput:          &models.UnifiedEmbeddingInput{Single: ptr("embed me")},
+		EmbeddingDimensions:     int64Ptr(1536),
+		EmbeddingEncodingFormat: ptr("float"),
+	}
+}
+
+// fromUnifiedErrorJSON 把 FromUnified 的错误包成确定的 JSON，用于冻进 golden。
+// 不引入「哪个 style 期望 error」的期望表——那会是 adapter 逻辑的第二份副本，
+// 必然漂移。错误进 golden 后，路径被接线时 golden 从 error 变真实 body，diff 自证。
+func fromUnifiedErrorJSON(err error) []byte {
+	b, _ := json.Marshal(map[string]string{"__from_unified_error__": err.Error()})
+	return b
+}
+
+// TestFromUnifiedCoverage_Golden 把统一请求在各协议下的出站 body 冻结成 golden。
+//
+// 两个维度：fixture（请求形态）× style（目标协议），golden 落在
+// testdata/golden/from_unified/{fixture}/{style}.json。新增边界 fixture 只需往
+// fixtures 表加一行 + 跑一次 -update-golden，不改测试逻辑。
 //
 // 直调 adapter.FromUnified 而非 ProcessRequest：FromUnified 是纯函数（无 ctx、不读设置），
 // 测的是纯字段映射终态。ProcessRequest 会先跑 clampUnifiedReasoning，
@@ -142,31 +194,50 @@ func TestFullUnifiedRequest_CoversAllSerializableFields(t *testing.T) {
 func TestFromUnifiedCoverage_Golden(t *testing.T) {
 	t.Parallel()
 
+	fixtures := []struct {
+		name  string
+		build func(*testing.T) *models.UnifiedRequest
+	}{
+		{name: "full", build: fullUnifiedRequest},
+		{name: "embedding", build: embeddingUnifiedRequest},
+		{name: "reasoning_effort_only", build: reasoningEffortOnlyUnifiedRequest},
+	}
+
 	styles := []string{"openai", "openai-res", "anthropic"}
-	for _, style := range styles {
-		style := style
-		t.Run(style, func(t *testing.T) {
+
+	for _, fixture := range fixtures {
+		t.Run(fixture.name, func(t *testing.T) {
 			t.Parallel()
 
-			// 每个 subtest 独立构造：Anthropic 出站会 snapshot/restore 消息级 reasoning，
-			// 共享同一实例可能跨 subtest 干扰。
-			req := fullUnifiedRequest(t)
-			if err := req.Validate(); err != nil {
-				t.Fatalf("fixture 未通过 Validate: %v", err)
-			}
+			for _, style := range styles {
+				t.Run(style, func(t *testing.T) {
+					t.Parallel()
 
-			adapter, err := getAdapterOrDefault(style)
-			if err != nil {
-				t.Fatalf("getAdapterOrDefault(%s) failed: %v", style, err)
-			}
+					// 每个 subtest 独立构造：Anthropic 出站会 snapshot/restore 消息级 reasoning，
+					// 共享同一实例可能跨 subtest 干扰。
+					req := fixture.build(t)
+					if err := req.Validate(); err != nil {
+						t.Fatalf("fixture 未通过 Validate: %v", err)
+					}
 
-			out, err := adapter.FromUnified(req)
-			if err != nil {
-				t.Fatalf("FromUnified(%s) failed: %v", style, err)
-			}
+					adapter, err := getAdapterOrDefault(style)
+					if err != nil {
+						t.Fatalf("getAdapterOrDefault(%s) failed: %v", style, err)
+					}
 
-			wantPath := filepath.Join("testdata", "golden", "from_unified", style+".json")
-			assertGoldenJSON(t, wantPath, out)
+					out, err := adapter.FromUnified(req)
+					// FromUnified 返错时不 Fatalf，而是把错误也冻进 golden：
+					// 某些 fixture（如 embedding 出站未接线）的当前行为就是返错，
+					// 这本身是要被覆盖矩阵记录的现状。哪天该路径被接线，
+					// golden 会从 error 变成真实 body，diff 一眼可见。
+					if err != nil {
+						out = fromUnifiedErrorJSON(err)
+					}
+
+					wantPath := filepath.Join("testdata", "golden", "from_unified", fixture.name, style+".json")
+					assertGoldenJSON(t, wantPath, out)
+				})
+			}
 		})
 	}
 }

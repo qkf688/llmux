@@ -1,0 +1,15 @@
+{
+  "max_tokens": 8192,
+  "messages": [
+    {
+      "content": "hello",
+      "role": "user"
+    }
+  ],
+  "model": "coverage-reasoning-model",
+  "stream": false,
+  "thinking": {
+    "budget_tokens": 50000,
+    "type": "enabled"
+  }
+}

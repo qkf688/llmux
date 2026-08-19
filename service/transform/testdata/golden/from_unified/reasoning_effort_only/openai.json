@@ -1,0 +1,11 @@
+{
+  "messages": [
+    {
+      "content": "hello",
+      "role": "user"
+    }
+  ],
+  "model": "coverage-reasoning-model",
+  "reasoning_effort": "high",
+  "stream": false
+}

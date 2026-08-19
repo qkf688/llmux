@@ -1,0 +1,21 @@
+{
+  "input": [
+    {
+      "content": [
+        {
+          "text": "hello",
+          "type": "input_text"
+        }
+      ],
+      "role": "user",
+      "type": "message"
+    }
+  ],
+  "metadata": {
+    "reasoning_effort": "high"
+  },
+  "model": "coverage-reasoning-model",
+  "reasoning": {
+    "effort": "high"
+  }
+}

@@ -11,14 +11,19 @@ export interface CompletionTokensDetails {
 }
 
 /**
+ * 检测状态四态，逐字对应后端 handler/logs/dto.go 的 unclaimedStatus* 常量。
+ * 收窄成字面量联合而非 string，是为了让消费方的四态分支能拿到穷尽性检查——
+ * 后端新增第五态时，未补分支的地方会编译报错而不是静默走进兜底文案。
+ */
+export type UnclaimedStatus = "ok" | "raw_not_recorded" | "style_unsupported" | "parse_error";
+
+/**
  * 入站原始请求体里本网关未认领的顶层键——即转换后会静默消失的字段。
  * 后端读时计算、不落库，仅 include_raw=true 的详情响应返回，故整字段 optional。
- * status 四态见后端 handler/logs/dto.go 的 unclaimedStatus* 常量：
- * ok / raw_not_recorded / style_unsupported / parse_error。
  * fields 仅 status=ok 时有意义（无未认领键时为空数组）；detail 仅 parse_error 给出。
  */
 export interface UnclaimedRequestFields {
-  status: string;
+  status: UnclaimedStatus;
   fields: string[];
   detail?: string;
 }

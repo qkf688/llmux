@@ -10,6 +10,7 @@ import {
 } from "../../../utils/formatters";
 import { DetailCard } from "./detail-card";
 import { RequestResponseSection } from "./request-response-section";
+import { UnclaimedFieldsSection } from "./unclaimed-fields-section";
 import type { ChatLogExportSections } from "../../../utils/export-log";
 
 type LogDetailDialogProps = {
@@ -141,6 +142,8 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDet
               loading={detailLoading}
               onExportLog={onExportLog}
             />
+
+            <UnclaimedFieldsSection log={detailLog} />
 
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">性能指标</p>

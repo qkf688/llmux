@@ -10,6 +10,19 @@ export interface CompletionTokensDetails {
   audio_tokens: number;
 }
 
+/**
+ * 入站原始请求体里本网关未认领的顶层键——即转换后会静默消失的字段。
+ * 后端读时计算、不落库，仅 include_raw=true 的详情响应返回，故整字段 optional。
+ * status 四态见后端 handler/logs/dto.go 的 unclaimedStatus* 常量：
+ * ok / raw_not_recorded / style_unsupported / parse_error。
+ * fields 仅 status=ok 时有意义（无未认领键时为空数组）；detail 仅 parse_error 给出。
+ */
+export interface UnclaimedRequestFields {
+  status: string;
+  fields: string[];
+  detail?: string;
+}
+
 export interface ChatLog {
   id: number;
   created_at: string;
@@ -44,6 +57,7 @@ export interface ChatLog {
   has_format_conversion: boolean;
   source_format?: string;
   target_format?: string;
+  unclaimed_request_fields?: UnclaimedRequestFields;
 }
 
 export interface ChatIO {

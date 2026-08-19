@@ -36,7 +36,7 @@ models/retention.go
 
 | 契约 | 职责 | 定义位置 | 实现方 |
 |------|------|----------|--------|
-| `chatLogResponse` / `chatIOResponse` | `/api/logs*` 与 `/api/logs/:id/chat-io` 的对外响应契约（全 snake_case），与 `models.ChatLog`/`ChatIO` 解耦 | `handler/logs/dto.go` | 同文件的 `buildChatLogResponse` / `buildChatIOResponse` |
+| `chatLogResponse` / `chatIOResponse` | `/api/logs*` 与 `/api/logs/:id/chat-io` 的对外响应契约（全 snake_case），与 `models.ChatLog`/`ChatIO` 解耦；含读时计算字段 `unclaimed_request_fields`（见下） | `handler/logs/dto.go` | 同文件的 `buildChatLogResponse` / `buildChatIOResponse` / `computeUnclaimedRequestFields` |
 | `ChatLogRepo` / `ChatIORepo` | 日志与 IO 持久化访问 | `repository/chat_log.go` | GORM |
 | `StatsRepo` | 六张 Stats* 表的写入（`AddTimeBased`/`IncModelCalls`/`IncRealModelCalls`/`AddProviderStats`）与读侧聚合（`GetTotal`/`SumDailiesSince`/`List*`） | `repository/stats.go` | GORM（`clause.OnConflict` upsert） |
 | `RecordLog` / 落库编排 | 请求结束后 processer + 落库 | `service/chat` | 同包 |
@@ -47,6 +47,11 @@ models/retention.go
 
 - **对外响应必须经 `handler/logs/dto.go` 的 DTO，禁止裸序列化 `models.ChatLog`/`ChatIO`**。理由是历史教训而非洁癖：`ChatIO` 曾直接 `httpresp.Success(c, chatIO)` 返回，GORM 模型的 Go 字段名就是 JSON key，改一个字段名（`LogId`→`LogID`）即破坏前端契约；`ChatLog` 曾用 `map[string]any` 手拼，漏写 `completion_tokens_details` 导致 reasoning_tokens 落库有值但 API 永不返回、前端类型声明成为谎言。结构体 DTO 让编译器兜住字段齐全，模型层字段改名不再波及 API
 - API 字段一律 snake_case（含 `id` / `created_at` / `chat_io` 等，AGENTS.md 3.1）；`raw` 六字段用 `*string`+`omitempty`——空字符串是合法值，必须与「include_raw=false 未返回」区分
+- **`unclaimed_request_fields` 是读时计算的诊断字段，不落库**：指出客户端原始请求体里有哪些顶层键本网关根本没解析（转换后会静默消失），供开发/运维据此去补 transform。入参是 `ChatLog.Style` + `ChatLog.RawRequestBody`，调 `transform.UnknownRequestKeys`（见 [protocol-transform.md](protocol-transform.md)）。
+  - **不落库的理由**：DTO 会随 transform 演进，落库的结论会僵化成「按当时 DTO 算的旧答案」；读时算永远反映最新代码，且日志详情是低频页面，反射 + JSON parse 的开销可忽略。
+  - **与 raw 组同一个 `includeRaw` 门控**：它的输入就是 `RawRequestBody`，`include_raw=false` 时该列压根没从库里读出来（`ChatLogRepo.List` 的 Omit），此时算出来的只会是假的 `raw_not_recorded`。
+  - **用 `status` 枚举而非「nil / 空数组」表达结果**：`ok`（`fields` 即结论，可能为空数组）/ `raw_not_recorded`（开关关着或 `errors_only` 在成功时清空了 raw）/ `style_unsupported`（anthropic 入站无请求 DTO 可反射）/ `parse_error`（raw 不是 JSON 对象，`detail` 给原因）。「查不出来」有三种彼此需要区分的原因，挤进一个可空数组的话前端只能猜，最坏是把「查不了」显示成「已检查、无问题」——假阴性比没有这个功能更糟。
+  - **语义边界**：结果是「网关 DTO 不认领的键」，不等于「转换过程中丢了这些键」——passthrough 路径（`style == provider.Type`）请求不进 transform，这些键实际原样透传。且只看顶层，`messages[].xxx` 不在范围内。前端措辞须说清这两点
 - `ChatLogRepo.List` 在 `!IncludeRaw` 时用 **Omit 排除 raw 大字段**，不用 Select 白名单：白名单的失效模式是静默的（新增字段忘记加进来 → 该字段恒为零值，调用方无从察觉，`usage_source` 就这样漏过一轮）
 - `logs/enrich.go` 允许多表只读富化直连（repository 白名单例外之一）
 - 统计表的日期列格式（`2006-01-02`）与「时间维度 = total/daily/hourly 三表」属存储细节，只在 `repository/stats.go` 内出现；调用方一律传 `time.Time`

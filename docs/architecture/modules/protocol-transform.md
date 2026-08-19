@@ -50,6 +50,7 @@ models/
 | `ThinkingClampConfig` | 思考档位钳制配置（白名单 + autoFallback + unknownStrategy），由 chat 主路径传入 `ProcessRequest` | `service/transform/transformer.go` | `clampUnifiedReasoning`（transform 路径）+ `clampPassthroughReasoning`（passthrough 路径） |
 | `ClaimedRequestKeys()` | 返回该协议入站解析实际认领的顶层 JSON 键集合（反射请求 DTO 的 json tag 派生，非手写清单） | 各协议子包（`openai/claimed_keys.go`、`responses/claimed_keys.go`） | openai / openai-res；**anthropic 无此函数**（入站走 map + maputil，无 DTO 可反射） |
 | `ClaimedJSONKeys` / `TopLevelJSONKeys` / `UnknownTopLevelKeys` | 「入站 raw 顶层键 − DTO 已认领键」的计算原语，纯函数无状态；求差**先精确、再忽略大小写**（与 encoding/json 字段匹配同口径，见下） | `service/transform/shared/json_keys.go` | 同文件 |
+| `UnknownRequestKeys(style, rawBody)` + `ErrClaimedKeysUnsupported` | 按**入站** style 分派到对应认领键集合再求差，是上述原语对外的唯一可消费入口；未注册的 style 返回 `ErrClaimedKeysUnsupported` 而非空集合 | `service/transform/unknown_request_keys.go` | 同文件（`claimedRequestKeysByStyle` 注册 openai / openai-res） |
 
 ## 5. 特殊约定
 
@@ -95,9 +96,11 @@ models/
 
 - **要解决什么**：一眼看出「客户端发来的请求里有哪些顶层键是本网关根本没解析的」——这些键在转换后会静默消失。
 - **为什么不比对入站 body 与出站 body 的键差**：改名与丢失在输出侧不可区分（`unified.Stop` 出到 anthropic 叫 `stop_sequences`、出到 openai 叫 `stop`），靠手工白名单补这个信息缺口等于维护转换逻辑的第二份副本，必然漂移成误报。检测点前移到入口侧——「DTO 认领了哪些键」从 struct tag 反射派生，是事实而非副本，DTO 改了自动跟着改，零维护且不受出站改名影响。
-- **分层**：`shared/json_keys.go` 提供不认识任何协议的通用原语（`ClaimedJSONKeys` 反射 struct tag、`TopLevelJSONKeys` 提 raw 顶层键、`UnknownTopLevelKeys` 求差）；各协议子包用 `ClaimedRequestKeys()` 传入自己的请求 DTO 零值。依赖方向由 import 倒逼：shared ← 协议子包 ← 顶层 transform。
+- **分层**：`shared/json_keys.go` 提供不认识任何协议的通用原语（`ClaimedJSONKeys` 反射 struct tag、`TopLevelJSONKeys` 提 raw 顶层键、`UnknownTopLevelKeys` 求差）；各协议子包用 `ClaimedRequestKeys()` 传入自己的请求 DTO 零值；顶层 `unknown_request_keys.go` 用 `UnknownRequestKeys(style, rawBody)` 把两者接成可消费入口。依赖方向由 import 倒逼：shared ← 协议子包 ← 顶层 transform。
+- **style 分派用独立可选注册表，不进 `FormatAdapter`（ISP）**：`claimedRequestKeysByStyle` 只注册有请求 DTO 的协议（当前 openai / openai-res）。做成接口第五个方法会逼 anthropic 空实现，调用方反而要靠约定判断「返回空是没有未知字段还是这个协议答不了」；独立注册表让「未注册 = 不支持」成为编译期事实，anthropic 补上请求 DTO 后只需加一行注册（OCP）。
+- **未命中时刻意不回退默认协议**：与 `getAdapterOrDefault` 的 fallback 形状相反。拿 openai 的键集合去查 anthropic 的 body 会把 `system` / `stop_sequences` 整片误报，正是 `TestUnknownTopLevelKeys_OutboundRenameIsNotUnknown` 钉死要防的退化。哨兵错误 `ErrClaimedKeysUnsupported` 而非空切片，是因为空切片与「确实没有未知字段」不可区分，消费方会把「查不了」显示成「已检查、无问题」。
 - **只覆盖 openai / openai-res**：两者都是单 struct + json tag，反射成本相同。**anthropic 无请求 DTO**（`service/anthropic/request_inbound.go` 直接 unmarshal 到 `map[string]interface{}` 再用 `maputil` 逐键取值），已认领键只以散落的字符串字面量存在，无从反射；要支持得先补 DTO 或键常量表，是独立工作量。
-- **消费方必须用「入站 style」的键集合**：用出站协议的键集合去查会把改名字段误报成未知，退化回被否掉的旧方案。当前只提供计算原语，未接生产路径（不落库、不打日志、不进热路径）。
+- **消费方必须用「入站 style」的键集合**：用出站协议的键集合去查会把改名字段误报成未知，退化回被否掉的旧方案。生产消费方是**日志详情接口的读时计算字段**（`unclaimed_request_fields`，见 [logs-metrics.md](logs-metrics.md)）：入参取 `ChatLog.Style` + `ChatLog.RawRequestBody`，不落库、不打日志、不进热路径。
 - **passthrough 路径无转换丢失**：`style == providerType` 时（`chat_attempt_request.go`）请求不进 transform，原样透传。对这类日志跑检测的语义是「网关 DTO 不认领的键」，而非「转换丢失的键」，消费方展示时须区分措辞。
 - 只看顶层：嵌套层（`messages[].xxx`）的键归属需要逐个子 DTO 的映射知识，不在原语职责内。
 - **求差与 encoding/json 同口径（先精确、再忽略大小写）**：`json.Unmarshal` 对键的匹配是「精确优先、精确未命中再忽略大小写」，故 `{"Temperature":0.7}` 会被正常解析进 `temperature` 字段。而认领集合按精确 tag 名派生，若求差只比精确名，这类键会被报成未知——诊断一上线就假报。`UnknownTopLevelKeys` 用 `strings.EqualFold` 线性兜底折叠（借标准库折叠语义，不自造归一化），精确未命中再折叠匹配。低频诊断路径，键数量级下 O(n·m) 无意义。回归测试 `TestUnknownTopLevelKeys_MatchesEncodingJSONCaseFolding` 先用标准库证明变体确实被解析进同一字段，再断言其不进未知集合——标准库若改掉折叠回退，前置 DeepEqual 先失败，区分「前提变了」与「实现错了」。

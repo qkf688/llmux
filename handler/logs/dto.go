@@ -1,9 +1,11 @@
 package logs
 
 import (
+	"errors"
 	"time"
 
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/transform"
 )
 
 // chatLogResponse 是 /api/logs 列表与 /api/logs/:id 详情的响应契约。
@@ -59,6 +61,61 @@ type chatLogResponse struct {
 	ResponseHeaders *string `json:"response_headers,omitempty"`
 	ResponseBody    *string `json:"response_body,omitempty"`
 	RawResponseBody *string `json:"raw_response_body,omitempty"`
+
+	// UnclaimedRequestFields 是读时计算的诊断字段（不落库），指出客户端原始请求体里
+	// 有哪些顶层键本网关根本没解析——即转换后会静默消失的字段。
+	//
+	// 与 raw 组同一个门控：它的输入就是 RawRequestBody，include_raw=false 时那个字段
+	// 压根没从库里读出来，此时算出来的只会是假的「未记录」。
+	UnclaimedRequestFields *unclaimedRequestFields `json:"unclaimed_request_fields,omitempty"`
+}
+
+// unclaimedRequestFields 用状态枚举而非「nil / 空数组」表达检测结果。
+//
+// 因为「查不出来」有三种彼此需要区分的原因（原始 body 没记、该协议不支持检测、
+// body 解析失败），挤进一个可空数组的话前端只能靠猜，最坏是把「查不了」显示成
+// 「已检查、无问题」——假阴性比没有这个功能更糟。
+type unclaimedRequestFields struct {
+	Status string `json:"status"`
+	// Fields 仅 Status 为 ok 时有意义；无未认领键时是空数组而非 null。
+	Fields []string `json:"fields"`
+	// Detail 只在 parse_error 时给出，便于定位是哪种畸形 body。
+	Detail string `json:"detail,omitempty"`
+}
+
+const (
+	// unclaimedStatusOK：已完成检测，Fields 即结论（可能为空）。
+	unclaimedStatusOK = "ok"
+	// unclaimedStatusRawNotRecorded：原始请求体没落库，无从检测。
+	// 常见原因是 log_raw_request_response 开关默认全关，或 errors_only 在成功时清空了它。
+	unclaimedStatusRawNotRecorded = "raw_not_recorded"
+	// unclaimedStatusStyleUnsupported：该入站协议没有可反射的请求 DTO（当前是 anthropic）。
+	unclaimedStatusStyleUnsupported = "style_unsupported"
+	// unclaimedStatusParseError：原始 body 不是 JSON 对象，键的概念不成立。
+	unclaimedStatusParseError = "parse_error"
+)
+
+// computeUnclaimedRequestFields 读时计算，纯函数：只读传入的日志行，不查库不写库。
+func computeUnclaimedRequestFields(log models.ChatLog) *unclaimedRequestFields {
+	if log.RawRequestBody == "" {
+		return &unclaimedRequestFields{Status: unclaimedStatusRawNotRecorded, Fields: []string{}}
+	}
+
+	// 必须传**入站** style（ChatLog.Style 存的就是客户端进来时的 style）：传出站协议
+	// 会把转换时改名的字段全部误报成未知。
+	unknown, err := transform.UnknownRequestKeys(log.Style, []byte(log.RawRequestBody))
+	switch {
+	case errors.Is(err, transform.ErrClaimedKeysUnsupported):
+		return &unclaimedRequestFields{Status: unclaimedStatusStyleUnsupported, Fields: []string{}}
+	case err != nil:
+		return &unclaimedRequestFields{
+			Status: unclaimedStatusParseError,
+			Fields: []string{},
+			Detail: err.Error(),
+		}
+	default:
+		return &unclaimedRequestFields{Status: unclaimedStatusOK, Fields: unknown}
+	}
 }
 
 // chatIOResponse 是 /api/logs/:id/chat-io 的响应契约。
@@ -116,6 +173,7 @@ func buildChatLogResponse(log models.ChatLog, enrich chatLogEnrichResult, includ
 		resp.ResponseHeaders = &log.ResponseHeaders
 		resp.ResponseBody = &log.ResponseBody
 		resp.RawResponseBody = &log.RawResponseBody
+		resp.UnclaimedRequestFields = computeUnclaimedRequestFields(log)
 	}
 
 	return resp

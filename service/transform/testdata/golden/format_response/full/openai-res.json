@@ -1,0 +1,39 @@
+{
+  "created_at": 1700000000,
+  "id": "resp-coverage",
+  "model": "coverage-model",
+  "object": "response",
+  "output": [
+    {
+      "arguments": "{\"city\":\"SF\"}",
+      "call_id": "call_1",
+      "id": "fc_call_1",
+      "name": "get_weather",
+      "type": "function_call"
+    },
+    {
+      "content": [
+        {
+          "text": "Sure, here is the weather.",
+          "type": "output_text"
+        }
+      ],
+      "id": "msg_resp-coverage",
+      "role": "assistant",
+      "status": "completed",
+      "type": "message"
+    }
+  ],
+  "status": "completed",
+  "usage": {
+    "input_tokens": 11,
+    "input_tokens_details": {
+      "cached_tokens": 3
+    },
+    "output_tokens": 22,
+    "output_tokens_details": {
+      "reasoning_tokens": 7
+    },
+    "total_tokens": 33
+  }
+}

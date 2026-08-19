@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "rate_limited",
+    "message": "too many requests",
+    "request_id": "req-error",
+    "type": "rate_limit_error"
+  }
+}

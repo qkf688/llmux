@@ -1,0 +1,17 @@
+{
+  "content": [
+    {
+      "text": "first choice",
+      "type": "text"
+    }
+  ],
+  "id": "resp-multi",
+  "model": "coverage-model",
+  "role": "assistant",
+  "stop_reason": "end_turn",
+  "type": "message",
+  "usage": {
+    "input_tokens": 5,
+    "output_tokens": 8
+  }
+}

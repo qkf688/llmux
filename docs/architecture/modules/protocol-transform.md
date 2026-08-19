@@ -108,4 +108,22 @@ models/
 
 ---
 
+### 跨格式转换字段覆盖矩阵（golden）
+
+- **要解决什么**：一眼看出「统一模型每个字段在各协议出站时 emit 成什么 / 被哪个 style 吃掉」，且转换器改动时自动亮出 diff。与上一节的入站未知字段检测互补——那个查「客户端发来但网关没认领的键」，这个查「网关认领了但出站丢掉的字段」。
+- **两个矩阵，各自 fixture × style**（style 列表均为 `openai` / `openai-res` / `anthropic`）：
+  - 请求侧 `TestFromUnifiedCoverage_Golden`（`from_unified_coverage_test.go`）→ `testdata/golden/from_unified/{fixture}/{style}.json`，fixture 为 `full` / `embedding` / `reasoning_effort_only`
+  - 响应侧 `TestFormatResponseCoverage_Golden`（`format_response_coverage_test.go`）→ `testdata/golden/format_response/{fixture}/{style}.json`，fixture 为 `full` / `error_only` / `multi_choice`
+- **刷新方式**：`go test ./service/transform/ -run TestFromUnifiedCoverage_Golden -update-golden`（响应侧换测试名）。golden 由 `assertGoldenJSON` 规范化后写入（2 空格缩进 + 键字典序），**禁止**手改。
+- **直调 adapter 而非走 ProcessRequest / TransformProviderResponse**：`FromUnified` 与 `FormatResponse` 都是纯函数（无 ctx、不读设置），测的是纯字段映射终态。串联入口会把钳制（`clampUnifiedReasoning`）或 `ParseResponse` 的字段丢失混进来，让「字段去向」不可读——尤其响应侧，`openai.ParseResponse` 根本不填 `Logprobs` 与四个 reasoning 字段，走串联入口结构性地覆盖不到这些路径。
+- **与 `TestGolden_{Request,Response}Conversions` 不重叠**：那两个是 `from × to` 跨协议矩阵（输入是协议原始 body 文件，排除同 style），本矩阵是 `fixture × style`（输入是 Go 满配 fixture，含同 style 出站）。前者验端到端，后者验单向映射完整性。
+- **错误也进 golden**：`FromUnified` / `FormatResponse` 返错时包成 `{"__from_unified_error__": ...}` / `{"__format_response_error__": ...}` 冻结，而非 `Fatalf`。某些路径的当前行为就是返错（如 embedding 出站未接线），这本身是覆盖矩阵要记录的现状；接线后 golden 从 error 变真实 body，diff 自证。**不**引入「哪个 style 期望 error」的期望表——那是 adapter 逻辑的第二份副本，必然漂移。
+- **styles 刻意硬编码而非 range 注册表**：新协议注册后应人工审一遍出站形状再纳入基线，自动全跑会静默接受未审输出。
+- **防腐化守卫**：`TestFullUnifiedRequest_CoversAllSerializableFields` / `TestFullUnifiedResponse_CoversAllSerializableFields` 要求满配 fixture 的字段全员非零，豁免项写进 `exempt` 表且**反向锁定为零值**（豁免字段被填值同样报错，说明豁免理由已失效）。新增字段忘了填 fixture 时守卫失败，否则新字段会静默游离在 golden 覆盖外。
+  - 两者的**遍历深度刻意不同**：请求侧只查顶层（`UnifiedRequest` 41 个顶层字段，单层已是实质约束）；响应侧**递归下降**（`UnifiedResponse` 只有 9 个顶层字段，实质内容全在 `Choices[].Message.ToolCalls` / `Usage.*Details` / `Logprobs` 三层，单层 IsZero 只要 `Choices` 非 nil 就通过，等于没有守卫）。递归报错按字段路径定位，如 `Choices[].Logprobs.Content[].TopLogprobs[].Token`。
+  - 递归的叶子边界是 `interface{}`（`UnifiedMessage.Content`）：其背后是 `text` / `image_url` / `input_audio` 互斥的 sum type，单个 fixture 值无法同时填满所有变体，多模态出站映射另由 `TestTransformProviderResponse_OpenAIToAnthropic_MapsMultimodalImage` 等专项测试覆盖。
+- **不覆盖流式**：流式响应（`streaming.TransformResponseRealtime`）从不构造 `UnifiedResponse`、从不调 `FormatResponse`，是独立状态机 + 4 条注册路由，与本矩阵零共享。改一侧不会自动同步另一侧，这是已存在的漂移风险面。
+
+---
+
 

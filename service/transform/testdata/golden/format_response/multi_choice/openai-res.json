@@ -1,0 +1,38 @@
+{
+  "created_at": 1700000001,
+  "id": "resp-multi",
+  "model": "coverage-model",
+  "object": "response",
+  "output": [
+    {
+      "content": [
+        {
+          "text": "first choice",
+          "type": "output_text"
+        }
+      ],
+      "id": "msg_resp-multi",
+      "role": "assistant",
+      "status": "completed",
+      "type": "message"
+    },
+    {
+      "content": [
+        {
+          "text": "second choice",
+          "type": "output_text"
+        }
+      ],
+      "id": "msg_resp-multi",
+      "role": "assistant",
+      "status": "completed",
+      "type": "message"
+    }
+  ],
+  "status": "completed",
+  "usage": {
+    "input_tokens": 5,
+    "output_tokens": 8,
+    "total_tokens": 13
+  }
+}

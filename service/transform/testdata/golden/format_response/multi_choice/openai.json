@@ -1,0 +1,29 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "first choice",
+        "role": "assistant"
+      }
+    },
+    {
+      "finish_reason": "length",
+      "index": 1,
+      "message": {
+        "content": "second choice",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1700000001,
+  "id": "resp-multi",
+  "model": "coverage-model",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 8,
+    "prompt_tokens": 5,
+    "total_tokens": 13
+  }
+}

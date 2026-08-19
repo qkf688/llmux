@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/qkf688/llmux/models"
@@ -141,5 +142,49 @@ func TestToUnified_SystemOnlyMessagePreserved(t *testing.T) {
 	}
 	if unified.Messages[0].Role != "system" || unified.Messages[0].Content != "only system" {
 		t.Fatalf("system-only message mismatch: %+v", unified.Messages[0])
+	}
+}
+
+// TestOpenAICacheSecurityFields_RoundTrip 覆盖 service_tier / safety_identifier /
+// prompt_cache_key 三字段的入站解析与出站回写对称性（曾是三个只声明不接线的死字段）。
+func TestOpenAICacheSecurityFields_RoundTrip(t *testing.T) {
+	input := []byte(`{
+		"model": "gpt-4.1",
+		"messages": [{"role": "user", "content": "hi"}],
+		"service_tier": "flex",
+		"safety_identifier": "user-hash-123",
+		"prompt_cache_key": "cache-abc"
+	}`)
+
+	unified, err := ToUnified(context.Background(), input)
+	if err != nil {
+		t.Fatalf("ToUnified failed: %v", err)
+	}
+	if unified.ServiceTier == nil || *unified.ServiceTier != "flex" {
+		t.Fatalf("service_tier not parsed: %v", unified.ServiceTier)
+	}
+	if unified.SafetyIdentifier == nil || *unified.SafetyIdentifier != "user-hash-123" {
+		t.Fatalf("safety_identifier not parsed: %v", unified.SafetyIdentifier)
+	}
+	if unified.PromptCacheKey == nil || *unified.PromptCacheKey != "cache-abc" {
+		t.Fatalf("prompt_cache_key not parsed: %v", unified.PromptCacheKey)
+	}
+
+	out, err := FromUnified(unified)
+	if err != nil {
+		t.Fatalf("FromUnified failed: %v", err)
+	}
+	var got map[string]interface{}
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("unmarshal output: %v", err)
+	}
+	if got["service_tier"] != "flex" {
+		t.Fatalf("service_tier not emitted: %v", got["service_tier"])
+	}
+	if got["safety_identifier"] != "user-hash-123" {
+		t.Fatalf("safety_identifier not emitted: %v", got["safety_identifier"])
+	}
+	if got["prompt_cache_key"] != "cache-abc" {
+		t.Fatalf("prompt_cache_key not emitted: %v", got["prompt_cache_key"])
 	}
 }

@@ -30,6 +30,9 @@ type openAIChatCompletionRequest struct {
 	StreamOptions       json.RawMessage `json:"stream_options"`
 	Modalities          openAIStringSeq `json:"modalities"`
 	Audio               json.RawMessage `json:"audio"`
+	ServiceTier         openAIString    `json:"service_tier"`
+	SafetyIdentifier    openAIString    `json:"safety_identifier"`
+	PromptCacheKey      openAIString    `json:"prompt_cache_key"`
 }
 
 type openAIChatMessage struct {

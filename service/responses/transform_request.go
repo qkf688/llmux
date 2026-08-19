@@ -112,6 +112,11 @@ func TransformRequest(rawBody []byte, options RequestTransformOptions) (*models.
 		unified.ReasoningBudget = req.Reasoning.MaxTokens
 	}
 
+	// 缓存与安全相关：与 TransformFromUnified 对称
+	unified.ServiceTier = req.ServiceTier
+	unified.SafetyIdentifier = req.SafetyIdentifier
+	unified.PromptCacheKey = req.PromptCacheKey
+
 	return unified, nil
 }
 

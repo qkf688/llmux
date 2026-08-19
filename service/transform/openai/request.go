@@ -104,6 +104,17 @@ func ToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedRequest, err
 	}
 	unified.Audio = parseOpenAIChatAudio(req.Audio)
 
+	// 缓存与安全相关：纯透传，值域校验交上游（白名单会在 OpenAI 扩枚举时变成新的丢字段源）
+	if req.ServiceTier.Set {
+		unified.ServiceTier = &req.ServiceTier.Value
+	}
+	if req.SafetyIdentifier.Set {
+		unified.SafetyIdentifier = &req.SafetyIdentifier.Value
+	}
+	if req.PromptCacheKey.Set {
+		unified.PromptCacheKey = &req.PromptCacheKey.Value
+	}
+
 	return unified, nil
 }
 
@@ -339,6 +350,17 @@ func FromUnified(unified *models.UnifiedRequest) ([]byte, error) {
 		if len(audioMap) > 0 {
 			req["audio"] = audioMap
 		}
+	}
+
+	// 缓存与安全相关：与 ToUnified 对称回写
+	if unified.ServiceTier != nil {
+		req["service_tier"] = *unified.ServiceTier
+	}
+	if unified.SafetyIdentifier != nil {
+		req["safety_identifier"] = *unified.SafetyIdentifier
+	}
+	if unified.PromptCacheKey != nil {
+		req["prompt_cache_key"] = *unified.PromptCacheKey
 	}
 
 	return json.Marshal(req)

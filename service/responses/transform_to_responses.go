@@ -86,6 +86,11 @@ func TransformFromUnified(unified *models.UnifiedRequest) ([]byte, error) {
 		req.Metadata["reasoning_effort"] = *unified.ReasoningEffort
 	}
 
+	// 缓存与安全相关：纯透传，值域校验交上游
+	req.ServiceTier = unified.ServiceTier
+	req.SafetyIdentifier = unified.SafetyIdentifier
+	req.PromptCacheKey = unified.PromptCacheKey
+
 	return json.Marshal(req)
 }
 

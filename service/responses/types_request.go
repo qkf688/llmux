@@ -19,6 +19,10 @@ type ResponsesRequest struct {
 	TopP            *float64               `json:"top_p,omitempty"`
 	Reasoning       *ResponsesReasoning    `json:"reasoning,omitempty"`
 	Metadata        map[string]interface{} `json:"metadata,omitempty"`
+	// Responses API 原生支持这三个参数，与 Chat Completions 同名同语义。
+	ServiceTier      *string `json:"service_tier,omitempty"`
+	SafetyIdentifier *string `json:"safety_identifier,omitempty"`
+	PromptCacheKey   *string `json:"prompt_cache_key,omitempty"`
 }
 
 // ResponsesText 文本输出配置（用于结构化输出等）。

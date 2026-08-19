@@ -83,7 +83,7 @@ func fullUnifiedRequest(t *testing.T) *models.UnifiedRequest {
 		EmbeddingDimensions:     int64Ptr(1536),
 		EmbeddingEncodingFormat: ptr("float"),
 
-		PromptCacheKey:   boolPtr(true),
+		PromptCacheKey:   ptr("coverage-cache-key"),
 		SafetyIdentifier: ptr("coverage-safety"),
 		ServiceTier:      ptr("auto"),
 

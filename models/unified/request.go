@@ -62,7 +62,8 @@ type UnifiedRequest struct {
 	EmbeddingEncodingFormat *string                `json:"embedding_encoding_format,omitempty"`
 
 	// 缓存和安全相关
-	PromptCacheKey   *bool   `json:"prompt_cache_key,omitempty"`
+	// PromptCacheKey 是 OpenAI 的缓存路由键（自由字符串），不是开关；曾误声明为 *bool。
+	PromptCacheKey   *string `json:"prompt_cache_key,omitempty"`
 	SafetyIdentifier *string `json:"safety_identifier,omitempty"`
 	ServiceTier      *string `json:"service_tier,omitempty"`
 

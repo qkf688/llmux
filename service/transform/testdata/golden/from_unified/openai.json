@@ -29,6 +29,7 @@
   "model": "coverage-model",
   "parallel_tool_calls": true,
   "presence_penalty": 0.2,
+  "prompt_cache_key": "coverage-cache-key",
   "reasoning_effort": "high",
   "response_format": {
     "json_schema": {
@@ -39,7 +40,9 @@
     },
     "type": "json_schema"
   },
+  "safety_identifier": "coverage-safety",
   "seed": 42,
+  "service_tier": "auto",
   "stop": [
     "STOP"
   ],

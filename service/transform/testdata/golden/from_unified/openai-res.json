@@ -18,10 +18,13 @@
     "trace": "coverage"
   },
   "model": "coverage-model",
+  "prompt_cache_key": "coverage-cache-key",
   "reasoning": {
     "effort": "high",
     "max_tokens": 4096
   },
+  "safety_identifier": "coverage-safety",
+  "service_tier": "auto",
   "stream": true,
   "temperature": 0.7,
   "text": {

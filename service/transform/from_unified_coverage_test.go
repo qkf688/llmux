@@ -188,9 +188,6 @@ func TestFromUnifiedCoverage_Golden(t *testing.T) {
 					// 每个 subtest 独立构造：Anthropic 出站会 snapshot/restore 消息级 reasoning，
 					// 共享同一实例可能跨 subtest 干扰。
 					req := fixture.build(t)
-					if err := req.Validate(); err != nil {
-						t.Fatalf("fixture 未通过 Validate: %v", err)
-					}
 
 					adapter, err := getAdapterOrDefault(style)
 					if err != nil {

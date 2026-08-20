@@ -599,42 +599,20 @@
 
 ## 参数验证规则
 
-### 自动验证
+### 网关不做入站参数校验
 
-系统会自动验证以下参数范围：
+LLMux **不**校验也**不**钳制客户端传入的取值范围。`temperature`、`top_p`、`frequency_penalty`、
+`presence_penalty`、`top_logprobs`、`max_tokens` 等参数原样透传给上游，非法值由上游返错。
 
-| 参数 | 有效范围 | 无效时行为 |
-|------|---------|-----------|
-| `temperature` | 0-2 | ❌ 返回错误 |
-| `top_p` | 0-1 | ❌ 返回错误 |
-| `frequency_penalty` | -2 to 2 | ❌ 返回错误 |
-| `presence_penalty` | -2 to 2 | ❌ 返回错误 |
-| `top_logprobs` | 0-20 | ❌ 返回错误 |
-| `max_tokens` | > 0 | ❌ 返回错误 |
+原因：网关的职责是协议转换与选路，不是充当客户端的 linter；各家上游对同一参数的合法区间
+并不一致（例如 `temperature` 上限有 1 也有 2），网关自建一套区间只会与上游产生二次冲突。
 
-### 自动修复
-
-可选启用参数自动修复功能：
-
-```go
-// 服务端代码
-RepairUnifiedRequest(request)
-```
-
-**修复行为**:
-- 超出范围的值自动限制在有效范围内
-- 负数的 `max_tokens` 修正为 1
-- 无效的 JSON 修复为空对象 `{}`
-
-**示例**:
-```
-temperature: 3.0 → 2.0
-top_p: 1.5 → 1.0
-frequency_penalty: -3.0 → -2.0
-max_tokens: -100 → 1
-```
+**例外**：确有必要的钳制是模型能力驱动的，不是通用区间校验——见 `MaxTokensLimit`
+（关联级 max_tokens 上限）与 `ClampReasoningEffort`（按模型 `thinking_levels` 白名单钳制
+推理档位）。这两处的依据是「该模型支持什么」，而非「该参数的通用合法范围」。
 
 ---
+
 
 ## 最佳实践
 

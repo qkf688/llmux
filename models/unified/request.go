@@ -2,7 +2,6 @@ package unified
 
 import (
 	"encoding/json"
-	"errors"
 )
 
 // UnifiedRequest 统一请求格式。
@@ -101,19 +100,6 @@ func (r *UnifiedRequest) SanitizedForProvider() *UnifiedRequest {
 	copied.NormalizeToolCallIDs()
 	copied.ClearHelpFields()
 	return &copied
-}
-
-// Validate 验证请求参数。
-func (r *UnifiedRequest) Validate() error {
-	if r.Model == "" {
-		return errors.New("model is required")
-	}
-
-	if len(r.Messages) == 0 && r.System == "" && len(r.SystemParts) == 0 {
-		return errors.New("either messages or system prompt is required")
-	}
-
-	return nil
 }
 
 // ClearHelpFields 清除帮助字段。

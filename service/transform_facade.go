@@ -42,8 +42,3 @@ func TransformUnifiedToAnthropic(unified *models.UnifiedRequest) ([]byte, error)
 func TransformProviderResponse(response *http.Response, providerType, clientType string, sideChannel *models.TransformSideChannel) (*http.Response, error) {
 	return transform.TransformProviderResponse(response, providerType, clientType, sideChannel)
 }
-
-func ValidateUnifiedRequest(req *models.UnifiedRequest) error {
-	return transform.ValidateUnifiedRequest(req)
-}
-func RepairUnifiedRequest(req *models.UnifiedRequest) { transform.RepairUnifiedRequest(req) }

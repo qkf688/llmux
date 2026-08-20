@@ -12,3 +12,11 @@ import "github.com/qkf688/llmux/service/transform/shared"
 func ClaimedRequestKeys() map[string]struct{} {
 	return shared.ClaimedJSONKeys(openAIChatCompletionRequest{})
 }
+
+// MismatchedRequestKeys 返回被本协议认领、但值类型不匹配而被静默丢弃的顶层键。
+//
+// 传零值样板与 ClaimedRequestKeys 同形：DTO 只用来提供类型，解码用的实例由 shared
+// 内部新建，故本函数无状态、可并发调用。
+func MismatchedRequestKeys(rawBody []byte) ([]string, error) {
+	return shared.MismatchedTopLevelKeys(rawBody, openAIChatCompletionRequest{})
+}

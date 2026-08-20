@@ -37,3 +37,9 @@ func FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
 func ClaimedRequestKeys() map[string]struct{} {
 	return anthropictransform.ClaimedRequestKeys()
 }
+
+// MismatchedRequestKeys 返回被本协议认领、但值类型不匹配而被静默丢弃的顶层键。
+// 同样只做转发，理由同 ClaimedRequestKeys。
+func MismatchedRequestKeys(rawBody []byte) ([]string, error) {
+	return anthropictransform.MismatchedRequestKeys(rawBody)
+}

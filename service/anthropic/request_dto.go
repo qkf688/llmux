@@ -169,3 +169,12 @@ type anthropicTool struct {
 func ClaimedRequestKeys() map[string]struct{} {
 	return shared.ClaimedJSONKeys(anthropicRequest{})
 }
+
+// MismatchedRequestKeys 返回被本协议认领、但值类型不匹配而被 shared.Optional* 容器
+// 静默丢弃的顶层键。定义在本包的理由同 ClaimedRequestKeys：必须与真正解析的 DTO 同源。
+//
+// 传零值样板与 ClaimedRequestKeys 同形：DTO 只用来提供类型，解码用的实例由 shared
+// 内部新建，故本函数无状态、可并发调用。
+func MismatchedRequestKeys(rawBody []byte) ([]string, error) {
+	return shared.MismatchedTopLevelKeys(rawBody, anthropicRequest{})
+}

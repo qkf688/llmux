@@ -106,3 +106,78 @@ func TestRegisterClaimedRequestKeys_DuplicatePanics(t *testing.T) {
 	}()
 	registerClaimedRequestKeys(consts.StyleOpenAI, func() map[string]struct{} { return nil })
 }
+
+// MismatchedRequestKeys 与 UnknownRequestKeys 是互补的两类静默检测：这里验证「键被
+// 认领了、但类型不匹配被宽容容器丢弃」这条路径的分派。
+func TestMismatchedRequestKeys_DetectsTypeMismatchPerStyle(t *testing.T) {
+	cases := []struct {
+		style string
+		raw   string
+		want  []string
+	}{
+		{
+			// temperature 传字符串：openai 的 OptionalNumber 容器静默吞掉，200 通过但参数不生效。
+			style: consts.StyleOpenAI,
+			raw:   `{"model":"gpt-5","messages":[],"temperature":"0.5"}`,
+			want:  []string{"temperature"},
+		},
+		{
+			// 类型全对时无命中。top_k 是未认领键，归 UnknownRequestKeys 管，不在这里报。
+			style: consts.StyleOpenAI,
+			raw:   `{"model":"gpt-5","messages":[],"temperature":0.7,"top_k":40}`,
+			want:  []string{},
+		},
+		{
+			// anthropic 的 max_tokens/thinking.budget_tokens 走 OptionalNumber，字符串被吞。
+			style: consts.StyleAnthropic,
+			raw:   `{"model":"claude","messages":[],"max_tokens":"lots"}`,
+			want:  []string{"max_tokens"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.style, func(t *testing.T) {
+			got, err := MismatchedRequestKeys(tc.style, []byte(tc.raw))
+			if err != nil {
+				t.Fatalf("MismatchedRequestKeys: %v", err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("MismatchedRequestKeys = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// openai-res 刻意不注册类型不匹配检测：ResponsesRequest 用裸类型/指针字段，类型不对
+// 时整条请求解析失败（客户端拿到显式错误），没有需要暴露的静默丢弃。未注册的 style
+// 也一样，必须显式报 unsupported 而非静默返回空集合。
+func TestMismatchedRequestKeys_UnsupportedStyleReportsUnsupported(t *testing.T) {
+	for _, style := range []string{consts.StyleOpenAIRes, "some-future-style", ""} {
+		t.Run(style, func(t *testing.T) {
+			got, err := MismatchedRequestKeys(style, []byte(`{"model":"m","temperature":"x"}`))
+			if !errors.Is(err, ErrMismatchedKeysUnsupported) {
+				t.Fatalf("err = %v, want ErrMismatchedKeysUnsupported", err)
+			}
+			if got != nil {
+				t.Fatalf("unsupported style must not return keys, got %v", got)
+			}
+		})
+	}
+}
+
+func TestMismatchedRequestKeys_PropagatesParseError(t *testing.T) {
+	if _, err := MismatchedRequestKeys(consts.StyleOpenAI, []byte(`null`)); err == nil {
+		t.Fatal("non-object payload must return an error")
+	} else if errors.Is(err, ErrMismatchedKeysUnsupported) {
+		t.Fatalf("parse failure must not be reported as unsupported style: %v", err)
+	}
+}
+
+func TestRegisterMismatchedRequestKeys_DuplicatePanics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("registering the same style twice must panic")
+		}
+	}()
+	registerMismatchedRequestKeys(consts.StyleOpenAI, func([]byte) ([]string, error) { return nil, nil })
+}

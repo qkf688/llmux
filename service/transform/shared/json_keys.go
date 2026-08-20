@@ -38,11 +38,24 @@ func ClaimedJSONKeys(v any) map[string]struct{} {
 	}
 
 	keys := make(map[string]struct{})
-	collectClaimedJSONKeys(t, keys)
+	walkClaimedJSONFields(t, nil, func(name string, _ []int) {
+		keys[name] = struct{}{}
+	})
 	return keys
 }
 
-func collectClaimedJSONKeys(t reflect.Type, keys map[string]struct{}) {
+// walkClaimedJSONFields 按 encoding/json 的可见性规则遍历 t，对每个会认领顶层键的
+// 字段回调一次 `(键名, 字段索引路径)`。索引路径供需要取字段值的调用方用
+// `reflect.Value.FieldByIndexErr` 定位。
+//
+// 键名推导与嵌入提升规则只在此处实现一份：本包有两个按 json 键反射 DTO 的检测
+// （认领键集合与类型不匹配），各写一遍必然分叉——曾经就分叉过，Type 侧对 nil 匿名
+// 嵌入指针递归、Value 侧不递归，同一个 DTO 在「认领了哪些键」与「哪些键被丢弃」上
+// 给出矛盾答案。
+//
+// 规则：`json:"-"` 与未导出字段不认领；无 tag 名的导出字段用字段名；匿名嵌入且无
+// tag 名时递归展开到外层，但嵌入的不是 struct 时退回按普通字段认领。
+func walkClaimedJSONFields(t reflect.Type, prefix []int, visit func(name string, index []int)) {
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 
@@ -55,13 +68,15 @@ func collectClaimedJSONKeys(t reflect.Type, keys map[string]struct{}) {
 			name = name[:idx]
 		}
 
+		index := append(append([]int(nil), prefix...), i)
+
 		if field.Anonymous && name == "" {
 			embedded := field.Type
 			for embedded.Kind() == reflect.Pointer {
 				embedded = embedded.Elem()
 			}
 			if embedded.Kind() == reflect.Struct {
-				collectClaimedJSONKeys(embedded, keys)
+				walkClaimedJSONFields(embedded, index, visit)
 				continue
 			}
 		}
@@ -72,7 +87,7 @@ func collectClaimedJSONKeys(t reflect.Type, keys map[string]struct{}) {
 		if name == "" {
 			name = field.Name
 		}
-		keys[name] = struct{}{}
+		visit(name, index)
 	}
 }
 
@@ -81,13 +96,9 @@ func collectClaimedJSONKeys(t reflect.Type, keys map[string]struct{}) {
 // 只看顶层：嵌套层（messages[].xxx 之类）的键归属需要逐个子 DTO 的映射知识，
 // 不在本函数职责内。
 func TopLevelJSONKeys(raw []byte) ([]string, error) {
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &obj); err != nil {
-		return nil, fmt.Errorf("parse top-level JSON object: %w", err)
-	}
-	if obj == nil {
-		// 合法 JSON 但不是对象（例如字面量 null），键的概念不成立。
-		return nil, errors.New("payload is not a JSON object")
+	obj, err := decodeTopLevelObject(raw)
+	if err != nil {
+		return nil, err
 	}
 
 	keys := make([]string, 0, len(obj))
@@ -96,6 +107,23 @@ func TopLevelJSONKeys(raw []byte) ([]string, error) {
 	}
 	sort.Strings(keys)
 	return keys, nil
+}
+
+// decodeTopLevelObject 把 raw 解成顶层键 → 原始值的映射，是本包所有「按顶层键
+// 检查」函数的共同入口（TopLevelJSONKeys 与 MismatchedTopLevelKeys）。
+//
+// 抽出来是为了让两者对「什么算不合法输入」给出同一个答案：合法 JSON 但不是对象
+// （例如字面量 null）时，键的概念不成立，必须报错而不是返回空集合——空集合会让
+// 调用方把「问不了」当成「已检查、没问题」。
+func decodeTopLevelObject(raw []byte) (map[string]json.RawMessage, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, fmt.Errorf("parse top-level JSON object: %w", err)
+	}
+	if obj == nil {
+		return nil, errors.New("payload is not a JSON object")
+	}
+	return obj, nil
 }
 
 // UnknownTopLevelKeys 返回 raw 里出现、但 claimed 未认领的顶层键，已排序。
@@ -122,13 +150,23 @@ func UnknownTopLevelKeys(raw []byte, claimed map[string]struct{}) ([]string, err
 }
 
 func isClaimedKey(claimed map[string]struct{}, key string) bool {
-	if _, ok := claimed[key]; ok {
-		return true
+	_, ok := lookupJSONKeyFold(claimed, key)
+	return ok
+}
+
+// lookupJSONKeyFold 按 encoding/json 的键匹配口径查 m：先精确、精确未命中再 EqualFold。
+//
+// 泛型而非各处手写：本包两个检测都要按同一口径查（认领键集合查 struct{}、类型不匹配
+// 查字段索引），口径一分叉就会出现「A 说这个键已认领、B 说查不到对应字段」的矛盾。
+func lookupJSONKeyFold[V any](m map[string]V, key string) (V, bool) {
+	if value, ok := m[key]; ok {
+		return value, true
 	}
-	for name := range claimed {
+	for name, value := range m {
 		if strings.EqualFold(name, key) {
-			return true
+			return value, true
 		}
 	}
-	return false
+	var zero V
+	return zero, false
 }

@@ -51,8 +51,10 @@ models/
 | `ThinkingClampConfig` | 思考档位钳制配置（白名单 + autoFallback + unknownStrategy），由 chat 主路径传入 `ProcessRequest` | `service/transform/transformer.go` | `clampUnifiedReasoning`（transform 路径）+ `clampPassthroughReasoning`（passthrough 路径） |
 | `DecodeJSONObject` / `RawString` | 多态入站字段的**形状守卫**：`DecodeJSONObject` 先判首字节是否 `{`（不靠 Unmarshal 报错判形状——`123` 解进某些目标类型会意外成功），`RawString` 试探裸字符串分支；形状不符返回 `false` 而非 error，故「解析不出来 = 视为未设置」贯穿整个入站层，不会把客户端的非标准写法升级成 400 | `service/transform/shared/json_dispatch.go` | 同文件（当前消费方：`service/anthropic` 的 system / tool_choice / thinking / output_config / cache_control 二次解析） |
 | `ClaimedRequestKeys()` | 返回该协议入站解析实际认领的顶层 JSON 键集合（反射请求 DTO 的 json tag 派生，非手写清单） | 各协议子包（`openai/claimed_keys.go`、`responses/claimed_keys.go`、`service/anthropic/request_dto.go`） | openai / openai-res / anthropic（anthropic 的 DTO 定义在真正做解析的 `service/anthropic`，`transform/anthropic/adapter.go` 只转发） |
-| `ClaimedJSONKeys` / `TopLevelJSONKeys` / `UnknownTopLevelKeys` | 「入站 raw 顶层键 − DTO 已认领键」的计算原语，纯函数无状态；求差**先精确、再忽略大小写**（与 encoding/json 字段匹配同口径，见下） | `service/transform/shared/json_keys.go` | 同文件 |
+| `ClaimedJSONKeys` / `TopLevelJSONKeys` / `UnknownTopLevelKeys` | 「入站 raw 顶层键 − DTO 已认领键」的计算原语，纯函数无状态；求差**先精确、再忽略大小写**（与 encoding/json 字段匹配同口径，见下）。键名推导 `walkClaimedJSONFields` 与折叠查找 `lookupJSONKeyFold` 是本包两项检测的共用底座 | `service/transform/shared/json_keys.go` | 同文件 |
 | `UnknownRequestKeys(style, rawBody)` + `ErrClaimedKeysUnsupported` | 按**入站** style 分派到对应认领键集合再求差，是上述原语对外的唯一可消费入口；未注册的 style 返回 `ErrClaimedKeysUnsupported` 而非空集合 | `service/transform/unknown_request_keys.go` | 同文件（`claimedRequestKeysByStyle` 注册 openai / openai-res / anthropic） |
+| `MismatchedTopLevelKeys(raw, dto)` | 「被 DTO 认领、但值类型不匹配被 `shared.Optional*` 容器静默丢弃」的顶层键计算原语；`dto` 只作类型样板（内部另建零值承接解码，纯函数、可并发），反射探测容器的 `Set` 位为 false 判定丢弃，`json.RawMessage`/`RawArray` 无三态刻意不覆盖 | `service/transform/shared/mismatched_keys.go` | 同文件 |
+| `MismatchedRequestKeys(style, rawBody)` + `ErrMismatchedKeysUnsupported` | 按**入站** style 分派到类型不匹配检测，独立于认领检测的第二注册表；只注册 openai / anthropic，openai-res 刻意缺席（`ResponsesRequest` 用裸类型，类型不匹配整条请求解析失败、无静默丢弃可暴露） | `service/transform/unknown_request_keys.go` | 同文件（`mismatchedRequestKeysByStyle` 注册 openai / anthropic） |
 
 ## 5. 特殊约定
 
@@ -113,7 +115,20 @@ models/
 
 ---
 
-### 跨格式转换字段覆盖矩阵（golden）
+### 入站类型不匹配字段检测（静默丢弃暴露）
+
+- **要解决什么**：上一节查「网关没认领的键」，本节查**认领了、但客户端把值的类型写错**的键。`shared.Optional*` 容器的 `UnmarshalJSON` 一律不返回错误（类型不匹配等同「没传」，见第 5 节），代价是 `{"temperature":"0.5"}` 这类写法**请求照常成功、参数静默不生效**，客户端零反馈。检测把这批 `Set=false` 的键暴露到日志详情。
+- **判据是容器的三态 `Set` 位，不是重新解析一遍类型**：`MismatchedTopLevelKeys` 先把 raw body 解进一个内部新建的 DTO 零值，再反射找「raw 里出现了该键（且非 null）、对应字段却 `Set=false`」的组合。重新实现一套类型校验等于把 `optional_fields.go` 的宽容规则抄第二份，必然与容器本体漂移；借 `Set` 位则永远与真实解析同源——容器改了宽容口径，检测自动跟着改。
+- **`dto` 入参只作类型样板**：解码用的实例由 `MismatchedTopLevelKeys` 内部 `reflect.New` 新建，不写调用方传进来的那个。因此各协议侧一律传零值（`ClaimedRequestKeys` 同形），既没有「函数偷偷改写入参」的隐藏副作用，也不存在共享实例被并发调用污染 `Set` 位的可能——不必靠调用点的注释约定去规避。
+- **键名推导与折叠匹配是全包唯一一份**：两项检测共用 `walkClaimedJSONFields`（json tag 截断 / `-` / 未导出 / 匿名提升）与泛型 `lookupJSONKeyFold`（先精确、再 `EqualFold`）。曾经各写一份，Type 侧对 nil 匿名嵌入指针递归、Value 侧不递归，同一 DTO 在「认领了哪些键」与「哪些键被丢弃」上给出矛盾答案。`TestMismatchedTopLevelKeys_AgreesWithClaimedJSONKeys` 把这条同源约束钉成可执行断言。
+- **`json.RawMessage` / `RawArray` 字段是已知且刻意的覆盖缺口**：这两类没有 `Set` 三态，无从判断「类型不符」，强行纳入只能靠猜测产生假阳性。故 anthropic 的 `messages` / `tools` 一类嵌套入口不在检测范围内——与「只看顶层」是同类边界。
+- **`null` 不算不匹配**：`IsJSONNull` 在本项目里与「键不存在」同义（第 5 节），把它报成「被丢弃」会让每个显式传 null 的客户端都收到假告警。
+- **第二个独立注册表 + 第二个哨兵错误，不复用认领检测那张表**：两项检测的支持面**不重合**——openai-res 支持认领检测但**不适用**类型不匹配检测（`ResponsesRequest` 用裸类型/指针，类型写错时整条请求解析失败、客户端拿到显式 400，不存在需要暴露的静默丢弃）。一张表两个字段会迫使「不支持」与「不适用」共用同一个信号，消费方无法分辨该显示「能力待补」还是「该协议本就不会静默丢弃」。哨兵分成 `ErrClaimedKeysUnsupported` / `ErrMismatchedKeysUnsupported` 正是为此。
+- **消费方**：与认领检测同一处——日志详情的读时计算字段 `mismatched_request_fields`（见 [logs-metrics.md](logs-metrics.md)），两块在弹窗内并列展示且文案刻意不同：未认领 = 改网关，类型不匹配 = 改客户端。
+- **前提测试钉死宽容行为**：`TestMismatchedTopLevelKeys_ContainersSwallowMismatchSilently` 先证明容器确实静默吞掉类型不匹配（本检测存在的前提），容器哪天改成报错，该测试先失败，区分「前提变了」与「实现错了」。
+
+---
+
 
 - **要解决什么**：一眼看出「统一模型每个字段在各协议出站时 emit 成什么 / 被哪个 style 吃掉」，且转换器改动时自动亮出 diff。与上一节的入站未知字段检测互补——那个查「客户端发来但网关没认领的键」，这个查「网关认领了但出站丢掉的字段」。
 - **两个矩阵，各自 fixture × style**（style 列表均为 `openai` / `openai-res` / `anthropic`）：

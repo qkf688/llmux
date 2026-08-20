@@ -55,12 +55,6 @@ type UnifiedRequest struct {
 	ReasoningEffort *string `json:"reasoning_effort,omitempty"`
 	ReasoningBudget *int64  `json:"reasoning_budget,omitempty"`
 
-	// 新增: Octopus 中的重要参数 (LLMIO 缺失但需要的)
-	// 嵌入相关参数
-	EmbeddingInput          *UnifiedEmbeddingInput `json:"embedding_input,omitempty"`
-	EmbeddingDimensions     *int64                 `json:"embedding_dimensions,omitempty"`
-	EmbeddingEncodingFormat *string                `json:"embedding_encoding_format,omitempty"`
-
 	// 缓存和安全相关
 	// PromptCacheKey 是 OpenAI 的缓存路由键（自由字符串），不是开关；曾误声明为 *bool。
 	PromptCacheKey   *string `json:"prompt_cache_key,omitempty"`
@@ -115,25 +109,8 @@ func (r *UnifiedRequest) Validate() error {
 		return errors.New("model is required")
 	}
 
-	isEmbeddingRequest := r.EmbeddingInput != nil
-	isChatRequest := len(r.Messages) > 0
-
-	if isEmbeddingRequest && isChatRequest {
-		return errors.New("cannot specify both messages and input")
-	}
-
-	if !isEmbeddingRequest && !isChatRequest && r.System == "" && len(r.SystemParts) == 0 {
-		return errors.New("either messages, input, or system prompt is required")
-	}
-
-	if isEmbeddingRequest {
-		if r.EmbeddingInput.Single == nil && len(r.EmbeddingInput.Multiple) == 0 {
-			return errors.New("embedding input cannot be empty")
-		}
-	}
-
-	if isChatRequest && len(r.Messages) == 0 {
-		return errors.New("messages are required")
+	if len(r.Messages) == 0 && r.System == "" && len(r.SystemParts) == 0 {
+		return errors.New("either messages or system prompt is required")
 	}
 
 	return nil
@@ -150,11 +127,6 @@ func (r *UnifiedRequest) ClearHelpFields() {
 	for i := range r.Messages {
 		r.Messages[i].ClearHelpFields()
 	}
-}
-
-// IsEmbeddingRequest 判断是否为嵌入请求。
-func (r *UnifiedRequest) IsEmbeddingRequest() bool {
-	return r.EmbeddingInput != nil
 }
 
 // IsChatRequest 判断是否为聊天请求。

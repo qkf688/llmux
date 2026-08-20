@@ -3,7 +3,6 @@ package unified
 import "testing"
 
 func TestUnifiedRequestValidate(t *testing.T) {
-	text := "hello"
 	cases := []struct {
 		name    string
 		req     UnifiedRequest
@@ -17,28 +16,11 @@ func TestUnifiedRequestValidate(t *testing.T) {
 			wantErr: "model is required",
 		},
 		{
-			name: "messages and embedding both set",
-			req: UnifiedRequest{
-				Model:          "m",
-				Messages:       []UnifiedMessage{{Role: "user", Content: "hi"}},
-				EmbeddingInput: &UnifiedEmbeddingInput{Single: &text},
-			},
-			wantErr: "cannot specify both messages and input",
-		},
-		{
-			name: "missing messages input and system",
+			name: "missing messages and system",
 			req: UnifiedRequest{
 				Model: "m",
 			},
-			wantErr: "either messages, input, or system prompt is required",
-		},
-		{
-			name: "empty embedding input",
-			req: UnifiedRequest{
-				Model:          "m",
-				EmbeddingInput: &UnifiedEmbeddingInput{},
-			},
-			wantErr: "embedding input cannot be empty",
+			wantErr: "either messages or system prompt is required",
 		},
 		{
 			name: "valid chat request",
@@ -61,13 +43,6 @@ func TestUnifiedRequestValidate(t *testing.T) {
 				SystemParts: []UnifiedMessageContentPart{
 					{Type: "text", Text: ptrString("you are helpful")},
 				},
-			},
-		},
-		{
-			name: "valid embedding request",
-			req: UnifiedRequest{
-				Model:          "m",
-				EmbeddingInput: &UnifiedEmbeddingInput{Single: &text},
 			},
 		},
 	}
@@ -197,9 +172,6 @@ func TestUnifiedRequestSanitizedForProvider(t *testing.T) {
 
 func TestUnifiedRequestPredicates(t *testing.T) {
 	req := UnifiedRequest{Model: "m"}
-	if req.IsEmbeddingRequest() {
-		t.Fatalf("IsEmbeddingRequest() should be false")
-	}
 	if req.IsChatRequest() {
 		t.Fatalf("IsChatRequest() should be false")
 	}
@@ -207,12 +179,6 @@ func TestUnifiedRequestPredicates(t *testing.T) {
 		t.Fatalf("IsImageGenerationRequest() should be false")
 	}
 
-	req.EmbeddingInput = &UnifiedEmbeddingInput{Single: ptrString("x")}
-	if !req.IsEmbeddingRequest() {
-		t.Fatalf("IsEmbeddingRequest() should be true")
-	}
-
-	req.EmbeddingInput = nil
 	req.Messages = []UnifiedMessage{{Role: "user", Content: "hi"}}
 	if !req.IsChatRequest() {
 		t.Fatalf("IsChatRequest() should be true")

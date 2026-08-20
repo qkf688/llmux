@@ -21,7 +21,6 @@ type UnifiedMessageContentPart = unifiedmodel.UnifiedMessageContentPart
 type UnifiedImageURL = unifiedmodel.UnifiedImageURL
 type UnifiedInputAudio = unifiedmodel.UnifiedInputAudio
 type TransformOptions = unifiedmodel.TransformOptions
-type UnifiedEmbeddingInput = unifiedmodel.UnifiedEmbeddingInput
 
 // UnifiedChoice 统一响应选择格式。
 type UnifiedChoice struct {

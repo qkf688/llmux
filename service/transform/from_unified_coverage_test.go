@@ -14,12 +14,10 @@ import (
 //
 // 为什么不用 baseUnifiedRequest：那个 fixture 只填 Messages，覆盖不到出站字段映射。
 //
-// 三条边界，改这个 fixture 前先读：
+// 两条边界，改这个 fixture 前先读：
 //  1. Messages 保持最简（单条 user 文本）。消息内部结构（多模态 / tool_calls）已由
 //     TestGolden_RequestConversions 的 request/in/*.json 覆盖，本测试只关心请求级字段。
-//  2. EmbeddingInput 留空：UnifiedRequest.Validate 规定它与 Messages 互斥，
-//     无法在同一 fixture 里共存。embedding 出站由同级的 embeddingUnifiedRequest 覆盖。
-//  3. SystemParts 留空：它与 System 语义重叠且 Anthropic 会优先取 SystemParts，
+//  2. SystemParts 留空：它与 System 语义重叠且 Anthropic 会优先取 SystemParts，
 //     两者同时填会掩盖 System 字段的真实去向。
 //
 // 帮助字段（RawRequest / ExtraBody / Include / TransformerMetadata / Query）刻意填了值，
@@ -80,9 +78,6 @@ func fullUnifiedRequest(t *testing.T) *models.UnifiedRequest {
 		ReasoningEffort: ptr("high"),
 		ReasoningBudget: int64Ptr(4096),
 
-		EmbeddingDimensions:     int64Ptr(1536),
-		EmbeddingEncodingFormat: ptr("float"),
-
 		PromptCacheKey:   ptr("coverage-cache-key"),
 		SafetyIdentifier: ptr("coverage-safety"),
 		ServiceTier:      ptr("auto"),
@@ -107,8 +102,7 @@ func TestFullUnifiedRequest_CoversAllSerializableFields(t *testing.T) {
 
 	// 豁免字段必须写明理由，且必须保持零值（否则说明豁免理由已失效）
 	exempt := map[string]string{
-		"EmbeddingInput": "与 Messages 互斥，见 UnifiedRequest.Validate",
-		"SystemParts":    "与 System 语义重叠且 Anthropic 优先取它，会掩盖 System 去向",
+		"SystemParts": "与 System 语义重叠且 Anthropic 优先取它，会掩盖 System 去向",
 	}
 
 	req := fullUnifiedRequest(t)
@@ -150,27 +144,6 @@ func reasoningEffortOnlyUnifiedRequest(t *testing.T) *models.UnifiedRequest {
 	}
 }
 
-// embeddingUnifiedRequest 构造一个 embedding 请求（EmbeddingInput 非空、Messages 为空）。
-//
-// 为什么需要独立 fixture：UnifiedRequest.Validate 规定 EmbeddingInput 与 Messages 互斥，
-// 无法塞进 fullUnifiedRequest。
-//
-// 这份 fixture 的 golden 冻结的是**功能缺失**，不是字段映射：三个协议的 FromUnified
-// 目前都不读 EmbeddingInput / EmbeddingDimensions / EmbeddingEncodingFormat，
-// 且全仓没有 /v1/embeddings 路由。openai 出站还会因 messages 为空直接返错。
-// 读 golden 时不要把它误当成 bug 基线——它记录的是「embedding 出站尚未接线」这个现状，
-// 一旦接线，golden 会 diff。
-func embeddingUnifiedRequest(t *testing.T) *models.UnifiedRequest {
-	t.Helper()
-
-	return &models.UnifiedRequest{
-		Model:                   "coverage-embedding-model",
-		EmbeddingInput:          &models.UnifiedEmbeddingInput{Single: ptr("embed me")},
-		EmbeddingDimensions:     int64Ptr(1536),
-		EmbeddingEncodingFormat: ptr("float"),
-	}
-}
-
 // fromUnifiedErrorJSON 把 FromUnified 的错误包成确定的 JSON，用于冻进 golden。
 // 不引入「哪个 style 期望 error」的期望表——那会是 adapter 逻辑的第二份副本，
 // 必然漂移。错误进 golden 后，路径被接线时 golden 从 error 变真实 body，diff 自证。
@@ -199,7 +172,6 @@ func TestFromUnifiedCoverage_Golden(t *testing.T) {
 		build func(*testing.T) *models.UnifiedRequest
 	}{
 		{name: "full", build: fullUnifiedRequest},
-		{name: "embedding", build: embeddingUnifiedRequest},
 		{name: "reasoning_effort_only", build: reasoningEffortOnlyUnifiedRequest},
 	}
 
@@ -227,7 +199,7 @@ func TestFromUnifiedCoverage_Golden(t *testing.T) {
 
 					out, err := adapter.FromUnified(req)
 					// FromUnified 返错时不 Fatalf，而是把错误也冻进 golden：
-					// 某些 fixture（如 embedding 出站未接线）的当前行为就是返错，
+					// 某个 fixture 在某协议下的当前行为可能就是返错（例如出站路径尚未接线），
 					// 这本身是要被覆盖矩阵记录的现状。哪天该路径被接线，
 					// golden 会从 error 变成真实 body，diff 一眼可见。
 					if err != nil {

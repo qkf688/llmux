@@ -1,6 +1,0 @@
-{
-  "max_tokens": 8192,
-  "messages": [],
-  "model": "coverage-embedding-model",
-  "stream": false
-}

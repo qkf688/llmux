@@ -1,57 +1,60 @@
 package anthropic
 
 import (
-	"github.com/qkf688/llmux/models"
+	"encoding/json"
 	"strings"
 
-	"github.com/qkf688/llmux/common/maputil"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/transform/shared"
 )
 
 // parseSystem parses Anthropic's "system" field, which can be either a string or an array of text blocks.
 // It returns:
 // - the extracted plain text (used by internal logic and other providers),
 // - the structured blocks (used to preserve Anthropic's system array format when round-tripping).
-func parseSystem(value interface{}) (string, []models.UnifiedMessageContentPart) {
-	switch v := value.(type) {
-	case string:
-		if v == "" {
-			return "", nil
-		}
-		return v, nil
-	case []interface{}:
-		parts := parseSystemParts(v)
-		return systemPartsToText(parts), parts
-	default:
+//
+// 数组分支刻意用 []json.RawMessage + 错误判定，而非 shared.RawArray：后者吞掉
+// 「不是数组」这个错误，会让标量 system（如 `"system":123`）与空数组 `[]` 落到同一
+// 分支，从而把「非数组 → SystemParts 为 nil」误改成「返回空切片」。
+func parseSystem(raw json.RawMessage) (string, []models.UnifiedMessageContentPart) {
+	if len(raw) == 0 || shared.IsJSONNull(raw) {
 		return "", nil
 	}
+	if value, ok := shared.RawString(raw); ok {
+		return value, nil
+	}
+
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return "", nil
+	}
+	parts := parseSystemParts(items)
+	return systemPartsToText(parts), parts
 }
 
-func parseSystemParts(items []interface{}) []models.UnifiedMessageContentPart {
+func parseSystemParts(items []json.RawMessage) []models.UnifiedMessageContentPart {
 	parts := make([]models.UnifiedMessageContentPart, 0, len(items))
 	for _, item := range items {
-		itemMap, ok := asMap(item)
-		if !ok {
+		var block anthropicTextBlock
+		if !shared.DecodeJSONObject(item, &block) {
 			continue
 		}
-		if maputil.String(itemMap, "type") != "text" {
+		if block.Type.Value != "text" {
 			continue
 		}
 
-		text := ""
-		if v, ok := itemMap["text"].(string); ok && v != "" {
-			text = v
-		} else if v, ok := itemMap["content"].(string); ok && v != "" {
-			text = v
+		text := block.Text.Value
+		if text == "" {
+			text = block.Content.Value
 		}
 		if text == "" {
 			continue
 		}
 
-		partText := text
 		parts = append(parts, models.UnifiedMessageContentPart{
 			Type:         "text",
-			Text:         &partText,
-			CacheControl: parseCacheControl(itemMap["cache_control"]),
+			Text:         &text,
+			CacheControl: parseRawCacheControl(block.CacheControl),
 		})
 	}
 	return parts

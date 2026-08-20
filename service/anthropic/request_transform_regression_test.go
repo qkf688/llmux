@@ -432,8 +432,9 @@ func TestTransformToUnified_OutputConfigEffort_OnlyEffort_NoBudget(t *testing.T)
 
 // Stage A 健壮性测试：output_config.effort 为非字符串类型 / output_config 非对象 /
 // effort 空串时，入站不 panic、不误注入 ReasoningEffort。
-// maputil.String 对非字符串返回 ""，asMap 对非对象返回 false，行为经代码审查正确，
-// 此用例固化该不变量，防止未来重构引入类型断言 panic 或误接。
+// DTO 化后由 shared.Optional[string] 吞掉类型不匹配、shared.DecodeJSONObject 拒掉
+// 非对象形状，语义与 map 时代（maputil.String 返回 ""、asMap 返回 false）等价，
+// 此用例固化该不变量，防止后续重构把宽容改严。
 func TestTransformToUnified_OutputConfigEffort_Robustness(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -509,5 +510,143 @@ func TestTransformToUnified_TopLevelKeysAreCaseInsensitive(t *testing.T) {
 	}
 	if unified.Stop == nil || len(unified.Stop.Multiple) != 1 || unified.Stop.Multiple[0] != "END" {
 		t.Fatalf("Stop_Sequences 应被 EqualFold 命中，实际 %#v", unified.Stop)
+	}
+}
+
+// Stage 4a 把 system / tools / thinking / output_config / tool_choice 从 map 解析改成
+// DTO，**嵌套**键因此也变成大小写不敏感（map 时代 `itemMap["budget_tokens"]` 是精确
+// 查找，`Budget_Tokens` 会静默丢失）。
+//
+// 与顶层那条差异同源、方向一致（见 TestTransformToUnified_TopLevelKeysAreCaseInsensitive），
+// 此用例把它钉成已知契约：不是无意后果，改回精确匹配才是回归。
+func TestTransformToUnified_NestedKeysAreCaseInsensitive(t *testing.T) {
+	raw := []byte(`{
+		"model":"claude-sonnet-4-5",
+		"max_tokens":1024,
+		"System":[{"Type":"text","Text":"be brief"}],
+		"thinking":{"Type":"enabled","Budget_Tokens":30000},
+		"output_config":{"Effort":"high"},
+		"tool_choice":{"Type":"tool","Name":"calc"},
+		"tools":[{"Name":"calc","Description":"do math","Input_Schema":{"type":"object"}}],
+		"messages":[{"role":"user","content":"hi"}]
+	}`)
+
+	unified, err := TransformToUnified(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("TransformToUnified 失败: %v", err)
+	}
+
+	if unified.System != "be brief" || len(unified.SystemParts) != 1 {
+		t.Fatalf("system 块的 Type/Text 应被 EqualFold 命中，实际 System=%q Parts=%#v", unified.System, unified.SystemParts)
+	}
+	if unified.ReasoningBudget == nil || *unified.ReasoningBudget != 30000 {
+		t.Fatalf("thinking.Budget_Tokens 应被 EqualFold 命中，实际 %#v", unified.ReasoningBudget)
+	}
+	if unified.ReasoningEffort == nil || *unified.ReasoningEffort != "high" {
+		t.Fatalf("output_config.Effort 应被 EqualFold 命中并压过 budget 反推，实际 %#v", unified.ReasoningEffort)
+	}
+	if unified.ToolChoice == nil || unified.ToolChoice.ObjectValue == nil ||
+		unified.ToolChoice.ObjectValue.Function == nil || unified.ToolChoice.ObjectValue.Function.Name != "calc" {
+		t.Fatalf("tool_choice 的 Type/Name 应被 EqualFold 命中，实际 %#v", unified.ToolChoice)
+	}
+	if len(unified.Tools) != 1 || unified.Tools[0].Function.Name != "calc" ||
+		unified.Tools[0].Function.Description != "do math" || unified.Tools[0].Function.Parameters == nil {
+		t.Fatalf("tools 元素的 Name/Description/Input_Schema 应被 EqualFold 命中，实际 %#v", unified.Tools)
+	}
+}
+
+// 非 "tool" 的 type（auto / any / none）走 StringValue 透传，而不是被丢弃；
+// 解析后 StringValue 与 ObjectValue 皆空时整个 ToolChoice 置 nil，而不是留一个空壳
+// ——空壳会让出站适配器 emit 出 `"tool_choice":{}` 这种上游会拒的形状。
+func TestTransformToUnified_ToolChoiceBranches(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		wantString string // 非空 = 期望 StringValue 等于它
+		wantFunc   string // 非空 = 期望 ObjectValue.Function.Name 等于它
+		wantNil    bool
+	}{
+		{
+			name:       "bare string passes through",
+			body:       `{"model":"m","max_tokens":1024,"tool_choice":"auto","messages":[{"role":"user","content":"hi"}]}`,
+			wantString: "auto",
+		},
+		{
+			name:       "unknown object type becomes StringValue",
+			body:       `{"model":"m","max_tokens":1024,"tool_choice":{"type":"any"},"messages":[{"role":"user","content":"hi"}]}`,
+			wantString: "any",
+		},
+		{
+			name:     "type tool with name becomes function object",
+			body:     `{"model":"m","max_tokens":1024,"tool_choice":{"type":"tool","name":"calc"},"messages":[{"role":"user","content":"hi"}]}`,
+			wantFunc: "calc",
+		},
+		{
+			name:    "type tool without name collapses to nil",
+			body:    `{"model":"m","max_tokens":1024,"tool_choice":{"type":"tool"},"messages":[{"role":"user","content":"hi"}]}`,
+			wantNil: true,
+		},
+		{
+			name:    "empty object collapses to nil",
+			body:    `{"model":"m","max_tokens":1024,"tool_choice":{},"messages":[{"role":"user","content":"hi"}]}`,
+			wantNil: true,
+		},
+		{
+			name:    "empty string collapses to nil",
+			body:    `{"model":"m","max_tokens":1024,"tool_choice":"","messages":[{"role":"user","content":"hi"}]}`,
+			wantNil: true,
+		},
+		{
+			name:    "number is not a valid shape",
+			body:    `{"model":"m","max_tokens":1024,"tool_choice":123,"messages":[{"role":"user","content":"hi"}]}`,
+			wantNil: true,
+		},
+		{
+			name:    "array is not a valid shape",
+			body:    `{"model":"m","max_tokens":1024,"tool_choice":["auto"],"messages":[{"role":"user","content":"hi"}]}`,
+			wantNil: true,
+		},
+		{
+			name:    "null is treated as unset",
+			body:    `{"model":"m","max_tokens":1024,"tool_choice":null,"messages":[{"role":"user","content":"hi"}]}`,
+			wantNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			unified, err := TransformToUnified(context.Background(), []byte(tt.body))
+			if err != nil {
+				t.Fatalf("TransformToUnified 失败: %v", err)
+			}
+
+			if tt.wantNil {
+				if unified.ToolChoice != nil {
+					t.Fatalf("ToolChoice 应整体为 nil，实际 %#v", unified.ToolChoice)
+				}
+				return
+			}
+			if unified.ToolChoice == nil {
+				t.Fatalf("ToolChoice 不应为 nil")
+			}
+
+			if tt.wantString != "" {
+				if unified.ToolChoice.StringValue == nil || *unified.ToolChoice.StringValue != tt.wantString {
+					t.Fatalf("StringValue 应为 %q，实际 %#v", tt.wantString, unified.ToolChoice.StringValue)
+				}
+				if unified.ToolChoice.ObjectValue != nil {
+					t.Fatalf("走 StringValue 分支时 ObjectValue 应为 nil，实际 %#v", unified.ToolChoice.ObjectValue)
+				}
+			}
+			if tt.wantFunc != "" {
+				obj := unified.ToolChoice.ObjectValue
+				if obj == nil || obj.Type != "function" || obj.Function == nil || obj.Function.Name != tt.wantFunc {
+					t.Fatalf("ObjectValue 应为 function/%s，实际 %#v", tt.wantFunc, obj)
+				}
+				if unified.ToolChoice.StringValue != nil {
+					t.Fatalf("走 ObjectValue 分支时 StringValue 应为 nil，实际 %#v", unified.ToolChoice.StringValue)
+				}
+			}
+		})
 	}
 }

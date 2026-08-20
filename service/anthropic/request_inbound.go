@@ -13,15 +13,16 @@ import (
 
 // TransformToUnified 将 Anthropic 请求格式转换为统一格式。
 //
-// 顶层字段走 anthropicRequest DTO（见 request_dto.go），嵌套多态结构仍走 map 解析。
+// 顶层字段与 system / tools / thinking / output_config / tool_choice 走 anthropicRequest
+// 及其嵌套 DTO（见 request_dto.go），messages 的 content 块仍走 map 解析。
 // DTO 的字段容器全部宽容（类型不匹配 = 当作未传，不报错），故本函数只在 body 不是
 // JSON 对象时返回错误。
 //
-// 与 map 时代的**唯一**对外差异：顶层键匹配由精确查找变成 encoding/json 的「先精确、
-// 未命中再 EqualFold」，即 `{"Max_Tokens":100}` 现在能解析（旧版静默丢失）。这是刻意
-// 接受的改善——openai 入站早已是 DTO（同样大小写不敏感），`shared.UnknownTopLevelKeys`
-// 的 isClaimedKey 也做 EqualFold 兜底；旧版 anthropic 的「检测认为 Temperature 已认领、
-// 解析却读不到它」才是两侧不一致。
+// 与 map 时代的对外差异只有一条：键匹配由精确查找变成 encoding/json 的「先精确、
+// 未命中再 EqualFold」，即 `{"Max_Tokens":100}`、`{"thinking":{"Budget_Tokens":30000}}`
+// 现在能解析（旧版静默丢失）。这是刻意接受的改善——openai 入站早已是 DTO（同样大小写
+// 不敏感），`shared.UnknownTopLevelKeys` 的 isClaimedKey 也做 EqualFold 兜底；旧版
+// anthropic 的「检测认为 Temperature 已认领、解析却读不到它」才是两侧不一致。
 func TransformToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedRequest, error) {
 	var req anthropicRequest
 	if err := json.Unmarshal(rawBody, &req); err != nil {
@@ -32,7 +33,7 @@ func TransformToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedReq
 		Model:  req.Model.Value,
 		Stream: req.Stream.Value,
 	}
-	unified.System, unified.SystemParts = parseSystem(shared.RawJSONValue(req.System))
+	unified.System, unified.SystemParts = parseSystem(req.System)
 
 	if req.MaxTokens.Set {
 		unified.MaxTokens = req.MaxTokens.Value
@@ -45,7 +46,7 @@ func TransformToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedReq
 	}
 
 	unified.Messages = parseMessages(shared.RawJSONValue(req.Messages))
-	unified.Tools = parseTools(shared.RawJSONValue(req.Tools))
+	unified.Tools = parseTools(req.Tools)
 
 	if req.StopSequences.Set && len(req.StopSequences.Value) > 0 {
 		unified.Stop = &models.UnifiedStop{Multiple: req.StopSequences.Value}
@@ -55,10 +56,10 @@ func TransformToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedReq
 		unified.Metadata = req.Metadata.Value
 	}
 
-	if thinking, ok := asMap(shared.RawJSONValue(req.Thinking)); ok {
-		thinkingType := maputil.String(thinking, "type")
-		budgetTokens := maputil.Int64(thinking, "budget_tokens")
-		if thinkingType == "enabled" && budgetTokens > 0 {
+	var thinking anthropicThinking
+	if shared.DecodeJSONObject(req.Thinking, &thinking) {
+		budgetTokens := thinking.BudgetTokens.Value
+		if thinking.Type.Value == "enabled" && budgetTokens > 0 {
 			effort := ThinkingBudgetToReasoningEffort(budgetTokens)
 			if effort != "" {
 				unified.ReasoningEffort = &effort
@@ -72,8 +73,9 @@ func TransformToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedReq
 	// 归一化开关与 OpenAI/Responses 入站一致：开启时走 NormalizeReasoningEffort，
 	// 关闭时原值透传（用户显式关闭映射设置后，跨协议行为对称）；
 	// budget 仍取 thinking.budget_tokens（两字段并存，出站 budget 优先已有实现不变）。
-	if outputConfig, ok := asMap(shared.RawJSONValue(req.OutputConfig)); ok {
-		if effortStr := maputil.String(outputConfig, "effort"); effortStr != "" {
+	var outputConfig anthropicOutputConfig
+	if shared.DecodeJSONObject(req.OutputConfig, &outputConfig) {
+		if effortStr := outputConfig.Effort.Value; effortStr != "" {
 			effort := effortStr
 			if shared.GetReasoningEffortMappingEnabled(ctx) {
 				effort = shared.NormalizeReasoningEffort(ctx, effortStr)
@@ -83,18 +85,33 @@ func TransformToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedReq
 	}
 
 	// tool_choice (best-effort): keep unified semantics as OpenAI-style tool_choice.
-	if rawToolChoice := shared.RawJSONValue(req.ToolChoice); rawToolChoice != nil {
-		unified.ToolChoice = &models.UnifiedToolChoice{}
+	unified.ToolChoice = parseToolChoice(req.ToolChoice)
 
-		if v, ok := rawToolChoice.(string); ok && v != "" {
-			unified.ToolChoice.StringValue = &v
-		} else if tcMap, ok := asMap(rawToolChoice); ok {
-			tcType := maputil.String(tcMap, "type")
-			switch tcType {
+	return unified, nil
+}
+
+// parseToolChoice 解析 Anthropic 的 tool_choice：裸字符串 ｜ 对象两种形态。
+//
+// 非 "tool" 的 type（auto / any / none）作为 StringValue 透传——统一模型不设
+// Anthropic 专属枚举，透传把「落地成什么」留给出站适配器。两个值都没拿到时返回
+// nil 而不是空壳：空壳会让出站 emit 出 `"tool_choice":{}`，上游据此判 400。
+func parseToolChoice(raw json.RawMessage) *models.UnifiedToolChoice {
+	if len(raw) == 0 || shared.IsJSONNull(raw) {
+		return nil
+	}
+
+	choice := &models.UnifiedToolChoice{}
+	if value, ok := shared.RawString(raw); ok {
+		if value != "" {
+			choice.StringValue = &value
+		}
+	} else {
+		var obj anthropicToolChoice
+		if shared.DecodeJSONObject(raw, &obj) {
+			switch tcType := obj.Type.Value; tcType {
 			case "tool":
-				name := maputil.String(tcMap, "name")
-				if name != "" {
-					unified.ToolChoice.ObjectValue = &models.UnifiedToolChoiceObject{
+				if name := obj.Name.Value; name != "" {
+					choice.ObjectValue = &models.UnifiedToolChoiceObject{
 						Type: "function",
 						Function: &models.UnifiedToolChoiceFunction{
 							Name: name,
@@ -103,17 +120,16 @@ func TransformToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedReq
 				}
 			default:
 				if tcType != "" {
-					unified.ToolChoice.StringValue = &tcType
+					choice.StringValue = &tcType
 				}
 			}
 		}
-
-		if unified.ToolChoice.StringValue == nil && unified.ToolChoice.ObjectValue == nil {
-			unified.ToolChoice = nil
-		}
 	}
 
-	return unified, nil
+	if choice.StringValue == nil && choice.ObjectValue == nil {
+		return nil
+	}
+	return choice
 }
 
 func parseMessages(raw interface{}) []models.UnifiedMessage {
@@ -163,28 +179,33 @@ func parseMessages(raw interface{}) []models.UnifiedMessage {
 	return messages
 }
 
-func parseTools(raw interface{}) []models.UnifiedTool {
-	items, ok := asSlice(raw)
-	if !ok {
+func parseTools(raw json.RawMessage) []models.UnifiedTool {
+	if len(raw) == 0 || shared.IsJSONNull(raw) {
+		return nil
+	}
+	// 与 parseSystem 同理：用错误判定区分「不是数组」与「空数组」，前者返回 nil、
+	// 后者返回空切片，保持 map 时代 asSlice 的两种结果。
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil {
 		return nil
 	}
 
 	tools := make([]models.UnifiedTool, 0, len(items))
 	for _, item := range items {
-		toolMap, ok := asMap(item)
-		if !ok {
+		var dto anthropicTool
+		if !shared.DecodeJSONObject(item, &dto) {
 			continue
 		}
 
 		tool := models.UnifiedTool{
 			Type: "function",
 			Function: models.UnifiedFunc{
-				Name:        maputil.String(toolMap, "name"),
-				Description: maputil.String(toolMap, "description"),
-				Parameters:  toolMap["input_schema"],
+				Name:        dto.Name.Value,
+				Description: dto.Description.Value,
+				Parameters:  shared.RawJSONValue(dto.InputSchema),
 			},
 		}
-		tool.CacheControl = parseCacheControl(toolMap["cache_control"])
+		tool.CacheControl = parseRawCacheControl(dto.CacheControl)
 		tools = append(tools, tool)
 	}
 	return tools

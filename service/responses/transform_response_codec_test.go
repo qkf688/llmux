@@ -137,3 +137,57 @@ func TestFormatResponse_EncodesImageURLParts(t *testing.T) {
 		t.Fatalf("expected image_url content part, got %s", string(out))
 	}
 }
+
+// OpenAI Responses 的 output 数组内 message item id 必须唯一：官方 schema 把
+// ResponseOutputMessage.id 定义为「the unique ID of the output message」，而客户端把
+// response.output 回灌成下一轮 input 是该协议的常规续话方式，重复的 msg_ id 会被 API 判
+// "Duplicate item found with id msg_..." 而 400 —— 危害出现在客户端的下一次请求，只看
+// 单次响应体察觉不到。多 choice 时若每个 choice 的 message 都取 msg_+unified.ID 就会撞车。
+func TestFormatResponse_MultiChoiceMessageItemIDsAreUnique(t *testing.T) {
+	t.Parallel()
+
+	first := "first"
+	second := "second"
+	unified := &models.UnifiedResponse{
+		ID:      "resp_multi",
+		Object:  "chat.completion",
+		Created: 1,
+		Model:   "m",
+		Choices: []models.UnifiedChoice{
+			{Index: 0, FinishReason: "stop", Message: &models.UnifiedMessage{Role: "assistant", Content: first}},
+			{Index: 1, FinishReason: "stop", Message: &models.UnifiedMessage{Role: "assistant", Content: second}},
+		},
+	}
+
+	out, err := FormatResponse(unified)
+	if err != nil {
+		t.Fatalf("FormatResponse: %v", err)
+	}
+
+	var decoded ResponsesResponse
+	if err := json.Unmarshal(out, &decoded); err != nil {
+		t.Fatalf("unmarshal formatted response: %v", err)
+	}
+
+	var messageIDs []string
+	for _, item := range decoded.Output {
+		if item.Type == "message" {
+			messageIDs = append(messageIDs, item.ID)
+		}
+	}
+	if len(messageIDs) != 2 {
+		t.Fatalf("expected 2 message items, got %d (%v)", len(messageIDs), messageIDs)
+	}
+	// 首个保持裸 msg_<id>：单 choice 是绝对主流形态，给它加后缀等于改动几乎所有响应的 id。
+	if messageIDs[0] != "msg_resp_multi" {
+		t.Fatalf("first message id should stay bare msg_<id>, got %q", messageIDs[0])
+	}
+	// 全员去重而非两两比较：choice 数增加时这条断言自动仍然有效。
+	seen := make(map[string]bool, len(messageIDs))
+	for _, id := range messageIDs {
+		if seen[id] {
+			t.Fatalf("duplicate message item id %q in output array: %v", id, messageIDs)
+		}
+		seen[id] = true
+	}
+}

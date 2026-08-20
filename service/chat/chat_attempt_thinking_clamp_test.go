@@ -158,8 +158,9 @@ func TestClampPassthroughReasoning_Anthropic(t *testing.T) {
 	})
 }
 
-// TestClampPassthroughReasoning_Responses 覆盖 Responses passthrough 双路径：
-// reasoning.effort + metadata.reasoning_effort 同步钳制。
+// TestClampPassthroughReasoning_Responses 覆盖 Responses passthrough 的 effort 钳制。
+// Responses 只有一条 effort 控制字段 reasoning.effort；metadata 是客户端自由 KV 标签
+// （上游不读其中的控制语义），即使恰好含 reasoning_effort 键也不参与钳制。
 func TestClampPassthroughReasoning_Responses(t *testing.T) {
 	clamp := &transform.ThinkingClampConfig{
 		Levels:          []string{"low", "medium"},
@@ -167,16 +168,25 @@ func TestClampPassthroughReasoning_Responses(t *testing.T) {
 		UnknownStrategy: "clamp_to_default",
 	}
 
-	t.Run("high → medium 双路径同步", func(t *testing.T) {
+	t.Run("high → medium，metadata 同名标签原样保留", func(t *testing.T) {
 		raw := []byte(`{"model":"m","reasoning":{"effort":"high"},"metadata":{"reasoning_effort":"high"}}`)
 		result := clampPassthroughReasoning(raw, consts.StyleOpenAIRes, clamp)
-		effort1 := gjson.GetBytes(result, "reasoning.effort").String()
-		effort2 := gjson.GetBytes(result, "metadata.reasoning_effort").String()
-		if effort1 != "medium" {
-			t.Errorf("reasoning.effort = %q, want medium", effort1)
+		if effort := gjson.GetBytes(result, "reasoning.effort").String(); effort != "medium" {
+			t.Errorf("reasoning.effort = %q, want medium", effort)
 		}
-		if effort2 != "medium" {
-			t.Errorf("metadata.reasoning_effort = %q, want medium", effort2)
+		if tag := gjson.GetBytes(result, "metadata.reasoning_effort").String(); tag != "high" {
+			t.Errorf("metadata.reasoning_effort = %q, want high（标签不参与钳制）", tag)
+		}
+	})
+
+	t.Run("官方字段缺席时不从 metadata 反推 effort", func(t *testing.T) {
+		raw := []byte(`{"model":"m","metadata":{"reasoning_effort":"high"}}`)
+		result := clampPassthroughReasoning(raw, consts.StyleOpenAIRes, clamp)
+		if gjson.GetBytes(result, "reasoning.effort").Exists() {
+			t.Errorf("不应凭 metadata 造出 reasoning.effort, got %s", result)
+		}
+		if tag := gjson.GetBytes(result, "metadata.reasoning_effort").String(); tag != "high" {
+			t.Errorf("metadata.reasoning_effort = %q, want high", tag)
 		}
 	})
 }

@@ -91,14 +91,10 @@ func TransformRequest(rawBody []byte, options RequestTransformOptions) (*models.
 		}
 	}
 
-	// reasoning_effort: prefer official field, fallback to metadata for compatibility.
+	// effort 只认官方字段 reasoning.effort；metadata 是客户端自由 KV 标签，不是控制通道。
 	effort := ""
 	if req.Reasoning != nil && req.Reasoning.Effort != nil {
 		effort = *req.Reasoning.Effort
-	} else if req.Metadata != nil {
-		if v, ok := req.Metadata["reasoning_effort"].(string); ok {
-			effort = v
-		}
 	}
 	if effort != "" {
 		if options.MapReasoningEffort != nil {

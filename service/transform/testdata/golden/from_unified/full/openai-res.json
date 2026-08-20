@@ -14,7 +14,6 @@
   "instructions": "You are a coverage probe.",
   "max_output_tokens": 1024,
   "metadata": {
-    "reasoning_effort": "high",
     "trace": "coverage"
   },
   "model": "coverage-model",

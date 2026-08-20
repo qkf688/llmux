@@ -18,8 +18,7 @@ import (
 // 这是 chat 层的收敛策略（非协议事实），故常量定义在本包而非 service/anthropic。
 const budgetMaxTokensRatio = 0.8
 
-// passthroughEffortField 返回各协议 passthrough 路径的 reasoning effort 字段路径。
-// Responses 有双路径（reasoning.effort 官方字段 + metadata.reasoning_effort 兼容回退）。
+// passthroughEffortFields 返回各协议 passthrough 路径的 reasoning effort 字段路径。
 func passthroughEffortFields(style string) []string {
 	switch style {
 	case consts.StyleOpenAI:
@@ -27,8 +26,7 @@ func passthroughEffortFields(style string) []string {
 	case consts.StyleAnthropic:
 		return []string{"output_config.effort"}
 	case consts.StyleOpenAIRes:
-		// 双路径：官方 reasoning.effort + 兼容 metadata.reasoning_effort
-		return []string{"reasoning.effort", "metadata.reasoning_effort"}
+		return []string{"reasoning.effort"}
 	default:
 		return nil
 	}
@@ -71,18 +69,12 @@ func clampPassthroughReasoning(raw []byte, style string, clamp *transform.Thinki
 		return raw
 	}
 
-	// 取第一个 effort 字段的值作为钳制输入（Responses 双路径取官方字段 reasoning.effort）
+	// 取 effort 字段的值作为钳制输入
 	effortVal := gjson.GetBytes(raw, effortFields[0]).String()
 	if effortVal == "" {
-		// 官方字段为空时，Responses 尝试兼容字段 metadata.reasoning_effort
-		if style == consts.StyleOpenAIRes && len(effortFields) > 1 {
-			effortVal = gjson.GetBytes(raw, effortFields[1]).String()
-		}
-		if effortVal == "" {
-			// budget-only 请求（只给 budget、不给 effort）：effort 缺席时仍须让 budget
-			// 受白名单约束，否则 budget 会完全绕过钳制直达上游。
-			return clampPassthroughBudgetOnly(raw, style, clamp)
-		}
+		// budget-only 请求（只给 budget、不给 effort）：effort 缺席时仍须让 budget
+		// 受白名单约束，否则 budget 会完全绕过钳制直达上游。
+		return clampPassthroughBudgetOnly(raw, style, clamp)
 	}
 
 	// 归一化小写：与 transform 路径的 NormalizeReasoningEffort 行为一致，
@@ -108,7 +100,7 @@ func clampPassthroughReasoning(raw []byte, style string, clamp *transform.Thinki
 		return raw
 	}
 
-	// 钳制发生 → 更新所有 effort 字段（Responses 双路径同步）
+	// 钳制发生 → 更新 effort 字段
 	if clamped == "" {
 		slog.Warn("passthrough reasoning effort clamped to empty (stripped)",
 			"original", original,

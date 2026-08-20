@@ -135,7 +135,7 @@ func TestFullUnifiedRequest_CoversAllSerializableFields(t *testing.T) {
 // 用于冻结「effort 单独存在」时各协议的推导/丢弃行为：
 //   - openai：原样 reasoning_effort，无 budget
 //   - anthropic：不 emit effort 字符串，而是由 ReasoningEffortToThinkingBudget 推导出 thinking.budget_tokens
-//   - openai-res：reasoning.effort + 冗余写进 metadata.reasoning_effort，无 reasoning.max_tokens
+//   - openai-res：只 emit 官方 reasoning.effort，无 reasoning.max_tokens
 //
 // golden 里的 effort 是**原值、未经钳制**：本测试直调 FromUnified，刻意绕开
 // clampUnifiedReasoning（那是 ProcessRequest 的另一层语义）。不要把 golden 里的

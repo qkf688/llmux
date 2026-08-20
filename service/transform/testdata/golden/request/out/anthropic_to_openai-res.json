@@ -18,7 +18,6 @@
   "instructions": "You are helpful.",
   "max_output_tokens": 123,
   "metadata": {
-    "reasoning_effort": "medium",
     "trace_id": "abc"
   },
   "model": "test-model",

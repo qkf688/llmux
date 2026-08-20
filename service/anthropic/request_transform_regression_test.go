@@ -652,7 +652,7 @@ func TestTransformToUnified_ToolChoiceBranches(t *testing.T) {
 }
 
 // 疑虑 #4 表征测试之一（锁死现状，供 #16 struct 化重构兜底）：
-// tool_result 块的 tool_use_id 为空时，parseMessageContentAndToolResults 会「按块」skip 该块，
+// tool_result 块的 tool_use_id 为空时，parseContentBlocks 会「按块」skip 该块，
 // 既不产出 tool 消息也不进入 content parts；非空时才产出 tool 消息。
 // 两个 case 都带一个 text 块以保证外层 user 消息在两种情况下都存活，
 // 从而把「块是否被 skip」与规则 2「user 仅含 tool_result 则整条丢弃」隔离开。
@@ -834,7 +834,7 @@ func TestTransformToUnified_UserMessageOnlyToolResultDropped(t *testing.T) {
 }
 
 // 疑虑 #4 表征测试之三（锁死现状，供 #16 struct 化重构兜底）：
-// 统一模型只有一个 RedactedThinkingData 字段，parseReasoning 遇到多个 redacted_thinking 块时
+// 统一模型只有一个 RedactedThinkingData 字段，parseContentBlocks 遇到多个 redacted_thinking 块时
 // 保留**第一个 data 非空**的块——判据是「当前累积值仍为空」而不是「是第一个块」，
 // 所以领头的空 data 块会被跳过、继续用后面的块填充，填上之后其余块全部忽略。
 // 与 thinking 块的 signature「后者覆盖前者」语义相反，#16 重构时勿混淆两者。
@@ -875,7 +875,7 @@ func TestTransformToUnified_MultipleRedactedThinkingKeepsFirstNonEmpty(t *testin
 }
 
 // 疑虑 #4 表征测试之四（锁死现状，供 #16 struct 化重构兜底）：
-// parseToolCalls 把 arguments 初始化为 "{}"，仅当 input 断言成 JSON object 成功时才覆盖。
+// parseContentBlocks 把 arguments 初始化为 "{}"，仅当 input 断言成 JSON object 成功时才覆盖。
 // 因此数组 / 标量 / 缺失 / null 形态的 input 全部静默塌成 "{}"——上游拿不到原始 input，
 // 这是当前的宽容取舍。#16 用 RawMessage 承接 input 时必须维持同样的塌陷结果。
 func TestTransformToUnified_ToolUseNonMapInputKeepsEmptyArgs(t *testing.T) {
@@ -934,7 +934,7 @@ func TestTransformToUnified_ToolUseNonMapInputKeepsEmptyArgs(t *testing.T) {
 }
 
 // 疑虑 #4 表征测试之五（AC-6，供 #16 struct 化重构兜底）：
-// content 既不是 string 也不是块数组（这里是 JSON 对象）时，parseMessageContentAndToolResults
+// content 既不是 string 也不是块数组（这里是 JSON 对象）时，parseContentBlocks
 // 走兜底分支原样透传该值，出站 FromUnified 再 marshal 出来应与入站 JSON 等价。
 // #16 用 RawMessage 承接兜底值后，透传对象仍须能 round-trip（RawMessage 实现 json.Marshaler，
 // 原样输出字节，比 map 重序列化更保真）。此外非数组 content 不应产出任何 tool_call。
@@ -977,7 +977,7 @@ func TestTransformToUnified_NonArrayObjectContentPassthrough(t *testing.T) {
 }
 
 // 疑虑 #4 表征测试之六（AC-7，供 #16 struct 化重构兜底）：
-// content 为空数组时，parseMessageContentAndToolResults 收敛出的 Content 为 nil
+// content 为空数组时，parseContentBlocks 收敛出的 Content 为 nil
 // （collapseContentParts 对空 parts 返回 nil），且不产出任何 tool_call；因为不含
 // tool_result 块，原 user 消息不被丢弃，仍产出 1 条 Content 为 nil 的消息。
 // #16 单遍历合并时须精确复现这套 nil 语义。

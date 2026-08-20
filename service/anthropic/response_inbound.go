@@ -42,8 +42,14 @@ func ParseResponse(body []byte) (*models.UnifiedResponse, error) {
 		return nil, fmt.Errorf("解析 anthropic 响应 content 失败: %w", err)
 	}
 
-	content, _ := parseMessageContentAndToolResults(respContent.Content)
-	toolCalls := parseToolCalls(respContent.Content)
+	// 与请求入站共用 parseContentBlocks 的单次遍历（#28）。响应侧只取 content 与
+	// tool_calls：thinking 仍走下面的 extractThinking，因为两者语义**不同**——
+	// extractThinking 的 thinking/signature 是「后一个块整体覆盖前一个（含空值覆盖）」，
+	// 而 parseContentBlocks 是「文本顺序拼接 + signature 仅非空时覆盖」。
+	// 统一两者会改变响应回写行为，不在本次范围内。
+	parsed := parseContentBlocks(respContent.Content)
+	content := parsed.content
+	toolCalls := parsed.toolCalls
 
 	reasoningText, reasoningSig, redactedData := extractThinking(resp["content"])
 	if reasoningText != "" {

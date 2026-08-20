@@ -25,7 +25,8 @@ import (
 //
 // messages 及其 content 块同样走 struct：anthropicMessage → 先用
 // anthropicContentBlockEnvelope peek 出块的 type → 再把同一份 raw 解进对应的
-// 块子 struct（见下方块 DTO 群）。**请求入站已无 map 逐键取值**（响应入站的
+// 块子 struct（见下方块 DTO 群），单次遍历一并产出各类结果（parseContentBlocks）。
+// **请求入站已无 map 逐键取值**（响应入站的
 // response_inbound.go 仍走 map，不在本 DTO 的职责内）。
 type anthropicRequest struct {
 	Model         shared.Optional[string]        `json:"model"`
@@ -143,7 +144,7 @@ type anthropicRedactedThinkingBlock struct {
 }
 
 // anthropicMessage 是 messages 数组元素的 DTO；content 停在 RawMessage，
-// 因为它是 string｜块数组二义，由 parseMessageContentAndToolResults 分派。
+// 因为它是 string｜块数组二义，由 parseContentBlocks 分派。
 type anthropicMessage struct {
 	Role         shared.Optional[string] `json:"role"`
 	Content      json.RawMessage         `json:"content"`

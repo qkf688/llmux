@@ -163,32 +163,36 @@ func parseMessages(raw json.RawMessage) []models.UnifiedMessage {
 			continue
 		}
 
-		content, toolResultMessages := parseMessageContentAndToolResults(msgDTO.Content)
+		// 单次遍历同一份 content，一并产出 content parts / tool_result 消息 /
+		// tool_calls / reasoning（#28：此前对同一份 content 连扫三遍）。
+		parsed := parseContentBlocks(msgDTO.Content)
 		msg := models.UnifiedMessage{
 			Role:      msgDTO.Role.Value,
-			Content:   content,
-			ToolCalls: parseToolCalls(msgDTO.Content),
+			Content:   parsed.content,
+			ToolCalls: parsed.toolCalls,
 		}
 		msg.CacheControl = parseCacheControl(msgDTO.CacheControl)
 
-		reasoning, signature, redactedData := parseReasoning(msgDTO.Content)
-		if reasoning != "" {
+		if parsed.reasoning != "" {
+			reasoning := parsed.reasoning
 			msg.ReasoningContent = &reasoning
-			if signature != "" {
+			if parsed.signature != "" {
+				signature := parsed.signature
 				msg.ReasoningSignature = &signature
 			}
 		}
-		if redactedData != "" {
+		if parsed.redactedData != "" {
+			redactedData := parsed.redactedData
 			msg.RedactedThinkingData = &redactedData
 		}
 
 		// tool_result blocks are mapped to OpenAI-style tool messages to enable cross-format conversion.
-		if len(toolResultMessages) > 0 {
-			messages = append(messages, toolResultMessages...)
+		if len(parsed.toolResultMessages) > 0 {
+			messages = append(messages, parsed.toolResultMessages...)
 		}
 
 		// If a user message only contains tool_result blocks, skip the original message.
-		if msg.Role == "user" && content == nil && len(toolResultMessages) > 0 {
+		if msg.Role == "user" && parsed.content == nil && len(parsed.toolResultMessages) > 0 {
 			continue
 		}
 
@@ -224,113 +228,87 @@ func parseTools(raw json.RawMessage) []models.UnifiedTool {
 	return tools
 }
 
-func parseToolCalls(rawContent json.RawMessage) []models.UnifiedToolCall {
-	content, ok := decodeRawArray(rawContent)
-	if !ok {
-		return nil
+func parseToolCallFromBlock(item json.RawMessage, index int) (models.UnifiedToolCall, bool) {
+	var block anthropicToolUseBlock
+	if !shared.DecodeJSONObject(item, &block) {
+		return models.UnifiedToolCall{}, false
 	}
 
-	toolCalls := make([]models.UnifiedToolCall, 0)
-	for _, item := range content {
-		var envelope anthropicContentBlockEnvelope
-		if !shared.DecodeJSONObject(item, &envelope) || envelope.Type.Value != "tool_use" {
-			continue
+	// input 必须经 map 往返再 Marshal，**不能**把 RawMessage 原文透传：
+	// json.Marshal 对 map 按键字典序输出并去掉空格，这是 map 时代确立的
+	// arguments 对外形态（arguments 直接进上游请求体）。原文透传会保留客户端
+	// 键序，属对外行为变更。非对象形态（数组 / 标量 / null / 缺失）一律塌成 "{}"。
+	argsStr := "{}"
+	var inputMap map[string]interface{}
+	if shared.DecodeJSONObject(block.Input, &inputMap) {
+		if argsBytes, err := json.Marshal(inputMap); err == nil {
+			argsStr = string(argsBytes)
 		}
-
-		var block anthropicToolUseBlock
-		if !shared.DecodeJSONObject(item, &block) {
-			continue
-		}
-
-		// input 必须经 map 往返再 Marshal，**不能**把 RawMessage 原文透传：
-		// json.Marshal 对 map 按键字典序输出并去掉空格，这是 map 时代确立的
-		// arguments 对外形态（arguments 直接进上游请求体）。原文透传会保留客户端
-		// 键序，属对外行为变更。非对象形态（数组 / 标量 / null / 缺失）一律塌成 "{}"。
-		argsStr := "{}"
-		var inputMap map[string]interface{}
-		if shared.DecodeJSONObject(block.Input, &inputMap) {
-			if argsBytes, err := json.Marshal(inputMap); err == nil {
-				argsStr = string(argsBytes)
-			}
-		}
-
-		index := len(toolCalls)
-		toolCalls = append(toolCalls, models.UnifiedToolCall{
-			ID:    block.ID.Value,
-			Type:  "function",
-			Index: index,
-			Function: models.UnifiedToolCallFunction{
-				Name:      block.Name.Value,
-				Arguments: argsStr,
-			},
-			CacheControl: parseCacheControl(block.CacheControl),
-		})
 	}
 
-	return toolCalls
+	return models.UnifiedToolCall{
+		ID:    block.ID.Value,
+		Type:  "function",
+		Index: index,
+		Function: models.UnifiedToolCallFunction{
+			Name:      block.Name.Value,
+			Arguments: argsStr,
+		},
+		CacheControl: parseCacheControl(block.CacheControl),
+	}, true
 }
 
-// parseReasoning 提取 assistant 轮的 thinking 与 redacted_thinking 块。
+// contentBlocks 是单次遍历一份 content 后的全部产出。
 //
-// thinking 的可读文本与 signature 使用既有 reasoning 字段；redacted_thinking.data
-// 是不透明密文，必须放入独立字段，禁止与文本拼接或尝试解析。统一模型当前
-// 只保留一个 redacted_thinking 块；若收到多个，保留第一个非空 data。
-func parseReasoning(rawContent json.RawMessage) (text string, signature string, redactedData string) {
-	content, ok := decodeRawArray(rawContent)
-	if !ok {
-		return "", "", ""
-	}
+// 六种块 type 的结果彼此正交，但都来自同一个数组，所以按「一次遍历、多路产出」
+// 组织，而不是每种产出各扫一遍（#28）。
+type contentBlocks struct {
+	// content 是收敛后的统一模型 Content：裸 string（content 本身是字符串，或
+	// collapseContentParts 把单个纯文本块降级）｜[]UnifiedMessageContentPart ｜
+	// 兜底透传的 json.RawMessage ｜ nil（无有效块）。
+	content            interface{}
+	toolResultMessages []models.UnifiedMessage
+	toolCalls          []models.UnifiedToolCall
 
-	var b strings.Builder
-	for _, item := range content {
-		var envelope anthropicContentBlockEnvelope
-		if !shared.DecodeJSONObject(item, &envelope) {
-			continue
-		}
-
-		switch envelope.Type.Value {
-		case "thinking":
-			var block anthropicThinkingBlock
-			if !shared.DecodeJSONObject(item, &block) {
-				continue
-			}
-			b.WriteString(block.Thinking.Value)
-			if sig := block.Signature.Value; sig != "" {
-				signature = sig
-			}
-		case "redacted_thinking":
-			if redactedData == "" {
-				var block anthropicRedactedThinkingBlock
-				if !shared.DecodeJSONObject(item, &block) {
-					continue
-				}
-				redactedData = block.Data.Value
-			}
-		}
-	}
-
-	return b.String(), signature, redactedData
+	// reasoning 是所有 thinking 块文本的顺序拼接；signature 取**最后**一个非空值
+	// （后者覆盖前者）；redactedData 取**第一个**非空值（先到先得）。两者方向相反，
+	// 是既有行为，回归测试 TestTransformToUnified_MultipleRedactedThinkingKeepsFirstNonEmpty
+	// 锁死了 redacted 侧。
+	reasoning    string
+	signature    string
+	redactedData string
 }
 
-func parseMessageContentAndToolResults(raw json.RawMessage) (content interface{}, toolResultMessages []models.UnifiedMessage) {
+// parseContentBlocks 单次遍历一份 content（messages[].content 或响应体 content），
+// 一并产出 content parts、tool_result 转出的 tool 消息、tool_calls、reasoning 三元组。
+//
+// 三种非数组形态的处理与拆分成三个函数的时代逐一等价：
+//   - 缺失 / null → 全空
+//   - 裸字符串 → 只有 content，其余为空
+//   - 既非字符串也非数组（对象 / 数字等）→ content 兜底透传原始 RawMessage。
+//     透传 RawMessage 而非解成 map：它满足 json.Marshaler，出站会原样输出字节，
+//     比 map 重序列化更保真（保留键序与数字精度）。
+func parseContentBlocks(raw json.RawMessage) contentBlocks {
+	var out contentBlocks
 	if len(raw) == 0 || shared.IsJSONNull(raw) {
-		return nil, nil
+		return out
 	}
 
 	if str, ok := shared.RawString(raw); ok {
-		return str, nil
+		out.content = str
+		return out
 	}
 
 	items, ok := decodeRawArray(raw)
 	if !ok {
 		// Keep behavior: passthrough unknown payloads (but this may reduce conversion quality).
-		// 透传 RawMessage 而非解成 map：它满足 json.Marshaler，出站会原样输出字节，
-		// 比 map 重序列化更保真（保留键序与数字精度）。下游对 Content 只断言 string 与
-		// []UnifiedMessageContentPart，两者都落同一兜底分支，故行为等价。
-		return raw, nil
+		out.content = raw
+		return out
 	}
 
 	parts := make([]models.UnifiedMessageContentPart, 0, len(items))
+	out.toolCalls = make([]models.UnifiedToolCall, 0)
+	var thinkingText strings.Builder
 
 	for _, item := range items {
 		var envelope anthropicContentBlockEnvelope
@@ -338,40 +316,78 @@ func parseMessageContentAndToolResults(raw json.RawMessage) (content interface{}
 			continue
 		}
 
-		if envelope.Type.Value == "tool_result" {
-			var block anthropicToolResultBlock
+		switch envelope.Type.Value {
+		case "tool_result":
+			if toolMsg, ok := parseToolResultBlock(item); ok {
+				out.toolResultMessages = append(out.toolResultMessages, toolMsg)
+			}
+
+		case "tool_use":
+			if toolCall, ok := parseToolCallFromBlock(item, len(out.toolCalls)); ok {
+				out.toolCalls = append(out.toolCalls, toolCall)
+			}
+
+		case "thinking":
+			var block anthropicThinkingBlock
 			if !shared.DecodeJSONObject(item, &block) {
 				continue
 			}
-
-			toolUseID := block.ToolUseID.Value
-			if toolUseID == "" {
-				continue
+			thinkingText.WriteString(block.Thinking.Value)
+			if sig := block.Signature.Value; sig != "" {
+				out.signature = sig
 			}
 
-			toolMsg := models.UnifiedMessage{
-				Role:         "tool",
-				ToolCallID:   toolUseID,
-				Content:      parseToolResultContent(block.Content),
-				CacheControl: parseCacheControl(block.CacheControl),
-			}
-			// Optional[bool] 只在 is_error 确为 JSON 布尔时 Set，与 map 时代的
-			// itemMap["is_error"].(bool) 断言等价。
-			if block.IsError.Set {
-				isErr := block.IsError.Value
-				toolMsg.ToolCallIsError = &isErr
+		case "redacted_thinking":
+			// thinking 的可读文本与 signature 使用既有 reasoning 字段；
+			// redacted_thinking.data 是不透明密文，必须放入独立字段，禁止与文本拼接
+			// 或尝试解析。统一模型只保留一个块，判据是「当前累积值仍为空」——
+			// 领头的空 data 块会被跳过，继续用后面的块填充。
+			if out.redactedData == "" {
+				var block anthropicRedactedThinkingBlock
+				if !shared.DecodeJSONObject(item, &block) {
+					continue
+				}
+				out.redactedData = block.Data.Value
 			}
 
-			toolResultMessages = append(toolResultMessages, toolMsg)
-			continue
-		}
-
-		if part, ok := parseTextOrImageBlock(item, envelope.Type.Value); ok {
-			parts = append(parts, part)
+		default:
+			if part, ok := parseTextOrImageBlock(item, envelope.Type.Value); ok {
+				parts = append(parts, part)
+			}
 		}
 	}
 
-	return collapseContentParts(parts), toolResultMessages
+	out.content = collapseContentParts(parts)
+	out.reasoning = thinkingText.String()
+	return out
+}
+
+// parseToolResultBlock 把一个 tool_result 块转成 OpenAI 风格的 tool 消息。
+// tool_use_id 为空时整块 skip（返回 false），既不产出 tool 消息也不进 content parts。
+func parseToolResultBlock(item json.RawMessage) (models.UnifiedMessage, bool) {
+	var block anthropicToolResultBlock
+	if !shared.DecodeJSONObject(item, &block) {
+		return models.UnifiedMessage{}, false
+	}
+
+	toolUseID := block.ToolUseID.Value
+	if toolUseID == "" {
+		return models.UnifiedMessage{}, false
+	}
+
+	toolMsg := models.UnifiedMessage{
+		Role:         "tool",
+		ToolCallID:   toolUseID,
+		Content:      parseToolResultContent(block.Content),
+		CacheControl: parseCacheControl(block.CacheControl),
+	}
+	// Optional[bool] 只在 is_error 确为 JSON 布尔时 Set，与 map 时代的
+	// itemMap["is_error"].(bool) 断言等价。
+	if block.IsError.Set {
+		isErr := block.IsError.Value
+		toolMsg.ToolCallIsError = &isErr
+	}
+	return toolMsg, true
 }
 
 // parseToolResultContent 解析 tool_result 的 content。

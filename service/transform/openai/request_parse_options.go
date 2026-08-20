@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/transform/shared"
 )
 
 func parseOpenAIChatStop(raw json.RawMessage) *models.UnifiedStop {
-	if len(raw) == 0 || isOpenAINullRaw(raw) {
+	if len(raw) == 0 || shared.IsJSONNull(raw) {
 		return nil
 	}
 	stop := &models.UnifiedStop{}
@@ -15,7 +16,7 @@ func parseOpenAIChatStop(raw json.RawMessage) *models.UnifiedStop {
 		stop.Single = &value
 		return stop
 	}
-	var values openAIStringSeq
+	var values shared.OptionalStringSeq
 	if err := json.Unmarshal(raw, &values); err == nil && values.Set {
 		stop.Multiple = values.Value
 		return stop
@@ -35,7 +36,7 @@ func parseOpenAIChatResponseFormat(raw json.RawMessage) *models.UnifiedResponseF
 }
 
 func parseOpenAIChatToolChoice(raw json.RawMessage) *models.UnifiedToolChoice {
-	if len(raw) == 0 || isOpenAINullRaw(raw) {
+	if len(raw) == 0 || shared.IsJSONNull(raw) {
 		return nil
 	}
 	choice := &models.UnifiedToolChoice{}

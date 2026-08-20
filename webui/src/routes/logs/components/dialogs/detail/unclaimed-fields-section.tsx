@@ -63,6 +63,10 @@ const viewByStatus: Record<UnclaimedStatus, (log: ChatLog, unclaimed: UnclaimedR
     headline: `无从检测：${log.style} 入站请求暂不支持此项检测`,
     // 措辞必须挡住「以为是 bug」的误读。不写「没有可反射的请求 DTO」这类实现术语：
     // 使用者读不懂，也无从据此行动；缺口的技术原因在 docs/architecture/modules/protocol-transform.md
+    //
+    // 注意：三个生产 style 现已全部支持检测，本分支**当前渲染不到**。保留是因为它是
+    // 后端契约的一部分——新协议 style 落地时必然先经过未注册阶段，届时这是唯一能把
+    // 「查不了」与「已检查、无未认领键」区分开的文案。清理死代码时不要删。
     description: "该协议的检测能力尚未实现，与本次请求是否正常无关。",
     fields: [],
     showBoundary: false,

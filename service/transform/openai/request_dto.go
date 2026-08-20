@@ -2,61 +2,63 @@ package openai
 
 import (
 	"encoding/json"
+
+	"github.com/qkf688/llmux/service/transform/shared"
 )
 
 type openAIChatCompletionRequest struct {
-	Model               openAIString    `json:"model"`
-	Messages            openAIRawArray  `json:"messages"`
-	Stream              openAIBool      `json:"stream"`
-	MaxTokens           openAIInt       `json:"max_tokens"`
-	Temperature         openAIFloat     `json:"temperature"`
-	TopP                openAIFloat     `json:"top_p"`
-	Tools               openAIRawArray  `json:"tools"`
-	ReasoningEffort     openAIString    `json:"reasoning_effort"`
-	FrequencyPenalty    openAIFloat     `json:"frequency_penalty"`
-	PresencePenalty     openAIFloat     `json:"presence_penalty"`
-	Seed                openAIInt64     `json:"seed"`
-	LogitBias           openAIInt64Map  `json:"logit_bias"`
-	Stop                json.RawMessage `json:"stop"`
-	User                openAIString    `json:"user"`
-	Metadata            openAIStringMap `json:"metadata"`
-	Logprobs            openAIBool      `json:"logprobs"`
-	TopLogprobs         openAIInt64     `json:"top_logprobs"`
-	MaxCompletionTokens openAIInt64     `json:"max_completion_tokens"`
-	Store               openAIBool      `json:"store"`
-	ResponseFormat      json.RawMessage `json:"response_format"`
-	ToolChoice          json.RawMessage `json:"tool_choice"`
-	ParallelToolCalls   openAIBool      `json:"parallel_tool_calls"`
-	StreamOptions       json.RawMessage `json:"stream_options"`
-	Modalities          openAIStringSeq `json:"modalities"`
-	Audio               json.RawMessage `json:"audio"`
-	ServiceTier         openAIString    `json:"service_tier"`
-	SafetyIdentifier    openAIString    `json:"safety_identifier"`
-	PromptCacheKey      openAIString    `json:"prompt_cache_key"`
+	Model               shared.Optional[string]        `json:"model"`
+	Messages            shared.RawArray                `json:"messages"`
+	Stream              shared.Optional[bool]          `json:"stream"`
+	MaxTokens           shared.OptionalNumber[int]     `json:"max_tokens"`
+	Temperature         shared.OptionalNumber[float64] `json:"temperature"`
+	TopP                shared.OptionalNumber[float64] `json:"top_p"`
+	Tools               shared.RawArray                `json:"tools"`
+	ReasoningEffort     shared.Optional[string]        `json:"reasoning_effort"`
+	FrequencyPenalty    shared.OptionalNumber[float64] `json:"frequency_penalty"`
+	PresencePenalty     shared.OptionalNumber[float64] `json:"presence_penalty"`
+	Seed                shared.OptionalNumber[int64]   `json:"seed"`
+	LogitBias           shared.OptionalInt64Map        `json:"logit_bias"`
+	Stop                json.RawMessage                `json:"stop"`
+	User                shared.Optional[string]        `json:"user"`
+	Metadata            shared.OptionalStringMap       `json:"metadata"`
+	Logprobs            shared.Optional[bool]          `json:"logprobs"`
+	TopLogprobs         shared.OptionalNumber[int64]   `json:"top_logprobs"`
+	MaxCompletionTokens shared.OptionalNumber[int64]   `json:"max_completion_tokens"`
+	Store               shared.Optional[bool]          `json:"store"`
+	ResponseFormat      json.RawMessage                `json:"response_format"`
+	ToolChoice          json.RawMessage                `json:"tool_choice"`
+	ParallelToolCalls   shared.Optional[bool]          `json:"parallel_tool_calls"`
+	StreamOptions       json.RawMessage                `json:"stream_options"`
+	Modalities          shared.OptionalStringSeq       `json:"modalities"`
+	Audio               json.RawMessage                `json:"audio"`
+	ServiceTier         shared.Optional[string]        `json:"service_tier"`
+	SafetyIdentifier    shared.Optional[string]        `json:"safety_identifier"`
+	PromptCacheKey      shared.Optional[string]        `json:"prompt_cache_key"`
 }
 
 type openAIChatMessage struct {
-	Role       openAIString    `json:"role"`
-	Content    json.RawMessage `json:"content"`
-	ToolCalls  openAIRawArray  `json:"tool_calls"`
-	ToolCallID openAIString    `json:"tool_call_id"`
+	Role       shared.Optional[string] `json:"role"`
+	Content    json.RawMessage         `json:"content"`
+	ToolCalls  shared.RawArray         `json:"tool_calls"`
+	ToolCallID shared.Optional[string] `json:"tool_call_id"`
 }
 
 type openAIChatContentPart struct {
-	Type       openAIString    `json:"type"`
-	Text       openAIString    `json:"text"`
-	ImageURL   json.RawMessage `json:"image_url"`
-	InputAudio json.RawMessage `json:"input_audio"`
+	Type       shared.Optional[string] `json:"type"`
+	Text       shared.Optional[string] `json:"text"`
+	ImageURL   json.RawMessage         `json:"image_url"`
+	InputAudio json.RawMessage         `json:"input_audio"`
 }
 
 type openAIChatImageURL struct {
-	URL    openAIString `json:"url"`
-	Detail openAIString `json:"detail"`
+	URL    shared.Optional[string] `json:"url"`
+	Detail shared.Optional[string] `json:"detail"`
 }
 
 type openAIChatInputAudio struct {
-	Data   openAIString `json:"data"`
-	Format openAIString `json:"format"`
+	Data   shared.Optional[string] `json:"data"`
+	Format shared.Optional[string] `json:"format"`
 }
 
 type openAIChatTool struct {
@@ -64,41 +66,41 @@ type openAIChatTool struct {
 }
 
 type openAIChatFunction struct {
-	Name        openAIString    `json:"name"`
-	Description openAIString    `json:"description"`
-	Parameters  json.RawMessage `json:"parameters"`
+	Name        shared.Optional[string] `json:"name"`
+	Description shared.Optional[string] `json:"description"`
+	Parameters  json.RawMessage         `json:"parameters"`
 }
 
 type openAIChatToolCall struct {
-	ID       openAIString    `json:"id"`
-	Type     openAIString    `json:"type"`
-	Function json.RawMessage `json:"function"`
+	ID       shared.Optional[string] `json:"id"`
+	Type     shared.Optional[string] `json:"type"`
+	Function json.RawMessage         `json:"function"`
 }
 
 type openAIChatToolCallFunction struct {
-	Name      openAIString    `json:"name"`
-	Arguments json.RawMessage `json:"arguments"`
+	Name      shared.Optional[string] `json:"name"`
+	Arguments json.RawMessage         `json:"arguments"`
 }
 
 type openAIChatResponseFormat struct {
-	Type       openAIString    `json:"type"`
-	JSONSchema json.RawMessage `json:"json_schema"`
+	Type       shared.Optional[string] `json:"type"`
+	JSONSchema json.RawMessage         `json:"json_schema"`
 }
 
 type openAIChatToolChoiceObject struct {
-	Type     openAIString    `json:"type"`
-	Function json.RawMessage `json:"function"`
+	Type     shared.Optional[string] `json:"type"`
+	Function json.RawMessage         `json:"function"`
 }
 
 type openAIChatToolChoiceFunction struct {
-	Name openAIString `json:"name"`
+	Name shared.Optional[string] `json:"name"`
 }
 
 type openAIChatStreamOptions struct {
-	IncludeUsage openAIBool `json:"include_usage"`
+	IncludeUsage shared.Optional[bool] `json:"include_usage"`
 }
 
 type openAIChatAudio struct {
-	Voice  openAIString `json:"voice"`
-	Format openAIString `json:"format"`
+	Voice  shared.Optional[string] `json:"voice"`
+	Format shared.Optional[string] `json:"format"`
 }

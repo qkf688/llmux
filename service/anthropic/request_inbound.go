@@ -4,48 +4,58 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/qkf688/llmux/models"
-	"github.com/qkf688/llmux/service/transform/shared"
 	"strings"
 
 	"github.com/qkf688/llmux/common/maputil"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/transform/shared"
 )
 
 // TransformToUnified 将 Anthropic 请求格式转换为统一格式。
+//
+// 顶层字段走 anthropicRequest DTO（见 request_dto.go），嵌套多态结构仍走 map 解析。
+// DTO 的字段容器全部宽容（类型不匹配 = 当作未传，不报错），故本函数只在 body 不是
+// JSON 对象时返回错误。
+//
+// 与 map 时代的**唯一**对外差异：顶层键匹配由精确查找变成 encoding/json 的「先精确、
+// 未命中再 EqualFold」，即 `{"Max_Tokens":100}` 现在能解析（旧版静默丢失）。这是刻意
+// 接受的改善——openai 入站早已是 DTO（同样大小写不敏感），`shared.UnknownTopLevelKeys`
+// 的 isClaimedKey 也做 EqualFold 兜底；旧版 anthropic 的「检测认为 Temperature 已认领、
+// 解析却读不到它」才是两侧不一致。
 func TransformToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedRequest, error) {
-	var req map[string]interface{}
+	var req anthropicRequest
 	if err := json.Unmarshal(rawBody, &req); err != nil {
 		return nil, err
 	}
 
 	unified := &models.UnifiedRequest{
-		Model:  maputil.String(req, "model"),
-		Stream: maputil.Bool(req, "stream"),
+		Model:  req.Model.Value,
+		Stream: req.Stream.Value,
 	}
-	unified.System, unified.SystemParts = parseSystem(req["system"])
+	unified.System, unified.SystemParts = parseSystem(shared.RawJSONValue(req.System))
 
-	if maxTokens, ok := req["max_tokens"].(float64); ok {
-		unified.MaxTokens = int(maxTokens)
+	if req.MaxTokens.Set {
+		unified.MaxTokens = req.MaxTokens.Value
 	}
-	if temp, ok := req["temperature"].(float64); ok {
-		unified.Temperature = &temp
+	if req.Temperature.Set {
+		unified.Temperature = &req.Temperature.Value
 	}
-	if topP, ok := req["top_p"].(float64); ok {
-		unified.TopP = &topP
-	}
-
-	unified.Messages = parseMessages(req["messages"])
-	unified.Tools = parseTools(req["tools"])
-
-	if stopSeqs := maputil.StringSlice(req, "stop_sequences"); len(stopSeqs) > 0 {
-		unified.Stop = &models.UnifiedStop{Multiple: stopSeqs}
+	if req.TopP.Set {
+		unified.TopP = &req.TopP.Value
 	}
 
-	if metadata := maputil.StringMap(req, "metadata"); len(metadata) > 0 {
-		unified.Metadata = metadata
+	unified.Messages = parseMessages(shared.RawJSONValue(req.Messages))
+	unified.Tools = parseTools(shared.RawJSONValue(req.Tools))
+
+	if req.StopSequences.Set && len(req.StopSequences.Value) > 0 {
+		unified.Stop = &models.UnifiedStop{Multiple: req.StopSequences.Value}
 	}
 
-	if thinking, ok := asMap(req["thinking"]); ok {
+	if req.Metadata.Set && len(req.Metadata.Value) > 0 {
+		unified.Metadata = req.Metadata.Value
+	}
+
+	if thinking, ok := asMap(shared.RawJSONValue(req.Thinking)); ok {
 		thinkingType := maputil.String(thinking, "type")
 		budgetTokens := maputil.Int64(thinking, "budget_tokens")
 		if thinkingType == "enabled" && budgetTokens > 0 {
@@ -62,7 +72,7 @@ func TransformToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedReq
 	// 归一化开关与 OpenAI/Responses 入站一致：开启时走 NormalizeReasoningEffort，
 	// 关闭时原值透传（用户显式关闭映射设置后，跨协议行为对称）；
 	// budget 仍取 thinking.budget_tokens（两字段并存，出站 budget 优先已有实现不变）。
-	if outputConfig, ok := asMap(req["output_config"]); ok {
+	if outputConfig, ok := asMap(shared.RawJSONValue(req.OutputConfig)); ok {
 		if effortStr := maputil.String(outputConfig, "effort"); effortStr != "" {
 			effort := effortStr
 			if shared.GetReasoningEffortMappingEnabled(ctx) {
@@ -73,7 +83,7 @@ func TransformToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedReq
 	}
 
 	// tool_choice (best-effort): keep unified semantics as OpenAI-style tool_choice.
-	if rawToolChoice, exists := req["tool_choice"]; exists && rawToolChoice != nil {
+	if rawToolChoice := shared.RawJSONValue(req.ToolChoice); rawToolChoice != nil {
 		unified.ToolChoice = &models.UnifiedToolChoice{}
 
 		if v, ok := rawToolChoice.(string); ok && v != "" {

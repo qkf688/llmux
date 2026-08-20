@@ -484,3 +484,30 @@ func TestTransformToUnified_OutputConfigEffort_Robustness(t *testing.T) {
 		})
 	}
 }
+
+// Stage 1 的 map → DTO 迁移带来的**唯一**对外行为差异：顶层键匹配走 encoding/json 的
+// 「先精确、未命中再 EqualFold」，而 map 时代 `req["max_tokens"]` 是精确查找、
+// `{"Max_Tokens":100}` 会静默丢失。
+//
+// 本用例把这条差异钉成已知契约，避免后人拿「DTO 迁移零行为变更」这句结论去做
+// 「anthropic 入站不受键名大小写影响」的推理而踩空。方向上是改善：openai 入站早已是
+// DTO（同样不敏感），UnknownTopLevelKeys 的认领判定也做 EqualFold 兜底。
+func TestTransformToUnified_TopLevelKeysAreCaseInsensitive(t *testing.T) {
+	raw := []byte(`{
+		"model":"claude-3-5-sonnet",
+		"Max_Tokens":100,
+		"Stop_Sequences":["END"],
+		"messages":[{"role":"user","content":"hi"}]
+	}`)
+
+	unified, err := TransformToUnified(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("TransformToUnified 失败: %v", err)
+	}
+	if unified.MaxTokens != 100 {
+		t.Fatalf("Max_Tokens 应被 EqualFold 命中，实际 MaxTokens=%d", unified.MaxTokens)
+	}
+	if unified.Stop == nil || len(unified.Stop.Multiple) != 1 || unified.Stop.Multiple[0] != "END" {
+		t.Fatalf("Stop_Sequences 应被 EqualFold 命中，实际 %#v", unified.Stop)
+	}
+}

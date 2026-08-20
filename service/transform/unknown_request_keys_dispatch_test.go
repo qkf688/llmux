@@ -38,6 +38,19 @@ func TestUnknownRequestKeys_DetectsUnclaimedKeysPerStyle(t *testing.T) {
 			raw:   `{"model":"gpt-5","messages":[],"temperature":0.7}`,
 			want:  []string{},
 		},
+		{
+			// top_k / container 是 Anthropic 真实 API 有、但本网关入站 DTO 未认领的键，
+			// 报出来是正确行为（不要为了让报告干净而把它们塞进 DTO）。
+			style: consts.StyleAnthropic,
+			raw:   `{"model":"claude","messages":[],"system":"s","top_k":40,"container":"c"}`,
+			want:  []string{"container", "top_k"},
+		},
+		{
+			// anthropic 独有的顶层键必须被认领，否则检测一上线就整片误报。
+			style: consts.StyleAnthropic,
+			raw:   `{"model":"claude","messages":[],"system":"s","stop_sequences":["x"],"thinking":{"type":"enabled","budget_tokens":1024},"output_config":{"effort":"high"},"tool_choice":"auto","metadata":{"user_id":"u"}}`,
+			want:  []string{},
+		},
 	}
 
 	for _, tc := range cases {
@@ -59,9 +72,7 @@ func TestUnknownRequestKeys_DetectsUnclaimedKeysPerStyle(t *testing.T) {
 // openai 的键集合去查 anthropic 请求，system/stop_sequences 之类会被整片误报，
 // 正是 TestUnknownTopLevelKeys_OutboundRenameIsNotUnknown 要防的病灶。
 func TestUnknownRequestKeys_UnsupportedStyleReportsUnsupported(t *testing.T) {
-	// anthropic 是真实存在的 style，但入站没有请求 DTO 可反射（见
-	// service/transform/anthropic/adapter.go 的说明），属于已知限制。
-	for _, style := range []string{consts.StyleAnthropic, "some-future-style", ""} {
+	for _, style := range []string{"some-future-style", ""} {
 		t.Run(style, func(t *testing.T) {
 			got, err := UnknownRequestKeys(style, []byte(`{"model":"m","system":"s"}`))
 			if !errors.Is(err, ErrClaimedKeysUnsupported) {

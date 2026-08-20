@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/transform/shared"
 )
 
-func parseOpenAIChatTools(tools openAIRawArray) []models.UnifiedTool {
+func parseOpenAIChatTools(tools shared.RawArray) []models.UnifiedTool {
 	var unified []models.UnifiedTool
 	for _, raw := range tools {
 		var tool openAIChatTool
@@ -22,14 +23,14 @@ func parseOpenAIChatTools(tools openAIRawArray) []models.UnifiedTool {
 			Function: models.UnifiedFunc{
 				Name:        fn.Name.Value,
 				Description: fn.Description.Value,
-				Parameters:  rawOpenAIValue(fn.Parameters),
+				Parameters:  shared.RawJSONValue(fn.Parameters),
 			},
 		})
 	}
 	return unified
 }
 
-func parseOpenAIChatToolCalls(toolCalls openAIRawArray) []models.UnifiedToolCall {
+func parseOpenAIChatToolCalls(toolCalls shared.RawArray) []models.UnifiedToolCall {
 	var unified []models.UnifiedToolCall
 	for _, raw := range toolCalls {
 		var toolCall openAIChatToolCall

@@ -82,11 +82,20 @@ func TestGetRequestLogDetail_UnclaimedRequestFieldsStatuses(t *testing.T) {
 			wantFields: []string{"messages"},
 		},
 		{
-			// anthropic 入站没有请求 DTO 可反射（见 service/transform/anthropic/adapter.go）。
-			// 必须显式报不支持——返回空数组会被读成「已检查、无未知字段」，即假阴性。
-			name:       "anthropic_unsupported",
+			// anthropic 入站已有请求 DTO（service/anthropic/request_dto.go）：
+			// system / messages 被认领，top_k 是 Anthropic 真实 API 有而网关未解析的键。
+			name:       "anthropic_uses_its_own_key_set",
 			style:      consts.StyleAnthropic,
-			rawBody:    `{"model":"claude","system":"s","messages":[]}`,
+			rawBody:    `{"model":"claude","system":"s","messages":[],"top_k":40}`,
+			wantStatus: unclaimedStatusOK,
+			wantFields: []string{"top_k"},
+		},
+		{
+			// 未注册的 style 必须显式报不支持——返回空数组会被读成「已检查、无未知字段」，
+			// 即假阴性。当前三个生产 style 均已注册，故这里用一个不存在的 style 覆盖该分支。
+			name:       "unregistered_style_unsupported",
+			style:      "some-future-style",
+			rawBody:    `{"model":"m","system":"s"}`,
 			wantStatus: unclaimedStatusStyleUnsupported,
 			wantFields: []string{},
 		},

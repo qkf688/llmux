@@ -89,7 +89,10 @@ const (
 	// unclaimedStatusRawNotRecorded：原始请求体没落库，无从检测。
 	// 常见原因是 log_raw_request_response 开关默认全关，或 errors_only 在成功时清空了它。
 	unclaimedStatusRawNotRecorded = "raw_not_recorded"
-	// unclaimedStatusStyleUnsupported：该入站协议没有可反射的请求 DTO（当前是 anthropic）。
+	// unclaimedStatusStyleUnsupported：该入站协议没有注册可反射的请求 DTO。
+	// 三个生产 style（openai / openai-res / anthropic）现已全部注册，故本状态在生产
+	// **暂无可达路径**；保留是因为它仍是活契约——新 style 落地时必然先经过未注册阶段，
+	// 那期间只有本状态能把「查不了」与「已检查、无未认领键」区分开。
 	unclaimedStatusStyleUnsupported = "style_unsupported"
 	// unclaimedStatusParseError：原始 body 不是 JSON 对象，键的概念不成立。
 	unclaimedStatusParseError = "parse_error"

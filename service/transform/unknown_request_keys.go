@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/qkf688/llmux/consts"
+	"github.com/qkf688/llmux/service/transform/anthropic"
 	"github.com/qkf688/llmux/service/transform/openai"
 	"github.com/qkf688/llmux/service/transform/responses"
 	"github.com/qkf688/llmux/service/transform/shared"
@@ -14,11 +15,10 @@ import (
 // 顶层键本网关根本没解析」的可消费入口。消费方是低频诊断路径（日志详情接口），
 // 见 handler/logs。
 //
-// 为什么不把认领键做成 FormatAdapter 的第五个方法（ISP）：Anthropic 入站没有请求
-// DTO 可反射，进接口就得逼它空实现或返 nil，调用方反而要靠约定判断「返回空到底
-// 是没有未知字段还是这个协议答不了」。做成独立的可选注册表后，「未注册 = 不支持」
-// 是编译期事实——想支持 anthropic 只需在它有了请求 DTO 之后加一行注册（OCP），
-// 本文件与 FormatAdapter 都不用动。
+// 为什么不把认领键做成 FormatAdapter 的第五个方法（ISP）：认领键是**入站**解析的
+// 性质，而 FormatAdapter 同时管出站；塞进接口会让「这个协议答不答得了」变成运行时
+// 约定而非编译期事实。做成独立的可选注册表后，某个 style 支持与否只看它在下面的
+// init 里有没有那一行（OCP）。
 
 // ErrClaimedKeysUnsupported 表示该 style 没有可反射的入站请求 DTO，无法计算未知字段。
 //
@@ -49,7 +49,7 @@ func registerClaimedRequestKeys(style string, keys func() map[string]struct{}) {
 func init() {
 	registerClaimedRequestKeys(consts.StyleOpenAI, openai.ClaimedRequestKeys)
 	registerClaimedRequestKeys(consts.StyleOpenAIRes, responses.ClaimedRequestKeys)
-	// consts.StyleAnthropic 刻意缺席，理由见 service/transform/anthropic/adapter.go。
+	registerClaimedRequestKeys(consts.StyleAnthropic, anthropic.ClaimedRequestKeys)
 }
 
 // UnknownRequestKeys 返回 rawBody 里出现、但 style 对应的入站 DTO 未认领的顶层键，已排序。

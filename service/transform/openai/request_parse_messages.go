@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/transform/shared"
 )
 
-func parseOpenAIChatMessages(messages openAIRawArray) ([]models.UnifiedMessage, string) {
+func parseOpenAIChatMessages(messages shared.RawArray) ([]models.UnifiedMessage, string) {
 	decoded := make([]openAIChatMessage, 0, len(messages))
 	for _, raw := range messages {
 		var msg openAIChatMessage
@@ -54,7 +55,7 @@ func parseOpenAIChatMessages(messages openAIRawArray) ([]models.UnifiedMessage, 
 }
 
 func parseOpenAIChatMessageContent(raw json.RawMessage) interface{} {
-	content := rawOpenAIValue(raw)
+	content := shared.RawJSONValue(raw)
 	if content == nil {
 		return nil
 	}

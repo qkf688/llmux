@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/qkf688/llmux/service/transform/anthropic"
 	"github.com/qkf688/llmux/service/transform/openai"
 	"github.com/qkf688/llmux/service/transform/responses"
 	"github.com/qkf688/llmux/service/transform/shared"
@@ -34,6 +35,15 @@ func TestClaimedRequestKeys_ProtocolsClaimTheirOwnKeys(t *testing.T) {
 			claimed:    responses.ClaimedRequestKeys(),
 			mustHave:   []string{"model", "input", "instructions", "max_output_tokens", "reasoning", "service_tier", "safety_identifier", "prompt_cache_key"},
 			mustNotHav: []string{"messages", "max_tokens", "stop", "reasoning_effort"},
+		},
+		{
+			// anthropic 的键集合来自 service/anthropic 的入站 DTO（本包只能经 adapter 转发拿到）。
+			// mustNotHav 里的 top_k 是纪律锚点：它是 Anthropic 真实 API 字段但网关未解析，
+			// 谁把它塞进 DTO 而不接进 UnifiedRequest，这条就会失败（见 request_dto.go 的纪律说明）。
+			style:      "anthropic",
+			claimed:    anthropic.ClaimedRequestKeys(),
+			mustHave:   []string{"model", "messages", "system", "max_tokens", "stop_sequences", "thinking", "output_config", "tool_choice", "metadata"},
+			mustNotHav: []string{"stop", "reasoning_effort", "input", "max_output_tokens", "top_k"},
 		},
 	}
 

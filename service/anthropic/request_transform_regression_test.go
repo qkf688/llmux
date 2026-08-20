@@ -650,3 +650,281 @@ func TestTransformToUnified_ToolChoiceBranches(t *testing.T) {
 		})
 	}
 }
+
+// 疑虑 #4 表征测试之一（锁死现状，供 #16 struct 化重构兜底）：
+// tool_result 块的 tool_use_id 为空时，parseMessageContentAndToolResults 会「按块」skip 该块，
+// 既不产出 tool 消息也不进入 content parts；非空时才产出 tool 消息。
+// 两个 case 都带一个 text 块以保证外层 user 消息在两种情况下都存活，
+// 从而把「块是否被 skip」与规则 2「user 仅含 tool_result 则整条丢弃」隔离开。
+func TestTransformToUnified_ToolResultEmptyToolUseIDSkipsBlock(t *testing.T) {
+	tests := []struct {
+		name           string
+		body           string
+		wantMessages   int
+		wantToolMsg    bool   // 是否期望存在一条 Role=="tool" 消息
+		wantToolCallID string // wantToolMsg 时该 tool 消息的 ToolCallID
+	}{
+		{
+			name: "empty tool_use_id skips the block",
+			body: `{
+				"model":"m","max_tokens":1024,
+				"messages":[
+					{"role":"user","content":[
+						{"type":"tool_result","tool_use_id":"","content":"ignored"},
+						{"type":"text","text":"hi"}
+					]}
+				]
+			}`,
+			wantMessages: 1,
+			wantToolMsg:  false,
+		},
+		{
+			name: "non-empty tool_use_id produces a tool message",
+			body: `{
+				"model":"m","max_tokens":1024,
+				"messages":[
+					{"role":"user","content":[
+						{"type":"tool_result","tool_use_id":"toolu_1","content":"ok"},
+						{"type":"text","text":"hi"}
+					]}
+				]
+			}`,
+			wantMessages:   2,
+			wantToolMsg:    true,
+			wantToolCallID: "toolu_1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			unified, err := TransformToUnified(context.Background(), []byte(tt.body))
+			if err != nil {
+				t.Fatalf("TransformToUnified 失败: %v", err)
+			}
+			if len(unified.Messages) != tt.wantMessages {
+				t.Fatalf("消息条数应为 %d，实际 %d: %#v", tt.wantMessages, len(unified.Messages), unified.Messages)
+			}
+
+			var toolMsg *models.UnifiedMessage
+			var userMsg *models.UnifiedMessage
+			for i := range unified.Messages {
+				switch unified.Messages[i].Role {
+				case "tool":
+					toolMsg = &unified.Messages[i]
+				case "user":
+					userMsg = &unified.Messages[i]
+				}
+			}
+
+			if tt.wantToolMsg {
+				if toolMsg == nil {
+					t.Fatalf("应存在一条 tool 消息，实际无: %#v", unified.Messages)
+				}
+				if toolMsg.ToolCallID != tt.wantToolCallID {
+					t.Fatalf("tool 消息 ToolCallID 应为 %q，实际 %q", tt.wantToolCallID, toolMsg.ToolCallID)
+				}
+			} else if toolMsg != nil {
+				t.Fatalf("空 tool_use_id 不应产出 tool 消息，实际 %#v", toolMsg)
+			}
+
+			// 两个 case 都含 text 块，user 消息必须存活且 content 收敛为 "hi"。
+			if userMsg == nil {
+				t.Fatalf("含 text 块的 user 消息应存活，实际无: %#v", unified.Messages)
+			}
+			if content, ok := userMsg.Content.(string); !ok || content != "hi" {
+				t.Fatalf("user 消息 content 应为 \"hi\"，实际 %#v", userMsg.Content)
+			}
+		})
+	}
+}
+
+// 疑虑 #4 表征测试之二（锁死现状，供 #16 struct 化重构兜底）：
+// parseMessages 丢弃原消息的三个条件必须同时成立——role=="user" 且 content==nil 且产出过 tool 消息。
+//
+// 注意实际判据是「没有产出任何有效 text/image part 导致 content==nil」，
+// **不是**「content 数组里只有 tool_result 类型的块」：空 text 块同样不产出 part，
+// 因此 [tool_result, 空 text] 也会触发丢弃。#16 重构时不要把它错读成按块类型判断。
+// tool 消息本身在丢弃判断之前已先行 append，被丢的只是原始 user 外壳消息。
+func TestTransformToUnified_UserMessageOnlyToolResultDropped(t *testing.T) {
+	tests := []struct {
+		name            string
+		body            string
+		wantRoles       []string // 期望的消息角色序列（tool 消息先于原消息 append）
+		wantShellString string   // 非空时校验存活的外壳消息 content
+	}{
+		{
+			name: "user with only tool_result drops the shell message",
+			body: `{
+				"model":"m","max_tokens":1024,
+				"messages":[
+					{"role":"user","content":[
+						{"type":"tool_result","tool_use_id":"toolu_1","content":"ok"}
+					]}
+				]
+			}`,
+			wantRoles: []string{"tool"},
+		},
+		{
+			name: "user with tool_result plus text keeps the shell message",
+			body: `{
+				"model":"m","max_tokens":1024,
+				"messages":[
+					{"role":"user","content":[
+						{"type":"tool_result","tool_use_id":"toolu_1","content":"ok"},
+						{"type":"text","text":"hi"}
+					]}
+				]
+			}`,
+			wantRoles:       []string{"tool", "user"},
+			wantShellString: "hi",
+		},
+		{
+			name: "empty text block yields no part so the shell is still dropped",
+			body: `{
+				"model":"m","max_tokens":1024,
+				"messages":[
+					{"role":"user","content":[
+						{"type":"tool_result","tool_use_id":"toolu_1","content":"ok"},
+						{"type":"text","text":""}
+					]}
+				]
+			}`,
+			wantRoles: []string{"tool"},
+		},
+		{
+			name: "non-user role is never dropped",
+			body: `{
+				"model":"m","max_tokens":1024,
+				"messages":[
+					{"role":"assistant","content":[
+						{"type":"tool_result","tool_use_id":"toolu_1","content":"ok"}
+					]}
+				]
+			}`,
+			wantRoles: []string{"tool", "assistant"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			unified, err := TransformToUnified(context.Background(), []byte(tt.body))
+			if err != nil {
+				t.Fatalf("TransformToUnified 失败: %v", err)
+			}
+			if len(unified.Messages) != len(tt.wantRoles) {
+				t.Fatalf("消息条数应为 %d，实际 %d: %#v", len(tt.wantRoles), len(unified.Messages), unified.Messages)
+			}
+			for i, wantRole := range tt.wantRoles {
+				if unified.Messages[i].Role != wantRole {
+					t.Fatalf("第 %d 条消息 role 应为 %q，实际 %q", i, wantRole, unified.Messages[i].Role)
+				}
+			}
+			if unified.Messages[0].ToolCallID != "toolu_1" {
+				t.Fatalf("tool 消息 ToolCallID 应为 toolu_1，实际 %q", unified.Messages[0].ToolCallID)
+			}
+
+			if tt.wantShellString != "" {
+				shell := unified.Messages[len(unified.Messages)-1]
+				if content, ok := shell.Content.(string); !ok || content != tt.wantShellString {
+					t.Fatalf("存活外壳消息 content 应为 %q，实际 %#v", tt.wantShellString, shell.Content)
+				}
+			}
+		})
+	}
+}
+
+// 疑虑 #4 表征测试之三（锁死现状，供 #16 struct 化重构兜底）：
+// 统一模型只有一个 RedactedThinkingData 字段，parseReasoning 遇到多个 redacted_thinking 块时
+// 保留**第一个 data 非空**的块——判据是「当前累积值仍为空」而不是「是第一个块」，
+// 所以领头的空 data 块会被跳过、继续用后面的块填充，填上之后其余块全部忽略。
+// 与 thinking 块的 signature「后者覆盖前者」语义相反，#16 重构时勿混淆两者。
+func TestTransformToUnified_MultipleRedactedThinkingKeepsFirstNonEmpty(t *testing.T) {
+	raw := []byte(`{
+		"model":"m","max_tokens":1024,
+		"messages":[
+			{"role":"assistant","content":[
+				{"type":"redacted_thinking","data":""},
+				{"type":"redacted_thinking","data":"D1"},
+				{"type":"redacted_thinking","data":"D2"}
+			]}
+		]
+	}`)
+
+	unified, err := TransformToUnified(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("TransformToUnified 失败: %v", err)
+	}
+	if len(unified.Messages) != 1 {
+		t.Fatalf("应产出 1 条 assistant 消息，实际 %d: %#v", len(unified.Messages), unified.Messages)
+	}
+
+	msg := unified.Messages[0]
+	if msg.Role != "assistant" {
+		t.Fatalf("role 应为 assistant，实际 %q", msg.Role)
+	}
+	if msg.RedactedThinkingData == nil {
+		t.Fatalf("RedactedThinkingData 不应为 nil")
+	}
+	if *msg.RedactedThinkingData != "D1" {
+		t.Fatalf("应保留首个非空 data \"D1\"，实际 %q", *msg.RedactedThinkingData)
+	}
+	// redacted_thinking 块不产出 text/image part，外壳 content 收敛为 nil。
+	if msg.Content != nil {
+		t.Fatalf("仅含 redacted_thinking 时 content 应为 nil，实际 %#v", msg.Content)
+	}
+}
+
+// 疑虑 #4 表征测试之四（锁死现状，供 #16 struct 化重构兜底）：
+// parseToolCalls 把 arguments 初始化为 "{}"，仅当 input 断言成 JSON object 成功时才覆盖。
+// 因此数组 / 标量 / 缺失 / null 形态的 input 全部静默塌成 "{}"——上游拿不到原始 input，
+// 这是当前的宽容取舍。#16 用 RawMessage 承接 input 时必须维持同样的塌陷结果。
+func TestTransformToUnified_ToolUseNonMapInputKeepsEmptyArgs(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string // tool_use 块里 input 字段的原文；空串表示不写该键
+		wantArgs string
+	}{
+		{name: "array input collapses to empty object", input: `[1,2]`, wantArgs: "{}"},
+		{name: "string input collapses to empty object", input: `"foo"`, wantArgs: "{}"},
+		{name: "number input collapses to empty object", input: `5`, wantArgs: "{}"},
+		{name: "null input collapses to empty object", input: `null`, wantArgs: "{}"},
+		{name: "missing input collapses to empty object", input: ``, wantArgs: "{}"},
+		{name: "object input is marshaled through", input: `{"a":1}`, wantArgs: `{"a":1}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inputField := ""
+			if tt.input != "" {
+				inputField = `,"input":` + tt.input
+			}
+			body := `{
+				"model":"m","max_tokens":1024,
+				"messages":[
+					{"role":"assistant","content":[
+						{"type":"tool_use","id":"toolu_1","name":"fn"` + inputField + `}
+					]}
+				]
+			}`
+
+			unified, err := TransformToUnified(context.Background(), []byte(body))
+			if err != nil {
+				t.Fatalf("TransformToUnified 失败: %v", err)
+			}
+			if len(unified.Messages) != 1 {
+				t.Fatalf("应产出 1 条 assistant 消息，实际 %d: %#v", len(unified.Messages), unified.Messages)
+			}
+
+			toolCalls := unified.Messages[0].ToolCalls
+			if len(toolCalls) != 1 {
+				t.Fatalf("应产出 1 个 tool_call，实际 %d: %#v", len(toolCalls), toolCalls)
+			}
+			if toolCalls[0].Function.Arguments != tt.wantArgs {
+				t.Fatalf("arguments 应为 %q，实际 %q", tt.wantArgs, toolCalls[0].Function.Arguments)
+			}
+			if toolCalls[0].ID != "toolu_1" || toolCalls[0].Function.Name != "fn" {
+				t.Fatalf("tool_call 元信息错误: %#v", toolCalls[0])
+			}
+		})
+	}
+}

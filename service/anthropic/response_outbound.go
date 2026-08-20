@@ -83,10 +83,20 @@ func FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
 	}
 
 	if unified.Usage != nil {
-		resp["usage"] = map[string]interface{}{
+		usage := map[string]interface{}{
 			"input_tokens":  unified.Usage.PromptTokens,
 			"output_tokens": unified.Usage.CompletionTokens,
 		}
+		// 按 Anthropic Messages 官方 usage 形状逐键决定，不照搬统一模型：
+		// ① **无 total_tokens**——该协议不定义此键，写出去是非标准扩展，故 TotalTokens 刻意丢弃；
+		// ② cached 命中数的官方键是顶层 cache_read_input_tokens（非 OpenAI 的嵌套 details）；
+		// ③ reasoning / audio 明细在本协议无槽位（thinking 计入 output_tokens），按协议能力裁剪。
+		// 仅在 >0 时写：显式 0 会被下游读成「上游报告了无缓存命中」，与「键缺失＝未知」是两种语义
+		// ——与流式侧 responses_to_anthropic.go 的 message_delta usage 判据保持同一口径。
+		if cached := unified.Usage.PromptTokensDetails.CachedTokens; cached > 0 {
+			usage["cache_read_input_tokens"] = cached
+		}
+		resp["usage"] = usage
 	}
 
 	return json.Marshal(resp)

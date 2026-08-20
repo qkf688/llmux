@@ -28,6 +28,7 @@
   "stop_reason": "tool_use",
   "type": "message",
   "usage": {
+    "cache_read_input_tokens": 3,
     "input_tokens": 11,
     "output_tokens": 22
   }

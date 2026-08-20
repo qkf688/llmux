@@ -98,6 +98,62 @@ func TestFormatResponse(t *testing.T) {
 	}
 }
 
+// Anthropic Messages 的缓存命中数官方键是顶层 cache_read_input_tokens；出站此前只写
+// input_tokens / output_tokens，缓存命中在统一模型里明明有值却被整段丢掉，
+// 客户端据此算出的成本会显著虚高（缓存读单价仅基础价的十分之一量级）。
+//
+// 表驱动同时锁死另一半契约：cached==0 时**不得**写出该键——显式 0 会被下游读成
+// 「上游明确报告了无缓存命中」，与「键缺失＝未知」是两种语义（与流式侧同一判据）。
+// total_tokens 两种情况下都不出现：该协议不定义此键，写出去即非标准扩展。
+func TestFormatResponse_UsageCacheReadTokens(t *testing.T) {
+	tests := []struct {
+		name       string
+		cached     int64
+		wantKey    bool
+		wantCached float64
+	}{
+		{name: "有缓存命中：写出顶层 cache_read_input_tokens", cached: 8, wantKey: true, wantCached: 8},
+		{name: "无缓存命中：不写该键", cached: 0, wantKey: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			usageIn := &models.Usage{PromptTokens: 100, CompletionTokens: 20, TotalTokens: 120}
+			usageIn.PromptTokensDetails.CachedTokens = tt.cached
+
+			body, err := FormatResponse(&models.UnifiedResponse{
+				ID:      "msg_cache",
+				Model:   "claude-3-5-sonnet",
+				Choices: []models.UnifiedChoice{{Message: &models.UnifiedMessage{Role: "assistant", Content: "hi"}}},
+				Usage:   usageIn,
+			})
+			if err != nil {
+				t.Fatalf("FormatResponse returned error: %v", err)
+			}
+
+			var resp map[string]interface{}
+			if err := json.Unmarshal(body, &resp); err != nil {
+				t.Fatalf("unmarshal result failed: %v", err)
+			}
+			usage, ok := resp["usage"].(map[string]interface{})
+			if !ok {
+				t.Fatal("expected usage field")
+			}
+
+			got, present := usage["cache_read_input_tokens"]
+			if present != tt.wantKey {
+				t.Fatalf("cache_read_input_tokens present = %v, want %v (usage=%+v)", present, tt.wantKey, usage)
+			}
+			if tt.wantKey && got.(float64) != tt.wantCached {
+				t.Fatalf("cache_read_input_tokens = %v, want %v", got, tt.wantCached)
+			}
+			if _, present := usage["total_tokens"]; present {
+				t.Fatalf("total_tokens 不属于 Anthropic usage 契约，不应写出: %+v", usage)
+			}
+		})
+	}
+}
+
 func TestParseResponse_MapsThinkingAndMultimodalContent(t *testing.T) {
 	raw := []byte(`{
 		"id":"msg_1",

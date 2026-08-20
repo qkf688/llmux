@@ -76,6 +76,8 @@ models/
 
 
 
+- **非流 Anthropic 出站 usage 按协议逐键裁剪（刻意不进 `usage_wire.go`）**：`service/anthropic/response_outbound.go` 的 `FormatResponse` 写 `input_tokens` / `output_tokens`，缓存命中写**顶层** `cache_read_input_tokens`（Anthropic Messages 官方键，非 OpenAI 的嵌套 `*_tokens_details`），且 `>0` 才写——显式 0 会被下游读成「上游报告了无缓存命中」，与「键缺失＝未知」是两种语义，与流式 `responses_to_anthropic.go` 的 `message_delta` usage 同一判据。`total_tokens` 与 reasoning / audio 明细**刻意不写**：前者不在该协议 usage 契约内（写出即非标准扩展），后者在该协议无槽位（thinking 计入 `output_tokens`）。不收进 `usageWireKeys` 的理由与流式侧同款：差异不止键名（无 total、明细在顶层、无 reasoning 槽位），参数化会退化成布尔开关堆。契约由 `TestFormatResponse_UsageCacheReadTokens`（两向断言：有命中写出、无命中不写、`total_tokens` 恒不出现）+ `format_response/full/anthropic.json` golden 双重锁住
+
 - **扩展点分布（现状）**：新外部格式通常同时涉及 `RegisterAdapter`、流式 `RegisterRealtimeRoute`（若涉及 SSE）、chat 侧 `Beforer`/`Processer`、`register_v1` 路由与 `consts.Style*`；Realtime 矩阵当前未覆盖全部协议组合，部分路径走 pivot/遗留逻辑
 - **Responses `function_call_output.output` 多模态**：`ResponsesItem.Output` 为 `interface{}`——纯文本 tool result 输出 `string`（老上游兼容），含图片块输出 `input_text`/`input_image` 数组（OpenAI Responses 协议规范）。编解码 helper 在 `service/responses/tool_content_codec.go`，入站解析复用 `parsePartsToUnifiedContent`（纯文本→string、含图片→块数组，与 Anthropic 路径行为一致）
 - 专题细节可参考历史图示（本地 `local/架构文档/格式转换架构图.md`，未入库）

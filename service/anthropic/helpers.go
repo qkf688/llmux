@@ -3,20 +3,15 @@ package anthropic
 import (
 	"encoding/json"
 
-	"github.com/qkf688/llmux/common/maputil"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/transform/shared"
 )
 
-// parseRawCacheControl 是 parseCacheControl 的 DTO 版：吃未解析的 json.RawMessage。
+// parseCacheControl 把 cache_control 解成统一模型的缓存标记。
 //
-// 两个版本并存是过渡态而非设计：system / tools 已走 DTO，messages 的 content 块仍走
-// map（6 种 type 混排的分派尚未 struct 化）。content 块转 DTO 后，下面那个 map 版
-// 连同 asMap / asSlice 一起删。
-//
-// 注意 `{"cache_control":{}}` 返回的是 &CacheControl{Type:""} 而非 nil——与 map 版
-// 一致：键存在即表示客户端声明了缓存意图，type 缺失是另一回事。
-func parseRawCacheControl(raw json.RawMessage) *models.CacheControl {
+// 注意 `{"cache_control":{}}` 返回的是 &CacheControl{Type:""} 而非 nil——键存在即
+// 表示客户端声明了缓存意图，type 缺失是另一回事。
+func parseCacheControl(raw json.RawMessage) *models.CacheControl {
 	var cacheControl anthropicCacheControl
 	if !shared.DecodeJSONObject(raw, &cacheControl) {
 		return nil
@@ -27,17 +22,9 @@ func parseRawCacheControl(raw json.RawMessage) *models.CacheControl {
 	}
 }
 
-func parseCacheControl(raw interface{}) *models.CacheControl {
-	cacheControl, ok := asMap(raw)
-	if !ok {
-		return nil
-	}
-
-	return &models.CacheControl{
-		Type: maputil.String(cacheControl, "type"),
-	}
-}
-
+// asMap / asSlice 现在只服务**响应**入站解析（response_inbound.go 的 ParseResponse
+// 与 extractThinking 仍走 map[string]interface{}）。请求入站已全量走 struct DTO，
+// 不要在请求侧新增这两个的调用。
 func asMap(value interface{}) (map[string]interface{}, bool) {
 	result, ok := value.(map[string]interface{})
 	return result, ok

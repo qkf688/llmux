@@ -13,9 +13,8 @@ import (
 // - the extracted plain text (used by internal logic and other providers),
 // - the structured blocks (used to preserve Anthropic's system array format when round-tripping).
 //
-// 数组分支刻意用 []json.RawMessage + 错误判定，而非 shared.RawArray：后者吞掉
-// 「不是数组」这个错误，会让标量 system（如 `"system":123`）与空数组 `[]` 落到同一
-// 分支，从而把「非数组 → SystemParts 为 nil」误改成「返回空切片」。
+// 数组分支走 decodeRawArray（见 request_inbound.go），它区分「不是数组」与「空数组」——
+// 标量 system（如 `"system":123`）必须落到 SystemParts 为 nil，不能与空数组 `[]` 同路。
 func parseSystem(raw json.RawMessage) (string, []models.UnifiedMessageContentPart) {
 	if len(raw) == 0 || shared.IsJSONNull(raw) {
 		return "", nil
@@ -24,8 +23,8 @@ func parseSystem(raw json.RawMessage) (string, []models.UnifiedMessageContentPar
 		return value, nil
 	}
 
-	var items []json.RawMessage
-	if err := json.Unmarshal(raw, &items); err != nil {
+	items, ok := decodeRawArray(raw)
+	if !ok {
 		return "", nil
 	}
 	parts := parseSystemParts(items)
@@ -54,7 +53,7 @@ func parseSystemParts(items []json.RawMessage) []models.UnifiedMessageContentPar
 		parts = append(parts, models.UnifiedMessageContentPart{
 			Type:         "text",
 			Text:         &text,
-			CacheControl: parseRawCacheControl(block.CacheControl),
+			CacheControl: parseCacheControl(block.CacheControl),
 		})
 	}
 	return parts

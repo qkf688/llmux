@@ -32,8 +32,18 @@ func ParseResponse(body []byte) (*models.UnifiedResponse, error) {
 		finishReason = "length"
 	}
 
-	content, _ := parseMessageContentAndToolResults(resp["content"])
-	toolCalls := parseToolCalls(resp["content"])
+	// content 另开一个 RawMessage 视图：块解析已统一走 struct DTO（吃 json.RawMessage），
+	// 而本函数其余字段（id / model / stop_reason / usage）仍走通用 map。两个视图各解各的，
+	// RawMessage 保住块内字节原样、不经 map 往返。
+	var respContent struct {
+		Content json.RawMessage `json:"content"`
+	}
+	if err := json.Unmarshal(body, &respContent); err != nil {
+		return nil, fmt.Errorf("解析 anthropic 响应 content 失败: %w", err)
+	}
+
+	content, _ := parseMessageContentAndToolResults(respContent.Content)
+	toolCalls := parseToolCalls(respContent.Content)
 
 	reasoningText, reasoningSig, redactedData := extractThinking(resp["content"])
 	if reasoningText != "" {
@@ -55,6 +65,14 @@ func ParseResponse(body []byte) (*models.UnifiedResponse, error) {
 			content = v2
 		case nil:
 			content = reasoningText
+		case json.RawMessage:
+			// content 是兜底透传的原始 JSON（既不是 string 也不是块数组）。按 JSON
+			// 文本拼接——落到下面的 %v 会把 []byte 打成字节数组，那是纯噪声。
+			if len(v) > 0 {
+				content = reasoningText + "\n\n---\n\n" + string(v)
+			} else {
+				content = reasoningText
+			}
 		default:
 			// Keep behavior: best-effort stringify unknown content shapes.
 			content = fmt.Sprintf("%v", v)

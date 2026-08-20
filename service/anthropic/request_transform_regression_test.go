@@ -890,6 +890,10 @@ func TestTransformToUnified_ToolUseNonMapInputKeepsEmptyArgs(t *testing.T) {
 		{name: "null input collapses to empty object", input: `null`, wantArgs: "{}"},
 		{name: "missing input collapses to empty object", input: ``, wantArgs: "{}"},
 		{name: "object input is marshaled through", input: `{"a":1}`, wantArgs: `{"a":1}`},
+		// arguments 是经 map 往返再 Marshal 得出的，故键按字典序重排、空格被去掉，
+		// 与客户端原文的键序无关。这是对外可见形态（arguments 直接进上游请求体），
+		// #16 用 RawMessage 承接 input 后**不能**改成原文透传。
+		{name: "object input keys are sorted, not source-ordered", input: `{"b": 2, "a": 1}`, wantArgs: `{"a":1,"b":2}`},
 	}
 
 	for _, tt := range tests {
@@ -926,5 +930,76 @@ func TestTransformToUnified_ToolUseNonMapInputKeepsEmptyArgs(t *testing.T) {
 				t.Fatalf("tool_call 元信息错误: %#v", toolCalls[0])
 			}
 		})
+	}
+}
+
+// 疑虑 #4 表征测试之五（AC-6，供 #16 struct 化重构兜底）：
+// content 既不是 string 也不是块数组（这里是 JSON 对象）时，parseMessageContentAndToolResults
+// 走兜底分支原样透传该值，出站 FromUnified 再 marshal 出来应与入站 JSON 等价。
+// #16 用 RawMessage 承接兜底值后，透传对象仍须能 round-trip（RawMessage 实现 json.Marshaler，
+// 原样输出字节，比 map 重序列化更保真）。此外非数组 content 不应产出任何 tool_call。
+func TestTransformToUnified_NonArrayObjectContentPassthrough(t *testing.T) {
+	body := `{
+		"model":"m","max_tokens":1024,
+		"messages":[
+			{"role":"user","content":{"foo":"bar","n":1}}
+		]
+	}`
+
+	unified, err := TransformToUnified(context.Background(), []byte(body))
+	if err != nil {
+		t.Fatalf("TransformToUnified 失败: %v", err)
+	}
+	if len(unified.Messages) != 1 {
+		t.Fatalf("应产出 1 条消息，实际 %d: %#v", len(unified.Messages), unified.Messages)
+	}
+	if unified.Messages[0].Content == nil {
+		t.Fatalf("对象 content 应被兜底透传，不应为 nil")
+	}
+	if len(unified.Messages[0].ToolCalls) != 0 {
+		t.Fatalf("非数组 content 不应产出 tool_call，实际 %#v", unified.Messages[0].ToolCalls)
+	}
+
+	msgs := decodeAnthropicMessages(t, unified)
+	if len(msgs) != 1 {
+		t.Fatalf("出站应产出 1 条消息，实际 %d", len(msgs))
+	}
+	content, ok := msgs[0]["content"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("出站 content 应 round-trip 成对象，实际 %#v", msgs[0]["content"])
+	}
+	if content["foo"] != "bar" {
+		t.Fatalf(`content.foo 应为 "bar"，实际 %#v`, content["foo"])
+	}
+	if content["n"] != float64(1) {
+		t.Fatalf("content.n 应为 1，实际 %#v", content["n"])
+	}
+}
+
+// 疑虑 #4 表征测试之六（AC-7，供 #16 struct 化重构兜底）：
+// content 为空数组时，parseMessageContentAndToolResults 收敛出的 Content 为 nil
+// （collapseContentParts 对空 parts 返回 nil），且不产出任何 tool_call；因为不含
+// tool_result 块，原 user 消息不被丢弃，仍产出 1 条 Content 为 nil 的消息。
+// #16 单遍历合并时须精确复现这套 nil 语义。
+func TestTransformToUnified_EmptyArrayContentProducesNilContent(t *testing.T) {
+	body := `{
+		"model":"m","max_tokens":1024,
+		"messages":[
+			{"role":"user","content":[]}
+		]
+	}`
+
+	unified, err := TransformToUnified(context.Background(), []byte(body))
+	if err != nil {
+		t.Fatalf("TransformToUnified 失败: %v", err)
+	}
+	if len(unified.Messages) != 1 {
+		t.Fatalf("空数组 content 的 user 消息不应被丢弃，应产出 1 条，实际 %d: %#v", len(unified.Messages), unified.Messages)
+	}
+	if unified.Messages[0].Content != nil {
+		t.Fatalf("空数组 content 应收敛为 nil，实际 %#v", unified.Messages[0].Content)
+	}
+	if len(unified.Messages[0].ToolCalls) != 0 {
+		t.Fatalf("空数组 content 不应产出 tool_call，实际 %#v", unified.Messages[0].ToolCalls)
 	}
 }

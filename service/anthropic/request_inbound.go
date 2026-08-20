@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/qkf688/llmux/common/maputil"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/transform/shared"
 )
@@ -14,7 +13,8 @@ import (
 // TransformToUnified 将 Anthropic 请求格式转换为统一格式。
 //
 // 顶层字段与 system / tools / thinking / output_config / tool_choice 走 anthropicRequest
-// 及其嵌套 DTO（见 request_dto.go），messages 的 content 块仍走 map 解析。
+// 及其嵌套 DTO（见 request_dto.go）；messages 及其 content 块也走 anthropicMessage +
+// envelope-peek + 块子 struct（见 request_dto.go），请求入站已无 map 逐键取值。
 // DTO 的字段容器全部宽容（类型不匹配 = 当作未传，不报错），故本函数只在 body 不是
 // JSON 对象时返回错误。
 //
@@ -45,7 +45,7 @@ func TransformToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedReq
 		unified.TopP = &req.TopP.Value
 	}
 
-	unified.Messages = parseMessages(shared.RawJSONValue(req.Messages))
+	unified.Messages = parseMessages(req.Messages)
 	unified.Tools = parseTools(req.Tools)
 
 	if req.StopSequences.Set && len(req.StopSequences.Value) > 0 {
@@ -132,28 +132,46 @@ func parseToolChoice(raw json.RawMessage) *models.UnifiedToolChoice {
 	return choice
 }
 
-func parseMessages(raw interface{}) []models.UnifiedMessage {
-	items, ok := asSlice(raw)
+// decodeRawArray 把一段 JSON 解成数组的原始元素切片，是本包所有「数组形字段」
+// （messages / content / tools / system 数组分支）的唯一入口。
+//
+// 用 err 判定区分「不是数组」（返回 false）与「空数组」（返回 true + 空切片），
+// 与 map 时代 asSlice 的两种结果一致。**不用 shared.RawArray**——它吞掉「不是
+// 数组」这个错误，会把标量值（如 `"system":123`）与空数组 `[]` 混为一谈，从而把
+// 「非数组 → 返回 nil」误改成「返回空切片」。
+func decodeRawArray(raw json.RawMessage) ([]json.RawMessage, bool) {
+	if len(raw) == 0 || shared.IsJSONNull(raw) {
+		return nil, false
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, false
+	}
+	return items, true
+}
+
+func parseMessages(raw json.RawMessage) []models.UnifiedMessage {
+	items, ok := decodeRawArray(raw)
 	if !ok {
 		return nil
 	}
 
 	messages := make([]models.UnifiedMessage, 0, len(items))
 	for _, item := range items {
-		msgMap, ok := asMap(item)
-		if !ok {
+		var msgDTO anthropicMessage
+		if !shared.DecodeJSONObject(item, &msgDTO) {
 			continue
 		}
 
-		content, toolResultMessages := parseMessageContentAndToolResults(msgMap["content"])
+		content, toolResultMessages := parseMessageContentAndToolResults(msgDTO.Content)
 		msg := models.UnifiedMessage{
-			Role:      maputil.String(msgMap, "role"),
+			Role:      msgDTO.Role.Value,
 			Content:   content,
-			ToolCalls: parseToolCalls(msgMap["content"]),
+			ToolCalls: parseToolCalls(msgDTO.Content),
 		}
-		msg.CacheControl = parseCacheControl(msgMap["cache_control"])
+		msg.CacheControl = parseCacheControl(msgDTO.CacheControl)
 
-		reasoning, signature, redactedData := parseReasoning(msgMap["content"])
+		reasoning, signature, redactedData := parseReasoning(msgDTO.Content)
 		if reasoning != "" {
 			msg.ReasoningContent = &reasoning
 			if signature != "" {
@@ -180,13 +198,8 @@ func parseMessages(raw interface{}) []models.UnifiedMessage {
 }
 
 func parseTools(raw json.RawMessage) []models.UnifiedTool {
-	if len(raw) == 0 || shared.IsJSONNull(raw) {
-		return nil
-	}
-	// 与 parseSystem 同理：用错误判定区分「不是数组」与「空数组」，前者返回 nil、
-	// 后者返回空切片，保持 map 时代 asSlice 的两种结果。
-	var items []json.RawMessage
-	if err := json.Unmarshal(raw, &items); err != nil {
+	items, ok := decodeRawArray(raw)
+	if !ok {
 		return nil
 	}
 
@@ -205,27 +218,37 @@ func parseTools(raw json.RawMessage) []models.UnifiedTool {
 				Parameters:  shared.RawJSONValue(dto.InputSchema),
 			},
 		}
-		tool.CacheControl = parseRawCacheControl(dto.CacheControl)
+		tool.CacheControl = parseCacheControl(dto.CacheControl)
 		tools = append(tools, tool)
 	}
 	return tools
 }
 
-func parseToolCalls(rawContent interface{}) []models.UnifiedToolCall {
-	content, ok := asSlice(rawContent)
+func parseToolCalls(rawContent json.RawMessage) []models.UnifiedToolCall {
+	content, ok := decodeRawArray(rawContent)
 	if !ok {
 		return nil
 	}
 
 	toolCalls := make([]models.UnifiedToolCall, 0)
 	for _, item := range content {
-		itemMap, ok := asMap(item)
-		if !ok || maputil.String(itemMap, "type") != "tool_use" {
+		var envelope anthropicContentBlockEnvelope
+		if !shared.DecodeJSONObject(item, &envelope) || envelope.Type.Value != "tool_use" {
 			continue
 		}
 
+		var block anthropicToolUseBlock
+		if !shared.DecodeJSONObject(item, &block) {
+			continue
+		}
+
+		// input 必须经 map 往返再 Marshal，**不能**把 RawMessage 原文透传：
+		// json.Marshal 对 map 按键字典序输出并去掉空格，这是 map 时代确立的
+		// arguments 对外形态（arguments 直接进上游请求体）。原文透传会保留客户端
+		// 键序，属对外行为变更。非对象形态（数组 / 标量 / null / 缺失）一律塌成 "{}"。
 		argsStr := "{}"
-		if inputMap, ok := asMap(itemMap["input"]); ok {
+		var inputMap map[string]interface{}
+		if shared.DecodeJSONObject(block.Input, &inputMap) {
 			if argsBytes, err := json.Marshal(inputMap); err == nil {
 				argsStr = string(argsBytes)
 			}
@@ -233,14 +256,14 @@ func parseToolCalls(rawContent interface{}) []models.UnifiedToolCall {
 
 		index := len(toolCalls)
 		toolCalls = append(toolCalls, models.UnifiedToolCall{
-			ID:    maputil.String(itemMap, "id"),
+			ID:    block.ID.Value,
 			Type:  "function",
 			Index: index,
 			Function: models.UnifiedToolCallFunction{
-				Name:      maputil.String(itemMap, "name"),
+				Name:      block.Name.Value,
 				Arguments: argsStr,
 			},
-			CacheControl: parseCacheControl(itemMap["cache_control"]),
+			CacheControl: parseCacheControl(block.CacheControl),
 		})
 	}
 
@@ -252,28 +275,36 @@ func parseToolCalls(rawContent interface{}) []models.UnifiedToolCall {
 // thinking 的可读文本与 signature 使用既有 reasoning 字段；redacted_thinking.data
 // 是不透明密文，必须放入独立字段，禁止与文本拼接或尝试解析。统一模型当前
 // 只保留一个 redacted_thinking 块；若收到多个，保留第一个非空 data。
-func parseReasoning(rawContent interface{}) (text string, signature string, redactedData string) {
-	content, ok := asSlice(rawContent)
+func parseReasoning(rawContent json.RawMessage) (text string, signature string, redactedData string) {
+	content, ok := decodeRawArray(rawContent)
 	if !ok {
 		return "", "", ""
 	}
 
 	var b strings.Builder
 	for _, item := range content {
-		itemMap, ok := asMap(item)
-		if !ok {
+		var envelope anthropicContentBlockEnvelope
+		if !shared.DecodeJSONObject(item, &envelope) {
 			continue
 		}
 
-		switch maputil.String(itemMap, "type") {
+		switch envelope.Type.Value {
 		case "thinking":
-			b.WriteString(maputil.String(itemMap, "thinking"))
-			if sig := maputil.String(itemMap, "signature"); sig != "" {
+			var block anthropicThinkingBlock
+			if !shared.DecodeJSONObject(item, &block) {
+				continue
+			}
+			b.WriteString(block.Thinking.Value)
+			if sig := block.Signature.Value; sig != "" {
 				signature = sig
 			}
 		case "redacted_thinking":
 			if redactedData == "" {
-				redactedData = maputil.String(itemMap, "data")
+				var block anthropicRedactedThinkingBlock
+				if !shared.DecodeJSONObject(item, &block) {
+					continue
+				}
+				redactedData = block.Data.Value
 			}
 		}
 	}
@@ -281,31 +312,39 @@ func parseReasoning(rawContent interface{}) (text string, signature string, reda
 	return b.String(), signature, redactedData
 }
 
-func parseMessageContentAndToolResults(raw interface{}) (content interface{}, toolResultMessages []models.UnifiedMessage) {
-	if raw == nil {
+func parseMessageContentAndToolResults(raw json.RawMessage) (content interface{}, toolResultMessages []models.UnifiedMessage) {
+	if len(raw) == 0 || shared.IsJSONNull(raw) {
 		return nil, nil
 	}
 
-	if str, ok := raw.(string); ok {
+	if str, ok := shared.RawString(raw); ok {
 		return str, nil
 	}
 
-	items, ok := asSlice(raw)
+	items, ok := decodeRawArray(raw)
 	if !ok {
 		// Keep behavior: passthrough unknown payloads (but this may reduce conversion quality).
+		// 透传 RawMessage 而非解成 map：它满足 json.Marshaler，出站会原样输出字节，
+		// 比 map 重序列化更保真（保留键序与数字精度）。下游对 Content 只断言 string 与
+		// []UnifiedMessageContentPart，两者都落同一兜底分支，故行为等价。
 		return raw, nil
 	}
 
 	parts := make([]models.UnifiedMessageContentPart, 0, len(items))
 
 	for _, item := range items {
-		itemMap, ok := asMap(item)
-		if !ok {
+		var envelope anthropicContentBlockEnvelope
+		if !shared.DecodeJSONObject(item, &envelope) {
 			continue
 		}
 
-		if maputil.String(itemMap, "type") == "tool_result" {
-			toolUseID := maputil.String(itemMap, "tool_use_id")
+		if envelope.Type.Value == "tool_result" {
+			var block anthropicToolResultBlock
+			if !shared.DecodeJSONObject(item, &block) {
+				continue
+			}
+
+			toolUseID := block.ToolUseID.Value
 			if toolUseID == "" {
 				continue
 			}
@@ -313,10 +352,13 @@ func parseMessageContentAndToolResults(raw interface{}) (content interface{}, to
 			toolMsg := models.UnifiedMessage{
 				Role:         "tool",
 				ToolCallID:   toolUseID,
-				Content:      parseToolResultContent(itemMap["content"]),
-				CacheControl: parseCacheControl(itemMap["cache_control"]),
+				Content:      parseToolResultContent(block.Content),
+				CacheControl: parseCacheControl(block.CacheControl),
 			}
-			if isErr, ok := itemMap["is_error"].(bool); ok {
+			// Optional[bool] 只在 is_error 确为 JSON 布尔时 Set，与 map 时代的
+			// itemMap["is_error"].(bool) 断言等价。
+			if block.IsError.Set {
+				isErr := block.IsError.Value
 				toolMsg.ToolCallIsError = &isErr
 			}
 
@@ -324,7 +366,7 @@ func parseMessageContentAndToolResults(raw interface{}) (content interface{}, to
 			continue
 		}
 
-		if part, ok := parseTextOrImageBlock(itemMap); ok {
+		if part, ok := parseTextOrImageBlock(item, envelope.Type.Value); ok {
 			parts = append(parts, part)
 		}
 	}
@@ -337,29 +379,34 @@ func parseMessageContentAndToolResults(raw interface{}) (content interface{}, to
 // 曾经这里只留 text 块，而 computer-use / 截图类工具的结果整条都是图片块，
 // 于是 content 变成空串，部分上游据此判 400。现在图片块一并保留，
 // 由各出站适配器决定是原样透传（Anthropic 原生支持块数组）还是降级为占位文本。
-func parseToolResultContent(raw interface{}) interface{} {
-	switch v := raw.(type) {
-	case string:
-		return v
-	case []interface{}:
-		parts := make([]models.UnifiedMessageContentPart, 0, len(v))
-		for _, item := range v {
-			itemMap, ok := asMap(item)
-			if !ok {
-				continue
-			}
-			if part, ok := parseTextOrImageBlock(itemMap); ok {
-				parts = append(parts, part)
-			}
-		}
-
-		if content := collapseContentParts(parts); content != nil {
-			return content
-		}
-		return ""
-	default:
+func parseToolResultContent(raw json.RawMessage) interface{} {
+	if len(raw) == 0 || shared.IsJSONNull(raw) {
 		return ""
 	}
+	if str, ok := shared.RawString(raw); ok {
+		return str
+	}
+
+	items, ok := decodeRawArray(raw)
+	if !ok {
+		return ""
+	}
+
+	parts := make([]models.UnifiedMessageContentPart, 0, len(items))
+	for _, item := range items {
+		var envelope anthropicContentBlockEnvelope
+		if !shared.DecodeJSONObject(item, &envelope) {
+			continue
+		}
+		if part, ok := parseTextOrImageBlock(item, envelope.Type.Value); ok {
+			parts = append(parts, part)
+		}
+	}
+
+	if content := collapseContentParts(parts); content != nil {
+		return content
+	}
+	return ""
 }
 
 // collapseContentParts 把内容块收敛成统一格式的 Content 形态：
@@ -375,13 +422,20 @@ func collapseContentParts(parts []models.UnifiedMessageContentPart) interface{} 
 }
 
 // parseTextOrImageBlock 解析单个 text / image 块，供消息内容与 tool_result 共用。
-func parseTextOrImageBlock(itemMap map[string]interface{}) (models.UnifiedMessageContentPart, bool) {
-	switch maputil.String(itemMap, "type") {
+//
+// blockType 由调用方经 envelope-peek 得出并传入，避免同一份 raw 重复解判别字段。
+func parseTextOrImageBlock(raw json.RawMessage, blockType string) (models.UnifiedMessageContentPart, bool) {
+	switch blockType {
 	case "text":
-		text := maputil.String(itemMap, "text")
+		var block anthropicTextBlock
+		if !shared.DecodeJSONObject(raw, &block) {
+			return models.UnifiedMessageContentPart{}, false
+		}
+
+		text := block.Text.Value
 		if text == "" {
 			// Some callers use "content" for text blocks.
-			text = maputil.String(itemMap, "content")
+			text = block.Content.Value
 		}
 		if text == "" {
 			return models.UnifiedMessageContentPart{}, false
@@ -391,26 +445,31 @@ func parseTextOrImageBlock(itemMap map[string]interface{}) (models.UnifiedMessag
 			Type: "text",
 			Text: &text,
 		}
-		part.CacheControl = parseCacheControl(itemMap["cache_control"])
+		part.CacheControl = parseCacheControl(block.CacheControl)
 		return part, true
 
 	case "image":
-		source, ok := asMap(itemMap["source"])
-		if !ok {
+		var block anthropicImageBlock
+		if !shared.DecodeJSONObject(raw, &block) {
+			return models.UnifiedMessageContentPart{}, false
+		}
+
+		var source anthropicImageSource
+		if !shared.DecodeJSONObject(block.Source, &source) {
 			return models.UnifiedMessageContentPart{}, false
 		}
 
 		var url string
-		switch maputil.String(source, "type") {
+		switch source.Type.Value {
 		case "base64":
-			mediaType := maputil.String(source, "media_type")
-			data := maputil.String(source, "data")
+			mediaType := source.MediaType.Value
+			data := source.Data.Value
 			if mediaType == "" || data == "" {
 				return models.UnifiedMessageContentPart{}, false
 			}
 			url = fmt.Sprintf("data:%s;base64,%s", mediaType, data)
 		case "url":
-			url = maputil.String(source, "url")
+			url = source.URL.Value
 		}
 		if url == "" {
 			return models.UnifiedMessageContentPart{}, false
@@ -422,7 +481,7 @@ func parseTextOrImageBlock(itemMap map[string]interface{}) (models.UnifiedMessag
 				URL: url,
 			},
 		}
-		part.CacheControl = parseCacheControl(itemMap["cache_control"])
+		part.CacheControl = parseCacheControl(block.CacheControl)
 		return part, true
 
 	default:

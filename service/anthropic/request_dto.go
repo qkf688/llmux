@@ -23,8 +23,10 @@ import (
 // system 是 string｜块数组、tool_choice 是 string｜对象，直接 Unmarshal 到 struct
 // 会让形状不符的合法请求整条 400，与 shared.Optional* 那套宽容语义相悖。
 //
-// messages 是**唯一**仍走 map 解析的字段：content 块有 6 种 type 混排，struct 化需要
-// 自定义分派，收益待评估（见 .plan/stages.md Stage 2）。
+// messages 及其 content 块同样走 struct：anthropicMessage → 先用
+// anthropicContentBlockEnvelope peek 出块的 type → 再把同一份 raw 解进对应的
+// 块子 struct（见下方块 DTO 群）。**请求入站已无 map 逐键取值**（响应入站的
+// response_inbound.go 仍走 map，不在本 DTO 的职责内）。
 type anthropicRequest struct {
 	Model         shared.Optional[string]        `json:"model"`
 	Stream        shared.Optional[bool]          `json:"stream"`
@@ -67,7 +69,8 @@ type anthropicCacheControl struct {
 	Type shared.Optional[string] `json:"type"`
 }
 
-// anthropicTextBlock 是 system 数组元素（纯 text 块）的 DTO。
+// anthropicTextBlock 是 text 块的 DTO，system 数组元素与 messages[].content 的
+// text 块共用——Anthropic 协议里两处是同一种块，没有理由声明两份。
 //
 // text 与 content 两个键并存是历史兼容：部分客户端把文本写进 content。取值优先
 // text、回落 content，与 map 时代一致。
@@ -75,6 +78,75 @@ type anthropicTextBlock struct {
 	Type         shared.Optional[string] `json:"type"`
 	Text         shared.Optional[string] `json:"text"`
 	Content      shared.Optional[string] `json:"content"`
+	CacheControl json.RawMessage         `json:"cache_control"`
+}
+
+// anthropicContentBlockEnvelope 只读 content 块的判别字段 type，供分派层先行 peek。
+//
+// 这是「envelope-peek + 各 type 独立子 struct」的判别层：读出 type 后再把同一份
+// RawMessage 解进对应的块 struct。**禁止**退回成把 6 种 type 的字段并进一个大 struct
+// （openai 侧的 openAIChatContentPart 就是那种字段并集，是反面参照不是模板）——并集
+// 会让「哪些键属于哪个 type」这个信息从类型系统里消失。
+type anthropicContentBlockEnvelope struct {
+	Type shared.Optional[string] `json:"type"`
+}
+
+// anthropicImageBlock 是 image 块的 DTO。
+type anthropicImageBlock struct {
+	Source       json.RawMessage `json:"source"`
+	CacheControl json.RawMessage `json:"cache_control"`
+}
+
+// anthropicImageSource 是 image.source 的 DTO：base64 与 url 两种 source type
+// 用的字段不同，这里平铺是因为它们同属一个 source 对象、由 type 决定读哪几个，
+// 不构成跨块的字段并集。
+type anthropicImageSource struct {
+	Type      shared.Optional[string] `json:"type"`
+	MediaType shared.Optional[string] `json:"media_type"`
+	Data      shared.Optional[string] `json:"data"`
+	URL       shared.Optional[string] `json:"url"`
+}
+
+// anthropicToolUseBlock 是 tool_use 块的 DTO。
+//
+// input 停在 RawMessage：协议允许它是对象，但真实流量里也出现数组与标量。统一模型的
+// arguments 是字符串，只在 input 确为 JSON 对象时才 marshal 进去，其余形态一律塌成
+// "{}"（表征测试 TestTransformToUnified_ToolUseNonMapInputKeepsEmptyArgs 锁死了这点）。
+type anthropicToolUseBlock struct {
+	ID           shared.Optional[string] `json:"id"`
+	Name         shared.Optional[string] `json:"name"`
+	Input        json.RawMessage         `json:"input"`
+	CacheControl json.RawMessage         `json:"cache_control"`
+}
+
+// anthropicToolResultBlock 是 tool_result 块的 DTO。
+//
+// content 停在 RawMessage：它是 string｜块数组二义，由 parseToolResultContent 二次分派。
+type anthropicToolResultBlock struct {
+	ToolUseID    shared.Optional[string] `json:"tool_use_id"`
+	Content      json.RawMessage         `json:"content"`
+	IsError      shared.Optional[bool]   `json:"is_error"`
+	CacheControl json.RawMessage         `json:"cache_control"`
+}
+
+// anthropicThinkingBlock 是 thinking 块的 DTO（与顶层 thinking 字段的
+// anthropicThinking 是两回事：那个配置 budget，这个承载 assistant 轮的思考内容）。
+type anthropicThinkingBlock struct {
+	Thinking  shared.Optional[string] `json:"thinking"`
+	Signature shared.Optional[string] `json:"signature"`
+}
+
+// anthropicRedactedThinkingBlock 是 redacted_thinking 块的 DTO。
+// data 是不透明密文，只搬运不解析。
+type anthropicRedactedThinkingBlock struct {
+	Data shared.Optional[string] `json:"data"`
+}
+
+// anthropicMessage 是 messages 数组元素的 DTO；content 停在 RawMessage，
+// 因为它是 string｜块数组二义，由 parseMessageContentAndToolResults 分派。
+type anthropicMessage struct {
+	Role         shared.Optional[string] `json:"role"`
+	Content      json.RawMessage         `json:"content"`
 	CacheControl json.RawMessage         `json:"cache_control"`
 }
 

@@ -3,7 +3,7 @@ package unified
 // UnifiedMessage 统一消息格式。
 type UnifiedMessage struct {
 	Role       string            `json:"role"`
-	Content    interface{}       `json:"content,omitempty"` // 支持 string 或 []UnifiedMessageContentPart
+	Content    interface{}       `json:"content,omitempty"` // string / []UnifiedMessageContentPart / 兜底透传的 json.RawMessage（对外为客户端原文字节，键序不归一）
 	ToolCalls  []UnifiedToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string            `json:"tool_call_id,omitempty"`
 

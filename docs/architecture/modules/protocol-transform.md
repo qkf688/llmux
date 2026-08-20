@@ -91,6 +91,7 @@ models/
 - **分路径钳制**：
   - transform 路径：`ProcessRequest(ctx, raw, clamp)` 在 ToUnified 后、FromUnified 前对 `unified.ReasoningEffort` 钳制（`clampUnifiedReasoning`）；effort 为 nil 时转入 `clampUnifiedBudgetOnly`
   - passthrough 路径：`clampPassthroughReasoning` 对 raw body 按 style 钳制 effort 字段（OpenAI `reasoning_effort`、Anthropic `output_config.effort`、Responses 双路径 `reasoning.effort` + `metadata.reasoning_effort`）+ budget 字段（Anthropic `thinking.budget_tokens`、Responses `reasoning.max_tokens`）；effort 字段缺席时转入 `clampPassthroughBudgetOnly`。**大小写归一化**：两条路径都在钳制前对 effort 做小写归一化（transform 经 `NormalizeReasoningEffort`，passthrough 经 `strings.ToLower`），避免客户端传 "HIGH" 时白名单命中失败。passthrough 路径在归一化后若值在白名单内但原始大小写不规范，会写回归一化小写值。**剥离**统一走 `stripPassthroughThinking`：删 effort + budget 字段后还要删 `passthroughThinkingContainers` 列出的容器（Anthropic 的 `thinking` 只有 type + budget_tokens，只删 budget 会残留 `{"type":"enabled"}`，上游会 400）。
+- **协议级 budget < max_tokens 收敛（独立于白名单钳制）**：Anthropic 要求 `thinking.budget_tokens` 严格小于 `max_tokens`（后者是思考+回答总额）。该收敛不属于档位白名单，落在 chat 层的 `reconcileThinkingBudgetWithMaxTokens` 且在 `clampMaxTokens` **之后**执行（`clampMaxTokens` 正是非法组合的制造者）；两条路径共用同一实现。规则与阈值见 `chat-gateway.md`。**注意**另一条独立触发源：`service/anthropic/request_outbound.go` 在 `max_tokens` 缺失时硬填 8192，仅此默认值就足以让 effort ≥ medium（budget ≥ 20000）落进非法区间，与 `MaxTokensLimit` 是否配置无关。
 
 ---
 

@@ -2,6 +2,7 @@ package chat
 
 import (
 	"log/slog"
+	"math"
 	"strings"
 
 	"github.com/qkf688/llmux/consts"
@@ -11,6 +12,11 @@ import (
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
+
+// budgetMaxTokensRatio 是收敛非法 budget 时目标 budget 占 max_tokens 的比例。
+// Anthropic 的 max_tokens 是「思考 + 回答」总额；留 20% 给回答，避免思考吃满导致回答无空间。
+// 这是 chat 层的收敛策略（非协议事实），故常量定义在本包而非 service/anthropic。
+const budgetMaxTokensRatio = 0.8
 
 // passthroughEffortField 返回各协议 passthrough 路径的 reasoning effort 字段路径。
 // Responses 有双路径（reasoning.effort 官方字段 + metadata.reasoning_effort 兼容回退）。
@@ -218,6 +224,63 @@ func clampPassthroughBudgetOnly(raw []byte, style string, clamp *transform.Think
 		}
 	}
 	return raw
+}
+
+// reconcileThinkingBudgetWithMaxTokens 收敛「thinking.budget_tokens >= max_tokens」的非法组合。
+// Anthropic 硬约束：budget_tokens 必须严格小于 max_tokens（后者是思考+回答总额），违反必 400。
+// 这类非法组合多由 llmux 自己造成——clampMaxTokens 把 max_tokens 压到 MaxTokensLimit 时不看 budget，
+// 故本函数必须在 clampMaxTokens **之后**执行，且只降 budget、不抬 max_tokens（运维阀值不能被请求绕过）。
+//
+// 只在组合已非法时介入（budget >= max_tokens），合法组合原样放行——不二次猜测客户端意图。
+// 目标值低于 anthropic.MinThinkingBudget 时钳制无意义（低于最小预算同样 400），整体剥离 thinking。
+// 防御式改写：非 anthropic / 字段缺失 / sjson 失败均返回原 body，不阻断主流程。
+func reconcileThinkingBudgetWithMaxTokens(body []byte, providerType string) []byte {
+	// 只有 Anthropic 有此约束：OpenAI Chat 无 budget 字段；Responses 的 budget 在
+	// reasoning.max_tokens、其上限键是 max_output_tokens（不被 clampMaxTokens 触及），不存在此冲突。
+	if providerType != consts.StyleAnthropic || len(body) == 0 {
+		return body
+	}
+
+	budget := gjson.GetBytes(body, "thinking.budget_tokens").Int()
+	if budget <= 0 {
+		return body
+	}
+
+	maxTok := gjson.GetBytes(body, "max_tokens").Int()
+	if maxTok <= 0 {
+		// max_tokens 缺失时上游用模型默认值，llmux 无模型级上限可回填，直接放行
+		// （与 clampMaxTokens 一致：不新增键）。
+		return body
+	}
+
+	if budget < maxTok {
+		return body // 已合法
+	}
+
+	target := int64(math.Floor(float64(maxTok) * budgetMaxTokensRatio))
+	if target < anthropic.MinThinkingBudget {
+		slog.Warn("thinking stripped: max_tokens too small to hold a legal thinking budget",
+			"max_tokens", maxTok,
+			"original_budget", budget,
+			"target_budget", target,
+			"min_budget", anthropic.MinThinkingBudget,
+			"reason", "budget_exceeds_max_tokens_and_target_below_min")
+		return stripPassthroughThinking(body, consts.StyleAnthropic)
+	}
+
+	next, err := sjson.SetBytes(body, "thinking.budget_tokens", target)
+	if err != nil {
+		slog.Error("reconcile thinking budget: sjson set failed, sending original body",
+			"error", err, "max_tokens", maxTok, "original_budget", budget)
+		return body
+	}
+
+	slog.Warn("thinking budget reconciled to fit max_tokens",
+		"max_tokens", maxTok,
+		"original_budget", budget,
+		"clamped_budget", target,
+		"reason", "budget_must_be_less_than_max_tokens")
+	return next
 }
 
 // stripPassthroughThinking 从 raw body 删除该 style 的 effort + budget 字段并清理残留空对象。

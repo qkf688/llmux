@@ -26,6 +26,11 @@ func asSlice(value interface{}) ([]interface{}, bool) {
 	return result, ok
 }
 
+// MinThinkingBudget 是 Anthropic 扩展思考的最小合法 budget_tokens（协议硬约束）。
+// 低于此值上游直接 400，故收敛 budget 时若目标值低于它，只能整体剥离 thinking
+// 而不是钳到一个非法的小值。
+const MinThinkingBudget int64 = 1024
+
 // ThinkingBudgetToReasoningEffort 将 thinking budget 转换为 reasoning effort。
 // 参考 Octopus 实现的映射规则（single source of truth，供协议转换与测试复用）。
 // 6 档反向区间——保留现有阈值不变（>=50000→high, >=20000→medium, >0→low），

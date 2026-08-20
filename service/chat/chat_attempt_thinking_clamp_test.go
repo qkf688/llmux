@@ -183,6 +183,9 @@ func TestClampPassthroughReasoning_Responses(t *testing.T) {
 
 // TestBuildRequestBodyForProvider_TransformClamp 集成测试：
 // transform 路径（OpenAI client → Anthropic provider）钳制 unified.ReasoningEffort。
+// fixture 必须显式给足 max_tokens：Anthropic 出站在 max_tokens 缺失时硬填 8192
+// （service/anthropic/request_outbound.go:30），会让 medium(20000) 落进
+// budget >= max_tokens 的非法区间而触发协议级收敛，掩盖本测试要断的白名单钳制结果。
 func TestBuildRequestBodyForProvider_TransformClamp(t *testing.T) {
 	ctx := context.Background()
 	clamp := &transform.ThinkingClampConfig{
@@ -192,7 +195,7 @@ func TestBuildRequestBodyForProvider_TransformClamp(t *testing.T) {
 	}
 
 	t.Run("OpenAI high → Anthropic medium（transform 钳制）", func(t *testing.T) {
-		raw := []byte(`{"model":"m","messages":[{"role":"user","content":"hi"}],"reasoning_effort":"high"}`)
+		raw := []byte(`{"model":"m","max_tokens":64000,"messages":[{"role":"user","content":"hi"}],"reasoning_effort":"high"}`)
 		result, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
 			Style:            consts.StyleOpenAI,
 			ProviderType:     consts.StyleAnthropic,
@@ -404,5 +407,206 @@ func TestBuildRequestBodyForProvider_ABStageBoundary_MinimalPreserved(t *testing
 	effort := gjson.GetBytes(result, "reasoning_effort").String()
 	if effort != "minimal" {
 		t.Errorf("reasoning_effort = %q, want minimal (Stage B 扩档后保留原值)", effort)
+	}
+}
+
+// TestReconcileThinkingBudget 覆盖「thinking budget 超 max_tokens」的协议级收敛。
+// 背景：clampMaxTokens 把 max_tokens 压到 MaxTokensLimit 时不看 budget_tokens，
+// 会自造 budget >= max_tokens 的非法组合（Anthropic 必 400）。方向是降 budget、不抬 max_tokens。
+func TestReconcileThinkingBudget(t *testing.T) {
+	tests := []struct {
+		name         string
+		providerType string
+		raw          string
+		wantBudget   int64 // -1 = 期望 thinking 整体不存在
+		wantMaxTok   int64
+	}{
+		{
+			name:         "AC-1 budget 超 max → 降到 floor(max*0.8)，max 不抬高",
+			providerType: consts.StyleAnthropic,
+			raw:          `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":50000}}`,
+			wantBudget:   6553,
+			wantMaxTok:   8192,
+		},
+		{
+			name:         "AC-2 目标值低于最小预算 → 剥离 thinking",
+			providerType: consts.StyleAnthropic,
+			raw:          `{"model":"m","max_tokens":1000,"output_config":{"effort":"high"},"thinking":{"type":"enabled","budget_tokens":50000}}`,
+			wantBudget:   -1,
+			wantMaxTok:   1000,
+		},
+		{
+			name:         "AC-3 组合已合法 → budget 不动（不二次猜测客户端意图）",
+			providerType: consts.StyleAnthropic,
+			raw:          `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":4000}}`,
+			wantBudget:   4000,
+			wantMaxTok:   8192,
+		},
+		{
+			name:         "AC-4 openai → 不触碰",
+			providerType: consts.StyleOpenAI,
+			raw:          `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":50000}}`,
+			wantBudget:   50000,
+			wantMaxTok:   8192,
+		},
+		{
+			name:         "AC-4 openai-res → 不触碰",
+			providerType: consts.StyleOpenAIRes,
+			raw:          `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":50000}}`,
+			wantBudget:   50000,
+			wantMaxTok:   8192,
+		},
+		{
+			name:         "AC-5 无 budget 字段 → 原样返回",
+			providerType: consts.StyleAnthropic,
+			raw:          `{"model":"m","max_tokens":8192}`,
+			wantBudget:   0,
+			wantMaxTok:   8192,
+		},
+		{
+			name:         "AC-5 budget 为 0 → 原样返回",
+			providerType: consts.StyleAnthropic,
+			raw:          `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":0}}`,
+			wantBudget:   0,
+			wantMaxTok:   8192,
+		},
+		{
+			name:         "无 max_tokens → 原样返回（不凭空造 max_tokens）",
+			providerType: consts.StyleAnthropic,
+			raw:          `{"model":"m","thinking":{"type":"enabled","budget_tokens":50000}}`,
+			wantBudget:   50000,
+			wantMaxTok:   0,
+		},
+		{
+			name:         "边界 max=1280 → budget=1024 刚好等于最小预算，保留",
+			providerType: consts.StyleAnthropic,
+			raw:          `{"model":"m","max_tokens":1280,"thinking":{"type":"enabled","budget_tokens":50000}}`,
+			wantBudget:   1024,
+			wantMaxTok:   1280,
+		},
+		{
+			name:         "边界 max=1279 → budget=1023 低于最小预算，剥离",
+			providerType: consts.StyleAnthropic,
+			raw:          `{"model":"m","max_tokens":1279,"thinking":{"type":"enabled","budget_tokens":50000}}`,
+			wantBudget:   -1,
+			wantMaxTok:   1279,
+		},
+		{
+			name:         "budget 恰等于 max → 仍属非法，收敛",
+			providerType: consts.StyleAnthropic,
+			raw:          `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":8192}}`,
+			wantBudget:   6553,
+			wantMaxTok:   8192,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := reconcileThinkingBudgetWithMaxTokens([]byte(tt.raw), tt.providerType)
+
+			if tt.wantBudget < 0 {
+				if gjson.GetBytes(result, "thinking").Exists() {
+					t.Errorf("thinking 容器应整体删除, got %s", result)
+				}
+				if gjson.GetBytes(result, "output_config.effort").Exists() {
+					t.Errorf("output_config.effort 应删除, got %s", result)
+				}
+			} else if got := gjson.GetBytes(result, "thinking.budget_tokens").Int(); got != tt.wantBudget {
+				t.Errorf("thinking.budget_tokens = %d, want %d", got, tt.wantBudget)
+			}
+
+			if got := gjson.GetBytes(result, "max_tokens").Int(); got != tt.wantMaxTok {
+				t.Errorf("max_tokens = %d, want %d（收敛只降 budget，不动 max_tokens）", got, tt.wantMaxTok)
+			}
+		})
+	}
+}
+
+// TestReconcileThinkingBudget_BothPathsAgree 覆盖 AC-6：
+// passthrough 与 transform 两条构建路径对等价输入必须产出一致的 budget/max_tokens 组合，
+// 防两条路径各写一份实现后行为漂移。
+func TestReconcileThinkingBudget_BothPathsAgree(t *testing.T) {
+	ctx := context.Background()
+	limit := 8192
+	clamp := &transform.ThinkingClampConfig{
+		Levels:          []string{"low", "medium", "high"},
+		AutoFallback:    "low",
+		UnknownStrategy: "clamp_to_default",
+	}
+
+	// passthrough：anthropic → anthropic，客户端自带 max_tokens=64000 + budget=50000
+	passthroughRaw := []byte(`{"model":"m","max_tokens":64000,"messages":[{"role":"user","content":"hi"}],"output_config":{"effort":"high"},"thinking":{"type":"enabled","budget_tokens":50000}}`)
+	passthroughOut, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
+		Style:            consts.StyleAnthropic,
+		ProviderType:     consts.StyleAnthropic,
+		Raw:              passthroughRaw,
+		MaxTokensLimit:   &limit,
+		SupportsThinking: true,
+		ThinkingClamp:    clamp,
+	})
+	if skip || err != nil {
+		t.Fatalf("passthrough: skip=%v err=%v", skip, err)
+	}
+
+	// transform：openai → anthropic，effort=high 映射出 budget=50000
+	transformRaw := []byte(`{"model":"m","max_tokens":64000,"messages":[{"role":"user","content":"hi"}],"reasoning_effort":"high"}`)
+	transformOut, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
+		Style:            consts.StyleOpenAI,
+		ProviderType:     consts.StyleAnthropic,
+		Raw:              transformRaw,
+		MaxTokensLimit:   &limit,
+		SupportsThinking: true,
+		ThinkingClamp:    clamp,
+	})
+	if skip || err != nil {
+		t.Fatalf("transform: skip=%v err=%v", skip, err)
+	}
+
+	const wantBudget = 6553 // floor(8192*0.8)
+	const wantMaxTok = 8192
+
+	for _, c := range []struct {
+		path string
+		body []byte
+	}{{"passthrough", passthroughOut}, {"transform", transformOut}} {
+		budget := gjson.GetBytes(c.body, "thinking.budget_tokens").Int()
+		maxTok := gjson.GetBytes(c.body, "max_tokens").Int()
+		if budget != wantBudget {
+			t.Errorf("%s: thinking.budget_tokens = %d, want %d", c.path, budget, wantBudget)
+		}
+		if maxTok != wantMaxTok {
+			t.Errorf("%s: max_tokens = %d, want %d", c.path, maxTok, wantMaxTok)
+		}
+	}
+}
+
+// TestReconcileThinkingBudget_AnthropicDefaultMaxTokens 覆盖不依赖 MaxTokensLimit 的触发路径：
+// 客户端不给 max_tokens 时 Anthropic 出站硬填 8192（request_outbound.go:30），
+// 而 effort=high 映射出 budget=50000 —— 非法组合由默认值单独造成，与 clampMaxTokens 无关。
+func TestReconcileThinkingBudget_AnthropicDefaultMaxTokens(t *testing.T) {
+	ctx := context.Background()
+	clamp := &transform.ThinkingClampConfig{
+		Levels:          []string{"low", "medium", "high"},
+		AutoFallback:    "low",
+		UnknownStrategy: "clamp_to_default",
+	}
+
+	raw := []byte(`{"model":"m","messages":[{"role":"user","content":"hi"}],"reasoning_effort":"high"}`)
+	result, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
+		Style:            consts.StyleOpenAI,
+		ProviderType:     consts.StyleAnthropic,
+		Raw:              raw,
+		MaxTokensLimit:   nil, // 无运维上限，非法组合纯由出站默认 max_tokens 造成
+		SupportsThinking: true,
+		ThinkingClamp:    clamp,
+	})
+	if skip || err != nil {
+		t.Fatalf("skip=%v err=%v", skip, err)
+	}
+	if got := gjson.GetBytes(result, "max_tokens").Int(); got != 8192 {
+		t.Fatalf("max_tokens = %d, want 8192 (Anthropic 出站默认值)", got)
+	}
+	if got := gjson.GetBytes(result, "thinking.budget_tokens").Int(); got != 6553 {
+		t.Errorf("thinking.budget_tokens = %d, want 6553 (floor(8192*0.8))", got)
 	}
 }

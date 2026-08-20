@@ -43,7 +43,8 @@ func withOptionalRequestTrace(ctx context.Context) context.Context {
 }
 
 // buildRequestBodyForProvider 聚合两条路径（真实/虚拟模型）的全部请求体改写。
-// 执行顺序：stripThinkingFields（先剥离不支持 thinking 的）→ passthrough/transform 钳制 → clampMaxTokens。
+// 执行顺序：stripThinkingFields（先剥离不支持 thinking 的）→ passthrough/transform 钳制 → clampMaxTokens
+// → reconcileThinkingBudgetWithMaxTokens（收敛 clampMaxTokens 可能造出的 budget >= max_tokens 非法组合）。
 // 改动时须同步两条路径的测试。
 func buildRequestBodyForProvider(ctx context.Context, caps ProviderRequestCaps) ([]byte, bool, error) {
 	style := caps.Style
@@ -69,7 +70,7 @@ func buildRequestBodyForProvider(ctx context.Context, caps ProviderRequestCaps) 
 		if clampErr != nil {
 			slog.Warn("max_tokens clamp failed, sending unclamped body", "error", clampErr)
 		}
-		return clamped, false, nil
+		return reconcileThinkingBudgetWithMaxTokens(clamped, providerType), false, nil
 	}
 
 	if !getEnableFormatConversion(ctx) {
@@ -91,7 +92,7 @@ func buildRequestBodyForProvider(ctx context.Context, caps ProviderRequestCaps) 
 	if clampErr != nil {
 		slog.Warn("max_tokens clamp failed, sending unclamped body", "error", clampErr)
 	}
-	return clamped, false, nil
+	return reconcileThinkingBudgetWithMaxTokens(clamped, providerType), false, nil
 }
 
 // stripThinkingFields 在 supportsThinking 为 false 时删除请求体中的 thinking 配置字段

@@ -228,7 +228,9 @@ func clampPassthroughBudgetOnly(raw []byte, style string, clamp *transform.Think
 // 防御式改写：非 anthropic / 字段缺失 / sjson 失败均返回原 body，不阻断主流程。
 func reconcileThinkingBudgetWithMaxTokens(body []byte, providerType string) []byte {
 	// 只有 Anthropic 有此约束：OpenAI Chat 无 budget 字段；Responses 的 budget 在
-	// reasoning.max_tokens、其上限键是 max_output_tokens（不被 clampMaxTokens 触及），不存在此冲突。
+	// reasoning.max_tokens、上限键是 max_output_tokens——该键**已被 clampMaxTokens 钳制**，
+	// 但 Responses 协议并未像 Anthropic 那样要求 budget 严格小于上限，故仍不在本函数范围内。
+	// 若日后确认 Responses 也有该硬约束，这里要补一条分支而非改 clampMaxTokens。
 	if providerType != consts.StyleAnthropic || len(body) == 0 {
 		return body
 	}

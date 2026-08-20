@@ -409,3 +409,41 @@ func TestClampMaxTokens_MaxCompletionTokens_Clamped(t *testing.T) {
 		t.Fatalf("expected max_completion_tokens=4096, got %v", obj["max_completion_tokens"])
 	}
 }
+
+// openai-res 出站体的输出上限键是 max_output_tokens（`service/responses/transform_to_responses.go`
+// 把 unified.MaxTokens 写进 ResponsesRequest.MaxOutputTokens）。该键曾不在钳制字段表里，
+// 使 MaxTokensLimit 对 Responses 上游完全空转、且无任何报错可察觉。
+func TestClampMaxTokens_MaxOutputTokens_Clamped(t *testing.T) {
+	limit := 2048
+	body := []byte(`{"model":"m","max_output_tokens":1048576,"input":[]}`)
+	got, err := clampMaxTokens(body, &limit)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(got, &obj); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if v, _ := obj["max_output_tokens"].(float64); int(v) != 2048 {
+		t.Fatalf("expected max_output_tokens=2048, got %v", obj["max_output_tokens"])
+	}
+}
+
+// 客户端同时传多个上限键时每个都要压住：只钳第一个命中的会留下超限值直通上游。
+func TestClampMaxTokens_AllOutputLimitFields_Clamped(t *testing.T) {
+	limit := 512
+	body := []byte(`{"model":"m","max_tokens":9000,"max_completion_tokens":9000,"max_output_tokens":9000}`)
+	got, err := clampMaxTokens(body, &limit)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(got, &obj); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	for _, field := range []string{"max_tokens", "max_completion_tokens", "max_output_tokens"} {
+		if v, _ := obj[field].(float64); int(v) != 512 {
+			t.Fatalf("expected %s=512, got %v", field, obj[field])
+		}
+	}
+}

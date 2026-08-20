@@ -210,10 +210,13 @@ func validateAndPatchOutgoingOpenAIRequest(providerType string, body []byte) ([]
 	return body, nil
 }
 
-// clampMaxTokens 将请求体中的 max_tokens（及 OpenAI 新名 max_completion_tokens）
-// 裁剪到 limit。limit 为 nil 或 <=0 表示不限，直接返回原 body。
-// 避免客户端发超大 max_tokens 触发上游 400（如 Cursor 默认填 1M）。
+// clampMaxTokens 将请求体中的输出上限字段裁剪到 limit。limit 为 nil 或 <=0 表示不限，
+// 直接返回原 body。避免客户端发超大值触发上游 400（如 Cursor 默认填 1M）。
 // 返回 error 供调用方感知失败；调用方可选择打日志后继续用原 body（兜底不阻断主流程）。
+//
+// 字段表按**协议实际键名**穷举而非只认 max_tokens：同一个「输出上限」语义在三个协议
+// 下有三个键名，漏一个该协议的运维阀值就是空转——`max_output_tokens` 曾漏在表外，
+// openai-res 上游的 MaxTokensLimit 完全不生效且无任何报错。
 func clampMaxTokens(body []byte, limit *int) ([]byte, error) {
 	if limit == nil || *limit <= 0 {
 		return body, nil
@@ -222,12 +225,14 @@ func clampMaxTokens(body []byte, limit *int) ([]byte, error) {
 
 	var obj map[string]any
 	if err := json.Unmarshal(body, &obj); err != nil {
-		return body, fmt.Errorf("unmarshal body for max_tokens clamp: %w", err)
+		return body, fmt.Errorf("unmarshal body for output limit clamp: %w", err)
 	}
 
 	changed := false
-	// OpenAI Chat API 旧名 max_tokens / 新名 max_completion_tokens，Anthropic 用 max_tokens
-	for _, field := range []string{"max_tokens", "max_completion_tokens"} {
+	// OpenAI Chat 旧名 max_tokens / 新名 max_completion_tokens；Anthropic 用 max_tokens；
+	// OpenAI Responses 用 max_output_tokens。逐个键独立钳制——同一 body 里出现多个
+	// （客户端同时传旧新名）时都得压住，只认第一个会留下没钳到的那个。
+	for _, field := range []string{"max_tokens", "max_completion_tokens", "max_output_tokens"} {
 		v, ok := obj[field]
 		if !ok {
 			continue
@@ -247,7 +252,7 @@ func clampMaxTokens(body []byte, limit *int) ([]byte, error) {
 	}
 	patched, err := json.Marshal(obj)
 	if err != nil {
-		return body, fmt.Errorf("marshal body after max_tokens clamp: %w", err)
+		return body, fmt.Errorf("marshal body after output limit clamp: %w", err)
 	}
 	return patched, nil
 }

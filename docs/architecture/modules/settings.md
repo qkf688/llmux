@@ -41,7 +41,7 @@ models.Setting
 
 ## 5. 特殊约定
 
-- **扩展最小改动集（现状）**：`models/setting_schema.go` + `handler/settings` DTO（如 `Settings`）+ 前端 `lib/api/.../settings.ts` 与表单 UI；Get/Update **分发**由 schema 驱动，但 **契约字段仍手同步三端**
+- **扩展点分布（现状）**：`models/setting_schema.go` + `handler/settings` DTO（如 `Settings`）+ 前端 `lib/api/.../settings.ts` 与表单 UI；Get/Update **分发**由 schema 驱动，但 **契约字段仍手同步三端**
 - 交叉字段归一化（如 `normalizeUpdateSettingsRequest`）可能不在 schema 内，新增约束时需排查
 - **热读未完全单路径**：并存 `models.GetSetting*`、`service/settings.Reader`、部分业务包自写 getter（默认值/min 语义可能不一致）
 - 键名使用 `SettingKey*` 常量，禁止魔法字符串散落

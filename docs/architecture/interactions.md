@@ -38,7 +38,7 @@ modelsync   → ActionHooks     → service/autoassoc.Associate / CleanInvalid
 
 ## 4. 注册表扩展（OCP）
 
-在 `init()` 或显式 Register 中绑定实现，调用方只查表。**注册表不等于「只改一个文件」**——各扩展点的最小改动集见 [README.md](README.md)「扩展最小改动集」。
+在 `init()` 或显式 Register 中绑定实现，调用方只查表。**注册表不等于「只改一个文件」**——各扩展点实际涉及的位置见对应 `modules/{x}.md`；扩展操作步骤见 `AGENTS.md` 第 5 节。
 
 ```
 providers.Register + RegisterMetadata          # 工厂层 OCP；外围或有 type 分支
@@ -83,4 +83,4 @@ handler → repository.Default()（repos.go）  # service 侧 chat/chatstats/hea
 
 ---
 
-*本文档由 Project Architecture Documenter skill 生成，生成日期：2026-07-23；同日审查回写。*
+*本文档由 Project Architecture Documenter skill 生成，生成日期：2026-08-21*

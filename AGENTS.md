@@ -17,7 +17,6 @@
 | 模块详情 | [docs/architecture/modules/](docs/architecture/modules/) | 各业务模块的职责、边界、接口契约（现状描述） |
 | 模块间交互 | [docs/architecture/interactions.md](docs/architecture/interactions.md) | 同步调用 / Hook / 注册表 / 共享模型（现状描述） |
 | 命名规范 | [docs/architecture/conventions.md](docs/architecture/conventions.md) | 文件 / 目录 / 变量命名约定（现状描述） |
-| 目录树 | [docs/architecture/dir-tree.txt](docs/architecture/dir-tree.txt) | 项目目录结构（生成脚本已不在仓库，现手工维护） |
 | 虚拟模型用户指南 | [docs/virtual-models-guide.md](docs/virtual-models-guide.md) | 虚拟模型使用说明（用户向，非架构） |
 
 > AGENTS.md 是操作规范（「该怎么改」）；架构文档是现状描述（「系统长什么样」）。两者互补，不重复。
@@ -28,12 +27,12 @@
 
 | 改动类型 | 需更新的文档 |
 |---|---|
-| 新增/删除/重命名目录、文件 | 架构文档（**手工**同步 `dir-tree.txt`——生成脚本已不在仓库）+ 涉及的 `modules/{x}.md` 内部结构 |
+| 新增/删除/重命名目录、文件 | 涉及的 `modules/{x}.md`「内部结构」节（**无**全局目录树文件；目录结构用 `list_dir` / `glob` 实时看） |
 | 新增/删除/重命名业务模块 | `docs/architecture/README.md` 模块索引 + 新建/删除 `modules/{x}.md` + 本文件第 2.1 节任务导航（如影响） |
 | 修改核心接口契约 | `modules/{x}.md` 的「关键接口契约」节 |
 | 修改模块职责边界 | `modules/{x}.md` 的「职责与边界」节 |
 | 修改顶层分层或依赖方向 | `README.md` 的「全局架构图」节 + 本文件第 4 节 |
-| 修改扩展最小改动集 | `README.md`「扩展最小改动集」+ 本文件第 5 节 |
+| 修改扩展最小改动集 | 本文件第 5 节（扩展指南只在本文件维护；架构文档不写「该怎么改」） |
 | 修改技术栈、构建命令、路径别名 | `README.md`「项目概述」+ 本文件第 2 节 |
 | 修改命名规范 | `conventions.md` + 本文件第 3 节（各自维护） |
 | 修改架构纪律、扩展方式、复用规则 | 本文件第 4 / 5 / 6 节 |

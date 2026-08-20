@@ -88,17 +88,6 @@ LLMux 是多供应商 LLM API 网关/代理：对外提供 OpenAI / Anthropic �
 - 自动关联已收敛为 **`service/autoassoc` 单一入口**；handler HTTP 与 modelsync ActionHooks 均委托该服务（见 associations 模块）。
 - 文档描述以**当前代码结构**为准，不以理想重构目标替代现状。
 
-### 扩展最小改动集（现状，非理想）
-
-| 扩展目标 | 通常要动的位置 |
-|----------|----------------|
-| 新供应商 type | `providers` 新文件 + `Register`/`RegisterMetadata`；排查 providerapi/testapi/chat 是否仍有 type 分支 |
-| 新客户端协议 style | chat 注册 Beforer/Processer、transform 适配器、streaming 路由、`register_v1`、`consts`、相关预处理/测试 |
-| 新虚拟模型策略 | `*_selector.go` + `RegisterSelector`；若算法不在现有 `selectBy*` 则改 Service；前端策略白名单 |
-| 新设置项 | `setting_schema.go` + handler DTO + 前端 settings 类型/表单；交叉校验可能在 normalize 逻辑 |
-| 新管理 API 域 | `handler/<domain>/` + `RegisterAll` 一行挂接 + 可选 service/repository + webui 路由/API |
-| 新管理页面 | `routes/<page>/` + `route-config.ts` + `lib/api` 模块 |
-
 ## 4. 模块索引
 
 | 模块 | 业务领域 | 详情文件 |
@@ -117,7 +106,7 @@ LLMux 是多供应商 LLM API 网关/代理：对外提供 OpenAI / Anthropic �
 | `webui` | 管理后台前端 SPA | [modules/webui.md](modules/webui.md) |
 
 > 新增业务域时：新建 `modules/{name}.md` 并在本表加一行；不改已有模块文件正文。  
-> `system-ops` 是文档上的横切合集，内部子边界见该模块文件，勿继续把无关业务规则塞入该桶。
+> `system-ops` 是文档上的横切合集（非单一业务实体），内部子边界见该模块文件。
 
 ## 5. 相关文件
 
@@ -126,9 +115,8 @@ LLMux 是多供应商 LLM API 网关/代理：对外提供 OpenAI / Anthropic �
 | [modules/](modules/) | 各业务模块的职责、边界、接口契约 |
 | [interactions.md](interactions.md) | 模块间交互方式 |
 | [conventions.md](conventions.md) | 命名规范 |
-| [dir-tree.txt](dir-tree.txt) | 目录树（脚本自动生成） |
 | [../virtual-models-guide.md](../virtual-models-guide.md) | 虚拟模型使用指南（用户向，非架构） |
 
 ---
-；同日按 OCP/DRY/SRP 审查回写「最小改动集 / 未闭环现状」。
-*本文档由 Project Architecture Documenter skill 生成，生成日期：2026-07-23*
+
+*本文档由 Project Architecture Documenter skill 生成，生成日期：2026-08-21*

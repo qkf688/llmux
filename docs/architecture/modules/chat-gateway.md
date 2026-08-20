@@ -65,7 +65,7 @@ balancer/                   # 加权随机纯算法
 
 ## 5. 特殊约定
 
-- **扩展最小改动集（现状）**：style 注册 `Beforer`/`Processer` + `register_v1` 路由 + transform 适配/流路由 + `consts`；不在 `main.go` 写业务路由
+- **扩展点分布（现状）**：style 注册 `Beforer`/`Processer` + `register_v1` 路由 + transform 适配/流路由 + `consts`；业务路由不在 `main.go`
 - **数据访问**：统一经 `repos()`（`service/chat/repos.go` → `repository.Default()`），**禁止**直连 `models.DB`/`gorm.G`；旁路包 `chatstats` 同样经 `repos().Stats`（`repository.StatsRepo`）
 - **职责拆分（现状）**：选路/重试/协议/日志落库编排仍在 `service/chat`；Stats 在 `chatstats`；权重调整在 `adjustment`。改统计策略与改选路策略不再同文件碰撞；日志 IO 存储仍可后续下沉
 - 虚拟模型路径：先由 `virtualmodel` 产出有序真实模型，再在真实模型层做 provider 级选路（两层 LB）。两条路径的差异只体现在**候选池如何构建**与**穷尽后如何处置**（真实路径整体失败；虚拟路径换下一个真实模型），provider 级重试循环本身由 `runProviderRetryLoop` 单点承载，不再各写一份

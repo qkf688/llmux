@@ -12,7 +12,7 @@ func parseOpenAIChatStop(raw json.RawMessage) *models.UnifiedStop {
 		return nil
 	}
 	stop := &models.UnifiedStop{}
-	if value, ok := rawOpenAIString(raw); ok {
+	if value, ok := shared.RawString(raw); ok {
 		stop.Single = &value
 		return stop
 	}
@@ -26,7 +26,7 @@ func parseOpenAIChatStop(raw json.RawMessage) *models.UnifiedStop {
 
 func parseOpenAIChatResponseFormat(raw json.RawMessage) *models.UnifiedResponseFormat {
 	var rf openAIChatResponseFormat
-	if !decodeOpenAIChatObject(raw, &rf) {
+	if !shared.DecodeJSONObject(raw, &rf) {
 		return nil
 	}
 	return &models.UnifiedResponseFormat{
@@ -40,18 +40,18 @@ func parseOpenAIChatToolChoice(raw json.RawMessage) *models.UnifiedToolChoice {
 		return nil
 	}
 	choice := &models.UnifiedToolChoice{}
-	if value, ok := rawOpenAIString(raw); ok {
+	if value, ok := shared.RawString(raw); ok {
 		choice.StringValue = &value
 		return choice
 	}
 
 	var obj openAIChatToolChoiceObject
-	if !decodeOpenAIChatObject(raw, &obj) {
+	if !shared.DecodeJSONObject(raw, &obj) {
 		return choice
 	}
 	unifiedObj := models.UnifiedToolChoiceObject{Type: obj.Type.Value}
 	var fn openAIChatToolChoiceFunction
-	if decodeOpenAIChatObject(obj.Function, &fn) {
+	if shared.DecodeJSONObject(obj.Function, &fn) {
 		unifiedObj.Function = &models.UnifiedToolChoiceFunction{Name: fn.Name.Value}
 	}
 	choice.ObjectValue = &unifiedObj
@@ -60,7 +60,7 @@ func parseOpenAIChatToolChoice(raw json.RawMessage) *models.UnifiedToolChoice {
 
 func parseOpenAIChatStreamOptions(raw json.RawMessage) *models.UnifiedStreamOptions {
 	var streamOptions openAIChatStreamOptions
-	if !decodeOpenAIChatObject(raw, &streamOptions) {
+	if !shared.DecodeJSONObject(raw, &streamOptions) {
 		return nil
 	}
 	return &models.UnifiedStreamOptions{IncludeUsage: streamOptions.IncludeUsage.Value}
@@ -68,7 +68,7 @@ func parseOpenAIChatStreamOptions(raw json.RawMessage) *models.UnifiedStreamOpti
 
 func parseOpenAIChatAudio(raw json.RawMessage) *models.UnifiedAudio {
 	var audio openAIChatAudio
-	if !decodeOpenAIChatObject(raw, &audio) {
+	if !shared.DecodeJSONObject(raw, &audio) {
 		return nil
 	}
 	return &models.UnifiedAudio{

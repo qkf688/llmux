@@ -11,11 +11,11 @@ func parseOpenAIChatTools(tools shared.RawArray) []models.UnifiedTool {
 	var unified []models.UnifiedTool
 	for _, raw := range tools {
 		var tool openAIChatTool
-		if !decodeOpenAIChatObject(raw, &tool) {
+		if !shared.DecodeJSONObject(raw, &tool) {
 			continue
 		}
 		var fn openAIChatFunction
-		if !decodeOpenAIChatObject(tool.Function, &fn) {
+		if !shared.DecodeJSONObject(tool.Function, &fn) {
 			continue
 		}
 		unified = append(unified, models.UnifiedTool{
@@ -34,11 +34,11 @@ func parseOpenAIChatToolCalls(toolCalls shared.RawArray) []models.UnifiedToolCal
 	var unified []models.UnifiedToolCall
 	for _, raw := range toolCalls {
 		var toolCall openAIChatToolCall
-		if !decodeOpenAIChatObject(raw, &toolCall) {
+		if !shared.DecodeJSONObject(raw, &toolCall) {
 			continue
 		}
 		var fn openAIChatToolCallFunction
-		if !decodeOpenAIChatObject(toolCall.Function, &fn) {
+		if !shared.DecodeJSONObject(toolCall.Function, &fn) {
 			continue
 		}
 		unified = append(unified, models.UnifiedToolCall{

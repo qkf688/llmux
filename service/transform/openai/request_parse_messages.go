@@ -11,7 +11,7 @@ func parseOpenAIChatMessages(messages shared.RawArray) ([]models.UnifiedMessage,
 	decoded := make([]openAIChatMessage, 0, len(messages))
 	for _, raw := range messages {
 		var msg openAIChatMessage
-		if !decodeOpenAIChatObject(raw, &msg) {
+		if !shared.DecodeJSONObject(raw, &msg) {
 			continue
 		}
 		decoded = append(decoded, msg)
@@ -30,7 +30,7 @@ func parseOpenAIChatMessages(messages shared.RawArray) ([]models.UnifiedMessage,
 	for _, msg := range decoded {
 		role := msg.Role.Value
 		if role == "system" && extractSystem {
-			if content, ok := rawOpenAIString(msg.Content); ok && content != "" {
+			if content, ok := shared.RawString(msg.Content); ok && content != "" {
 				if system != "" {
 					system += "\n\n" + content
 				} else {
@@ -68,7 +68,7 @@ func parseOpenAIChatMessageContent(raw json.RawMessage) interface{} {
 	parts := make([]models.UnifiedMessageContentPart, 0, len(rawParts))
 	for _, rawPart := range rawParts {
 		var part openAIChatContentPart
-		if !decodeOpenAIChatObject(rawPart, &part) {
+		if !shared.DecodeJSONObject(rawPart, &part) {
 			continue
 		}
 
@@ -81,7 +81,7 @@ func parseOpenAIChatMessageContent(raw json.RawMessage) interface{} {
 			}
 		case "image_url":
 			var image openAIChatImageURL
-			if decodeOpenAIChatObject(part.ImageURL, &image) {
+			if shared.DecodeJSONObject(part.ImageURL, &image) {
 				var detail *string
 				if image.Detail.Set {
 					detail = &image.Detail.Value
@@ -93,7 +93,7 @@ func parseOpenAIChatMessageContent(raw json.RawMessage) interface{} {
 			}
 		case "input_audio":
 			var audio openAIChatInputAudio
-			if decodeOpenAIChatObject(part.InputAudio, &audio) {
+			if shared.DecodeJSONObject(part.InputAudio, &audio) {
 				unifiedPart.InputAudio = &models.UnifiedInputAudio{
 					Data:   audio.Data.Value,
 					Format: audio.Format.Value,

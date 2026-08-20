@@ -38,7 +38,7 @@ modelsync   → ActionHooks     → service/autoassoc.Associate / CleanInvalid
 
 ## 4. 注册表扩展（OCP）
 
-在 `init()` 或显式 Register 中绑定实现，调用方只查表。**注册表不等于「只改一个文件」**——各扩展点实际涉及的位置见对应 `modules/{x}.md`；扩展操作步骤见 `AGENTS.md` 第 5 节。
+在 `init()` 或显式 Register 中绑定实现，调用方只查表。**注册表不等于「只改一个文件」**——各扩展点实际涉及的位置见对应 `modules/{x}.md`；扩展操作步骤见 [../guides/extension.md](../guides/extension.md)。
 
 ```
 providers.Register + RegisterMetadata          # 工厂层 OCP；外围或有 type 分支

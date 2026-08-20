@@ -46,7 +46,7 @@ models/retention.go
 ## 5. 特殊约定
 
 - **对外响应必须经 `handler/logs/dto.go` 的 DTO，禁止裸序列化 `models.ChatLog`/`ChatIO`**。理由是历史教训而非洁癖：`ChatIO` 曾直接 `httpresp.Success(c, chatIO)` 返回，GORM 模型的 Go 字段名就是 JSON key，改一个字段名（`LogId`→`LogID`）即破坏前端契约；`ChatLog` 曾用 `map[string]any` 手拼，漏写 `completion_tokens_details` 导致 reasoning_tokens 落库有值但 API 永不返回、前端类型声明成为谎言。结构体 DTO 让编译器兜住字段齐全，模型层字段改名不再波及 API
-- API 字段一律 snake_case（含 `id` / `created_at` / `chat_io` 等，AGENTS.md 3.1）；`raw` 六字段用 `*string`+`omitempty`——空字符串是合法值，必须与「include_raw=false 未返回」区分
+- API 字段一律 snake_case（含 `id` / `created_at` / `chat_io` 等，见 [conventions.md](../conventions.md)）；`raw` 六字段用 `*string`+`omitempty`——空字符串是合法值，必须与「include_raw=false 未返回」区分
 - **`unclaimed_request_fields` 是读时计算的诊断字段，不落库**：指出客户端原始请求体里有哪些顶层键本网关根本没解析（转换后会静默消失），供开发/运维据此去补 transform。入参是 `ChatLog.Style` + `ChatLog.RawRequestBody`，调 `transform.UnknownRequestKeys`（见 [protocol-transform.md](protocol-transform.md)）。
   - **不落库的理由**：DTO 会随 transform 演进，落库的结论会僵化成「按当时 DTO 算的旧答案」；读时算永远反映最新代码，且日志详情是低频页面，反射 + JSON parse 的开销可忽略。
   - **与 raw 组同一个 `includeRaw` 门控**：它的输入就是 `RawRequestBody`，`include_raw=false` 时该列压根没从库里读出来（`ChatLogRepo.List` 的 Omit），此时算出来的只会是假的 `raw_not_recorded`。

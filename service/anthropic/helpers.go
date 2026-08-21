@@ -80,31 +80,12 @@ const MinThinkingBudget int64 = 1024
 // （不报错，只是想得更少），比 400 更难发现，故收敛必须先识别本例外。
 const BetaInterleavedThinking = "interleaved-thinking-2025-05-14"
 
-// ThinkingBudgetToReasoningEffort 将 thinking budget 转换为 reasoning effort。
-// 参考 Octopus 实现的映射规则（single source of truth，供协议转换与测试复用）。
-// 6 档反向区间——保留现有阈值不变（>=50000→high, >=20000→medium, >0→low），
-// 新增 1-512→minimal, 50001-80000→xhigh, 80001+→max。
-func ThinkingBudgetToReasoningEffort(budgetTokens int64) string {
-	switch {
-	case budgetTokens >= 80001:
-		return "max"
-	case budgetTokens >= 50001:
-		return "xhigh"
-	case budgetTokens >= 50000:
-		return "high"
-	case budgetTokens >= 20000:
-		return "medium"
-	case budgetTokens >= 1 && budgetTokens <= 512:
-		return "minimal"
-	case budgetTokens > 0:
-		return "low"
-	default:
-		return ""
-	}
-}
-
 // ReasoningEffortToThinkingBudget 将 reasoning effort 转换为 thinking budget。
 // 6 档映射的 single source of truth，供协议转换与测试复用。
+//
+// 反方向（budget→effort）在 shared.ThinkingBudgetToReasoningEffort：那条方向是协议中立的
+// 降级粗化，多个入站协议都要用；本方向的取值编码了 Anthropic 的 budget_tokens 硬地板，
+// 是 Anthropic 协议知识，故留在本包。
 //
 // 高四档沿用 Octopus 值（medium→20000, high→50000, xhigh→80000, max→128000）。
 // **minimal 与 low 合并到 MinThinkingBudget(1024)**：这两档原为 512 / 1000，均低于

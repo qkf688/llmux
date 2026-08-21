@@ -1,40 +1,10 @@
 package anthropic
 
-import "testing"
+import (
+	"testing"
 
-func TestThinkingBudgetToReasoningEffort(t *testing.T) {
-	tests := []struct {
-		name           string
-		budgetTokens   int64
-		expectedEffort string
-	}{
-		// 保留现有 3 档测试（Octopus 阈值不变）
-		{"high effort", 50000, "high"},
-		{"medium effort", 30000, "medium"},
-		{"medium lower bound", 20000, "medium"}, // 档位下界恰等值
-		{"low effort", 5000, "low"},
-		{"zero budget", 0, ""},
-
-		// 新增 3 档（Stage B 扩档）
-		{"minimal effort", 512, "minimal"},
-		{"minimal upper bound", 512, "minimal"},
-		{"minimal lower bound", 1, "minimal"},
-		{"low above minimal", 513, "low"}, // 513 落入 low 区间
-		{"xhigh effort", 80000, "xhigh"},
-		{"xhigh lower bound", 50001, "xhigh"},
-		{"max effort", 128000, "max"},
-		{"max lower bound", 80001, "max"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			effort := ThinkingBudgetToReasoningEffort(tt.budgetTokens)
-			if effort != tt.expectedEffort {
-				t.Errorf("Expected effort '%s', got '%s'", tt.expectedEffort, effort)
-			}
-		})
-	}
-}
+	"github.com/qkf688/llmux/service/transform/shared"
+)
 
 // TestMapAnthropicErrorType 冻结出站错误 type 的白名单钳制：
 // Anthropic 的 error.type 是客户端用来分支的机器可读枚举，写出协议未定义的值
@@ -171,9 +141,9 @@ func TestReasoningEffortBudgetRoundTrip(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			effort := ThinkingBudgetToReasoningEffort(tt.originalBudget)
+			effort := shared.ThinkingBudgetToReasoningEffort(tt.originalBudget)
 			if effort != tt.reverseEffort {
-				t.Errorf("reverse: ThinkingBudgetToReasoningEffort(%d) = %q, want %q",
+				t.Errorf("reverse: shared.ThinkingBudgetToReasoningEffort(%d) = %q, want %q",
 					tt.originalBudget, effort, tt.reverseEffort)
 			}
 			budget := ReasoningEffortToThinkingBudget(effort)

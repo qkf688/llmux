@@ -247,9 +247,25 @@ func FromUnified(unified *models.UnifiedRequest) ([]byte, error) {
 		req["tools"] = tools
 	}
 
-	// 输出 reasoning_effort 参数
+	// 输出 reasoning_effort 参数。
+	//
+	// effort 缺席但有 budget 时**降级 emit** 反推档位：OpenAI chat-completions 协议没有任何
+	// thinking token 数字段，budget 这一维在这里无处可放。不降级的话 budget-only 请求
+	// （responses 入站 reasoning.max_tokens 是唯一可达来源）出站会一个 thinking 字段都不带，
+	// 上游按「不思考」处理、客户端也收不到任何提示——比 400 更难发现。
+	// 有损（513..19999 全塌到 low）是协议固有代价，不是实现缺陷。
+	//
+	// 刻意只在出站降级、**不回写 unified**：往 unified 补 effort 会让 clampUnifiedReasoning
+	// 把 budget-only 请求误判成 effort 请求（它靠 ReasoningEffort == nil 分派到
+	// clampUnifiedBudgetOnly），还会给 responses 出站凭空加上客户端没给的 reasoning.effort。
+	// 同一决策见 transform/transformer_thinking_clamp.go 的 clampUnifiedBudgetOnly。
+	// 顺序安全：白名单钳制在 FromUnified 之前完成，此处的 budget 已受约束。
 	if unified.ReasoningEffort != nil {
 		req["reasoning_effort"] = *unified.ReasoningEffort
+	} else if unified.ReasoningBudget != nil {
+		if derived := shared.ThinkingBudgetToReasoningEffort(*unified.ReasoningBudget); derived != "" {
+			req["reasoning_effort"] = derived
+		}
 	}
 
 	// 阶段 1: 输出基础高级参数

@@ -60,7 +60,7 @@ func TransformToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedReq
 	if shared.DecodeJSONObject(req.Thinking, &thinking) {
 		budgetTokens := thinking.BudgetTokens.Value
 		if thinking.Type.Value == "enabled" && budgetTokens > 0 {
-			effort := ThinkingBudgetToReasoningEffort(budgetTokens)
+			effort := shared.ThinkingBudgetToReasoningEffort(budgetTokens)
 			if effort != "" {
 				unified.ReasoningEffort = &effort
 			}

@@ -34,6 +34,16 @@ type OpenAICompat interface {
 	OpenAICompatAPIKey() string
 }
 
+// BetaFeatureCapable 暴露「本供应商是否启用了某个 beta 特性」的查询能力。
+// 上层做协议合法性收敛时需要它：同一条硬约束在特定 beta 开启后可能整体失效
+// （Anthropic interleaved thinking 下 thinking.budget_tokens 允许超过 max_tokens），
+// 不看 beta 就收敛等于把合法请求静默改写。
+// 目前仅 *Anthropic 实现；调用方**必须**断言本接口而非具体类型（OCP：新 type 想参与只需实现它）。
+type BetaFeatureCapable interface {
+	Provider
+	HasBetaFeature(name string) bool
+}
+
 func buildCustomModels(custom []string) []Model {
 	now := time.Now().Unix()
 	models := make([]Model, 0, len(custom))

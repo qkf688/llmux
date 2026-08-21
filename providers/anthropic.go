@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/qkf688/llmux/consts"
@@ -83,6 +84,24 @@ func setAnthropicBeta(header http.Header, beta string) {
 		return
 	}
 	header.Set("anthropic-beta", beta)
+}
+
+// HasBetaFeature 判断本供应商配置的 anthropic-beta 是否包含指定特性（实现 BetaFeatureCapable）。
+//
+// 判据只看 provider 配置的 Beta 字段，不看客户端请求头——setAnthropicBeta 已保证客户端
+// 自带的 anthropic-beta 进不到上游（未配则 Del、配了则覆盖），故运维配置是唯一事实来源。
+// Beta 按官方格式是逗号分隔的多特性列表（如 "interleaved-thinking-2025-05-14,output-128k-2025-02-19"），
+// 逐项 trim 后比较；官方特性名恒为小写，但运维手填大小写不可控，故用 EqualFold 宽松匹配。
+func (a *Anthropic) HasBetaFeature(name string) bool {
+	if a.Beta == "" || name == "" {
+		return false
+	}
+	for _, item := range strings.Split(a.Beta, ",") {
+		if strings.EqualFold(strings.TrimSpace(item), name) {
+			return true
+		}
+	}
+	return false
 }
 
 type AnthropicModelsResponse struct {

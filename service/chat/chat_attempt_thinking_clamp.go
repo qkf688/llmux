@@ -7,6 +7,7 @@ import (
 
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/providers"
 	"github.com/qkf688/llmux/service/anthropic"
 	"github.com/qkf688/llmux/service/transform"
 	"github.com/tidwall/gjson"
@@ -17,6 +18,20 @@ import (
 // Anthropic 的 max_tokens 是「思考 + 回答」总额；留 20% 给回答，避免思考吃满导致回答无空间。
 // 这是 chat 层的收敛策略（非协议事实），故常量定义在本包而非 service/anthropic。
 const budgetMaxTokensRatio = 0.8
+
+// providerAllowsBudgetExceedMaxTokens 判断上游是否启用了让「budget < max_tokens」约束失效的 beta。
+//
+// 走 providers.BetaFeatureCapable 能力接口断言，不断言 *providers.Anthropic 具体类型：
+// 后者会把 chat 层钉死在一个 provider 实现上，新增同族上游（如某个 Anthropic 兼容代理）
+// 就得回来改这里（违反 OCP）。不实现该接口的 provider 一律按「未启用」处理——保守方向，
+// 最坏情况是维持既有收敛行为。
+func providerAllowsBudgetExceedMaxTokens(chatModel providers.Provider) bool {
+	betaCapable, ok := chatModel.(providers.BetaFeatureCapable)
+	if !ok {
+		return false
+	}
+	return betaCapable.HasBetaFeature(anthropic.BetaInterleavedThinking)
+}
 
 // passthroughEffortFields 返回各协议 passthrough 路径的 reasoning effort 字段路径。
 func passthroughEffortFields(style string) []string {
@@ -226,7 +241,11 @@ func clampPassthroughBudgetOnly(raw []byte, style string, clamp *transform.Think
 // 只在组合已非法时介入（budget >= max_tokens），合法组合原样放行——不二次猜测客户端意图。
 // 目标值低于 anthropic.MinThinkingBudget 时钳制无意义（低于最小预算同样 400），整体剥离 thinking。
 // 防御式改写：非 anthropic / 字段缺失 / sjson 失败均返回原 body，不阻断主流程。
-func reconcileThinkingBudgetWithMaxTokens(body []byte, providerType string) []byte {
+//
+// allowBudgetExceedMaxTokens 为 true 时整体跳过：上游启用了 interleaved thinking beta，
+// 该约束不成立（详见 anthropic.BetaInterleavedThinking）。这类请求本就合法，收敛只会
+// 把思考静默压浅——没有 400 提示，比报错更难排查。
+func reconcileThinkingBudgetWithMaxTokens(body []byte, providerType string, allowBudgetExceedMaxTokens bool) []byte {
 	// 只有 Anthropic 有此约束：OpenAI Chat 无 budget 字段；Responses 的 budget 在
 	// reasoning.max_tokens、上限键是 max_output_tokens——该键**已被 clampMaxTokens 钳制**，
 	// 但 Responses 并无「budget 必须严格小于上限」的对应硬约束：官方 Responses API 根本没有
@@ -234,6 +253,12 @@ func reconcileThinkingBudgetWithMaxTokens(body []byte, providerType string) []by
 	// 等兼容层的扩展），max_output_tokens 的语义是「推理+回答总额，超了就截断」而非 400 拒绝。
 	// 故本函数刻意不覆盖 Responses。
 	if providerType != consts.StyleAnthropic || len(body) == 0 {
+		return body
+	}
+
+	if allowBudgetExceedMaxTokens {
+		slog.Debug("skip thinking budget reconcile: interleaved thinking beta enabled on provider",
+			"beta", anthropic.BetaInterleavedThinking)
 		return body
 	}
 

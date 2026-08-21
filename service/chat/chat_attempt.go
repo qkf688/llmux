@@ -48,12 +48,13 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 	}
 
 	requestBody, skipProvider, bodyErr := buildRequestBodyForProvider(input.Ctx, ProviderRequestCaps{
-		Style:            input.Style,
-		ProviderType:     input.Provider.Type,
-		Raw:              input.Before.raw,
-		MaxTokensLimit:   input.ModelWithProvider.MaxTokens,
-		SupportsThinking: supportsThinking,
-		ThinkingClamp:    thinkingClamp,
+		Style:                      input.Style,
+		ProviderType:               input.Provider.Type,
+		Raw:                        input.Before.raw,
+		MaxTokensLimit:             input.ModelWithProvider.MaxTokens,
+		SupportsThinking:           supportsThinking,
+		ThinkingClamp:              thinkingClamp,
+		AllowBudgetExceedMaxTokens: providerAllowsBudgetExceedMaxTokens(input.ChatModel),
 	})
 	if skipProvider {
 		return singleProviderAttemptResult{RemoveWeight: true, RemovePriority: true}

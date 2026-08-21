@@ -70,6 +70,16 @@ func mapAnthropicErrorType(errType string) string {
 // 而不是钳到一个非法的小值。
 const MinThinkingBudget int64 = 1024
 
+// BetaInterleavedThinking 是 Anthropic 交错思考（interleaved thinking）的 beta 特性名，
+// 以 anthropic-beta 头启用；llmux 侧唯一来源是 provider 配置的 Beta 字段
+// （客户端自带的该头被 providers.setAnthropicBeta 清除或覆盖，进不到上游）。
+//
+// 它是「budget_tokens 必须严格小于 max_tokens」这条硬约束的**官方例外**：启用后 budget
+// 表示「一个 assistant 轮次内所有 thinking 块的总预算」，上限变为整个上下文窗口，
+// 故允许超过 max_tokens。此时若仍按常规收敛降 budget，合法请求会被静默压浅思考
+// （不报错，只是想得更少），比 400 更难发现，故收敛必须先识别本例外。
+const BetaInterleavedThinking = "interleaved-thinking-2025-05-14"
+
 // ThinkingBudgetToReasoningEffort 将 thinking budget 转换为 reasoning effort。
 // 参考 Octopus 实现的映射规则（single source of truth，供协议转换与测试复用）。
 // 6 档反向区间——保留现有阈值不变（>=50000→high, >=20000→medium, >0→low），

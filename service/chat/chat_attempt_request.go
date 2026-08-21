@@ -26,6 +26,10 @@ type ProviderRequestCaps struct {
 	MaxTokensLimit   *int                           // max_tokens 上限，nil=不限
 	SupportsThinking bool                           // 关联最终是否支持 thinking（SupportsThinkingResolved 结果）
 	ThinkingClamp    *transform.ThinkingClampConfig // nil=不钳制（supportsThinking=false 时 thinking 已剥离）
+	// AllowBudgetExceedMaxTokens 为 true 时跳过 budget >= max_tokens 的协议级收敛。
+	// 来源：上游 provider 是否启用了 Anthropic interleaved thinking beta——该 beta 下
+	// 「budget 必须小于 max_tokens」的硬约束整体不成立（见 anthropic.BetaInterleavedThinking）。
+	AllowBudgetExceedMaxTokens bool
 }
 
 func withOptionalRequestTrace(ctx context.Context) context.Context {
@@ -70,7 +74,7 @@ func buildRequestBodyForProvider(ctx context.Context, caps ProviderRequestCaps) 
 		if clampErr != nil {
 			slog.Warn("max_tokens clamp failed, sending unclamped body", "error", clampErr)
 		}
-		return reconcileThinkingBudgetWithMaxTokens(clamped, providerType), false, nil
+		return reconcileThinkingBudgetWithMaxTokens(clamped, providerType, caps.AllowBudgetExceedMaxTokens), false, nil
 	}
 
 	if !getEnableFormatConversion(ctx) {
@@ -92,7 +96,7 @@ func buildRequestBodyForProvider(ctx context.Context, caps ProviderRequestCaps) 
 	if clampErr != nil {
 		slog.Warn("max_tokens clamp failed, sending unclamped body", "error", clampErr)
 	}
-	return reconcileThinkingBudgetWithMaxTokens(clamped, providerType), false, nil
+	return reconcileThinkingBudgetWithMaxTokens(clamped, providerType, caps.AllowBudgetExceedMaxTokens), false, nil
 }
 
 // stripThinkingFields 在 supportsThinking 为 false 时删除请求体中的 thinking 配置字段

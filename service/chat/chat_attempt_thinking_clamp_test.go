@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/qkf688/llmux/consts"
+	"github.com/qkf688/llmux/providers"
+	"github.com/qkf688/llmux/service/anthropic"
 	"github.com/qkf688/llmux/service/transform"
 	"github.com/tidwall/gjson"
 )
@@ -428,6 +430,7 @@ func TestReconcileThinkingBudget(t *testing.T) {
 		name         string
 		providerType string
 		raw          string
+		allowExceed  bool  // 上游启用 interleaved thinking beta → 该约束不成立
 		wantBudget   int64 // -1 = 期望 thinking 整体不存在
 		wantMaxTok   int64
 	}{
@@ -508,11 +511,31 @@ func TestReconcileThinkingBudget(t *testing.T) {
 			wantBudget:   6553,
 			wantMaxTok:   8192,
 		},
+		{
+			// 官方例外：interleaved thinking 下 budget 是「整轮所有 thinking 块的总预算」，
+			// 上限是上下文窗口而非 max_tokens。收敛这类请求不会 400，只会静默把思考压浅。
+			name:         "interleaved beta 开启 + budget 超 max → 原样放行，不收敛",
+			providerType: consts.StyleAnthropic,
+			raw:          `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":50000}}`,
+			allowExceed:  true,
+			wantBudget:   50000,
+			wantMaxTok:   8192,
+		},
+		{
+			// 例外只免除「budget 超 max_tokens」这一条，不代表 thinking 可以被随意剥离：
+			// 原本会触发剥离的小 max_tokens 组合也必须原样保留。
+			name:         "interleaved beta 开启 + 目标值本会低于最小预算 → 仍不剥离 thinking",
+			providerType: consts.StyleAnthropic,
+			raw:          `{"model":"m","max_tokens":1000,"thinking":{"type":"enabled","budget_tokens":50000}}`,
+			allowExceed:  true,
+			wantBudget:   50000,
+			wantMaxTok:   1000,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := reconcileThinkingBudgetWithMaxTokens([]byte(tt.raw), tt.providerType)
+			result := reconcileThinkingBudgetWithMaxTokens([]byte(tt.raw), tt.providerType, tt.allowExceed)
 
 			if tt.wantBudget < 0 {
 				if gjson.GetBytes(result, "thinking").Exists() {
@@ -618,5 +641,71 @@ func TestReconcileThinkingBudget_AnthropicDefaultMaxTokens(t *testing.T) {
 	}
 	if got := gjson.GetBytes(result, "thinking.budget_tokens").Int(); got != 6553 {
 		t.Errorf("thinking.budget_tokens = %d, want 6553 (floor(8192*0.8))", got)
+	}
+}
+
+// TestProviderAllowsBudgetExceedMaxTokens 覆盖「例外识别」这一步本身：
+// 判据是 provider 配置的 anthropic-beta，而不是客户端请求头（客户端头进不到上游）。
+// 判错的后果是单向静默——漏判把合法深思考压浅，误判则放过真正非法的组合让上游 400。
+func TestProviderAllowsBudgetExceedMaxTokens(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		model providers.Provider
+		want  bool
+	}{
+		{
+			name:  "anthropic 配了 interleaved beta → 允许超出",
+			model: &providers.Anthropic{Beta: anthropic.BetaInterleavedThinking},
+			want:  true,
+		},
+		{
+			name:  "anthropic 配了其它 beta → 不允许",
+			model: &providers.Anthropic{Beta: "output-128k-2025-02-19"},
+			want:  false,
+		},
+		{
+			name:  "anthropic 未配 beta → 不允许",
+			model: &providers.Anthropic{},
+			want:  false,
+		},
+		{
+			// 不实现 BetaFeatureCapable 的 provider 一律按未启用处理（保守方向：维持既有收敛）。
+			name:  "非 anthropic provider（未实现能力接口）→ 不允许",
+			model: &providers.OpenAI{},
+			want:  false,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := providerAllowsBudgetExceedMaxTokens(tt.model); got != tt.want {
+				t.Errorf("providerAllowsBudgetExceedMaxTokens = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestBuildRequestBody_InterleavedBetaSkipsReconcile 打在**出站 body** 上：
+// 例外标志必须真的从 caps 贯通到收敛函数，只测纯函数不足以证明装配没断。
+func TestBuildRequestBody_InterleavedBetaSkipsReconcile(t *testing.T) {
+	ctx := context.Background()
+	limit := 8192
+	raw := []byte(`{"model":"m","max_tokens":64000,"messages":[{"role":"user","content":"hi"}],"thinking":{"type":"enabled","budget_tokens":50000}}`)
+
+	result, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
+		Style:                      consts.StyleAnthropic,
+		ProviderType:               consts.StyleAnthropic,
+		Raw:                        raw,
+		MaxTokensLimit:             &limit, // 压 max_tokens 到 8192，本会造出 budget >= max_tokens
+		SupportsThinking:           true,
+		AllowBudgetExceedMaxTokens: true,
+	})
+	if skip || err != nil {
+		t.Fatalf("skip=%v err=%v", skip, err)
+	}
+
+	if got := gjson.GetBytes(result, "max_tokens").Int(); got != 8192 {
+		t.Fatalf("max_tokens = %d, want 8192（运维上限照旧生效）", got)
+	}
+	if got := gjson.GetBytes(result, "thinking.budget_tokens").Int(); got != 50000 {
+		t.Errorf("thinking.budget_tokens = %d, want 50000（interleaved 下不收敛）", got)
 	}
 }

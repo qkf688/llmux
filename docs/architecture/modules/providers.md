@@ -15,7 +15,7 @@
 
 - **负责什么**：`Provider` 工厂与实现（OpenAI / OpenAIRes / Anthropic）；客户端缓存；Metadata（模板、TestBody、HealthCheckBody）；管理端供应商 CRUD、黑名单、上游模型列表展示
 - **不负责什么**：模型-供应商关联行（`associations`）；协议互转（`protocol-transform`）；chat 选路与重试；虚拟模型策略
-- **对外暴露**：`providers.Provider`、`Register`/`New`、`RegisterMetadata`/`MetadataOf`/`AllMetadata`、`OpenAICompat`；`handler/providerapi` REST；`ProviderRepo`
+- **对外暴露**：`providers.Provider`、`Register`/`New`、`RegisterMetadata`/`MetadataOf`/`AllMetadata`、`OpenAICompat`、`BetaFeatureCapable`；`handler/providerapi` REST；`ProviderRepo`
 - **依赖谁**：`models`、`consts`、少量 `common`；handler 侧 `repository`/`httpresp`；拉上游模型时可能经 `service` 辅助
 
 ## 3. 内部结构
@@ -36,6 +36,8 @@ repository/provider.go
 | 契约 | 职责 | 定义位置 | 实现方 |
 |------|------|----------|--------|
 | `Provider` | `BuildReq` / `Models` / `GetProxy` | `providers/provider.go` | OpenAI、OpenAIRes、Anthropic |
+| `OpenAICompat` | 标记 OpenAI 兼容协议族并暴露 baseURL/apiKey | `providers/provider.go` | OpenAI、OpenAIRes |
+| `BetaFeatureCapable` | `HasBetaFeature(name)`：查询本供应商已启用的 beta 特性，供上层判断协议约束是否被 beta 豁免 | `providers/provider.go` | Anthropic（判据为配置的 `Beta` 字段） |
 | `Factory` + `Register`/`New` | 按 type 构造实现 | `providers/provider.go` | 各实现 `init` 注册 |
 | `Metadata` | 配置模板与探测 body | `providers/meta.go` | `RegisterMetadata` |
 | `ProviderRepo` | 供应商持久化 | `repository/provider.go` | GORM 实现 |

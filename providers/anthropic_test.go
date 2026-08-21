@@ -121,6 +121,46 @@ func TestAnthropicBuildReq_BetaHeader(t *testing.T) {
 	}
 }
 
+// TestAnthropicHasBetaFeature 覆盖 beta 特性查询：上层的 budget/max_tokens 收敛靠它
+// 识别 interleaved thinking 例外，判错的后果是静默改写合法请求（不报错、只是思考变浅）。
+func TestAnthropicHasBetaFeature(t *testing.T) {
+	const interleaved = "interleaved-thinking-2025-05-14"
+
+	for _, tt := range []struct {
+		name string
+		beta string
+		want bool
+	}{
+		{name: "未配 beta", beta: "", want: false},
+		{name: "单值精确命中", beta: interleaved, want: true},
+		{name: "多值列表命中", beta: "output-128k-2025-02-19," + interleaved, want: true},
+		{name: "多值带空格命中（运维手填常见形态）", beta: "output-128k-2025-02-19, " + interleaved, want: true},
+		{name: "大小写不敏感", beta: "Interleaved-Thinking-2025-05-14", want: true},
+		{name: "配了别的 beta 不误命中", beta: "output-128k-2025-02-19", want: false},
+		{name: "前缀相同但非同一特性不误命中", beta: "interleaved-thinking-2024-01-01", want: false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &Anthropic{Beta: tt.beta}
+			if got := a.HasBetaFeature(interleaved); got != tt.want {
+				t.Errorf("HasBetaFeature(%q) with Beta=%q = %v, want %v", interleaved, tt.beta, got, tt.want)
+			}
+		})
+	}
+
+	// 空特性名必须返回 false：否则「未指定要查什么」会被任意 Beta 配置误判成命中。
+	t.Run("空特性名", func(t *testing.T) {
+		a := &Anthropic{Beta: interleaved}
+		if a.HasBetaFeature("") {
+			t.Error(`HasBetaFeature("") = true, want false`)
+		}
+	})
+
+	// 断言 *Anthropic 满足能力接口：上层做的是接口断言，实现签名漂移时这里先红。
+	t.Run("实现 BetaFeatureCapable", func(t *testing.T) {
+		var _ BetaFeatureCapable = &Anthropic{}
+	})
+}
+
 // TestAnthropicModels_BetaHeader 覆盖拉模型列表这条独立路径：它自建 header，
 // 与 BuildReq 不共用代码，改一处漏一处正是此前的实际形态。
 func TestAnthropicModels_BetaHeader(t *testing.T) {

@@ -36,6 +36,43 @@ func TestThinkingBudgetToReasoningEffort(t *testing.T) {
 	}
 }
 
+// TestMapAnthropicErrorType 冻结出站错误 type 的白名单钳制：
+// Anthropic 的 error.type 是客户端用来分支的机器可读枚举，写出协议未定义的值
+// （如 OpenAI 的 rate_limit_exceeded）等于让客户端拿到无法分支的字符串，
+// 故未知值一律兜底 api_error（500 语义，最中性的「上游出错了」）。
+func TestMapAnthropicErrorType(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		// 官方白名单原样透传
+		{"invalid_request_error", "invalid_request_error", "invalid_request_error"},
+		{"authentication_error", "authentication_error", "authentication_error"},
+		{"billing_error", "billing_error", "billing_error"},
+		{"permission_error", "permission_error", "permission_error"},
+		{"not_found_error", "not_found_error", "not_found_error"},
+		{"request_too_large", "request_too_large", "request_too_large"},
+		{"rate_limit_error", "rate_limit_error", "rate_limit_error"},
+		{"api_error", "api_error", "api_error"},
+		{"overloaded_error", "overloaded_error", "overloaded_error"},
+
+		// 非白名单兜底
+		{"空值兜底", "", "api_error"},
+		{"OpenAI 专有 code 兜底", "rate_limit_exceeded", "api_error"},
+		{"OpenAI server_error 兜底", "server_error", "api_error"},
+		{"大小写不同不算命中", "Rate_Limit_Error", "api_error"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := mapAnthropicErrorType(tt.input); got != tt.expected {
+				t.Errorf("mapAnthropicErrorType(%q) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestReasoningEffortToThinkingBudget(t *testing.T) {
 	tests := []struct {
 		name           string

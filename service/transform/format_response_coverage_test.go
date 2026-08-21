@@ -24,8 +24,8 @@ func intPtr(i int) *int {
 //     的出站映射已由 TestTransformProviderResponse_OpenAIToAnthropic_MapsMultimodalImage
 //     等测试覆盖，本测试只关心响应级字段的去向，不重复覆盖 content part 变体。
 //  2. Error 与 Choices 同时填。真实响应里两者通常互斥（错误响应没有 choices），
-//     但本 fixture 是覆盖探针不是拟真样本：openai / responses 的错误信封分支守卫是
-//     `Error != nil && len(Choices) == 0`，anthropic 根本无错误分支，所以三 style 在
+//     但本 fixture 是覆盖探针不是拟真样本：三 style 的错误信封分支守卫都是
+//     `Error != nil && len(Choices) == 0`，所以三 style 在
 //     full 里都会走正常路径、Error 不出现在 body。纯错误路径由 errorOnlyUnifiedResponse
 //     单独覆盖。
 func fullUnifiedResponse(t *testing.T) *models.UnifiedResponse {
@@ -255,8 +255,9 @@ func TestFormatResponseCoverage_Golden(t *testing.T) {
 //
 // 为什么需要独立 fixture：三个 style 的错误信封分支守卫都是
 // `Error != nil && len(Choices) == 0`，无法塞进 fullUnifiedResponse（那里 Choices 非空）。
-// 这份 fixture 冻结的是错误响应的出站形状差异：openai / responses 各有错误信封，
-// anthropic 出站**无错误分支**——golden 会记录 anthropic 拿到纯错误响应时产出什么。
+// 这份 fixture 冻结的是错误响应的出站形状差异：openai / responses 是 `{"error":{...}}`
+// 五字段信封，anthropic 是官方的 `{"type":"error","error":{type,message},"request_id":...}`
+// ——同一份错误在三协议下的键名与字段集都不同，golden 记录这个差异。
 func errorOnlyUnifiedResponse(t *testing.T) *models.UnifiedResponse {
 	t.Helper()
 

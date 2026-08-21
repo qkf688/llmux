@@ -13,6 +13,13 @@ func FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
 		return nil, errors.New("unified response cannot be nil")
 	}
 
+	// 纯错误响应走官方错误信封，而不是套进一个 content 为空的 message 壳子
+	// （后者形式合法但语义空洞，客户端会当成「模型什么都没说」而非「上游报错了」）。
+	// 守卫沿用 openai / openai-res 出站的同一判据：Error 与 Choices 并存时以内容为主。
+	if unified.Error != nil && len(unified.Choices) == 0 {
+		return formatErrorEnvelope(unified.Error)
+	}
+
 	resp := map[string]interface{}{
 		"id":      unified.ID,
 		"type":    "message",
@@ -100,6 +107,31 @@ func FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
 	}
 
 	return json.Marshal(resp)
+}
+
+// formatErrorEnvelope 产出 Anthropic 官方错误形状：
+//
+//	{"type":"error","error":{"type":...,"message":...},"request_id":"req_..."}
+//
+// 按官方契约逐键决定，不照搬统一模型（与本文件 usage 段同一口径）：
+// ① inner error 官方只保证 type 与 message 两键，故统一模型的 Code / Param
+// **刻意丢弃**——写出去是非标准扩展键，严格校验的客户端会当成协议违规；把它们
+// 拼进 message 又会污染那段人类可读文案（官方明说 message 不可 pattern-match）；
+// ② request_id 是顶层键（不在 error 对象内），仅在上游给了值时写：写出空串会让
+// 客户端以为拿到了一个可用于联系支持的 ID，而「键缺失＝上游没给」才是真实语义。
+func formatErrorEnvelope(respErr *models.ResponseError) ([]byte, error) {
+	envelope := map[string]interface{}{
+		"type": "error",
+		"error": map[string]interface{}{
+			"type":    mapAnthropicErrorType(respErr.Detail.Type),
+			"message": respErr.Detail.Message,
+		},
+	}
+	if respErr.Detail.RequestID != "" {
+		envelope["request_id"] = respErr.Detail.RequestID
+	}
+
+	return json.Marshal(envelope)
 }
 
 func stripReasoningPrefix(content interface{}, reasoning string) interface{} {

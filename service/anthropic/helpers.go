@@ -35,6 +35,36 @@ func asSlice(value interface{}) ([]interface{}, bool) {
 	return result, ok
 }
 
+// anthropicErrorTypes 是 Anthropic 错误响应 error.type 的官方枚举。
+// 该值是客户端用来分支的机器可读标识（message 是人类可读文案、官方明说可能变动，
+// 不可 pattern-match），故只允许写出协议定义过的值。
+var anthropicErrorTypes = map[string]struct{}{
+	"invalid_request_error": {},
+	"authentication_error":  {},
+	"billing_error":         {},
+	"permission_error":      {},
+	"not_found_error":       {},
+	"request_too_large":     {},
+	"rate_limit_error":      {},
+	"api_error":             {},
+	"overloaded_error":      {},
+}
+
+// mapAnthropicErrorType 把统一模型里的错误 type 钳到 Anthropic 官方枚举。
+//
+// 统一模型的 ErrorDetail.Type 来自上游协议（OpenAI 侧可能是 rate_limit_exceeded、
+// server_error 这类本协议未定义的值），原样透传会让 Anthropic 客户端拿到无法分支的
+// 字符串。未知/空值兜底 api_error——它是官方枚举里语义最中性的「上游内部错误」。
+//
+// 刻意不按 HTTP 状态码反推 type：ResponseError.StatusCode 在生产路径从未被赋值
+// （非 200 上游在 chat_attempt 就转重试了，走不到本函数），按它推等于凭空造数据。
+func mapAnthropicErrorType(errType string) string {
+	if _, ok := anthropicErrorTypes[errType]; ok {
+		return errType
+	}
+	return "api_error"
+}
+
 // MinThinkingBudget 是 Anthropic 扩展思考的最小合法 budget_tokens（协议硬约束）。
 // 低于此值上游直接 400，故收敛 budget 时若目标值低于它，只能整体剥离 thinking
 // 而不是钳到一个非法的小值。

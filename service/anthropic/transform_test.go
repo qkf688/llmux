@@ -290,3 +290,47 @@ func TestTransformFromUnified(t *testing.T) {
 		t.Fatalf("expected high effort => 50000 budget, got %v", thinking["budget_tokens"])
 	}
 }
+
+// TestTransformFromUnified_LowTiersRespectMinThinkingBudget 打在**出站 body** 上，
+// 覆盖 effort-only 请求（budget 为 nil，故走 ReasoningEffortToThinkingBudget 正映）。
+//
+// 为什么必须有这条：minimal 与 low 两档曾分别映射到 512 / 1000，都低于 Anthropic 的
+// 1024 硬地板，出站即被上游 400 拒；而链路上唯一消费 MinThinkingBudget 的
+// reconcileThinkingBudgetWithMaxTokens 有 `budget < max_tokens 就放行` 的早退，
+// 512/1000 相对默认 max_tokens=8192 「合法」，兜不住。只断纯函数的返回值不够——
+// 得确认真正写进 body 的那个值合法。
+func TestTransformFromUnified_LowTiersRespectMinThinkingBudget(t *testing.T) {
+	for _, effort := range []string{"minimal", "low"} {
+		t.Run(effort, func(t *testing.T) {
+			e := effort
+			unified := &models.UnifiedRequest{
+				Model:           "claude-sonnet-4-6",
+				Messages:        []models.UnifiedMessage{{Role: "user", Content: "hi"}},
+				ReasoningEffort: &e,
+			}
+
+			body, err := TransformFromUnified(unified)
+			if err != nil {
+				t.Fatalf("TransformFromUnified returned error: %v", err)
+			}
+
+			var req map[string]interface{}
+			if err := json.Unmarshal(body, &req); err != nil {
+				t.Fatalf("unmarshal result failed: %v", err)
+			}
+
+			thinking, ok := req["thinking"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("effort %q 应 emit thinking，实际 body: %s", effort, body)
+			}
+			budget, ok := thinking["budget_tokens"].(float64)
+			if !ok {
+				t.Fatalf("thinking.budget_tokens 缺失或非数字: %#v", thinking["budget_tokens"])
+			}
+			if int64(budget) < MinThinkingBudget {
+				t.Errorf("effort %q => budget_tokens=%d，低于 Anthropic 最小合法值 %d，上游必 400",
+					effort, int64(budget), MinThinkingBudget)
+			}
+		})
+	}
+}

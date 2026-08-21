@@ -82,12 +82,14 @@ func TestReasoningEffortToThinkingBudget(t *testing.T) {
 		// 保留现有 3 档测试（Octopus 值不变）
 		{"high effort", "high", 50000},
 		{"medium effort", "medium", 20000},
-		{"low effort", "low", 1000},
+		// low 原为 1000，低于 Anthropic 1024 地板，已抬到 MinThinkingBudget
+		{"low effort", "low", MinThinkingBudget},
 		{"empty effort", "", 0},
 		{"unknown effort", "super", 0},
 
 		// 新增 3 档（Stage B 扩档）
-		{"minimal effort", "minimal", 512},
+		// minimal 原为 512，同样低于地板，与 low 合并到 MinThinkingBudget
+		{"minimal effort", "minimal", MinThinkingBudget},
 		{"xhigh effort", "xhigh", 80000},
 		{"max effort", "max", 128000},
 	}
@@ -102,9 +104,40 @@ func TestReasoningEffortToThinkingBudget(t *testing.T) {
 	}
 }
 
+// TestReasoningEffortToThinkingBudget_AllTiersRespectMinBudget 是**防回归守卫**：
+// 正向映射的每个档位要么返回 0（未知/空档位，调用方据此不写 thinking），
+// 要么必须 >= MinThinkingBudget——Anthropic 对 budget_tokens < 1024 直接 400，
+// 返回一个既非 0 又非法的值等于让出站请求必失败。
+//
+// 用测试而不是在函数末尾加运行时钳制来守这条：将来新增档位若给了非法值，这里会红，
+// 比静默纠正更早暴露问题（也避免在纯映射函数里堆防御分支）。
+func TestReasoningEffortToThinkingBudget_AllTiersRespectMinBudget(t *testing.T) {
+	// 六档正向档位，与 models.IsSixLevelEffort 的口径一致。
+	for _, effort := range []string{"minimal", "low", "medium", "high", "xhigh", "max"} {
+		t.Run(effort, func(t *testing.T) {
+			budget := ReasoningEffortToThinkingBudget(effort)
+			if budget < MinThinkingBudget {
+				t.Errorf("effort %q => budget %d，低于 Anthropic 最小合法值 %d，出站必 400",
+					effort, budget, MinThinkingBudget)
+			}
+		})
+	}
+
+	// 非档位输入必须返回 0（而非落进某个 case），否则调用方无法区分「不设 thinking」。
+	for _, effort := range []string{"", "super", "none", "auto"} {
+		t.Run("non-tier:"+effort, func(t *testing.T) {
+			if budget := ReasoningEffortToThinkingBudget(effort); budget != 0 {
+				t.Errorf("非六档输入 %q 应返回 0，实际 %d", effort, budget)
+			}
+		})
+	}
+}
+
 // TestReasoningEffortBudgetRoundTrip 覆盖 round-trip 路径：
 // request_inbound.go（budget→effort 反推）+ request_outbound.go（effort→budget 正映）同一请求内。
 // 标注丢档边界：budget=60000 → 反推 xhigh → 正映 80000（多了 20000 token）。
+// 低档另有一类非对称：正向不得吐出 <MinThinkingBudget 的非法值，故 512/1000 这类
+// 小 budget round-trip 后会被抬到 1024（见表中「抬到地板」组）。
 func TestReasoningEffortBudgetRoundTrip(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -117,17 +150,21 @@ func TestReasoningEffortBudgetRoundTrip(t *testing.T) {
 		lossNote string
 	}{
 		// 精确 round-trip（无丢档）
-		{"512 → minimal → 512（精确）", 512, "minimal", 512, "无丢档"},
-		{"1000 → low → 1000（精确）", 1000, "low", 1000, "无丢档"},
 		{"20000 → medium → 20000（精确）", 20000, "medium", 20000, "无丢档"},
 		{"50000 → high → 50000（精确）", 50000, "high", 50000, "无丢档"},
 		{"80000 → xhigh → 80000（精确）", 80000, "xhigh", 80000, "无丢档"},
 		{"128000 → max → 128000（精确）", 128000, "max", 128000, "无丢档"},
 
-		// 丢档边界：budget 落在两档之间，反推到较高档，正映回更高 budget
+		// 地板抬升导致的非对称：反向区间保留 1..512→minimal / 513..19999→low（它们描述的是
+		// 「客户端给了这么小的 budget」这一事实），但正向不能再吐出 <1024 的非法值，只能抬到
+		// MinThinkingBudget。所以低档 round-trip 必然不精确——这是协议地板造成的，不是 bug。
+		{"512 → minimal → 1024（抬到地板）", 512, "minimal", MinThinkingBudget, "抬到协议地板，多了 512 token"},
+		{"1000 → low → 1024（抬到地板）", 1000, "low", MinThinkingBudget, "抬到协议地板，多了 24 token"},
+		{"513 → low → 1024（抬到地板）", 513, "low", MinThinkingBudget, "抬到协议地板，多了 511 token"},
+
+		// 丢档边界：budget 落在两档之间，反推到某档，正映回该档的标准值
 		{"60000 → xhigh → 80000（丢 20000）", 60000, "xhigh", 80000, "多了 20000 token"},
-		{"513 → low → 1000（丢 487）", 513, "low", 1000, "多了 487 token"},
-		{"19999 → low → 1000（丢 18999）", 19999, "low", 1000, "少了 18999 token（反推降档）"},
+		{"19999 → low → 1024（丢 18975）", 19999, "low", MinThinkingBudget, "少了 18975 token（反推降档 + 地板）"},
 		{"50001 → xhigh → 80000（丢 29999）", 50001, "xhigh", 80000, "多了 29999 token"},
 		{"80001 → max → 128000（丢 47999）", 80001, "max", 128000, "多了 47999 token"},
 	}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/anthropic"
 	"github.com/tidwall/gjson"
 )
 
@@ -29,12 +30,13 @@ func TestClampUnifiedReasoning_BudgetOnly(t *testing.T) {
 		{"under limit → unchanged", 5000, []string{"low", "medium"}, "low", "clamp_to_default", false, 5000},
 		{"exactly at limit → unchanged", 20000, []string{"low", "medium"}, "low", "clamp_to_default", false, 20000},
 
-		// 反推有损的反例：budget 15000 反推是 low(1000)，但白名单允许 medium(20000)，不该被钳
+		// 反推有损的反例：budget 15000 反推是 low(地板 1024)，但白名单允许 medium(20000)，不该被钳
 		{"lossy-inference trap → not clamped", 15000, []string{"low", "medium"}, "low", "clamp_to_default", false, 15000},
 
 		// 白名单最高档决定上限的其余档位
 		{"whitelist max → limit 128000", 999999, []string{"max"}, "low", "clamp_to_default", false, 128000},
-		{"whitelist minimal only → limit 512", 5000, []string{"minimal"}, "low", "clamp_to_default", false, 512},
+		// minimal/low 的上限即 Anthropic 协议地板 1024（此前为 512，是个非法上限）
+		{"whitelist minimal only → limit MinThinkingBudget", 5000, []string{"minimal"}, "low", "clamp_to_default", false, anthropic.MinThinkingBudget},
 
 		// 白名单不含任何正向 6 档 → 剥离 thinking
 		{"whitelist only none → stripped", 5000, []string{"none"}, "low", "clamp_to_default", true, 0},
@@ -42,9 +44,9 @@ func TestClampUnifiedReasoning_BudgetOnly(t *testing.T) {
 
 		// 白名单空：按 unknown_strategy 分流（与 ClampReasoningEffort 口径一致）
 		{"empty whitelist + passthrough → untouched", 999999, nil, "low", "passthrough", false, 999999},
-		{"empty whitelist + clamp_to_default → autoFallback limit", 999999, nil, "low", "clamp_to_default", false, 1000},
+		{"empty whitelist + clamp_to_default → autoFallback limit", 999999, nil, "low", "clamp_to_default", false, anthropic.MinThinkingBudget},
 		{"empty whitelist + clamp_to_default + high fallback", 999999, nil, "high", "clamp_to_default", false, 50000},
-		{"empty whitelist + garbage fallback → low limit", 999999, nil, "garbage", "clamp_to_default", false, 1000},
+		{"empty whitelist + garbage fallback → low limit", 999999, nil, "garbage", "clamp_to_default", false, anthropic.MinThinkingBudget},
 
 		// 非正 budget 不处理（客户端给 0/负值，交由出站协议自行忽略）
 		{"zero budget → untouched", 0, []string{"low"}, "low", "clamp_to_default", false, 0},

@@ -94,9 +94,18 @@ func ThinkingBudgetToReasoningEffort(budgetTokens int64) string {
 }
 
 // ReasoningEffortToThinkingBudget 将 reasoning effort 转换为 thinking budget。
-// 参考 Octopus 实现的映射规则（single source of truth，供协议转换与测试复用）。
-// 保留现有 Octopus 值不变（low→1000, medium→20000, high→50000），
-// 新增 minimal→512, xhigh→80000, max→128000。
+// 6 档映射的 single source of truth，供协议转换与测试复用。
+//
+// 高四档沿用 Octopus 值（medium→20000, high→50000, xhigh→80000, max→128000）。
+// **minimal 与 low 合并到 MinThinkingBudget(1024)**：这两档原为 512 / 1000，均低于
+// Anthropic 的 budget_tokens 硬地板，出站被上游直接 400（协议明文「API rejects
+// smaller values」）。地板之下不存在合法值可用来表达「想得更少」，故两档只能同取地板——
+// 给 low 另编一个更大的数（如 2048）是凭空发明，无官方依据；而 Anthropic 官方恰好建议
+// 简单任务从 1024 最小值起步，low≈地板是有据的。
+//
+// 代价（刻意接受）：minimal 与 low 对 Anthropic 上游不可区分。对 OpenAI 系上游无影响，
+// 那条路 effort 字符串直传、不经本函数换算。
+//
 // 注意：max→128000 是标准映射值，非模型实际上限（Claude 4.6 各模型 budget max 不同，
 // 如 opus 4.6=64000, sonnet=32768）。模型级精度需后续加 budget max 字段。
 func ReasoningEffortToThinkingBudget(effort string) int64 {
@@ -109,10 +118,8 @@ func ReasoningEffortToThinkingBudget(effort string) int64 {
 		return 50000
 	case "medium":
 		return 20000
-	case "low":
-		return 1000
-	case "minimal":
-		return 512
+	case "low", "minimal":
+		return MinThinkingBudget
 	default:
 		return 0
 	}

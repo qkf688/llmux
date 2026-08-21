@@ -67,8 +67,22 @@ func (a *Anthropic) BuildReq(ctx context.Context, header http.Header, model stri
 	}
 
 	req.Header.Set("anthropic-version", a.Version)
-	req.Header.Set("anthropic-beta", a.Beta)
+	setAnthropicBeta(req.Header, a.Beta)
 	return req, nil
+}
+
+// setAnthropicBeta 按 provider 配置写 anthropic-beta 头，Beta 为空时删键而非写空值。
+//
+// 为什么必须 Del 而不是 Set("")：BuildReq 的 header 参数在关联开了 withHeader 时是客户端
+// 请求头的 Clone（chatcore.BuildHeaders），里面可能已带客户端自己的 anthropic-beta。
+// provider 未配 Beta 的语义是「本供应商不启用任何 beta 特性」——运维配置权威，不能让客户端
+// 头绕过它，故要清掉残留键；而 Set("") 发出的是一个空值头，语义不等于「无此头」。
+func setAnthropicBeta(header http.Header, beta string) {
+	if beta == "" {
+		header.Del("anthropic-beta")
+		return
+	}
+	header.Set("anthropic-beta", beta)
 }
 
 type AnthropicModelsResponse struct {
@@ -105,7 +119,7 @@ func (a *Anthropic) Models(ctx context.Context) ([]Model, error) {
 	}
 
 	req.Header.Set("anthropic-version", a.Version)
-	req.Header.Set("anthropic-beta", a.Beta)
+	setAnthropicBeta(req.Header, a.Beta)
 
 	// 使用带代理的客户端
 	client := GetClientWithProxy(30*time.Second, a.Proxy)

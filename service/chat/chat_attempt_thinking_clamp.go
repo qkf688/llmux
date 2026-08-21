@@ -229,8 +229,10 @@ func clampPassthroughBudgetOnly(raw []byte, style string, clamp *transform.Think
 func reconcileThinkingBudgetWithMaxTokens(body []byte, providerType string) []byte {
 	// 只有 Anthropic 有此约束：OpenAI Chat 无 budget 字段；Responses 的 budget 在
 	// reasoning.max_tokens、上限键是 max_output_tokens——该键**已被 clampMaxTokens 钳制**，
-	// 但 Responses 协议并未像 Anthropic 那样要求 budget 严格小于上限，故仍不在本函数范围内。
-	// 若日后确认 Responses 也有该硬约束，这里要补一条分支而非改 clampMaxTokens。
+	// 但 Responses 并无「budget 必须严格小于上限」的对应硬约束：官方 Responses API 根本没有
+	// reasoning budget 字段（reasoning 只有 effort/summary，reasoning.max_tokens 是 OpenRouter
+	// 等兼容层的扩展），max_output_tokens 的语义是「推理+回答总额，超了就截断」而非 400 拒绝。
+	// 故本函数刻意不覆盖 Responses。
 	if providerType != consts.StyleAnthropic || len(body) == 0 {
 		return body
 	}

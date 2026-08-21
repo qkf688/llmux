@@ -3,6 +3,7 @@ package transform
 import (
 	"log/slog"
 
+	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/anthropic"
 )
@@ -15,11 +16,11 @@ import (
 //   - effort 钳制后为空串 → 设 nil（FromUnified 不 emit thinking）
 //   - effort 被钳制（clamped != original）→ budget 联动：按钳制后 effort 对应 budget 值作上限
 //   - budget 超上限 → 钳到上限 + warn；低于上限不动；effort 未钳制则 budget 不动
-func clampUnifiedReasoning(unified *models.UnifiedRequest, clamp *ThinkingClampConfig, clientType, providerType string) {
+func clampUnifiedReasoning(unified *models.UnifiedRequest, clamp *ThinkingClampConfig, clientFormat, upstreamFormat consts.WireFormat) {
 	if unified.ReasoningEffort == nil {
 		// budget-only 请求（如 responses 入站只给 reasoning.max_tokens）：effort 缺席时
 		// 仍须让 budget 受白名单约束，否则 budget 会完全绕过钳制直达上游。
-		clampUnifiedBudgetOnly(unified, clamp, clientType, providerType)
+		clampUnifiedBudgetOnly(unified, clamp, clientFormat, upstreamFormat)
 		return
 	}
 
@@ -30,8 +31,8 @@ func clampUnifiedReasoning(unified *models.UnifiedRequest, clamp *ThinkingClampC
 	if clamped == "" {
 		slog.Warn("reasoning effort clamped to empty (stripped)",
 			"original", original,
-			"client_type", clientType,
-			"provider_type", providerType,
+			"client_format", clientFormat,
+			"upstream_format", upstreamFormat,
 			"reason", "none_not_in_whitelist")
 		unified.ReasoningEffort = nil
 		// none 剥离时也清 budget（thinking 整体剥离，budget 无意义）
@@ -44,8 +45,8 @@ func clampUnifiedReasoning(unified *models.UnifiedRequest, clamp *ThinkingClampC
 		slog.Warn("reasoning effort clamped",
 			"original", original,
 			"clamped_to", clamped,
-			"client_type", clientType,
-			"provider_type", providerType,
+			"client_format", clientFormat,
+			"upstream_format", upstreamFormat,
 			"reason", "not_in_whitelist")
 		unified.ReasoningEffort = &clamped
 
@@ -112,7 +113,7 @@ func BudgetLimitForClamp(clamp *ThinkingClampConfig) int64 {
 // clampUnifiedBudgetOnly 处理 effort 缺席、只有 budget 的统一请求。
 // 不写回反推出的 effort：那会凭空替客户端补一个它没给的字段（污染 responses 的
 // reasoning.effort 与 metadata），且反推有损。这里只钳数值 / 剥离，不改出站形状。
-func clampUnifiedBudgetOnly(unified *models.UnifiedRequest, clamp *ThinkingClampConfig, clientType, providerType string) {
+func clampUnifiedBudgetOnly(unified *models.UnifiedRequest, clamp *ThinkingClampConfig, clientFormat, upstreamFormat consts.WireFormat) {
 	if unified.ReasoningBudget == nil || *unified.ReasoningBudget <= 0 {
 		return
 	}
@@ -125,8 +126,8 @@ func clampUnifiedBudgetOnly(unified *models.UnifiedRequest, clamp *ThinkingClamp
 	if limit == 0 {
 		slog.Warn("budget-only reasoning stripped",
 			"original_budget", *unified.ReasoningBudget,
-			"client_type", clientType,
-			"provider_type", providerType,
+			"client_format", clientFormat,
+			"upstream_format", upstreamFormat,
 			"reason", "whitelist_has_no_positive_thinking_level")
 		unified.ReasoningBudget = nil
 		return
@@ -136,8 +137,8 @@ func clampUnifiedBudgetOnly(unified *models.UnifiedRequest, clamp *ThinkingClamp
 		slog.Warn("budget-only reasoning budget clamped to whitelist limit",
 			"original_budget", *unified.ReasoningBudget,
 			"clamped_budget", limit,
-			"client_type", clientType,
-			"provider_type", providerType,
+			"client_format", clientFormat,
+			"upstream_format", upstreamFormat,
 			"reason", "budget_exceeds_whitelist_max_level")
 		clamped := limit
 		unified.ReasoningBudget = &clamped

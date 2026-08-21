@@ -4,7 +4,9 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/providers"
 )
 
 type chatLogEnrichResult struct {
@@ -58,15 +60,15 @@ func enrichChatLogs(ctx context.Context, logs []models.ChatLog, includeRaw bool)
 
 	providerTypeByName := make(map[string]string, len(providerNames))
 	if len(providerNames) > 0 {
-		var providers []models.Provider
+		var providerRows []models.Provider
 		if err := models.DB.WithContext(ctx).
 			Model(&models.Provider{}).
 			Select("name", "type").
 			Where("name IN ?", providerNames).
-			Find(&providers).Error; err != nil {
+			Find(&providerRows).Error; err != nil {
 			slog.Error("failed to query providers for logs enrichment", "error", err)
 		} else {
-			for _, provider := range providers {
+			for _, provider := range providerRows {
 				providerTypeByName[provider.Name] = provider.Type
 			}
 		}
@@ -77,12 +79,19 @@ func enrichChatLogs(ctx context.Context, logs []models.ChatLog, includeRaw bool)
 		_, isVirtual := virtualNameSet[log.Name]
 		providerType := providerTypeByName[log.ProviderName]
 
-		hasFormatConversion := providerType != "" && log.Style != "" && log.Style != providerType
+		// 是否真的发生了格式转换，取决于两端的**协议形状**是否不同，而不是
+		// 「入站 style 字符串 != provider type 字符串」——后者会把 openai 客户端打一家
+		// OpenAI 兼容的新上游误报成有转换（两端 body 形状其实一致，代理走的是直通）。
+		// 任一侧解析不出形状（provider 已删、type 未注册）时判为无转换：宁可少报，
+		// 不要凭字符串不等造一条假的转换记录。
+		clientFormat, clientFormatOK := consts.WireFormatOfStyle(consts.Style(log.Style))
+		upstreamFormat, upstreamFormatOK := providers.WireFormatOf(providerType)
+		hasFormatConversion := clientFormatOK && upstreamFormatOK && clientFormat != upstreamFormat
 		enrich := chatLogEnrichResult{
 			isVirtualModel:      isVirtual,
 			hasFormatConversion: hasFormatConversion,
-			sourceFormat:        log.Style,
-			targetFormat:        providerType,
+			sourceFormat:        string(clientFormat),
+			targetFormat:        string(upstreamFormat),
 		}
 
 		enrichedLogs = append(enrichedLogs, buildChatLogResponse(log, enrich, includeRaw))

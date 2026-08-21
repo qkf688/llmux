@@ -11,7 +11,7 @@ func TestExtractStructuredOutputJSON_OpenAI(t *testing.T) {
 	payload := `{"language":"zh","version":1,"features":["structured_output"],"score":1,"passed":true}`
 	response := []byte(`{"choices":[{"message":{"content":` + jsonString(payload) + `}}]}`)
 
-	gotPayload, gotRaw, err := extractStructuredOutputJSON(consts.StyleOpenAI, response)
+	gotPayload, gotRaw, err := extractStructuredOutputJSON(consts.FormatOpenAIChat, response)
 	if err != nil {
 		t.Fatalf("extractStructuredOutputJSON failed: %v", err)
 	}
@@ -27,7 +27,7 @@ func TestExtractStructuredOutputJSON_OpenAIRes(t *testing.T) {
 	payload := `{"language":"zh","version":1,"features":["structured_output"],"score":1,"passed":true}`
 	response := []byte(`{"output":[{"type":"output_text","text":` + jsonString(payload) + `}]}`)
 
-	gotPayload, gotRaw, err := extractStructuredOutputJSON(consts.StyleOpenAIRes, response)
+	gotPayload, gotRaw, err := extractStructuredOutputJSON(consts.FormatOpenAIResponses, response)
 	if err != nil {
 		t.Fatalf("extractStructuredOutputJSON failed: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestExtractStructuredOutputJSON_Anthropic(t *testing.T) {
 	payloadObj := `{"language":"zh","version":1,"features":["structured_output"],"score":1,"passed":true}`
 	response := []byte(`{"content":[{"type":"tool_use","id":"1","name":"structured_output","input":` + payloadObj + `}]}`)
 
-	gotPayload, gotRaw, err := extractStructuredOutputJSON(consts.StyleAnthropic, response)
+	gotPayload, gotRaw, err := extractStructuredOutputJSON(consts.FormatAnthropic, response)
 	if err != nil {
 		t.Fatalf("extractStructuredOutputJSON failed: %v", err)
 	}

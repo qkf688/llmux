@@ -205,7 +205,9 @@ func BeforerAnthropic(data []byte) (*Before, error) {
 }
 
 func init() {
-	RegisterBeforer(consts.StyleOpenAI, BeforerOpenAI)
-	RegisterBeforer(consts.StyleOpenAIRes, BeforerOpenAIRes)
-	RegisterBeforer(consts.StyleAnthropic, BeforerAnthropic)
+	// 注册表键仍是裸 string（chat 内部 Style 尚未端到端换成 consts.Style，
+	// 见 chat_attempt_request.go 的 TODO），故此处显式转换。
+	RegisterBeforer(string(consts.StyleOpenAI), BeforerOpenAI)
+	RegisterBeforer(string(consts.StyleOpenAIRes), BeforerOpenAIRes)
+	RegisterBeforer(string(consts.StyleAnthropic), BeforerAnthropic)
 }

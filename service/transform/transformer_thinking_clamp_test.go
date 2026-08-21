@@ -66,7 +66,7 @@ func TestClampUnifiedReasoning_BudgetOnly(t *testing.T) {
 				UnknownStrategy: tt.unknownStrategy,
 			}
 
-			clampUnifiedReasoning(unified, clamp, consts.StyleOpenAIRes, consts.StyleAnthropic)
+			clampUnifiedReasoning(unified, clamp, consts.FormatOpenAIResponses, consts.FormatAnthropic)
 
 			if unified.ReasoningEffort != nil {
 				t.Errorf("ReasoningEffort = %q, want nil（budget-only 不写回 effort）", *unified.ReasoningEffort)
@@ -104,7 +104,7 @@ func TestClampUnifiedReasoning_EffortPresentUnaffected(t *testing.T) {
 		UnknownStrategy: "clamp_to_default",
 	}
 
-	clampUnifiedReasoning(unified, clamp, consts.StyleOpenAI, consts.StyleAnthropic)
+	clampUnifiedReasoning(unified, clamp, consts.FormatOpenAIChat, consts.FormatAnthropic)
 
 	if unified.ReasoningEffort == nil || *unified.ReasoningEffort != "medium" {
 		t.Fatalf("ReasoningEffort = %v, want medium", unified.ReasoningEffort)
@@ -119,7 +119,7 @@ func TestClampUnifiedReasoning_EffortPresentUnaffected(t *testing.T) {
 // reasoning.effort 完全解耦），出站 anthropic 的 thinking.budget_tokens 应被钳到白名单上限。
 func TestProcessRequest_BudgetOnlyClamped(t *testing.T) {
 	raw := []byte(`{"model":"m","input":"hi","reasoning":{"max_tokens":60000}}`)
-	tm := NewTransformerManager(consts.StyleOpenAIRes, consts.StyleAnthropic)
+	tm := NewTransformerManager(consts.FormatOpenAIResponses, consts.FormatAnthropic)
 	clamp := &ThinkingClampConfig{
 		Levels:          []string{"low", "medium"},
 		AutoFallback:    "low",
@@ -163,20 +163,20 @@ func TestProcessRequest_BudgetOnly_OutboundShape(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		raw           string
-		providerStyle string
-		clamp         *ThinkingClampConfig
-		want          map[string]any // gjson path → 期望值（int64 / string）
-		wantMissing   []string       // 必须整键缺失的 gjson path（区别于「键存在但为 null」）
+		name           string
+		raw            string
+		upstreamFormat consts.WireFormat
+		clamp          *ThinkingClampConfig
+		want           map[string]any // gjson path → 期望值（int64 / string）
+		wantMissing    []string       // 必须整键缺失的 gjson path（区别于「键存在但为 null」）
 	}{
 		{
-			name:          "responses 出站：budget 钳到白名单上限，不凭空补 effort",
-			raw:           budgetOnlyRaw,
-			providerStyle: consts.StyleOpenAIRes,
-			clamp:         minimalOnly,
-			want:          map[string]any{"reasoning.max_tokens": anthropic.MinThinkingBudget},
-			wantMissing:   []string{"reasoning.effort"},
+			name:           "responses 出站：budget 钳到白名单上限，不凭空补 effort",
+			raw:            budgetOnlyRaw,
+			upstreamFormat: consts.FormatOpenAIResponses,
+			clamp:          minimalOnly,
+			want:           map[string]any{"reasoning.max_tokens": anthropic.MinThinkingBudget},
+			wantMissing:    []string{"reasoning.effort"},
 		},
 		{
 			// OpenAI chat-completions 没有任何思考 token 字段，budget 只能降级成档位。
@@ -184,31 +184,31 @@ func TestProcessRequest_BudgetOnly_OutboundShape(t *testing.T) {
 			// 的正推 budget 同为 1024，于是钳到 1024 后反推出的档位跳到 low——
 			// 即出站降级档位不受白名单约束。这是**已知泄漏而非设计意图**，此处只冻结现状；
 			// 要不要让降级结果过一遍白名单是独立议题（会改变真实出站行为，须真机验证）。
-			name:          "openai 出站：钳制后的 budget 降级成档位（档位不受白名单约束）",
-			raw:           budgetOnlyRaw,
-			providerStyle: consts.StyleOpenAI,
-			clamp:         minimalOnly,
-			want:          map[string]any{"reasoning_effort": "low"},
-			wantMissing:   []string{"reasoning.max_tokens", "thinking.budget_tokens"},
+			name:           "openai 出站：钳制后的 budget 降级成档位（档位不受白名单约束）",
+			raw:            budgetOnlyRaw,
+			upstreamFormat: consts.FormatOpenAIChat,
+			clamp:          minimalOnly,
+			want:           map[string]any{"reasoning_effort": "low"},
+			wantMissing:    []string{"reasoning.max_tokens", "thinking.budget_tokens"},
 		},
 		{
-			name:          "白名单只含 none：responses 出站整块剥离 thinking",
-			raw:           budgetOnlyRaw,
-			providerStyle: consts.StyleOpenAIRes,
-			clamp:         noneOnly,
-			wantMissing:   []string{"reasoning", "reasoning.max_tokens", "reasoning.effort"},
+			name:           "白名单只含 none：responses 出站整块剥离 thinking",
+			raw:            budgetOnlyRaw,
+			upstreamFormat: consts.FormatOpenAIResponses,
+			clamp:          noneOnly,
+			wantMissing:    []string{"reasoning", "reasoning.max_tokens", "reasoning.effort"},
 		},
 		{
-			name:          "白名单只含 none：openai 出站不 emit 任何档位",
-			raw:           budgetOnlyRaw,
-			providerStyle: consts.StyleOpenAI,
-			clamp:         noneOnly,
-			wantMissing:   []string{"reasoning_effort"},
+			name:           "白名单只含 none：openai 出站不 emit 任何档位",
+			raw:            budgetOnlyRaw,
+			upstreamFormat: consts.FormatOpenAIChat,
+			clamp:          noneOnly,
+			wantMissing:    []string{"reasoning_effort"},
 		},
 		{
-			name:          "白名单空 + passthrough：budget 原样透传且仍不补 effort",
-			raw:           `{"model":"m","input":"hi","reasoning":{"max_tokens":999999}}`,
-			providerStyle: consts.StyleOpenAIRes,
+			name:           "白名单空 + passthrough：budget 原样透传且仍不补 effort",
+			raw:            `{"model":"m","input":"hi","reasoning":{"max_tokens":999999}}`,
+			upstreamFormat: consts.FormatOpenAIResponses,
 			clamp: &ThinkingClampConfig{
 				Levels:          nil,
 				AutoFallback:    "low",
@@ -221,7 +221,7 @@ func TestProcessRequest_BudgetOnly_OutboundShape(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tm := NewTransformerManager(consts.StyleOpenAIRes, tt.providerStyle)
+			tm := NewTransformerManager(consts.FormatOpenAIResponses, tt.upstreamFormat)
 			got, err := tm.ProcessRequest(context.Background(), []byte(tt.raw), tt.clamp)
 			if err != nil {
 				t.Fatalf("ProcessRequest failed: %v", err)

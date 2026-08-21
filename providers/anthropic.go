@@ -15,6 +15,9 @@ import (
 	"github.com/tidwall/sjson"
 )
 
+// TypeAnthropic 是本 provider 在 DB Provider.Type 里的取值，也是 Register / RegisterMetadata 的键。
+const TypeAnthropic = "anthropic"
+
 type Anthropic struct {
 	BaseURL      string   `json:"base_url"`
 	APIKey       string   `json:"api_key"`
@@ -26,7 +29,7 @@ type Anthropic struct {
 }
 
 func init() {
-	Register(consts.StyleAnthropic, func(config, proxy string) (Provider, error) {
+	Register(TypeAnthropic, func(config, proxy string) (Provider, error) {
 		var anthropic Anthropic
 		if err := json.Unmarshal([]byte(config), &anthropic); err != nil {
 			return nil, errors.New("invalid anthropic config")
@@ -37,7 +40,8 @@ func init() {
 		return &anthropic, nil
 	})
 	RegisterMetadata(Metadata{
-		Type:            consts.StyleAnthropic,
+		Type:            TypeAnthropic,
+		WireFormat:      consts.FormatAnthropic,
 		ConfigTemplate:  configTemplateAnthropic,
 		TestBody:        []byte(testBodyAnthropic),
 		StructuredBody:  []byte(structuredBodyAnthropic),

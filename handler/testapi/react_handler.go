@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/httpresp"
 	"github.com/qkf688/llmux/providers"
 	"gorm.io/gorm"
@@ -63,12 +62,12 @@ func TestReactHandler(c *gin.Context) {
 		var final string
 		toolCities, final, checkError = runOpenAIReactTest(ctx, c, httpClient, header, chatModel, compat, scenario)
 		finalText.WriteString(final)
-	} else if chatModel.Type == consts.StyleAnthropic {
+	} else if chatModel.Type == providers.TypeAnthropic {
 		var final string
 		toolCities, final, checkError = runAnthropicReactTest(ctx, c, httpClient, header, chatModel, providerInstance, scenario)
 		finalText.WriteString(final)
 	} else {
-		c.SSEvent("error", fmt.Sprintf("该测试仅支持 OpenAI 兼容接口（%s/%s）或 %s，当前提供商类型: %s", consts.StyleOpenAI, consts.StyleOpenAIRes, consts.StyleAnthropic, chatModel.Type))
+		c.SSEvent("error", fmt.Sprintf("该测试仅支持 OpenAI 兼容接口（%s/%s）或 %s，当前提供商类型: %s", providers.TypeOpenAI, providers.TypeOpenAIRes, providers.TypeAnthropic, chatModel.Type))
 		c.Writer.Flush()
 		return
 	}

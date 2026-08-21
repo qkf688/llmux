@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/qkf688/llmux/consts"
 )
 
 type sseEvent struct {
@@ -40,7 +42,7 @@ func (e sseEvent) intField(t *testing.T, key string) int {
 	return int(v)
 }
 
-func runRealtimeTransform(t *testing.T, in, from, to string) []sseEvent {
+func runRealtimeTransform(t *testing.T, in string, from, to consts.WireFormat) []sseEvent {
 	t.Helper()
 
 	resp := &http.Response{
@@ -151,7 +153,7 @@ func assertNumber(t *testing.T, m map[string]interface{}, key string, want int) 
 // newTestRealtimeState 构造一个把输出丢弃的 state，供需要直接驱动
 // handler 并检查 state 内部字段的白盒测试使用。
 // 返回的 cleanup 必须调用，否则 drain goroutine 泄漏。
-func newTestRealtimeState(t *testing.T, providerType, clientType string) (*realtimeStreamState, func()) {
+func newTestRealtimeState(t *testing.T, upstreamFormat, clientFormat consts.WireFormat) (*realtimeStreamState, func()) {
 	t.Helper()
 
 	pr, pw := io.Pipe()
@@ -163,8 +165,8 @@ func newTestRealtimeState(t *testing.T, providerType, clientType string) (*realt
 
 	state := &realtimeStreamState{
 		writer:                     pw,
-		providerType:               providerType,
-		clientType:                 clientType,
+		upstreamFormat:             upstreamFormat,
+		clientFormat:               clientFormat,
 		anthropicActiveBlockIndex:  -1,
 		anthropicActiveOutputIndex: -1,
 	}

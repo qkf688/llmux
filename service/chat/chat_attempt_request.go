@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/qkf688/llmux/consts"
+	"github.com/qkf688/llmux/providers"
 	preprocessopenai "github.com/qkf688/llmux/service/chat/preprocess/openai"
 	"github.com/qkf688/llmux/service/transform"
 	"github.com/tidwall/gjson"
@@ -55,18 +56,32 @@ func buildRequestBodyForProvider(ctx context.Context, caps ProviderRequestCaps) 
 	providerType := caps.ProviderType
 	raw := caps.Raw
 
+	// 选路依据是**协议形状**，provider type 只回答「哪一家」：openai 客户端打一家 OpenAI
+	// 兼容的新上游时两端形状相同，应走 passthrough，而不是因 type 字符串不同白跑一趟转换。
+	//
+	// TODO: caps.Style 仍是裸 string，此处显式转换成 consts.Style。把 Style 端到端改成
+	// consts.Style（handler/v1 → chat input → caps）可以省掉这次转换，属独立重构。
+	clientFormat, ok := consts.WireFormatOfStyle(consts.Style(style))
+	if !ok {
+		return nil, false, fmt.Errorf("client style %q has no registered wire format", style)
+	}
+	upstreamFormat, ok := providers.WireFormatOf(providerType)
+	if !ok {
+		return nil, false, fmt.Errorf("provider type %q declares no wire format", providerType)
+	}
+
 	// 裁剪 thinking 字段：model/关联不支持 thinking 时去掉请求中的思考配置，
 	// 避免上游对不支持 thinking 的模型报 400/静默忽略导致行为不一致。
 	// 先于钳制执行：supportsThinking=false 时整体剥离，钳制无意义。
 	raw = stripThinkingFields(raw, caps.SupportsThinking)
 
-	if style == providerType {
-		slog.Debug("passthrough mode", "client_type", style, "provider_type", providerType)
-		// passthrough 路径思考档位钳制（同格式 1×1，对 raw body 按 style 钳制）
+	if clientFormat == upstreamFormat {
+		slog.Debug("passthrough mode", "client_format", clientFormat, "upstream_format", upstreamFormat, "provider_type", providerType)
+		// passthrough 路径思考档位钳制（同格式 1×1，对 raw body 按协议形状钳制）
 		if caps.ThinkingClamp != nil {
-			raw = clampPassthroughReasoning(raw, style, caps.ThinkingClamp)
+			raw = clampPassthroughReasoning(raw, clientFormat, caps.ThinkingClamp)
 		}
-		validated, err := validateAndPatchOutgoingOpenAIRequest(providerType, raw)
+		validated, err := validateAndPatchOutgoingOpenAIRequest(upstreamFormat, raw)
 		if err != nil {
 			return nil, false, err
 		}
@@ -74,21 +89,21 @@ func buildRequestBodyForProvider(ctx context.Context, caps ProviderRequestCaps) 
 		if clampErr != nil {
 			slog.Warn("max_tokens clamp failed, sending unclamped body", "error", clampErr)
 		}
-		return reconcileThinkingBudgetWithMaxTokens(clamped, providerType, caps.AllowBudgetExceedMaxTokens), false, nil
+		return reconcileThinkingBudgetWithMaxTokens(clamped, upstreamFormat, caps.AllowBudgetExceedMaxTokens), false, nil
 	}
 
 	if !getEnableFormatConversion(ctx) {
-		slog.Debug("format conversion disabled, skipping provider", "client_type", style, "provider_type", providerType)
+		slog.Debug("format conversion disabled, skipping provider", "client_format", clientFormat, "upstream_format", upstreamFormat)
 		return nil, true, nil
 	}
 
-	slog.Debug("transform mode", "client_type", style, "provider_type", providerType)
-	tm := transform.NewTransformerManager(style, providerType)
+	slog.Debug("transform mode", "client_format", clientFormat, "upstream_format", upstreamFormat)
+	tm := transform.NewTransformerManager(clientFormat, upstreamFormat)
 	convertedBody, err := tm.ProcessRequest(ctx, raw, caps.ThinkingClamp)
 	if err != nil {
 		return nil, false, err
 	}
-	validated, err := validateAndPatchOutgoingOpenAIRequest(providerType, convertedBody)
+	validated, err := validateAndPatchOutgoingOpenAIRequest(upstreamFormat, convertedBody)
 	if err != nil {
 		return nil, false, err
 	}
@@ -96,7 +111,7 @@ func buildRequestBodyForProvider(ctx context.Context, caps ProviderRequestCaps) 
 	if clampErr != nil {
 		slog.Warn("max_tokens clamp failed, sending unclamped body", "error", clampErr)
 	}
-	return reconcileThinkingBudgetWithMaxTokens(clamped, providerType, caps.AllowBudgetExceedMaxTokens), false, nil
+	return reconcileThinkingBudgetWithMaxTokens(clamped, upstreamFormat, caps.AllowBudgetExceedMaxTokens), false, nil
 }
 
 // stripThinkingFields 在 supportsThinking 为 false 时删除请求体中的 thinking 配置字段
@@ -194,8 +209,11 @@ func stripThinkingBlocksFromMessages(body []byte) ([]byte, bool) {
 	return body, changed
 }
 
-func validateAndPatchOutgoingOpenAIRequest(providerType string, body []byte) ([]byte, error) {
-	if providerType != consts.StyleOpenAI {
+// validateAndPatchOutgoingOpenAIRequest 只对**出站 body 是 OpenAI Chat 形状**时生效：
+// 校验/补齐的都是 OpenAI Chat 特有字段（tool_call 函数名、tool_call_id、message.content），
+// 判定依据必须是 wire format 而非「上游是哪一家」——OpenAI 兼容的新上游同样需要这层补齐。
+func validateAndPatchOutgoingOpenAIRequest(upstreamFormat consts.WireFormat, body []byte) ([]byte, error) {
+	if upstreamFormat != consts.FormatOpenAIChat {
 		return body, nil
 	}
 

@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strconv"
 	"testing"
+
+	"github.com/qkf688/llmux/consts"
 )
 
 func TestTransformProviderResponse_RewritesContentLengthAndEncodingHeaders(t *testing.T) {
@@ -156,7 +158,13 @@ func TestTransformProviderResponse_SameTypePassthrough(t *testing.T) {
 	}
 }
 
-func TestTransformProviderResponse_UnknownTypesFallBackToOpenAI(t *testing.T) {
+// 未注册的 wire format 必须显式报错，**不许**静默回退到 OpenAI 形状。
+//
+// 本用例替代了原 TestTransformProviderResponse_UnknownTypesFallBackToOpenAI：那条锁的是
+// getAdapterOrDefault 的兜底行为，而 adapter.go 已刻意去掉该兜底——回退会把「provider 漏声明
+// WireFormat」「新协议漏注册适配器」这类漏配静默变成「按 OpenAI 形状解析上游响应」，
+// 现象要飘到客户端解析失败才暴露，离根因很远。
+func TestTransformProviderResponse_UnregisteredFormatReturnsError(t *testing.T) {
 	openaiBody := []byte(`{
 		"id":"chatcmpl_1",
 		"object":"chat.completion",
@@ -166,29 +174,30 @@ func TestTransformProviderResponse_UnknownTypesFallBackToOpenAI(t *testing.T) {
 		"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}
 	}`)
 
-	unknownProvider, err := TransformProviderResponse(newJSONResponse(openaiBody), "unknown-provider", "openai-res", nil)
-	if err != nil {
-		t.Fatalf("TransformProviderResponse with unknown provider type returned error: %v", err)
+	cases := []struct {
+		name           string
+		upstreamFormat consts.WireFormat
+		clientFormat   consts.WireFormat
+	}{
+		{
+			name:           "unregistered upstream format",
+			upstreamFormat: "unregistered-format",
+			clientFormat:   consts.FormatOpenAIResponses,
+		},
+		{
+			name:           "unregistered client format",
+			upstreamFormat: consts.FormatOpenAIChat,
+			clientFormat:   "unregistered-format",
+		},
 	}
-	openAIProvider, err := TransformProviderResponse(newJSONResponse(openaiBody), "openai", "openai-res", nil)
-	if err != nil {
-		t.Fatalf("TransformProviderResponse with openai provider type returned error: %v", err)
-	}
-	unknownProviderBody := mustReadResponseBody(t, unknownProvider)
-	openAIProviderBody := mustReadResponseBody(t, openAIProvider)
-	assertJSONEqual(t, unknownProviderBody, openAIProviderBody)
 
-	unknownClient, err := TransformProviderResponse(newJSONResponse(openaiBody), "openai", "unknown-client", nil)
-	if err != nil {
-		t.Fatalf("TransformProviderResponse with unknown client type returned error: %v", err)
-	}
-	b := mustReadResponseBody(t, unknownClient)
-	var out map[string]interface{}
-	if err := json.Unmarshal(b, &out); err != nil {
-		t.Fatalf("unmarshal unknown client response: %v", err)
-	}
-	if out["object"] != "chat.completion" {
-		t.Fatalf("expected OpenAI response object, got %#v", out["object"])
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			converted, err := TransformProviderResponse(newJSONResponse(openaiBody), tc.upstreamFormat, tc.clientFormat, nil)
+			if err == nil {
+				t.Fatalf("未注册形状必须报错，实际转换成功: %s", mustReadResponseBody(t, converted))
+			}
+		})
 	}
 }
 

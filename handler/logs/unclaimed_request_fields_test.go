@@ -57,7 +57,7 @@ func detailResponseDiagnostics(t *testing.T, log *models.ChatLog, key string) (m
 func TestGetRequestLogDetail_UnclaimedRequestFieldsStatuses(t *testing.T) {
 	cases := []struct {
 		name       string
-		style      string
+		style      consts.Style
 		rawBody    string
 		wantStatus string
 		wantFields []string
@@ -133,7 +133,7 @@ func TestGetRequestLogDetail_UnclaimedRequestFieldsStatuses(t *testing.T) {
 				Name:           "m1",
 				ProviderName:   "p1",
 				Status:         "success",
-				Style:          tc.style,
+				Style:          string(tc.style),
 				RawRequestBody: tc.rawBody,
 			}
 			if err := models.DB.Create(&log).Error; err != nil {
@@ -186,7 +186,7 @@ func TestGetRequestLogs_UnclaimedRequestFieldsFollowsIncludeRawGate(t *testing.T
 		Name:           "m1",
 		ProviderName:   "p1",
 		Status:         "success",
-		Style:          consts.StyleOpenAI,
+		Style:          string(consts.StyleOpenAI),
 		RawRequestBody: `{"model":"gpt-5","messages":[],"top_k":40}`,
 	}
 	if err := models.DB.Create(&log).Error; err != nil {
@@ -228,7 +228,7 @@ func TestGetRequestLogs_UnclaimedRequestFieldsFollowsIncludeRawGate(t *testing.T
 func TestGetRequestLogDetail_MismatchedRequestFieldsStatuses(t *testing.T) {
 	cases := []struct {
 		name       string
-		style      string
+		style      consts.Style
 		rawBody    string
 		wantStatus string
 		wantFields []string
@@ -291,7 +291,7 @@ func TestGetRequestLogDetail_MismatchedRequestFieldsStatuses(t *testing.T) {
 				Name:           "m1",
 				ProviderName:   "p1",
 				Status:         "success",
-				Style:          tc.style,
+				Style:          string(tc.style),
 				RawRequestBody: tc.rawBody,
 			}
 			if err := models.DB.Create(&log).Error; err != nil {
@@ -344,7 +344,7 @@ func TestGetRequestLogDetail_UnclaimedAndMismatchedAreReportedSeparately(t *test
 		Name:           "m1",
 		ProviderName:   "p1",
 		Status:         "success",
-		Style:          consts.StyleOpenAI,
+		Style:          string(consts.StyleOpenAI),
 		RawRequestBody: `{"model":"gpt-5","messages":[],"temperature":"0.5","top_k":40}`,
 	}
 	if err := models.DB.Create(&log).Error; err != nil {
@@ -376,7 +376,7 @@ func TestGetRequestLogs_MismatchedRequestFieldsFollowsIncludeRawGate(t *testing.
 		Name:           "m1",
 		ProviderName:   "p1",
 		Status:         "success",
-		Style:          consts.StyleOpenAI,
+		Style:          string(consts.StyleOpenAI),
 		RawRequestBody: `{"model":"gpt-5","messages":[],"temperature":"0.5"}`,
 	}
 	if err := models.DB.Create(&log).Error; err != nil {

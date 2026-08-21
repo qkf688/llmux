@@ -7,12 +7,18 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/transform/streaming"
 )
 
-func TransformProviderResponse(response *http.Response, providerType, clientType string, sideChannel *models.TransformSideChannel) (*http.Response, error) {
-	if providerType == clientType {
+// TransformProviderResponse 把上游响应体从 upstreamFormat 转成 clientFormat。
+//
+// 两个参数都是**协议形状**：两端形状相同即直通，与「上游供应商是谁」无关。
+// 因此 openai 客户端打一家 OpenAI 兼容的新上游时会正确走直通，而不会因 provider type
+// 字符串不同而白跑一趟转换。
+func TransformProviderResponse(response *http.Response, upstreamFormat, clientFormat consts.WireFormat, sideChannel *models.TransformSideChannel) (*http.Response, error) {
+	if upstreamFormat == clientFormat {
 		return response, nil
 	}
 
@@ -22,7 +28,7 @@ func TransformProviderResponse(response *http.Response, providerType, clientType
 
 	if isStream {
 		// 流式响应：直接从 Body 读取器进行实时转换
-		return streaming.TransformResponseRealtime(response, providerType, clientType, sideChannel)
+		return streaming.TransformResponseRealtime(response, upstreamFormat, clientFormat, sideChannel)
 	}
 
 	// 非流式响应：读取完整响应体后转换
@@ -32,11 +38,11 @@ func TransformProviderResponse(response *http.Response, providerType, clientType
 	}
 	response.Body.Close()
 
-	return transformNonStreamResponse(response, body, providerType, clientType, sideChannel)
+	return transformNonStreamResponse(response, body, upstreamFormat, clientFormat, sideChannel)
 }
 
-func transformNonStreamResponse(response *http.Response, body []byte, providerType, clientType string, sideChannel *models.TransformSideChannel) (*http.Response, error) {
-	providerAdapter, err := getAdapterOrDefault(providerType)
+func transformNonStreamResponse(response *http.Response, body []byte, upstreamFormat, clientFormat consts.WireFormat, sideChannel *models.TransformSideChannel) (*http.Response, error) {
+	providerAdapter, err := getAdapter(upstreamFormat)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +57,7 @@ func transformNonStreamResponse(response *http.Response, body []byte, providerTy
 		sideChannel.SetUpstreamUsage(*unified.Usage)
 	}
 
-	clientAdapter, err := getAdapterOrDefault(clientType)
+	clientAdapter, err := getAdapter(clientFormat)
 	if err != nil {
 		return nil, err
 	}

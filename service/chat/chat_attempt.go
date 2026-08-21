@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/providers"
 	"github.com/qkf688/llmux/service/adjustment"
 	"github.com/qkf688/llmux/service/chatcore"
 	"github.com/qkf688/llmux/service/chatstats"
@@ -124,10 +126,17 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 	// 仅在需要转换时创建——直通路径没有转换层可供旁路，落库回退 processer 解析（该路径本就完整）。
 	captureRawBody := logRawOptions.RawResponseBody && rawResponseBodyStr == ""
 
+	// 响应侧的直通判定必须与请求侧（buildRequestBodyForProvider）用同一依据：**协议形状**。
+	// 按 provider type 字符串比较会让「openai 客户端打一家 OpenAI 兼容的新上游」请求直通、
+	// 响应却白跑一趟转换。任一侧形状解析不出来时按「形状不同」走转换路径，由转换层报错
+	// （请求侧已先解析过并在失败时返回错误，走到这里两侧本应都解析成功）。
+	clientFormat, clientFormatOK := consts.WireFormatOfStyle(consts.Style(input.Style))
+	upstreamFormat, upstreamFormatOK := providers.WireFormatOf(input.Provider.Type)
+
 	var sideChannel *models.TransformSideChannel
-	if input.Style != input.Provider.Type {
+	if !clientFormatOK || !upstreamFormatOK || clientFormat != upstreamFormat {
 		sideChannel = models.NewTransformSideChannel(captureRawBody)
-		tm := transform.NewTransformerManager(input.Style, input.Provider.Type)
+		tm := transform.NewTransformerManager(clientFormat, upstreamFormat)
 		convertedRes, err := tm.ProcessResponse(res, sideChannel)
 		if err != nil {
 			errorUpdate := models.ChatLog{
@@ -164,7 +173,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		}
 		res = convertedRes
 	} else {
-		slog.Debug("passthrough response", "client_type", input.Style, "provider_type", input.Provider.Type)
+		slog.Debug("passthrough response", "client_format", clientFormat, "upstream_format", upstreamFormat, "provider_type", input.Provider.Type)
 	}
 
 	updateRequestAndResponseLog(input.Ctx, logID, logRawOptions, logSnapshot, res.Header, rawResponseBodyStr)

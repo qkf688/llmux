@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/qkf688/llmux/consts"
+	"github.com/qkf688/llmux/providers"
 )
 
 func TestApplyProviderSelectionResult_ReduceWeight(t *testing.T) {
@@ -70,8 +71,8 @@ func TestBuildRequestBodyForProvider_OpenAI_MissingToolCallFunctionName_ReturnsH
 	}`)
 
 	_, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
-		Style:            consts.StyleOpenAI,
-		ProviderType:     consts.StyleOpenAI,
+		Style:            string(consts.StyleOpenAI),
+		ProviderType:     providers.TypeOpenAI,
 		Raw:              raw,
 		MaxTokensLimit:   nil,
 		SupportsThinking: true,
@@ -107,8 +108,8 @@ func TestBuildRequestBodyForProvider_OpenAI_ValidToolCall_Passes(t *testing.T) {
 	}`)
 
 	got, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
-		Style:            consts.StyleOpenAI,
-		ProviderType:     consts.StyleOpenAI,
+		Style:            string(consts.StyleOpenAI),
+		ProviderType:     providers.TypeOpenAI,
 		Raw:              raw,
 		MaxTokensLimit:   nil,
 		SupportsThinking: true,

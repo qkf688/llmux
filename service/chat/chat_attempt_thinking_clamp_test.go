@@ -48,7 +48,7 @@ func TestClampPassthroughReasoning_OpenAI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := clampPassthroughReasoning([]byte(tt.raw), consts.StyleOpenAI, clamp)
+			result := clampPassthroughReasoning([]byte(tt.raw), consts.FormatOpenAIChat, clamp)
 			got := gjson.GetBytes(result, "reasoning_effort").String()
 			if got != tt.wantEffort {
 				t.Errorf("reasoning_effort = %q, want %q", got, tt.wantEffort)
@@ -91,7 +91,7 @@ func TestClampPassthroughReasoning_CaseInsensitive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := clampPassthroughReasoning([]byte(tt.raw), consts.StyleOpenAI, clamp)
+			result := clampPassthroughReasoning([]byte(tt.raw), consts.FormatOpenAIChat, clamp)
 			got := gjson.GetBytes(result, "reasoning_effort").String()
 			if got != tt.wantEffort {
 				t.Errorf("reasoning_effort = %q, want %q", got, tt.wantEffort)
@@ -111,7 +111,7 @@ func TestClampPassthroughReasoning_Anthropic(t *testing.T) {
 
 	t.Run("high → medium + budget 联动", func(t *testing.T) {
 		raw := []byte(`{"model":"m","output_config":{"effort":"high"},"thinking":{"budget_tokens":50000}}`)
-		result := clampPassthroughReasoning(raw, consts.StyleAnthropic, clamp)
+		result := clampPassthroughReasoning(raw, consts.FormatAnthropic, clamp)
 		effort := gjson.GetBytes(result, "output_config.effort").String()
 		if effort != "medium" {
 			t.Errorf("effort = %q, want medium", effort)
@@ -125,7 +125,7 @@ func TestClampPassthroughReasoning_Anthropic(t *testing.T) {
 
 	t.Run("low → 透传 + budget 不动", func(t *testing.T) {
 		raw := []byte(`{"model":"m","output_config":{"effort":"low"},"thinking":{"budget_tokens":1000}}`)
-		result := clampPassthroughReasoning(raw, consts.StyleAnthropic, clamp)
+		result := clampPassthroughReasoning(raw, consts.FormatAnthropic, clamp)
 		effort := gjson.GetBytes(result, "output_config.effort").String()
 		if effort != "low" {
 			t.Errorf("effort = %q, want low (passthrough)", effort)
@@ -138,7 +138,7 @@ func TestClampPassthroughReasoning_Anthropic(t *testing.T) {
 
 	t.Run("none 不支持 → 剥离 effort + budget", func(t *testing.T) {
 		raw := []byte(`{"model":"m","output_config":{"effort":"none"},"thinking":{"budget_tokens":5000}}`)
-		result := clampPassthroughReasoning(raw, consts.StyleAnthropic, clamp)
+		result := clampPassthroughReasoning(raw, consts.FormatAnthropic, clamp)
 		if gjson.GetBytes(result, "output_config.effort").Exists() {
 			t.Errorf("output_config.effort should be deleted")
 		}
@@ -152,7 +152,7 @@ func TestClampPassthroughReasoning_Anthropic(t *testing.T) {
 
 	t.Run("none 不支持 + thinking.type 存在 → thinking 容器整体删除", func(t *testing.T) {
 		raw := []byte(`{"model":"m","output_config":{"effort":"none"},"thinking":{"type":"enabled","budget_tokens":5000}}`)
-		result := clampPassthroughReasoning(raw, consts.StyleAnthropic, clamp)
+		result := clampPassthroughReasoning(raw, consts.FormatAnthropic, clamp)
 		// 只删 budget_tokens 会残留 {"type":"enabled"}，Anthropic 要求 enabled 必须带 budget_tokens
 		if gjson.GetBytes(result, "thinking").Exists() {
 			t.Errorf("thinking 容器应整体删除, got %s", result)
@@ -172,7 +172,7 @@ func TestClampPassthroughReasoning_Responses(t *testing.T) {
 
 	t.Run("high → medium，metadata 同名标签原样保留", func(t *testing.T) {
 		raw := []byte(`{"model":"m","reasoning":{"effort":"high"},"metadata":{"reasoning_effort":"high"}}`)
-		result := clampPassthroughReasoning(raw, consts.StyleOpenAIRes, clamp)
+		result := clampPassthroughReasoning(raw, consts.FormatOpenAIResponses, clamp)
 		if effort := gjson.GetBytes(result, "reasoning.effort").String(); effort != "medium" {
 			t.Errorf("reasoning.effort = %q, want medium", effort)
 		}
@@ -183,7 +183,7 @@ func TestClampPassthroughReasoning_Responses(t *testing.T) {
 
 	t.Run("官方字段缺席时不从 metadata 反推 effort", func(t *testing.T) {
 		raw := []byte(`{"model":"m","metadata":{"reasoning_effort":"high"}}`)
-		result := clampPassthroughReasoning(raw, consts.StyleOpenAIRes, clamp)
+		result := clampPassthroughReasoning(raw, consts.FormatOpenAIResponses, clamp)
 		if gjson.GetBytes(result, "reasoning.effort").Exists() {
 			t.Errorf("不应凭 metadata 造出 reasoning.effort, got %s", result)
 		}
@@ -209,8 +209,8 @@ func TestBuildRequestBodyForProvider_TransformClamp(t *testing.T) {
 	t.Run("OpenAI high → Anthropic medium（transform 钳制）", func(t *testing.T) {
 		raw := []byte(`{"model":"m","max_tokens":64000,"messages":[{"role":"user","content":"hi"}],"reasoning_effort":"high"}`)
 		result, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
-			Style:            consts.StyleOpenAI,
-			ProviderType:     consts.StyleAnthropic,
+			Style:            string(consts.StyleOpenAI),
+			ProviderType:     providers.TypeAnthropic,
 			Raw:              raw,
 			SupportsThinking: true,
 			ThinkingClamp:    clamp,
@@ -239,8 +239,8 @@ func TestBuildRequestBodyForProvider_PassthroughClamp(t *testing.T) {
 	t.Run("OpenAI passthrough high → medium", func(t *testing.T) {
 		raw := []byte(`{"model":"m","reasoning_effort":"high"}`)
 		result, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
-			Style:            consts.StyleOpenAI,
-			ProviderType:     consts.StyleOpenAI,
+			Style:            string(consts.StyleOpenAI),
+			ProviderType:     providers.TypeOpenAI,
 			Raw:              raw,
 			SupportsThinking: true,
 			ThinkingClamp:    clamp,
@@ -261,8 +261,8 @@ func TestBuildRequestBodyForProvider_SupportsThinkingFalse_StripsAndNoClamp(t *t
 	ctx := context.Background()
 	raw := []byte(`{"model":"m","reasoning_effort":"high"}`)
 	result, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
-		Style:            consts.StyleOpenAI,
-		ProviderType:     consts.StyleOpenAI,
+		Style:            string(consts.StyleOpenAI),
+		ProviderType:     providers.TypeOpenAI,
 		Raw:              raw,
 		SupportsThinking: false,
 		ThinkingClamp:    nil, // supportsThinking=false → 不钳制
@@ -288,8 +288,8 @@ func TestBuildRequestBodyForProvider_BudgetNotClampedWhenEffortNotClamped(t *tes
 	t.Run("Anthropic passthrough high 在白名单 → budget 不动", func(t *testing.T) {
 		raw := []byte(`{"model":"m","output_config":{"effort":"high"},"thinking":{"budget_tokens":50000}}`)
 		result, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
-			Style:            consts.StyleAnthropic,
-			ProviderType:     consts.StyleAnthropic,
+			Style:            string(consts.StyleAnthropic),
+			ProviderType:     providers.TypeAnthropic,
 			Raw:              raw,
 			SupportsThinking: true,
 			ThinkingClamp:    clamp,
@@ -315,7 +315,7 @@ func TestClampPassthroughReasoning_BudgetOnly(t *testing.T) {
 			UnknownStrategy: "clamp_to_default",
 		}
 		raw := []byte(`{"model":"m","thinking":{"budget_tokens":60000}}`)
-		result := clampPassthroughReasoning(raw, consts.StyleAnthropic, clamp)
+		result := clampPassthroughReasoning(raw, consts.FormatAnthropic, clamp)
 		if got := gjson.GetBytes(result, "thinking.budget_tokens").Int(); got != 20000 {
 			t.Errorf("budget = %d, want 20000", got)
 		}
@@ -331,7 +331,7 @@ func TestClampPassthroughReasoning_BudgetOnly(t *testing.T) {
 			UnknownStrategy: "clamp_to_default",
 		}
 		raw := []byte(`{"model":"m","thinking":{"budget_tokens":5000}}`)
-		result := clampPassthroughReasoning(raw, consts.StyleAnthropic, clamp)
+		result := clampPassthroughReasoning(raw, consts.FormatAnthropic, clamp)
 		if got := gjson.GetBytes(result, "thinking.budget_tokens").Int(); got != 5000 {
 			t.Errorf("budget = %d, want 5000 (unchanged)", got)
 		}
@@ -344,7 +344,7 @@ func TestClampPassthroughReasoning_BudgetOnly(t *testing.T) {
 			UnknownStrategy: "clamp_to_default",
 		}
 		raw := []byte(`{"model":"m","thinking":{"type":"enabled","budget_tokens":5000}}`)
-		result := clampPassthroughReasoning(raw, consts.StyleAnthropic, clamp)
+		result := clampPassthroughReasoning(raw, consts.FormatAnthropic, clamp)
 		if gjson.GetBytes(result, "thinking.budget_tokens").Exists() {
 			t.Errorf("budget 应被剥离")
 		}
@@ -361,7 +361,7 @@ func TestClampPassthroughReasoning_BudgetOnly(t *testing.T) {
 			UnknownStrategy: "clamp_to_default",
 		}
 		raw := []byte(`{"model":"m","reasoning":{"max_tokens":60000}}`)
-		result := clampPassthroughReasoning(raw, consts.StyleOpenAIRes, clamp)
+		result := clampPassthroughReasoning(raw, consts.FormatOpenAIResponses, clamp)
 		if got := gjson.GetBytes(result, "reasoning.max_tokens").Int(); got != 20000 {
 			t.Errorf("reasoning.max_tokens = %d, want 20000", got)
 		}
@@ -374,7 +374,7 @@ func TestClampPassthroughReasoning_BudgetOnly(t *testing.T) {
 			UnknownStrategy: "clamp_to_default",
 		}
 		raw := []byte(`{"model":"m"}`)
-		result := clampPassthroughReasoning(raw, consts.StyleOpenAI, clamp)
+		result := clampPassthroughReasoning(raw, consts.FormatOpenAIChat, clamp)
 		if string(result) != string(raw) {
 			t.Errorf("OpenAI budget-only 应原样返回, got %s", result)
 		}
@@ -387,7 +387,7 @@ func TestClampPassthroughReasoning_BudgetOnly(t *testing.T) {
 			UnknownStrategy: "passthrough",
 		}
 		raw := []byte(`{"model":"m","thinking":{"budget_tokens":999999}}`)
-		result := clampPassthroughReasoning(raw, consts.StyleAnthropic, clamp)
+		result := clampPassthroughReasoning(raw, consts.FormatAnthropic, clamp)
 		if got := gjson.GetBytes(result, "thinking.budget_tokens").Int(); got != 999999 {
 			t.Errorf("budget = %d, want 999999 (unconstrained passthrough)", got)
 		}
@@ -407,8 +407,8 @@ func TestBuildRequestBodyForProvider_ABStageBoundary_MinimalPreserved(t *testing
 
 	raw := []byte(`{"model":"m","reasoning_effort":"minimal"}`)
 	result, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
-		Style:            consts.StyleOpenAI,
-		ProviderType:     consts.StyleOpenAI,
+		Style:            string(consts.StyleOpenAI),
+		ProviderType:     providers.TypeOpenAI,
 		Raw:              raw,
 		SupportsThinking: true,
 		ThinkingClamp:    clamp,
@@ -427,115 +427,115 @@ func TestBuildRequestBodyForProvider_ABStageBoundary_MinimalPreserved(t *testing
 // 会自造 budget >= max_tokens 的非法组合（Anthropic 必 400）。方向是降 budget、不抬 max_tokens。
 func TestReconcileThinkingBudget(t *testing.T) {
 	tests := []struct {
-		name         string
-		providerType string
-		raw          string
-		allowExceed  bool  // 上游启用 interleaved thinking beta → 该约束不成立
-		wantBudget   int64 // -1 = 期望 thinking 整体不存在
-		wantMaxTok   int64
+		name           string
+		upstreamFormat consts.WireFormat
+		raw            string
+		allowExceed    bool  // 上游启用 interleaved thinking beta → 该约束不成立
+		wantBudget     int64 // -1 = 期望 thinking 整体不存在
+		wantMaxTok     int64
 	}{
 		{
-			name:         "AC-1 budget 超 max → 降到 floor(max*0.8)，max 不抬高",
-			providerType: consts.StyleAnthropic,
-			raw:          `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":50000}}`,
-			wantBudget:   6553,
-			wantMaxTok:   8192,
+			name:           "AC-1 budget 超 max → 降到 floor(max*0.8)，max 不抬高",
+			upstreamFormat: consts.FormatAnthropic,
+			raw:            `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":50000}}`,
+			wantBudget:     6553,
+			wantMaxTok:     8192,
 		},
 		{
-			name:         "AC-2 目标值低于最小预算 → 剥离 thinking",
-			providerType: consts.StyleAnthropic,
-			raw:          `{"model":"m","max_tokens":1000,"output_config":{"effort":"high"},"thinking":{"type":"enabled","budget_tokens":50000}}`,
-			wantBudget:   -1,
-			wantMaxTok:   1000,
+			name:           "AC-2 目标值低于最小预算 → 剥离 thinking",
+			upstreamFormat: consts.FormatAnthropic,
+			raw:            `{"model":"m","max_tokens":1000,"output_config":{"effort":"high"},"thinking":{"type":"enabled","budget_tokens":50000}}`,
+			wantBudget:     -1,
+			wantMaxTok:     1000,
 		},
 		{
-			name:         "AC-3 组合已合法 → budget 不动（不二次猜测客户端意图）",
-			providerType: consts.StyleAnthropic,
-			raw:          `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":4000}}`,
-			wantBudget:   4000,
-			wantMaxTok:   8192,
+			name:           "AC-3 组合已合法 → budget 不动（不二次猜测客户端意图）",
+			upstreamFormat: consts.FormatAnthropic,
+			raw:            `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":4000}}`,
+			wantBudget:     4000,
+			wantMaxTok:     8192,
 		},
 		{
-			name:         "AC-4 openai → 不触碰",
-			providerType: consts.StyleOpenAI,
-			raw:          `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":50000}}`,
-			wantBudget:   50000,
-			wantMaxTok:   8192,
+			name:           "AC-4 openai → 不触碰",
+			upstreamFormat: consts.FormatOpenAIChat,
+			raw:            `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":50000}}`,
+			wantBudget:     50000,
+			wantMaxTok:     8192,
 		},
 		{
-			name:         "AC-4 openai-res → 不触碰",
-			providerType: consts.StyleOpenAIRes,
-			raw:          `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":50000}}`,
-			wantBudget:   50000,
-			wantMaxTok:   8192,
+			name:           "AC-4 openai-res → 不触碰",
+			upstreamFormat: consts.FormatOpenAIResponses,
+			raw:            `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":50000}}`,
+			wantBudget:     50000,
+			wantMaxTok:     8192,
 		},
 		{
-			name:         "AC-5 无 budget 字段 → 原样返回",
-			providerType: consts.StyleAnthropic,
-			raw:          `{"model":"m","max_tokens":8192}`,
-			wantBudget:   0,
-			wantMaxTok:   8192,
+			name:           "AC-5 无 budget 字段 → 原样返回",
+			upstreamFormat: consts.FormatAnthropic,
+			raw:            `{"model":"m","max_tokens":8192}`,
+			wantBudget:     0,
+			wantMaxTok:     8192,
 		},
 		{
-			name:         "AC-5 budget 为 0 → 原样返回",
-			providerType: consts.StyleAnthropic,
-			raw:          `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":0}}`,
-			wantBudget:   0,
-			wantMaxTok:   8192,
+			name:           "AC-5 budget 为 0 → 原样返回",
+			upstreamFormat: consts.FormatAnthropic,
+			raw:            `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":0}}`,
+			wantBudget:     0,
+			wantMaxTok:     8192,
 		},
 		{
-			name:         "无 max_tokens → 原样返回（不凭空造 max_tokens）",
-			providerType: consts.StyleAnthropic,
-			raw:          `{"model":"m","thinking":{"type":"enabled","budget_tokens":50000}}`,
-			wantBudget:   50000,
-			wantMaxTok:   0,
+			name:           "无 max_tokens → 原样返回（不凭空造 max_tokens）",
+			upstreamFormat: consts.FormatAnthropic,
+			raw:            `{"model":"m","thinking":{"type":"enabled","budget_tokens":50000}}`,
+			wantBudget:     50000,
+			wantMaxTok:     0,
 		},
 		{
-			name:         "边界 max=1280 → budget=1024 刚好等于最小预算，保留",
-			providerType: consts.StyleAnthropic,
-			raw:          `{"model":"m","max_tokens":1280,"thinking":{"type":"enabled","budget_tokens":50000}}`,
-			wantBudget:   1024,
-			wantMaxTok:   1280,
+			name:           "边界 max=1280 → budget=1024 刚好等于最小预算，保留",
+			upstreamFormat: consts.FormatAnthropic,
+			raw:            `{"model":"m","max_tokens":1280,"thinking":{"type":"enabled","budget_tokens":50000}}`,
+			wantBudget:     1024,
+			wantMaxTok:     1280,
 		},
 		{
-			name:         "边界 max=1279 → budget=1023 低于最小预算，剥离",
-			providerType: consts.StyleAnthropic,
-			raw:          `{"model":"m","max_tokens":1279,"thinking":{"type":"enabled","budget_tokens":50000}}`,
-			wantBudget:   -1,
-			wantMaxTok:   1279,
+			name:           "边界 max=1279 → budget=1023 低于最小预算，剥离",
+			upstreamFormat: consts.FormatAnthropic,
+			raw:            `{"model":"m","max_tokens":1279,"thinking":{"type":"enabled","budget_tokens":50000}}`,
+			wantBudget:     -1,
+			wantMaxTok:     1279,
 		},
 		{
-			name:         "budget 恰等于 max → 仍属非法，收敛",
-			providerType: consts.StyleAnthropic,
-			raw:          `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":8192}}`,
-			wantBudget:   6553,
-			wantMaxTok:   8192,
+			name:           "budget 恰等于 max → 仍属非法，收敛",
+			upstreamFormat: consts.FormatAnthropic,
+			raw:            `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":8192}}`,
+			wantBudget:     6553,
+			wantMaxTok:     8192,
 		},
 		{
 			// 官方例外：interleaved thinking 下 budget 是「整轮所有 thinking 块的总预算」，
 			// 上限是上下文窗口而非 max_tokens。收敛这类请求不会 400，只会静默把思考压浅。
-			name:         "interleaved beta 开启 + budget 超 max → 原样放行，不收敛",
-			providerType: consts.StyleAnthropic,
-			raw:          `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":50000}}`,
-			allowExceed:  true,
-			wantBudget:   50000,
-			wantMaxTok:   8192,
+			name:           "interleaved beta 开启 + budget 超 max → 原样放行，不收敛",
+			upstreamFormat: consts.FormatAnthropic,
+			raw:            `{"model":"m","max_tokens":8192,"thinking":{"type":"enabled","budget_tokens":50000}}`,
+			allowExceed:    true,
+			wantBudget:     50000,
+			wantMaxTok:     8192,
 		},
 		{
 			// 例外只免除「budget 超 max_tokens」这一条，不代表 thinking 可以被随意剥离：
 			// 原本会触发剥离的小 max_tokens 组合也必须原样保留。
-			name:         "interleaved beta 开启 + 目标值本会低于最小预算 → 仍不剥离 thinking",
-			providerType: consts.StyleAnthropic,
-			raw:          `{"model":"m","max_tokens":1000,"thinking":{"type":"enabled","budget_tokens":50000}}`,
-			allowExceed:  true,
-			wantBudget:   50000,
-			wantMaxTok:   1000,
+			name:           "interleaved beta 开启 + 目标值本会低于最小预算 → 仍不剥离 thinking",
+			upstreamFormat: consts.FormatAnthropic,
+			raw:            `{"model":"m","max_tokens":1000,"thinking":{"type":"enabled","budget_tokens":50000}}`,
+			allowExceed:    true,
+			wantBudget:     50000,
+			wantMaxTok:     1000,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := reconcileThinkingBudgetWithMaxTokens([]byte(tt.raw), tt.providerType, tt.allowExceed)
+			result := reconcileThinkingBudgetWithMaxTokens([]byte(tt.raw), tt.upstreamFormat, tt.allowExceed)
 
 			if tt.wantBudget < 0 {
 				if gjson.GetBytes(result, "thinking").Exists() {
@@ -570,8 +570,8 @@ func TestReconcileThinkingBudget_BothPathsAgree(t *testing.T) {
 	// passthrough：anthropic → anthropic，客户端自带 max_tokens=64000 + budget=50000
 	passthroughRaw := []byte(`{"model":"m","max_tokens":64000,"messages":[{"role":"user","content":"hi"}],"output_config":{"effort":"high"},"thinking":{"type":"enabled","budget_tokens":50000}}`)
 	passthroughOut, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
-		Style:            consts.StyleAnthropic,
-		ProviderType:     consts.StyleAnthropic,
+		Style:            string(consts.StyleAnthropic),
+		ProviderType:     providers.TypeAnthropic,
 		Raw:              passthroughRaw,
 		MaxTokensLimit:   &limit,
 		SupportsThinking: true,
@@ -584,8 +584,8 @@ func TestReconcileThinkingBudget_BothPathsAgree(t *testing.T) {
 	// transform：openai → anthropic，effort=high 映射出 budget=50000
 	transformRaw := []byte(`{"model":"m","max_tokens":64000,"messages":[{"role":"user","content":"hi"}],"reasoning_effort":"high"}`)
 	transformOut, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
-		Style:            consts.StyleOpenAI,
-		ProviderType:     consts.StyleAnthropic,
+		Style:            string(consts.StyleOpenAI),
+		ProviderType:     providers.TypeAnthropic,
 		Raw:              transformRaw,
 		MaxTokensLimit:   &limit,
 		SupportsThinking: true,
@@ -626,8 +626,8 @@ func TestReconcileThinkingBudget_AnthropicDefaultMaxTokens(t *testing.T) {
 
 	raw := []byte(`{"model":"m","messages":[{"role":"user","content":"hi"}],"reasoning_effort":"high"}`)
 	result, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
-		Style:            consts.StyleOpenAI,
-		ProviderType:     consts.StyleAnthropic,
+		Style:            string(consts.StyleOpenAI),
+		ProviderType:     providers.TypeAnthropic,
 		Raw:              raw,
 		MaxTokensLimit:   nil, // 无运维上限，非法组合纯由出站默认 max_tokens 造成
 		SupportsThinking: true,
@@ -691,8 +691,8 @@ func TestBuildRequestBody_InterleavedBetaSkipsReconcile(t *testing.T) {
 	raw := []byte(`{"model":"m","max_tokens":64000,"messages":[{"role":"user","content":"hi"}],"thinking":{"type":"enabled","budget_tokens":50000}}`)
 
 	result, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
-		Style:                      consts.StyleAnthropic,
-		ProviderType:               consts.StyleAnthropic,
+		Style:                      string(consts.StyleAnthropic),
+		ProviderType:               providers.TypeAnthropic,
 		Raw:                        raw,
 		MaxTokensLimit:             &limit, // 压 max_tokens 到 8192，本会造出 budget >= max_tokens
 		SupportsThinking:           true,

@@ -16,7 +16,7 @@ import (
 
 func TestUnknownRequestKeys_DetectsUnclaimedKeysPerStyle(t *testing.T) {
 	cases := []struct {
-		style string
+		style consts.Style
 		raw   string
 		want  []string
 	}{
@@ -54,7 +54,7 @@ func TestUnknownRequestKeys_DetectsUnclaimedKeysPerStyle(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		t.Run(tc.style, func(t *testing.T) {
+		t.Run(string(tc.style), func(t *testing.T) {
 			got, err := UnknownRequestKeys(tc.style, []byte(tc.raw))
 			if err != nil {
 				t.Fatalf("UnknownRequestKeys: %v", err)
@@ -72,8 +72,8 @@ func TestUnknownRequestKeys_DetectsUnclaimedKeysPerStyle(t *testing.T) {
 // openai 的键集合去查 anthropic 请求，system/stop_sequences 之类会被整片误报，
 // 正是 TestUnknownTopLevelKeys_OutboundRenameIsNotUnknown 要防的病灶。
 func TestUnknownRequestKeys_UnsupportedStyleReportsUnsupported(t *testing.T) {
-	for _, style := range []string{"some-future-style", ""} {
-		t.Run(style, func(t *testing.T) {
+	for _, style := range []consts.Style{"some-future-style", ""} {
+		t.Run(string(style), func(t *testing.T) {
 			got, err := UnknownRequestKeys(style, []byte(`{"model":"m","system":"s"}`))
 			if !errors.Is(err, ErrClaimedKeysUnsupported) {
 				t.Fatalf("err = %v, want ErrClaimedKeysUnsupported", err)
@@ -111,7 +111,7 @@ func TestRegisterClaimedRequestKeys_DuplicatePanics(t *testing.T) {
 // 认领了、但类型不匹配被宽容容器丢弃」这条路径的分派。
 func TestMismatchedRequestKeys_DetectsTypeMismatchPerStyle(t *testing.T) {
 	cases := []struct {
-		style string
+		style consts.Style
 		raw   string
 		want  []string
 	}{
@@ -136,7 +136,7 @@ func TestMismatchedRequestKeys_DetectsTypeMismatchPerStyle(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		t.Run(tc.style, func(t *testing.T) {
+		t.Run(string(tc.style), func(t *testing.T) {
 			got, err := MismatchedRequestKeys(tc.style, []byte(tc.raw))
 			if err != nil {
 				t.Fatalf("MismatchedRequestKeys: %v", err)
@@ -152,8 +152,8 @@ func TestMismatchedRequestKeys_DetectsTypeMismatchPerStyle(t *testing.T) {
 // 时整条请求解析失败（客户端拿到显式错误），没有需要暴露的静默丢弃。未注册的 style
 // 也一样，必须显式报 unsupported 而非静默返回空集合。
 func TestMismatchedRequestKeys_UnsupportedStyleReportsUnsupported(t *testing.T) {
-	for _, style := range []string{consts.StyleOpenAIRes, "some-future-style", ""} {
-		t.Run(style, func(t *testing.T) {
+	for _, style := range []consts.Style{consts.StyleOpenAIRes, "some-future-style", ""} {
+		t.Run(string(style), func(t *testing.T) {
 			got, err := MismatchedRequestKeys(style, []byte(`{"model":"m","temperature":"x"}`))
 			if !errors.Is(err, ErrMismatchedKeysUnsupported) {
 				t.Fatalf("err = %v, want ErrMismatchedKeysUnsupported", err)

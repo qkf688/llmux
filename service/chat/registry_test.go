@@ -7,8 +7,8 @@ import (
 )
 
 func TestRegistry_GetBeforer_KnownStyles(t *testing.T) {
-	for _, style := range []string{consts.StyleOpenAI, consts.StyleOpenAIRes, consts.StyleAnthropic} {
-		b, err := GetBeforer(style)
+	for _, style := range []consts.Style{consts.StyleOpenAI, consts.StyleOpenAIRes, consts.StyleAnthropic} {
+		b, err := GetBeforer(string(style))
 		if err != nil {
 			t.Errorf("GetBeforer(%q) error: %v", style, err)
 		}
@@ -19,8 +19,8 @@ func TestRegistry_GetBeforer_KnownStyles(t *testing.T) {
 }
 
 func TestRegistry_GetProcesser_KnownStyles(t *testing.T) {
-	for _, style := range []string{consts.StyleOpenAI, consts.StyleOpenAIRes, consts.StyleAnthropic} {
-		p, err := GetProcesser(style)
+	for _, style := range []consts.Style{consts.StyleOpenAI, consts.StyleOpenAIRes, consts.StyleAnthropic} {
+		p, err := GetProcesser(string(style))
 		if err != nil {
 			t.Errorf("GetProcesser(%q) error: %v", style, err)
 		}

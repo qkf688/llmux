@@ -272,7 +272,8 @@ func ScannerToken(reader *bufio.Scanner) iter.Seq[string] {
 }
 
 func init() {
-	RegisterProcesser(consts.StyleOpenAI, ProcesserOpenAI)
-	RegisterProcesser(consts.StyleOpenAIRes, ProcesserOpenAiRes)
-	RegisterProcesser(consts.StyleAnthropic, ProcesserAnthropic)
+	// 与 before.go 的注册同源：键为裸 string，见那里的说明。
+	RegisterProcesser(string(consts.StyleOpenAI), ProcesserOpenAI)
+	RegisterProcesser(string(consts.StyleOpenAIRes), ProcesserOpenAiRes)
+	RegisterProcesser(string(consts.StyleAnthropic), ProcesserAnthropic)
 }

@@ -5,12 +5,13 @@ import (
 	"fmt"
 
 	"github.com/qkf688/llmux/common/maputil"
+	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/transform/shared"
 )
 
 func init() {
-	RegisterRealtimeRoute("anthropic", "openai-res", handleRealtimeAnthropicToResponses)
+	RegisterRealtimeRoute(consts.FormatAnthropic, consts.FormatOpenAIResponses, handleRealtimeAnthropicToResponses)
 }
 
 func handleRealtimeAnthropicToResponses(state *realtimeStreamState, data string) error {

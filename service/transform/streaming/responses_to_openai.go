@@ -3,11 +3,12 @@ package streaming
 import (
 	"encoding/json"
 
+	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/service/responses"
 )
 
 func init() {
-	RegisterRealtimeRoute("openai-res", "openai", handleRealtimeResponsesToOpenAI)
+	RegisterRealtimeRoute(consts.FormatOpenAIResponses, consts.FormatOpenAIChat, handleRealtimeResponsesToOpenAI)
 }
 
 func handleRealtimeResponsesToOpenAI(state *realtimeStreamState, data string) error {

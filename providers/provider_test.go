@@ -2,8 +2,6 @@ package providers
 
 import (
 	"testing"
-
-	"github.com/qkf688/llmux/consts"
 )
 
 func TestRegistry_New_KnownTypes(t *testing.T) {
@@ -15,19 +13,19 @@ func TestRegistry_New_KnownTypes(t *testing.T) {
 	}{
 		{
 			name:      "openai",
-			typ:       consts.StyleOpenAI,
+			typ:       TypeOpenAI,
 			config:    `{"base_url":"http://localhost","api_key":"sk"}`,
 			wantProxy: "http://proxy",
 		},
 		{
 			name:      "openai-res",
-			typ:       consts.StyleOpenAIRes,
+			typ:       TypeOpenAIRes,
 			config:    `{"base_url":"http://localhost","api_key":"sk"}`,
 			wantProxy: "http://proxy",
 		},
 		{
 			name:      "anthropic",
-			typ:       consts.StyleAnthropic,
+			typ:       TypeAnthropic,
 			config:    `{"base_url":"http://localhost","api_key":"sk"}`,
 			wantProxy: "http://proxy",
 		},
@@ -57,7 +55,7 @@ func TestRegistry_New_UnknownType(t *testing.T) {
 }
 
 func TestRegistry_New_ProxyFallback(t *testing.T) {
-	p, err := New(consts.StyleOpenAI, `{"base_url":"http://localhost","api_key":"sk","proxy":"http://config-proxy"}`, "")
+	p, err := New(TypeOpenAI, `{"base_url":"http://localhost","api_key":"sk","proxy":"http://config-proxy"}`, "")
 	if err != nil {
 		t.Fatalf("New error: %v", err)
 	}
@@ -72,5 +70,5 @@ func TestRegistry_Register_DuplicatePanics(t *testing.T) {
 			t.Fatal("expected panic on duplicate registration")
 		}
 	}()
-	Register(consts.StyleOpenAI, func(_, _ string) (Provider, error) { return nil, nil })
+	Register(TypeOpenAI, func(_, _ string) (Provider, error) { return nil, nil })
 }

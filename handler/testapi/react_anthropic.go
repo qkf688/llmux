@@ -11,14 +11,13 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/providers"
 	anthropicsvc "github.com/qkf688/llmux/service/anthropic"
 )
 
 func runAnthropicReactTest(ctx context.Context, c *gin.Context, httpClient *http.Client, header http.Header, chatModel *ChatModel, providerInstance providers.Provider, scenario reactScenario) ([]string, string, error) {
-	if chatModel.Type != consts.StyleAnthropic {
+	if chatModel.Type != providers.TypeAnthropic {
 		return nil, "", fmt.Errorf("invalid provider type for anthropic runner: %s", chatModel.Type)
 	}
 	// 仅依赖 Provider 接口（BuildReq），不强制 *providers.Anthropic 类型断言。

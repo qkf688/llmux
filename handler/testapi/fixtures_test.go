@@ -4,25 +4,25 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/qkf688/llmux/consts"
+	"github.com/qkf688/llmux/providers"
 )
 
 func TestBuildTestBody(t *testing.T) {
 	tests := []struct {
-		name      string
-		style     string
-		expectErr bool
+		name         string
+		providerType string
+		expectErr    bool
 	}{
-		{name: "openai", style: consts.StyleOpenAI, expectErr: false},
-		{name: "anthropic", style: consts.StyleAnthropic, expectErr: false},
-		{name: "openai responses", style: consts.StyleOpenAIRes, expectErr: false},
-		{name: "invalid style", style: "unknown-style", expectErr: true},
+		{name: "openai", providerType: providers.TypeOpenAI, expectErr: false},
+		{name: "anthropic", providerType: providers.TypeAnthropic, expectErr: false},
+		{name: "openai responses", providerType: providers.TypeOpenAIRes, expectErr: false},
+		{name: "invalid provider type", providerType: "unknown-provider-type", expectErr: true},
 	}
 
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			body, err := buildTestBody(tc.style)
+			body, err := buildTestBody(tc.providerType)
 			if tc.expectErr {
 				if !errors.Is(err, errInvalidProviderType) {
 					t.Fatalf("expected errInvalidProviderType, got %v", err)
@@ -41,20 +41,20 @@ func TestBuildTestBody(t *testing.T) {
 
 func TestBuildStructuredOutputTestBody(t *testing.T) {
 	tests := []struct {
-		name      string
-		style     string
-		expectErr bool
+		name         string
+		providerType string
+		expectErr    bool
 	}{
-		{name: "openai", style: consts.StyleOpenAI, expectErr: false},
-		{name: "anthropic", style: consts.StyleAnthropic, expectErr: false},
-		{name: "openai responses", style: consts.StyleOpenAIRes, expectErr: false},
-		{name: "invalid style", style: "unknown-style", expectErr: true},
+		{name: "openai", providerType: providers.TypeOpenAI, expectErr: false},
+		{name: "anthropic", providerType: providers.TypeAnthropic, expectErr: false},
+		{name: "openai responses", providerType: providers.TypeOpenAIRes, expectErr: false},
+		{name: "invalid provider type", providerType: "unknown-provider-type", expectErr: true},
 	}
 
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			body, err := buildStructuredOutputTestBody(tc.style)
+			body, err := buildStructuredOutputTestBody(tc.providerType)
 			if tc.expectErr {
 				if !errors.Is(err, errInvalidProviderType) {
 					t.Fatalf("expected errInvalidProviderType, got %v", err)

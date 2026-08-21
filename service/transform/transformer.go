@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 )
 
@@ -52,18 +53,6 @@ func (c *UnifiedMessageContent) UnmarshalJSON(data []byte) error {
 	return errors.New("invalid content type: must be string or array of content parts")
 }
 
-// Transformer 格式转换器接口
-type Transformer interface {
-	// TransformRequest 将客户端请求转换为统一格式
-	TransformRequest(rawBody []byte) (*models.UnifiedRequest, error)
-
-	// TransformToProvider 将统一格式转换为上游供应商格式
-	TransformToProvider(unified *models.UnifiedRequest, providerType string) ([]byte, error)
-
-	// TransformResponse 将上游供应商响应转换为客户端格式
-	TransformResponse(response *http.Response, clientType string) (*http.Response, error)
-}
-
 // ThinkingClampConfig 携带模型思考档位白名单 + 策略设置进入 ProcessRequest。
 // 所有字段由调用方预先从 ctx + model/association 解析后传入，ProcessRequest 保持纯函数（不读设置）。
 // Clamp 为 nil 表示不做钳制（如 SupportsThinking=false 时 thinking 已被 stripThinkingFields 剥离）。
@@ -73,17 +62,21 @@ type ThinkingClampConfig struct {
 	UnknownStrategy string   // SettingKeyReasoningEffortUnknownStrategy（clamp_to_default / passthrough）
 }
 
-// TransformerManager 转换管理器
+// TransformerManager 转换管理器。
+//
+// 两个字段都是**协议形状**（consts.WireFormat），不是「客户端 style」或「供应商 type」：
+// 本包只关心 body 长什么样。由调用方（service/chat）负责把入站 style 与 Provider.Type
+// 各自解析成形状后传进来——那一层才知道供应商是谁。
 type TransformerManager struct {
-	clientType   string // 客户端格式类型
-	providerType string // 上游供应商类型
+	clientFormat   consts.WireFormat // 客户端 body 形状（由入站 style 解析而来）
+	upstreamFormat consts.WireFormat // 上游 body 形状（由 provider metadata 声明）
 }
 
 // NewTransformerManager 创建转换管理器
-func NewTransformerManager(clientType, providerType string) *TransformerManager {
+func NewTransformerManager(clientFormat, upstreamFormat consts.WireFormat) *TransformerManager {
 	return &TransformerManager{
-		clientType:   clientType,
-		providerType: providerType,
+		clientFormat:   clientFormat,
+		upstreamFormat: upstreamFormat,
 	}
 }
 
@@ -94,7 +87,7 @@ func NewTransformerManager(clientType, providerType string) *TransformerManager 
 // budget 联动（方案 E）：effort 被钳制时，按钳制后 effort 对应 budget 值作上限，
 // 超上限则钳到上限 + warn；低于上限不动；effort 未钳制则 budget 不动。
 func (tm *TransformerManager) ProcessRequest(ctx context.Context, rawBody []byte, clamp *ThinkingClampConfig) ([]byte, error) {
-	clientAdapter, err := getAdapterOrDefault(tm.clientType)
+	clientAdapter, err := getAdapter(tm.clientFormat)
 	if err != nil {
 		return nil, err
 	}
@@ -105,10 +98,10 @@ func (tm *TransformerManager) ProcessRequest(ctx context.Context, rawBody []byte
 
 	// 思考档位钳制（transform 路径，走 unified）
 	if clamp != nil {
-		clampUnifiedReasoning(unified, clamp, tm.clientType, tm.providerType)
+		clampUnifiedReasoning(unified, clamp, tm.clientFormat, tm.upstreamFormat)
 	}
 
-	providerAdapter, err := getAdapterOrDefault(tm.providerType)
+	providerAdapter, err := getAdapter(tm.upstreamFormat)
 	if err != nil {
 		return nil, err
 	}
@@ -118,5 +111,5 @@ func (tm *TransformerManager) ProcessRequest(ctx context.Context, rawBody []byte
 // ProcessResponse 处理响应转换
 func (tm *TransformerManager) ProcessResponse(response *http.Response, sideChannel *models.TransformSideChannel) (*http.Response, error) {
 	// 上游供应商格式 -> 统一格式 -> 客户端格式
-	return TransformProviderResponse(response, tm.providerType, tm.clientType, sideChannel)
+	return TransformProviderResponse(response, tm.upstreamFormat, tm.clientFormat, sideChannel)
 }

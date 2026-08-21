@@ -4,6 +4,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 )
 
@@ -64,7 +65,7 @@ func TestOpenAIToResponses_TotalTokensFallback(t *testing.T) {
 }
 
 // sideChannelTotalTokens 跑一遍带侧信道的转换，返回落库侧拿到的 TotalTokens。
-func sideChannelTotalTokens(t *testing.T, sse, from, to string) int64 {
+func sideChannelTotalTokens(t *testing.T, sse string, from, to consts.WireFormat) int64 {
 	t.Helper()
 
 	sc := models.NewTransformSideChannel(false)

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/qkf688/llmux/common/bgtask"
-	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/providers"
 )
@@ -153,7 +152,7 @@ func chooseTestBody(providerType string) []byte {
 	if m, ok := providers.MetadataOf(providerType); ok && len(m.HealthCheckBody) > 0 {
 		return m.HealthCheckBody
 	}
-	if m, ok := providers.MetadataOf(consts.StyleOpenAI); ok && len(m.HealthCheckBody) > 0 {
+	if m, ok := providers.MetadataOf(providers.TypeOpenAI); ok && len(m.HealthCheckBody) > 0 {
 		return m.HealthCheckBody
 	}
 	return nil

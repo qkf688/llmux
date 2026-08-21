@@ -1,9 +1,13 @@
 package streaming
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/qkf688/llmux/consts"
+)
 
 func TestRealtimeRoute_Registered(t *testing.T) {
-	pairs := [][2]string{
+	pairs := [][2]consts.WireFormat{
 		{"anthropic", "openai-res"},
 		{"openai-res", "anthropic"},
 		{"openai", "openai-res"},

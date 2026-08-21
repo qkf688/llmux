@@ -77,18 +77,21 @@ func CountTokens(c *gin.Context) {
 	httpresp.ErrorWithHttpStatus(c, http.StatusNotImplemented, http.StatusNotImplemented, "count_tokens not implemented")
 }
 
-func chatHandlerByStyle(c *gin.Context, style string) {
-	beforer, err := service.GetBeforer(style)
+// chatHandlerByStyle 以入站 style 为入口分发。参数用 consts.Style 收窄取值域；
+// 下游（注册表 / chat 编排）仍按裸 string 传递，故在此做唯一一次转换
+// （Style 端到端换成 consts.Style 是独立重构，见 service/chat/chat_attempt_request.go 的 TODO）。
+func chatHandlerByStyle(c *gin.Context, style consts.Style) {
+	beforer, err := service.GetBeforer(string(style))
 	if err != nil {
 		httpresp.ErrorWithHttpStatus(c, http.StatusBadRequest, http.StatusBadRequest, err.Error())
 		return
 	}
-	processer, err := service.GetProcesser(style)
+	processer, err := service.GetProcesser(string(style))
 	if err != nil {
 		httpresp.ErrorWithHttpStatus(c, http.StatusBadRequest, http.StatusBadRequest, err.Error())
 		return
 	}
-	chatHandler(c, beforer, processer, style)
+	chatHandler(c, beforer, processer, string(style))
 }
 
 func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor service.Processer, style string) {

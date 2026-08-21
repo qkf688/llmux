@@ -34,13 +34,13 @@ func providerAllowsBudgetExceedMaxTokens(chatModel providers.Provider) bool {
 }
 
 // passthroughEffortFields 返回各协议 passthrough 路径的 reasoning effort 字段路径。
-func passthroughEffortFields(style string) []string {
-	switch style {
-	case consts.StyleOpenAI:
+func passthroughEffortFields(format consts.WireFormat) []string {
+	switch format {
+	case consts.FormatOpenAIChat:
 		return []string{"reasoning_effort"}
-	case consts.StyleAnthropic:
+	case consts.FormatAnthropic:
 		return []string{"output_config.effort"}
-	case consts.StyleOpenAIRes:
+	case consts.FormatOpenAIResponses:
 		return []string{"reasoning.effort"}
 	default:
 		return nil
@@ -48,13 +48,13 @@ func passthroughEffortFields(style string) []string {
 }
 
 // passthroughBudgetField 返回各协议 passthrough 路径的 reasoning budget 字段路径。
-func passthroughBudgetFields(style string) []string {
-	switch style {
-	case consts.StyleOpenAI:
+func passthroughBudgetFields(format consts.WireFormat) []string {
+	switch format {
+	case consts.FormatOpenAIChat:
 		return nil // OpenAI Chat API 无 budget 字段，只有 reasoning_effort
-	case consts.StyleAnthropic:
+	case consts.FormatAnthropic:
 		return []string{"thinking.budget_tokens"}
-	case consts.StyleOpenAIRes:
+	case consts.FormatOpenAIResponses:
 		return []string{"reasoning.max_tokens"}
 	default:
 		return nil
@@ -65,21 +65,21 @@ func passthroughBudgetFields(style string) []string {
 // Anthropic 的 thinking 只有 type + budget_tokens 两个键，删掉 budget 后残留的
 // {"type":"enabled"} 缺 budget_tokens，上游会 400——必须连容器一起删。
 // Responses 的 reasoning 还可能带 summary 等无关键，只能靠空对象清理，不在此列。
-func passthroughThinkingContainers(style string) []string {
-	switch style {
-	case consts.StyleAnthropic:
+func passthroughThinkingContainers(format consts.WireFormat) []string {
+	switch format {
+	case consts.FormatAnthropic:
 		return []string{"thinking"}
 	default:
 		return nil
 	}
 }
 
-// clampPassthroughReasoning 在 passthrough 路径（同格式 1×1）对 raw body 按 style 钳制 effort 字段。
-// 不违反 N×M 禁令：同格式 1×1，只处理一种 style 的字段。
+// clampPassthroughReasoning 在 passthrough 路径（同格式 1×1）对 raw body 按 format 钳制 effort 字段。
+// 不违反 N×M 禁令：同格式 1×1，只处理一种 format 的字段。
 // 钳制后 effort 为空串 → 删 effort 字段（none 不支持 → 剥离 thinking）。
 // budget 联动（方案 E）：effort 被钳制时，同步钳 budget 上限。
-func clampPassthroughReasoning(raw []byte, style string, clamp *transform.ThinkingClampConfig) []byte {
-	effortFields := passthroughEffortFields(style)
+func clampPassthroughReasoning(raw []byte, format consts.WireFormat, clamp *transform.ThinkingClampConfig) []byte {
+	effortFields := passthroughEffortFields(format)
 	if len(effortFields) == 0 {
 		return raw
 	}
@@ -89,7 +89,7 @@ func clampPassthroughReasoning(raw []byte, style string, clamp *transform.Thinki
 	if effortVal == "" {
 		// budget-only 请求（只给 budget、不给 effort）：effort 缺席时仍须让 budget
 		// 受白名单约束，否则 budget 会完全绕过钳制直达上游。
-		return clampPassthroughBudgetOnly(raw, style, clamp)
+		return clampPassthroughBudgetOnly(raw, format, clamp)
 	}
 
 	// 归一化小写：与 transform 路径的 NormalizeReasoningEffort 行为一致，
@@ -107,7 +107,7 @@ func clampPassthroughReasoning(raw []byte, style string, clamp *transform.Thinki
 			next, err := sjson.SetBytes(raw, field, clamped)
 			if err != nil {
 				slog.Error("passthrough effort normalize: sjson set failed, aborting",
-					"field", field, "error", err, "style", style)
+					"field", field, "error", err, "format", format)
 				return raw
 			}
 			raw = next
@@ -119,15 +119,15 @@ func clampPassthroughReasoning(raw []byte, style string, clamp *transform.Thinki
 	if clamped == "" {
 		slog.Warn("passthrough reasoning effort clamped to empty (stripped)",
 			"original", original,
-			"style", style,
+			"format", format,
 			"reason", "none_not_in_whitelist")
-		return stripPassthroughThinking(raw, style)
+		return stripPassthroughThinking(raw, format)
 	}
 
 	slog.Warn("passthrough reasoning effort clamped",
 		"original", original,
 		"clamped_to", clamped,
-		"style", style,
+		"format", format,
 		"reason", "not_in_whitelist")
 
 	// 更新所有 effort 字段为钳制后的值。
@@ -137,22 +137,22 @@ func clampPassthroughReasoning(raw []byte, style string, clamp *transform.Thinki
 		next, err := sjson.SetBytes(raw, field, clamped)
 		if err != nil {
 			slog.Error("passthrough effort clamp: sjson set failed, aborting clamp",
-				"field", field, "error", err, "style", style)
+				"field", field, "error", err, "format", format)
 			return raw
 		}
 		raw = next
 	}
 
 	// budget 联动（方案 E）：按钳制后 effort 对应 budget 值作上限
-	raw = clampPassthroughBudget(raw, style, clamped)
+	raw = clampPassthroughBudget(raw, format, clamped)
 
 	return raw
 }
 
 // clampPassthroughBudget 在 passthrough 路径按钳制后 effort 对应的 budget 值钳制 raw 中 budget 字段。
 // budget 超上限 → 钳到上限 + warn；低于上限不动。
-func clampPassthroughBudget(raw []byte, style string, clampedEffort string) []byte {
-	budgetFields := passthroughBudgetFields(style)
+func clampPassthroughBudget(raw []byte, format consts.WireFormat, clampedEffort string) []byte {
+	budgetFields := passthroughBudgetFields(format)
 	if len(budgetFields) == 0 {
 		return raw
 	}
@@ -177,7 +177,7 @@ func clampPassthroughBudget(raw []byte, style string, clampedEffort string) []by
 			next, err := sjson.SetBytes(raw, field, budgetLimit)
 			if err != nil {
 				slog.Error("passthrough budget clamp: sjson set failed, skipping field",
-					"field", field, "error", err, "style", style)
+					"field", field, "error", err, "format", format)
 				continue // budget 单字段失败不影响其他字段，跳过即可
 			}
 			raw = next
@@ -191,8 +191,8 @@ func clampPassthroughBudget(raw []byte, style string, clampedEffort string) []by
 //   - 上限为 unconstrained → 原样返回
 //   - 上限为 0（白名单禁思考）→ 剥离 thinking（删 effort/budget 字段 + 清理空对象）
 //   - budget 超上限 → 钳到上限；低于上限不动
-func clampPassthroughBudgetOnly(raw []byte, style string, clamp *transform.ThinkingClampConfig) []byte {
-	budgetFields := passthroughBudgetFields(style)
+func clampPassthroughBudgetOnly(raw []byte, format consts.WireFormat, clamp *transform.ThinkingClampConfig) []byte {
+	budgetFields := passthroughBudgetFields(format)
 	if len(budgetFields) == 0 {
 		return raw // 该协议无 budget 字段（如 OpenAI Chat），无从钳起
 	}
@@ -204,9 +204,9 @@ func clampPassthroughBudgetOnly(raw []byte, style string, clamp *transform.Think
 
 	if limit == 0 {
 		slog.Warn("passthrough budget-only reasoning stripped",
-			"style", style,
+			"format", format,
 			"reason", "whitelist_has_no_positive_thinking_level")
-		return stripPassthroughThinking(raw, style)
+		return stripPassthroughThinking(raw, format)
 	}
 
 	for _, field := range budgetFields {
@@ -219,12 +219,12 @@ func clampPassthroughBudgetOnly(raw []byte, style string, clamp *transform.Think
 				"field", field,
 				"original_budget", budgetVal,
 				"clamped_budget", limit,
-				"style", style,
+				"format", format,
 				"reason", "budget_exceeds_whitelist_max_level")
 			next, err := sjson.SetBytes(raw, field, limit)
 			if err != nil {
 				slog.Error("passthrough budget-only clamp: sjson set failed, skipping field",
-					"field", field, "error", err, "style", style)
+					"field", field, "error", err, "format", format)
 				continue
 			}
 			raw = next
@@ -245,14 +245,14 @@ func clampPassthroughBudgetOnly(raw []byte, style string, clamp *transform.Think
 // allowBudgetExceedMaxTokens 为 true 时整体跳过：上游启用了 interleaved thinking beta，
 // 该约束不成立（详见 anthropic.BetaInterleavedThinking）。这类请求本就合法，收敛只会
 // 把思考静默压浅——没有 400 提示，比报错更难排查。
-func reconcileThinkingBudgetWithMaxTokens(body []byte, providerType string, allowBudgetExceedMaxTokens bool) []byte {
+func reconcileThinkingBudgetWithMaxTokens(body []byte, upstreamFormat consts.WireFormat, allowBudgetExceedMaxTokens bool) []byte {
 	// 只有 Anthropic 有此约束：OpenAI Chat 无 budget 字段；Responses 的 budget 在
 	// reasoning.max_tokens、上限键是 max_output_tokens——该键**已被 clampMaxTokens 钳制**，
 	// 但 Responses 并无「budget 必须严格小于上限」的对应硬约束：官方 Responses API 根本没有
 	// reasoning budget 字段（reasoning 只有 effort/summary，reasoning.max_tokens 是 OpenRouter
 	// 等兼容层的扩展），max_output_tokens 的语义是「推理+回答总额，超了就截断」而非 400 拒绝。
 	// 故本函数刻意不覆盖 Responses。
-	if providerType != consts.StyleAnthropic || len(body) == 0 {
+	if upstreamFormat != consts.FormatAnthropic || len(body) == 0 {
 		return body
 	}
 
@@ -286,7 +286,7 @@ func reconcileThinkingBudgetWithMaxTokens(body []byte, providerType string, allo
 			"target_budget", target,
 			"min_budget", anthropic.MinThinkingBudget,
 			"reason", "budget_exceeds_max_tokens_and_target_below_min")
-		return stripPassthroughThinking(body, consts.StyleAnthropic)
+		return stripPassthroughThinking(body, consts.FormatAnthropic)
 	}
 
 	next, err := sjson.SetBytes(body, "thinking.budget_tokens", target)
@@ -304,37 +304,37 @@ func reconcileThinkingBudgetWithMaxTokens(body []byte, providerType string, allo
 	return next
 }
 
-// stripPassthroughThinking 从 raw body 删除该 style 的 effort + budget 字段并清理残留空对象。
+// stripPassthroughThinking 从 raw body 删除该 format 的 effort + budget 字段并清理残留空对象。
 // 供 effort 钳成空串（none 剥离）与 budget-only 白名单禁思考两条路径共用。
-func stripPassthroughThinking(raw []byte, style string) []byte {
-	for _, field := range passthroughEffortFields(style) {
+func stripPassthroughThinking(raw []byte, format consts.WireFormat) []byte {
+	for _, field := range passthroughEffortFields(format) {
 		if next, err := sjson.DeleteBytes(raw, field); err == nil {
 			raw = next
 		}
 	}
-	raw = cleanupEmptyPassthroughObjects(raw, style)
-	for _, field := range passthroughBudgetFields(style) {
+	raw = cleanupEmptyPassthroughObjects(raw, format)
+	for _, field := range passthroughBudgetFields(format) {
 		if next, err := sjson.DeleteBytes(raw, field); err == nil {
 			raw = next
 		}
 	}
-	for _, container := range passthroughThinkingContainers(style) {
+	for _, container := range passthroughThinkingContainers(format) {
 		if next, err := sjson.DeleteBytes(raw, container); err == nil {
 			raw = next
 		}
 	}
-	return cleanupEmptyPassthroughObjects(raw, style)
+	return cleanupEmptyPassthroughObjects(raw, format)
 }
 
 // cleanupEmptyPassthroughObjects 删除 effort/budget 字段后可能残留的空对象。
 // Anthropic: output_config / thinking 变空 → 删整个键
 // Responses: reasoning 变空 → 删整个键
-func cleanupEmptyPassthroughObjects(raw []byte, style string) []byte {
+func cleanupEmptyPassthroughObjects(raw []byte, format consts.WireFormat) []byte {
 	var objectsToCheck []string
-	switch style {
-	case consts.StyleAnthropic:
+	switch format {
+	case consts.FormatAnthropic:
 		objectsToCheck = []string{"output_config", "thinking"}
-	case consts.StyleOpenAIRes:
+	case consts.FormatOpenAIResponses:
 		objectsToCheck = []string{"reasoning"}
 	}
 	for _, obj := range objectsToCheck {

@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 
 	"github.com/qkf688/llmux/common/maputil"
+	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 )
 
 func init() {
-	RegisterRealtimeRoute("openai", "openai-res", handleRealtimeOpenAIToResponses)
+	RegisterRealtimeRoute(consts.FormatOpenAIChat, consts.FormatOpenAIResponses, handleRealtimeOpenAIToResponses)
 }
 
 func handleRealtimeOpenAIToResponses(state *realtimeStreamState, data string) error {

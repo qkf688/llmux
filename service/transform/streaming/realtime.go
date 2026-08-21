@@ -8,14 +8,15 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 )
 
 type realtimeStreamState struct {
 	writer *io.PipeWriter
 
-	providerType string
-	clientType   string
+	upstreamFormat consts.WireFormat
+	clientFormat   consts.WireFormat
 
 	currentEvent string
 	lineCount    int
@@ -115,20 +116,20 @@ type realtimeStreamState struct {
 // directly from the response Body reader.
 //
 // sideChannel 承载转换旁路产物（上游原始体 + 上游原始 usage）；nil 表示不需要旁路。
-func TransformResponseRealtime(response *http.Response, providerType, clientType string, sideChannel *models.TransformSideChannel) (*http.Response, error) {
+func TransformResponseRealtime(response *http.Response, upstreamFormat, clientFormat consts.WireFormat, sideChannel *models.TransformSideChannel) (*http.Response, error) {
 	// Reduce N×N streaming conversions to N+N by routing through OpenAI Responses
 	// streaming format when neither side is already using it.
 	//
 	// provider -> openai-res (canonical) -> client
-	if providerType != "openai-res" && clientType != "openai-res" {
-		return transformResponseRealtimeViaResponses(response, providerType, clientType, sideChannel)
+	if upstreamFormat != consts.FormatOpenAIResponses && clientFormat != consts.FormatOpenAIResponses {
+		return transformResponseRealtimeViaResponses(response, upstreamFormat, clientFormat, sideChannel)
 	}
 
 	pr, pw := io.Pipe()
 
 	go func() {
 		defer response.Body.Close()
-		err := transformStreamBodyRealtime(response.Body, pw, providerType, clientType, sideChannel)
+		err := transformStreamBodyRealtime(response.Body, pw, upstreamFormat, clientFormat, sideChannel)
 		if err != nil {
 			pw.CloseWithError(err)
 			return
@@ -150,7 +151,7 @@ func TransformResponseRealtime(response *http.Response, providerType, clientType
 	return newResponse, nil
 }
 
-func transformResponseRealtimeViaResponses(response *http.Response, providerType, clientType string, sideChannel *models.TransformSideChannel) (*http.Response, error) {
+func transformResponseRealtimeViaResponses(response *http.Response, upstreamFormat, clientFormat consts.WireFormat, sideChannel *models.TransformSideChannel) (*http.Response, error) {
 	midReader, midWriter := io.Pipe()
 	outReader, outWriter := io.Pipe()
 
@@ -159,7 +160,7 @@ func transformResponseRealtimeViaResponses(response *http.Response, providerType
 
 		// 第一个 goroutine 读上游原始 body，持有 sideChannel（旁路捕获上游原始体与 usage）；
 		// 第二个 goroutine 读中间格式，传 nil——否则捕获的会是中间格式而非上游真值。
-		err := transformStreamBodyRealtime(response.Body, midWriter, providerType, "openai-res", sideChannel)
+		err := transformStreamBodyRealtime(response.Body, midWriter, upstreamFormat, consts.FormatOpenAIResponses, sideChannel)
 		if err != nil {
 			midWriter.CloseWithError(err)
 			return
@@ -170,7 +171,7 @@ func transformResponseRealtimeViaResponses(response *http.Response, providerType
 	go func() {
 		defer midReader.Close()
 
-		err := transformStreamBodyRealtime(midReader, outWriter, "openai-res", clientType, nil)
+		err := transformStreamBodyRealtime(midReader, outWriter, consts.FormatOpenAIResponses, clientFormat, nil)
 		if err != nil {
 			outWriter.CloseWithError(err)
 			return
@@ -192,15 +193,15 @@ func transformResponseRealtimeViaResponses(response *http.Response, providerType
 	return newResponse, nil
 }
 
-func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, providerType, clientType string, sideChannel *models.TransformSideChannel) error {
+func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, upstreamFormat, clientFormat consts.WireFormat, sideChannel *models.TransformSideChannel) error {
 	scanner := bufio.NewScanner(src)
 	// Increase initial buffer to 64KB, and cap at maxSSEEventSize (avoid "token too long").
 	scanner.Buffer(make([]byte, 0, 64*1024), maxSSEEventSize)
 
 	state := &realtimeStreamState{
 		writer:                     dst,
-		providerType:               providerType,
-		clientType:                 clientType,
+		upstreamFormat:             upstreamFormat,
+		clientFormat:               clientFormat,
 		anthropicActiveBlockIndex:  -1,
 		anthropicActiveOutputIndex: -1,
 		sideChannel:                sideChannel,
@@ -222,8 +223,8 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, provider
 					"dropped_bytes", dropped,
 					"head_limit", rawAccumulatorHeadSize,
 					"tail_limit", rawAccumulatorTailSize,
-					"provider_type", providerType,
-					"client_type", clientType,
+					"upstream_format", upstreamFormat,
+					"client_format", clientFormat,
 				)
 			}
 		}()
@@ -301,14 +302,14 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, provider
 		if state.finalize != nil {
 			if ferr := state.finalize(state); ferr != nil {
 				slog.Warn("failed to deliver pending completion after upstream read error",
-					"provider_type", state.providerType,
-					"client_type", state.clientType,
+					"upstream_format", state.upstreamFormat,
+					"client_format", state.clientFormat,
 					"error", ferr)
 			}
 		}
 		slog.Error("scanner error in stream transformation",
-			"provider_type", state.providerType,
-			"client_type", state.clientType,
+			"upstream_format", state.upstreamFormat,
+			"client_format", state.clientFormat,
 			"lines_processed", state.lineCount,
 			"errors_encountered", state.errorCount,
 			"error", err)
@@ -320,8 +321,8 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, provider
 		// 这里不像 scanner.Err() 分支那样再尝试 finalize：该错误来自**写下游** pipe 失败，
 		// finalize 同样是写下游，必然一起失败；而 scanner.Err() 是读上游失败、下游仍可写。
 		slog.Error("failed to flush last SSE event in stream transformation",
-			"provider_type", state.providerType,
-			"client_type", state.clientType,
+			"upstream_format", state.upstreamFormat,
+			"client_format", state.clientFormat,
 			"lines_processed", state.lineCount,
 			"errors_encountered", state.errorCount,
 			"error", err)
@@ -333,8 +334,8 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, provider
 	if state.finalize != nil {
 		if err := state.finalize(state); err != nil {
 			slog.Error("failed to finalize stream transformation",
-				"provider_type", state.providerType,
-				"client_type", state.clientType,
+				"upstream_format", state.upstreamFormat,
+				"client_format", state.clientFormat,
 				"lines_processed", state.lineCount,
 				"error", err)
 			return err
@@ -342,23 +343,23 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, provider
 	}
 
 	slog.Debug("stream transformation completed",
-		"provider_type", state.providerType,
-		"client_type", state.clientType,
+		"upstream_format", state.upstreamFormat,
+		"client_format", state.clientFormat,
 		"lines_processed", state.lineCount,
 		"errors_encountered", state.errorCount)
 	return nil
 }
 
 func dispatchRealtimeStreamChunk(state *realtimeStreamState, data string) error {
-	if h, ok := lookupRealtimeRoute(state.providerType, state.clientType); ok {
+	if h, ok := lookupRealtimeRoute(state.upstreamFormat, state.clientFormat); ok {
 		return h(state, data)
 	}
 	// Keep behavior: passthrough. Add observability for unexpected routes.
 	if state.unknownRouteCount < 3 {
 		state.unknownRouteCount++
 		slog.Warn("unknown stream transform route, passthrough",
-			"provider_type", state.providerType,
-			"client_type", state.clientType,
+			"upstream_format", state.upstreamFormat,
+			"client_format", state.clientFormat,
 			"event", state.currentEvent,
 			"line", state.lineCount,
 			"data_length", len(data),
@@ -380,8 +381,8 @@ func writeRealtimeData(state *realtimeStreamState, data string) error {
 
 func logRealtimeWriteError(state *realtimeStreamState, err error) {
 	slog.Error("failed to write to pipe in stream transformation",
-		"provider_type", state.providerType,
-		"client_type", state.clientType,
+		"upstream_format", state.upstreamFormat,
+		"client_format", state.clientFormat,
 		"line", state.lineCount,
 		"error", err)
 }
@@ -389,8 +390,8 @@ func logRealtimeWriteError(state *realtimeStreamState, err error) {
 func logRealtimeChunkParseError(state *realtimeStreamState, data string, err error) {
 	state.errorCount++
 	slog.Error("failed to parse SSE chunk in stream transformation",
-		"provider_type", state.providerType,
-		"client_type", state.clientType,
+		"upstream_format", state.upstreamFormat,
+		"client_format", state.clientFormat,
 		"line", state.lineCount,
 		"data_length", len(data),
 		"error", err,

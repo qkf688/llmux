@@ -3,6 +3,7 @@ package transform
 import (
 	"context"
 
+	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/transform/anthropic"
 	"github.com/qkf688/llmux/service/transform/openai"
@@ -34,19 +35,19 @@ func (a funcAdapter) FormatResponse(unified *models.UnifiedResponse) ([]byte, er
 }
 
 func init() {
-	RegisterAdapter("openai", funcAdapter{
+	RegisterAdapter(consts.FormatOpenAIChat, funcAdapter{
 		toUnified:      openai.ToUnified,
 		fromUnified:    openai.FromUnified,
 		parseResponse:  openai.ParseResponse,
 		formatResponse: openai.FormatResponse,
 	})
-	RegisterAdapter("anthropic", funcAdapter{
+	RegisterAdapter(consts.FormatAnthropic, funcAdapter{
 		toUnified:      anthropic.ToUnified,
 		fromUnified:    anthropic.FromUnified,
 		parseResponse:  anthropic.ParseResponse,
 		formatResponse: anthropic.FormatResponse,
 	})
-	RegisterAdapter("openai-res", funcAdapter{
+	RegisterAdapter(consts.FormatOpenAIResponses, funcAdapter{
 		toUnified:      responses.ToUnified,
 		fromUnified:    responses.FromUnified,
 		parseResponse:  responses.ParseResponse,

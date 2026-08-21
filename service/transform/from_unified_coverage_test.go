@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 )
 
@@ -154,15 +155,15 @@ func fromUnifiedErrorJSON(err error) []byte {
 
 // TestFromUnifiedCoverage_Golden 把统一请求在各协议下的出站 body 冻结成 golden。
 //
-// 两个维度：fixture（请求形态）× style（目标协议），golden 落在
-// testdata/golden/from_unified/{fixture}/{style}.json。新增边界 fixture 只需往
+// 两个维度：fixture（请求形态）× wire format（目标协议形状），golden 落在
+// testdata/golden/from_unified/{fixture}/{format}.json。新增边界 fixture 只需往
 // fixtures 表加一行 + 跑一次 -update-golden，不改测试逻辑。
 //
 // 直调 adapter.FromUnified 而非 ProcessRequest：FromUnified 是纯函数（无 ctx、不读设置），
 // 测的是纯字段映射终态。ProcessRequest 会先跑 clampUnifiedReasoning，
 // 那是另一层语义，混进来会让「字段去向」不可读。
 //
-// styles 刻意硬编码而非 range formatAdapters：新协议注册后应当人工审一遍它的
+// formats 刻意硬编码而非 range formatAdapters：新协议注册后应当人工审一遍它的
 // 出站形状再纳入基线，自动全跑会静默接受未审输出。
 func TestFromUnifiedCoverage_Golden(t *testing.T) {
 	t.Parallel()
@@ -175,23 +176,23 @@ func TestFromUnifiedCoverage_Golden(t *testing.T) {
 		{name: "reasoning_effort_only", build: reasoningEffortOnlyUnifiedRequest},
 	}
 
-	styles := []string{"openai", "openai-res", "anthropic"}
+	formats := []consts.WireFormat{consts.FormatOpenAIChat, consts.FormatOpenAIResponses, consts.FormatAnthropic}
 
 	for _, fixture := range fixtures {
 		t.Run(fixture.name, func(t *testing.T) {
 			t.Parallel()
 
-			for _, style := range styles {
-				t.Run(style, func(t *testing.T) {
+			for _, format := range formats {
+				t.Run(string(format), func(t *testing.T) {
 					t.Parallel()
 
 					// 每个 subtest 独立构造：Anthropic 出站会 snapshot/restore 消息级 reasoning，
 					// 共享同一实例可能跨 subtest 干扰。
 					req := fixture.build(t)
 
-					adapter, err := getAdapterOrDefault(style)
+					adapter, err := getAdapter(format)
 					if err != nil {
-						t.Fatalf("getAdapterOrDefault(%s) failed: %v", style, err)
+						t.Fatalf("getAdapter(%s) failed: %v", format, err)
 					}
 
 					out, err := adapter.FromUnified(req)
@@ -203,7 +204,7 @@ func TestFromUnifiedCoverage_Golden(t *testing.T) {
 						out = fromUnifiedErrorJSON(err)
 					}
 
-					wantPath := filepath.Join("testdata", "golden", "from_unified", fixture.name, style+".json")
+					wantPath := filepath.Join("testdata", "golden", "from_unified", fixture.name, string(format)+".json")
 					assertGoldenJSON(t, wantPath, out)
 				})
 			}

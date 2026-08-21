@@ -125,7 +125,10 @@ func TestStructuredOutputHandler(c *gin.Context) {
 		return
 	}
 
-	payload, rawOutput, err := extractStructuredOutputJSON(chatModel.Type, bodyBytes)
+	// 上游响应体形状由 provider metadata 声明；未声明时传零值，落到
+	// extractStructuredOutputJSON 的 default 分支（按 OpenAI Chat 形状取），与改造前一致。
+	upstreamFormat, _ := providers.WireFormatOf(chatModel.Type)
+	payload, rawOutput, err := extractStructuredOutputJSON(upstreamFormat, bodyBytes)
 	if err != nil {
 		httpresp.Success(c, map[string]interface{}{
 			"passed": false,

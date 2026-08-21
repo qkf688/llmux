@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 )
 
@@ -195,15 +196,15 @@ func formatResponseErrorJSON(err error) []byte {
 
 // TestFormatResponseCoverage_Golden 把统一响应在各协议下的出站 body 冻结成 golden。
 //
-// 两个维度：fixture（响应形态）× style（目标协议），golden 落在
-// testdata/golden/format_response/{fixture}/{style}.json。这是请求侧
+// 两个维度：fixture（响应形态）× wire format（目标协议形状），golden 落在
+// testdata/golden/format_response/{fixture}/{format}.json。这是请求侧
 // TestFromUnifiedCoverage_Golden 的响应侧对偶。
 //
 // 直调 adapter.FormatResponse 而非 TransformProviderResponse：FormatResponse 是纯函数
 // （无 ctx、不读设置），测的是纯出站字段映射终态。TransformProviderResponse 会先跑
 // ParseResponse，任一侧的字段丢失会被另一侧掩盖，「字段去向」不可读。
 //
-// styles 刻意硬编码而非 range formatAdapters：新协议注册后应当人工审一遍它的
+// formats 刻意硬编码而非 range formatAdapters：新协议注册后应当人工审一遍它的
 // 出站形状再纳入基线，自动全跑会静默接受未审输出。
 func TestFormatResponseCoverage_Golden(t *testing.T) {
 	t.Parallel()
@@ -217,23 +218,23 @@ func TestFormatResponseCoverage_Golden(t *testing.T) {
 		{name: "multi_choice", build: multiChoiceUnifiedResponse},
 	}
 
-	styles := []string{"openai", "openai-res", "anthropic"}
+	formats := []consts.WireFormat{consts.FormatOpenAIChat, consts.FormatOpenAIResponses, consts.FormatAnthropic}
 
 	for _, fixture := range fixtures {
 		t.Run(fixture.name, func(t *testing.T) {
 			t.Parallel()
 
-			for _, style := range styles {
-				t.Run(style, func(t *testing.T) {
+			for _, format := range formats {
+				t.Run(string(format), func(t *testing.T) {
 					t.Parallel()
 
 					// 每个 subtest 独立构造：Anthropic 出站会 snapshot/restore 消息级 reasoning，
 					// 共享同一实例可能跨 subtest 干扰。
 					resp := fixture.build(t)
 
-					adapter, err := getAdapterOrDefault(style)
+					adapter, err := getAdapter(format)
 					if err != nil {
-						t.Fatalf("getAdapterOrDefault(%s) failed: %v", style, err)
+						t.Fatalf("getAdapter(%s) failed: %v", format, err)
 					}
 
 					out, err := adapter.FormatResponse(resp)
@@ -243,7 +244,7 @@ func TestFormatResponseCoverage_Golden(t *testing.T) {
 						out = formatResponseErrorJSON(err)
 					}
 
-					wantPath := filepath.Join("testdata", "golden", "format_response", fixture.name, style+".json")
+					wantPath := filepath.Join("testdata", "golden", "format_response", fixture.name, string(format)+".json")
 					assertGoldenJSON(t, wantPath, out)
 				})
 			}

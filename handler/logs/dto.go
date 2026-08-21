@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/transform"
 )
@@ -129,14 +130,14 @@ func computeMismatchedRequestFields(log models.ChatLog) *requestFieldDiagnostics
 // 复制一份必然在某次改动里只改了一侧，让同一个弹窗里两块状态语义不同。
 func computeRequestFieldDiagnostics(
 	log models.ChatLog,
-	detect func(style string, rawBody []byte) ([]string, error),
+	detect func(style consts.Style, rawBody []byte) ([]string, error),
 	errUnsupported error,
 ) *requestFieldDiagnostics {
 	if log.RawRequestBody == "" {
 		return &requestFieldDiagnostics{Status: unclaimedStatusRawNotRecorded, Fields: []string{}}
 	}
 
-	fields, err := detect(log.Style, []byte(log.RawRequestBody))
+	fields, err := detect(consts.Style(log.Style), []byte(log.RawRequestBody))
 	switch {
 	case errors.Is(err, errUnsupported):
 		return &requestFieldDiagnostics{Status: unclaimedStatusStyleUnsupported, Fields: []string{}}

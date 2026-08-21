@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/qkf688/llmux/common"
+	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/service/responses"
 )
 
@@ -23,7 +24,7 @@ type anthropicBufferedDelta struct {
 }
 
 func init() {
-	RegisterRealtimeRoute("openai-res", "anthropic", handleRealtimeResponsesToAnthropic)
+	RegisterRealtimeRoute(consts.FormatOpenAIResponses, consts.FormatAnthropic, handleRealtimeResponsesToAnthropic)
 }
 
 func handleRealtimeResponsesToAnthropic(state *realtimeStreamState, data string) error {

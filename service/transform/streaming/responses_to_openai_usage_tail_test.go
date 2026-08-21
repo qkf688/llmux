@@ -5,6 +5,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/qkf688/llmux/consts"
 )
 
 // 本文件锁定 openai-res → openai 的**出站** usage 形状。
@@ -67,42 +69,42 @@ type expectedTailUsage struct {
 var usageTailCases = []struct {
 	name       string
 	in         string
-	from       string
+	from       consts.WireFormat
 	wantFinish string
 	wantUsage  *expectedTailUsage
 }{
 	{
 		name:       "openai-res_stop_with_details",
 		in:         fixtureResponsesCompletedWithUsageDetails,
-		from:       "openai-res",
+		from:       consts.FormatOpenAIResponses,
 		wantFinish: "stop",
 		wantUsage:  &expectedTailUsage{prompt: 100, completion: 42, total: 142, cached: 80, reasoning: 7},
 	},
 	{
 		name:       "openai-res_tool_calls",
 		in:         fixtureResponsesCompletedToolCallWithUsage,
-		from:       "openai-res",
+		from:       consts.FormatOpenAIResponses,
 		wantFinish: "tool_calls",
 		wantUsage:  &expectedTailUsage{prompt: 10, completion: 8, total: 18},
 	},
 	{
 		name:       "anthropic_double_hop",
 		in:         fixtureAnthropicStreamForOpenAIOut,
-		from:       "anthropic",
+		from:       consts.FormatAnthropic,
 		wantFinish: "stop",
 		wantUsage:  &expectedTailUsage{prompt: 10, completion: 5, total: 15},
 	},
 	{
 		name:       "no_usage_no_tail_chunk",
 		in:         fixtureResponsesCompletedWithoutUsage,
-		from:       "openai-res",
+		from:       consts.FormatOpenAIResponses,
 		wantFinish: "stop",
 		wantUsage:  nil,
 	},
 	{
 		name:       "zero_usage_no_tail_chunk",
 		in:         fixtureResponsesCompletedWithZeroUsage,
-		from:       "openai-res",
+		from:       consts.FormatOpenAIResponses,
 		wantFinish: "stop",
 		wantUsage:  nil,
 	},
@@ -267,7 +269,7 @@ func openAIChunkFinishReason(t *testing.T, ev sseEvent) string {
 
 // countSSEDoneMarkers 数出站流里的 [DONE] 标记数量。
 // runRealtimeTransform 会跳过 [DONE]，故终止语义只能另跑一遍原始文本来验。
-func countSSEDoneMarkers(t *testing.T, sse, from, to string) int {
+func countSSEDoneMarkers(t *testing.T, sse string, from, to consts.WireFormat) int {
 	t.Helper()
 
 	out, err := TransformResponseRealtime(newSSEResponse(sse), from, to, nil)

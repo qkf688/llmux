@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/qkf688/llmux/consts"
 )
 
 var updateGolden = flag.Bool("update-golden", false, "update golden fixtures")
@@ -18,26 +20,26 @@ var updateGolden = flag.Bool("update-golden", false, "update golden fixtures")
 func TestGolden_RequestConversions(t *testing.T) {
 	t.Parallel()
 
-	styles := []string{"openai", "openai-res", "anthropic"}
-	for _, from := range styles {
+	formats := []consts.WireFormat{consts.FormatOpenAIChat, consts.FormatOpenAIResponses, consts.FormatAnthropic}
+	for _, from := range formats {
 		from := from
-		t.Run(from, func(t *testing.T) {
+		t.Run(string(from), func(t *testing.T) {
 			t.Parallel()
 
-			in := mustReadFile(t, filepath.Join("testdata", "golden", "request", "in", from+".json"))
-			for _, to := range styles {
+			in := mustReadFile(t, filepath.Join("testdata", "golden", "request", "in", string(from)+".json"))
+			for _, to := range formats {
 				if to == from {
 					continue
 				}
 				to := to
-				t.Run("to_"+to, func(t *testing.T) {
+				t.Run("to_"+string(to), func(t *testing.T) {
 					tm := NewTransformerManager(from, to)
 					out, err := tm.ProcessRequest(context.Background(), in, nil)
 					if err != nil {
 						t.Fatalf("ProcessRequest(%s->%s) failed: %v", from, to, err)
 					}
 
-					wantPath := filepath.Join("testdata", "golden", "request", "out", from+"_to_"+to+".json")
+					wantPath := filepath.Join("testdata", "golden", "request", "out", string(from)+"_to_"+string(to)+".json")
 					assertGoldenJSON(t, wantPath, out)
 				})
 			}
@@ -48,19 +50,19 @@ func TestGolden_RequestConversions(t *testing.T) {
 func TestGolden_ResponseConversions(t *testing.T) {
 	t.Parallel()
 
-	styles := []string{"openai", "openai-res", "anthropic"}
-	for _, from := range styles {
+	formats := []consts.WireFormat{consts.FormatOpenAIChat, consts.FormatOpenAIResponses, consts.FormatAnthropic}
+	for _, from := range formats {
 		from := from
-		t.Run(from, func(t *testing.T) {
+		t.Run(string(from), func(t *testing.T) {
 			t.Parallel()
 
-			in := mustReadFile(t, filepath.Join("testdata", "golden", "response", "in", from+".json"))
-			for _, to := range styles {
+			in := mustReadFile(t, filepath.Join("testdata", "golden", "response", "in", string(from)+".json"))
+			for _, to := range formats {
 				if to == from {
 					continue
 				}
 				to := to
-				t.Run("to_"+to, func(t *testing.T) {
+				t.Run("to_"+string(to), func(t *testing.T) {
 					resp := &http.Response{
 						StatusCode: 200,
 						Header: http.Header{
@@ -79,7 +81,7 @@ func TestGolden_ResponseConversions(t *testing.T) {
 						t.Fatalf("read response body: %v", err)
 					}
 
-					wantPath := filepath.Join("testdata", "golden", "response", "out", from+"_to_"+to+".json")
+					wantPath := filepath.Join("testdata", "golden", "response", "out", string(from)+"_to_"+string(to)+".json")
 					assertGoldenJSON(t, wantPath, out)
 				})
 			}
@@ -90,10 +92,10 @@ func TestGolden_ResponseConversions(t *testing.T) {
 func TestGolden_StreamConversions(t *testing.T) {
 	t.Parallel()
 
-	styles := []string{"openai", "openai-res", "anthropic"}
-	for _, from := range styles {
+	formats := []consts.WireFormat{consts.FormatOpenAIChat, consts.FormatOpenAIResponses, consts.FormatAnthropic}
+	for _, from := range formats {
 		from := from
-		t.Run(from, func(t *testing.T) {
+		t.Run(string(from), func(t *testing.T) {
 			t.Parallel()
 
 			inDir := filepath.Join("testdata", "golden", "stream", "in")
@@ -117,10 +119,10 @@ func TestGolden_StreamConversions(t *testing.T) {
 				}
 
 				caseName := ""
-				if name == from+".sse" {
+				if name == string(from)+".sse" {
 					caseName = ""
-				} else if strings.HasPrefix(name, from+"__") {
-					caseName = strings.TrimSuffix(strings.TrimPrefix(name, from+"__"), ".sse")
+				} else if strings.HasPrefix(name, string(from)+"__") {
+					caseName = strings.TrimSuffix(strings.TrimPrefix(name, string(from)+"__"), ".sse")
 				} else {
 					continue
 				}
@@ -132,14 +134,14 @@ func TestGolden_StreamConversions(t *testing.T) {
 				t.Fatalf("no stream fixtures found for %s in %s", from, inDir)
 			}
 
-			for _, to := range styles {
+			for _, to := range formats {
 				if to == from {
 					continue
 				}
 				to := to
 				for _, c := range cases {
 					c := c
-					name := "to_" + to
+					name := "to_" + string(to)
 					if c.name != "" {
 						name += "__" + c.name
 					}
@@ -162,9 +164,9 @@ func TestGolden_StreamConversions(t *testing.T) {
 							t.Fatalf("read stream body: %v", err)
 						}
 
-						wantName := from + "_to_" + to + ".sse"
+						wantName := string(from) + "_to_" + string(to) + ".sse"
 						if c.name != "" {
-							wantName = from + "_to_" + to + "__" + c.name + ".sse"
+							wantName = string(from) + "_to_" + string(to) + "__" + c.name + ".sse"
 						}
 						wantPath := filepath.Join("testdata", "golden", "stream", "out", wantName)
 						assertGoldenSSE(t, wantPath, out)

@@ -35,21 +35,25 @@ var ErrClaimedKeysUnsupported = errors.New("transform: inbound unknown-field det
 // 会让消费方分不清是哪项能力缺失。
 var ErrMismatchedKeysUnsupported = errors.New("transform: inbound type-mismatch detection is not supported for this style")
 
-// claimedRequestKeysByStyle 是 style → 入站认领键集合的分派表。
+// claimedRequestKeysByStyle 是**入站客户端 style** → 入站认领键集合的分派表。
 //
-// 刻意**不**像 getAdapterOrDefault 那样在未命中时回退到默认协议：拿 openai 的键
-// 集合去查 anthropic 的 body，会把 system / stop_sequences 这类正常键整片误报，
-// 正是 TestUnknownTopLevelKeys_OutboundRenameIsNotUnknown 钉死要防的退化。
-var claimedRequestKeysByStyle = map[string]func() map[string]struct{}{}
+// 键刻意保持 consts.Style（而不是 consts.WireFormat）：本表只服务入站诊断，传出站协议
+// 会把「转换时改名的字段」全部误报成未知。用 Style 做键之后，出站侧的 consts.WireFormat
+// 值在编译期就传不进来——这条原本只写在注释里的告诫现在由类型系统兜住。
+//
+// 刻意**不**在未命中时回退到默认协议：拿 openai 的键集合去查 anthropic 的 body，
+// 会把 system / stop_sequences 这类正常键整片误报，正是
+// TestUnknownTopLevelKeys_OutboundRenameIsNotUnknown 钉死要防的退化。
+var claimedRequestKeysByStyle = map[consts.Style]func() map[string]struct{}{}
 
 // mismatchedRequestKeysByStyle 是 style → 类型不匹配键计算函数的分派表。
 //
 // 与 claimedRequestKeysByStyle 分成两张表而不是一张表两个字段：两者的支持面不同
 // （见 ErrMismatchedKeysUnsupported），合成一张表就得允许其中一半为 nil，等于把
 // 「未注册」和「注册了但为空」混在一起。
-var mismatchedRequestKeysByStyle = map[string]func([]byte) ([]string, error){}
+var mismatchedRequestKeysByStyle = map[consts.Style]func([]byte) ([]string, error){}
 
-func registerClaimedRequestKeys(style string, keys func() map[string]struct{}) {
+func registerClaimedRequestKeys(style consts.Style, keys func() map[string]struct{}) {
 	if style == "" {
 		panic("transform: claimed request keys style must not be empty")
 	}
@@ -62,7 +66,7 @@ func registerClaimedRequestKeys(style string, keys func() map[string]struct{}) {
 	claimedRequestKeysByStyle[style] = keys
 }
 
-func registerMismatchedRequestKeys(style string, mismatched func([]byte) ([]string, error)) {
+func registerMismatchedRequestKeys(style consts.Style, mismatched func([]byte) ([]string, error)) {
 	if style == "" {
 		panic("transform: mismatched request keys style must not be empty")
 	}
@@ -98,7 +102,7 @@ func init() {
 //
 // 未注册的 style 返回 ErrClaimedKeysUnsupported；rawBody 不是 JSON 对象则透传解析错误。
 // 只看顶层，messages[].xxx 之类的嵌套键不在范围内。
-func UnknownRequestKeys(style string, rawBody []byte) ([]string, error) {
+func UnknownRequestKeys(style consts.Style, rawBody []byte) ([]string, error) {
 	claimed, ok := claimedRequestKeysByStyle[style]
 	if !ok {
 		return nil, fmt.Errorf("style %q: %w", style, ErrClaimedKeysUnsupported)
@@ -118,7 +122,7 @@ func UnknownRequestKeys(style string, rawBody []byte) ([]string, error) {
 // style 语义与 UnknownRequestKeys 相同（必须传**入站** style）。未注册的 style 返回
 // ErrMismatchedKeysUnsupported；只看顶层，且只覆盖带三态的容器字段
 // （`json.RawMessage` / `RawArray` 类型的字段不在范围内，见 shared 侧注释）。
-func MismatchedRequestKeys(style string, rawBody []byte) ([]string, error) {
+func MismatchedRequestKeys(style consts.Style, rawBody []byte) ([]string, error) {
 	mismatched, ok := mismatchedRequestKeysByStyle[style]
 	if !ok {
 		return nil, fmt.Errorf("style %q: %w", style, ErrMismatchedKeysUnsupported)

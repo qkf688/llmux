@@ -2,6 +2,8 @@ package streaming
 
 import (
 	"testing"
+
+	"github.com/qkf688/llmux/consts"
 )
 
 // 本文件是协议不变量断言，与 golden 快照相互独立：
@@ -68,10 +70,10 @@ func TestInvariant_AnthropicOut_BlockTypesAndIndices(t *testing.T) {
 
 	cases := []struct {
 		name string
-		from string
+		from consts.WireFormat
 		in   string
 	}{
-		{name: "from_openai", from: "openai", in: fixtureOpenAIToolCallStream},
+		{name: "from_openai", from: consts.FormatOpenAIChat, in: fixtureOpenAIToolCallStream},
 	}
 
 	for _, c := range cases {
@@ -79,7 +81,7 @@ func TestInvariant_AnthropicOut_BlockTypesAndIndices(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 
-			events := runRealtimeTransform(t, c.in, c.from, "anthropic")
+			events := runRealtimeTransform(t, c.in, c.from, consts.FormatAnthropic)
 			openBlocks := map[int]string{}
 
 			for _, ev := range events {
@@ -162,12 +164,12 @@ func TestInvariant_ResponsesOut_OutputIndexAndCompleted(t *testing.T) {
 
 	cases := []struct {
 		name             string
-		from             string
+		from             consts.WireFormat
 		in               string
 		wantFunctionCall bool
 	}{
-		{name: "from_openai", from: "openai", in: fixtureOpenAIToolCallStream, wantFunctionCall: true},
-		{name: "from_anthropic", from: "anthropic", in: fixtureAnthropicToolUseStream, wantFunctionCall: true},
+		{name: "from_openai", from: consts.FormatOpenAIChat, in: fixtureOpenAIToolCallStream, wantFunctionCall: true},
+		{name: "from_anthropic", from: consts.FormatAnthropic, in: fixtureAnthropicToolUseStream, wantFunctionCall: true},
 	}
 
 	for _, c := range cases {
@@ -175,7 +177,7 @@ func TestInvariant_ResponsesOut_OutputIndexAndCompleted(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 
-			events := runRealtimeTransform(t, c.in, c.from, "openai-res")
+			events := runRealtimeTransform(t, c.in, c.from, consts.FormatOpenAIResponses)
 
 			// 待办 25：不同 item 不得共用同一个 output_index
 			indexToItemID := map[int]string{}

@@ -13,9 +13,12 @@ import (
 
 var errStructuredOutputNotFound = errors.New("structured output not found in response")
 
-func extractStructuredOutputJSON(providerType string, responseBody []byte) (payload json.RawMessage, rawOutput string, err error) {
-	switch providerType {
-	case consts.StyleAnthropic:
+// extractStructuredOutputJSON 按**上游响应体形状**取结构化输出：三个协议放 JSON 的位置不同。
+// 判定用 wire format 而非 provider type——OpenAI 兼容上游的响应体同样是 OpenAI Chat 形状，
+// 按「哪一家」分支会让每接一家新上游都要来这里加 case。
+func extractStructuredOutputJSON(upstreamFormat consts.WireFormat, responseBody []byte) (payload json.RawMessage, rawOutput string, err error) {
+	switch upstreamFormat {
+	case consts.FormatAnthropic:
 		result := gjson.GetBytes(responseBody, `content.#(type=="tool_use").input`)
 		if !result.Exists() || result.Type == gjson.Null {
 			return nil, "", errStructuredOutputNotFound
@@ -25,7 +28,7 @@ func extractStructuredOutputJSON(providerType string, responseBody []byte) (payl
 			return nil, "", errStructuredOutputNotFound
 		}
 		return json.RawMessage(raw), raw, nil
-	case consts.StyleOpenAIRes:
+	case consts.FormatOpenAIResponses:
 		// Prefer output_text items
 		outputItems := gjson.GetBytes(responseBody, "output")
 		if outputItems.IsArray() {

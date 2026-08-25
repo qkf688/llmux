@@ -61,14 +61,14 @@ describe("UnclaimedFieldsSection", () => {
 
     expect(screen.getByText("foo_bar")).toBeInTheDocument();
     expect(screen.getByText("baz")).toBeInTheDocument();
-    expect(screen.getByText(/未解析的顶层键 \(2\)/)).toBeInTheDocument();
+    expect(screen.getByText(/发现 2 个网关未识别的请求字段/)).toBeInTheDocument();
   });
 
   it("ok 且无未认领键时说明是「已检测」而非「查不了」", () => {
     render(<UnclaimedFieldsSection log={buildLog({ unclaimed: { status: "ok", fields: [] } })} />);
 
     // 必须明确表达检测已完成，否则与 raw_not_recorded 无从区分
-    expect(screen.getByText(/已完成检测/)).toBeInTheDocument();
+    expect(screen.getByText(/已检测/)).toBeInTheDocument();
   });
 
   it("raw_not_recorded 说明是原始体未记录、无从检测，不渲染成「无问题」", () => {
@@ -77,7 +77,7 @@ describe("UnclaimedFieldsSection", () => {
     );
 
     expect(screen.getByText(/未记录原始请求体/)).toBeInTheDocument();
-    expect(screen.queryByText(/已完成检测/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/已检测/)).not.toBeInTheDocument();
   });
 
   it("style_unsupported 写明是该入站协议的检测能力缺口而非请求出错", () => {
@@ -89,7 +89,7 @@ describe("UnclaimedFieldsSection", () => {
 
     expect(screen.getByText(/anthropic/)).toBeInTheDocument();
     expect(screen.getByText(/尚未实现/)).toBeInTheDocument();
-    expect(screen.queryByText(/已完成检测/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/已检测/)).not.toBeInTheDocument();
   });
 
   it("parse_error 展示后端给出的 detail", () => {
@@ -132,8 +132,9 @@ describe("UnclaimedFieldsSection", () => {
       <UnclaimedFieldsSection log={buildLog({ unclaimed: { status: "ok", fields: ["foo"] } })} />,
     );
     // 「网关不认领」≠「转换丢失」，且只看顶层键——不说清会被读成「转换已无问题」
+    // （说明收进默认折叠的 <details>，内容仍在 DOM 中可查）
     expect(screen.getByText(/不等于/)).toBeInTheDocument();
-    expect(screen.getByText(/顶层键/)).toBeInTheDocument();
+    expect(screen.getByText(/这项检测是什么意思/)).toBeInTheDocument();
     withFields.unmount();
 
     render(<UnclaimedFieldsSection log={buildLog({ unclaimed: { status: "raw_not_recorded", fields: [] } })} />);
@@ -162,7 +163,7 @@ describe("MismatchedFieldsSection", () => {
     );
 
     expect(screen.getByText("temperature")).toBeInTheDocument();
-    expect(screen.getByText(/被丢弃的顶层键 \(1\)/)).toBeInTheDocument();
+    expect(screen.getByText(/1 个字段因值类型不符被忽略/)).toBeInTheDocument();
     // 用户最需要知道的是「没报错但参数没生效」，否则不会去查客户端
     expect(screen.getByText(/请求照常成功/)).toBeInTheDocument();
   });
@@ -170,7 +171,7 @@ describe("MismatchedFieldsSection", () => {
   it("ok 且无类型不符键时说明是「已检测」而非「查不了」", () => {
     render(<MismatchedFieldsSection log={buildLog({ mismatched: { status: "ok", fields: [] } })} />);
 
-    expect(screen.getByText(/已完成检测/)).toBeInTheDocument();
+    expect(screen.getByText(/已检测/)).toBeInTheDocument();
   });
 
   it("style_unsupported 表述为「不适用」而非能力缺口", () => {

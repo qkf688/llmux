@@ -41,8 +41,6 @@ func CreateModel(c *gin.Context) {
 	model := models.Model{
 		Name:             req.Name,
 		Remark:           req.Remark,
-		MaxRetry:         req.MaxRetry,
-		TimeOut:          req.TimeOut,
 		IOLog:            &req.IOLog,
 		AutoAssociate:    req.AutoAssociate,
 		SupportsThinking: req.SupportsThinking != nil && *req.SupportsThinking,
@@ -74,11 +72,9 @@ func UpdateModel(c *gin.Context) {
 	}
 
 	updates := map[string]any{
-		"name":      req.Name,
-		"remark":    req.Remark,
-		"max_retry": req.MaxRetry,
-		"time_out":  req.TimeOut,
-		"io_log":    req.IOLog,
+		"name":   req.Name,
+		"remark": req.Remark,
+		"io_log": req.IOLog,
 	}
 	if req.AutoAssociate != nil {
 		updates["auto_associate"] = *req.AutoAssociate

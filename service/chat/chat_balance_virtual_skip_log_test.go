@@ -21,7 +21,7 @@ func TestBalanceChatVirtual_NoProvidersForRealModel_WritesSkipLog(t *testing.T) 
 		t.Fatalf("create virtual model: %v", err)
 	}
 
-	realModel := models.Model{Name: "MiniMax-M2", MaxRetry: 1, TimeOut: 10}
+	realModel := models.Model{Name: "MiniMax-M2"}
 	if err := models.DB.Create(&realModel).Error; err != nil {
 		t.Fatalf("create real model: %v", err)
 	}
@@ -31,8 +31,6 @@ func TestBalanceChatVirtual_NoProvidersForRealModel_WritesSkipLog(t *testing.T) 
 		VirtualModelID:   virtual.ID,
 		VirtualModelName: virtual.Name,
 		VirtualStrategy:  virtual.Strategy,
-		MaxRetry:         1,
-		TimeOut:          10,
 		IOLog:            false,
 		OrderedRealModels: []virtualmodel.OrderedRealModel{
 			{Model: realModel},

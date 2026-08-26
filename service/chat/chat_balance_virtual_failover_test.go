@@ -23,8 +23,8 @@ func TestBalanceChatVirtual_PoolExhausted_TriesNextRealModel(t *testing.T) {
 		t.Fatalf("create virtual model: %v", err)
 	}
 
-	first := models.Model{Name: "first-real", MaxRetry: 2, TimeOut: 10}
-	second := models.Model{Name: "second-real", MaxRetry: 2, TimeOut: 10}
+	first := models.Model{Name: "first-real"}
+	second := models.Model{Name: "second-real"}
 	for _, m := range []*models.Model{&first, &second} {
 		if err := models.DB.Create(m).Error; err != nil {
 			t.Fatalf("create real model %q: %v", m.Name, err)
@@ -59,8 +59,6 @@ func TestBalanceChatVirtual_PoolExhausted_TriesNextRealModel(t *testing.T) {
 			VirtualModelID:    virtual.ID,
 			VirtualModelName:  virtual.Name,
 			VirtualStrategy:   virtual.Strategy,
-			MaxRetry:          2,
-			TimeOut:           10,
 			OrderedRealModels: []virtualmodel.OrderedRealModel{{Model: first}, {Model: second}},
 		},
 	})

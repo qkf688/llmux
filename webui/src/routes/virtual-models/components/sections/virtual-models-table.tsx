@@ -59,7 +59,6 @@ export function VirtualModelsTable({
               <TableHead>名称</TableHead>
               <TableHead>描述</TableHead>
               <TableHead>路由策略</TableHead>
-              <TableHead>重试/超时</TableHead>
               <TableHead>状态</TableHead>
               <TableHead className="w-[360px]">操作</TableHead>
             </TableRow>
@@ -70,9 +69,6 @@ export function VirtualModelsTable({
                 <TableCell className="font-medium">{model.Name}</TableCell>
                 <TableCell className="max-w-xs truncate">{model.Description || "-"}</TableCell>
                 <TableCell>{getStrategyLabel(model.Strategy)}</TableCell>
-                <TableCell>
-                  {model.MaxRetry} / {model.TimeOut}s
-                </TableCell>
                 <TableCell>
                   <VirtualModelStatusPill enabled={model.Enabled} />
                 </TableCell>
@@ -117,15 +113,6 @@ export function VirtualModelsTable({
             {model.Description && (
               <div className="text-xs text-muted-foreground break-words">{model.Description}</div>
             )}
-
-            <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-              <span>
-                重试: <span className="font-medium text-foreground">{model.MaxRetry}</span>
-              </span>
-              <span>
-                超时: <span className="font-medium text-foreground">{model.TimeOut}s</span>
-              </span>
-            </div>
 
             <div className="flex flex-wrap justify-end gap-1.5 pt-1">
               <Button

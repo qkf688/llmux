@@ -27,16 +27,14 @@ func TestModelRepo_UpdateFields_WritesZeroValues(t *testing.T) {
 	db := newModelTestDB(t)
 	repo := NewModelRepo(db)
 
-	m := &models.Model{Name: "gpt-4o", Remark: "some remark", MaxRetry: 3, TimeOut: 30}
+	m := &models.Model{Name: "gpt-4o", Remark: "some remark"}
 	if err := repo.Create(ctx, m); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	// 清空 Remark，MaxRetry/TimeOut 设 0
+	// 清空 Remark（零值写回）
 	updates := map[string]any{
-		"remark":    "",
-		"max_retry": 0,
-		"time_out":  0,
+		"remark": "",
 	}
 	if _, err := repo.UpdateFields(ctx, m.ID, updates); err != nil {
 		t.Fatalf("UpdateFields: %v", err)
@@ -48,11 +46,5 @@ func TestModelRepo_UpdateFields_WritesZeroValues(t *testing.T) {
 	}
 	if got.Remark != "" {
 		t.Fatalf("Remark = %q, want empty", got.Remark)
-	}
-	if got.MaxRetry != 0 {
-		t.Fatalf("MaxRetry = %d, want 0", got.MaxRetry)
-	}
-	if got.TimeOut != 0 {
-		t.Fatalf("TimeOut = %d, want 0", got.TimeOut)
 	}
 }

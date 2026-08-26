@@ -4,8 +4,6 @@ export interface Model {
   ID: number;
   Name: string;
   Remark: string;
-  MaxRetry: number;
-  TimeOut: number;
   IOLog: boolean;
   auto_associate?: boolean;
   supports_thinking: boolean;
@@ -30,8 +28,6 @@ export async function getModels(): Promise<Model[]> {
 export async function createModel(model: {
   name: string;
   remark: string;
-  max_retry: number;
-  time_out: number;
   io_log: boolean;
   supports_thinking?: boolean;
   thinking_levels?: string[];
@@ -47,8 +43,6 @@ export async function updateModel(
   model: {
     name?: string;
     remark?: string;
-    max_retry?: number;
-    time_out?: number;
     io_log?: boolean;
     auto_associate?: boolean;
     supports_thinking?: boolean;
@@ -76,8 +70,7 @@ export async function batchDeleteModels(ids: number[]): Promise<{ deleted: numbe
 
 export async function batchUpdateModels(params: {
   ids: number[];
-  max_retry?: number;
-  time_out?: number;
+  auto_associate?: boolean;
 }): Promise<{ updated: number }> {
   return apiRequest<{ updated: number }>("/models/batch", {
     method: "PUT",

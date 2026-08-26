@@ -44,9 +44,7 @@ type ProvidersWithMeta struct {
 	// balanceChatVirtual 循环内按当前 ordered model 逐个构建，不经本字段。
 	CandidatePool CandidatePool
 
-	MaxRetry int
-	TimeOut  int
-	IOLog    bool
+	IOLog bool
 
 	// Model 当前请求关联的真实模型：真实路径为查询到的 model；虚拟路径不设置本字段
 	//（虚拟分支在 balanceChatVirtual 循环内经 retryLoopInput.Model 注入正在尝试的 ordered model）。
@@ -91,14 +89,9 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 			"count", len(orderedModels),
 			"first_model", orderedModels[0].Model.Name)
 
-		// 应用虚拟模型的配置到所有真实模型
+		// 应用虚拟模型的配置到所有真实模型：IOLog 仍为 per-model 语义；
+		// 超时/重试已全局化（见 chat_balance / chat_balance_virtual），不再覆盖。
 		for i := range orderedModels {
-			if virtualModel.MaxRetry > 0 {
-				orderedModels[i].Model.MaxRetry = virtualModel.MaxRetry
-			}
-			if virtualModel.TimeOut > 0 {
-				orderedModels[i].Model.TimeOut = virtualModel.TimeOut
-			}
 			if virtualModel.IOLog != nil {
 				orderedModels[i].Model.IOLog = virtualModel.IOLog
 			}
@@ -110,9 +103,7 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 		}
 
 		return &ProvidersWithMeta{
-			MaxRetry: firstModel.MaxRetry,
-			TimeOut:  firstModel.TimeOut,
-			IOLog:    *firstModel.IOLog,
+			IOLog: *firstModel.IOLog,
 			// 虚拟模型相关字段
 			IsVirtualModel:    true,
 			VirtualModelID:    virtualModel.ID,
@@ -176,8 +167,6 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 
 	return &ProvidersWithMeta{
 		CandidatePool: pool,
-		MaxRetry:      model.MaxRetry,
-		TimeOut:       model.TimeOut,
 		IOLog:         *model.IOLog,
 		Model:         model,
 	}, nil

@@ -67,15 +67,11 @@ func createTestModels(t *testing.T, db *gorm.DB) ([]models.Model, []models.Virtu
 			Name:        "smart-chat",
 			Description: "智能聊天模型集合",
 			Strategy:    "round_robin",
-			MaxRetry:    3,
-			TimeOut:     30,
 		},
 		{
 			Name:        "backup-chat",
 			Description: "备份聊天模型集合",
 			Strategy:    "priority",
-			MaxRetry:    2,
-			TimeOut:     60,
 		},
 	}
 

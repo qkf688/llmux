@@ -56,7 +56,7 @@ func TestUpdateModel_ThinkingLevelsSerialization(t *testing.T) {
 	m := createModelForUpdateTest(t)
 
 	// 1) 非空白名单
-	updateModelViaHandler(t, m.ID, `{"name":"test-model-update","max_retry":3,"time_out":30,"io_log":true,"thinking_levels":["low","high","max"]}`)
+	updateModelViaHandler(t, m.ID, `{"name":"test-model-update","io_log":true,"thinking_levels":["low","high","max"]}`)
 	got := reloadModel(t, m.ID)
 	if len(got.ThinkingLevels) != 3 {
 		t.Fatalf("case 1: ThinkingLevels len = %d, want 3, value=%v", len(got.ThinkingLevels), got.ThinkingLevels)
@@ -66,14 +66,14 @@ func TestUpdateModel_ThinkingLevelsSerialization(t *testing.T) {
 	}
 
 	// 2) 空白名单（不约束）
-	updateModelViaHandler(t, m.ID, `{"name":"test-model-update","max_retry":3,"time_out":30,"io_log":true,"thinking_levels":[]}`)
+	updateModelViaHandler(t, m.ID, `{"name":"test-model-update","io_log":true,"thinking_levels":[]}`)
 	got = reloadModel(t, m.ID)
 	if len(got.ThinkingLevels) != 0 {
 		t.Fatalf("case 2: ThinkingLevels len = %d, want 0, value=%v", len(got.ThinkingLevels), got.ThinkingLevels)
 	}
 
 	// 3) 不发字段（nil → 空切片语义）
-	updateModelViaHandler(t, m.ID, `{"name":"test-model-update","max_retry":3,"time_out":30,"io_log":true}`)
+	updateModelViaHandler(t, m.ID, `{"name":"test-model-update","io_log":true}`)
 	got = reloadModel(t, m.ID)
 	if len(got.ThinkingLevels) != 0 {
 		t.Fatalf("case 3: ThinkingLevels len = %d, want 0 (nil→empty), value=%v", len(got.ThinkingLevels), got.ThinkingLevels)
@@ -85,7 +85,7 @@ func TestUpdateModel_ThinkingLevelsSerialization(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 	c.Params = gin.Params{{Key: "id", Value: strconv.FormatUint(uint64(m.ID), 10)}}
 	c.Request = httptest.NewRequest("PUT", "/models/"+strconv.FormatUint(uint64(m.ID), 10),
-		strings.NewReader(`{"name":"test-model-update","max_retry":3,"time_out":30,"io_log":true,"thinking_levels":["medium","xhigh"]}`))
+		strings.NewReader(`{"name":"test-model-update","io_log":true,"thinking_levels":["medium","xhigh"]}`))
 	c.Request.Header.Set("Content-Type", "application/json")
 	UpdateModel(c)
 	if w.Code != 200 {

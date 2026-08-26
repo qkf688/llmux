@@ -62,8 +62,6 @@ export function ModelsDesktopTable({
             <TableHead>ID</TableHead>
             <TableHead>名称</TableHead>
             <TableHead>备注</TableHead>
-            <TableHead>重试次数限制</TableHead>
-            <TableHead>超时时间(秒)</TableHead>
             <TableHead>IO 记录</TableHead>
             <TableHead>自动关联</TableHead>
             <TableHead className="w-[220px]">操作</TableHead>
@@ -84,8 +82,6 @@ export function ModelsDesktopTable({
               <TableCell className="max-w-[240px] truncate text-sm" title={model.Remark}>
                 {model.Remark || "-"}
               </TableCell>
-              <TableCell>{model.MaxRetry}</TableCell>
-              <TableCell>{model.TimeOut}</TableCell>
               <TableCell>
                 <Switch
                   checked={model.IOLog}

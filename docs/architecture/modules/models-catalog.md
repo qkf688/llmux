@@ -35,7 +35,7 @@ models.Model / ModelTemplateItem
 | `ModelRepo` | 真实模型持久化与批量更新 | `repository/model.go` | GORM |
 | `ModelTemplateItemRepo` | 模板名条目 | `repository/model_template_item.go` | GORM |
 | `TemplateIndex` | 上游模型名 → 真实模型模板匹配 | `service/model_template.go` | 同文件 |
-| `models.Model` | 真实模型实体（重试、超时、IO 日志、thinking 能力、自动关联标记等） | `models/model.go` | GORM |
+| `models.Model` | 真实模型实体（IO 日志、thinking 能力、自动关联标记等；超时/重试已全局化，见 settings 模块「请求参数」） | `models/model.go` | GORM |
 
 ## 5. 特殊约定
 

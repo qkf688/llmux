@@ -17,7 +17,6 @@ export type ModelsDialogsState = {
   editingModel: Model | null;
   deletingModel: Model | null;
   batchDeleteDialogOpen: boolean;
-  batchSettingsDialogOpen: boolean;
   modelPickerOpen: boolean;
 };
 

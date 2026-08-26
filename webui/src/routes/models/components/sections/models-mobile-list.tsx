@@ -75,12 +75,6 @@ export function ModelsMobileList({
               </div>
 
               <div className="flex items-center gap-3 text-xs flex-wrap">
-                <span className="text-muted-foreground">
-                  重试: <span className="font-medium text-foreground">{model.MaxRetry}</span>
-                </span>
-                <span className="text-muted-foreground">
-                  超时: <span className="font-medium text-foreground">{model.TimeOut}s</span>
-                </span>
                 <div className="flex items-center gap-1.5">
                   <span className="text-muted-foreground">IO:</span>
                   <Switch

@@ -38,11 +38,6 @@ interface VirtualModelFormDialogProps {
   onSubmit: (values: VirtualModelFormValues) => void;
 }
 
-const parseInteger = (value: string) => {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isNaN(parsed) ? 0 : parsed;
-};
-
 export function VirtualModelFormDialog({
   open,
   onOpenChange,
@@ -116,71 +111,31 @@ export function VirtualModelFormDialog({
                 )}
               />
 
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="max_retry"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>最大重试次数</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          value={field.value}
-                          onChange={(event) => field.onChange(parseInteger(event.target.value))}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <FormField
+                control={form.control}
+                name="io_log"
+                render={({ field }) => (
+                  <FormItem className="flex items-center gap-2">
+                    <FormLabel>记录 IO 日志</FormLabel>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
 
-                <FormField
-                  control={form.control}
-                  name="time_out"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>超时时间（秒）</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          value={field.value}
-                          onChange={(event) => field.onChange(parseInteger(event.target.value))}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <div className="flex gap-4">
-                <FormField
-                  control={form.control}
-                  name="io_log"
-                  render={({ field }) => (
-                    <FormItem className="flex items-center gap-2">
-                      <FormLabel>记录 IO 日志</FormLabel>
-                      <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="enabled"
-                  render={({ field }) => (
-                    <FormItem className="flex items-center gap-2">
-                      <FormLabel>启用</FormLabel>
-                      <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
+              <FormField
+                control={form.control}
+                name="enabled"
+                render={({ field }) => (
+                  <FormItem className="flex items-center gap-2">
+                    <FormLabel>启用</FormLabel>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
             </DialogBody>
 
             <DialogFooter>

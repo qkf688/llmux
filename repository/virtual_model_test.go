@@ -240,16 +240,14 @@ func TestVirtualModelRepo_UpdateFields_WritesZeroValues(t *testing.T) {
 	repo := NewVirtualModelRepo(db)
 
 	enabled := true
-	vm := &models.VirtualModel{Name: "vm-zero", Description: "desc", MaxRetry: 5, TimeOut: 30, Enabled: &enabled}
+	vm := &models.VirtualModel{Name: "vm-zero", Description: "desc", Enabled: &enabled}
 	if err := repo.Create(ctx, vm); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	// 清空 Description，MaxRetry/TimeOut 设 0
+	// 清空 Description（零值写回）
 	updates := map[string]any{
 		"description": "",
-		"max_retry":   0,
-		"time_out":    0,
 	}
 	if _, err := repo.UpdateFields(ctx, vm.ID, updates); err != nil {
 		t.Fatalf("UpdateFields: %v", err)
@@ -261,12 +259,6 @@ func TestVirtualModelRepo_UpdateFields_WritesZeroValues(t *testing.T) {
 	}
 	if got.Description != "" {
 		t.Fatalf("Description = %q, want empty", got.Description)
-	}
-	if got.MaxRetry != 0 {
-		t.Fatalf("MaxRetry = %d, want 0", got.MaxRetry)
-	}
-	if got.TimeOut != 0 {
-		t.Fatalf("TimeOut = %d, want 0", got.TimeOut)
 	}
 }
 

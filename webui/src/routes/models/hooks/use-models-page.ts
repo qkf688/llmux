@@ -39,11 +39,8 @@ export function useModelsPage() {
     setDeletingModel: data.setDeletingModel,
     setSelectedIds: data.setSelectedIds,
     setBatchDeleteDialogOpen: data.setBatchDeleteDialogOpen,
-    setBatchSettingsDialogOpen: data.setBatchSettingsDialogOpen,
     setBatchDeleting: data.setBatchDeleting,
-    setBatchUpdating: data.setBatchUpdating,
     form: dialogs.form,
-    batchUpdateForm: dialogs.batchUpdateForm,
   });
 
   // 卸载时重置 transient 状态

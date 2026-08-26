@@ -52,28 +52,13 @@ func BatchUpdateModels(c *gin.Context) {
 		return
 	}
 
-	if req.MaxRetry == nil && req.TimeOut == nil && req.AutoAssociate == nil {
+	if req.AutoAssociate == nil {
 		httpresp.BadRequest(c, "至少需要更新一个字段")
 		return
 	}
-	if req.MaxRetry != nil && *req.MaxRetry < 0 {
-		httpresp.BadRequest(c, "重试次数不能为负数")
-		return
-	}
-	if req.TimeOut != nil && *req.TimeOut < 0 {
-		httpresp.BadRequest(c, "超时时间不能为负数")
-		return
-	}
 
-	updates := make(map[string]any)
-	if req.MaxRetry != nil {
-		updates["max_retry"] = *req.MaxRetry
-	}
-	if req.TimeOut != nil {
-		updates["time_out"] = *req.TimeOut
-	}
-	if req.AutoAssociate != nil {
-		updates["auto_associate"] = req.AutoAssociate
+	updates := map[string]any{
+		"auto_associate": req.AutoAssociate,
 	}
 
 	updated, err := repos().Model.BatchUpdate(c.Request.Context(), req.IDs, updates)

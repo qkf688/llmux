@@ -6,17 +6,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import type { Model } from "@/lib/api";
-import {
-  batchUpdateSchema,
-  modelFormSchema,
-  type BatchUpdateValues,
-  type ModelFormValues,
-} from "../schemas/forms";
-import {
-  defaultBatchUpdateValues,
-  defaultModelFormValues,
-  toModelFormValues,
-} from "../utils/form-values";
+import { modelFormSchema, type ModelFormValues } from "../schemas/forms";
+import { defaultModelFormValues, toModelFormValues } from "../utils/form-values";
 import { buildCollapsedProviderState } from "../utils/provider-models";
 import type { ProviderModelGroup, ProviderModelWithOwner } from "../types";
 
@@ -46,11 +37,6 @@ export function useModelsDialogs({
   const form = useForm<ModelFormValues>({
     resolver: zodResolver(modelFormSchema),
     defaultValues: { ...defaultModelFormValues },
-  });
-
-  const batchUpdateForm = useForm<BatchUpdateValues>({
-    resolver: zodResolver(batchUpdateSchema),
-    defaultValues: { ...defaultBatchUpdateValues },
   });
 
   // 折叠状态同步：provider 列表变化后重建折叠状态
@@ -99,7 +85,6 @@ export function useModelsDialogs({
 
   return {
     form,
-    batchUpdateForm,
     handleSelectProviderModel,
     toggleProviderCollapse,
     openModelPicker,

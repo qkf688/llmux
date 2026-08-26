@@ -49,8 +49,6 @@ export function useVirtualModelsModelActions({
       name: model.Name,
       description: model.Description,
       strategy: toVirtualModelStrategy(model.Strategy),
-      max_retry: model.MaxRetry,
-      time_out: model.TimeOut,
       io_log: model.IOLog,
       enabled: model.Enabled,
     });

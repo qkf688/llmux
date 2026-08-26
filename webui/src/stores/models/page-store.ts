@@ -5,7 +5,6 @@ import { readModelsPagePreferences, writeModelsPagePreferences } from "@/stores/
 
 export type ModelsPageState = {
   batchDeleting: boolean;
-  batchUpdating: boolean;
 
   searchQuery: string;
   selectedProviderId: string;
@@ -17,12 +16,10 @@ export type ModelsPageState = {
   selectedIds: number[];
 
   batchDeleteDialogOpen: boolean;
-  batchSettingsDialogOpen: boolean;
   modelPickerOpen: boolean;
   collapsedProviders: Record<number, boolean>;
 
   setBatchDeleting: (loading: boolean) => void;
-  setBatchUpdating: (loading: boolean) => void;
 
   setSearchQuery: (query: string) => void;
   setSelectedProviderId: (providerId: string) => void;
@@ -41,7 +38,6 @@ export type ModelsPageState = {
   clearSelectedIds: () => void;
 
   setBatchDeleteDialogOpen: (open: boolean) => void;
-  setBatchSettingsDialogOpen: (open: boolean) => void;
 
   setModelPickerOpen: (open: boolean) => void;
   setCollapsedProviders: (next: Updater<Record<number, boolean>>) => void;
@@ -53,7 +49,6 @@ const preferences = readModelsPagePreferences();
 
 export const modelsPageStore = createStore<ModelsPageState>()((set, get) => ({
   batchDeleting: false,
-  batchUpdating: false,
 
   searchQuery: preferences.searchQuery,
   selectedProviderId: preferences.selectedProviderId,
@@ -65,12 +60,10 @@ export const modelsPageStore = createStore<ModelsPageState>()((set, get) => ({
   selectedIds: [],
 
   batchDeleteDialogOpen: false,
-  batchSettingsDialogOpen: false,
   modelPickerOpen: false,
   collapsedProviders: {},
 
   setBatchDeleting: (loading: boolean) => set({ batchDeleting: loading }),
-  setBatchUpdating: (loading: boolean) => set({ batchUpdating: loading }),
 
   setSearchQuery: (query: string) => {
     set({ searchQuery: query });
@@ -101,7 +94,6 @@ export const modelsPageStore = createStore<ModelsPageState>()((set, get) => ({
   clearSelectedIds: () => set({ selectedIds: [] }),
 
   setBatchDeleteDialogOpen: (open: boolean) => set({ batchDeleteDialogOpen: open }),
-  setBatchSettingsDialogOpen: (open: boolean) => set({ batchSettingsDialogOpen: open }),
 
   setModelPickerOpen: (open: boolean) => set({ modelPickerOpen: open }),
   setCollapsedProviders: (next: Updater<Record<number, boolean>>) =>
@@ -110,13 +102,11 @@ export const modelsPageStore = createStore<ModelsPageState>()((set, get) => ({
   resetTransient: () =>
     set({
       batchDeleting: false,
-      batchUpdating: false,
       formDialogOpen: false,
       editingModel: null,
       deletingModel: null,
       selectedIds: [],
       batchDeleteDialogOpen: false,
-      batchSettingsDialogOpen: false,
       modelPickerOpen: false,
     }),
 }));

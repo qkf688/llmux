@@ -139,44 +139,6 @@ export function ModelFormDialog({
               )}
             />
 
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="max_retry"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>重试次数限制</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        {...field}
-                        onChange={(event) => field.onChange(Number(event.target.value))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="time_out"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>超时时间(秒)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        {...field}
-                        onChange={(event) => field.onChange(Number(event.target.value))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
             <div className="rounded-lg border p-4 space-y-3">
               <div className="space-y-0.5">
                 <div className="text-base font-medium">行为开关</div>

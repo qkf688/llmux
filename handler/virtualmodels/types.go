@@ -7,8 +7,6 @@ type VirtualModelRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Strategy    string `json:"strategy"`
-	MaxRetry    int    `json:"max_retry"`
-	TimeOut     int    `json:"time_out"`
 	IOLog       bool   `json:"io_log"`
 	Enabled     bool   `json:"enabled"`
 }

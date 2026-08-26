@@ -53,8 +53,6 @@ func CreateVirtualModel(c *gin.Context) {
 		Name:        req.Name,
 		Description: req.Description,
 		Strategy:    req.Strategy,
-		MaxRetry:    req.MaxRetry,
-		TimeOut:     req.TimeOut,
 		IOLog:       &ioLog,
 		Enabled:     &enabled,
 	}
@@ -111,8 +109,6 @@ func UpdateVirtualModel(c *gin.Context) {
 		"name":        req.Name,
 		"description": req.Description,
 		"strategy":    req.Strategy,
-		"max_retry":   req.MaxRetry,
-		"time_out":    req.TimeOut,
 		"io_log":      req.IOLog,
 		"enabled":     req.Enabled,
 	}

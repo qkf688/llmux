@@ -24,7 +24,6 @@ export function useModelsPageViewProps({ data, selection, dialogs, mutations }: 
     batchDeleteDialogOpen: data.batchDeleteDialogOpen,
     onBatchDeleteDialogOpenChange: data.setBatchDeleteDialogOpen,
     batchDeleting: data.batchDeleting,
-    onOpenBatchSettings: () => data.setBatchSettingsDialogOpen(true),
     onConfirmBatchDelete: () => {
       void mutations.handleBatchDelete();
     },
@@ -88,17 +87,6 @@ export function useModelsPageViewProps({ data, selection, dialogs, mutations }: 
     onSelectModel: dialogs.handleSelectProviderModel,
   };
 
-  const batchSettingsDialogProps = {
-    open: data.batchSettingsDialogOpen,
-    onOpenChange: data.setBatchSettingsDialogOpen,
-    selectedCount: data.selectedIds.length,
-    maxRetryRange: selection.maxRetryRange,
-    timeOutRange: selection.timeOutRange,
-    form: dialogs.batchUpdateForm,
-    updating: data.batchUpdating,
-    onSubmit: mutations.handleBatchUpdate,
-  };
-
   const modelDeleteDialogProps = {
     open: data.deletingModel !== null,
     modelLabel: data.deletingModel?.Name ?? data.deletingModel?.ID ?? "",
@@ -118,7 +106,6 @@ export function useModelsPageViewProps({ data, selection, dialogs, mutations }: 
     listSectionProps,
     modelFormDialogProps,
     modelPickerDialogProps,
-    batchSettingsDialogProps,
     modelDeleteDialogProps,
   };
 }

@@ -5,7 +5,6 @@ import { useMemo } from "react";
 import { EMPTY_MODELS, EMPTY_PROVIDERS } from "@/lib/empty-constants";
 import {
   selectModelsBatchDeleteDialogOpen,
-  selectModelsBatchSettingsDialogOpen,
   selectModelsCollapsedProviders,
   selectModelsDeletingModel,
   selectModelsEditingModel,
@@ -17,7 +16,6 @@ import {
   selectModelsSelectedProviderId,
   selectResetModelsTransient,
   selectSetModelsBatchDeleteDialogOpen,
-  selectSetModelsBatchSettingsDialogOpen,
   selectSetModelsCollapsedProviders,
   selectSetModelsDeletingModel,
   selectSetModelsEditingModel,
@@ -44,8 +42,6 @@ export function useModelsPageData() {
   // store 状态
   const batchDeleting = useModelsPageStore((s) => s.batchDeleting);
   const setBatchDeleting = useModelsPageStore((s) => s.setBatchDeleting);
-  const batchUpdating = useModelsPageStore((s) => s.batchUpdating);
-  const setBatchUpdating = useModelsPageStore((s) => s.setBatchUpdating);
 
   const formDialogOpen = useModelsPageStore(selectModelsFormDialogOpen);
   const setFormDialogOpen = useModelsPageStore(selectSetModelsFormDialogOpen);
@@ -58,8 +54,6 @@ export function useModelsPageData() {
 
   const batchDeleteDialogOpen = useModelsPageStore(selectModelsBatchDeleteDialogOpen);
   const setBatchDeleteDialogOpen = useModelsPageStore(selectSetModelsBatchDeleteDialogOpen);
-  const batchSettingsDialogOpen = useModelsPageStore(selectModelsBatchSettingsDialogOpen);
-  const setBatchSettingsDialogOpen = useModelsPageStore(selectSetModelsBatchSettingsDialogOpen);
   const selectedProviderId = useModelsPageStore(selectModelsSelectedProviderId);
   const setSelectedProviderId = useModelsPageStore(selectSetModelsSelectedProviderId);
   const collapsedProviders = useModelsPageStore(selectModelsCollapsedProviders);
@@ -102,8 +96,6 @@ export function useModelsPageData() {
     // store state
     batchDeleting,
     setBatchDeleting,
-    batchUpdating,
-    setBatchUpdating,
     formDialogOpen,
     setFormDialogOpen,
     editingModel,
@@ -114,8 +106,6 @@ export function useModelsPageData() {
     setSelectedIds,
     batchDeleteDialogOpen,
     setBatchDeleteDialogOpen,
-    batchSettingsDialogOpen,
-    setBatchSettingsDialogOpen,
     selectedProviderId,
     setSelectedProviderId,
     collapsedProviders,

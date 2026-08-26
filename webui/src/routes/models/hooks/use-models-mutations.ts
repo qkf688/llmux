@@ -10,15 +10,11 @@ import {
   useUpdateModel,
   useDeleteModel,
   useBatchDeleteModels,
-  useBatchUpdateModels,
   modelKeys,
 } from "@/hooks/api/use-models";
-import {
-  defaultBatchUpdateValues,
-  defaultModelFormValues,
-} from "../utils/form-values";
+import { defaultModelFormValues } from "../utils/form-values";
 import { buildModelUpdatePayload } from "../utils/model-update-payload";
-import type { BatchUpdateValues, ModelFormValues } from "../schemas/forms";
+import type { ModelFormValues } from "../schemas/forms";
 import type { UseFormReturn } from "react-hook-form";
 
 interface UseModelsMutationsParams {
@@ -30,11 +26,8 @@ interface UseModelsMutationsParams {
   setDeletingModel: (model: Model | null) => void;
   setSelectedIds: (updater: (previous: number[]) => number[]) => void;
   setBatchDeleteDialogOpen: (open: boolean) => void;
-  setBatchSettingsDialogOpen: (open: boolean) => void;
   setBatchDeleting: (value: boolean) => void;
-  setBatchUpdating: (value: boolean) => void;
   form: UseFormReturn<ModelFormValues>;
-  batchUpdateForm: UseFormReturn<BatchUpdateValues>;
 }
 
 export function useModelsMutations({
@@ -46,18 +39,14 @@ export function useModelsMutations({
   setDeletingModel,
   setSelectedIds,
   setBatchDeleteDialogOpen,
-  setBatchSettingsDialogOpen,
   setBatchDeleting,
-  setBatchUpdating,
   form,
-  batchUpdateForm,
 }: UseModelsMutationsParams) {
   const queryClient = useQueryClient();
   const [togglingIOLog, setTogglingIOLog] = useState<Record<number, boolean>>({});
   const [togglingAutoAssociate, setTogglingAutoAssociate] = useState<Record<number, boolean>>({});
 
   const batchDeleteMutation = useBatchDeleteModels();
-  const batchUpdateMutation = useBatchUpdateModels();
   const createMutation = useCreateModel();
   const updateMutation = useUpdateModel();
   const deleteMutation = useDeleteModel();
@@ -153,7 +142,7 @@ export function useModelsMutations({
           // 不覆盖条件写字段（thinking/auto_associate）：避免 stale cache 值回写覆盖他人修改（后端 *bool 条件写，undefined 被 JSON 省略）
           supports_thinking: undefined,
           auto_associate: undefined,
-          // 注：name/remark/max_retry/time_out 仍随全量 payload 回写（既有 toggle 模式，后端无条件写，故不能只提交单字段）
+          // 注：name/remark/io_log 仍随全量 payload 回写（既有 toggle 模式，后端无条件写，故不能只提交单字段）
         },
       });
 
@@ -185,7 +174,7 @@ export function useModelsMutations({
           auto_associate: checked,
           // 不覆盖 thinking：避免 stale cache 值回写覆盖他人修改（后端 *bool 条件写，undefined 被 JSON 省略）
           supports_thinking: undefined,
-          // 注：name/remark/max_retry/time_out/io_log 仍随全量 payload 回写（既有 toggle 模式，后端无条件写，故不能只提交单字段）
+          // 注：name/remark/io_log 仍随全量 payload 回写（既有 toggle 模式，后端无条件写，故不能只提交单字段）
         },
       });
 
@@ -205,39 +194,6 @@ export function useModelsMutations({
     }
   };
 
-  const handleBatchUpdate = async (values: BatchUpdateValues) => {
-    if (selectedIds.length === 0) {
-      return;
-    }
-
-    setBatchUpdating(true);
-
-    try {
-      const params: { ids: number[]; max_retry?: number; time_out?: number } = {
-        ids: selectedIds,
-      };
-
-      if (values.enableMaxRetry) {
-        params.max_retry = values.max_retry;
-      }
-
-      if (values.enableTimeOut) {
-        params.time_out = values.time_out;
-      }
-
-      const result = await batchUpdateMutation.mutateAsync(params);
-      toast.success(`成功更新 ${result.updated} 个模型`);
-      setSelectedIds(() => []);
-      setBatchSettingsDialogOpen(false);
-      batchUpdateForm.reset(defaultBatchUpdateValues);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      toast.error(`批量更新模型失败: ${message}`);
-    } finally {
-      setBatchUpdating(false);
-    }
-  };
-
   return {
     togglingIOLog,
     togglingAutoAssociate,
@@ -247,6 +203,5 @@ export function useModelsMutations({
     handleBatchDelete,
     handleToggleIOLog,
     handleToggleAutoAssociate,
-    handleBatchUpdate,
   };
 }

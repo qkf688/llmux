@@ -37,8 +37,6 @@ type Model struct {
 	UpdatedAt     time.Time
 	Name          string
 	Remark        string
-	MaxRetry      int   // 重试次数限制
-	TimeOut       int   // 超时时间 单位秒
 	IOLog         *bool // 是否记录IO
 	IsUpstream    *bool // 是否是上游模型（true=上游，false=自定义）
 	AutoAssociate *bool `gorm:"default:true" json:"auto_associate"` // 是否允许自动关联触发
@@ -323,8 +321,6 @@ type VirtualModel struct {
 	Name        string `gorm:"type:varchar(255);uniqueIndex;not null"` // 虚拟模型名称
 	Description string `gorm:"type:text"`                              // 描述
 	Strategy    string `gorm:"type:varchar(50);default:'priority'"`    // 路由策略: priority, round_robin, random
-	MaxRetry    int    `gorm:"default:10"`                             // 重试次数限制
-	TimeOut     int    `gorm:"default:60"`                             // 超时时间 单位秒
 	IOLog       *bool  `gorm:"default:false"`                          // 是否记录IO
 	Enabled     *bool  `gorm:"default:true"`                           // 是否启用
 }

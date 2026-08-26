@@ -1,4 +1,3 @@
-import { BatchSettingsDialog } from "./components/dialogs/batch-settings-dialog";
 import { ModelDeleteDialog } from "./components/dialogs/model-delete-dialog";
 import { ModelFormDialog } from "./components/dialogs/model-form-dialog";
 import { ModelPickerDialog } from "./components/dialogs/model-picker-dialog";
@@ -15,7 +14,6 @@ export default function ModelsPage() {
     listSectionProps,
     modelFormDialogProps,
     modelPickerDialogProps,
-    batchSettingsDialogProps,
     modelDeleteDialogProps,
   } = useModelsPage();
 
@@ -26,7 +24,6 @@ export default function ModelsPage() {
       <ModelsListSection {...listSectionProps} />
       <ModelFormDialog {...modelFormDialogProps} />
       <ModelPickerDialog {...modelPickerDialogProps} />
-      <BatchSettingsDialog {...batchSettingsDialogProps} />
       <ModelDeleteDialog {...modelDeleteDialogProps} />
     </div>
   );

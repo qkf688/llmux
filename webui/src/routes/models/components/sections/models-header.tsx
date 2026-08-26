@@ -11,7 +11,6 @@ interface ModelsHeaderProps {
   batchDeleteDialogOpen: boolean;
   onBatchDeleteDialogOpenChange: (open: boolean) => void;
   batchDeleting: boolean;
-  onOpenBatchSettings: () => void;
   onConfirmBatchDelete: () => void;
   onOpenCreateDialog: () => void;
 }
@@ -26,7 +25,6 @@ export function ModelsHeader({
   batchDeleteDialogOpen,
   onBatchDeleteDialogOpenChange,
   batchDeleting,
-  onOpenBatchSettings,
   onConfirmBatchDelete,
   onOpenCreateDialog,
 }: ModelsHeaderProps) {
@@ -41,21 +39,13 @@ export function ModelsHeader({
             添加模型
           </Button>
           {selectedCount > 0 && (
-            <>
-              <Button variant="default" size="sm" onClick={onOpenBatchSettings} className="relative">
-                批量设置
-                <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold leading-none bg-destructive text-destructive-foreground">
-                  {selectedCount}
-                </span>
-              </Button>
-              <BatchDeleteDialog
-                open={batchDeleteDialogOpen}
-                onOpenChange={onBatchDeleteDialogOpenChange}
-                selectedCount={selectedCount}
-                deleting={batchDeleting}
-                onConfirm={onConfirmBatchDelete}
-              />
-            </>
+            <BatchDeleteDialog
+              open={batchDeleteDialogOpen}
+              onOpenChange={onBatchDeleteDialogOpenChange}
+              selectedCount={selectedCount}
+              deleting={batchDeleting}
+              onConfirm={onConfirmBatchDelete}
+            />
           )}
         </>
       }

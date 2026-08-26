@@ -5,8 +5,6 @@ export interface VirtualModel {
   Name: string;
   Description: string;
   Strategy: string;
-  MaxRetry: number;
-  TimeOut: number;
   IOLog: boolean;
   Enabled: boolean;
   CreatedAt: string;
@@ -53,8 +51,6 @@ export async function createVirtualModel(virtualModel: {
   name: string;
   description: string;
   strategy: string;
-  max_retry: number;
-  time_out: number;
   io_log: boolean;
   enabled: boolean;
 }): Promise<VirtualModel> {
@@ -70,8 +66,6 @@ export async function updateVirtualModel(
     name: string;
     description: string;
     strategy: string;
-    max_retry: number;
-    time_out: number;
     io_log: boolean;
     enabled: boolean;
   }

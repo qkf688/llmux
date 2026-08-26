@@ -169,7 +169,11 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDet
                 />
                 <DetailCard
                   label="推理"
-                  value={formatTokenValue(detailLog.completion_tokens_details?.reasoning_tokens)}
+                  value={
+                    detailLog.completion_tokens_details?.reasoning_tokens_known
+                      ? formatTokenValue(detailLog.completion_tokens_details?.reasoning_tokens)
+                      : "未知"
+                  }
                 />
                 <DetailCard label="usage 来源" value={detailLog.usage_source || "-"} mono />
               </div>

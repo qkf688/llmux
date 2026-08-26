@@ -116,6 +116,8 @@ func usageFromResponses(u *responses.ResponsesUsage) models.Usage {
 	}
 	if d := u.OutputTokenDetails; d != nil {
 		out.CompletionTokensDetails.ReasoningTokens = d.ReasoningTokens
+		// details 非 nil = 上游明确报告过拆分（含 0），known 标记供落库/展示区分「没报」与「真 0」。
+		out.CompletionTokensDetails.ReasoningTokensKnown = true
 	}
 	return out
 }

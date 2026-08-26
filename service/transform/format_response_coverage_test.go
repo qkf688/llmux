@@ -87,8 +87,9 @@ func fullUnifiedResponse(t *testing.T) *models.UnifiedResponse {
 				AudioTokens:  1,
 			},
 			CompletionTokensDetails: models.CompletionTokensDetails{
-				ReasoningTokens: 7,
-				AudioTokens:     2,
+				ReasoningTokens:      7,
+				ReasoningTokensKnown: true,
+				AudioTokens:          2,
 			},
 		},
 		SystemFingerprint: "fp_coverage",

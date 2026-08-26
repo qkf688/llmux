@@ -152,6 +152,8 @@ func TestUsageFromResponses(t *testing.T) {
 				u := models.Usage{PromptTokens: 100, CompletionTokens: 42, TotalTokens: 142}
 				u.PromptTokensDetails.CachedTokens = 80
 				u.CompletionTokensDetails.ReasoningTokens = 7
+				// OutputTokenDetails 非 nil = 上游报告过拆分，known 必须为 true。
+				u.CompletionTokensDetails.ReasoningTokensKnown = true
 				return u
 			}(),
 		},

@@ -482,7 +482,16 @@ type PromptTokensDetails struct {
 
 type CompletionTokensDetails struct {
 	ReasoningTokens int64 `json:"reasoning_tokens"`
-	AudioTokens     int64 `json:"audio_tokens"`
+	// ReasoningTokensKnown 标记上游是否明确报告了 reasoning 拆分。
+	//
+	// true  = 候选路径键存在（含明确报告 0——非推理模型报 0 与「没报」语义不同）；
+	// false = 上游没报拆分，「推理为 0」应展示为「未知」而不是 0。
+	//
+	// 链路：归一入口 models.UsageFromMap 与三处手工作法点
+	// （service/transform/openai、service/responses、service/transform/streaming
+	// usageFromResponses）必须同步维护，新增一处解析即需在此登记。
+	ReasoningTokensKnown bool  `json:"reasoning_tokens_known"`
+	AudioTokens          int64 `json:"audio_tokens"`
 }
 
 type ChatIO struct {

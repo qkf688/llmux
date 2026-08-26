@@ -65,6 +65,8 @@ func ParseResponse(body []byte) (*models.UnifiedResponse, error) {
 		if resp.Usage.CompletionTokensDetails != nil {
 			unified.Usage.CompletionTokensDetails.ReasoningTokens = resp.Usage.CompletionTokensDetails.ReasoningTokens
 			unified.Usage.CompletionTokensDetails.AudioTokens = resp.Usage.CompletionTokensDetails.AudioTokens
+			// details 非 nil = 上游明确报告过拆分（含 0），known 标记供落库/展示区分「没报」与「真 0」。
+			unified.Usage.CompletionTokensDetails.ReasoningTokensKnown = true
 		}
 	}
 

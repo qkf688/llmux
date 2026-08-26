@@ -245,11 +245,14 @@ func TestGetRequestLogs_ReturnsUsageDetailsAndSource(t *testing.T) {
 		Status:       "success",
 		Style:        "openai",
 		Usage: models.Usage{
-			PromptTokens:            10,
-			CompletionTokens:        20,
-			TotalTokens:             30,
-			PromptTokensDetails:     models.PromptTokensDetails{CachedTokens: 3},
-			CompletionTokensDetails: models.CompletionTokensDetails{ReasoningTokens: 7},
+			PromptTokens:        10,
+			CompletionTokens:    20,
+			TotalTokens:         30,
+			PromptTokensDetails: models.PromptTokensDetails{CachedTokens: 3},
+			CompletionTokensDetails: models.CompletionTokensDetails{
+				ReasoningTokens:      7,
+				ReasoningTokensKnown: true,
+			},
 		},
 		UsageSource: models.UsageSourceUpstream,
 	}
@@ -279,6 +282,9 @@ func TestGetRequestLogs_ReturnsUsageDetailsAndSource(t *testing.T) {
 	}
 	if completionDetails["reasoning_tokens"] != float64(7) {
 		t.Fatalf("reasoning_tokens = %v, want 7", completionDetails["reasoning_tokens"])
+	}
+	if completionDetails["reasoning_tokens_known"] != true {
+		t.Fatalf("reasoning_tokens_known = %v, want true（known 必须透传到响应，前端据此区分「未知」与「真 0」）", completionDetails["reasoning_tokens_known"])
 	}
 
 	promptDetails, ok := item["prompt_tokens_details"].(map[string]any)

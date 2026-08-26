@@ -89,6 +89,32 @@ func pickUsageField(usage map[string]interface{}, candidates usageFieldCandidate
 	return 0
 }
 
+// usageFieldPresent 判断候选路径里是否存在可读取的键，与 pickUsageField 同遍历规则
+// 但不要求值 > 0——「上游明确报 0」也算报告过。
+//
+// 与 pickUsageField 的语义差是刻意的：pick 只认 > 0，缺失与明确 0 都落 0，走不了
+// 计费（两者计费都是 0）；但落库/展示需要区分「上游没报拆分」（推理应显示未知）
+// 与「上游报了拆分且为 0」（推理确实为 0）。ReasoningTokensKnown 由此产出。
+func usageFieldPresent(usage map[string]interface{}, candidates usageFieldCandidates) bool {
+	for _, path := range candidates {
+		node := usage
+		for i, key := range path {
+			if i == len(path)-1 {
+				if _, ok := node[key]; ok {
+					return true
+				}
+				break
+			}
+			next, ok := node[key].(map[string]interface{})
+			if !ok {
+				break
+			}
+			node = next
+		}
+	}
+	return false
+}
+
 // UsageFromMap 把任意上游协议的 usage map 归一为 Usage。
 //
 // 契约：只认「> 0 的第一个候选」，所以「上游没给」与「上游明确报 0」都落到 0，
@@ -108,6 +134,7 @@ func UsageFromMap(usage map[string]interface{}) Usage {
 	u.PromptTokensDetails.CachedTokens = pickUsageField(usage, cachedTokenPaths)
 	u.PromptTokensDetails.AudioTokens = pickUsageField(usage, promptAudioTokenPaths)
 	u.CompletionTokensDetails.ReasoningTokens = pickUsageField(usage, reasoningTokenPaths)
+	u.CompletionTokensDetails.ReasoningTokensKnown = usageFieldPresent(usage, reasoningTokenPaths)
 	u.CompletionTokensDetails.AudioTokens = pickUsageField(usage, completionAudioTokenPaths)
 	return u
 }

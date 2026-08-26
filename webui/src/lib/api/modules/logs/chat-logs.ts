@@ -7,6 +7,8 @@ export interface PromptTokensDetails {
 
 export interface CompletionTokensDetails {
   reasoning_tokens: number;
+  /** true = 上游明确报告了 reasoning 拆分（0 也是报告）；false/缺失 = 未报告，推理应展示「未知」 */
+  reasoning_tokens_known?: boolean;
   audio_tokens: number;
 }
 

@@ -47,7 +47,14 @@ func BalanceChat(ctx context.Context, in BalanceInput) (*BalanceResult, error) {
 
 	pwm := in.ProvidersWithMeta
 
-	timer := time.NewTimer(time.Second * time.Duration(pwm.TimeOut))
+	// 超时/重试已全局化（per-model time_out/max_retry 移除）：
+	// ResourceHeaderTimeout 与总预算从此解耦——总预算 = 全局总超时，等头窗口 = 全局
+	// 响应头超时。二者不同值时，「等头超时」不再一击致命：候选 1 等头超时只消耗
+	// 等头窗口，总预算未耗尽时候选 2 仍有完整窗口（原实现同一值双角色）。
+	headerTimeout := time.Second * time.Duration(getRequestHeaderTimeout(ctx))
+	totalTimeout := time.Second * time.Duration(getRequestTotalTimeout(ctx))
+
+	timer := time.NewTimer(totalTimeout)
 	defer timer.Stop()
 
 	outcome := runProviderRetryLoop(retryLoopInput{
@@ -60,8 +67,8 @@ func BalanceChat(ctx context.Context, in BalanceInput) (*BalanceResult, error) {
 		Pool:          pwm.CandidatePool,
 		RealModelName: in.Before.Model,
 		Model:         pwm.Model,
-		MaxRetry:      pwm.MaxRetry,
-		ClientTimeout: time.Second * time.Duration(pwm.TimeOut),
+		MaxRetry:      getRequestMaxRetry(ctx),
+		ClientTimeout: headerTimeout,
 		Deadline:      timer.C,
 		DeadlineErr:   errors.New("retry time out"),
 	})

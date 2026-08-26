@@ -63,6 +63,11 @@ type Settings struct {
 	ReasoningEffortMappingEnabled  bool   `json:"reasoning_effort_mapping_enabled"`
 	ReasoningEffortDefaultValue    string `json:"reasoning_effort_default_value"`    // minimal/low/medium/high/xhigh/max
 	ReasoningEffortUnknownStrategy string `json:"reasoning_effort_unknown_strategy"` // clamp_to_default / passthrough
+	// 请求参数相关设置（全局超时/重试）
+	RequestHeaderTimeout   int `json:"request_header_timeout"`    // 单次尝试等待响应头超时（秒）
+	RequestTotalTimeout    int `json:"request_total_timeout"`     // 整个请求总预算超时（秒）
+	StreamFirstByteTimeout int `json:"stream_first_byte_timeout"` // 流式响应头后首字节等待超时（秒）
+	RequestMaxRetry        int `json:"request_max_retry"`         // 单候选池最大尝试次数
 }
 
 // SettingsResponse 设置响应结构（类型别名，字段定义统一在 Settings 中）

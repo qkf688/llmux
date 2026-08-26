@@ -56,7 +56,7 @@ balancer/                   # 加权随机纯算法
 |------|------|----------|--------|
 | `Beforer` / `Processer` | 按 style 预处理请求 / 处理上游响应 | `service/chat`（门面 re-export） | style 注册实现 |
 | `BalanceChat` | 在候选供应商上执行带重试的转发；入参 `BalanceInput`、返回 `*BalanceResult` | `service/chat_facade.go` | `service/chat` |
-| `runProviderRetryLoop` | 在**单个候选池**上执行「选路 → 尝试 → 淘汰」重试循环，产出 `retryLoopOutcome`（成功/穷尽/中止） | `service/chat/chat_retry_loop.go` | `service/chat`（包内，真实与虚拟路径共用） |
+| `runProviderRetryLoop` | 在**单个候选池**上执行「选路 → 尝试 → 淘汰」重试循环，产出 `retryLoopOutcome`（成功/穷尽/中止）；`MaxRetry`/`ClientTimeout`/`Deadline` 的取值已全局化（见 settings 模块「请求参数」，per-model time_out/max_retry 已移除） | `service/chat/chat_retry_loop.go` | `service/chat`（包内，真实与虚拟路径共用） |
 | `ProvidersWithMetaBymodelsName` | 按模型名解析候选供应商元信息（含虚拟模型分支） | `service/chat` | `service/chat` |
 | `chatcore.SelectByPriorityAndWeight` | 在关联列表上按优先级与权重选供应商 | `service/chatcore/` | `service/chatcore` |
 | `balancer.WeightedRandom` | 加权随机选取 | `balancer/balancer.go` | 泛型算法 |

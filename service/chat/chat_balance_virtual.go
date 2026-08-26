@@ -19,8 +19,11 @@ func balanceChatVirtual(ctx context.Context, in BalanceInput) (*BalanceResult, e
 		"real_models_count", len(pwm.OrderedRealModels),
 	)
 
-	globalTimer := time.NewTimer(time.Second * time.Duration(pwm.TimeOut))
+	// 全局化后总预算语义 = 跨真实模型共享的全局总超时帽子（等头窗口见下，
+	// 二者解耦：等头超时不再拖垮后续真实模型的窗口）。
+	globalTimer := time.NewTimer(time.Second * time.Duration(getRequestTotalTimeout(ctx)))
 	defer globalTimer.Stop()
+	headerTimeout := time.Second * time.Duration(getRequestHeaderTimeout(ctx))
 
 	// 全局超时错误在外层循环与内层重试循环共用同一实例，保证两处返回的语义一致。
 	deadlineErr := errors.New("virtual model global timeout")
@@ -72,8 +75,8 @@ func balanceChatVirtual(ctx context.Context, in BalanceInput) (*BalanceResult, e
 			Pool:          pool,
 			RealModelName: realModel.Name,
 			Model:         &realModel,
-			MaxRetry:      realModel.MaxRetry,
-			ClientTimeout: time.Second * time.Duration(realModel.TimeOut),
+			MaxRetry:      getRequestMaxRetry(ctx),
+			ClientTimeout: headerTimeout,
 			Deadline:      globalTimer.C,
 			DeadlineErr:   deadlineErr,
 			LogAttrs:      []any{"virtual_model", pwm.VirtualModelName, "real_model", realModel.Name},

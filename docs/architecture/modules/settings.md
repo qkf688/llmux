@@ -49,6 +49,12 @@ models.Setting
   - `SettingKeyReasoningEffortDefaultValue`：Type=string，Default=`low`，Enum=`[minimal, low, medium, high, xhigh, max]`（6 档，不含 none/auto）。用于 `auto` 不支持且白名单空时的兜底 + `unknownStrategy=clamp_to_default` 时的回退值。
   - `SettingKeyReasoningEffortUnknownStrategy`：Type=string，Default=`clamp_to_default`，Enum=`[clamp_to_default, passthrough]`。用于请求中的 reasoning_effort 不在模型白名单时的处理策略。
   - 消费方：`service/chat` 的 `buildThinkingClampConfig`（`chat_settings.go`）经 `settingsReader` 读取这两个设置 + `ThinkingLevelsResolved` 白名单，构建 `transform.ThinkingClampConfig` 传入 chat 主路径钳制。
+- **请求参数相关设置（全局超时/重试，2026-08 替代原 per-model time_out/max_retry）**：
+  - `SettingKeyRequestHeaderTimeout`：int，Default=`30`，Min=1。单次尝试等上游响应头的窗口（`providers` 的 `ResponseHeaderTimeout`）。
+  - `SettingKeyRequestTotalTimeout`：int，Default=`90`，Min=1。整个请求的预算上限（真实路径=重试循环 Deadline；虚拟路径=跨真实模型共享 globalTimer）。
+  - `SettingKeyStreamFirstByteTimeout`：int，Default=`15`，Min=1。流式响应头后首字节等待窗口，驱动 `handler/v1` 的首字节看门狗。
+  - `SettingKeyRequestMaxRetry`：int，Default=`3`，Min=1。单候选池尝试次数。
+  - 消费方：`service/chat` 的 `getRequestHeaderTimeout / getRequestTotalTimeout / GetStreamFirstByteTimeout / getRequestMaxRetry`（`chat_settings.go`）经 `settingsReader` 读取；`handler/v1` 经 `service` facade 读首字节等待。响应头超时与总超时**解耦**：等头超时不再拖垮后续候选窗口（`chat_balance.go` / `chat_balance_virtual.go`）。
 
 ---
 

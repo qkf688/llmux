@@ -63,6 +63,33 @@ func getEnableFormatConversion(ctx context.Context) bool {
 	return settingsReader.Bool(ctx, models.SettingKeyEnableFormatConversion, true)
 }
 
+// getRequestHeaderTimeout 获取单次尝试等待响应头的超时（秒）。
+// 默认值与 setting schema 一致（30），语义 = 原 per-model TimeOut 的 ResponseHeaderTimeout 角色。
+// 驱动 providers.GetClientWithProxy 的 ResponseHeaderTimeout。
+func getRequestHeaderTimeout(ctx context.Context) int {
+	return settingsReader.Int(ctx, models.SettingKeyRequestHeaderTimeout, 30, 1)
+}
+
+// getRequestTotalTimeout 获取整个请求的总预算超时（秒），含所有重试/故障转移。
+// 默认值与 setting schema 一致（90 = 30×3，保证等头超时后后续候选仍有完整窗口）。
+// 驱动 chat_balance 的重试循环 Deadline。
+func getRequestTotalTimeout(ctx context.Context) int {
+	return settingsReader.Int(ctx, models.SettingKeyRequestTotalTimeout, 90, 1)
+}
+
+// GetStreamFirstByteTimeout 获取流式响应头后首字节等待超时（秒），
+// 导出供 handler/v1 首字节看门狗使用。
+// 默认值与 setting schema 一致（15）。
+func GetStreamFirstByteTimeout(ctx context.Context) int {
+	return settingsReader.Int(ctx, models.SettingKeyStreamFirstByteTimeout, 15, 1)
+}
+
+// getRequestMaxRetry 获取单候选池最大尝试次数。
+// 默认值与 setting schema 一致（3），替代原 per-model MaxRetry。
+func getRequestMaxRetry(ctx context.Context) int {
+	return settingsReader.Int(ctx, models.SettingKeyRequestMaxRetry, 3, 1)
+}
+
 // buildThinkingClampConfig 从 ctx 读取设置 + model/association 白名单，构建思考档位钳制配置。
 // 调用方在 supportsThinking=true 时调用（false 时 thinking 已被 stripThinkingFields 剥离，无需钳制）。
 // autoFallback 复用 SettingKeyReasoningEffortDefaultValue（P0-2：设置键保留真实消费者）。

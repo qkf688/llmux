@@ -51,6 +51,10 @@ export interface Settings {
   reasoning_effort_mapping_enabled: boolean;
   reasoning_effort_default_value: "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   reasoning_effort_unknown_strategy: "clamp_to_default" | "passthrough";
+  request_header_timeout: number;
+  request_total_timeout: number;
+  stream_first_byte_timeout: number;
+  request_max_retry: number;
 }
 
 export interface ResetWeightsResponse {

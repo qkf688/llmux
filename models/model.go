@@ -588,6 +588,12 @@ const (
 	SettingKeyReasoningEffortMappingEnabled  = "reasoning_effort_mapping_enabled"  // 是否启用映射
 	SettingKeyReasoningEffortDefaultValue    = "reasoning_effort_default_value"    // 默认值（minimal/low/medium/high/xhigh/max）
 	SettingKeyReasoningEffortUnknownStrategy = "reasoning_effort_unknown_strategy" // 未知档位策略（clamp_to_default / passthrough）
+
+	// 请求参数相关设置（全局超时/重试，替代原 per-model time_out/max_retry）
+	SettingKeyRequestHeaderTimeout   = "request_header_timeout"    // 单次尝试等待响应头的超时（秒）
+	SettingKeyRequestTotalTimeout    = "request_total_timeout"     // 整个请求的总预算超时（秒，含所有重试/故障转移）
+	SettingKeyStreamFirstByteTimeout = "stream_first_byte_timeout" // 流式响应头到达后等待首个数据字节的超时（秒）
+	SettingKeyRequestMaxRetry        = "request_max_retry"         // 单候选池最大尝试次数
 )
 
 // HealthCheckLog 模型健康检测日志

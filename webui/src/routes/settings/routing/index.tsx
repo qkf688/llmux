@@ -3,6 +3,7 @@ import { FormatConversionCard } from "./components/sections/format-conversion-ca
 import { ModelAssociationAutomationCard } from "./components/sections/model-association-automation-card";
 import { ModelSyncCard } from "./components/sections/model-sync-card";
 import { ParameterMappingCard } from "./components/sections/parameter-mapping-card";
+import { RequestParamsCard } from "./components/sections/request-params-card";
 import { TemplateFuzzyMatchCard } from "./components/sections/template-fuzzy-match-card";
 import { RoutingSettingsHeader } from "./components/shared/routing-settings-header";
 import { useRoutingSettingsForm } from "./hooks/use-routing-settings-form";
@@ -39,6 +40,7 @@ export function RoutingSettings(props: RoutingSettingsProps) {
         localSettings={form.localSettings}
         updateLocalSettings={form.updateLocalSettings}
       />
+      <RequestParamsCard localSettings={form.localSettings} updateLocalSettings={form.updateLocalSettings} />
       <ParameterMappingCard
         localSettings={form.localSettings}
         updateLocalSettings={form.updateLocalSettings}

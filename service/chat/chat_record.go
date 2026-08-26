@@ -17,6 +17,9 @@ import (
 // SideChannel 是转换层旁路：携带流式响应的原始 SSE 累积体（流结束后已写满）与上游原始 usage。
 // 未经协议转换（style == provider type）或未开启记录时为 nil，读取方法均 nil-safe。
 type RecordLogInput struct {
+	// ReqStart 请求级开始时刻（handler/v1/chat.go 的 startReq），**必须非零**：
+	// ProxyTime / FirstChunkTime 都以它零点；传零值时 time.Since 会溢出成巨大的
+	// 负 Duration（非零，能绕过 UpdateByID 的零值跳过）直接落库。
 	ReqStart     time.Time
 	Reader       io.ReadCloser
 	Processer    Processer
@@ -45,6 +48,10 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 				if _, updateErr := repos().ChatLog.UpdateByID(ctx, in.LogID, models.ChatLog{
 					Status: "error",
 					Error:  fmt.Sprintf("processer error: %v", err),
+					// 与成功分支同语义的端到端耗时回填：错误日志同样要反映
+					// 「请求进入网关到失败判定」的真实时长，而非建行近零快照。
+					// struct Updates 跳过零值——毫秒级真实耗时实际不会为零，可安全写入。
+					ProxyTime: time.Since(in.ReqStart),
 				}); updateErr != nil {
 					slog.Error("failed to update log status on processer error", "log_id", in.LogID, "error", updateErr)
 				}
@@ -57,6 +64,12 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 		}
 
 		logUpdate := *log
+
+		// 回填端到端「代理耗时」：建行时的 ProxyTime 快照取在 `Client.Do` 之前
+		// （见 executeSingleProviderAttempt），不包含任何上游耗时。此处 processer
+		// 已读到响应 EOF（流式响应读完 / 非流式读完），是成功路径最晚、最完整的
+		// 终值时刻；与 FirstChunkTime 同以 ReqStart（handler startReq）为零点。
+		logUpdate.ProxyTime = time.Since(in.ReqStart)
 
 		// usage 归集：优先采用转换层旁路交出的上游原始 usage。
 		// 必须在统计之前完成——RecordTokenStats / RecordProviderStats 都读

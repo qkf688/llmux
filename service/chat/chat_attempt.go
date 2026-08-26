@@ -30,7 +30,12 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		RemoteIP:      input.ReqMeta.RemoteIP,
 		ChatIO:        input.IOLog,
 		Retry:         input.Retry,
-		ProxyTime:     time.Since(input.Start),
+		// 仅作占位快照：此刻上游请求尚未发出，取到的只是准备阶段耗时。
+		// 终值由各出口回填（成功在 RecordLog，失败在各 errorUpdate / 写 retryLog 前），
+		// 否则所有日志的「代理耗时」恒为近零。
+		// ⚠️ 强制约定：**任何新的终态出口必须先回填 ProxyTime 再落库**，否则该出口
+		// 的日志耗时重新失真成近零——本字段的「唯一赋值点」必须保持在各出口之外无效。
+		ProxyTime: time.Since(input.Start),
 	}
 
 	withHeader := false
@@ -66,6 +71,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		if errors.As(bodyErr, &statusCoder) {
 			return singleProviderAttemptResult{FatalErr: bodyErr}
 		}
+		logEntry.ProxyTime = time.Since(input.Start) // 写通道前回填，终值随 Create 落库
 		retryLog <- logEntry.WithError(fmt.Errorf("transform request error: %v", bodyErr))
 		if err := chatstats.RecordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
 			slog.Warn("failed to record provider stats", "provider", input.Provider.Name, "error", err)
@@ -78,6 +84,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 
 	req, err := input.ChatModel.BuildReq(reqCtx, header, input.ModelWithProvider.ProviderModel, requestBody)
 	if err != nil {
+		logEntry.ProxyTime = time.Since(input.Start) // 写通道前回填，终值随 Create 落库
 		retryLog <- logEntry.WithError(err)
 		if err := chatstats.RecordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
 			slog.Warn("failed to record provider stats", "provider", input.Provider.Name, "error", err)
@@ -96,6 +103,8 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		errorUpdate := models.ChatLog{
 			Status: "error",
 			Error:  err.Error(),
+			// 回填端到端耗时：上游请求已发出，建行快照不含任何上游耗时。
+			ProxyTime: time.Since(input.Start),
 		}
 		if logRawOptions.RequestHeaders {
 			errorUpdate.RequestHeaders = string(logSnapshot.RequestHeadersJSON)
@@ -115,7 +124,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 	}
 
 	if res.StatusCode != http.StatusOK {
-		return handleNonOKProviderResponse(input.Ctx, res, logID, logRawOptions, logSnapshot, input.ModelWithProvider, input.Provider)
+		return handleNonOKProviderResponse(input.Ctx, res, logID, logRawOptions, logSnapshot, input.ModelWithProvider, input.Provider, input.Start)
 	}
 
 	rawResponseBodyStr := captureRawResponseBody(logRawOptions, res)
@@ -142,6 +151,8 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 			errorUpdate := models.ChatLog{
 				Status: "error",
 				Error:  fmt.Sprintf("transform response error: %v", err),
+				// 同 Client.Do 失败分支：错误日志回填真实端到端耗时。
+				ProxyTime: time.Since(input.Start),
 			}
 			if logRawOptions.ResponseHeaders {
 				responseHeadersJSON, marshalErr := json.Marshal(res.Header)

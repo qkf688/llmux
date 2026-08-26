@@ -16,7 +16,10 @@ import (
 // 真实模型各构建一个候选池，逐个调用本循环。两条路径的差异全部收敛为本结构体
 // 的字段，循环体内不含路径判断。
 type retryLoopInput struct {
-	Ctx     context.Context
+	Ctx context.Context
+	// Start 是**请求级**开始时刻（handler startReq），整个循环每次尝试共用同一值：
+	// 每条尝试日志的 ProxyTime 都是「请求进入网关至今」的累计耗时，含此前所有
+	// 失败尝试的时长，非单次尝试耗时。与 FirstChunkTime 同零点（勿改 per-attempt）。
 	Start   time.Time
 	Style   string
 	Before  Before

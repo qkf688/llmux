@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/adjustment"
@@ -21,6 +22,7 @@ func handleNonOKProviderResponse(
 	logSnapshot requestLogSnapshot,
 	modelWithProvider models.ModelWithProvider,
 	provider models.Provider,
+	start time.Time, // 请求开始时刻（handler startReq）：用于回填 ProxyTime 终值
 ) singleProviderAttemptResult {
 	byteBody, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -30,6 +32,8 @@ func handleNonOKProviderResponse(
 	errorUpdate := models.ChatLog{
 		Status: "error",
 		Error:  fmt.Sprintf("status: %d, body: %s", res.StatusCode, string(byteBody)),
+		// 回填端到端耗时：上游已返回完整错误响应，建行快照不含上游耗时。
+		ProxyTime: time.Since(start),
 	}
 
 	if logRawOptions.RequestHeaders || logRawOptions.RequestBody || logRawOptions.RawRequestBody || logRawOptions.ResponseHeaders || logRawOptions.RawResponseBody {

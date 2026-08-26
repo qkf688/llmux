@@ -4,10 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/qkf688/llmux/consts"
+	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/providers"
 )
 
@@ -446,5 +450,224 @@ func TestClampMaxTokens_AllOutputLimitFields_Clamped(t *testing.T) {
 		if v, _ := obj[field].(float64); int(v) != 512 {
 			t.Fatalf("expected %s=512, got %v", field, obj[field])
 		}
+	}
+}
+
+// TestExecuteSingleProviderAttempt_NonOKResponse_BackfillsProxyTime：
+// 上游返回非 200（handleNonOKProviderResponse 分支）时，错误日志的 ProxyTime 必须
+// 回填端到端耗时，而不是留在建行瞬间的近零快照（建行发生在 Client.Do 之前）。
+// 构造要点：上游 sleep 300ms 再回 502——用真实耗时区分「回填值」与「建行快照」。
+// 注意不能回拨 Start：回拨会让建行快照本身≈回拨量，测试变成假绿（自证循环）。
+func TestExecuteSingleProviderAttempt_NonOKResponse_BackfillsProxyTime(t *testing.T) {
+	initChatRecordTestDB(t)
+
+	providerRow := models.Provider{Name: "p1", Type: providers.TypeOpenAI}
+	if err := models.DB.Create(&providerRow).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	mwp := models.ModelWithProvider{ProviderID: providerRow.ID, ProviderModel: "pm1"}
+	if err := models.DB.Create(&mwp).Error; err != nil {
+		t.Fatalf("create model-provider: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(300 * time.Millisecond)
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"error":"upstream boom"}`))
+	}))
+	defer srv.Close()
+
+	chatModel, err := providers.New(providers.TypeOpenAI, fmt.Sprintf(`{"base_url":%q,"api_key":"k"}`, srv.URL), "")
+	if err != nil {
+		t.Fatalf("new provider: %v", err)
+	}
+
+	executeSingleProviderAttempt(singleProviderAttemptInput{
+		Ctx:               context.Background(),
+		Start:             time.Now(),
+		Style:             string(consts.StyleOpenAI),
+		Before:            Before{Model: "m1", Stream: false, raw: []byte(`{"model":"m1","messages":[{"role":"user","content":"hi"}]}`)},
+		RealModelName:     "m1",
+		ReqMeta:           models.ReqMeta{Header: http.Header{}},
+		Provider:          providerRow,
+		ModelWithProvider: mwp,
+		ChatModel:         chatModel,
+		Client:            srv.Client(),
+	}, make(chan models.ChatLog))
+
+	var got models.ChatLog
+	if err := models.DB.Where("provider_name = ?", "p1").First(&got).Error; err != nil {
+		t.Fatalf("reload log: %v", err)
+	}
+	if got.Status != "error" {
+		t.Fatalf("Status = %q, want error", got.Status)
+	}
+	if got.ProxyTime < 250*time.Millisecond {
+		t.Fatalf("ProxyTime = %v, want ≈ 300ms（非 200 响应回填端到端耗时），当前仍是建行近零快照", got.ProxyTime)
+	}
+}
+
+// TestExecuteSingleProviderAttempt_DoError_BackfillsProxyTime：
+// 上游连接阶段失败（Client.Do 返回错误）时同样回填 ProxyTime。
+// 构造要点：上游 sleep 500ms 而客户端 Timeout=200ms → Do 在 200ms 处返回超时错误，
+// 真实 elapsed ≈200ms 可测；若只凭回拨 Start，建行快照会吸收回拨量导致假绿。
+func TestExecuteSingleProviderAttempt_DoError_BackfillsProxyTime(t *testing.T) {
+	initChatRecordTestDB(t)
+
+	providerRow := models.Provider{Name: "p1", Type: providers.TypeOpenAI}
+	if err := models.DB.Create(&providerRow).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	mwp := models.ModelWithProvider{ProviderID: providerRow.ID, ProviderModel: "pm1"}
+	if err := models.DB.Create(&mwp).Error; err != nil {
+		t.Fatalf("create model-provider: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(500 * time.Millisecond)
+	}))
+	defer srv.Close()
+
+	chatModel, err := providers.New(providers.TypeOpenAI, fmt.Sprintf(`{"base_url":%q,"api_key":"k"}`, srv.URL), "")
+	if err != nil {
+		t.Fatalf("new provider: %v", err)
+	}
+
+	executeSingleProviderAttempt(singleProviderAttemptInput{
+		Ctx:               context.Background(),
+		Start:             time.Now(),
+		Style:             string(consts.StyleOpenAI),
+		Before:            Before{Model: "m1", Stream: false, raw: []byte(`{"model":"m1","messages":[{"role":"user","content":"hi"}]}`)},
+		RealModelName:     "m1",
+		ReqMeta:           models.ReqMeta{Header: http.Header{}},
+		Provider:          providerRow,
+		ModelWithProvider: mwp,
+		ChatModel:         chatModel,
+		Client:            &http.Client{Timeout: 200 * time.Millisecond},
+	}, make(chan models.ChatLog))
+
+	var got models.ChatLog
+	if err := models.DB.Where("provider_name = ?", "p1").First(&got).Error; err != nil {
+		t.Fatalf("reload log: %v", err)
+	}
+	if got.Status != "error" {
+		t.Fatalf("Status = %q, want error", got.Status)
+	}
+	if got.ProxyTime < 150*time.Millisecond {
+		t.Fatalf("ProxyTime = %v, want ≈ 200ms（连接超时回填端到端耗时），当前仍是建行近零快照", got.ProxyTime)
+	}
+}
+
+// TestExecuteSingleProviderAttempt_TransformResponseError_BackfillsProxyTime：
+// 协议转换失败（transform response err 分支）时错误日志同样回填 ProxyTime。
+// 构造：style=openai × 上游 type=anthropic（wire format 不同 → 强制转换）+
+// 上游 sleep 300ms 后返回 200 + 非 JSON body → ProcessResponse 解析必失败。
+// 该出口的回填与建行之间隔着真实上游耗时，删除回填后落库值跌回建行近零快照、
+// 断言变红——与 Do err / 非 200 用例同构，真正锁定回填行为。
+func TestExecuteSingleProviderAttempt_TransformResponseError_BackfillsProxyTime(t *testing.T) {
+	initChatRecordTestDB(t)
+
+	providerRow := models.Provider{Name: "p1", Type: providers.TypeAnthropic}
+	if err := models.DB.Create(&providerRow).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	mwp := models.ModelWithProvider{ProviderID: providerRow.ID, ProviderModel: "pm1"}
+	if err := models.DB.Create(&mwp).Error; err != nil {
+		t.Fatalf("create model-provider: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(300 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`not-json`))
+	}))
+	defer srv.Close()
+
+	chatModel, err := providers.New(providers.TypeAnthropic, fmt.Sprintf(`{"base_url":%q,"api_key":"k","version":"2023-06-01","auth_type":"x-api-key"}`, srv.URL), "")
+	if err != nil {
+		t.Fatalf("new provider: %v", err)
+	}
+
+	executeSingleProviderAttempt(singleProviderAttemptInput{
+		Ctx:               context.Background(),
+		Start:             time.Now(),
+		Style:             string(consts.StyleOpenAI),
+		Before:            Before{Model: "m1", Stream: false, raw: []byte(`{"model":"m1","messages":[{"role":"user","content":"hi"}]}`)},
+		RealModelName:     "m1",
+		ReqMeta:           models.ReqMeta{Header: http.Header{}},
+		Provider:          providerRow,
+		ModelWithProvider: mwp,
+		ChatModel:         chatModel,
+		Client:            srv.Client(),
+	}, make(chan models.ChatLog))
+
+	var got models.ChatLog
+	if err := models.DB.Where("provider_name = ?", "p1").First(&got).Error; err != nil {
+		t.Fatalf("reload log: %v", err)
+	}
+	if got.Status != "error" {
+		t.Fatalf("Status = %q, want error（转换失败应落 error 日志）", got.Status)
+	}
+	if got.ProxyTime < 250*time.Millisecond {
+		t.Fatalf("ProxyTime = %v, want ≈ 300ms（转换失败回填端到端耗时），当前仍是建行近零快照", got.ProxyTime)
+	}
+}
+
+// buildReqErrProvider 是 BuildReq 必失败的 providers.Provider stub。
+type buildReqErrProvider struct{}
+
+func (buildReqErrProvider) BuildReq(ctx context.Context, header http.Header, model string, rawData []byte) (*http.Request, error) {
+	return nil, errors.New("build req failed")
+}
+
+func (buildReqErrProvider) Models(ctx context.Context) ([]providers.Model, error) { return nil, nil }
+
+func (buildReqErrProvider) GetProxy() string { return "" }
+
+// TestExecuteSingleProviderAttempt_BuildReqError_RetryLogCarriesProxyTime：
+// BuildReq 失败走 retryLog 通道（recordRetryLog 侧 Create 落库），断言通道产物为
+// error 状态且 ProxyTime 非零。
+// 局限说明（有意如此）：该出口的「回填」与建行占位只差一次 BuildReq 调用（微秒级），
+// 断言无法区分回填语句是否被删除——回拨量会被建行占位吸收，删了同样绿。本用例锁定
+// 的是「此出口经通道产出 error 日志且耗时值非零」的链路完整性；回填语句本身由
+// chat_attempt.go 的强制约定注释 + 代码审阅保证。
+func TestExecuteSingleProviderAttempt_BuildReqError_RetryLogCarriesProxyTime(t *testing.T) {
+	initChatRecordTestDB(t)
+
+	providerRow := models.Provider{Name: "p1", Type: providers.TypeOpenAI}
+	if err := models.DB.Create(&providerRow).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	mwp := models.ModelWithProvider{ProviderID: providerRow.ID, ProviderModel: "pm1"}
+	if err := models.DB.Create(&mwp).Error; err != nil {
+		t.Fatalf("create model-provider: %v", err)
+	}
+
+	retryChan := make(chan models.ChatLog, 1)
+	executeSingleProviderAttempt(singleProviderAttemptInput{
+		Ctx:               context.Background(),
+		Start:             time.Now().Add(-300 * time.Millisecond),
+		Style:             string(consts.StyleOpenAI),
+		Before:            Before{Model: "m1", Stream: false, raw: []byte(`{"model":"m1","messages":[{"role":"user","content":"hi"}]}`)},
+		RealModelName:     "m1",
+		ReqMeta:           models.ReqMeta{Header: http.Header{}},
+		Provider:          providerRow,
+		ModelWithProvider: mwp,
+		ChatModel:         buildReqErrProvider{},
+		Client:            &http.Client{},
+	}, retryChan)
+
+	var got models.ChatLog
+	select {
+	case got = <-retryChan:
+	case <-time.After(time.Second):
+		t.Fatal("retryLog channel got no entry")
+	}
+	if got.Status != "error" {
+		t.Fatalf("Status = %q, want error", got.Status)
+	}
+	if got.ProxyTime < 250*time.Millisecond {
+		t.Fatalf("ProxyTime = %v, want 非近零（回拨 300ms 下占位/回填均应为该量级）", got.ProxyTime)
 	}
 }

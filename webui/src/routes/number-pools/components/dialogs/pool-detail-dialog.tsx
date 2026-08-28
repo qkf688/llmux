@@ -389,49 +389,49 @@ export function PoolDetailDialog({ open, onOpenChange, pool, onPoolUpdate }: Poo
             </div>
         </DialogBody>
 
-        {/* 固定底部：分页 / 被引用分组 */}
-        <div className="flex-shrink-0 space-y-3 text-sm">
-            {/* 分页 */}
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>
-                共 {filtered.length} 条{filtered.length !== pool.credentials.length ? `（筛选后）` : ""}
-              </span>
-              <div className="flex items-center gap-1">
-                <Button size="sm" variant="outline" className="h-7 px-2" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                  上一页
-                </Button>
-                <span>
-                  {page} / {totalPages}
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  下一页
-                </Button>
-              </div>
-            </div>
+        {/* 固定底部：被引用分组（纯展示；双向导航深链待 S6 接真实 API 后实现）/ 分页，一行两端对齐 */}
+        <div className="flex-shrink-0 flex flex-wrap items-center justify-between gap-2 border-t px-1 pt-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            {pool.refGroups.length === 0 ? (
+              <span>尚未被任何分组引用</span>
+            ) : (
+              <>
+                <span className="shrink-0">被引用</span>
+                {pool.refGroups.map((ref) => (
+                  <span
+                    key={`${ref.providerName}.${ref.groupName}`}
+                    className="inline-flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-[11px] text-foreground"
+                  >
+                    <span className="font-medium">{ref.providerName}</span>
+                    <span className="text-muted-foreground">· {ref.groupName}</span>
+                  </span>
+                ))}
+              </>
+            )}
+          </div>
 
-            {/* 双向导航：被哪些分组引用 */}
-            <div className="space-y-2 rounded-md border bg-muted/20 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                被分组引用（双向导航：跳转对应提供商）
-              </p>
-              {pool.refGroups.length === 0 ? (
-                <span className="text-xs text-muted-foreground">尚未被任何分组引用</span>
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {pool.refGroups.map((ref) => (
-                    <Badge key={`${ref.providerName}.${ref.groupName}`} variant="secondary" className="text-[11px]">
-                      {ref.providerName} · {ref.groupName}
-                    </Badge>
-                  ))}
-                </div>
-              )}
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>
+              共 {filtered.length} 条{filtered.length !== pool.credentials.length ? "（筛选后）" : ""}
+            </span>
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="outline" className="h-7 px-2" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                上一页
+              </Button>
+              <span>
+                {page} / {totalPages}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                下一页
+              </Button>
             </div>
+          </div>
         </div>
       </DialogContent>
       <ImportCredentialsDialog open={importOpen} onOpenChange={setImportOpen} onImport={handleImportClick} />

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -195,7 +196,7 @@ export function PoolDetailDialog({ open, onOpenChange, pool, onPoolUpdate }: Poo
           </DialogHeader>
         </div>
 
-        {/* 固定工具区：健康概览 / 导入入口 / 搜索筛选工具栏（不随表格滚动） */}
+        {/* 固定工具区：健康概览 / 搜索筛选工具栏（不随表格滚动） */}
         <div className="flex-shrink-0 space-y-3 text-sm">
             {/* 健康概览 */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border bg-muted/20 p-2 text-xs text-muted-foreground">
@@ -217,17 +218,7 @@ export function PoolDetailDialog({ open, onOpenChange, pool, onPoolUpdate }: Poo
               </span>
             </div>
 
-            {/* 批量导入入口 */}
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-2.5">
-              <p className="text-xs text-muted-foreground">
-                粘贴 Key 批量导入，每行一个，自动去重；1 个 Key 也可直接粘贴
-              </p>
-              <Button size="sm" onClick={() => setImportOpen(true)}>
-                添加
-              </Button>
-            </div>
-
-            {/* 工具栏 */}
+            {/* 工具栏：搜索 / 状态筛选 / 批量操作 / 添加入口 */}
             <div className="flex flex-wrap items-center gap-2">
               <Input
                 className="w-56"
@@ -266,6 +257,10 @@ export function PoolDetailDialog({ open, onOpenChange, pool, onPoolUpdate }: Poo
                   </Button>
                 </div>
               )}
+              <Button size="sm" className="ml-auto" onClick={() => setImportOpen(true)}>
+                <Plus className="size-4" />
+                添加
+              </Button>
             </div>
         </div>
 

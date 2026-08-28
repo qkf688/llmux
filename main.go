@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/qkf688/llmux/common/bgtask"
+	"github.com/qkf688/llmux/common/credentialcrypto"
 	"github.com/qkf688/llmux/handler"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/repository"
@@ -37,6 +38,20 @@ func main() {
 		slog.Error("JWT_SECRET env is required")
 		os.Exit(1)
 	}
+
+	// 凭据加密密钥解析（在 models.Init 之前：存量迁移需要它加密 api_key）。
+	// 与 JWT_SECRET 同地位：部署级永久密钥；未设则首启生成并落盘 ./db/credential.key。
+	credKey, err := credentialcrypto.ResolveKey(os.Getenv("CREDENTIAL_ENCRYPTION_KEY"), "./db/credential.key")
+	if err != nil {
+		slog.Error("resolve credential encryption key", "error", err)
+		os.Exit(1)
+	}
+	credCipher, err := credentialcrypto.New(credKey)
+	if err != nil {
+		slog.Error("invalid CREDENTIAL_ENCRYPTION_KEY (need 32-byte hex)", "error", err)
+		os.Exit(1)
+	}
+	credentialcrypto.SetDefault(credCipher)
 
 	// 启动装配：建库/迁移与 repository 绑定必须早于任何仓储使用者（BootstrapAdmin 等）。
 	// 放在 main 而非 init：init 里做 IO 会让 package main 的测试一跑就迁移开发库；

@@ -130,6 +130,19 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDet
               </div>
             </div>
 
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">调度明细</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                <DetailCard label="协议端点" value={detailLog.endpoint_protocol || "-"} />
+                <DetailCard label="端点 URL" value={detailLog.endpoint_url || "-"} mono />
+                <DetailCard label="凭据分组" value={detailLog.key_group_name || "-"} />
+                <DetailCard label="凭据" value={detailLog.credential_note || "-"} mono />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                S0 原型预留：后端 S3 选路改造后填充实际命中的端点 / 分组 / 凭据
+              </p>
+            </div>
+
             {detailError && (
               <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 sm:p-3">
                 <p className="text-xs text-destructive uppercase tracking-wide">加载请求响应失败</p>

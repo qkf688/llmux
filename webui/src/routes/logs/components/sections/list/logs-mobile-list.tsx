@@ -105,6 +105,14 @@ export function LogsMobileList({
               <p className="text-muted-foreground text-[10px] uppercase tracking-wide">请求头</p>
               <p className="font-medium">{formatByteLength(log.request_headers)}</p>
             </div>
+            <div className="space-y-0.5">
+              <p className="text-muted-foreground text-[10px] uppercase tracking-wide">调度</p>
+              <p className="truncate text-[11px]">
+                {[log.endpoint_protocol, log.endpoint_url].filter(Boolean).join(" · ") ||
+                  [log.key_group_name, log.credential_note].filter(Boolean).join(" · ") ||
+                  "-"}
+              </p>
+            </div>
             <div className="space-y-0.5 col-span-2">
               <p className="text-muted-foreground text-[10px] uppercase tracking-wide">响应头</p>
               <p className="font-medium">{formatByteLength(log.response_headers)}</p>

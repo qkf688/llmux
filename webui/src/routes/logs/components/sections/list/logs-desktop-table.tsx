@@ -59,6 +59,7 @@ export function LogsDesktopTable({
             <TableHead>提供商模型</TableHead>
             <TableHead>格式</TableHead>
             <TableHead>提供商</TableHead>
+            <TableHead>调度</TableHead>
             <TableHead className="w-[180px]">操作</TableHead>
           </TableRow>
         </TableHeader>
@@ -110,6 +111,20 @@ export function LogsDesktopTable({
                  )}
                </TableCell>
               <TableCell className="text-xs">{log.provider_name}</TableCell>
+              <TableCell>
+                {log.endpoint_protocol || log.endpoint_url || log.key_group_name || log.credential_note ? (
+                  <div className="flex flex-col gap-0.5 text-xs">
+                    <span className="font-medium">
+                      {[log.endpoint_protocol, log.endpoint_url].filter(Boolean).join(" · ") || "—"}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {[log.key_group_name, log.credential_note].filter(Boolean).join(" · ") || "—"}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
+              </TableCell>
               <TableCell>
                 <div className="flex gap-1">
                   <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => onOpenDetail(log)}>

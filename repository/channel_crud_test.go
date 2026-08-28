@@ -51,6 +51,15 @@ func TestPoolRepo_CRUD(t *testing.T) {
 		t.Fatalf("Update 未生效: %+v", again)
 	}
 
+	// struct Update 跳过零值字段：清空 Note 必须走 UpdateFields（map 显式写空串）
+	if _, err := repo.UpdateFields(ctx, pool.ID, map[string]any{"note": ""}); err != nil {
+		t.Fatalf("UpdateFields: %v", err)
+	}
+	cleared, _ := repo.Get(ctx, pool.ID)
+	if cleared.Note != "" {
+		t.Fatalf("UpdateFields 清空 Note 后 = %q, want 空串", cleared.Note)
+	}
+
 	list, err := repo.List(ctx, PoolFilter{Name: "改名"})
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -205,5 +214,162 @@ func TestKeyGroupRepo_CRUD(t *testing.T) {
 	reloaded, _ := repo.Get(ctx, group.ID)
 	if reloaded.PoolID != nil {
 		t.Fatalf("置 nil 后 PoolID = %v, want nil", reloaded.PoolID)
+	}
+}
+
+// TestPoolRepo_Stats 锁定号池凭据统计聚合：一条 GROUP BY 查询返回
+// key 总数与各状态计数（号池列表健康概览用，防 N+1）。
+func TestPoolRepo_Stats(t *testing.T) {
+	ctx := context.Background()
+	db := newChannelTestDB(t)
+	poolRepo := NewPoolRepo(db)
+	credRepo := NewCredentialRepo(db)
+
+	p1 := &models.Pool{Name: "主池"}
+	p2 := &models.Pool{Name: "备用池"}
+	for _, p := range []*models.Pool{p1, p2} {
+		if err := poolRepo.Create(ctx, p); err != nil {
+			t.Fatalf("Create pool: %v", err)
+		}
+	}
+
+	creds := []*models.Credential{
+		{Key: "enc-1", KeyHash: "h-a", PoolID: &p1.ID, Status: models.CredentialStatusActive},
+		{Key: "enc-2", KeyHash: "h-b", PoolID: &p1.ID, Status: models.CredentialStatusActive},
+		{Key: "enc-3", KeyHash: "h-c", PoolID: &p1.ID, Status: models.CredentialStatusError},
+		{Key: "enc-4", KeyHash: "h-d", PoolID: &p2.ID, Status: models.CredentialStatusDisabled},
+	}
+	for _, c := range creds {
+		if err := credRepo.Create(ctx, c); err != nil {
+			t.Fatalf("Create credential: %v", err)
+		}
+	}
+
+	stats, err := poolRepo.StatsByIDs(ctx, []uint{p1.ID, p2.ID})
+	if err != nil {
+		t.Fatalf("StatsByIDs: %v", err)
+	}
+
+	s1, ok := stats[p1.ID]
+	if !ok {
+		t.Fatalf("stats 缺 p1=%d 条目: %+v", p1.ID, stats)
+	}
+	if s1.KeyCount != 3 {
+		t.Fatalf("p1 KeyCount = %d, want 3", s1.KeyCount)
+	}
+	if s1.StatusCount[models.CredentialStatusActive] != 2 || s1.StatusCount[models.CredentialStatusError] != 1 {
+		t.Fatalf("p1 StatusCount 不符: %+v", s1.StatusCount)
+	}
+
+	s2, ok := stats[p2.ID]
+	if !ok {
+		t.Fatalf("stats 缺 p2=%d 条目: %+v", p2.ID, stats)
+	}
+	if s2.KeyCount != 1 || s2.StatusCount[models.CredentialStatusDisabled] != 1 {
+		t.Fatalf("p2 统计不符: %+v", s2)
+	}
+
+	// 无凭据的号池不产生条目（调用方初始化为零值）
+	p3 := &models.Pool{Name: "空池"}
+	if err := poolRepo.Create(ctx, p3); err != nil {
+		t.Fatalf("Create empty pool: %v", err)
+	}
+	emptyStats, err := poolRepo.StatsByIDs(ctx, []uint{p3.ID})
+	if err != nil {
+		t.Fatalf("StatsByIDs(empty): %v", err)
+	}
+	if len(emptyStats) != 0 {
+		t.Fatalf("空池应无统计条目, got %d", len(emptyStats))
+	}
+
+	// ids 为空返回空 map（handler 空列表时调用）
+	nilStats, err := poolRepo.StatsByIDs(ctx, nil)
+	if err != nil {
+		t.Fatalf("StatsByIDs(nil): %v", err)
+	}
+	if len(nilStats) != 0 {
+		t.Fatalf("StatsByIDs(nil) 应返回空 map, got %d", len(nilStats))
+	}
+}
+
+// TestCredentialRepo_DeleteByPool 锁定按号池级联删除凭据（软删）；
+// 分组内联凭据（GroupID 归属）不受影响。
+func TestCredentialRepo_DeleteByPool(t *testing.T) {
+	ctx := context.Background()
+	repo := NewCredentialRepo(newChannelTestDB(t))
+
+	poolID, groupID := uint(1), uint(2)
+	creds := []*models.Credential{
+		{Key: "enc-1", KeyHash: "h1", PoolID: &poolID},
+		{Key: "enc-2", KeyHash: "h2", PoolID: &poolID},
+		{Key: "enc-3", KeyHash: "h3", GroupID: &groupID},
+	}
+	for _, c := range creds {
+		if err := repo.Create(ctx, c); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+	}
+
+	affected, err := repo.DeleteByPoolID(ctx, poolID)
+	if err != nil {
+		t.Fatalf("DeleteByPoolID: %v", err)
+	}
+	if affected != 2 {
+		t.Fatalf("DeleteByPoolID RowsAffected = %d, want 2", affected)
+	}
+
+	byPool, err := repo.List(ctx, CredentialFilter{PoolID: &poolID})
+	if err != nil {
+		t.Fatalf("List byPool: %v", err)
+	}
+	if len(byPool) != 0 {
+		t.Fatalf("级联删除后池内凭据数 = %d, want 0", len(byPool))
+	}
+
+	byGroup, err := repo.List(ctx, CredentialFilter{GroupID: &groupID})
+	if err != nil {
+		t.Fatalf("List byGroup: %v", err)
+	}
+	if len(byGroup) != 1 || byGroup[0].KeyHash != "h3" {
+		t.Fatalf("分组内联凭据不应被级联删除: %+v", byGroup)
+	}
+}
+
+// TestKeyGroupRepo_CountByPoolIDs 锁定号池被分组引用计数
+// （DELETE /api/pools/:id 引用守卫的依据）。
+func TestKeyGroupRepo_CountByPoolIDs(t *testing.T) {
+	ctx := context.Background()
+	repo := NewKeyGroupRepo(newChannelTestDB(t))
+
+	p1, p2, p3 := uint(1), uint(2), uint(3)
+	groups := []*models.KeyGroup{
+		{ProviderID: 1, Name: "默认组", PoolID: &p1},
+		{ProviderID: 1, Name: "低价组", PoolID: &p1},
+		{ProviderID: 2, Name: "走量组", PoolID: &p2},
+		{ProviderID: 3, Name: "内联组"}, // 无 PoolID（内联凭据）
+	}
+	for _, g := range groups {
+		if err := repo.Create(ctx, g); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+	}
+
+	counts, err := repo.CountByPoolIDs(ctx, []uint{p1, p2, p3})
+	if err != nil {
+		t.Fatalf("CountByPoolIDs: %v", err)
+	}
+	if counts[p1] != 2 {
+		t.Fatalf("p1 引用数 = %d, want 2", counts[p1])
+	}
+	if counts[p2] != 1 {
+		t.Fatalf("p2 引用数 = %d, want 1", counts[p2])
+	}
+	if counts[p3] != 0 {
+		t.Fatalf("p3 引用数 = %d, want 0", counts[p3])
+	}
+
+	empty, err := repo.CountByPoolIDs(ctx, nil)
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("CountByPoolIDs(nil) = (%v, %v), want (empty, nil)", empty, err)
 	}
 }

@@ -22,6 +22,9 @@ type KeyGroupRepo interface {
 	UpdateFields(ctx context.Context, id uint, fields map[string]any) (int64, error)
 	// Delete 根据 ID 删除分组，返回受影响行数。
 	Delete(ctx context.Context, id uint) (int64, error)
+	// CountByPoolIDs 返回每个号池被分组引用的次数（key_groups.PoolID 指向该号池）。
+	// 号池删除守卫用：被引用（>0）时禁止删除。无引用的号池不产生条目。
+	CountByPoolIDs(ctx context.Context, poolIDs []uint) (map[uint]int64, error)
 }
 
 // NewKeyGroupRepo 创建 KeyGroupRepo 实现。
@@ -68,4 +71,30 @@ func (r *keyGroupRepo) UpdateFields(ctx context.Context, id uint, fields map[str
 func (r *keyGroupRepo) Delete(ctx context.Context, id uint) (int64, error) {
 	result := r.db.WithContext(ctx).Delete(&models.KeyGroup{}, id)
 	return result.RowsAffected, result.Error
+}
+
+func (r *keyGroupRepo) CountByPoolIDs(ctx context.Context, poolIDs []uint) (map[uint]int64, error) {
+	if len(poolIDs) == 0 {
+		return map[uint]int64{}, nil
+	}
+
+	type countRow struct {
+		PoolID uint
+		Count  int64
+	}
+	var rows []countRow
+	if err := r.db.WithContext(ctx).
+		Model(&models.KeyGroup{}).
+		Select("pool_id, COUNT(*) AS count").
+		Where("pool_id IN ?", poolIDs).
+		Group("pool_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	counts := make(map[uint]int64, len(rows))
+	for _, row := range rows {
+		counts[row.PoolID] = row.Count
+	}
+	return counts, nil
 }

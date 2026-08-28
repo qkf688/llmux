@@ -9,6 +9,7 @@ import (
 	"github.com/qkf688/llmux/handler/importexport"
 	"github.com/qkf688/llmux/handler/logs"
 	"github.com/qkf688/llmux/handler/modelapi"
+	"github.com/qkf688/llmux/handler/pools"
 	"github.com/qkf688/llmux/handler/providerapi"
 	"github.com/qkf688/llmux/handler/settings"
 	"github.com/qkf688/llmux/handler/testapi"
@@ -69,6 +70,8 @@ func RegisterAll(r *gin.Engine, d Deps) {
 	RegisterModelSync(api)
 
 	virtualmodels.Register(api)
+
+	pools.Register(api)
 
 	// auth 受保护路由（me / rotate api key / change password）
 	auth.Register(api)

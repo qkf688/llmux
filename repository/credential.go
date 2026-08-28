@@ -24,6 +24,9 @@ type CredentialRepo interface {
 	UpdateFields(ctx context.Context, id uint, fields map[string]any) (int64, error)
 	// Delete 根据 ID 删除凭据，返回受影响行数。
 	Delete(ctx context.Context, id uint) (int64, error)
+	// DeleteByPoolID 删除指定号池下的全部凭据（软删），返回受影响行数。
+	// 号池删除时的级联清理用；分组内联凭据（GroupID 归属）不受影响。
+	DeleteByPoolID(ctx context.Context, poolID uint) (int64, error)
 }
 
 // CredentialFilter 用于凭据 List 查询的筛选条件。
@@ -90,5 +93,10 @@ func (r *credentialRepo) UpdateFields(ctx context.Context, id uint, fields map[s
 
 func (r *credentialRepo) Delete(ctx context.Context, id uint) (int64, error) {
 	result := r.db.WithContext(ctx).Delete(&models.Credential{}, id)
+	return result.RowsAffected, result.Error
+}
+
+func (r *credentialRepo) DeleteByPoolID(ctx context.Context, poolID uint) (int64, error) {
+	result := r.db.WithContext(ctx).Where("pool_id = ?", poolID).Delete(&models.Credential{})
 	return result.RowsAffected, result.Error
 }

@@ -3,6 +3,7 @@ import { lazy } from "react";
 import {
   House,
   Cloud,
+  KeyRound,
   Bot,
   Link as LinkIcon,
   FileText,
@@ -59,6 +60,12 @@ export const appRoutes: AppRouteConfig[] = [
     layout: "app",
     lazy: () => import("./providers"),
     nav: { label: "提供商", order: 20, icon: Cloud },
+  },
+  {
+    path: "/number-pools",
+    layout: "app",
+    lazy: () => import("./number-pools"),
+    nav: { label: "号池", order: 25, icon: KeyRound },
   },
   {
     path: "/models",

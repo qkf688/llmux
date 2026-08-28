@@ -24,7 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import type { Provider, ProviderTemplate } from "@/lib/api";
 import type { ProviderFormValues } from "../../form-schema";
 import { getProviderExtraFields } from "../../form-fields";
-import { applyProviderTemplateDefaults } from "../../utils/template-defaults";
+import { EndpointsSection, GroupsSection, SupportTypesField } from "./provider-schedule-fields";
 
 interface ProviderFormDialogProps {
   open: boolean;
@@ -79,33 +79,8 @@ export function ProviderFormDialog({
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="type"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>类型</FormLabel>
-                    <FormControl>
-                      <select
-                        {...field}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                        onChange={(e) => {
-                          field.onChange(e);
-                          applyProviderTemplateDefaults(e.target.value, providerTemplates, form);
-                        }}
-                      >
-                        <option value="">请选择提供商类型</option>
-                        {providerTemplates.map((template) => (
-                          <option key={template.type} value={template.type}>
-                            {template.type}
-                          </option>
-                        ))}
-                      </select>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {/* 支持类型（原「类型」位置）：多选勾选，第一个 = 主类型 */}
+              <SupportTypesField providerTemplates={providerTemplates} />
 
               <FormField
                 control={form.control}
@@ -256,6 +231,18 @@ export function ProviderFormDialog({
                   </FormItem>
                 )}
               />
+
+              {/* S0 原型：协议勾选 + 协议端点 + 凭据分组（S6 起改独立 DTO 提交） */}
+              <div className="space-y-4 border-t pt-4">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold">协议端点与凭据分组</h3>
+                  <p className="text-xs text-muted-foreground">
+                    协议端点（URL 继承/覆盖）与凭据分组（价格权重 / 白名单 / 凭据来源）
+                  </p>
+                </div>
+                <EndpointsSection />
+                <GroupsSection />
+              </div>
             </DialogBody>
 
             <DialogFooter>

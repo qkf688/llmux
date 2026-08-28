@@ -2,6 +2,7 @@ import { Boxes } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 import { AnimatedListItem } from "@/components/ui/animated-list-item";
 import { StaggerList } from "@/components/ui/stagger-list";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -11,6 +12,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { Provider } from "@/lib/api";
 import { extractAllModels } from "../../utils/config";
+import { countSchedule } from "../../utils/schedule";
 import { ProviderRowActions } from "./provider-row-actions";
 
 // 卡片副标题（ID / 类型）行样式：单独成常量避免 JSX 内长行
@@ -61,6 +63,7 @@ export function ProvidersMobileList({
       <AnimatePresence>
         {providers.map((provider) => {
           const allModels = extractAllModels(provider.Config);
+          const schedule = countSchedule(provider.Config);
           return (
             <AnimatedListItem
               key={provider.ID}
@@ -100,6 +103,14 @@ export function ProvidersMobileList({
                   <Boxes className="size-3 opacity-70" />
                   {allModels.length}
                 </Button>
+
+                {schedule.endpoints > 0 || schedule.groups > 0 ? (
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
+                    端点 {schedule.endpoints} · 分组 {schedule.groups}
+                  </Badge>
+                ) : (
+                  <span className="text-[10px] text-muted-foreground">未配置调度</span>
+                )}
 
                 <div className="flex items-center gap-1.5">
                   <span className="text-[10px] text-muted-foreground">端点</span>

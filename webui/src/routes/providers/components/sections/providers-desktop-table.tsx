@@ -1,4 +1,5 @@
 import { Boxes, Hash } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { Provider } from "@/lib/api";
 import { extractAllModels } from "../../utils/config";
+import { countSchedule } from "../../utils/schedule";
 import { ProviderRowActions } from "./provider-row-actions";
 
 interface ProvidersDesktopTableProps {
@@ -65,6 +67,7 @@ export function ProvidersDesktopTable({
             <TableHead>名称</TableHead>
             <TableHead>类型</TableHead>
             <TableHead>全部模型</TableHead>
+            <TableHead>调度</TableHead>
             <TableHead>模型端点</TableHead>
             <TableHead>关联触发</TableHead>
             <TableHead>模型过滤</TableHead>
@@ -77,6 +80,7 @@ export function ProvidersDesktopTable({
         <TableBody>
           {providers.map((provider) => {
             const allModels = extractAllModels(provider.Config);
+            const schedule = countSchedule(provider.Config);
             return (
               <TableRow key={provider.ID} className="group">
                 <TableCell className="font-mono text-xs text-muted-foreground">
@@ -107,6 +111,15 @@ export function ProvidersDesktopTable({
                     <Boxes className="size-4 opacity-70" />
                     {allModels.length}
                   </Button>
+                </TableCell>
+                <TableCell>
+                  {schedule.endpoints > 0 || schedule.groups > 0 ? (
+                    <Badge variant="outline" className="text-[10px]">
+                      端点 {schedule.endpoints} · 分组 {schedule.groups}
+                    </Badge>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <Switch

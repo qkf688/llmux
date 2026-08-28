@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 
+	"github.com/qkf688/llmux/common/credentialcrypto"
 	"gorm.io/gorm"
 )
 
@@ -10,6 +11,10 @@ import (
 func migrate(ctx context.Context) {
 	if err := DB.AutoMigrate(
 		&Provider{},
+		&Pool{},
+		&Credential{},
+		&Endpoint{},
+		&KeyGroup{},
 		&Model{},
 		&ModelWithProvider{},
 		&ModelTemplateItem{},
@@ -30,6 +35,7 @@ func migrate(ctx context.Context) {
 	); err != nil {
 		panic(err)
 	}
+	migrateLegacyProviders(ctx, DB, credentialcrypto.Default())
 	purgeSoftDeleted(ctx, &VirtualModelMapping{}, &ModelTemplateItem{}, &VirtualModel{}, &Setting{})
 	cleanupSoftDeletedModels(ctx)
 	// 兼容性考虑

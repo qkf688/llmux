@@ -23,6 +23,10 @@ type Provider struct {
 	ModelFilterEnabled *bool   // 是否启用模型过滤（按规则过滤上游模型）
 	AuthType           *string // 认证方式：x-api-key（默认）或 bearer，仅用于 Anthropic 类型
 	Blacklisted        *bool   `gorm:"default:false" json:"blacklisted"` // 是否拉黑（拉黑后不参与自动关联）
+	// Protocols 勾选的出站协议（设计定案第 2 节），取值见 consts.Protocol*。
+	// 存量 Provider 由启动迁移按 type 派生填充（见 migrate_channels.go），
+	// 新建 Provider 由前端勾选写入（S6）；nil = 未设置。
+	Protocols []string `gorm:"serializer:json"`
 }
 
 type AnthropicConfig struct {

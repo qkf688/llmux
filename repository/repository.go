@@ -26,6 +26,10 @@ type Repositories struct {
 	ModelSyncLog        ModelSyncLogRepo
 	Stats               StatsRepo
 	User                UserRepo
+	Pool                PoolRepo
+	Credential          CredentialRepo
+	Endpoint            EndpointRepo
+	KeyGroup            KeyGroupRepo
 }
 
 // New 根据 *gorm.DB 创建所有 Repository 实例。
@@ -46,6 +50,10 @@ func New(db *gorm.DB) *Repositories {
 		ModelSyncLog:        NewModelSyncLogRepo(db),
 		Stats:               NewStatsRepo(db),
 		User:                NewUserRepo(db),
+		Pool:                NewPoolRepo(db),
+		Credential:          NewCredentialRepo(db),
+		Endpoint:            NewEndpointRepo(db),
+		KeyGroup:            NewKeyGroupRepo(db),
 	}
 }
 

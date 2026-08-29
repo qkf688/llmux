@@ -1,6 +1,10 @@
 package pools
 
-import "github.com/qkf688/llmux/models"
+import (
+	"time"
+
+	"github.com/qkf688/llmux/models"
+)
 
 // PoolRequest 号池创建/更新请求体（设计定案第 2 节：ID / Name / Note）。
 type PoolRequest struct {
@@ -20,4 +24,31 @@ type PoolListItem struct {
 	StatusCounts map[string]int64 `json:"StatusCounts"`
 	// ReferencedBy 被分组（key_groups.PoolID）引用的次数。
 	ReferencedBy int64 `json:"ReferencedBy"`
+}
+
+// CredentialListItem 凭据列表项：掩码后的展示形态，不含明文/密文 Key。
+type CredentialListItem struct {
+	ID             uint       `json:"ID"`
+	PoolID         *uint      `json:"PoolID"`
+	GroupID        *uint      `json:"GroupID"`
+	Status         string     `json:"Status"`
+	Note           string     `json:"Note"`
+	KeyMasked      string     `json:"KeyMasked"`
+	CooldownUntil  *time.Time `json:"CooldownUntil"`
+	CooldownReason string     `json:"CooldownReason"`
+	FailCount      int        `json:"FailCount"`
+	LastUsedAt     *time.Time `json:"LastUsedAt"`
+	TotalRequests  int64      `json:"TotalRequests"`
+	TotalErrors    int64      `json:"TotalErrors"`
+	TotalTokens    int64      `json:"TotalTokens"`
+	CreatedAt      time.Time  `json:"CreatedAt"`
+	UpdatedAt      time.Time  `json:"UpdatedAt"`
+}
+
+// CredentialListData 凭据列表分页信封。
+type CredentialListData struct {
+	Items    []CredentialListItem `json:"items"`
+	Total    int64                `json:"total"`
+	Page     int                  `json:"page"`
+	PageSize int                  `json:"page_size"`
 }

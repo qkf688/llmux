@@ -22,6 +22,16 @@ const (
 	CredentialStatusError    = "error"
 )
 
+// IsValidCredentialStatus 校验凭据状态合法性（S4 新增状态时在此扩展，OCP 收敛点）。
+func IsValidCredentialStatus(s string) bool {
+	switch s {
+	case CredentialStatusActive, CredentialStatusDisabled, CredentialStatusError:
+		return true
+	default:
+		return false
+	}
+}
+
 // Credential 凭据：一条 = 一个 key，归属号池（PoolID）或分组内联（GroupID）二选一。
 // Key 存密文（hex(nonce‖ciphertext)，见 common/credentialcrypto），
 // KeyHash 用于不解密即可完成的批量导入去重 / 搜索 / 日志关联。

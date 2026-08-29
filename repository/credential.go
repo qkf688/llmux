@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 
 	"github.com/qkf688/llmux/models"
 	"gorm.io/gorm"
@@ -13,6 +14,9 @@ import (
 type CredentialRepo interface {
 	// List 返回符合条件的凭据；filter 为零值时返回全部。
 	List(ctx context.Context, filter CredentialFilter) ([]models.Credential, error)
+	// ListPaged 返回分页凭据列表及总数；page/pageSize 由调用方校验（>=1），
+	// Q 仅对 Note 做 LIKE 匹配（Key 需解密，不在此层搜索）。
+	ListPaged(ctx context.Context, filter CredentialFilter, page, pageSize int) ([]models.Credential, int64, error)
 	// Get 根据 ID 获取凭据。
 	Get(ctx context.Context, id uint) (*models.Credential, error)
 	// Create 创建凭据。
@@ -35,6 +39,8 @@ type CredentialFilter struct {
 	GroupID *uint
 	Status  string
 	KeyHash string
+	// Q 关键词搜索：仅对 Note 做 LIKE %Q%（Key 明文需解密，不在此层搜索）。
+	Q string
 }
 
 // NewCredentialRepo 创建 CredentialRepo 实现。
@@ -46,8 +52,7 @@ type credentialRepo struct {
 	db *gorm.DB
 }
 
-func (r *credentialRepo) List(ctx context.Context, filter CredentialFilter) ([]models.Credential, error) {
-	query := r.db.WithContext(ctx).Model(&models.Credential{})
+func applyCredentialFilter(query *gorm.DB, filter CredentialFilter) *gorm.DB {
 	if filter.PoolID != nil {
 		query = query.Where("pool_id = ?", *filter.PoolID)
 	}
@@ -60,11 +65,43 @@ func (r *credentialRepo) List(ctx context.Context, filter CredentialFilter) ([]m
 	if filter.KeyHash != "" {
 		query = query.Where("key_hash = ?", filter.KeyHash)
 	}
+	if filter.Q != "" {
+		// 转义 LIKE 通配符，避免 q=% 匹配全表（AC-3 精确子串语义）
+		escaped := strings.ReplaceAll(filter.Q, `\`, `\\`)
+		escaped = strings.ReplaceAll(escaped, `%`, `\%`)
+		escaped = strings.ReplaceAll(escaped, `_`, `\_`)
+		query = query.Where("note LIKE ? ESCAPE '\\'", "%"+escaped+"%")
+	}
+	return query
+}
+
+func (r *credentialRepo) List(ctx context.Context, filter CredentialFilter) ([]models.Credential, error) {
+	query := applyCredentialFilter(r.db.WithContext(ctx).Model(&models.Credential{}), filter)
 	var creds []models.Credential
 	if err := query.Find(&creds).Error; err != nil {
 		return nil, err
 	}
 	return creds, nil
+}
+
+// ListPaged 返回分页凭据列表及总数，按 id ASC 稳定排序。
+func (r *credentialRepo) ListPaged(ctx context.Context, filter CredentialFilter, page, pageSize int) ([]models.Credential, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	base := applyCredentialFilter(r.db.WithContext(ctx).Model(&models.Credential{}), filter)
+	var total int64
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var creds []models.Credential
+	if err := base.Order("id ASC").Limit(pageSize).Offset((page - 1) * pageSize).Find(&creds).Error; err != nil {
+		return nil, 0, err
+	}
+	return creds, total, nil
 }
 
 func (r *credentialRepo) Get(ctx context.Context, id uint) (*models.Credential, error) {

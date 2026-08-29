@@ -8,4 +8,5 @@ func Register(rg gin.IRoutes) {
 	rg.POST("/pools", CreatePool)
 	rg.PUT("/pools/:id", UpdatePool)
 	rg.DELETE("/pools/:id", DeletePool)
+	rg.GET("/pools/:id/credentials", ListCredentials)
 }

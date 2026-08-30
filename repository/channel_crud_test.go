@@ -437,3 +437,67 @@ func TestCredentialRepo_BatchWithinPool(t *testing.T) {
 		t.Fatalf("池B凭据数 = %d, want 1（越池不应被删）", len(byPoolB))
 	}
 }
+
+// TestCredentialRepo_ExistingHashes 锁定批量导入查重的仓储语义：
+// 命中/未命中、池内限界（跨池同 hash 不计）、软删行排除（语义 =「现存未删行去重」）、
+// 空 hashes 不产生查询。
+func TestCredentialRepo_ExistingHashes(t *testing.T) {
+	ctx := context.Background()
+	repo := NewCredentialRepo(newChannelTestDB(t))
+
+	poolA, poolB, groupID := uint(1), uint(2), uint(3)
+	creds := []*models.Credential{
+		{Key: "enc-1", KeyHash: "hash-keep", PoolID: &poolA},
+		{Key: "enc-2", KeyHash: "hash-deleted", PoolID: &poolA},
+		{Key: "enc-3", KeyHash: "hash-poolb", PoolID: &poolB},
+		{Key: "enc-4", KeyHash: "hash-group", GroupID: &groupID},
+	}
+	for _, c := range creds {
+		if err := repo.Create(ctx, c); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+	}
+	// 软删一条，验证查询自动排除
+	if _, err := repo.Delete(ctx, creds[1].ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	// 池A：命中现存行，未命中不返回；池B 与分组行不算池A命中；软删行不算命中
+	got, err := repo.ExistingHashes(ctx, poolA, []string{"hash-keep", "hash-deleted", "hash-poolb", "hash-group", "hash-none"})
+	if err != nil {
+		t.Fatalf("ExistingHashes: %v", err)
+	}
+	if !got["hash-keep"] {
+		t.Fatalf("hash-keep 应命中: %+v", got)
+	}
+	if got["hash-deleted"] {
+		t.Fatalf("软删行 hash-deleted 不应命中: %+v", got)
+	}
+	if got["hash-poolb"] {
+		t.Fatalf("跨池 hash-poolb 不应命中池A: %+v", got)
+	}
+	if got["hash-group"] {
+		t.Fatalf("分组行 hash-group 不应命中池A: %+v", got)
+	}
+	if got["hash-none"] {
+		t.Fatalf("不存在 hash-none 不应命中: %+v", got)
+	}
+	if len(got) != 1 {
+		t.Fatalf("命中数 = %d, want 1: %+v", len(got), got)
+	}
+
+	// 池B 命中自己的行
+	gotB, err := repo.ExistingHashes(ctx, poolB, []string{"hash-poolb", "hash-keep"})
+	if err != nil {
+		t.Fatalf("ExistingHashes(poolB): %v", err)
+	}
+	if !gotB["hash-poolb"] || gotB["hash-keep"] {
+		t.Fatalf("池B查重结果不符: %+v", gotB)
+	}
+
+	// 空 hashes 直接返回空 map（不产生 SQL）
+	empty, err := repo.ExistingHashes(ctx, poolA, nil)
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("ExistingHashes(nil) = (%v, %v), want (empty, nil)", empty, err)
+	}
+}

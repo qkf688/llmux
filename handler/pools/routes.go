@@ -13,6 +13,7 @@ func Register(rg gin.IRoutes) {
 	// batch 固定段优先于 :credId，避免 "batch" 被当成 credId 捕获
 	rg.PATCH("/pools/:id/credentials/batch/status", BatchUpdateCredentialStatus)
 	rg.DELETE("/pools/:id/credentials/batch", BatchDeleteCredentials)
+	rg.POST("/pools/:id/credentials/batch/import", BatchImportCredentials)
 	rg.GET("/pools/:id/credentials/:credId", GetCredential)
 	rg.GET("/pools/:id/credentials/:credId/raw", GetCredentialRaw)
 	rg.PATCH("/pools/:id/credentials/:credId", UpdateCredential)

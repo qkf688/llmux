@@ -30,6 +30,7 @@ func TestRegisterRouteOrder_BatchBeforeCredID(t *testing.T) {
 	}{
 		{"batch/status 固定段优先", "PATCH", "/pools/9999/credentials/batch/status", `{"ids":[1],"status":"disabled"}`},
 		{"batch 固定段优先", "DELETE", "/pools/9999/credentials/batch", `{"ids":[1]}`},
+		{"batch/import 固定段优先", "POST", "/pools/9999/credentials/batch/import", `{"keys":["sk-route-import-ABCD1234"]}`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

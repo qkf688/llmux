@@ -35,6 +35,10 @@ type CredentialRepo interface {
 	UpdateStatusByIDs(ctx context.Context, poolID uint, ids []uint, status string) (int64, error)
 	// DeleteByIDs 批量软删同一号池下指定 IDs 的凭据（池内限界防越池）。
 	DeleteByIDs(ctx context.Context, poolID uint, ids []uint) (int64, error)
+	// ExistingHashes 返回指定号池下现存（未软删）凭据中命中的 KeyHash 集合，
+	// 供批量导入一次查询完成池内查重（防逐条 N+1）。KeyHash 非 unique，去重是
+	// 应用层语义；跨池同 key 复用合法，不在此处做全局拦截。
+	ExistingHashes(ctx context.Context, poolID uint, hashes []string) (map[string]bool, error)
 }
 
 // CredentialFilter 用于凭据 List 查询的筛选条件。
@@ -156,4 +160,21 @@ func (r *credentialRepo) DeleteByIDs(ctx context.Context, poolID uint, ids []uin
 	}
 	result := r.db.WithContext(ctx).Where("pool_id = ? AND id IN ?", poolID, ids).Delete(&models.Credential{})
 	return result.RowsAffected, result.Error
+}
+
+func (r *credentialRepo) ExistingHashes(ctx context.Context, poolID uint, hashes []string) (map[string]bool, error) {
+	existing := map[string]bool{}
+	if len(hashes) == 0 {
+		return existing, nil
+	}
+	var found []string
+	if err := r.db.WithContext(ctx).Model(&models.Credential{}).
+		Where("pool_id = ? AND key_hash IN ?", poolID, hashes).
+		Pluck("key_hash", &found).Error; err != nil {
+		return nil, err
+	}
+	for _, h := range found {
+		existing[h] = true
+	}
+	return existing, nil
 }

@@ -81,3 +81,28 @@ type BatchCredentialDeleteRequest struct {
 type CredentialRawData struct {
 	Key string `json:"key"`
 }
+
+// BatchImportCredentialsRequest 批量粘贴导入请求体（设计定案第 7 节：
+// 前端按行拆分后传数组，服务端不做文本解析）。
+type BatchImportCredentialsRequest struct {
+	Keys []string `json:"keys"`
+}
+
+// BatchImportRow 批量导入逐行回显：与输入 keys 按 Index 一一对应。
+// Key 为掩码形态（空行回空串）；Status ∈ imported|skipped|failed（机器码，
+// 前端映射展示文案）；Reason 仅 skipped/failed 行存在（duplicate_in_batch 等机器码）。
+type BatchImportRow struct {
+	Index  int    `json:"Index"`
+	Key    string `json:"Key"`
+	Status string `json:"Status"`
+	Reason string `json:"Reason,omitempty"`
+}
+
+// BatchImportData 批量导入响应：展示用汇总计数 + 逐行回显（失败行回显）。
+type BatchImportData struct {
+	Total    int              `json:"total"`
+	Imported int              `json:"imported"`
+	Skipped  int              `json:"skipped"`
+	Failed   int              `json:"failed"`
+	Rows     []BatchImportRow `json:"rows"`
+}

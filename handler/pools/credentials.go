@@ -1,6 +1,7 @@
 package pools
 
 import (
+	"context"
 	"errors"
 
 	"github.com/gin-gonic/gin"
@@ -20,6 +21,21 @@ func maskKey(plain string) string {
 	return plain[:3] + "****" + plain[len(plain)-4:]
 }
 
+// requirePool 校验号池存在：不存在写 404、查询异常写 500，返回 false（响应已写出，
+// 调用方直接 return）；存在返回 true。池存在性判定在 pools 域所有凭据端点统一
+// 走此 helper（防 404/500 语义在各 handler 分裂）。
+func requirePool(c *gin.Context, ctx context.Context, poolID uint) bool {
+	if _, err := repos().Pool.Get(ctx, poolID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			httpresp.NotFound(c, "Pool not found")
+			return false
+		}
+		httpresp.InternalServerError(c, err.Error())
+		return false
+	}
+	return true
+}
+
 // ListCredentials 获取指定号池的凭据分页列表（分页/状态筛选/关键词搜索+掩码）。
 // GET /api/pools/:id/credentials?page=&page_size=&status=&q=
 func ListCredentials(c *gin.Context) {
@@ -30,12 +46,7 @@ func ListCredentials(c *gin.Context) {
 
 	// 号池存在性校验：不存在直接 404
 	ctx := c.Request.Context()
-	if _, err := repos().Pool.Get(ctx, poolID); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			httpresp.NotFound(c, "Pool not found")
-			return
-		}
-		httpresp.InternalServerError(c, err.Error())
+	if !requirePool(c, ctx, poolID) {
 		return
 	}
 

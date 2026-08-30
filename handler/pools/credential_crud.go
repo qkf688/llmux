@@ -56,12 +56,7 @@ func CreateCredential(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	if _, err := repos().Pool.Get(ctx, poolID); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			httpresp.NotFound(c, "Pool not found")
-			return
-		}
-		httpresp.InternalServerError(c, err.Error())
+	if !requirePool(c, ctx, poolID) {
 		return
 	}
 
@@ -127,12 +122,7 @@ func CreateCredential(c *gin.Context) {
 // 池不存在 404、凭据不存在 404、越池 404（不暴露凭据存在性）。
 // 返回 false 时响应已写出，调用方直接 return。
 func getCredentialInPool(c *gin.Context, ctx context.Context, poolID, credID uint) (*models.Credential, bool) {
-	if _, err := repos().Pool.Get(ctx, poolID); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			httpresp.NotFound(c, "Pool not found")
-			return nil, false
-		}
-		httpresp.InternalServerError(c, err.Error())
+	if !requirePool(c, ctx, poolID) {
 		return nil, false
 	}
 	cred, err := repos().Credential.Get(ctx, credID)

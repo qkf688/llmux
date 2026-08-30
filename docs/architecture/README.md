@@ -99,6 +99,7 @@ LLMux 是多供应商 LLM API 网关/代理：对外提供 OpenAI / Anthropic �
 | `associations` | 模型-供应商关联与自动关联 | [modules/associations.md](modules/associations.md) |
 | `virtual-models` | 虚拟模型与策略选路 | [modules/virtual-models.md](modules/virtual-models.md) |
 | `pools` | 供应商号池 / 凭据 / 协议端点 / 分组 | [modules/pools.md](modules/pools.md) |
+| `channel-routing` | 供应商内部三层选路（端点匹配 / 分组加权 / 凭据轮询+冷却） | [modules/channel-routing.md](modules/channel-routing.md) |
 | `health-check` | 健康探测与关联启停 | [modules/health-check.md](modules/health-check.md) |
 | `model-sync` | 上游模型同步 | [modules/model-sync.md](modules/model-sync.md) |
 | `logs-metrics` | 请求日志、ChatIO、仪表盘指标 | [modules/logs-metrics.md](modules/logs-metrics.md) |

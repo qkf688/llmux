@@ -14,6 +14,11 @@ import (
 type CredentialRepo interface {
 	// List 返回符合条件的凭据；filter 为零值时返回全部。
 	List(ctx context.Context, filter CredentialFilter) ([]models.Credential, error)
+	// ListByGroups 返回归属命中的凭据：group_id IN groupIDs OR pool_id IN poolIDs，
+	// 按 id ASC 排序。两组都为空时返回 nil（不产生 SQL）。装配层按分组归并用——
+	// 只拉本供应商分组涉及的凭据，避免全表扫描（500 key 量级热路径）。
+	// 凭据 GroupID/PoolID 二选一（设计定案），同一条绝不双计。
+	ListByGroups(ctx context.Context, groupIDs, poolIDs []uint) ([]models.Credential, error)
 	// ListPaged 返回分页凭据列表及总数；page/pageSize 由调用方校验（>=1），
 	// Q 仅对 Note 做 LIKE 匹配（Key 需解密，不在此层搜索）。
 	ListPaged(ctx context.Context, filter CredentialFilter, page, pageSize int) ([]models.Credential, int64, error)
@@ -86,6 +91,31 @@ func applyCredentialFilter(query *gorm.DB, filter CredentialFilter) *gorm.DB {
 func (r *credentialRepo) List(ctx context.Context, filter CredentialFilter) ([]models.Credential, error) {
 	query := applyCredentialFilter(r.db.WithContext(ctx).Model(&models.Credential{}), filter)
 	var creds []models.Credential
+	if err := query.Find(&creds).Error; err != nil {
+		return nil, err
+	}
+	return creds, nil
+}
+
+func (r *credentialRepo) ListByGroups(ctx context.Context, groupIDs, poolIDs []uint) ([]models.Credential, error) {
+	conds := make([]string, 0, 2)
+	args := make([]any, 0, 2)
+	if len(groupIDs) > 0 {
+		conds = append(conds, "group_id IN ?")
+		args = append(args, groupIDs)
+	}
+	if len(poolIDs) > 0 {
+		conds = append(conds, "pool_id IN ?")
+		args = append(args, poolIDs)
+	}
+	if len(conds) == 0 {
+		// 两组皆空：装配侧无任何分组，返回空即可，不产生 SQL 也不必报错
+		return nil, nil
+	}
+	var creds []models.Credential
+	query := r.db.WithContext(ctx).Model(&models.Credential{}).
+		Where(strings.Join(conds, " OR "), args...).
+		Order("id ASC")
 	if err := query.Find(&creds).Error; err != nil {
 		return nil, err
 	}

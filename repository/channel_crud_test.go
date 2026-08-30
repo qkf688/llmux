@@ -441,6 +441,62 @@ func TestCredentialRepo_BatchWithinPool(t *testing.T) {
 // TestCredentialRepo_ExistingHashes 锁定批量导入查重的仓储语义：
 // 命中/未命中、池内限界（跨池同 hash 不计）、软删行排除（语义 =「现存未删行去重」）、
 // 空 hashes 不产生查询。
+
+// TestCredentialRepo_ListByGroups 锁定装配侧收敛查询语义：
+//
+//	命中 = group_id IN ∪ pool_id IN（OR 合并）；同一条凭据只归一侧（二选一）不双计；
+//	结果按 id ASC（组内轮询取模基线）；两组皆空返回空且不产生错误。
+func TestCredentialRepo_ListByGroups(t *testing.T) {
+	ctx := context.Background()
+	db := newChannelTestDB(t)
+	repo := NewCredentialRepo(db)
+
+	poolID := uint(9)
+	if err := db.Create(&[]models.Credential{
+		{Key: "c1", KeyHash: "h1", GroupID: uintPtr(1)},
+		{Key: "c2", KeyHash: "h2", GroupID: uintPtr(2)},
+		{Key: "c3", KeyHash: "h3", GroupID: uintPtr(3)},
+		{Key: "c-pool", KeyHash: "h-pool", PoolID: &poolID},
+	}).Error; err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// 只命中组 2 + 池 9：c2 与 c-pool
+	got, err := repo.ListByGroups(ctx, []uint{1, 2}, []uint{9})
+	if err != nil {
+		t.Fatalf("ListByGroups: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("ListByGroups = %d 条, want 3（组1/组2/池9）", len(got))
+	}
+	if got[0].KeyHash != "h1" || got[1].KeyHash != "h2" || got[2].KeyHash != "h-pool" {
+		t.Fatalf("ListByGroups 顺序 = [%s %s %s], want [h1 h2 h-pool]（id ASC）", got[0].KeyHash, got[1].KeyHash, got[2].KeyHash)
+	}
+
+	// 组集合不含任何命中 → 空
+	empty, err := repo.ListByGroups(ctx, []uint{99}, nil)
+	if err != nil {
+		t.Fatalf("ListByGroups(99): %v", err)
+	}
+	if len(empty) != 0 {
+		t.Fatalf("ListByGroups(99) = %d 条, want 0", len(empty))
+	}
+
+	// 两组皆空 → nil 不产生 SQL
+	noop, err := repo.ListByGroups(ctx, nil, nil)
+	if err != nil {
+		t.Fatalf("ListByGroups(nil,nil): %v", err)
+	}
+	if noop != nil {
+		t.Fatalf("ListByGroups(nil,nil) = %v, want nil", noop)
+	}
+}
+
+func uintPtr(v uint) *uint { return &v }
+
+// TestCredentialRepo_ExistingHashes 锁定批量导入查重的仓储语义：
+// 命中/未命中、池内限界（跨池同 hash 不计）、软删行排除（语义 =「现存未删行去重」）、
+// 空 hashes 不产生查询。
 func TestCredentialRepo_ExistingHashes(t *testing.T) {
 	ctx := context.Background()
 	repo := NewCredentialRepo(newChannelTestDB(t))

@@ -78,6 +78,7 @@ make webui            # 生产构建供 Go embed：cd webui && pnpm install && p
 | 任务 | 先看这些文件 | 参考 |
 |------|-------------|------|
 | 改代理主路径 / 选路 / 重试 / 流式回写 | `handler/v1/`、`service/chat/`（`before.go` / `process.go` / `chat_balance*.go` / `chat_attempt.go`）、`service/chatcore/`、`balancer/`、`service/chat_facade.go` | [modules/chat-gateway.md](docs/architecture/modules/chat-gateway.md) |
+| 改供应商内部选路（端点匹配 / 分组 / 凭据轮询+冷却） | `service/channel/`（`selector.go` `assemble.go` 及其余）、`consts/protocol.go`、`repository/`（endpoint / key_group / credential） | [modules/channel-routing.md](docs/architecture/modules/channel-routing.md) |
 | 新增 / 修改客户端协议 style（OpenAI / Anthropic / Responses） | `service/chat/registry.go` + `before.go` / `process.go`、`service/transform/`（adapter + streaming）、`handler/register_v1.go`、`consts/consts.go`、`models/unified/` | [modules/protocol-transform.md](docs/architecture/modules/protocol-transform.md)、[modules/chat-gateway.md](docs/architecture/modules/chat-gateway.md) |
 | 新增 / 修改上游供应商 type | `providers/`（实现 + `init` 中 `Register`/`RegisterMetadata`）、`handler/providerapi/`、grep 外围 type 分支（providerapi / testapi / chat 预处理） | [modules/providers.md](docs/architecture/modules/providers.md) |
 | 改虚拟模型策略 / 映射 / 第一层 LB | `service/virtualmodel/`（`selector.go`、`*_selector.go`、`service.go`）、`handler/virtualmodels/`、`repository/virtual_model.go`、前端 `webui/src/routes/virtual-models/` | [modules/virtual-models.md](docs/architecture/modules/virtual-models.md)、[docs/virtual-models-guide.md](docs/virtual-models-guide.md) |

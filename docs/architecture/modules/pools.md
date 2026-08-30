@@ -47,6 +47,7 @@ common/credentialcrypto/ # AES-256-GCM 加密 + KeyHash + 密钥引导
 | `CredentialRepo.UpdateStatusByIDs` | 批量更新同一号池下 IDs 状态（`WHERE pool_id AND id IN`，越池 ID 不命中） | `repository/credential.go` | 同文件 |
 | `CredentialRepo.DeleteByIDs` | 批量软删同一号池下 IDs 凭据（池内限界，防越池误删） | `repository/credential.go` | 同文件 |
 | `CredentialRepo.ExistingHashes` | 批量导入查重：返回号池下现存（未软删）凭据命中的 KeyHash 集合，一次查询防 N+1 | `repository/credential.go` | 同文件 |
+| `CredentialRepo.ListByGroups` | 装配侧收敛查询：`group_id IN groupIDs OR pool_id IN poolIDs`，按 `id ASC`；两组皆空返回 nil 不产生 SQL；凭据 GroupID/PoolID 二选一，绝不双计（S3 选路热路径用，避免全表扫描） | `repository/credential.go` | 同文件 |
 | 批量导入语义 | `POST .../batch/import` `{"keys":[...]}`：批内首现 + 池内 `KeyHash` 双重去重（判定顺序：批内首现先于池内——同 key 批内重复∧池内已有时，首现行 duplicate_in_pool、重复行 duplicate_in_batch）；行级失败隔离（逐行独立落库，无共享事务；单行加密/落库异常收集为 failed 不阻断其余行）；逐行回显 `rows`（`Index`/掩码 `Key`/`Status` ∈ imported|skipped|failed/`Reason` 机器码 duplicate_in_batch、duplicate_in_pool、empty、encrypt_failed、db_failed）；单请求上限 500，超限 400；空数组 400；池不存在 404；`Default()==nil` 500 | `handler/pools/credential_batch.go` `BatchImportCredentials` | `importCredentialRows`（加密/落库失败经注入桩覆盖测试） |
 | `KeyGroupRepo.CountByPoolIDs` | 号池被分组引用计数（删除守卫依据） | `repository/key_group.go` | 同文件 |
 | `PoolListItem` | `/api/pools` 列表项：内嵌 `models.Pool`（PascalCase 直返）+ `KeyCount`/`StatusCounts`/`ReferencedBy` | `handler/pools/types.go` | `handler/pools/crud.go` |

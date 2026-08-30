@@ -31,6 +31,10 @@ type CredentialRepo interface {
 	// DeleteByPoolID 删除指定号池下的全部凭据（软删），返回受影响行数。
 	// 号池删除时的级联清理用；分组内联凭据（GroupID 归属）不受影响。
 	DeleteByPoolID(ctx context.Context, poolID uint) (int64, error)
+	// UpdateStatusByIDs 批量更新同一号池下指定 IDs 的状态（池内限界防越池）。
+	UpdateStatusByIDs(ctx context.Context, poolID uint, ids []uint, status string) (int64, error)
+	// DeleteByIDs 批量软删同一号池下指定 IDs 的凭据（池内限界防越池）。
+	DeleteByIDs(ctx context.Context, poolID uint, ids []uint) (int64, error)
 }
 
 // CredentialFilter 用于凭据 List 查询的筛选条件。
@@ -135,5 +139,21 @@ func (r *credentialRepo) Delete(ctx context.Context, id uint) (int64, error) {
 
 func (r *credentialRepo) DeleteByPoolID(ctx context.Context, poolID uint) (int64, error) {
 	result := r.db.WithContext(ctx).Where("pool_id = ?", poolID).Delete(&models.Credential{})
+	return result.RowsAffected, result.Error
+}
+
+func (r *credentialRepo) UpdateStatusByIDs(ctx context.Context, poolID uint, ids []uint, status string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	result := r.db.WithContext(ctx).Model(&models.Credential{}).Where("pool_id = ? AND id IN ?", poolID, ids).Updates(map[string]any{"status": status})
+	return result.RowsAffected, result.Error
+}
+
+func (r *credentialRepo) DeleteByIDs(ctx context.Context, poolID uint, ids []uint) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	result := r.db.WithContext(ctx).Where("pool_id = ? AND id IN ?", poolID, ids).Delete(&models.Credential{})
 	return result.RowsAffected, result.Error
 }

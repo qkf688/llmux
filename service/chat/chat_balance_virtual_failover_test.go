@@ -31,7 +31,8 @@ func TestBalanceChatVirtual_PoolExhausted_TriesNextRealModel(t *testing.T) {
 		}
 	}
 
-	// type 未注册 → providers.New 必然失败，循环淘汰该候选后报告穷尽。
+	// DB 无该供应商的端点/分组/凭据 → 选路（channel Select）必然失败，
+	// 循环淘汰该候选后报告穷尽。
 	provider := models.Provider{Name: "bad-provider", Type: "no-such-provider-type"}
 	if err := models.DB.Create(&provider).Error; err != nil {
 		t.Fatalf("create provider: %v", err)

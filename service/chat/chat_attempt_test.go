@@ -13,7 +13,18 @@ import (
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/providers"
+	"github.com/qkf688/llmux/service/channel"
 )
+
+// selectionForEndpoint 构造 attempt 测试所需的选路命中（透传判定取数点
+// 按选中端点协议，attempt 直调用例不再经 retry loop 的 Select）。
+// ⚠️ 只填 Endpoint（attempt 内当前仅消费 Endpoint.Protocol）；#13 在 attempt
+// 消费 UpstreamURL/Config 记录 ChatLog 时，此处 4 个直调点须同步补填。
+func selectionForEndpoint(protocol string) channel.SelectionResult {
+	return channel.SelectionResult{
+		Endpoint: models.Endpoint{Protocol: protocol},
+	}
+}
 
 func TestApplyProviderSelectionResult_ReduceWeight(t *testing.T) {
 	weightItems := map[uint]int{1: 9}
@@ -76,7 +87,7 @@ func TestBuildRequestBodyForProvider_OpenAI_MissingToolCallFunctionName_ReturnsH
 
 	_, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
 		Style:            string(consts.StyleOpenAI),
-		ProviderType:     providers.TypeOpenAI,
+		EndpointProtocol: consts.ProtocolOpenAI,
 		Raw:              raw,
 		MaxTokensLimit:   nil,
 		SupportsThinking: true,
@@ -113,7 +124,7 @@ func TestBuildRequestBodyForProvider_OpenAI_ValidToolCall_Passes(t *testing.T) {
 
 	got, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
 		Style:            string(consts.StyleOpenAI),
-		ProviderType:     providers.TypeOpenAI,
+		EndpointProtocol: consts.ProtocolOpenAI,
 		Raw:              raw,
 		MaxTokensLimit:   nil,
 		SupportsThinking: true,
@@ -491,6 +502,7 @@ func TestExecuteSingleProviderAttempt_NonOKResponse_BackfillsProxyTime(t *testin
 		ReqMeta:           models.ReqMeta{Header: http.Header{}},
 		Provider:          providerRow,
 		ModelWithProvider: mwp,
+		Selection:         selectionForEndpoint(string(consts.ProtocolOpenAI)),
 		ChatModel:         chatModel,
 		Client:            srv.Client(),
 	}, make(chan models.ChatLog))
@@ -542,6 +554,7 @@ func TestExecuteSingleProviderAttempt_DoError_BackfillsProxyTime(t *testing.T) {
 		ReqMeta:           models.ReqMeta{Header: http.Header{}},
 		Provider:          providerRow,
 		ModelWithProvider: mwp,
+		Selection:         selectionForEndpoint(string(consts.ProtocolOpenAI)),
 		ChatModel:         chatModel,
 		Client:            &http.Client{Timeout: 200 * time.Millisecond},
 	}, make(chan models.ChatLog))
@@ -598,6 +611,7 @@ func TestExecuteSingleProviderAttempt_TransformResponseError_BackfillsProxyTime(
 		ReqMeta:           models.ReqMeta{Header: http.Header{}},
 		Provider:          providerRow,
 		ModelWithProvider: mwp,
+		Selection:         selectionForEndpoint(string(consts.ProtocolAnthropic)),
 		ChatModel:         chatModel,
 		Client:            srv.Client(),
 	}, make(chan models.ChatLog))
@@ -654,6 +668,7 @@ func TestExecuteSingleProviderAttempt_BuildReqError_RetryLogCarriesProxyTime(t *
 		ReqMeta:           models.ReqMeta{Header: http.Header{}},
 		Provider:          providerRow,
 		ModelWithProvider: mwp,
+		Selection:         selectionForEndpoint(string(consts.ProtocolOpenAI)),
 		ChatModel:         buildReqErrProvider{},
 		Client:            &http.Client{},
 	}, retryChan)

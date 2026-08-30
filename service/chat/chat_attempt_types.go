@@ -7,6 +7,7 @@ import (
 
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/providers"
+	"github.com/qkf688/llmux/service/channel"
 )
 
 type singleProviderAttemptInput struct {
@@ -21,7 +22,11 @@ type singleProviderAttemptInput struct {
 	Provider          models.Provider
 	ModelWithProvider models.ModelWithProvider
 	// Model 当前尝试关联所属的真实模型；用于 SupportsThinkingResolved 的 model 继承来源。
-	Model     *models.Model
+	Model *models.Model
+	// Selection 选路命中结果（端点/分组/凭据）。透传判定取数点（请求/响应两侧）
+	// 按选中端点协议；#13 的故障记录（端点/URL/分组/凭据）同样从这里取。
+	// 生产路径由 retry loop 传入，测试直接构造。
+	Selection channel.SelectionResult
 	ChatModel providers.Provider
 	Client    *http.Client
 }

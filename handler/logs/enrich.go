@@ -84,6 +84,11 @@ func enrichChatLogs(ctx context.Context, logs []models.ChatLog, includeRaw bool)
 		// OpenAI 兼容的新上游误报成有转换（两端 body 形状其实一致，代理走的是直通）。
 		// 任一侧解析不出形状（provider 已删、type 未注册）时判为无转换：宁可少报，
 		// 不要凭字符串不等造一条假的转换记录。
+		//
+		// ⚠️ 取数点分叉（已知，#13 履行）：S3-2 起运行时透传判定按**选中端点协议**
+		// （chat_attempt.go 两侧同源），本处仍按 Provider.Type 回放——对多协议端点
+		// 供应商（type=openai + anthropic 端点）会回放出与请求实际行为相反的转换标签。
+		// #13 把命中端点协议落入 ChatLog 后，此处必须改为消费该字段，与 chat 链路同源。
 		clientFormat, clientFormatOK := consts.WireFormatOfStyle(consts.Style(log.Style))
 		upstreamFormat, upstreamFormatOK := providers.WireFormatOf(providerType)
 		hasFormatConversion := clientFormatOK && upstreamFormatOK && clientFormat != upstreamFormat

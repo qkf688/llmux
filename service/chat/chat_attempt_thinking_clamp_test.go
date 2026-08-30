@@ -210,7 +210,7 @@ func TestBuildRequestBodyForProvider_TransformClamp(t *testing.T) {
 		raw := []byte(`{"model":"m","max_tokens":64000,"messages":[{"role":"user","content":"hi"}],"reasoning_effort":"high"}`)
 		result, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
 			Style:            string(consts.StyleOpenAI),
-			ProviderType:     providers.TypeAnthropic,
+			EndpointProtocol: consts.ProtocolAnthropic,
 			Raw:              raw,
 			SupportsThinking: true,
 			ThinkingClamp:    clamp,
@@ -240,7 +240,7 @@ func TestBuildRequestBodyForProvider_PassthroughClamp(t *testing.T) {
 		raw := []byte(`{"model":"m","reasoning_effort":"high"}`)
 		result, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
 			Style:            string(consts.StyleOpenAI),
-			ProviderType:     providers.TypeOpenAI,
+			EndpointProtocol: consts.ProtocolOpenAI,
 			Raw:              raw,
 			SupportsThinking: true,
 			ThinkingClamp:    clamp,
@@ -262,7 +262,7 @@ func TestBuildRequestBodyForProvider_SupportsThinkingFalse_StripsAndNoClamp(t *t
 	raw := []byte(`{"model":"m","reasoning_effort":"high"}`)
 	result, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
 		Style:            string(consts.StyleOpenAI),
-		ProviderType:     providers.TypeOpenAI,
+		EndpointProtocol: consts.ProtocolOpenAI,
 		Raw:              raw,
 		SupportsThinking: false,
 		ThinkingClamp:    nil, // supportsThinking=false → 不钳制
@@ -289,7 +289,7 @@ func TestBuildRequestBodyForProvider_BudgetNotClampedWhenEffortNotClamped(t *tes
 		raw := []byte(`{"model":"m","output_config":{"effort":"high"},"thinking":{"budget_tokens":50000}}`)
 		result, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
 			Style:            string(consts.StyleAnthropic),
-			ProviderType:     providers.TypeAnthropic,
+			EndpointProtocol: consts.ProtocolAnthropic,
 			Raw:              raw,
 			SupportsThinking: true,
 			ThinkingClamp:    clamp,
@@ -408,7 +408,7 @@ func TestBuildRequestBodyForProvider_ABStageBoundary_MinimalPreserved(t *testing
 	raw := []byte(`{"model":"m","reasoning_effort":"minimal"}`)
 	result, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
 		Style:            string(consts.StyleOpenAI),
-		ProviderType:     providers.TypeOpenAI,
+		EndpointProtocol: consts.ProtocolOpenAI,
 		Raw:              raw,
 		SupportsThinking: true,
 		ThinkingClamp:    clamp,
@@ -571,7 +571,7 @@ func TestReconcileThinkingBudget_BothPathsAgree(t *testing.T) {
 	passthroughRaw := []byte(`{"model":"m","max_tokens":64000,"messages":[{"role":"user","content":"hi"}],"output_config":{"effort":"high"},"thinking":{"type":"enabled","budget_tokens":50000}}`)
 	passthroughOut, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
 		Style:            string(consts.StyleAnthropic),
-		ProviderType:     providers.TypeAnthropic,
+		EndpointProtocol: consts.ProtocolAnthropic,
 		Raw:              passthroughRaw,
 		MaxTokensLimit:   &limit,
 		SupportsThinking: true,
@@ -585,7 +585,7 @@ func TestReconcileThinkingBudget_BothPathsAgree(t *testing.T) {
 	transformRaw := []byte(`{"model":"m","max_tokens":64000,"messages":[{"role":"user","content":"hi"}],"reasoning_effort":"high"}`)
 	transformOut, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
 		Style:            string(consts.StyleOpenAI),
-		ProviderType:     providers.TypeAnthropic,
+		EndpointProtocol: consts.ProtocolAnthropic,
 		Raw:              transformRaw,
 		MaxTokensLimit:   &limit,
 		SupportsThinking: true,
@@ -627,7 +627,7 @@ func TestReconcileThinkingBudget_AnthropicDefaultMaxTokens(t *testing.T) {
 	raw := []byte(`{"model":"m","messages":[{"role":"user","content":"hi"}],"reasoning_effort":"high"}`)
 	result, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
 		Style:            string(consts.StyleOpenAI),
-		ProviderType:     providers.TypeAnthropic,
+		EndpointProtocol: consts.ProtocolAnthropic,
 		Raw:              raw,
 		MaxTokensLimit:   nil, // 无运维上限，非法组合纯由出站默认 max_tokens 造成
 		SupportsThinking: true,
@@ -692,7 +692,7 @@ func TestBuildRequestBody_InterleavedBetaSkipsReconcile(t *testing.T) {
 
 	result, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
 		Style:                      string(consts.StyleAnthropic),
-		ProviderType:               providers.TypeAnthropic,
+		EndpointProtocol:           consts.ProtocolAnthropic,
 		Raw:                        raw,
 		MaxTokensLimit:             &limit, // 压 max_tokens 到 8192，本会造出 budget >= max_tokens
 		SupportsThinking:           true,

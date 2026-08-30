@@ -6,8 +6,10 @@ import (
 	"time"
 
 	"github.com/qkf688/llmux/common/bgtask"
+	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/providers"
+	"github.com/qkf688/llmux/service/channel"
 	"github.com/qkf688/llmux/service/chatcore"
 )
 
@@ -84,6 +86,10 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 	modelWithProviderMap := in.Pool.ModelWithProviderMap
 	bgtask.Go(func(ctx context.Context) { RecordRetryLog(ctx, retryLog, modelWithProviderMap) })
 
+	// style 已由 handler 层固定路由校验，必可解析（与 attempt 内同容忍度）。
+	// 循环不变量，提到循环外只算一次。
+	clientWire, _ := consts.WireFormatOfStyle(consts.Style(in.Style))
+
 	for retry := range in.MaxRetry {
 		select {
 		case <-in.Ctx.Done():
@@ -108,7 +114,33 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 		}
 
 		provider := in.Pool.ProviderMap[modelWithProvider.ProviderID]
-		chatModel, err := providers.New(provider.Type, provider.Config, provider.Proxy)
+
+		// 选路：端点 → 分组 → 凭据（service/channel 三层）。任何一层失败只淘汰该候选
+		// （与 providers.New 失败同语义），池中其余候选仍应尝试；凭据级/组织级的
+		// 分层处置（组内换 key、冷却）属 #13，此处不区分 sentinel。
+		snapshot, err := channel.NewAssembler(repos()).Assemble(in.Ctx, provider)
+		if err != nil {
+			slog.Error("failed to assemble channel snapshot", retryLogAttrs(in.LogAttrs, "provider", provider.Name, "error", err)...)
+			delete(in.Pool.WeightItems, *id)
+			continue
+		}
+		// 进程级共享选路器：轮询状态（分组档内 / 凭据组内）跨请求推进；新建实例
+		// 会让指针恒从 0 起算、多凭据/多组退化为确定性首选（见 channel.Select 注释）。
+		selection, err := channel.DefaultSelector().Select(snapshot, clientWire, in.RealModelName, time.Now())
+		if err != nil {
+			slog.Error("no channel selection", retryLogAttrs(in.LogAttrs, "provider", provider.Name, "error", err)...)
+			delete(in.Pool.WeightItems, *id)
+			continue
+		}
+		// 防御性分支（不变量）：Select 成功则端点协议必在 protocolMetaTable 中——
+		// SelectEndpoint 已按同一张表过滤未知协议端点，TypeOfProtocol 与之共享表不可能发散。
+		providerType, ok := consts.TypeOfProtocol(consts.Protocol(selection.Endpoint.Protocol))
+		if !ok {
+			slog.Error("unknown endpoint protocol", retryLogAttrs(in.LogAttrs, "provider", provider.Name, "protocol", selection.Endpoint.Protocol)...)
+			delete(in.Pool.WeightItems, *id)
+			continue
+		}
+		chatModel, err := providers.New(providerType, selection.Config, provider.Proxy)
 		if err != nil {
 			// 单个供应商实例化失败（配置损坏等）只淘汰该候选，池中其余候选仍应尝试。
 			slog.Error("failed to create provider", retryLogAttrs(in.LogAttrs, "provider", provider.Name, "error", err)...)
@@ -136,6 +168,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 			Provider:          provider,
 			ModelWithProvider: modelWithProvider,
 			Model:             in.Model,
+			Selection:         selection,
 			ChatModel:         chatModel,
 			Client:            client,
 		}, retryLog)

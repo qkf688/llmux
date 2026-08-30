@@ -40,6 +40,7 @@ func (timeoutSettingsReader) String(_ context.Context, _ string, def string) str
 // Deadline 同步耗尽，候选 2 必然 aborted、断言变红——本用例能区分新旧语义。
 func TestBalanceChat_HeaderTimeout_CandidateHasFullWindow(t *testing.T) {
 	initChatRecordTestDB(t)
+	cipher := setupChatChannelCipher(t)
 	SetSettingsReader(timeoutSettingsReader{})
 	t.Cleanup(func() { SetSettingsReader(nil) })
 
@@ -67,6 +68,8 @@ func TestBalanceChat_HeaderTimeout_CandidateHasFullWindow(t *testing.T) {
 		if err := models.DB.Create(p).Error; err != nil {
 			t.Fatalf("create provider: %v", err)
 		}
+		// S3-2 起凭据走加密 credentials 表：补老 Provider 等价形态（端点/分组/内联凭据）。
+		addLegacyChannelRows(t, cipher, *p)
 	}
 	mwpSlow := models.ModelWithProvider{ModelID: model.ID, ProviderID: providerSlow.ID, ProviderModel: "slow-upstream", Weight: 10, Priority: 10}
 	mwpFast := models.ModelWithProvider{ModelID: model.ID, ProviderID: providerFast.ID, ProviderModel: "fast-upstream", Weight: 10, Priority: 5}

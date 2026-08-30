@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/qkf688/llmux/consts"
-	"github.com/qkf688/llmux/providers"
 	preprocessopenai "github.com/qkf688/llmux/service/chat/preprocess/openai"
 	"github.com/qkf688/llmux/service/transform"
 	"github.com/tidwall/gjson"
@@ -18,11 +17,11 @@ import (
 )
 
 // ProviderRequestCaps 聚合 buildRequestBodyForProvider 的全部请求体改写参数。
-// 重构自 6 个位置参数（style/providerType/raw/maxTokensLimit/supportsThinking + thinkingClamp），
+// 重构自 6 个位置参数（style/endpointProtocol/raw/maxTokensLimit/supportsThinking + thinkingClamp），
 // 避免继续横向膨胀。新增改写型能力字段时追加到此结构体，不再加位置参数。
 type ProviderRequestCaps struct {
 	Style            string                         // 客户端协议格式
-	ProviderType     string                         // 上游供应商格式
+	EndpointProtocol consts.Protocol                // 选中端点出站协议（透传判定取数点，S3-2 起替代 Provider.Type）
 	Raw              []byte                         // 原始请求体
 	MaxTokensLimit   *int                           // max_tokens 上限，nil=不限
 	SupportsThinking bool                           // 关联最终是否支持 thinking（SupportsThinkingResolved 结果）
@@ -53,11 +52,13 @@ func withOptionalRequestTrace(ctx context.Context) context.Context {
 // 改动时须同步两条路径的测试。
 func buildRequestBodyForProvider(ctx context.Context, caps ProviderRequestCaps) ([]byte, bool, error) {
 	style := caps.Style
-	providerType := caps.ProviderType
 	raw := caps.Raw
 
-	// 选路依据是**协议形状**，provider type 只回答「哪一家」：openai 客户端打一家 OpenAI
-	// 兼容的新上游时两端形状相同，应走 passthrough，而不是因 type 字符串不同白跑一趟转换。
+	// 选路依据是**协议形状**，端点协议直接回答「出站是哪一种形状」：openai 客户端打一家
+	// OpenAI 兼容的新上游（端点协议同为 openai）时两端形状相同，应走 passthrough，
+	// 而不是因 type 字符串不同白跑一趟转换。
+	// S3-2 起取数点从 Provider.Type 换成选中端点协议——协议形状与 type 字符串解耦，
+	// 多协议端点供应商按请求实际命中的端点判定（定点定协议，透传/转换各走其路）。
 	//
 	// TODO: caps.Style 仍是裸 string，此处显式转换成 consts.Style。把 Style 端到端改成
 	// consts.Style（handler/v1 → chat input → caps）可以省掉这次转换，属独立重构。
@@ -65,9 +66,9 @@ func buildRequestBodyForProvider(ctx context.Context, caps ProviderRequestCaps) 
 	if !ok {
 		return nil, false, fmt.Errorf("client style %q has no registered wire format", style)
 	}
-	upstreamFormat, ok := providers.WireFormatOf(providerType)
+	upstreamFormat, ok := consts.WireFormatOfProtocol(caps.EndpointProtocol)
 	if !ok {
-		return nil, false, fmt.Errorf("provider type %q declares no wire format", providerType)
+		return nil, false, fmt.Errorf("endpoint protocol %q has no wire format", caps.EndpointProtocol)
 	}
 
 	// 裁剪 thinking 字段：model/关联不支持 thinking 时去掉请求中的思考配置，
@@ -76,7 +77,7 @@ func buildRequestBodyForProvider(ctx context.Context, caps ProviderRequestCaps) 
 	raw = stripThinkingFields(raw, caps.SupportsThinking)
 
 	if clientFormat == upstreamFormat {
-		slog.Debug("passthrough mode", "client_format", clientFormat, "upstream_format", upstreamFormat, "provider_type", providerType)
+		slog.Debug("passthrough mode", "client_format", clientFormat, "upstream_format", upstreamFormat, "endpoint_protocol", caps.EndpointProtocol)
 		// passthrough 路径思考档位钳制（同格式 1×1，对 raw body 按协议形状钳制）
 		if caps.ThinkingClamp != nil {
 			raw = clampPassthroughReasoning(raw, clientFormat, caps.ThinkingClamp)

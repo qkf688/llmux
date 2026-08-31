@@ -10,11 +10,14 @@ import (
 	"github.com/qkf688/llmux/models"
 )
 
-// minimalCredentialCooldown 凭据最小冷却窗口（设计定案第 4/5 节的 S3 先行版）：
-// 429/5xx/网络/鉴权失败后冷却该凭据，窗口内选路剔除（channel 的 credentialUsable
-// 判定「CooldownUntil > now 即冷却中」），到期自动恢复、不占状态位。
-// S3 先取统一常量；S4 完整状态机替换为「可配基数」设置项并按失败类型分窗。
-const minimalCredentialCooldown = 1 * time.Minute
+// cooldownReason429 429 限流冷却 reason 机器码：分窗判定（cooldownWindowForReason）
+// 与产出侧（cooldownReasonForStatus）共用的唯一来源，改动必须同步两处，
+// 否则分窗判定会静默失效（429 掉进服务端窗口）。
+const cooldownReason429 = "http_429"
+
+// cooldownReasonNetwork 网络/超时失败 reason 机器码（调用点唯一来源，
+// 与 cooldownReasonForStatus 产出的 http_<code> 序列并列）。
+const cooldownReasonNetwork = "network"
 
 // classifyCredentialFailure 判定一次失败是否属于「凭据级」——该凭据自身的问题
 // （限流/服务端错误/鉴权），换一条 key 可能成功，组内故障转移（#13）以此换 key；
@@ -31,12 +34,13 @@ func classifyCredentialFailure(statusCode int) bool {
 	return false
 }
 
-// cooldownReasonForStatus 冷却原因机器码（供 S4 状态机/前端文案映射消费；
-// 5xx 直接带状态码便于排查，不细分 5xx 子类——S4 如需按类分窗再拆）。
+// cooldownReasonForStatus 冷却原因机器码（供状态机/前端文案映射消费；
+// 5xx 直接带状态码便于排查，不细分 5xx 子类——#6-1 分窗按 reason 前缀分派，
+// 5xx 与网络/鉴权都落在 server 窗，不依赖子类细分）。
 func cooldownReasonForStatus(statusCode int) string {
 	switch {
 	case statusCode == http.StatusTooManyRequests:
-		return "http_429"
+		return cooldownReason429 // 单源：与 cooldownWindowForReason 分窗判定共用
 	case statusCode == http.StatusUnauthorized:
 		return "http_401"
 	case statusCode == http.StatusForbidden:
@@ -46,7 +50,21 @@ func cooldownReasonForStatus(statusCode int) string {
 	}
 }
 
+// cooldownWindowForReason 按失败类型分配冷却窗口（#6-1 可配基数 + 分窗）：
+// 429/过载独立读「429 窗口」；其余凭据级失败（5xx/超时/网络）共用「服务端窗口」；
+// 401/403 在 #6-2 判停落地前同归服务端窗（过渡期，默认 60s 与 S3 行为一致）。
+// 分窗判定集中此一处（OCP）：复用既有窗口的新失败类型此判定即覆盖（多半连这都不用改）；
+// 但「新窗口」类型需同步设置项全链 6 处（键常量/schema/DTO/前端 interface/卡片 intFields/本函数）。
+func cooldownWindowForReason(ctx context.Context, reason string) time.Duration {
+	if reason == cooldownReason429 {
+		return time.Duration(getCredHealthCooldown429Sec(ctx)) * time.Second
+	}
+	return time.Duration(getCredHealthCooldownServerSec(ctx)) * time.Second
+}
+
 // applyCredentialCooldown 写单条凭据的冷却状态（CooldownUntil 到期自动恢复）。
+// 窗口 = 按失败类型分窗读设置项（见 cooldownWindowForReason），非固定常量；
+// 行为经逐请求读库即时生效，修改设置项无需重载。
 // 写库失败仅告警不阻断：选路指针「选择即推进」保证同请求内即使冷却未生效，
 // 也不会反复选出同一条 key（配合 retry loop 的组内换 key 上限收敛）。
 func applyCredentialCooldown(ctx context.Context, cred models.Credential, reason string) {
@@ -55,8 +73,9 @@ func applyCredentialCooldown(ctx context.Context, cred models.Credential, reason
 		// 生产路径 Select 成功必有 Credential，此处只是防御壳非兼容分支。
 		return
 	}
+	window := cooldownWindowForReason(ctx, reason)
 	if _, err := repos().Credential.UpdateFields(ctx, cred.ID, map[string]any{
-		"cooldown_until":  time.Now().Add(minimalCredentialCooldown),
+		"cooldown_until":  time.Now().Add(window),
 		"cooldown_reason": reason,
 	}); err != nil {
 		slog.Warn("failed to apply credential cooldown", "credential_id", cred.ID, "reason", reason, "error", err)

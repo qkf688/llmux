@@ -42,6 +42,8 @@ func TestClassifyCredentialFailure(t *testing.T) {
 
 func TestApplyCredentialCooldown(t *testing.T) {
 	initChatRecordTestDB(t)
+	SetSettingsReader(credCooldownSettingsReader{Cooldown429Sec: 60, CooldownServerSec: 60})
+	t.Cleanup(func() { SetSettingsReader(nil) })
 
 	grp := models.KeyGroup{ProviderID: 1, Name: "g1", Weight: 1}
 	if err := models.DB.Create(&grp).Error; err != nil {
@@ -61,11 +63,84 @@ func TestApplyCredentialCooldown(t *testing.T) {
 	if got.CooldownUntil == nil {
 		t.Fatalf("CooldownUntil = nil, want 窗口内冷却已写入")
 	}
-	if time.Until(*got.CooldownUntil) > minimalCredentialCooldown+time.Second {
-		t.Fatalf("CooldownUntil = %v, want within %v", time.Until(*got.CooldownUntil), minimalCredentialCooldown)
+	if diff := time.Until(*got.CooldownUntil); diff > 61*time.Second {
+		t.Fatalf("CooldownUntil = %v, want within 60s window", diff)
 	}
 	if got.CooldownReason != "http_429" {
 		t.Fatalf("CooldownReason = %q, want http_429", got.CooldownReason)
+	}
+}
+
+// credCooldownSettingsReader 测试用 settings.Reader stub：只覆写凭据冷却两键，
+// 其余回退 defaultValue。窗口最小粒度秒。
+type credCooldownSettingsReader struct {
+	Cooldown429Sec    int
+	CooldownServerSec int
+}
+
+func (r credCooldownSettingsReader) Bool(_ context.Context, _ string, def bool) bool { return def }
+
+func (r credCooldownSettingsReader) Int(_ context.Context, key string, def, _ int) int {
+	switch key {
+	case models.SettingKeyCredHealthCooldown429Sec:
+		return r.Cooldown429Sec
+	case models.SettingKeyCredHealthCooldownServerSec:
+		return r.CooldownServerSec
+	}
+	return def
+}
+
+func (r credCooldownSettingsReader) String(_ context.Context, _ string, def string) string {
+	return def
+}
+
+// TestApplyCredentialCooldown_ConfigurableWindows 锁「冷却窗口可配 + 按失败类型分窗」（#6-1）：
+// 429 走 429 窗口独立读设置项；5xx/网络/401(过渡期) 共用服务端窗口。reason 机器码不变。
+func TestApplyCredentialCooldown_ConfigurableWindows(t *testing.T) {
+	initChatRecordTestDB(t)
+	SetSettingsReader(credCooldownSettingsReader{Cooldown429Sec: 10, CooldownServerSec: 120})
+	t.Cleanup(func() { SetSettingsReader(nil) })
+
+	cases := []struct {
+		name    string
+		reason  string
+		wantSec int
+	}{
+		{"429 限流走 429 窗口", "http_429", 10},
+		{"5xx 服务端走 server 窗口", "http_500", 120},
+		{"网络失败走 server 窗口", "network", 120},
+		{"401 过渡期走 server 窗口", "http_401", 120},
+		{"403 过渡期走 server 窗口", "http_403", 120},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			grp := models.KeyGroup{ProviderID: 1, Name: "g1", Weight: 1}
+			if err := models.DB.Create(&grp).Error; err != nil {
+				t.Fatalf("create key group: %v", err)
+			}
+			cred := models.Credential{GroupID: &grp.ID, Key: "enc", KeyHash: "hash"}
+			if err := models.DB.Create(&cred).Error; err != nil {
+				t.Fatalf("create credential: %v", err)
+			}
+
+			before := time.Now()
+			applyCredentialCooldown(context.Background(), cred, tc.reason)
+
+			var got models.Credential
+			if err := models.DB.First(&got, cred.ID).Error; err != nil {
+				t.Fatalf("reload credential: %v", err)
+			}
+			if got.CooldownUntil == nil {
+				t.Fatalf("CooldownUntil = nil, want 冷却已写入")
+			}
+			want := time.Duration(tc.wantSec) * time.Second
+			if got.CooldownUntil.Before(before.Add(want-time.Second)) || got.CooldownUntil.After(before.Add(want+time.Second)) {
+				t.Fatalf("CooldownUntil = %v (now+%v), want now+%v", got.CooldownUntil, got.CooldownUntil.Sub(before), want)
+			}
+			if got.CooldownReason != tc.reason {
+				t.Fatalf("CooldownReason = %q, want %q（机器码不变）", got.CooldownReason, tc.reason)
+			}
+		})
 	}
 }
 

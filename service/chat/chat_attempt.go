@@ -131,7 +131,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		}
 		// 网络/超时属凭据级失败：写冷却，组内换 key 可能救回（#13）。
 		// 组织级淘汰标记仍返回（现状语义不变，组耗尽才消费）。
-		applyCredentialCooldown(input.Ctx, input.Selection.Credential, "network")
+		applyCredentialCooldown(input.Ctx, input.Selection.Credential, cooldownReasonNetwork)
 		return singleProviderAttemptResult{CredentialFailure: true, RemoveWeight: true, RemovePriority: true}
 	}
 

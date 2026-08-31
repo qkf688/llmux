@@ -90,6 +90,19 @@ func getRequestMaxRetry(ctx context.Context) int {
 	return settingsReader.Int(ctx, models.SettingKeyRequestMaxRetry, 3, 1)
 }
 
+// getCredHealthCooldown429Sec 获取凭据 429 限流冷却窗口（秒）。
+// 默认值与 setting schema 一致（60），驱动 applyCredentialCooldown 的 429 分窗。
+func getCredHealthCooldown429Sec(ctx context.Context) int {
+	return settingsReader.Int(ctx, models.SettingKeyCredHealthCooldown429Sec, 60, 1)
+}
+
+// getCredHealthCooldownServerSec 获取凭据服务端错误冷却窗口（秒，5xx/超时/网络；
+// 鉴权失败过渡期同窗，#6-2 判停落地后 401/403 不再走冷却）。
+// 默认值与 setting schema 一致（60）。
+func getCredHealthCooldownServerSec(ctx context.Context) int {
+	return settingsReader.Int(ctx, models.SettingKeyCredHealthCooldownServerSec, 60, 1)
+}
+
 // buildThinkingClampConfig 从 ctx 读取设置 + model/association 白名单，构建思考档位钳制配置。
 // 调用方在 supportsThinking=true 时调用（false 时 thinking 已被 stripThinkingFields 剥离，无需钳制）。
 // autoFallback 复用 SettingKeyReasoningEffortDefaultValue（P0-2：设置键保留真实消费者）。

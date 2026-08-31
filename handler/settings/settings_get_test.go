@@ -21,6 +21,12 @@ func TestDefaultSettingsResponse(t *testing.T) {
 	if response.ModelSyncInterval != 12 {
 		t.Fatalf("expected ModelSyncInterval default to be 12, got %d", response.ModelSyncInterval)
 	}
+	if response.CredHealthCooldown429Sec != 60 {
+		t.Fatalf("expected CredHealthCooldown429Sec default to be 60, got %d", response.CredHealthCooldown429Sec)
+	}
+	if response.CredHealthCooldownServerSec != 60 {
+		t.Fatalf("expected CredHealthCooldownServerSec default to be 60, got %d", response.CredHealthCooldownServerSec)
+	}
 	if response.ReasoningEffortDefaultValue != "low" {
 		t.Fatalf("expected ReasoningEffortDefaultValue default to be low, got %s", response.ReasoningEffortDefaultValue)
 	}

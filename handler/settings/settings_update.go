@@ -54,7 +54,8 @@ func UpdateSettings(c *gin.Context) {
 func handleUpdateSettingsError(c *gin.Context, err error) {
 	var clientErr directClientError
 	if errors.As(err, &clientErr) {
-		httpresp.InternalServerError(c, clientErr.Error())
+		// 客户端提交值违反 schema 校验（Min/Max/Enum）是请求体非法，非服务端故障。
+		httpresp.BadRequest(c, clientErr.Error())
 		return
 	}
 

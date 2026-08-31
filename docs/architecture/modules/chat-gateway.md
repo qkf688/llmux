@@ -32,7 +32,7 @@ service/
 │   ├── chat_balance*.go    # 选路入口与虚拟模型故障转移（真实/虚拟两条路径的编排）
 │   ├── chat_retry_loop.go  # 单候选池上的重试循环（两条 balance 路径共用；候选级选路经 channel，组内凭据故障转移在候选内层循环）
 │   ├── chat_attempt*.go    # 单次上游尝试（types/request/log/error 按职责拆分）
-│   ├── chat_credential_cooldown.go # 凭据最小冷却（#13）：失败分类 + CooldownUntil 写库；S4 状态机替换为可配窗口 + 异步落库
+│   ├── chat_credential_cooldown.go # 凭据冷却（#13/#6-1）：失败分类 + 按 reason 分窗的可配窗口写库（读 cred_health 设置项）；#6-2 判停 / #6-4 异步落库见后续 stage
 │   ├── chat_record*.go     # 日志后处理编排与 raw 清理
 │   ├── chat_provider_meta.go # 供应商元数据装配 + 模型-供应商查询
 │   ├── chat_log_storage.go # ChatLog 落库与保留

@@ -1,4 +1,5 @@
 import { CapabilityMatchingCard } from "./components/sections/capability-matching-card";
+import { CredentialCooldownCard } from "./components/sections/credential-cooldown-card";
 import { FormatConversionCard } from "./components/sections/format-conversion-card";
 import { ModelAssociationAutomationCard } from "./components/sections/model-association-automation-card";
 import { ModelSyncCard } from "./components/sections/model-sync-card";
@@ -41,6 +42,10 @@ export function RoutingSettings(props: RoutingSettingsProps) {
         updateLocalSettings={form.updateLocalSettings}
       />
       <RequestParamsCard localSettings={form.localSettings} updateLocalSettings={form.updateLocalSettings} />
+      <CredentialCooldownCard
+        localSettings={form.localSettings}
+        updateLocalSettings={form.updateLocalSettings}
+      />
       <ParameterMappingCard
         localSettings={form.localSettings}
         updateLocalSettings={form.updateLocalSettings}

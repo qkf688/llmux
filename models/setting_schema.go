@@ -152,6 +152,11 @@ func buildSettingSchemas() map[string]SettingSchema {
 		{Key: SettingKeyRequestTotalTimeout, Field: "RequestTotalTimeout", Type: SettingTypeInt, Default: 90, Category: "request", Min: intPtr(1)},
 		{Key: SettingKeyStreamFirstByteTimeout, Field: "StreamFirstByteTimeout", Type: SettingTypeInt, Default: 15, Category: "request", Min: intPtr(1)},
 		{Key: SettingKeyRequestMaxRetry, Field: "RequestMaxRetry", Type: SettingTypeInt, Default: 3, Category: "request", Min: intPtr(1)},
+
+		// 凭据健康（S4 状态机 #6-1）：429 与过载合并一个窗口字段，5xx/超时/网络共用一个
+		// 窗口（设计定案第 5 节）；鉴权失败(401/403)在 #6-2 判停落地前暂归 server 窗口。
+		{Key: SettingKeyCredHealthCooldown429Sec, Field: "CredHealthCooldown429Sec", Type: SettingTypeInt, Default: 60, Category: "cred_health", Min: intPtr(1)},
+		{Key: SettingKeyCredHealthCooldownServerSec, Field: "CredHealthCooldownServerSec", Type: SettingTypeInt, Default: 60, Category: "cred_health", Min: intPtr(1)},
 	}
 
 	result := make(map[string]SettingSchema, len(list))

@@ -612,6 +612,10 @@ const (
 	SettingKeyRequestTotalTimeout    = "request_total_timeout"     // 整个请求的总预算超时（秒，含所有重试/故障转移）
 	SettingKeyStreamFirstByteTimeout = "stream_first_byte_timeout" // 流式响应头到达后等待首个数据字节的超时（秒）
 	SettingKeyRequestMaxRetry        = "request_max_retry"         // 单候选池最大尝试次数
+
+	// 凭据健康相关设置
+	SettingKeyCredHealthCooldown429Sec    = "cred_health_cooldown_429_sec"    // 凭据 429 限流冷却窗口（秒）
+	SettingKeyCredHealthCooldownServerSec = "cred_health_cooldown_server_sec" // 凭据服务端错误冷却窗口（秒，5xx/超时/网络；鉴权失败过渡期同窗）
 )
 
 // HealthCheckLog 模型健康检测日志

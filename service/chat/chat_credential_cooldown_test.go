@@ -74,10 +74,10 @@ func TestApplyCredentialCooldown(t *testing.T) {
 // credCooldownSettingsReader 测试用 settings.Reader stub：只覆写凭据健康键，
 // 其余回退 defaultValue。窗口最小粒度秒。
 type credCooldownSettingsReader struct {
-	Cooldown429Sec     int
-	CooldownServerSec  int
-	AuthFailThreshold  int
-	ProbeIntervalSec   int
+	Cooldown429Sec    int
+	CooldownServerSec int
+	AuthFailThreshold int
+	ProbeIntervalSec  int
 }
 
 func (r credCooldownSettingsReader) Bool(_ context.Context, _ string, def bool) bool { return def }

@@ -34,6 +34,9 @@ type CredentialRepo interface {
 	// UpdateFieldsIfStatus 仅当当前 status 匹配时按字段 map 更新（条件更新，
 	// RowsAffected==0 表示状态已变——供探活恢复防 TOCTOU 覆写人工终态）。
 	UpdateFieldsIfStatus(ctx context.Context, id uint, status string, fields map[string]any) (int64, error)
+	// IncrementFailCountAndStopIfThreshold 原子自增 fail_count；仅当 status 为 active
+	// （或空串视同 active）且自增后达阈值时判停 temp_unsched 并写 stopReason、清 cooldown_until。
+	IncrementFailCountAndStopIfThreshold(ctx context.Context, id uint, threshold int, stopReason string) (int64, error)
 	// Delete 根据 ID 删除凭据，返回受影响行数。
 	Delete(ctx context.Context, id uint) (int64, error)
 	// DeleteByPoolID 删除指定号池下的全部凭据（软删），返回受影响行数。
@@ -178,6 +181,33 @@ func (r *credentialRepo) UpdateFieldsIfStatus(ctx context.Context, id uint, stat
 	}
 	result := r.db.WithContext(ctx).Model(&models.Credential{}).
 		Where("id = ? AND status = ?", id, status).Updates(fields)
+	return result.RowsAffected, result.Error
+}
+
+func (r *credentialRepo) IncrementFailCountAndStopIfThreshold(ctx context.Context, id uint, threshold int, stopReason string) (int64, error) {
+	// 单条 UPDATE：自增与判停同语句完成，避免读回再写（#6-4-1）。
+	// SQLite SET 右值用更新前行值，fail_count+1 与阈值比较语义正确。
+	result := r.db.WithContext(ctx).Exec(`
+UPDATE credentials SET
+  fail_count = fail_count + 1,
+  status = CASE
+    WHEN (status = '' OR status = ?) AND fail_count + 1 >= ? THEN ?
+    ELSE status
+  END,
+  cooldown_reason = CASE
+    WHEN (status = '' OR status = ?) AND fail_count + 1 >= ? THEN ?
+    ELSE cooldown_reason
+  END,
+  cooldown_until = CASE
+    WHEN (status = '' OR status = ?) AND fail_count + 1 >= ? THEN NULL
+    ELSE cooldown_until
+  END
+WHERE id = ? AND deleted_at IS NULL`,
+		models.CredentialStatusActive, threshold, models.CredentialStatusTempUnsched,
+		models.CredentialStatusActive, threshold, stopReason,
+		models.CredentialStatusActive, threshold,
+		id,
+	)
 	return result.RowsAffected, result.Error
 }
 

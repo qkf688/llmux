@@ -10,20 +10,26 @@ import (
 
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/repository"
+	"github.com/qkf688/llmux/service/credwrite"
 )
 
 func initChatRecordTestDB(t *testing.T) {
 	t.Helper()
+	credwrite.EnableTestSyncMode(true)
 	models.Init(context.Background(), filepath.Join(t.TempDir(), "llmux-test.db"))
 	// 与 models.DB 同步默认 Repositories，避免 Default 缓存上一个用例的连接
 	repository.SetDefault(repository.New(models.DB))
 	t.Cleanup(func() {
+		// 测试基线保持 sync=true，避免后续用例误入异步队列写已关库。
+		credwrite.EnableTestSyncMode(true)
+		credwrite.ResetDroppedForTest()
 		repository.SetDefault(nil)
-		sqlDB, err := models.DB.DB()
-		if err != nil {
-			return
+		if models.DB != nil {
+			sqlDB, err := models.DB.DB()
+			if err == nil {
+				_ = sqlDB.Close()
+			}
 		}
-		_ = sqlDB.Close()
 	})
 }
 

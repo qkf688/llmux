@@ -24,6 +24,7 @@ import (
 	"github.com/qkf688/llmux/repository"
 	"github.com/qkf688/llmux/service"
 	"github.com/qkf688/llmux/service/auth"
+	"github.com/qkf688/llmux/service/credwrite"
 	_ "golang.org/x/crypto/x509roots/fallback"
 )
 
@@ -115,7 +116,7 @@ func main() {
 	slog.Info("server started", "addr", srv.Addr)
 
 	<-ctx.Done()
-	shutdown(srv, bgtask.Default(), models.Close)
+	shutdown(srv, bgtask.Default(), models.Close, credwrite.Stop)
 }
 
 // 关闭各阶段的等待上限。
@@ -134,18 +135,28 @@ type serverShutdowner interface {
 	Shutdown(ctx context.Context) error
 }
 
-// shutdown 按序收尾：停收新请求并等在途请求 → 排空后台写库任务 → 关闭数据库。
+// shutdown 按序收尾：停收新请求并等在途请求 → Flush/停凭据写队列 → 排空后台写库任务 → 关闭数据库。
 // 每一步失败都只记日志、不提前返回，否则前一步的失败会导致数据库连接永不关闭。
 //
-// 三个依赖一律经参数注入而非包级全局（bgtask.Default / models.Close）：顺序错了会让
-// 在途写库任务撞「数据库已关闭」，注入后这条顺序才能被测试锁定，而不是只有注释在保护。
-func shutdown(srv serverShutdowner, mgr *bgtask.Manager, closeDB func() error) {
+// 依赖一律经参数注入而非包级全局：顺序错了会让在途写库撞「数据库已关闭」，
+// 注入后这条顺序才能被测试锁定。stopCredWrite 可为 nil（单测不启队列时）。
+func shutdown(srv serverShutdowner, mgr *bgtask.Manager, closeDB func() error, stopCredWrite func(context.Context) error) {
 	slog.Info("shutting down")
 
 	srvCtx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout)
 	defer cancel()
 	if err := srv.Shutdown(srvCtx); err != nil {
 		slog.Error("http server shutdown", "error", err)
+	}
+
+	// 凭据写 worker 长驻：先 Flush 再 requestStop，使 bgtask.Shutdown 能等到它退出，
+	// 且关库前队列落库完成（#6-4-1）。
+	if stopCredWrite != nil {
+		flushCtx, cancelFlush := context.WithTimeout(context.Background(), bgtaskDrainTimeout)
+		if err := stopCredWrite(flushCtx); err != nil {
+			slog.Error("stop credential write queue", "error", err)
+		}
+		cancelFlush()
 	}
 
 	// 必须在 closeDB 之前：排空中的任务仍要写库。
@@ -161,9 +172,12 @@ func shutdown(srv serverShutdowner, mgr *bgtask.Manager, closeDB func() error) {
 	slog.Info("shutdown complete")
 }
 
-// startBackgroundServices 启动健康检查与模型自动同步。
-// 两者的 goroutine 由各自内部经 bgtask 登记，ctx 取消即其退出信号。
+// startBackgroundServices 启动健康检查、模型自动同步与凭据写队列 worker。
+// healthcheck/modelsync 的 goroutine 由各自内部经 bgtask 登记，ctx 取消即退出信号；
+// credwrite worker 由 Stop（在 shutdown 内）显式停收并排空。
 func startBackgroundServices(ctx context.Context) {
+	credwrite.Start()
+
 	service.GetHealthChecker().Start(ctx)
 
 	syncService := service.NewModelSyncService(models.DB, nil)

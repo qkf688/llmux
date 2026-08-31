@@ -3,11 +3,11 @@ package chat
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/credwrite"
 )
 
 // cooldownReason429 429 限流冷却 reason 机器码：分窗判定（cooldownWindowForReason）
@@ -62,19 +62,12 @@ func cooldownWindowForReason(ctx context.Context, reason string) time.Duration {
 // applyCredentialCooldown 写单条凭据的冷却状态（CooldownUntil 到期自动恢复）。
 // 窗口 = 按失败类型分窗读设置项（见 cooldownWindowForReason），非固定常量；
 // 行为经逐请求读库即时生效，修改设置项无需重载。
-// 写库失败仅告警不阻断：选路指针「选择即推进」保证同请求内即使冷却未生效，
-// 也不会反复选出同一条 key（配合 retry loop 的组内换 key 上限收敛）。
+// 落库经 credwrite 有界队列异步执行（#6-4-1），请求路径不等待 DB。
 func applyCredentialCooldown(ctx context.Context, cred models.Credential, reason string) {
 	if cred.ID == 0 {
 		// Selection 里凭据为空（测试直调 attempt 的构造形态），无行可冷却。
 		// 生产路径 Select 成功必有 Credential，此处只是防御壳非兼容分支。
 		return
 	}
-	window := cooldownWindowForReason(ctx, reason)
-	if _, err := repos().Credential.UpdateFields(ctx, cred.ID, map[string]any{
-		"cooldown_until":  time.Now().Add(window),
-		"cooldown_reason": reason,
-	}); err != nil {
-		slog.Warn("failed to apply credential cooldown", "credential_id", cred.ID, "reason", reason, "error", err)
-	}
+	credwrite.EnqueueCooldown(cred.ID, reason)
 }

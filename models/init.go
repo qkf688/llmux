@@ -17,7 +17,9 @@ func Init(ctx context.Context, path string) {
 	if err := ensureDBFile(path); err != nil {
 		panic(err)
 	}
-	db, err := gorm.Open(sqlite.Open(path))
+	// busy_timeout + WAL：凭据健康异步写与前台读并发时降低 database is locked 概率。
+	dsn := path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
+	db, err := gorm.Open(sqlite.Open(dsn))
 	if err != nil {
 		panic(err)
 	}

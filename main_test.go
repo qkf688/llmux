@@ -49,7 +49,7 @@ func TestShutdownOrder(t *testing.T) {
 		return nil
 	}
 
-	shutdown(&recordingShutdowner{record: record}, mgr, closeDB)
+	shutdown(&recordingShutdowner{record: record}, mgr, closeDB, nil)
 
 	want := []string{"srv", "bgtask", "closeDB"}
 	mu.Lock()
@@ -72,7 +72,7 @@ func TestShutdownContinuesAfterStepFailure(t *testing.T) {
 	shutdown(failingShutdowner{}, bgtask.NewManager(), func() error {
 		closed = true
 		return nil
-	})
+	}, nil)
 
 	if !closed {
 		t.Fatal("closeDB was not called after server shutdown failed; database would leak")

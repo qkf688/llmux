@@ -26,7 +26,7 @@ service/channel/
   endpoint_select.go      # SelectEndpoint：入站 wire ∈ enabled 端点协议 → 透传路径；否则主协议端点（转换路径）
   group_select.go         # SelectGroup：白名单过滤（空=不限）→ weight 聚合档 → 档间加权随机 → 档内轮询
   credential_select.go    # SelectCredential：active + 非冷却（CooldownUntil 读判定）→ 组内轮询（选择即推进）
-  config_build.go         # BuildConfig：Provider.Config JSON round-trip + base_url 继承链 + api_key 明文；plainCredentialKey 解密
+  config_build.go         # BuildConfig：Provider.Config JSON round-trip + base_url 继承链 + api_key 明文；DecryptCredentialKey 解密（供选路与 credprobe 共用）
   rrstate.go              # Selector: 轮询指针容器（sync.Mutex + map，分组档/凭据组两维）+ Select 编排门面
                           # 测试：endpoint_group_select_test.go / credential_select_test.go /
                           #       config_build_test.go / assemble_test.go / rrstate_test.go
@@ -39,19 +39,19 @@ consts/protocol.go        # Protocol* 常量 + ProtocolOfType（type→protocol�
 |------|------|----------|--------|
 | `Assembler.Assemble(ctx, provider) → *Snapshot` | 一次拉取端点/分组/凭据归并成快照；端点/分组/凭据统一按 ID ASC 排序（轮询取模基线）；凭据按本供应商分组与号池的 ID 集合收敛（`CredentialRepo.ListByGroups`），内联与号池两侧归入同一分组 | `service/channel/assemble.go` | `repository.Endpoint/KeyGroup/Credential` |
 | `Selector.Select(snapshot, clientWire, modelName, now) → SelectionResult` | 三层编排：端点 → 分组 → 凭据 → 解密 → config；每层错误携带 sentinel | `service/channel/selector.go` | 同包三层函数 |
-| `Selector.RetryCredential(snapshot, groupID, endpoint, now) → SelectionResult` | 组内重选凭据（#13 故障转移）：锁**原分组/原端点**重选下一条可用凭据（冷却中的被剔除、轮询指针推进）；返回新的 `SelectionResult`（含按新凭据重建的 `Config`/`UpstreamURL`）；组内无可用 → `ErrNoCredentialAvailable` 上抛，由 chat 链路做组织级淘汰（设计定案「分组失败 → 供应商整体失败」，本层不换组） | `service/channel/selector.go` | 复用 `SelectCredential` + `plainCredentialKey` + `BuildConfig`（与 `Select` 同 tail） |
+| `Selector.RetryCredential(snapshot, groupID, endpoint, now) → SelectionResult` | 组内重选凭据（#13 故障转移）：锁**原分组/原端点**重选下一条可用凭据（冷却中的被剔除、轮询指针推进）；返回新的 `SelectionResult`（含按新凭据重建的 `Config`/`UpstreamURL`）；组内无可用 → `ErrNoCredentialAvailable` 上抛，由 chat 链路做组织级淘汰（设计定案「分组失败 → 供应商整体失败」，本层不换组） | `service/channel/selector.go` | 复用 `SelectCredential` + `DecryptCredentialKey` + `BuildConfig`（与 `Select` 同 tail） |
 | `SelectEndpoint` | 同协议 wire 匹配选端点（透传）；无匹配回落主协议端点（`ProtocolOfType(Provider.Type)`，转换路径）；disabled 与未知协议端点不参与；无可用 → `ErrEndpointUnavailable` | `service/channel/endpoint_select.go` | 同文件 |
 | `SelectGroup` | 白名单过滤（空=不限）→ 按 weight 聚合档 → `balancer.WeightedRandom` 档间随机 → 档内轮询；weight<=0 不参与；无命中 → `ErrNoGroupMatches` | `service/channel/group_select.go` | `balancer.WeightedRandom`（复用） |
 | `SelectCredential` | active 且非冷却（`CooldownUntil > now` 剔除）→ 组内轮询选择即推进；空/全不可用 → `ErrNoCredentialAvailable` | `service/channel/credential_select.go` | `Selector.nextCredentialInRR` |
 | `BuildConfig` | Provider.Config round-trip 保留未知字段；base_url 继承链（端点 URL 非空覆盖，否则原 base_url）；api_key 恒为选中凭据明文；两者皆空报错；返回 (config, upstreamURL) | `service/channel/config_build.go` | 同文件 |
-| `plainCredentialKey` | 解密凭据明文；`credentialcrypto.Default()==nil` 明确报错（无降级） | `service/channel/config_build.go` | `credentialcrypto.Default()` |
+| `DecryptCredentialKey` | 解密凭据明文；`credentialcrypto.Default()==nil` 明确报错（无降级）；选路与 `service/credprobe` 共用 | `service/channel/config_build.go` | `credentialcrypto.Default()` |
 | `consts.TypeOfProtocol` / `WireFormatOfProtocol` | 端点协议 → provider 注册类型 / wire format（responses ↔ openai-res；未知协议不兜底）；与 `ProtocolOfType` 反向 | `consts/protocol.go` | 同文件 |
 | 轮询指针语义 | 进程内内存态 + `sync.Mutex`；选择即推进单轨（无成功后回调——凭据层失败转移本就跳选）；多实例部署不同步可接受 | `service/channel/rrstate.go` | 同文件 |
 
 ## 5. 特殊约定
 
 - **错误分层语义**：三层 sentinel（`ErrEndpointUnavailable` / `ErrNoGroupMatches` / `ErrNoCredentialAvailable`）供 chat 链路按层处置——凭据层失败由 #13 组内故障转移消化（`RetryCredential` 换 key，冷却写库在 chat 侧），`ErrNoCredentialAvailable` 上抛即组耗尽 → 组织级淘汰；分组/端点层耗尽同样判供应商整体失败；`ConsecutiveFailures` 组织级语义与凭据级失败不重叠（#13 起层内耗尽才累计）
-- **无 DB/无时钟依赖**：选择函数输入为内存快照，冷却判定时钟由 `Select` 的 `now` 参数注入；IO 收敛在 `assemble.go`（读库）与 `plainCredentialKey`（解密单例）；`RetryCredential` 不写冷却——CooldownUntil 与凭据状态的写库是 chat 链路职责（冷却 `chat_credential_cooldown.go`；鉴权判停 `chat_credential_auth_fail.go`，#6-2 起连败达阈值写 `temp_unsched`），本模块只读判定（`credentialUsable` 按 Status≠active 与冷却剔除，新增状态枚举无需改本模块）
+- **无 DB/无时钟依赖**：选择函数输入为内存快照，冷却判定时钟由 `Select` 的 `now` 参数注入；IO 收敛在 `assemble.go`（读库）与 `DecryptCredentialKey`（解密单例）；`RetryCredential` 不写冷却——CooldownUntil 与凭据状态的写库是 chat 链路职责（冷却 `chat_credential_cooldown.go`；鉴权判停 `chat_credential_auth_fail.go`，#6-2 起连败达阈值写 `temp_unsched`；探活恢复 `service/credprobe`，#6-3），本模块只读判定（`credentialUsable` 按 Status≠active 与冷却剔除，新增状态枚举无需改本模块）；本包**不** import `providers`（探活在 credprobe）
 - **档间加权 = 单组权重而非档总权重**：同权重组由轮询打散为等概率，档权重只表达「某权重档的选中概率」，防止多组低权把单个高权组挤出随机池
 - **组内候选顺序稳定性**：装配按凭据 ID ASC 排序，repository List 不保证顺序；轮询取模的正确性依赖该不变式
 - **快照语义**：单供应商数据；`CredentialsByGroup` 组键恒存在（含空切片），选择路径统一收口 `ErrNoCredentialAvailable`

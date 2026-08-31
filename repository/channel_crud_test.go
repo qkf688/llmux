@@ -558,3 +558,38 @@ func TestCredentialRepo_ExistingHashes(t *testing.T) {
 		t.Fatalf("ExistingHashes(nil) = (%v, %v), want (empty, nil)", empty, err)
 	}
 }
+
+// TestCredentialRepo_UpdateFieldsIfStatus 锁探活恢复条件更新（#6-3）：
+// status 匹配才写；不匹配 → RowsAffected=0 且行不变。
+func TestCredentialRepo_UpdateFieldsIfStatus(t *testing.T) {
+	ctx := context.Background()
+	repo := NewCredentialRepo(newChannelTestDB(t))
+	cred := &models.Credential{
+		Key: "enc", KeyHash: "h", Status: models.CredentialStatusTempUnsched, FailCount: 3,
+	}
+	if err := repo.Create(ctx, cred); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	n, err := repo.UpdateFieldsIfStatus(ctx, cred.ID, models.CredentialStatusTempUnsched, map[string]any{
+		"status": models.CredentialStatusActive, "fail_count": 0,
+	})
+	if err != nil || n != 1 {
+		t.Fatalf("match update = (%d, %v), want (1, nil)", n, err)
+	}
+	got, _ := repo.Get(ctx, cred.ID)
+	if got.Status != models.CredentialStatusActive || got.FailCount != 0 {
+		t.Fatalf("after match: %+v", got)
+	}
+
+	n, err = repo.UpdateFieldsIfStatus(ctx, cred.ID, models.CredentialStatusTempUnsched, map[string]any{
+		"status": models.CredentialStatusDisabled,
+	})
+	if err != nil || n != 0 {
+		t.Fatalf("mismatch update = (%d, %v), want (0, nil)", n, err)
+	}
+	got, _ = repo.Get(ctx, cred.ID)
+	if got.Status != models.CredentialStatusActive {
+		t.Fatalf("mismatch must not overwrite: status=%q", got.Status)
+	}
+}

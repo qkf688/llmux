@@ -58,6 +58,7 @@ export interface Settings {
   cred_health_cooldown_429_sec: number;
   cred_health_cooldown_server_sec: number;
   cred_health_auth_fail_threshold: number;
+  cred_health_probe_interval_sec: number;
 }
 
 export interface ResetWeightsResponse {

@@ -118,12 +118,12 @@ func TestPlainCredentialKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Encrypt: %v", err)
 	}
-	got, err := plainCredentialKey(models.Credential{Key: enc})
+	got, err := DecryptCredentialKey(models.Credential{Key: enc})
 	if err != nil {
-		t.Fatalf("plainCredentialKey error: %v", err)
+		t.Fatalf("DecryptCredentialKey error: %v", err)
 	}
 	if got != "sk-secret-456" {
-		t.Fatalf("plainCredentialKey = %q, want %q", got, "sk-secret-456")
+		t.Fatalf("DecryptCredentialKey = %q, want %q", got, "sk-secret-456")
 	}
 }
 
@@ -131,9 +131,9 @@ func TestPlainCredentialKey(t *testing.T) {
 // 明文落库路径禁止的同一原则——明文写盘/无密可用都应显式失败。
 func TestPlainCredentialKey_NoCipher(t *testing.T) {
 	credentialcrypto.SetDefault(nil)
-	_, err := plainCredentialKey(models.Credential{Key: "anything"})
+	_, err := DecryptCredentialKey(models.Credential{Key: "anything"})
 	if err == nil {
-		t.Fatal("plainCredentialKey with nil cipher succeeded, want error")
+		t.Fatal("DecryptCredentialKey with nil cipher succeeded, want error")
 	}
 }
 
@@ -151,16 +151,16 @@ func TestPlainCredentialKey_BadCiphertext(t *testing.T) {
 	if tampered == enc {
 		tampered = enc[:len(enc)-1] + "1"
 	}
-	_, err = plainCredentialKey(models.Credential{Model: gorm.Model{ID: 42}, Key: tampered})
+	_, err = DecryptCredentialKey(models.Credential{Model: gorm.Model{ID: 42}, Key: tampered})
 	if err == nil {
-		t.Fatal("plainCredentialKey with tampered ciphertext succeeded, want error")
+		t.Fatal("DecryptCredentialKey with tampered ciphertext succeeded, want error")
 	}
 	if !strings.Contains(err.Error(), "42") {
 		t.Fatalf("err = %v, want 含凭据 ID 上下文", err)
 	}
 	// 非 hex 形态：同样报错（hex.DecodeString 失败路径）
-	if _, err = plainCredentialKey(models.Credential{Key: "not-hex!"}); err == nil {
-		t.Fatal("plainCredentialKey with non-hex key succeeded, want error")
+	if _, err = DecryptCredentialKey(models.Credential{Key: "not-hex!"}); err == nil {
+		t.Fatal("DecryptCredentialKey with non-hex key succeeded, want error")
 	}
 }
 

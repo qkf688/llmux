@@ -40,6 +40,7 @@ func credentialToListItem(cred models.Credential) CredentialListItem {
 		CooldownReason: cred.CooldownReason,
 		FailCount:      cred.FailCount,
 		LastUsedAt:     cred.LastUsedAt,
+		LastProbeAt:    cred.LastProbeAt,
 		TotalRequests:  cred.TotalRequests,
 		TotalErrors:    cred.TotalErrors,
 		TotalTokens:    cred.TotalTokens,

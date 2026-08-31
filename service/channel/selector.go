@@ -31,9 +31,11 @@ func (s *Selector) Select(snapshot *Snapshot, clientWire consts.WireFormat, mode
 	}
 	c, err := SelectCredential(s, snapshot, g.ID, now)
 	if err != nil {
-		return SelectionResult{}, err
+		// 凭据层失败：仍带回已选端点/分组。#6-3 探活必须锁定「刚耗尽」的那一组，
+		// 禁止调用方再跑 SelectGroup（选择即推进 RR，同权重组会切到另一组）。
+		return SelectionResult{Endpoint: ep, Group: g}, err
 	}
-	plainKey, err := plainCredentialKey(c)
+	plainKey, err := DecryptCredentialKey(c)
 	if err != nil {
 		return SelectionResult{}, err
 	}
@@ -75,7 +77,7 @@ func (s *Selector) RetryCredential(snapshot *Snapshot, groupID uint, endpoint mo
 	if err != nil {
 		return SelectionResult{}, err
 	}
-	plainKey, err := plainCredentialKey(c)
+	plainKey, err := DecryptCredentialKey(c)
 	if err != nil {
 		return SelectionResult{}, err
 	}

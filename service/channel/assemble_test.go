@@ -180,19 +180,23 @@ func TestSelect_FallbackChain(t *testing.T) {
 }
 
 // TestSelect_AllCooling 锁「全凭据冷却 → ErrNoCredentialAvailable 冒泡」
-// （#13 据 sentinel 判定组内转移 vs 组织级失败）。
+// （#13 据 sentinel 判定组内转移 vs 组织级失败）；同时锁 #6-3：凭据失败仍带回
+// Endpoint/Group，供探活锁定刚耗尽的组（禁止调用方再 SelectGroup）。
 func TestSelect_AllCooling(t *testing.T) {
 	snap := &Snapshot{
 		Provider:  models.Provider{Model: gorm.Model{ID: 1}, Type: "openai", Config: `{"base_url":"u"}`},
-		Endpoints: []models.Endpoint{{ProviderID: 1, Protocol: "openai", Enabled: true}},
-		Groups:    []models.KeyGroup{{ProviderID: 1, Name: "g", Weight: 1}},
+		Endpoints: []models.Endpoint{{Model: gorm.Model{ID: 9}, ProviderID: 1, Protocol: "openai", Enabled: true}},
+		Groups:    []models.KeyGroup{{Model: gorm.Model{ID: 7}, ProviderID: 1, Name: "g", Weight: 1}},
 		CredentialsByGroup: map[uint][]models.Credential{
-			1: {{KeyHash: "h", CooldownUntil: futureTime()}},
+			7: {{KeyHash: "h", CooldownUntil: futureTime()}},
 		},
 	}
-	_, err := (&Selector{}).Select(snap, "openai", "m", now())
+	got, err := (&Selector{}).Select(snap, "openai", "m", now())
 	if !errors.Is(err, ErrNoCredentialAvailable) {
 		t.Fatalf("err = %v, want %v", err, ErrNoCredentialAvailable)
+	}
+	if got.Endpoint.ID != 9 || got.Group.ID != 7 {
+		t.Fatalf("partial selection = ep=%d group=%d, want ep=9 group=7", got.Endpoint.ID, got.Group.ID)
 	}
 }
 

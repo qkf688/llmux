@@ -60,7 +60,8 @@ common/credentialcrypto/ # AES-256-GCM 加密 + KeyHash + 密钥引导
 
 - **仓储层不解密**：`credentials.Key` 在 models/repository 层是密文原样存取；解密/掩码是上层（S2 API / S3 调度）职责
 - **凭据只存加密形态**：`Config.api_key` 明文兜底链已废除，存量迁移加密搬移后清空
-- **三态字段**（`Credential.GroupID/PoolID`、`KeyGroup.PoolID`）为 `*uint`，nil 序列化 JSON `null`（禁 omitempty）；清除必须走 `UpdateFields`（map 显式写 NULL），struct Update 跳过零值
+- **三态字段**（`Credential.GroupID/PoolID/CooldownUntil/LastUsedAt/LastProbeAt`、`KeyGroup.PoolID`）为指针，nil 序列化 JSON `null`（禁 omitempty）；清除必须走 `UpdateFields`（map 显式写 NULL），struct Update 跳过零值
+- **`LastProbeAt`**：#6-3 惰性探活频控字段（成败都更新）；列表 DTO `CredentialListItem` 已暴露；恢复 active 不经 `CredentialRecoveryFields` 清该字段
 - **`StatusCounts` 用 map 而非固定字段**：S4 新增状态（如 temp_unsched）不改响应结构，前端按状态配置遍历
 - **未做**：号池列表分页（数量级小）；`GET /api/pools/:id` 详情端点（列表项携带足够）；引用分组名明细（S6 前端需求）；批量导入逐行独立落库（无共享事务：500 条 ≈ 2s，低频粘贴可接受；单事务改造需扩仓储接口，未做）；`(pool_id, key_hash)` 无唯一约束，并发导入同 key 双插竞态与单条创建同语义（#11 起接受，不做复合唯一索引）
 - 契约测试：`handler/pools/crud_test.go`、`credentials_test.go`、`credential_crud_test.go`、`credential_batch_test.go`、`credential_import_test.go` 断言打在响应体 JSON（gjson `Exists()` 区分键存在与 null）；仓储测试在 `repository/channel_crud_test.go`

@@ -119,6 +119,8 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 		// 选路：端点 → 分组 → 凭据（service/channel 三层）。任何一层失败只淘汰该候选
 		// （与 providers.New 失败同语义），池中其余候选仍应尝试；凭据级/组织级的
 		// 分层处置（组内换 key、冷却）在下面内层循环，此处不区分 sentinel。
+		// probedThisCandidate：#6-3 每候选每请求最多探活一次，防恢复后再次耗尽死循环。
+		probedThisCandidate := false
 		snapshot, err := channel.NewAssembler(repos()).Assemble(in.Ctx, provider)
 		if err != nil {
 			slog.Error("failed to assemble channel snapshot", retryLogAttrs(in.LogAttrs, "provider", provider.Name, "error", err)...)
@@ -129,12 +131,30 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 		// 会让指针恒从 0 起算、多凭据/多组退化为确定性首选（见 channel.Select 注释）。
 		selection, err := channel.DefaultSelector().Select(snapshot, clientWire, in.RealModelName, time.Now())
 		if err != nil {
-			// Warn 而非 Error：Select 失败含「全部凭据冷却」这类组内故障转移的
-			// **正常产出**（前一轮刚把 key 打冷却），配上 ErrEndpointUnavailable/
-			// ErrNoGroupMatches 等配置态，均非系统异常；按候选淘汰继续即可。
-			slog.Warn("no channel selection", retryLogAttrs(in.LogAttrs, "provider", provider.Name, "error", err)...)
-			delete(in.Pool.WeightItems, *id)
-			continue
+			// 凭据耗尽：惰性探活 temp_unsched（#6-3）。成功则刷新快照重选；
+			// 端点/分组不可用不探（非凭据层问题）。Select 在凭据失败时已带回
+			// Endpoint/Group，探活锁定该组——禁止再 SelectGroup（二次推进 RR）。
+			if errors.Is(err, channel.ErrNoCredentialAvailable) && !probedThisCandidate && selection.Group.ID != 0 {
+				probedThisCandidate = true
+				if probeRecoverInGroup(in.Ctx, provider, selection.Endpoint, snapshot.CredentialsByGroup[selection.Group.ID]) {
+					refreshed, refreshErr := channel.NewAssembler(repos()).Assemble(in.Ctx, provider)
+					if refreshErr == nil {
+						if sel2, selErr := channel.DefaultSelector().Select(refreshed, clientWire, in.RealModelName, time.Now()); selErr == nil {
+							selection = sel2
+							snapshot = refreshed
+							err = nil
+						}
+					}
+				}
+			}
+			if err != nil {
+				// Warn 而非 Error：Select 失败含「全部凭据冷却」这类组内故障转移的
+				// **正常产出**（前一轮刚把 key 打冷却），配上 ErrEndpointUnavailable/
+				// ErrNoGroupMatches 等配置态，均非系统异常；按候选淘汰继续即可。
+				slog.Warn("no channel selection", retryLogAttrs(in.LogAttrs, "provider", provider.Name, "error", err)...)
+				delete(in.Pool.WeightItems, *id)
+				continue
+			}
 		}
 		// 防御性分支（不变量）：Select 成功则端点协议必在 protocolMetaTable 中——
 		// SelectEndpoint 已按同一张表过滤未知协议端点，TypeOfProtocol 与之共享表不可能发散。
@@ -244,7 +264,22 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 			retrySelection, err := channel.DefaultSelector().RetryCredential(refreshed, selection.Group.ID, selection.Endpoint, time.Now())
 			if err != nil {
 				if errors.Is(err, channel.ErrNoCredentialAvailable) {
-					// 真组耗尽：交由循环外统一做组织级处置——按最后一次凭据级失败的
+					// 真组耗尽：先惰性探活（#6-3）。成功则再锁组重选一次；
+					// 仍失败才交由循环外组织级处置。
+					if !probedThisCandidate {
+						probedThisCandidate = true
+						if probeRecoverInGroup(in.Ctx, provider, selection.Endpoint, refreshed.CredentialsByGroup[selection.Group.ID]) {
+							if refreshed2, rerr := assembler.Assemble(in.Ctx, provider); rerr == nil {
+								if sel2, serr := channel.DefaultSelector().RetryCredential(refreshed2, selection.Group.ID, selection.Endpoint, time.Now()); serr == nil {
+									selection = sel2
+									snapshot = refreshed2
+									orgFailure = &result
+									continue
+								}
+							}
+						}
+					}
+					// 探活未恢复 / 已探过：交由循环外统一做组织级处置——按最后一次凭据级失败的
 					// 分类淘汰候选（single key 组与现状分类语义等价）并累计
 					// ConsecutiveFailures（凭据级失败本身不累计，设计定案第 5 节
 					// 「层内耗尽才累计组织级」——两级语义不重叠）。

@@ -153,11 +153,13 @@ func buildSettingSchemas() map[string]SettingSchema {
 		{Key: SettingKeyStreamFirstByteTimeout, Field: "StreamFirstByteTimeout", Type: SettingTypeInt, Default: 15, Category: "request", Min: intPtr(1)},
 		{Key: SettingKeyRequestMaxRetry, Field: "RequestMaxRetry", Type: SettingTypeInt, Default: 3, Category: "request", Min: intPtr(1)},
 
-		// 凭据健康（S4 状态机 #6-1/#6-2）：429 与过载合并一个窗口字段，5xx/超时/网络共用一个
-		// 窗口（设计定案第 5 节）；鉴权失败(401/403)不走冷却，连续失败达阈值后判停 temp_unsched。
+		// 凭据健康（S4 状态机 #6-1/#6-2/#6-3）：429 与过载合并一个窗口字段，5xx/超时/网络共用一个
+		// 窗口（设计定案第 5 节）；鉴权失败(401/403)不走冷却，连续失败达阈值后判停 temp_unsched；
+		// 探活间隔控制 temp_unsched 惰性自愈频控（#6-3）。
 		{Key: SettingKeyCredHealthCooldown429Sec, Field: "CredHealthCooldown429Sec", Type: SettingTypeInt, Default: 60, Category: "cred_health", Min: intPtr(1)},
 		{Key: SettingKeyCredHealthCooldownServerSec, Field: "CredHealthCooldownServerSec", Type: SettingTypeInt, Default: 60, Category: "cred_health", Min: intPtr(1)},
 		{Key: SettingKeyCredHealthAuthFailThreshold, Field: "CredHealthAuthFailThreshold", Type: SettingTypeInt, Default: 3, Category: "cred_health", Min: intPtr(1)},
+		{Key: SettingKeyCredHealthProbeIntervalSec, Field: "CredHealthProbeIntervalSec", Type: SettingTypeInt, Default: 60, Category: "cred_health", Min: intPtr(1)},
 	}
 
 	result := make(map[string]SettingSchema, len(list))

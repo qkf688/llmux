@@ -30,6 +30,9 @@ func TestDefaultSettingsResponse(t *testing.T) {
 	if response.CredHealthAuthFailThreshold != 3 {
 		t.Fatalf("expected CredHealthAuthFailThreshold default to be 3, got %d", response.CredHealthAuthFailThreshold)
 	}
+	if response.CredHealthProbeIntervalSec != 60 {
+		t.Fatalf("expected CredHealthProbeIntervalSec default to be 60, got %d", response.CredHealthProbeIntervalSec)
+	}
 	if response.ReasoningEffortDefaultValue != "low" {
 		t.Fatalf("expected ReasoningEffortDefaultValue default to be low, got %s", response.ReasoningEffortDefaultValue)
 	}

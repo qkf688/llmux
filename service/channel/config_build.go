@@ -48,9 +48,10 @@ func BuildConfig(provider models.Provider, endpoint models.Endpoint, plainKey st
 	return string(out), upstreamURL, nil
 }
 
-// plainCredentialKey 解密凭据明文 key。cipher 未初始化（main 装配缺失）→ 明确
+// DecryptCredentialKey 解密凭据明文 key。cipher 未初始化（main 装配缺失）→ 明确
 // 报错：与「明文落库路径禁止」同一原则——无解密能力就显式失败，不做降级。
-func plainCredentialKey(c models.Credential) (string, error) {
+// 供选路（Select/RetryCredential）与探活（credprobe）共用，禁止调用方各自解密。
+func DecryptCredentialKey(c models.Credential) (string, error) {
 	cipher := credentialcrypto.Default()
 	if cipher == nil {
 		return "", errors.New("channel: credential cipher not initialized")

@@ -38,6 +38,7 @@ type CredentialListItem struct {
 	CooldownReason string     `json:"CooldownReason"`
 	FailCount      int        `json:"FailCount"`
 	LastUsedAt     *time.Time `json:"LastUsedAt"`
+	LastProbeAt    *time.Time `json:"LastProbeAt"`
 	TotalRequests  int64      `json:"TotalRequests"`
 	TotalErrors    int64      `json:"TotalErrors"`
 	TotalTokens    int64      `json:"TotalTokens"`

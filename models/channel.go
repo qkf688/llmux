@@ -66,6 +66,9 @@ type Credential struct {
 	CooldownReason string `gorm:"type:text"`
 	FailCount      int
 	LastUsedAt     *time.Time
+	// LastProbeAt 上次惰性探活尝试时间（#6-3）：成败都更新，供频控判定
+	// 「距上次探活 > 间隔才再探」；nil = 从未探过。三态指针禁 omitempty。
+	LastProbeAt *time.Time
 	// 统计字段（号池页概览用；S3/S4 起写入）
 	TotalRequests int64
 	TotalErrors   int64

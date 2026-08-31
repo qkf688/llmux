@@ -72,7 +72,7 @@ func TestCreateThenGet_FieldIntegrity(t *testing.T) {
 
 	keys := []string{
 		"ID", "PoolID", "GroupID", "Status", "Note", "KeyMasked",
-		"CooldownUntil", "CooldownReason", "FailCount", "LastUsedAt",
+		"CooldownUntil", "CooldownReason", "FailCount", "LastUsedAt", "LastProbeAt",
 		"TotalRequests", "TotalErrors", "TotalTokens", "CreatedAt", "UpdatedAt",
 	}
 	for _, k := range keys {

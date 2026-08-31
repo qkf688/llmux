@@ -31,6 +31,9 @@ type CredentialRepo interface {
 	Update(ctx context.Context, id uint, cred *models.Credential) error
 	// UpdateFields 按字段 map 更新（map 可显式写 NULL，绕过 struct 零值跳过语义）。
 	UpdateFields(ctx context.Context, id uint, fields map[string]any) (int64, error)
+	// UpdateFieldsIfStatus 仅当当前 status 匹配时按字段 map 更新（条件更新，
+	// RowsAffected==0 表示状态已变——供探活恢复防 TOCTOU 覆写人工终态）。
+	UpdateFieldsIfStatus(ctx context.Context, id uint, status string, fields map[string]any) (int64, error)
 	// Delete 根据 ID 删除凭据，返回受影响行数。
 	Delete(ctx context.Context, id uint) (int64, error)
 	// DeleteByPoolID 删除指定号池下的全部凭据（软删），返回受影响行数。
@@ -166,6 +169,15 @@ func (r *credentialRepo) UpdateFields(ctx context.Context, id uint, fields map[s
 		return 0, nil
 	}
 	result := r.db.WithContext(ctx).Model(&models.Credential{}).Where("id = ?", id).Updates(fields)
+	return result.RowsAffected, result.Error
+}
+
+func (r *credentialRepo) UpdateFieldsIfStatus(ctx context.Context, id uint, status string, fields map[string]any) (int64, error) {
+	if len(fields) == 0 {
+		return 0, nil
+	}
+	result := r.db.WithContext(ctx).Model(&models.Credential{}).
+		Where("id = ? AND status = ?", id, status).Updates(fields)
 	return result.RowsAffected, result.Error
 }
 

@@ -109,6 +109,13 @@ func getCredHealthAuthFailThreshold(ctx context.Context) int {
 	return settingsReader.Int(ctx, models.SettingKeyCredHealthAuthFailThreshold, 3, 1)
 }
 
+// getCredHealthProbeIntervalSec 获取凭据惰性探活最小间隔（秒）。
+// temp_unsched 凭据距 LastProbeAt 不足该间隔则跳过探活（#6-3 频控）。
+// 默认值与 setting schema 一致（60）。
+func getCredHealthProbeIntervalSec(ctx context.Context) int {
+	return settingsReader.Int(ctx, models.SettingKeyCredHealthProbeIntervalSec, 60, 1)
+}
+
 // buildThinkingClampConfig 从 ctx 读取设置 + model/association 白名单，构建思考档位钳制配置。
 // 调用方在 supportsThinking=true 时调用（false 时 thinking 已被 stripThinkingFields 剥离，无需钳制）。
 // autoFallback 复用 SettingKeyReasoningEffortDefaultValue（P0-2：设置键保留真实消费者）。

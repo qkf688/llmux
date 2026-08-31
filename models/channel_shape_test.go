@@ -36,6 +36,7 @@ var (
 		{key: "CooldownReason", wantSetType: gjson.String},
 		{key: "FailCount", wantSetType: gjson.Number},
 		{key: "LastUsedAt", wantSetType: gjson.String, nilable: true},
+		{key: "LastProbeAt", wantSetType: gjson.String, nilable: true},
 		{key: "TotalRequests", wantSetType: gjson.Number},
 		{key: "TotalErrors", wantSetType: gjson.Number},
 		{key: "TotalTokens", wantSetType: gjson.Number},
@@ -110,6 +111,7 @@ func TestChannelEntities_KeysPresent_WhenSet(t *testing.T) {
 		CooldownReason: "429 限流",
 		FailCount:      3,
 		LastUsedAt:     &now,
+		LastProbeAt:    &now,
 		TotalRequests:  100,
 		TotalErrors:    2,
 		TotalTokens:    5000,
@@ -127,7 +129,7 @@ func TestChannelEntities_KeysPresent_WhenSet(t *testing.T) {
 
 // TestChannelEntities_KeysPresent_WhenUnset 是 omitempty 类断层的主防线：
 // 三态字段全为 nil 时，键必须仍在且为 JSON null（GroupID/PoolID/CooldownUntil/
-// LastUsedAt/Provider.Protocols）。
+// LastUsedAt/LastProbeAt/Provider.Protocols）。
 func TestChannelEntities_KeysPresent_WhenUnset(t *testing.T) {
 	credential := Credential{Key: "hex", KeyHash: "h", Status: CredentialStatusActive}
 	keyGroup := KeyGroup{ProviderID: 2, Name: "默认组"}

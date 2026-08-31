@@ -169,7 +169,7 @@ func TestSetHandlers_MergesNonNilFields(t *testing.T) {
 	ReplaceHandlersForTest(Handlers{})
 	t.Cleanup(func() { ReplaceHandlersForTest(Handlers{}) })
 
-	var cool, auth atomic.Int32
+	var cool, auth, touch, recover atomic.Int32
 	SetHandlers(Handlers{
 		Cooldown: func(ctx context.Context, credID uint, reason string) error {
 			cool.Add(1)
@@ -182,10 +182,80 @@ func TestSetHandlers_MergesNonNilFields(t *testing.T) {
 			return nil
 		},
 	})
+	SetHandlers(Handlers{
+		TouchProbe: func(ctx context.Context, credID uint, at time.Time) error {
+			touch.Add(1)
+			return nil
+		},
+		Recover: func(ctx context.Context, credID uint, at time.Time) (bool, error) {
+			recover.Add(1)
+			return true, nil
+		},
+	})
 
+	now := time.Now()
 	processJob(context.Background(), Job{Kind: KindCooldown, CredID: 1, Reason: "x"})
 	processJob(context.Background(), Job{Kind: KindAuthFail, CredID: 2})
-	if cool.Load() != 1 || auth.Load() != 1 {
-		t.Fatalf("cool=%d auth=%d, want both 1 (merge kept cooldown)", cool.Load(), auth.Load())
+	processJob(context.Background(), Job{Kind: KindTouchProbe, CredID: 3, At: now})
+	processJob(context.Background(), Job{Kind: KindRecover, CredID: 4, At: now})
+	if cool.Load() != 1 || auth.Load() != 1 || touch.Load() != 1 || recover.Load() != 1 {
+		t.Fatalf("cool=%d auth=%d touch=%d recover=%d, want all 1 (merge kept cooldown/auth)",
+			cool.Load(), auth.Load(), touch.Load(), recover.Load())
+	}
+}
+
+func TestEnqueueTouchProbeAndRecover(t *testing.T) {
+	ReplaceHandlersForTest(Handlers{})
+	t.Cleanup(func() {
+		ReplaceHandlersForTest(Handlers{})
+		EnableTestSyncMode(true)
+		ResetDroppedForTest()
+	})
+
+	var touchID, recoverID uint
+	var touchAt, recoverAt time.Time
+	var recoverFalse atomic.Bool
+	SetHandlers(Handlers{
+		TouchProbe: func(ctx context.Context, credID uint, at time.Time) error {
+			touchID = credID
+			touchAt = at
+			return nil
+		},
+		Recover: func(ctx context.Context, credID uint, at time.Time) (bool, error) {
+			recoverID = credID
+			recoverAt = at
+			if recoverFalse.Load() {
+				return false, nil
+			}
+			return true, nil
+		},
+	})
+
+	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+
+	// Recover 始终同步：关 syncMode 也立刻拿到真实结果。
+	EnableTestSyncMode(false)
+	if !EnqueueRecover(10, now.Add(time.Second)) {
+		t.Fatal("EnqueueRecover = false, want true（同步落库）")
+	}
+	if recoverID != 10 || !recoverAt.Equal(now.Add(time.Second)) {
+		t.Fatalf("recover = %d %v, want 10 %v", recoverID, recoverAt, now.Add(time.Second))
+	}
+	recoverFalse.Store(true)
+	if EnqueueRecover(11, now) {
+		t.Fatal("EnqueueRecover = true, want false（handler 返回未恢复）")
+	}
+
+	// Touch 仍走异步队列。
+	EnableTestSyncMode(false)
+	Start()
+	EnqueueTouchProbe(9, now)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := Flush(ctx); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	if touchID != 9 || !touchAt.Equal(now) {
+		t.Fatalf("touch = %d %v, want 9 %v", touchID, touchAt, now)
 	}
 }

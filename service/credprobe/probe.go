@@ -12,6 +12,7 @@ import (
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/providers"
 	"github.com/qkf688/llmux/service/channel"
+	"github.com/qkf688/llmux/service/credwrite"
 )
 
 // DefaultTimeout 探活上游 /models 的默认超时（短于普通聊天客户端超时，
@@ -38,14 +39,14 @@ type Outcome struct {
 	CredentialID uint
 }
 
-// TryRecover 组内全不可用时的惰性探活（#6-3）：
+// TryRecover 组内全不可用时的惰性探活（#6-3 / #6-4-2）：
 //
 //  1. 在候选中按 ID ASC 取第一条 temp_unsched 且已过探活间隔的凭据（本轮最多 1 条）
-//  2. 用选中端点组装动态 config，调 Models() 轻探
-//  3. 无论成败都写 LastProbeAt（频控）
-//  4. 成功且条件更新仍为 temp_unsched → 经 CredentialRecoveryFields 恢复 active
+//  2. CAS claim LastProbeAt（防双请求双打上游）
+//  3. 用选中端点组装动态 config，调 Models() 轻探
+//  4. 成败写路径经 credwrite 队列：失败 touch；成功条件恢复 active
 //
-// 无候选/频控全跳过 → Attempted=false，调用方保持原失败语义。
+// 无候选/频控全跳过/未抢到 claim → Attempted=false，调用方保持原失败语义。
 func TryRecover(req Request) Outcome {
 	if req.Ctx == nil {
 		req.Ctx = context.Background()
@@ -60,6 +61,18 @@ func TryRecover(req Request) Outcome {
 
 	cand := pickProbeCandidate(req.Credentials, req.Now, req.Interval)
 	if cand == nil {
+		return Outcome{}
+	}
+
+	cutoff := req.Now.Add(-req.Interval)
+	n, err := repos().Credential.ClaimLastProbeAt(req.Ctx, cand.ID, req.Now, cutoff)
+	if err != nil {
+		slog.Warn("credential probe claim last_probe_at failed",
+			"credential_id", cand.ID, "error", err)
+		return Outcome{}
+	}
+	if n == 0 {
+		// 他路已 claim 或间隔内——不得打上游。
 		return Outcome{}
 	}
 
@@ -146,37 +159,13 @@ func stripCustomModels(config string) (string, error) {
 }
 
 // touchLastProbeAt 探活失败路径：只记账探活时间，不动 Status/FailCount/CooldownReason。
-func touchLastProbeAt(ctx context.Context, id uint, now time.Time) {
-	if _, err := repos().Credential.UpdateFields(ctx, id, map[string]any{
-		"last_probe_at": now,
-	}); err != nil {
-		slog.Warn("failed to update credential last_probe_at after probe failure",
-			"credential_id", id, "error", err)
-	}
+// CAS 已 stamp 过 LastProbeAt；仍入队保证队列化路径与恢复失败触点一致（#6-4-2）。
+func touchLastProbeAt(_ context.Context, id uint, now time.Time) {
+	credwrite.EnqueueTouchProbe(id, now)
 }
 
-// recoverCredential 探活成功写回 active：条件更新要求仍为 temp_unsched
-// （WHERE status=temp_unsched，防 Get→Update TOCTOU 覆写人工终态），
-// 字段重置经 CredentialRecoveryFields 单源 + last_probe_at。
-func recoverCredential(ctx context.Context, id uint, now time.Time) bool {
-	fields := map[string]any{
-		"status":        models.CredentialStatusActive,
-		"last_probe_at": now,
-	}
-	for k, v := range models.CredentialRecoveryFields(models.CredentialStatusActive) {
-		fields[k] = v
-	}
-	n, err := repos().Credential.UpdateFieldsIfStatus(ctx, id, models.CredentialStatusTempUnsched, fields)
-	if err != nil {
-		slog.Warn("failed to recover credential after successful probe",
-			"credential_id", id, "error", err)
-		touchLastProbeAt(ctx, id, now)
-		return false
-	}
-	if n == 0 {
-		// 状态已变（人工 disabled/error 等）——只记账探活时间，不拉回生产。
-		touchLastProbeAt(ctx, id, now)
-		return false
-	}
-	return true
+// recoverCredential 探活成功写回 active：同步落库（与随后 Assemble/Select happens-before）；
+// 条件更新与失败 touch 在 Recover handler 内完成。
+func recoverCredential(_ context.Context, id uint, now time.Time) bool {
+	return credwrite.EnqueueRecover(id, now)
 }

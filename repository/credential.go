@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/qkf688/llmux/models"
 	"gorm.io/gorm"
@@ -37,6 +38,9 @@ type CredentialRepo interface {
 	// IncrementFailCountAndStopIfThreshold 原子自增 fail_count；仅当 status 为 active
 	// （或空串视同 active）且自增后达阈值时判停 temp_unsched 并写 stopReason、清 cooldown_until。
 	IncrementFailCountAndStopIfThreshold(ctx context.Context, id uint, threshold int, stopReason string) (int64, error)
+	// ClaimLastProbeAt 探活前 CAS：仅当 last_probe_at 为空或早于 cutoff 时写入 now。
+	// RowsAffected==0 表示他路已 claim 或仍在间隔内——调用方不得打上游（#6-4-2）。
+	ClaimLastProbeAt(ctx context.Context, id uint, now, cutoff time.Time) (int64, error)
 	// Delete 根据 ID 删除凭据，返回受影响行数。
 	Delete(ctx context.Context, id uint) (int64, error)
 	// DeleteByPoolID 删除指定号池下的全部凭据（软删），返回受影响行数。
@@ -208,6 +212,13 @@ WHERE id = ? AND deleted_at IS NULL`,
 		models.CredentialStatusActive, threshold,
 		id,
 	)
+	return result.RowsAffected, result.Error
+}
+
+func (r *credentialRepo) ClaimLastProbeAt(ctx context.Context, id uint, now, cutoff time.Time) (int64, error) {
+	result := r.db.WithContext(ctx).Model(&models.Credential{}).
+		Where("id = ? AND deleted_at IS NULL AND (last_probe_at IS NULL OR last_probe_at < ?)", id, cutoff).
+		Updates(map[string]any{"last_probe_at": now})
 	return result.RowsAffected, result.Error
 }
 

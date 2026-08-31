@@ -5,18 +5,21 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/qkf688/llmux/common/bgtask"
 )
 
 const defaultQueueCapacity = 4096
 
-// Kind 凭据健康异步写任务类型（#6-4-2 在此扩展 probe/recovery）。
+// Kind 凭据健康异步写任务类型（#6-4-2 扩展 probe/recovery）。
 type Kind int
 
 const (
 	KindCooldown Kind = iota
 	KindAuthFail
+	KindTouchProbe
+	KindRecover
 	kindFlush // 内部：Flush 哨兵，不落库、不可被 drop-oldest 丢掉
 )
 
@@ -24,15 +27,18 @@ const (
 type Job struct {
 	Kind      Kind
 	CredID    uint
-	Reason    string // KindCooldown 时：冷却 reason 机器码
+	Reason    string    // KindCooldown 时：冷却 reason 机器码
+	At        time.Time // KindTouchProbe / KindRecover：探活记账时间
 	flushDone chan struct{}
 }
 
 // Handlers worker 落库回调，由 chat / credprobe 注入（避免 credwrite import 业务包）。
-// SetHandlers 按非 nil 字段合并，#6-4-2 追加 Probe 时不会清掉已有 Cooldown/AuthFail。
+// SetHandlers 按非 nil 字段合并，追加 Probe 时不会清掉已有 Cooldown/AuthFail。
 type Handlers struct {
-	Cooldown func(ctx context.Context, credID uint, reason string) error
-	AuthFail func(ctx context.Context, credID uint) error
+	Cooldown   func(ctx context.Context, credID uint, reason string) error
+	AuthFail   func(ctx context.Context, credID uint) error
+	TouchProbe func(ctx context.Context, credID uint, at time.Time) error
+	Recover    func(ctx context.Context, credID uint, at time.Time) (recovered bool, err error)
 }
 
 var (
@@ -84,6 +90,12 @@ func SetHandlers(h Handlers) {
 	}
 	if h.AuthFail != nil {
 		handlers.AuthFail = h.AuthFail
+	}
+	if h.TouchProbe != nil {
+		handlers.TouchProbe = h.TouchProbe
+	}
+	if h.Recover != nil {
+		handlers.Recover = h.Recover
 	}
 }
 
@@ -142,6 +154,41 @@ func EnqueueAuthFail(credID uint) {
 		return
 	}
 	defaultQueue.enqueue(Job{Kind: KindAuthFail, CredID: credID})
+}
+
+// EnqueueTouchProbe 非阻塞投递探活失败/恢复未落地时的 LastProbeAt 记账。
+func EnqueueTouchProbe(credID uint, at time.Time) {
+	if credID == 0 {
+		return
+	}
+	defaultQueue.enqueue(Job{Kind: KindTouchProbe, CredID: credID, At: at})
+}
+
+// EnqueueRecover 探活成功后的恢复写。
+// 必须与调用方随后的 Assemble/Select happens-before：探活低频，同步落库并返回
+// 真实 recovered（条件更新 0 行 → false）。TouchProbe 仍走异步队列。
+func EnqueueRecover(credID uint, at time.Time) bool {
+	if credID == 0 {
+		return false
+	}
+	return processRecoverJob(context.Background(), credID, at)
+}
+
+func processRecoverJob(ctx context.Context, credID uint, at time.Time) bool {
+	handlersMu.RLock()
+	h := handlers.Recover
+	handlersMu.RUnlock()
+	if h == nil {
+		slog.Warn("credential write queue: recover handler nil", "credential_id", credID)
+		return false
+	}
+	recovered, err := h(ctx, credID, at)
+	if err != nil {
+		slog.Warn("credential write queue: persist failed",
+			"credential_id", credID, "kind", KindRecover, "error", err)
+		return false
+	}
+	return recovered
 }
 
 func (q *Queue) enqueue(job Job) {
@@ -280,6 +327,18 @@ func processJob(ctx context.Context, job Job) {
 			return
 		}
 		err = h.AuthFail(ctx, job.CredID)
+	case KindTouchProbe:
+		if h.TouchProbe == nil {
+			slog.Warn("credential write queue: touch-probe handler nil", "credential_id", job.CredID)
+			return
+		}
+		err = h.TouchProbe(ctx, job.CredID, job.At)
+	case KindRecover:
+		if h.Recover == nil {
+			slog.Warn("credential write queue: recover handler nil", "credential_id", job.CredID)
+			return
+		}
+		_, err = h.Recover(ctx, job.CredID, job.At)
 	default:
 		slog.Warn("credential write queue: unknown job kind", "kind", job.Kind)
 		return

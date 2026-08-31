@@ -36,7 +36,7 @@ models/retention.go
 
 | 契约 | 职责 | 定义位置 | 实现方 |
 |------|------|----------|--------|
-| `chatLogResponse` / `chatIOResponse` | `/api/logs*` 与 `/api/logs/:id/chat-io` 的对外响应契约（全 snake_case），与 `models.ChatLog`/`ChatIO` 解耦；含两个读时计算字段 `unclaimed_request_fields` / `mismatched_request_fields`（见下） | `handler/logs/dto.go` | 同文件的 `buildChatLogResponse` / `buildChatIOResponse` / `computeRequestFieldDiagnostics`（`computeUnclaimedRequestFields` / `computeMismatchedRequestFields` 各传一组检测函数 + 哨兵） |
+| `chatLogResponse` / `chatIOResponse` | `/api/logs*` 与 `/api/logs/:id/chat-io` 的对外响应契约（全 snake_case），与 `models.ChatLog`/`ChatIO` 解耦；含两个读时计算字段 `unclaimed_request_fields` / `mismatched_request_fields`（见下）；S3-3 起含四个调度明细键 `endpoint_protocol`/`endpoint_url`/`key_group_name`/`credential_note`（映射 `ChatLog` 同字段，前端 logs 展示层已按同名键消费） | `handler/logs/dto.go` | 同文件的 `buildChatLogResponse` / `buildChatIOResponse` / `computeRequestFieldDiagnostics`（`computeUnclaimedRequestFields` / `computeMismatchedRequestFields` 各传一组检测函数 + 哨兵） |
 | `ChatLogRepo` / `ChatIORepo` | 日志与 IO 持久化访问 | `repository/chat_log.go` | GORM |
 | `StatsRepo` | 六张 Stats* 表的写入（`AddTimeBased`/`IncModelCalls`/`IncRealModelCalls`/`AddProviderStats`）与读侧聚合（`GetTotal`/`SumDailiesSince`/`List*`） | `repository/stats.go` | GORM（`clause.OnConflict` upsert） |
 | `RecordLog` / 落库编排 | 请求结束后 processer + 落库 | `service/chat` | 同包 |
@@ -47,6 +47,7 @@ models/retention.go
 
 - **对外响应必须经 `handler/logs/dto.go` 的 DTO，禁止裸序列化 `models.ChatLog`/`ChatIO`**。理由是历史教训而非洁癖：`ChatIO` 曾直接 `httpresp.Success(c, chatIO)` 返回，GORM 模型的 Go 字段名就是 JSON key，改一个字段名（`LogId`→`LogID`）即破坏前端契约；`ChatLog` 曾用 `map[string]any` 手拼，漏写 `completion_tokens_details` 导致 reasoning_tokens 落库有值但 API 永不返回、前端类型声明成为谎言。结构体 DTO 让编译器兜住字段齐全，模型层字段改名不再波及 API
 - API 字段一律 snake_case（含 `id` / `created_at` / `chat_io` 等，见 [conventions.md](../conventions.md)）；`raw` 六字段用 `*string`+`omitempty`——空字符串是合法值，必须与「include_raw=false 未返回」区分
+- **调度明细四字段（`endpoint_protocol` / `endpoint_url` / `key_group_name` / `credential_note`）在 `service/chat` 建行时从选路结果 `Selection` 填充一次**（`executeSingleProviderAttempt` 的 logEntry）：失败出口全部走 `struct Updates`（零值跳过），不会用空串覆盖这些字段。`credential_note` 的取值规则是「Note 非空用 Note，否则 `KeyHash[:8]` 加 `#` 前缀」（见 chat 包 `credentialLabel`）——组内多 key 排查需要在日志里区分命中哪条 key，KeyHash 是不解密即可获得的稳定脱敏标识。`enrichChatLogs` 的格式转换判定同样消费 `EndpointProtocol`（与 chat 链路透传判定取数点同源），字段为空（S3-3 之前存量行）时判无转换
 - **`unclaimed_request_fields` 是读时计算的诊断字段，不落库**：指出客户端原始请求体里有哪些顶层键本网关根本没解析（转换后会静默消失），供开发/运维据此去补 transform。入参是 `ChatLog.Style` + `ChatLog.RawRequestBody`，调 `transform.UnknownRequestKeys`（见 [protocol-transform.md](protocol-transform.md)）。
   - **不落库的理由**：DTO 会随 transform 演进，落库的结论会僵化成「按当时 DTO 算的旧答案」；读时算永远反映最新代码，且日志详情是低频页面，反射 + JSON parse 的开销可忽略。
   - **与 raw 组同一个 `includeRaw` 门控**：它的输入就是 `RawRequestBody`，`include_raw=false` 时该列压根没从库里读出来（`ChatLogRepo.List` 的 Omit），此时算出来的只会是假的 `raw_not_recorded`。

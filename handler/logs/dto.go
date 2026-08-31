@@ -48,6 +48,13 @@ type chatLogResponse struct {
 	// UsageSource 暴露给管理端用于排查「token 全为 0」是上游没给还是归集链路丢了。
 	UsageSource string `json:"usage_source"`
 
+	// 调度明细（S3-3 起）：一次选路的三层命中，前端 logs 展示列/详情卡按同名键消费。
+	// 键名与前端 lib/api/modules/logs/chat-logs.ts 预留键逐字对齐（两侧同源）。
+	EndpointProtocol string `json:"endpoint_protocol"`
+	EndpointURL      string `json:"endpoint_url"`
+	KeyGroupName     string `json:"key_group_name"`
+	CredentialNote   string `json:"credential_note"`
+
 	IsVirtualModel      bool `json:"is_virtual_model"`
 	HasFormatConversion bool `json:"has_format_conversion"`
 	// 仅在 HasFormatConversion 为真时有值，此时两者必非空（见 enrichChatLogs 的判定）。
@@ -190,6 +197,11 @@ func buildChatLogResponse(log models.ChatLog, enrich chatLogEnrichResult, includ
 		PromptTokensDetails:     log.PromptTokensDetails,
 		CompletionTokensDetails: log.CompletionTokensDetails,
 		UsageSource:             log.UsageSource,
+
+		EndpointProtocol: log.EndpointProtocol,
+		EndpointURL:      log.EndpointURL,
+		KeyGroupName:     log.KeyGroupName,
+		CredentialNote:   log.CredentialNote,
 
 		IsVirtualModel:      enrich.isVirtualModel,
 		HasFormatConversion: enrich.hasFormatConversion,

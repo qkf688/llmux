@@ -33,17 +33,18 @@ func TestGetRequestLogs_DefaultOmitRawFields(t *testing.T) {
 	}
 
 	log := models.ChatLog{
-		Name:            "m1",
-		ProviderName:    "p1",
-		ProviderModel:   "pm1",
-		Status:          "success",
-		Style:           "anthropic",
-		RequestHeaders:  `{"x":"y"}`,
-		RequestBody:     `{"hello":"world"}`,
-		RawRequestBody:  `{"raw":"client"}`,
-		ResponseHeaders: `{"a":"b"}`,
-		ResponseBody:    `{"ok":true}`,
-		RawResponseBody: `{"raw":true}`,
+		Name:             "m1",
+		ProviderName:     "p1",
+		ProviderModel:    "pm1",
+		Status:           "success",
+		Style:            "anthropic",
+		EndpointProtocol: "openai", // S3-3 起转换判定按端点协议：入站 anthropic × 出站 openai = 有转换
+		RequestHeaders:   `{"x":"y"}`,
+		RequestBody:      `{"hello":"world"}`,
+		RawRequestBody:   `{"raw":"client"}`,
+		ResponseHeaders:  `{"a":"b"}`,
+		ResponseBody:     `{"ok":true}`,
+		RawResponseBody:  `{"raw":true}`,
 	}
 	if err := models.DB.Create(&log).Error; err != nil {
 		t.Fatalf("create log: %v", err)

@@ -35,6 +35,14 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		// ⚠️ 强制约定：**任何新的终态出口必须先回填 ProxyTime 再落库**，否则该出口
 		// 的日志耗时重新失真成近零——本字段的「唯一赋值点」必须保持在各出口之外无效。
 		ProxyTime: time.Since(input.Start),
+
+		// 调度明细（S3-3）：建行时从 Selection 填充一次即贯穿——失败出口全部走
+		// struct Updates（零值跳过），不会用空串覆盖这些字段。Select 失败的候选
+		// 淘汰路径不建行（无日志），故走到这里的行必有命中信息。
+		EndpointProtocol: input.Selection.Endpoint.Protocol,
+		EndpointURL:      input.Selection.UpstreamURL,
+		KeyGroupName:     input.Selection.Group.Name,
+		CredentialNote:   credentialLabel(input.Selection.Credential),
 	}
 
 	withHeader := false
@@ -115,15 +123,20 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 			errorUpdate.RawRequestBody = logSnapshot.RawRequestBodyStr
 		}
 		updateChatLogByID(input.Ctx, logID, errorUpdate, "failed to update log status")
-		applyProviderFailureAdjustments(input.Ctx, input.ModelWithProvider.ID, input.Provider.Name, input.ModelWithProvider.ProviderModel)
+		// 组织级 adjustment 不再在此累计：网络/超时是凭据级失败（#13），由 retry loop
+		// 组耗尽时统一补 ConsecutiveFailures/衰减（设计定案第 5 节「层内耗尽才累计
+		// 组织级」）。chatstats 统计保留现状（凭据级失败也是该供应商请求失败）。
 		if err := chatstats.RecordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
 			slog.Warn("failed to record provider stats", "provider", input.Provider.Name, "error", err)
 		}
-		return singleProviderAttemptResult{RemoveWeight: true, RemovePriority: true}
+		// 网络/超时属凭据级失败：写冷却，组内换 key 可能救回（#13）。
+		// 组织级淘汰标记仍返回（现状语义不变，组耗尽才消费）。
+		applyCredentialCooldown(input.Ctx, input.Selection.Credential, "network")
+		return singleProviderAttemptResult{CredentialFailure: true, RemoveWeight: true, RemovePriority: true}
 	}
 
 	if res.StatusCode != http.StatusOK {
-		return handleNonOKProviderResponse(input.Ctx, res, logID, logRawOptions, logSnapshot, input.ModelWithProvider, input.Provider, input.Start)
+		return handleNonOKProviderResponse(input.Ctx, res, logID, logRawOptions, logSnapshot, input.ModelWithProvider, input.Provider, input.Start, input.Selection.Credential)
 	}
 
 	rawResponseBodyStr := captureRawResponseBody(logRawOptions, res)
@@ -197,4 +210,22 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		Success:     true,
 		SideChannel: sideChannel,
 	}
+}
+
+// credentialLabel 返回凭据的日志展示标识：Note 非空用 Note（用户可读），
+// 否则取 KeyHash 前 8 位加 # 前缀——组内多 key 排查（故障转移日志）需要区分
+// 命中的是哪条凭据，KeyHash 是不解密即可获得的稳定脱敏标识。# 前缀把「哈希
+// 派生标识」与「用户手填 Note」在展示上区分开。KeyHash 也缺失（构造形态）时
+// 用显式占位符，避免落一条无意义的光杆 "#"。
+func credentialLabel(c models.Credential) string {
+	if c.Note != "" {
+		return c.Note
+	}
+	if len(c.KeyHash) >= 8 {
+		return "#" + c.KeyHash[:8]
+	}
+	if c.KeyHash != "" {
+		return "#" + c.KeyHash
+	}
+	return "(unknown)"
 }

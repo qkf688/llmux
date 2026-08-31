@@ -12,7 +12,7 @@
 
 ## 2. 职责与边界
 
-- **对外暴露**：`Selector.Select(snapshot, clientWire, modelName, now) → SelectionResult`（S3-2 chat 链路接入点）；`Assembler.Assemble(ctx, provider) → Snapshot`（装配输入）
+- **对外暴露**：`Selector.Select(snapshot, clientWire, modelName, now) → SelectionResult`（S3-2 chat 链路接入点）；`Selector.RetryCredential(snapshot, groupID, endpoint, now) → SelectionResult`（S3-3 组内故障转移：锁组/端点重选凭据）；`Assembler.Assemble(ctx, provider) → Snapshot`（装配输入）
 - **依赖谁**：`repository.*`（构造注入 `*repository.Repositories`，不取包级默认）；`models` 四表实体；`consts.Protocol*`/`WireFormatOfProtocol`；`common/credentialcrypto.Default()`（main 装配注入）
 - **不负责什么**：上游请求构造与协议适配（providers）；透传判定与转换链路编排（chat 链路消费 SelectionResult 后自判）；凭据状态机写入（CooldownUntil 只读不写，S4 接管）；请求日志落库（#13 消费命中信息）
 - **依赖方向**：`service/channel` 不 import `providers`——config 组装是 JSON 字符串操作，产物可被 `providers.New` 反序列化即可
@@ -39,6 +39,7 @@ consts/protocol.go        # Protocol* 常量 + ProtocolOfType（type→protocol�
 |------|------|----------|--------|
 | `Assembler.Assemble(ctx, provider) → *Snapshot` | 一次拉取端点/分组/凭据归并成快照；端点/分组/凭据统一按 ID ASC 排序（轮询取模基线）；凭据按本供应商分组与号池的 ID 集合收敛（`CredentialRepo.ListByGroups`），内联与号池两侧归入同一分组 | `service/channel/assemble.go` | `repository.Endpoint/KeyGroup/Credential` |
 | `Selector.Select(snapshot, clientWire, modelName, now) → SelectionResult` | 三层编排：端点 → 分组 → 凭据 → 解密 → config；每层错误携带 sentinel | `service/channel/selector.go` | 同包三层函数 |
+| `Selector.RetryCredential(snapshot, groupID, endpoint, now) → SelectionResult` | 组内重选凭据（#13 故障转移）：锁**原分组/原端点**重选下一条可用凭据（冷却中的被剔除、轮询指针推进）；返回新的 `SelectionResult`（含按新凭据重建的 `Config`/`UpstreamURL`）；组内无可用 → `ErrNoCredentialAvailable` 上抛，由 chat 链路做组织级淘汰（设计定案「分组失败 → 供应商整体失败」，本层不换组） | `service/channel/selector.go` | 复用 `SelectCredential` + `plainCredentialKey` + `BuildConfig`（与 `Select` 同 tail） |
 | `SelectEndpoint` | 同协议 wire 匹配选端点（透传）；无匹配回落主协议端点（`ProtocolOfType(Provider.Type)`，转换路径）；disabled 与未知协议端点不参与；无可用 → `ErrEndpointUnavailable` | `service/channel/endpoint_select.go` | 同文件 |
 | `SelectGroup` | 白名单过滤（空=不限）→ 按 weight 聚合档 → `balancer.WeightedRandom` 档间随机 → 档内轮询；weight<=0 不参与；无命中 → `ErrNoGroupMatches` | `service/channel/group_select.go` | `balancer.WeightedRandom`（复用） |
 | `SelectCredential` | active 且非冷却（`CooldownUntil > now` 剔除）→ 组内轮询选择即推进；空/全不可用 → `ErrNoCredentialAvailable` | `service/channel/credential_select.go` | `Selector.nextCredentialInRR` |
@@ -49,8 +50,8 @@ consts/protocol.go        # Protocol* 常量 + ProtocolOfType（type→protocol�
 
 ## 5. 特殊约定
 
-- **错误分层语义**：三层 sentinel（`ErrEndpointUnavailable` / `ErrNoGroupMatches` / `ErrNoCredentialAvailable`）供 chat 链路按层处置——凭据层失败可组内换 key 重试（#13），分组/端点层耗尽可判定供应商整体失败；`ConsecutiveFailures` 组织级语义与凭据级失败不重叠（#13 接入点）
-- **无 DB/无时钟依赖**：选择函数输入为内存快照，冷却判定时钟由 `Select` 的 `now` 参数注入；IO 收敛在 `assemble.go`（读库）与 `plainCredentialKey`（解密单例）
+- **错误分层语义**：三层 sentinel（`ErrEndpointUnavailable` / `ErrNoGroupMatches` / `ErrNoCredentialAvailable`）供 chat 链路按层处置——凭据层失败由 #13 组内故障转移消化（`RetryCredential` 换 key，冷却写库在 chat 侧），`ErrNoCredentialAvailable` 上抛即组耗尽 → 组织级淘汰；分组/端点层耗尽同样判供应商整体失败；`ConsecutiveFailures` 组织级语义与凭据级失败不重叠（#13 起层内耗尽才累计）
+- **无 DB/无时钟依赖**：选择函数输入为内存快照，冷却判定时钟由 `Select` 的 `now` 参数注入；IO 收敛在 `assemble.go`（读库）与 `plainCredentialKey`（解密单例）；`RetryCredential` 不写冷却——CooldownUntil 的写库是 chat 链路职责（`service/chat/chat_credential_cooldown.go`），本模块只读判定
 - **档间加权 = 单组权重而非档总权重**：同权重组由轮询打散为等概率，档权重只表达「某权重档的选中概率」，防止多组低权把单个高权组挤出随机池
 - **组内候选顺序稳定性**：装配按凭据 ID ASC 排序，repository List 不保证顺序；轮询取模的正确性依赖该不变式
 - **快照语义**：单供应商数据；`CredentialsByGroup` 组键恒存在（含空切片），选择路径统一收口 `ErrNoCredentialAvailable`

@@ -30,8 +30,9 @@ service/
 │   ├── before.go           # 请求前处理
 │   ├── process.go          # 响应/SSE 处理
 │   ├── chat_balance*.go    # 选路入口与虚拟模型故障转移（真实/虚拟两条路径的编排）
-│   ├── chat_retry_loop.go  # 单候选池上的重试循环（两条 balance 路径共用；候选级选路经 channel）
+│   ├── chat_retry_loop.go  # 单候选池上的重试循环（两条 balance 路径共用；候选级选路经 channel，组内凭据故障转移在候选内层循环）
 │   ├── chat_attempt*.go    # 单次上游尝试（types/request/log/error 按职责拆分）
+│   ├── chat_credential_cooldown.go # 凭据最小冷却（#13）：失败分类 + CooldownUntil 写库；S4 状态机替换为可配窗口 + 异步落库
 │   ├── chat_record*.go     # 日志后处理编排与 raw 清理
 │   ├── chat_provider_meta.go # 供应商元数据装配 + 模型-供应商查询
 │   ├── chat_log_storage.go # ChatLog 落库与保留
@@ -56,7 +57,7 @@ balancer/                   # 加权随机纯算法
 |------|------|----------|--------|
 | `Beforer` / `Processer` | 按 style 预处理请求 / 处理上游响应 | `service/chat`（门面 re-export） | style 注册实现 |
 | `BalanceChat` | 在候选供应商上执行带重试的转发；入参 `BalanceInput`、返回 `*BalanceResult` | `service/chat_facade.go` | `service/chat` |
-| `runProviderRetryLoop` | 在**单个候选池**上执行「选候选 ⚌ channel 三层选路（端点→分组→凭据）→ 尝试 → 淘汰」重试循环，产出 `retryLoopOutcome`（成功/穷尽/中止）；`MaxRetry`/`ClientTimeout`/`Deadline` 的取值已全局化（见 settings 模块「请求参数」，per-model time_out/max_retry 已移除） | `service/chat/chat_retry_loop.go` | `service/chat`（包内，真实与虚拟路径共用） |
+| `runProviderRetryLoop` | 在**单个候选池**上执行「选候选 → channel 三层选路（端点→分组→凭据）→ 尝试 → 淘汰」重试循环，产出 `retryLoopOutcome`（成功/穷尽/中止）；候选内嵌**组内凭据循环**（#13）：凭据级失败（429/5xx/鉴权/网络）写最小冷却后刷新快照、`channel.RetryCredential` 锁组换 key 重试，组内耗尽才按最后一次失败的分类做组织级淘汰并累计 `ConsecutiveFailures`；`MaxRetry`/`ClientTimeout`/`Deadline` 的取值已全局化（见 settings 模块「请求参数」，per-model time_out/max_retry 已移除） | `service/chat/chat_retry_loop.go` | `service/chat`（包内，真实与虚拟路径共用） |
 | `ProvidersWithMetaBymodelsName` | 按模型名解析候选供应商元信息（含虚拟模型分支） | `service/chat` | `service/chat` |
 | `chatcore.SelectByPriorityAndWeight` | 在关联列表上按优先级与权重选供应商 | `service/chatcore/` | `service/chatcore` |
 | `balancer.WeightedRandom` | 加权随机选取 | `balancer/balancer.go` | 泛型算法 |
@@ -71,7 +72,7 @@ balancer/                   # 加权随机纯算法
 - 虚拟模型路径：先由 `virtualmodel` 产出有序真实模型，再在真实模型层做 provider 级选路（两层 LB）。两条路径的差异只体现在**候选池如何构建**与**穷尽后如何处置**（真实路径整体失败；虚拟路径换下一个真实模型），provider 级重试循环本身由 `runProviderRetryLoop` 单点承载，不再各写一份
 - **retryLog 生命周期**：`RecordRetryLog` 消费的通道由 `runProviderRetryLoop` 独占持有（一候选池一通道，`defer close`），调用方**禁止**手动 close——此前虚拟路径在多个返回分支各写一次 close，漏一处即泄漏 goroutine
 - **thinking 裁剪（能力标记联动）**：`ProvidersWithMeta` 携带 `Model`（真实路径为查询到的 model；虚拟路径为正在尝试的 ordered model），经 `retryLoopInput.Model` → `singleProviderAttemptInput.Model` 传入单次尝试；`buildRequestBodyForProvider` 在入口处调用纯函数 `stripThinkingFields`（`chat_attempt_request.go`）——当 `ModelWithProvider.SupportsThinkingResolved(model)` 为 `false` 时删除请求体中的 `thinking`/`reasoning_effort`/`reasoning`/`output_config.effort` 字段（Anthropic adaptive thinking 字段），避免不支持 thinking 的上游报 400/静默忽略；`output_config.effort` 删除后若 `output_config` 变空对象则连壳删除，避免残留空对象；失败仅记录日志不阻断主流程。裁剪与 `clampMaxTokens` 同属"构建请求体时的保护性改写"，两条路径（真实/虚拟模型）共享同一入口
-- **供应商级选路（S3-2 起经 `channel`）**：`runProviderRetryLoop` 选中候选（`ModelWithProvider`）后按请求实际装配选择——`channel.Assembler.Assemble`（预载该供应商端点/分组/凭据，`Snapshot`）→ `channel.Selector.Select`（端点匹配 → 分组白名单+权重 → 凭据轮询+冷却剔除）→ `providers.New(consts.TypeOfProtocol(选中端点协议), Selection.Config, proxy)`。候选级失败（无端点/分组/凭据/解密失败或装配错误）只淘汰该候选继续尝试，不升级致命错误；凭据级组内转移与冷却（失败分层处置）属后续 stage，本模块不区分 sentinel 层级
+- **供应商级选路（S3-2 起经 `channel`）**：`runProviderRetryLoop` 选中候选（`ModelWithProvider`）后按请求实际装配选择——`channel.Assembler.Assemble`（预载该供应商端点/分组/凭据，`Snapshot`）→ `channel.Selector.Select`（端点匹配 → 分组白名单+权重 → 凭据轮询+冷却剔除）→ `providers.New(consts.TypeOfProtocol(选中端点协议), Selection.Config, proxy)`。候选级失败（无端点/分组/凭据/解密失败或装配错误）只淘汰该候选继续尝试，不升级致命错误；**组内凭据故障转移（#13，候选内层循环）**：凭据级失败（限流/鉴权/5xx/网络，`classifyCredentialFailure`）在 attempt 内写冷却（`applyCredentialCooldown`，`chat_credential_cooldown.go`）但不触组织级 adjustment，retry loop 刷新快照后 `channel.RetryCredential` 锁组换 key 重试；组内无可用凭据即组耗尽 → 组织级失败——组耗尽与预算自然用尽（冷却写库失败时 `RetryCredential` 不会报耗尽，预算用尽即替代收敛信号）统一收敛：按最后一次凭据级失败的分类淘汰候选（429→ReduceWeight / 其余→Remove）并补累计 `ConsecutiveFailures`/衰减（设计定案「层内耗尽才累计组织级」，两级语义不重叠）。**单 key 组（存量迁移形态）等价边界**：组耗尽淘汰分类与现状逐分支等价；但冷却窗口内不再重复打同一 key——单 key 组瞬时 429 为 fail-fast（限流窗口内重试本无益），不会像改造前那样每轮 retry 再轰一次上游
 - **透传判定取数点按选中端点协议**：请求侧（`buildRequestBodyForProvider`）与响应侧（`executeSingleProviderAttempt`）的透传/转换判定取数点均为 `consts.WireFormatOfProtocol(选中端点协议)`（S3-2 起替代 `Provider.Type`）——协议形状与 type 字符串解耦，多协议端点供应商按请求实际命中的端点判定；两侧同源（同一 `Selection` 字段），保证「请求直通则响应也直通」契约
 - **思考档位钳制（Stage B 扩档）**：`buildRequestBodyForProvider` 重构为接收 `ProviderRequestCaps` 结构体（含 `Style`/`EndpointProtocol`/`Raw`/`MaxTokensLimit`/`SupportsThinking`/`ThinkingClamp`/`AllowBudgetExceedMaxTokens`），避免位置参数横向膨胀。`SupportsThinking=true` 时由 `buildThinkingClampConfig`（`chat_settings.go`）从 ctx 读取设置 + `ThinkingLevelsResolved` 白名单构建 `transform.ThinkingClampConfig`，传入 `ProcessRequest`（transform 路径）或 `clampPassthroughReasoning`（passthrough 路径）执行就近钳制 + budget 联动（方案 E）。`SupportsThinking=false` 时 `ThinkingClamp` 为 nil（thinking 已被 `stripThinkingFields` 剥离，钳制无意义）。钳制规则详见 `protocol-transform.md`。
 - **interleaved thinking 例外（整体跳过收敛）**：启用 `anthropic.BetaInterleavedThinking`（`interleaved-thinking-2025-05-14`）时官方允许 budget 超过 `max_tokens`——此时 budget 表示「一个 assistant 轮次内所有 thinking 块的总预算」，上限是上下文窗口。对这类合法请求做收敛换不来 400，只会把思考静默压浅（比报错更难发现）。故 `AllowBudgetExceedMaxTokens` 由 `chat_attempt.go` 经 `providerAllowsBudgetExceedMaxTokens(input.ChatModel)` 求值：**断言 `providers.BetaFeatureCapable` 能力接口，不断言 `*providers.Anthropic` 具体类型**（OCP），未实现该接口的 provider 一律按未启用处理（保守：维持既有收敛）。判据只看 provider 配置的 `Beta` 字段——客户端自带的 `anthropic-beta` 头已被 `providers.setAnthropicBeta` 清除或覆盖，进不到上游。例外只免除本条约束，`clampMaxTokens` 的运维上限照旧生效。

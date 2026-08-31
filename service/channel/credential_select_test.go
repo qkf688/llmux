@@ -2,10 +2,12 @@ package channel
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/qkf688/llmux/models"
+	"gorm.io/gorm"
 )
 
 // TestSelectCredential_Filter 锁 AC-4 凭据过滤：
@@ -143,3 +145,86 @@ func TestSelectCredential_CoolingEnds(t *testing.T) {
 }
 
 func ptrTime(t time.Time) *time.Time { return &t }
+
+// TestRetryCredential_SkipsCooldown_LocksGroupAndEndpoint：组内故障转移（#13）
+// 的 channel 侧契约——重选时冷却中的凭据被剔除、组/端点锁定不换、Config 用新凭据
+// 明文与端点 URL 重建。生产调用方在一次凭据级失败写库冷却后重新 Assemble 刷新
+// 快照，本用例以「构造已冷却快照」等价模拟，聚焦选择语义本身。
+func TestRetryCredential_SkipsCooldown_LocksGroupAndEndpoint(t *testing.T) {
+	cipher := setupCipherForChannel(t)
+	now := time.Now()
+
+	groupID := uint(3)
+	endpointID := uint(5)
+	enc1, err := cipher.Encrypt("sk-key1")
+	if err != nil {
+		t.Fatalf("encrypt key1: %v", err)
+	}
+	enc2, err := cipher.Encrypt("sk-key2")
+	if err != nil {
+		t.Fatalf("encrypt key2: %v", err)
+	}
+	cooldownUntil := now.Add(10 * time.Minute)
+
+	mkSnap := func(cooldown map[uint]*time.Time) *Snapshot {
+		return &Snapshot{
+			Provider: models.Provider{
+				Model:  gorm.Model{ID: 1},
+				Type:   "openai",
+				Config: `{"base_url":"https://base.example/v1","version":"2023-06-01"}`,
+			},
+			Endpoints: []models.Endpoint{
+				{Model: gorm.Model{ID: endpointID}, ProviderID: 1, Protocol: "openai", URL: "https://ep.example/claude/v1", Enabled: true},
+			},
+			Groups: []models.KeyGroup{
+				{Model: gorm.Model{ID: groupID}, ProviderID: 1, Name: "g1", Weight: 1},
+			},
+			CredentialsByGroup: map[uint][]models.Credential{
+				groupID: {
+					// 按 ID ASC 候选顺序：key1 在前，轮询首现命中 key1
+					{Model: gorm.Model{ID: 11}, GroupID: &groupID, Key: enc1, KeyHash: cipher.Hash("sk-key1"), CooldownUntil: cooldown[11]},
+					{Model: gorm.Model{ID: 12}, GroupID: &groupID, Key: enc2, KeyHash: cipher.Hash("sk-key2"), CooldownUntil: cooldown[12]},
+				},
+			},
+		}
+	}
+
+	// ① 全可用 → 命中 key1（RR 首现）
+	sel := &Selector{}
+	res1, err := sel.RetryCredential(mkSnap(nil), groupID, models.Endpoint{Model: gorm.Model{ID: endpointID}, URL: "https://ep.example/claude/v1"}, now)
+	if err != nil {
+		t.Fatalf("retry step 1 error: %v", err)
+	}
+	if res1.Credential.KeyHash != cipher.Hash("sk-key1") {
+		t.Fatalf("step 1 Credential = %s, want key1（轮询首现）", res1.Credential.KeyHash)
+	}
+	if res1.Endpoint.ID != endpointID || res1.Group.ID != groupID {
+		t.Fatalf("step 1 组/端点被换：endpoint=%d group=%d, want %d/%d（锁组重选不换）", res1.Endpoint.ID, res1.Group.ID, endpointID, groupID)
+	}
+	if !strings.Contains(res1.Config, `"api_key":"sk-key1"`) {
+		t.Fatalf("step 1 config 缺 key1 明文: %s", res1.Config)
+	}
+	if res1.UpstreamURL != "https://ep.example/claude/v1" {
+		t.Fatalf("step 1 UpstreamURL = %q, want 端点覆盖 URL（继承链）", res1.UpstreamURL)
+	}
+
+	// ② key1 冷却 → 重选命中 key2（冷却剔除，同组内故障转移）
+	sel = &Selector{}
+	res2, err := sel.RetryCredential(mkSnap(map[uint]*time.Time{11: &cooldownUntil}), groupID, res1.Endpoint, now)
+	if err != nil {
+		t.Fatalf("retry step 2 error: %v", err)
+	}
+	if res2.Credential.KeyHash != cipher.Hash("sk-key2") {
+		t.Fatalf("step 2 Credential = %s, want key2（key1 冷却中被剔除）", res2.Credential.KeyHash)
+	}
+	if !strings.Contains(res2.Config, `"api_key":"sk-key2"`) {
+		t.Fatalf("step 2 config 缺 key2 明文: %s", res2.Config)
+	}
+	// ③ 全部冷却（组耗尽）→ ErrNoCredentialAvailable 上抛，由 chat 链路做组织级淘汰
+	sel = &Selector{}
+	if _, err := sel.RetryCredential(mkSnap(map[uint]*time.Time{11: &cooldownUntil, 12: &cooldownUntil}), groupID, res1.Endpoint, now); err == nil {
+		t.Fatal("step 3 want error, got nil（组内无可用凭据必须上抛）")
+	} else if !errors.Is(err, ErrNoCredentialAvailable) {
+		t.Fatalf("step 3 err = %v, want ErrNoCredentialAvailable sentinel", err)
+	}
+}

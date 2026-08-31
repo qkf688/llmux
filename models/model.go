@@ -368,6 +368,15 @@ type ChatLog struct {
 	// 混入非 token 字段会污染协议形状。
 	UsageSource string `gorm:"index"`
 
+	// 调度明细（S3-3 起写入）：一次选路的三层命中（service/channel Selection）。
+	// 建行时填充（executeSingleProviderAttempt 的 logEntry）；失败更新走 struct
+	// Updates 零值跳过语义，建行值自动贯穿全部失败出口。handler/logs 的 DTO 以
+	// snake_case 键暴露，前端展示层（S0 原型）已按同名键消费。
+	EndpointProtocol string // 命中的协议端点协议（openai/anthropic/responses）
+	EndpointURL      string // 实际出站 URL（继承链解析后：端点 URL 或 Provider base_url）
+	KeyGroupName     string // 命中的凭据分组名
+	CredentialNote   string // 命中的凭据标识（Note 非空用 Note，否则 KeyHash 前 8 位）
+
 	// 原始请求和响应内容
 	RequestHeaders  string // 请求头JSON字符串
 	RequestBody     string // 请求体（转换后，发给上游的）

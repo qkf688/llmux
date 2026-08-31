@@ -40,6 +40,11 @@ type singleProviderAttemptResult struct {
 	RemovePriority bool
 	ReduceWeight   bool
 
+	// CredentialFailure 标记本次失败是**凭据级**（限流/鉴权/服务端错误/网络），
+	// 换一条 key 可能成功。由 retry loop（#13 组内故障转移）决定层内换 key；
+	// 组织级语义（RemoveWeight* / ReduceWeight）仍在，层内耗尽才消费。
+	CredentialFailure bool
+
 	// SideChannel 承载转换旁路产物：上游原始 SSE 累积体（供 RawResponseBody）
 	// 与上游原始 usage（供落库统计）。直通路径无转换层可旁路，故为 nil。
 	// 转换 goroutine 写、流结束后读，内部自带互斥。

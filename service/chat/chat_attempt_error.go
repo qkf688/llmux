@@ -23,6 +23,7 @@ func handleNonOKProviderResponse(
 	modelWithProvider models.ModelWithProvider,
 	provider models.Provider,
 	start time.Time, // 请求开始时刻（handler startReq）：用于回填 ProxyTime 终值
+	cred models.Credential, // 本次尝试选中的凭据：凭据级失败时写冷却（#13）
 ) singleProviderAttemptResult {
 	byteBody, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -60,15 +61,33 @@ func handleNonOKProviderResponse(
 	}
 
 	updateChatLogByID(ctx, logID, errorUpdate, "failed to update log status")
-	applyProviderFailureAdjustments(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
+	// 组织级 adjustment 只在「非凭据级失败」时在 attempt 内累计（#13）：凭据级失败
+	// （限流/鉴权/5xx）组内消化，由 retry loop 组耗尽时统一补 ConsecutiveFailures/
+	// 衰减（设计定案第 5 节「层内耗尽才累计组织级」）。chatstats 统计保留现状。
+	if !classifyCredentialFailure(res.StatusCode) {
+		applyProviderFailureAdjustments(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
+	}
 	if err := chatstats.RecordProviderStats(context.Background(), provider.Name, false, 0, 0); err != nil {
 		slog.Warn("failed to record provider stats", "provider", provider.Name, "error", err)
 	}
 	res.Body.Close()
 
-	if res.StatusCode == http.StatusTooManyRequests {
-		return singleProviderAttemptResult{ReduceWeight: true}
+	// 凭据级失败（限流/鉴权/5xx）写最小冷却：窗口内选路跳过该凭据并允许同组换
+	// key（#13 的组内故障转移）。组织级淘汰标记保留，单 key 组（存量迁移形态）
+	// 组耗尽后行为与现状完全等价。
+	if classifyCredentialFailure(res.StatusCode) {
+		applyCredentialCooldown(ctx, cred, cooldownReasonForStatus(res.StatusCode))
 	}
+
+	if res.StatusCode == http.StatusTooManyRequests {
+		return singleProviderAttemptResult{CredentialFailure: true, ReduceWeight: true}
+	}
+	if classifyCredentialFailure(res.StatusCode) {
+		// 5xx / 401 / 403：凭据级失败，组织级淘汰标记保留（现状语义），
+		// 组内耗尽才真正消费（retry loop 淘汰候选时同现状）。
+		return singleProviderAttemptResult{CredentialFailure: true, RemoveWeight: true, RemovePriority: true}
+	}
+	// 其余 4xx（请求体被拒等）：请求本身的问题，换 key 无意义——组织级失败，不标凭据级。
 	return singleProviderAttemptResult{RemoveWeight: true, RemovePriority: true}
 }
 

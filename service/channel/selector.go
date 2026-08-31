@@ -1,9 +1,11 @@
 package channel
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/qkf688/llmux/consts"
+	"github.com/qkf688/llmux/models"
 )
 
 // Select 完成一次完整选路：端点 → 分组 → 凭据 → 动态 config。
@@ -59,3 +61,47 @@ func DefaultSelector() *Selector { return defaultSelector }
 // ResetDefaultSelectorForTest 清空默认选路器轮询指针（测试隔离用；
 // 集成测试用例开头复位，避免受前序用例推进位置影响）。
 func ResetDefaultSelectorForTest() { defaultSelector.Reset() }
+
+// RetryCredential 组内重选凭据（#13 组内故障转移）：锁定**原分组与原端点**，
+// 在刷新后的快照上重选下一条可用凭据。调用时机：上一凭据凭据级失败并已写冷却
+// 之后，调用方重新 Assemble 得到刷新快照——冷却中的凭据被 credentialUsable 剔除、
+// 轮询指针「选择即推进」天然选到下一条；同请求内重试不再复用旧快照里的冷却值。
+//
+// 分组不自动切换：设计定案第 4 节「分组失败 → 供应商整体失败」，本层无可用凭据
+// 即 ErrNoCredentialAvailable 上抛，由 chat 链路做组织级淘汰。
+// 与 Select 复用同一尾部组装（解密 + BuildConfig），保证同套 config 继承链语义。
+func (s *Selector) RetryCredential(snapshot *Snapshot, groupID uint, endpoint models.Endpoint, now time.Time) (SelectionResult, error) {
+	c, err := SelectCredential(s, snapshot, groupID, now)
+	if err != nil {
+		return SelectionResult{}, err
+	}
+	plainKey, err := plainCredentialKey(c)
+	if err != nil {
+		return SelectionResult{}, err
+	}
+	cfg, upstreamURL, err := BuildConfig(snapshot.Provider, endpoint, plainKey)
+	if err != nil {
+		return SelectionResult{}, err
+	}
+	g, ok := groupByID(snapshot, groupID)
+	if !ok {
+		return SelectionResult{}, fmt.Errorf("%w: group %d gone after refresh", ErrNoGroupMatches, groupID)
+	}
+	return SelectionResult{
+		Endpoint:    endpoint,
+		Group:       g,
+		Credential:  c,
+		UpstreamURL: upstreamURL,
+		Config:      cfg,
+	}, nil
+}
+
+// groupByID 在快照分组中按 ID 取回分组信息（RetryCredential 锁组重选要用）。
+func groupByID(snapshot *Snapshot, id uint) (models.KeyGroup, bool) {
+	for _, g := range snapshot.Groups {
+		if g.ID == id {
+			return g, true
+		}
+	}
+	return models.KeyGroup{}, false
+}

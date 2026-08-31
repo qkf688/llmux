@@ -204,6 +204,8 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 
 	adjustment.ResetConsecutiveFailures(input.Ctx, input.ModelWithProvider.ID)
 	adjustment.ApplySuccessAdjustments(input.Ctx, input.ModelWithProvider.ID)
+	// 成功重置鉴权失败计数（#6-2）：FailCount>0 才写，常态成功请求零凭据写。
+	resetCredentialAuthFailCount(input.Ctx, input.Selection.Credential)
 	return singleProviderAttemptResult{
 		Response:    res,
 		LogID:       logID,

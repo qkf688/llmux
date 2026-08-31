@@ -72,11 +72,16 @@ func handleNonOKProviderResponse(
 	}
 	res.Body.Close()
 
-	// 凭据级失败（限流/鉴权/5xx）写最小冷却：窗口内选路跳过该凭据并允许同组换
-	// key（#13 的组内故障转移）。组织级淘汰标记保留，单 key 组（存量迁移形态）
-	// 组耗尽后行为与现状完全等价。
+	// 凭据级失败（限流/鉴权/5xx）的凭据侧处置（#13 组内故障转移 + #6-2 分类型）：
+	// 鉴权失败（401/403）走判停——连败计数 + 达阈值 temp_unsched（不写冷却）；
+	// 其余（429/5xx）写最小冷却，窗口内选路跳过该凭据并允许同组换 key。
+	// 组织级淘汰标记保留，单 key 组（存量迁移形态）组耗尽后行为与现状完全等价。
 	if classifyCredentialFailure(res.StatusCode) {
-		applyCredentialCooldown(ctx, cred, cooldownReasonForStatus(res.StatusCode))
+		if classifyAuthFailure(res.StatusCode) {
+			applyCredentialAuthFailure(ctx, cred)
+		} else {
+			applyCredentialCooldown(ctx, cred, cooldownReasonForStatus(res.StatusCode))
+		}
 	}
 
 	if res.StatusCode == http.StatusTooManyRequests {

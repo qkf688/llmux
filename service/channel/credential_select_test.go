@@ -11,7 +11,8 @@ import (
 )
 
 // TestSelectCredential_Filter 锁 AC-4 凭据过滤：
-// disabled / error / 冷却中（CooldownUntil > now）一律不可选，可用的只剩 active。
+// disabled / error / temp_unsched（鉴权判停，#6-2）/ 冷却中（CooldownUntil > now）
+// 一律不可选，可用的只剩 active。
 func TestSelectCredential_Filter(t *testing.T) {
 	now := time.Now()
 	snap := &Snapshot{
@@ -21,6 +22,7 @@ func TestSelectCredential_Filter(t *testing.T) {
 				{KeyHash: "h-active"},
 				{KeyHash: "h-disabled", Status: models.CredentialStatusDisabled},
 				{KeyHash: "h-error", Status: models.CredentialStatusError},
+				{KeyHash: "h-temputsched", Status: models.CredentialStatusTempUnsched},
 				{KeyHash: "h-cooldown", CooldownUntil: ptrTime(now.Add(5 * time.Minute))},
 				{KeyHash: "h-expired", CooldownUntil: ptrTime(now.Add(-5 * time.Minute))},
 			},

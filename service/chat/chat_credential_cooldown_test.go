@@ -71,11 +71,12 @@ func TestApplyCredentialCooldown(t *testing.T) {
 	}
 }
 
-// credCooldownSettingsReader 测试用 settings.Reader stub：只覆写凭据冷却两键，
+// credCooldownSettingsReader 测试用 settings.Reader stub：只覆写凭据健康三键，
 // 其余回退 defaultValue。窗口最小粒度秒。
 type credCooldownSettingsReader struct {
 	Cooldown429Sec    int
 	CooldownServerSec int
+	AuthFailThreshold int
 }
 
 func (r credCooldownSettingsReader) Bool(_ context.Context, _ string, def bool) bool { return def }
@@ -86,6 +87,8 @@ func (r credCooldownSettingsReader) Int(_ context.Context, key string, def, _ in
 		return r.Cooldown429Sec
 	case models.SettingKeyCredHealthCooldownServerSec:
 		return r.CooldownServerSec
+	case models.SettingKeyCredHealthAuthFailThreshold:
+		return r.AuthFailThreshold
 	}
 	return def
 }
@@ -95,7 +98,8 @@ func (r credCooldownSettingsReader) String(_ context.Context, _ string, def stri
 }
 
 // TestApplyCredentialCooldown_ConfigurableWindows 锁「冷却窗口可配 + 按失败类型分窗」（#6-1）：
-// 429 走 429 窗口独立读设置项；5xx/网络/401(过渡期) 共用服务端窗口。reason 机器码不变。
+// 429 走 429 窗口独立读设置项；5xx/网络共用服务端窗口。reason 机器码不变。
+// 401/403 不在本表：#6-2 起走鉴权判停路径（不写冷却），见 chat_credential_auth_fail_test.go。
 func TestApplyCredentialCooldown_ConfigurableWindows(t *testing.T) {
 	initChatRecordTestDB(t)
 	SetSettingsReader(credCooldownSettingsReader{Cooldown429Sec: 10, CooldownServerSec: 120})
@@ -109,8 +113,6 @@ func TestApplyCredentialCooldown_ConfigurableWindows(t *testing.T) {
 		{"429 限流走 429 窗口", "http_429", 10},
 		{"5xx 服务端走 server 窗口", "http_500", 120},
 		{"网络失败走 server 窗口", "network", 120},
-		{"401 过渡期走 server 窗口", "http_401", 120},
-		{"403 过渡期走 server 窗口", "http_403", 120},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

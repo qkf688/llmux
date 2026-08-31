@@ -137,3 +137,27 @@ func TestChannelEntities_KeysPresent_WhenUnset(t *testing.T) {
 	checkShapeTable(t, marshalShape(t, keyGroup), "", keyGroupResponseKeys, false)
 	checkShapeTable(t, marshalShape(t, provider), "", providerProtocolsKeys, false)
 }
+
+// TestIsValidCredentialStatus 锁凭据状态枚举的合法值集合（OCP 收敛点，
+// #6-2 起 temp_unsched 入列）：handler 的 CRUD/筛选经此白名单反射放行，
+// 新增状态只改 models 侧（含本表），handler 不另设白名单。
+func TestIsValidCredentialStatus(t *testing.T) {
+	cases := []struct {
+		status string
+		want   bool
+	}{
+		{CredentialStatusActive, true},
+		{CredentialStatusDisabled, true},
+		{CredentialStatusError, true},
+		{CredentialStatusTempUnsched, true},
+		{"cooldown", false}, // 冷却不占状态位（CooldownUntil 表达），防枚举误收
+		{"", false},
+		{"ACTIVE", false},
+		{"bogus", false},
+	}
+	for _, tc := range cases {
+		if got := IsValidCredentialStatus(tc.status); got != tc.want {
+			t.Fatalf("IsValidCredentialStatus(%q) = %v, want %v", tc.status, got, tc.want)
+		}
+	}
+}

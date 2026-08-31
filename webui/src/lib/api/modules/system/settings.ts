@@ -57,6 +57,7 @@ export interface Settings {
   request_max_retry: number;
   cred_health_cooldown_429_sec: number;
   cred_health_cooldown_server_sec: number;
+  cred_health_auth_fail_threshold: number;
 }
 
 export interface ResetWeightsResponse {

@@ -36,15 +36,12 @@ func classifyCredentialFailure(statusCode int) bool {
 
 // cooldownReasonForStatus 冷却原因机器码（供状态机/前端文案映射消费；
 // 5xx 直接带状态码便于排查，不细分 5xx 子类——#6-1 分窗按 reason 前缀分派，
-// 5xx 与网络/鉴权都落在 server 窗，不依赖子类细分）。
+// 5xx 与网络都落在 server 窗，不依赖子类细分。401/403 由判停路径接管
+// （chat_credential_auth_fail.go，reason=auth_fail），不经本函数）。
 func cooldownReasonForStatus(statusCode int) string {
-	switch {
-	case statusCode == http.StatusTooManyRequests:
+	switch statusCode {
+	case http.StatusTooManyRequests:
 		return cooldownReason429 // 单源：与 cooldownWindowForReason 分窗判定共用
-	case statusCode == http.StatusUnauthorized:
-		return "http_401"
-	case statusCode == http.StatusForbidden:
-		return "http_403"
 	default:
 		return fmt.Sprintf("http_%d", statusCode)
 	}
@@ -52,7 +49,7 @@ func cooldownReasonForStatus(statusCode int) string {
 
 // cooldownWindowForReason 按失败类型分配冷却窗口（#6-1 可配基数 + 分窗）：
 // 429/过载独立读「429 窗口」；其余凭据级失败（5xx/超时/网络）共用「服务端窗口」；
-// 401/403 在 #6-2 判停落地前同归服务端窗（过渡期，默认 60s 与 S3 行为一致）。
+// 鉴权失败（401/403）不走冷却，走判停路径（#6-2，见 chat_credential_auth_fail.go）。
 // 分窗判定集中此一处（OCP）：复用既有窗口的新失败类型此判定即覆盖（多半连这都不用改）；
 // 但「新窗口」类型需同步设置项全链 6 处（键常量/schema/DTO/前端 interface/卡片 intFields/本函数）。
 func cooldownWindowForReason(ctx context.Context, reason string) time.Duration {

@@ -96,11 +96,17 @@ func getCredHealthCooldown429Sec(ctx context.Context) int {
 	return settingsReader.Int(ctx, models.SettingKeyCredHealthCooldown429Sec, 60, 1)
 }
 
-// getCredHealthCooldownServerSec 获取凭据服务端错误冷却窗口（秒，5xx/超时/网络；
-// 鉴权失败过渡期同窗，#6-2 判停落地后 401/403 不再走冷却）。
+// getCredHealthCooldownServerSec 获取凭据服务端错误冷却窗口（秒，5xx/超时/网络）。
 // 默认值与 setting schema 一致（60）。
 func getCredHealthCooldownServerSec(ctx context.Context) int {
 	return settingsReader.Int(ctx, models.SettingKeyCredHealthCooldownServerSec, 60, 1)
+}
+
+// getCredHealthAuthFailThreshold 获取凭据连续鉴权失败（401/403）判停阈值。
+// 连续失败达阈值后 Status 变为 temp_unsched（选路剔除；探活恢复为 #6-3，人工可经
+// 凭据 CRUD 改回 active）。默认值与 setting schema 一致（3）。
+func getCredHealthAuthFailThreshold(ctx context.Context) int {
+	return settingsReader.Int(ctx, models.SettingKeyCredHealthAuthFailThreshold, 3, 1)
 }
 
 // buildThinkingClampConfig 从 ctx 读取设置 + model/association 白名单，构建思考档位钳制配置。

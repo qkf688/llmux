@@ -15,17 +15,21 @@ type Pool struct {
 }
 
 // CredentialStatus 凭据状态枚举。冷却不占状态（用 CooldownUntil 表达），
-// 与设计定案第 5 节状态机一致：active → 冷却(cooldown_until) → 到期自动回 active。
+// 与设计定案第 5 节状态机一致：active → 冷却(cooldown_until) → 到期自动回 active；
+// active → 鉴权连败×N(#6-2) → temp_unsched → 探活成功(#6-3)/人工恢复 → active。
+// temp_unsched 与 error 的语义区分：前者自动进入可自动恢复，后者人工终态——
+// 不区分则探活自愈会把人工标记的故障 key 拉回生产。
 const (
-	CredentialStatusActive   = "active"
-	CredentialStatusDisabled = "disabled"
-	CredentialStatusError    = "error"
+	CredentialStatusActive      = "active"
+	CredentialStatusDisabled    = "disabled"
+	CredentialStatusError       = "error"
+	CredentialStatusTempUnsched = "temp_unsched"
 )
 
 // IsValidCredentialStatus 校验凭据状态合法性（S4 新增状态时在此扩展，OCP 收敛点）。
 func IsValidCredentialStatus(s string) bool {
 	switch s {
-	case CredentialStatusActive, CredentialStatusDisabled, CredentialStatusError:
+	case CredentialStatusActive, CredentialStatusDisabled, CredentialStatusError, CredentialStatusTempUnsched:
 		return true
 	default:
 		return false

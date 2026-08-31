@@ -70,7 +70,8 @@ type Settings struct {
 	RequestMaxRetry        int `json:"request_max_retry"`         // 单候选池最大尝试次数
 	// 凭据健康相关设置
 	CredHealthCooldown429Sec    int `json:"cred_health_cooldown_429_sec"`    // 凭据 429 限流冷却窗口（秒）
-	CredHealthCooldownServerSec int `json:"cred_health_cooldown_server_sec"` // 凭据服务端错误冷却窗口（秒）
+	CredHealthCooldownServerSec int `json:"cred_health_cooldown_server_sec"` // 凭据服务端错误冷却窗口（秒，5xx/超时/网络）
+	CredHealthAuthFailThreshold int `json:"cred_health_auth_fail_threshold"` // 凭据连续鉴权失败（401/403）判停阈值（次）
 }
 
 // SettingsResponse 设置响应结构（类型别名，字段定义统一在 Settings 中）

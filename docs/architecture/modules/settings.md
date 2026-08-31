@@ -55,10 +55,11 @@ models.Setting
   - `SettingKeyStreamFirstByteTimeout`：int，Default=`15`，Min=1。流式响应头后首字节等待窗口，驱动 `handler/v1` 的首字节看门狗。
   - `SettingKeyRequestMaxRetry`：int，Default=`3`，Min=1。单候选池尝试次数。
   - 消费方：`service/chat` 的 `getRequestHeaderTimeout / getRequestTotalTimeout / GetStreamFirstByteTimeout / getRequestMaxRetry`（`chat_settings.go`）经 `settingsReader` 读取；`handler/v1` 经 `service` facade 读首字节等待。响应头超时与总超时**解耦**：等头超时不再拖垮后续候选窗口（`chat_balance.go` / `chat_balance_virtual.go`）。
-- **凭据健康相关设置（S4 #6-1，可配冷却窗口 + 按失败类型分窗）**：
+- **凭据健康相关设置（S4 #6-1/#6-2：可配冷却窗口 + 按失败类型分窗 + 鉴权失败判停阈值）**：
   - `SettingKeyCredHealthCooldown429Sec`：int，Default=`60`，Min=1。凭据 429 限流冷却窗口（秒）。
-  - `SettingKeyCredHealthCooldownServerSec`：int，Default=`60`，Min=1。凭据服务端错误冷却窗口（秒，5xx/超时/网络；401/403 在 #6-2 判停落地前同窗过渡）。
-  - 消费方：`service/chat` 的 `getCredHealthCooldown429Sec / getCredHealthCooldownServerSec`（`chat_settings.go`）经 `settingsReader` 读取 → `cooldownWindowForReason`（`chat_credential_cooldown.go`）按 reason 分窗写 `CooldownUntil`；选路侧 `channel` 的 `credentialUsable` 判定冷却中、到期自动恢复（不占状态位，`channel-routing.md`）。
+  - `SettingKeyCredHealthCooldownServerSec`：int，Default=`60`，Min=1。凭据服务端错误冷却窗口（秒，5xx/超时/网络）。
+  - `SettingKeyCredHealthAuthFailThreshold`：int，Default=`3`，Min=1。凭据连续鉴权失败（401/403）判停阈值：达 N 后 Status=`temp_unsched`（选路剔除，探活恢复为 #6-3），成功请求重置计数。
+  - 消费方：`service/chat` 的 `getCredHealthCooldown429Sec / getCredHealthCooldownServerSec / getCredHealthAuthFailThreshold`（`chat_settings.go`）经 `settingsReader` 读取 → `cooldownWindowForReason`（`chat_credential_cooldown.go`）按 reason 分窗写 `CooldownUntil`；`applyCredentialAuthFailure`（`chat_credential_auth_fail.go`）读阈值判停写 `temp_unsched`（401/403 不走冷却）；选路侧 `channel` 的 `credentialUsable` 判定冷却中与非 active 状态剔除（`channel-routing.md`）。
 
 ---
 

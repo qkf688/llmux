@@ -227,6 +227,10 @@ func UpdateCredential(c *gin.Context) {
 	}
 	if req.Status != nil {
 		fields["status"] = *req.Status
+		// 恢复 active 时按状态机约定连带重置鉴权失败计数（单一来源 models.CredentialRecoveryFields）
+		for k, v := range models.CredentialRecoveryFields(*req.Status) {
+			fields[k] = v
+		}
 	}
 	if _, err := repos().Credential.UpdateFields(ctx, credID, fields); err != nil {
 		httpresp.InternalServerError(c, "Failed to update credential: "+err.Error())

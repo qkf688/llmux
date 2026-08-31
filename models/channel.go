@@ -36,6 +36,18 @@ func IsValidCredentialStatus(s string) bool {
 	}
 }
 
+// CredentialRecoveryFields 返回状态切换到 active（恢复）时按状态机约定需要连带
+// 重置的字段：鉴权失败窗口重新开始（#6-2 连败计数清零 + 判停 reason 清残留，
+// 否则人工恢复后首次 401 即 N+1≥N 再判停、UI 误显示 auth_fail）。
+// 非恢复目标状态返回 nil（切往 disabled/error/temp_unsched 不带重置语义）。
+// 人工 CRUD 单条/批量启停/探活恢复（#6-3）共用此单一来源，禁止入口各自拼字段。
+func CredentialRecoveryFields(status string) map[string]any {
+	if status != CredentialStatusActive {
+		return nil
+	}
+	return map[string]any{"fail_count": 0, "cooldown_reason": ""}
+}
+
 // Credential 凭据：一条 = 一个 key，归属号池（PoolID）或分组内联（GroupID）二选一。
 // Key 存密文（hex(nonce‖ciphertext)，见 common/credentialcrypto），
 // KeyHash 用于不解密即可完成的批量导入去重 / 搜索 / 日志关联。

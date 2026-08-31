@@ -227,6 +227,107 @@ func TestExecuteSingleProviderAttempt_NonOK401_AuthFailStopsCredential(t *testin
 	}
 }
 
+// TestApplyCredentialAuthFailure_ClearsResidualCooldown 锁「判停清残留冷却」：
+// 判停前凭据可能带 429/5xx 冷却（穿插失败场景），temp_unsched 的排除不依赖
+// CooldownUntil，但不清会让 UI 误显示冷却态——判停写必须三字段同落。
+func TestApplyCredentialAuthFailure_ClearsResidualCooldown(t *testing.T) {
+	initChatRecordTestDB(t)
+	SetSettingsReader(credCooldownSettingsReader{Cooldown429Sec: 60, CooldownServerSec: 60, AuthFailThreshold: 3})
+	t.Cleanup(func() { SetSettingsReader(nil) })
+
+	residual := time.Now().Add(5 * time.Minute)
+	cred := models.Credential{Key: "enc", KeyHash: "hash", FailCount: 2, CooldownUntil: &residual, CooldownReason: "http_429"}
+	if err := models.DB.Create(&cred).Error; err != nil {
+		t.Fatalf("create credential: %v", err)
+	}
+
+	applyCredentialAuthFailure(context.Background(), cred)
+
+	var got models.Credential
+	if err := models.DB.First(&got, cred.ID).Error; err != nil {
+		t.Fatalf("reload credential: %v", err)
+	}
+	if got.Status != models.CredentialStatusTempUnsched {
+		t.Fatalf("Status = %q, want temp_unsched", got.Status)
+	}
+	if got.CooldownReason != cooldownReasonAuthFail {
+		t.Fatalf("CooldownReason = %q, want %q（覆盖 429 残留）", got.CooldownReason, cooldownReasonAuthFail)
+	}
+	if got.CooldownUntil != nil {
+		t.Fatalf("CooldownUntil != nil, want nil（判停清残留冷却）")
+	}
+}
+
+// TestApplyCredentialAuthFailure_CooldownDoesNotResetCount 锁「穿插冷却不清零计数」：
+// 401×2 后穿插一次 429 冷却，计数保留——只有成功请求才重置「连续」判据。
+func TestApplyCredentialAuthFailure_CooldownDoesNotResetCount(t *testing.T) {
+	initChatRecordTestDB(t)
+	SetSettingsReader(credCooldownSettingsReader{Cooldown429Sec: 60, CooldownServerSec: 60, AuthFailThreshold: 3})
+	t.Cleanup(func() { SetSettingsReader(nil) })
+
+	cred := models.Credential{Key: "enc", KeyHash: "hash", FailCount: 2}
+	if err := models.DB.Create(&cred).Error; err != nil {
+		t.Fatalf("create credential: %v", err)
+	}
+
+	// 穿插 429 冷却：只写 cooldown_*, 不碰 fail_count
+	applyCredentialCooldown(context.Background(), cred, "http_429")
+	var afterCooldown models.Credential
+	if err := models.DB.First(&afterCooldown, cred.ID).Error; err != nil {
+		t.Fatalf("reload credential (after cooldown): %v", err)
+	}
+	if afterCooldown.FailCount != 2 {
+		t.Fatalf("429 冷却后 FailCount = %d, want 2（穿插冷却不清零计数）", afterCooldown.FailCount)
+	}
+	if afterCooldown.Status != models.CredentialStatusActive {
+		t.Fatalf("429 冷却后 Status = %q, want active（冷却不占状态位）", afterCooldown.Status)
+	}
+
+	// 冷却未到期时再一发 401：计数 3 → 判停（计数没被穿插冷却打断）
+	applyCredentialAuthFailure(context.Background(), cred)
+	var stopped models.Credential
+	if err := models.DB.First(&stopped, cred.ID).Error; err != nil {
+		t.Fatalf("reload credential (stopped): %v", err)
+	}
+	if stopped.Status != models.CredentialStatusTempUnsched {
+		t.Fatalf("Status = %q, want temp_unsched（穿插冷却后计数延续至判停）", stopped.Status)
+	}
+	if stopped.CooldownUntil != nil {
+		t.Fatalf("CooldownUntil != nil, want nil（判停清冷却残留）")
+	}
+}
+
+// TestApplyCredentialAuthFailure_SkipsNonActiveCredential 锁「判停不覆写人工终态」：
+// 管理员置 disabled/error 的窗口内 in-flight 请求 401 达阈值，不判停——
+// temp_unsched 可被探活自动恢复，覆写人工终态等于绕开「停用 key 不被拉回生产」。
+func TestApplyCredentialAuthFailure_SkipsNonActiveCredential(t *testing.T) {
+	for _, status := range []string{models.CredentialStatusDisabled, models.CredentialStatusError} {
+		t.Run(status, func(t *testing.T) {
+			initChatRecordTestDB(t)
+			SetSettingsReader(credCooldownSettingsReader{AuthFailThreshold: 3})
+			t.Cleanup(func() { SetSettingsReader(nil) })
+
+			cred := models.Credential{Key: "enc", KeyHash: "hash", FailCount: 2, Status: status}
+			if err := models.DB.Create(&cred).Error; err != nil {
+				t.Fatalf("create credential: %v", err)
+			}
+
+			applyCredentialAuthFailure(context.Background(), cred)
+
+			var got models.Credential
+			if err := models.DB.First(&got, cred.ID).Error; err != nil {
+				t.Fatalf("reload credential: %v", err)
+			}
+			if got.Status != status {
+				t.Fatalf("Status = %q, want %q（判停不得覆写人工终态）", got.Status, status)
+			}
+			if got.FailCount != 3 {
+				t.Fatalf("FailCount = %d, want 3（计数照常自增，只是不判停）", got.FailCount)
+			}
+		})
+	}
+}
+
 // TestResetCredentialAuthFailCount 锁 #6-2 成功重置语义（AC-3）：
 // FailCount>0 的凭据计数清零（判停判据归位）；FailCount=0 时不产生写库——
 // 成功是热路径，常态请求不应有任何凭据写（#6-4 异步落库前的必要约束）。

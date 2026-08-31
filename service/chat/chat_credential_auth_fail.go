@@ -10,8 +10,8 @@ import (
 )
 
 // cooldownReasonAuthFail 鉴权失败判停 reason 机器码：判停时写入 CooldownReason 字段
-// （字段复用：temp_unsched 在 UI 归入「错误」显示，详情行靠此机器码区分——
-// 与人工 error 的区分见 models.CredentialStatusTempUnsched 注释）。
+// （字段复用：temp_unsched 在 UI 归入「错误」显示，详情行靠此机器码区分——UI 方案
+// 预留，S6 接真实凭据 API 时落地；与人工 error 的区分见 CredentialStatusTempUnsched 注释）。
 // 与 cooldownReason429 / cooldownReasonNetwork 并列的 reason 单源常量，
 // 探活恢复路径（#6-3）消费同一常量。
 const cooldownReasonAuthFail = "auth_fail"
@@ -24,13 +24,17 @@ func classifyAuthFailure(statusCode int) bool {
 }
 
 // applyCredentialAuthFailure 处理一次鉴权失败（401/403）：FailCount 经 SQL 原子自增
-// （防并发 401 丢计数——读改写在并发下会漏加），读回达阈值 N（可配设置项）则判停：
+// （防并发 401 丢计数——读改写在并发下会漏加），读回达阈值 N（可配设置项，读侧
+// GetSettingInt 对脏值已回落默认值，与同族冷却 getter 一致不二次防御）则判停：
 // Status=temp_unsched + reason=auth_fail + 清 cooldown_until（判停前若有冷却残留，
 // temp_unsched 的排除不依赖冷却字段，但清掉避免 UI 误显示冷却态）。
-// 判停凭据被 credentialUsable 排除（非 active 即剔除）；恢复走探活（#6-3）或人工改回。
-// 自增与读回非原子：并发下可能第 N+1 次才判停，可接受偏差（判停不需精确到 N；
-// #6-4 异步落库收敛时统一处理写路径）。穿插的 429/5xx 冷却不清零计数——只有
-// 成功请求重置（见 executeSingleProviderAttempt 成功出口）。
+// 判停写前校验读回的 Status 仍是 active：管理员把凭据置 disabled/error 的窗口内
+// in-flight 请求的 401 不得覆写人工终态——temp_unsched 可被探活自动恢复，
+// 覆写等于绕开「人工标记的故障 key 不被拉回生产」的保护（#6-3 探活落地前必须堵住）。
+// 判停凭据被 credentialUsable 排除（非 active 即剔除）；恢复走探活（#6-3）或人工改回
+// （人工恢复连带清计数，见 models.CredentialRecoveryFields）。自增与读回非原子：
+// 并发下可能第 N+1 次才判停，可接受偏差（判停不需精确到 N；#6-4 异步落库收敛时
+// 统一处理写路径）。穿插的 429/5xx 冷却不清零计数——只有成功请求重置（见成功出口）。
 // 写库失败仅告警不阻断（与 applyCredentialCooldown 同策略）。
 func applyCredentialAuthFailure(ctx context.Context, cred models.Credential) {
 	if cred.ID == 0 {
@@ -50,11 +54,12 @@ func applyCredentialAuthFailure(ctx context.Context, cred models.Credential) {
 		return
 	}
 	threshold := getCredHealthAuthFailThreshold(ctx)
-	if threshold < 1 {
-		// 防御：设置写入侧已 Min=1 校验，此处兜底绕过 API 的脏值（0 会让首败即判停）。
-		threshold = 1
-	}
 	if updated.FailCount < threshold {
+		return
+	}
+	// 非 active（含人工 disabled/error/已判停 temp_unsched）不判停：覆写人工终态
+	// 会让探活自愈把停用的 key 拉回生产。空串视为 active（DB default 兜底，防误跳过）。
+	if updated.Status != models.CredentialStatusActive && updated.Status != "" {
 		return
 	}
 	if _, err := repos().Credential.UpdateFields(ctx, cred.ID, map[string]any{

@@ -396,12 +396,13 @@ func TestCredentialRepo_BatchWithinPool(t *testing.T) {
 	idsB := []uint{creds[3].ID}
 
 	// 批量启停：池A操作带入池B的ID，只应命中池A的2条
-	updated, err := repo.UpdateStatusByIDs(ctx, poolA, append(idsA, idsB...), models.CredentialStatusDisabled)
+	statusFields := map[string]any{"status": models.CredentialStatusDisabled}
+	updated, err := repo.UpdateFieldsByIDs(ctx, poolA, append(idsA, idsB...), statusFields)
 	if err != nil {
-		t.Fatalf("UpdateStatusByIDs: %v", err)
+		t.Fatalf("UpdateFieldsByIDs: %v", err)
 	}
 	if updated != 2 {
-		t.Fatalf("UpdateStatusByIDs RowsAffected = %d, want 2", updated)
+		t.Fatalf("UpdateFieldsByIDs RowsAffected = %d, want 2", updated)
 	}
 	got, _ := repo.Get(ctx, creds[0].ID)
 	if got.Status != models.CredentialStatusDisabled {
@@ -413,8 +414,8 @@ func TestCredentialRepo_BatchWithinPool(t *testing.T) {
 	}
 
 	// 空 IDs 直接返回 0（不产生 SQL）
-	if updated, err := repo.UpdateStatusByIDs(ctx, poolA, nil, models.CredentialStatusActive); err != nil || updated != 0 {
-		t.Fatalf("UpdateStatusByIDs(nil) = (%d, %v), want (0, nil)", updated, err)
+	if updated, err := repo.UpdateFieldsByIDs(ctx, poolA, nil, statusFields); err != nil || updated != 0 {
+		t.Fatalf("UpdateFieldsByIDs(nil) = (%d, %v), want (0, nil)", updated, err)
 	}
 
 	// 批量删除：同样只删池内

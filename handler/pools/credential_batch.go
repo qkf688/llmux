@@ -172,7 +172,12 @@ func BatchUpdateCredentialStatus(c *gin.Context) {
 	if !requirePool(c, ctx, poolID) {
 		return
 	}
-	updated, err := repos().Credential.UpdateStatusByIDs(ctx, poolID, req.IDs, req.Status)
+	// 恢复 active 时按状态机约定连带重置鉴权失败计数（单一来源 models.CredentialRecoveryFields）
+	fields := map[string]any{"status": req.Status}
+	for k, v := range models.CredentialRecoveryFields(req.Status) {
+		fields[k] = v
+	}
+	updated, err := repos().Credential.UpdateFieldsByIDs(ctx, poolID, req.IDs, fields)
 	if err != nil {
 		httpresp.InternalServerError(c, "Failed to update status: "+err.Error())
 		return

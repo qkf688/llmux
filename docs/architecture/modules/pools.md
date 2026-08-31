@@ -29,7 +29,7 @@ handler/pools/           # 号池管理 API 域（S2：CRUD + 健康统计 + 凭
   repos.go               # repos() 访问 repository.Default()
 repository/
   pool.go                # PoolRepo + StatsByIDs（GROUP BY 聚合健康统计）+ UpdateFields
-  credential.go          # CredentialRepo + DeleteByPoolID + UpdateStatusByIDs/DeleteByIDs（池内限界）+ ExistingHashes（批量导入查重）+ UpdateFields
+  credential.go          # CredentialRepo + DeleteByPoolID + UpdateFieldsByIDs/DeleteByIDs（池内限界）+ ExistingHashes（批量导入查重）+ UpdateFields
   endpoint.go            # EndpointRepo
   key_group.go           # KeyGroupRepo + CountByPoolIDs（引用守卫）+ UpdateFields
 models/
@@ -44,7 +44,7 @@ common/credentialcrypto/ # AES-256-GCM 加密 + KeyHash + 密钥引导
 |------|------|----------|--------|
 | `PoolRepo.StatsByIDs` | 一条 GROUP BY 返回多号池凭据统计（key 数 + 状态分布），防 N+1 | `repository/pool.go` | 同文件 |
 | `CredentialRepo.DeleteByPoolID` | 级联删除号池下凭据（软删）；分组内联凭据不受影响 | `repository/credential.go` | 同文件 |
-| `CredentialRepo.UpdateStatusByIDs` | 批量更新同一号池下 IDs 状态（`WHERE pool_id AND id IN`，越池 ID 不命中） | `repository/credential.go` | 同文件 |
+| `CredentialRepo.UpdateFieldsByIDs` | 按字段 map 批量更新同一号池下 IDs（`WHERE pool_id AND id IN`，越池 ID 不命中）；批量启停经此与恢复重置字段（`models.CredentialRecoveryFields`）共用 | `repository/credential.go` | 同文件 |
 | `CredentialRepo.DeleteByIDs` | 批量软删同一号池下 IDs 凭据（池内限界，防越池误删） | `repository/credential.go` | 同文件 |
 | `CredentialRepo.ExistingHashes` | 批量导入查重：返回号池下现存（未软删）凭据命中的 KeyHash 集合，一次查询防 N+1 | `repository/credential.go` | 同文件 |
 | `CredentialRepo.ListByGroups` | 装配侧收敛查询：`group_id IN groupIDs OR pool_id IN poolIDs`，按 `id ASC`；两组皆空返回 nil 不产生 SQL；凭据 GroupID/PoolID 二选一，绝不双计（S3 选路热路径用，避免全表扫描） | `repository/credential.go` | 同文件 |

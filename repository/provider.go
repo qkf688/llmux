@@ -40,6 +40,8 @@ type ProviderRepo interface {
 	Create(ctx context.Context, provider *models.Provider) error
 	// Update 根据 ID 更新 Provider。
 	Update(ctx context.Context, id uint, provider *models.Provider) error
+	// UpdateFields 按字段 map 更新（map 可显式写空切片/NULL，绕过 struct 零值跳过语义）。
+	UpdateFields(ctx context.Context, id uint, fields map[string]any) (int64, error)
 	// Delete 根据 ID 删除 Provider。
 	Delete(ctx context.Context, id uint) (int64, error)
 	// UpdateBlacklist 整体替换黑名单状态，返回受影响的行数。
@@ -133,6 +135,14 @@ func (r *providerRepo) Create(ctx context.Context, provider *models.Provider) er
 
 func (r *providerRepo) Update(ctx context.Context, id uint, provider *models.Provider) error {
 	return r.db.WithContext(ctx).Model(&models.Provider{}).Where("id = ?", id).Updates(provider).Error
+}
+
+func (r *providerRepo) UpdateFields(ctx context.Context, id uint, fields map[string]any) (int64, error) {
+	if len(fields) == 0 {
+		return 0, nil
+	}
+	result := r.db.WithContext(ctx).Model(&models.Provider{}).Where("id = ?", id).Updates(fields)
+	return result.RowsAffected, result.Error
 }
 
 func (r *providerRepo) Delete(ctx context.Context, id uint) (int64, error) {

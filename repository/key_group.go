@@ -25,6 +25,9 @@ type KeyGroupRepo interface {
 	// CountByPoolIDs 返回每个号池被分组引用的次数（key_groups.PoolID 指向该号池）。
 	// 号池删除守卫用：被引用（>0）时禁止删除。无引用的号池不产生条目。
 	CountByPoolIDs(ctx context.Context, poolIDs []uint) (map[uint]int64, error)
+	// CountByProviderIDs 返回每个供应商的分组数量（供应商列表徽标用）。
+	// 无分组的供应商不产生条目（调用方对缺失键按 0 处理）。
+	CountByProviderIDs(ctx context.Context, providerIDs []uint) (map[uint]int64, error)
 }
 
 // NewKeyGroupRepo 创建 KeyGroupRepo 实现。
@@ -95,6 +98,32 @@ func (r *keyGroupRepo) CountByPoolIDs(ctx context.Context, poolIDs []uint) (map[
 	counts := make(map[uint]int64, len(rows))
 	for _, row := range rows {
 		counts[row.PoolID] = row.Count
+	}
+	return counts, nil
+}
+
+func (r *keyGroupRepo) CountByProviderIDs(ctx context.Context, providerIDs []uint) (map[uint]int64, error) {
+	if len(providerIDs) == 0 {
+		return map[uint]int64{}, nil
+	}
+
+	type countRow struct {
+		ProviderID uint
+		Count      int64
+	}
+	var rows []countRow
+	if err := r.db.WithContext(ctx).
+		Model(&models.KeyGroup{}).
+		Select("provider_id, COUNT(*) AS count").
+		Where("provider_id IN ?", providerIDs).
+		Group("provider_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	counts := make(map[uint]int64, len(rows))
+	for _, row := range rows {
+		counts[row.ProviderID] = row.Count
 	}
 	return counts, nil
 }

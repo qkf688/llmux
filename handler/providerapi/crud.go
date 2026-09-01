@@ -14,12 +14,24 @@ import (
 	"gorm.io/gorm"
 )
 
-// GetProviders 获取所有提供商列表（支持名称搜索和类型筛选）。
+// respondTxError 统一处理 RunInTx 返回的错误：命中 errValidation 哨兵（请求数据/配置
+// 不合法）回 400，其余（DB 故障等）回 500。区分校验错与服务器错，避免把配置缺失/引用
+// 失效误报成 500。
+func respondTxError(c *gin.Context, action string, err error) {
+	if errors.Is(err, errValidation) {
+		httpresp.BadRequest(c, err.Error())
+		return
+	}
+	httpresp.InternalServerError(c, action+": "+err.Error())
+}
+
+// GetProviders 获取所有提供商列表（支持名称搜索和类型筛选），附端点/分组计数。
 func GetProviders(c *gin.Context) {
 	name := c.Query("name")
 	providerType := c.Query("type")
+	ctx := c.Request.Context()
 
-	list, err := repos().Provider.List(c.Request.Context(), repository.ProviderFilter{
+	list, err := repos().Provider.List(ctx, repository.ProviderFilter{
 		Name: name,
 		Type: providerType,
 	})
@@ -28,10 +40,42 @@ func GetProviders(c *gin.Context) {
 		return
 	}
 
-	httpresp.Success(c, list)
+	items, err := buildProviderListItems(ctx, repos(), list)
+	if err != nil {
+		httpresp.InternalServerError(c, err.Error())
+		return
+	}
+
+	httpresp.Success(c, items)
 }
 
-// CreateProvider 创建提供商。
+// GetProvider 获取单个提供商详情（展开 endpoints / groups）。
+func GetProvider(c *gin.Context) {
+	id, ok := httpx.ParseUintParamAllowZero(c, "id")
+	if !ok {
+		return
+	}
+
+	ctx := c.Request.Context()
+	provider, err := repos().Provider.Get(ctx, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			httpresp.NotFound(c, "Provider not found")
+			return
+		}
+		httpresp.InternalServerError(c, "Database error: "+err.Error())
+		return
+	}
+
+	detail, err := loadProviderDetail(ctx, repos(), *provider)
+	if err != nil {
+		httpresp.InternalServerError(c, err.Error())
+		return
+	}
+	httpresp.Success(c, detail)
+}
+
+// CreateProvider 创建提供商（事务写 providers + endpoints + key_groups + credentials）。
 func CreateProvider(c *gin.Context) {
 	var req ProviderRequest
 	if !httpx.BindJSON(c, &req) {
@@ -39,6 +83,18 @@ func CreateProvider(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	if err := validateStructuredRequest(ctx, repos(), &req); err != nil {
+		httpresp.BadRequest(c, err.Error())
+		return
+	}
+
+	sanitized, err := sanitizeConfig(req.Config)
+	if err != nil {
+		httpresp.BadRequest(c, "Invalid config JSON: "+err.Error())
+		return
+	}
+	req.Config = sanitized
+
 	exists, err := repos().Provider.ExistsByName(ctx, req.Name)
 	if err != nil {
 		httpresp.InternalServerError(c, "Database error: "+err.Error())
@@ -59,31 +115,49 @@ func CreateProvider(c *gin.Context) {
 		modelFilterEnabled = *req.ModelFilterEnabled
 	}
 
-	// AuthType 仅 Anthropic
 	authType := resolveAuthType(req.Type, req.AuthType)
 
-	provider := models.Provider{
-		Name:               req.Name,
-		Type:               req.Type,
-		Config:             req.Config,
-		Console:            req.Console,
-		Proxy:              req.Proxy,
-		ModelEndpoint:      &modelEndpoint,
-		ModelFilterEnabled: &modelFilterEnabled,
-		AuthType:           authType,
+	var createdID uint
+	err = repos().RunInTx(ctx, func(txRepos *repository.Repositories) error {
+		provider := models.Provider{
+			Name:               req.Name,
+			Type:               req.Type,
+			Config:             req.Config,
+			Console:            req.Console,
+			Proxy:              req.Proxy,
+			ModelEndpoint:      &modelEndpoint,
+			ModelFilterEnabled: &modelFilterEnabled,
+			AuthType:           authType,
+			Protocols:          req.Protocols,
+		}
+		if err := txRepos.Provider.Create(ctx, &provider); err != nil {
+			return err
+		}
+		createdID = provider.ID
+		return syncProviderChildren(ctx, txRepos, provider.ID, &req)
+	})
+	if err != nil {
+		respondTxError(c, "Failed to create provider", err)
+		return
 	}
 
-	if err := repos().Provider.Create(ctx, &provider); err != nil {
-		httpresp.InternalServerError(c, "Failed to create provider: "+err.Error())
+	provider, err := repos().Provider.Get(ctx, createdID)
+	if err != nil {
+		httpresp.InternalServerError(c, "Failed to retrieve created provider: "+err.Error())
+		return
+	}
+	detail, err := loadProviderDetail(ctx, repos(), *provider)
+	if err != nil {
+		httpresp.InternalServerError(c, err.Error())
 		return
 	}
 
 	bgtask.Go(autoassoc.TriggerAutoAssociate)
 
-	httpresp.Success(c, provider)
+	httpresp.Success(c, detail)
 }
 
-// UpdateProvider 更新提供商。
+// UpdateProvider 更新提供商（事务同步四表）。
 func UpdateProvider(c *gin.Context) {
 	id, ok := httpx.ParseUintParamAllowZero(c, "id")
 	if !ok {
@@ -105,22 +179,40 @@ func UpdateProvider(c *gin.Context) {
 		return
 	}
 
-	authType := resolveAuthType(req.Type, req.AuthType)
-
-	updates := models.Provider{
-		Name:               req.Name,
-		Type:               req.Type,
-		Config:             req.Config,
-		Console:            req.Console,
-		Proxy:              req.Proxy,
-		ModelEndpoint:      req.ModelEndpoint,
-		ModelFilterEnabled: req.ModelFilterEnabled,
-		Blacklisted:        req.Blacklisted,
-		AuthType:           authType,
+	if err := validateStructuredRequest(ctx, repos(), &req); err != nil {
+		httpresp.BadRequest(c, err.Error())
+		return
 	}
 
-	if err := repos().Provider.Update(ctx, id, &updates); err != nil {
-		httpresp.InternalServerError(c, "Failed to update provider: "+err.Error())
+	sanitized, err := sanitizeConfig(req.Config)
+	if err != nil {
+		httpresp.BadRequest(c, "Invalid config JSON: "+err.Error())
+		return
+	}
+	req.Config = sanitized
+
+	authType := resolveAuthType(req.Type, req.AuthType)
+
+	err = repos().RunInTx(ctx, func(txRepos *repository.Repositories) error {
+		updates := models.Provider{
+			Name:               req.Name,
+			Type:               req.Type,
+			Config:             req.Config,
+			Console:            req.Console,
+			Proxy:              req.Proxy,
+			ModelEndpoint:      req.ModelEndpoint,
+			ModelFilterEnabled: req.ModelFilterEnabled,
+			Blacklisted:        req.Blacklisted,
+			AuthType:           authType,
+			Protocols:          req.Protocols,
+		}
+		if err := txRepos.Provider.Update(ctx, id, &updates); err != nil {
+			return err
+		}
+		return syncProviderChildren(ctx, txRepos, id, &req)
+	})
+	if err != nil {
+		respondTxError(c, "Failed to update provider", err)
 		return
 	}
 
@@ -129,11 +221,16 @@ func UpdateProvider(c *gin.Context) {
 		httpresp.InternalServerError(c, "Failed to retrieve updated provider: "+err.Error())
 		return
 	}
+	detail, err := loadProviderDetail(ctx, repos(), *updatedProvider)
+	if err != nil {
+		httpresp.InternalServerError(c, err.Error())
+		return
+	}
 
 	bgtask.Go(autoassoc.TriggerAutoAssociate)
 	bgtask.Go(autoassoc.TriggerAutoClean)
 
-	httpresp.Success(c, updatedProvider)
+	httpresp.Success(c, detail)
 }
 
 // DeleteProvider 删除提供商。

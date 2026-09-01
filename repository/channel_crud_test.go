@@ -217,6 +217,66 @@ func TestKeyGroupRepo_CRUD(t *testing.T) {
 	}
 }
 
+// TestEndpointRepo_CountByProviderIDs 锁定按供应商聚合端点计数（列表徽标防 N+1）。
+func TestEndpointRepo_CountByProviderIDs(t *testing.T) {
+	ctx := context.Background()
+	repo := NewEndpointRepo(newChannelTestDB(t))
+
+	for _, e := range []*models.Endpoint{
+		{ProviderID: 1, Protocol: "openai", Enabled: true},
+		{ProviderID: 1, Protocol: "responses", Enabled: true},
+		{ProviderID: 2, Protocol: "anthropic", Enabled: true},
+	} {
+		if err := repo.Create(ctx, e); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+	}
+
+	counts, err := repo.CountByProviderIDs(ctx, []uint{1, 2, 3})
+	if err != nil {
+		t.Fatalf("CountByProviderIDs: %v", err)
+	}
+	if counts[1] != 2 || counts[2] != 1 {
+		t.Fatalf("counts = %+v, want {1:2, 2:1}", counts)
+	}
+	if _, ok := counts[3]; ok {
+		t.Fatalf("无端点供应商 3 不应产生条目, counts=%+v", counts)
+	}
+
+	empty, err := repo.CountByProviderIDs(ctx, nil)
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("空 IDs = (%v, %v), want (空 map, nil)", empty, err)
+	}
+}
+
+// TestKeyGroupRepo_CountByProviderIDs 锁定按供应商聚合分组计数（列表徽标防 N+1）。
+func TestKeyGroupRepo_CountByProviderIDs(t *testing.T) {
+	ctx := context.Background()
+	repo := NewKeyGroupRepo(newChannelTestDB(t))
+
+	for _, g := range []*models.KeyGroup{
+		{ProviderID: 10, Name: "a", Weight: 1},
+		{ProviderID: 10, Name: "b", Weight: 2},
+		{ProviderID: 10, Name: "c", Weight: 3},
+		{ProviderID: 20, Name: "d", Weight: 1},
+	} {
+		if err := repo.Create(ctx, g); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+	}
+
+	counts, err := repo.CountByProviderIDs(ctx, []uint{10, 20, 30})
+	if err != nil {
+		t.Fatalf("CountByProviderIDs: %v", err)
+	}
+	if counts[10] != 3 || counts[20] != 1 {
+		t.Fatalf("counts = %+v, want {10:3, 20:1}", counts)
+	}
+	if _, ok := counts[30]; ok {
+		t.Fatalf("无分组供应商 30 不应产生条目, counts=%+v", counts)
+	}
+}
+
 // TestPoolRepo_Stats 锁定号池凭据统计聚合：一条 GROUP BY 查询返回
 // key 总数与各状态计数（号池列表健康概览用，防 N+1）。
 func TestPoolRepo_Stats(t *testing.T) {

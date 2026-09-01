@@ -16,7 +16,7 @@
 - **负责什么**：`ModelWithProvider` 的权重、优先级、能力（tool/structured/image）、状态、连续失败等字段管理；自动按模板创建关联；清理无效关联
 - **不负责什么**：上游连通性测试执行细节（`testapi`）；定时健康检查（`health-check`）；chat 运行时选路算法（消费本表数据）
 - **对外暴露**：`handler/associations` REST；`handler/autoassoc` REST（委托 service）；`service/autoassoc.Service`；`ModelWithProviderRepo`；`NewDefaultAssociation`
-- **依赖谁**：`repository`（Model / Provider / ModelWithProvider / ModelTemplateItem）；`service.BuildTemplateIndexFromData`（经门面注入）；`service/modelsync.GetProviderModels`（读 Config 模型列表）
+- **依赖谁**：`repository`（Model / Provider / ModelWithProvider / ModelTemplateItem / KeyGroup）；`service.BuildTemplateIndexFromData`（经门面注入）；`service/modelsync.GetProviderModels`（分组白名单并集 ∪ custom_models）
 
 ## 3. 内部结构
 
@@ -69,7 +69,7 @@ models.ModelWithProvider
   - 尊重 `Model.AutoAssociate`（`false` 跳过）
   - 跳过 `Provider.Blacklisted`
   - 默认 `Weight` 读 `SettingKeyAutoWeightDecayDefault`、`Priority` 读 `SettingKeyAutoPriorityDecayDefault`（schema 默认 100/100；缺失/非法回退到 `DefaultWeightFallback`/`DefaultPriorityFallback` 常量，由调用方 `service.associate` 传入 `NewDefaultAssociation`）
-  - 无效关联：provider 不存在，或 `ProviderModel` 不在 Config 的 upstream/custom 列表；拉列表失败则不删
+  - 无效关联：provider 不存在，或 `ProviderModel` 不在组织级目录（各分组白名单并集 ∪ `custom_models`）；`GetProviderModels` 读库失败则不删
 
 ---
 

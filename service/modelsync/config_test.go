@@ -3,10 +3,16 @@ package modelsync
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/repository"
+	"github.com/qkf688/llmux/service/internal/testutil"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 func TestDropCustomModels(t *testing.T) {
@@ -53,35 +59,6 @@ func TestExtractUpstreamModels(t *testing.T) {
 	}
 }
 
-func TestBuildConfigWithAllModels(t *testing.T) {
-	original := `{"api_key":"k","upstream_models":["old"],"custom_models":["c1"]}`
-	updated := buildConfigWithAllModels(original, []string{"n1", "n2"})
-
-	var parsed map[string]any
-	if err := json.Unmarshal([]byte(updated), &parsed); err != nil {
-		t.Fatalf("failed to parse updated config: %v", err)
-	}
-
-	upstreamAny, ok := parsed["upstream_models"].([]interface{})
-	if !ok {
-		t.Fatalf("upstream_models should exist and be array, got %T", parsed["upstream_models"])
-	}
-
-	got := make([]string, 0, len(upstreamAny))
-	for _, item := range upstreamAny {
-		got = append(got, item.(string))
-	}
-	expected := []string{"n1", "n2"}
-	if !reflect.DeepEqual(got, expected) {
-		t.Fatalf("upstream_models = %v, want %v", got, expected)
-	}
-
-	customAny, ok := parsed["custom_models"].([]interface{})
-	if !ok || len(customAny) != 1 || customAny[0].(string) != "c1" {
-		t.Fatalf("custom_models should remain unchanged, got %v", parsed["custom_models"])
-	}
-}
-
 func TestMatchesAnyRule(t *testing.T) {
 	rules := []string{"gpt", "claude"}
 	if !matchesAnyRule("gpt-4.1", rules) {
@@ -92,17 +69,35 @@ func TestMatchesAnyRule(t *testing.T) {
 	}
 }
 
-func TestGetProviderModels(t *testing.T) {
-	provider := models.Provider{
-		Config: `{"upstream_models":["u1"],"custom_models":["c1","c2"]}`,
+func TestGetProviderModels_FromGroupWhitelist(t *testing.T) {
+	dsn := fmt.Sprintf("file:get_provider_models_%d?mode=memory&cache=shared", time.Now().UnixNano())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	sqlDB := testutil.ConfigureSQLiteForSingleConn(t, db)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := db.AutoMigrate(&models.Provider{}, &models.KeyGroup{}); err != nil {
+		t.Fatalf("migrate: %v", err)
 	}
 
-	got, err := GetProviderModels(context.Background(), provider)
+	provider := models.Provider{
+		Name:   "p",
+		Type:   "openai",
+		Config: `{"custom_models":["c1"],"upstream_models":["ignored"]}`,
+	}
+	if err := db.Create(&provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	if err := db.Create(&models.KeyGroup{ProviderID: provider.ID, Name: "g", Models: "u1,u2"}).Error; err != nil {
+		t.Fatalf("create group: %v", err)
+	}
+
+	got, err := GetProviderModels(context.Background(), provider, repository.New(db))
 	if err != nil {
 		t.Fatalf("GetProviderModels() error = %v", err)
 	}
-
-	expected := []string{"u1", "c1", "c2"}
+	expected := []string{"u1", "u2", "c1"}
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("GetProviderModels() = %v, want %v", got, expected)
 	}

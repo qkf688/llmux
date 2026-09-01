@@ -2,7 +2,9 @@ package modelsync
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/qkf688/llmux/models"
@@ -10,8 +12,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// SyncProviderModels 同步单个提供商的上游模型。
-// 返回日志记录（无论是否有变化），以及可能的错误。
+// SyncProviderModels 按分组粒度同步上游模型：每组用活跃凭据打 Models()，
+// 全量写入该组 KeyGroup.Models；请求数 ≈ 分组数。日志仍按供应商聚合。
 func (s *Service) SyncProviderModels(ctx context.Context, providerID uint) (*models.ModelSyncLog, error) {
 	provider, err := gorm.G[models.Provider](s.db).Where("id = ?", providerID).First(ctx)
 	if err != nil {
@@ -19,52 +21,76 @@ func (s *Service) SyncProviderModels(ctx context.Context, providerID uint) (*mod
 		return nil, err
 	}
 
-	currentModels := extractUpstreamModels(provider.Config)
-	config := provider.Config
-	if cleanedConfig, err := dropCustomModels(config); err == nil {
-		config = cleanedConfig
+	beforeModels, err := collectGroupWhitelistUnion(ctx, s.repos, providerID)
+	if err != nil {
+		return nil, fmt.Errorf("list group models before sync: %w", err)
 	}
 
-	chatModel, err := providers.New(provider.Type, config, provider.Proxy)
+	snapshot, err := s.assembler.Assemble(ctx, provider)
 	if err != nil {
-		slog.Error("failed to create provider client", "provider_id", providerID, "error", err)
+		slog.Error("failed to assemble channel snapshot", "provider_id", providerID, "error", err)
 		return s.createAndSaveErrorLog(ctx, provider, err.Error()), nil
 	}
 
-	upstreamModels, err := chatModel.Models(ctx)
-	if err != nil {
-		slog.Error("failed to fetch upstream models", "provider_id", providerID, "error", err)
-		return s.createAndSaveErrorLog(ctx, provider, err.Error()), nil
+	if len(snapshot.Groups) == 0 {
+		return s.createAndSaveErrorLog(ctx, provider, "no key groups to sync"), nil
 	}
 
-	if provider.ModelFilterEnabled != nil && *provider.ModelFilterEnabled {
-		filteredModels, err := s.filterModelsByRules(ctx, upstreamModels)
-		if err != nil {
-			slog.Warn("failed to filter models by rules", "provider_id", providerID, "error", err)
-		} else {
-			upstreamModels = filteredModels
+	now := time.Now()
+	var (
+		syncedCount int
+		skipReasons []string
+		fetchErrs   []string
+	)
+
+	for _, group := range snapshot.Groups {
+		outcome := s.syncKeyGroup(ctx, provider, snapshot, group, now)
+		if outcome.Skipped {
+			skipReasons = append(skipReasons, fmt.Sprintf("group %q: %s", outcome.GroupName, outcome.SkipReason))
+			continue
 		}
+		if outcome.Err != nil {
+			slog.Error("group model sync failed",
+				"provider_id", providerID, "group_id", outcome.GroupID, "error", outcome.Err)
+			fetchErrs = append(fetchErrs, outcome.Err.Error())
+			continue
+		}
+		syncedCount++
 	}
 
-	addedModels, removedModels := diffUpstreamModels(currentModels, upstreamModels)
+	if syncedCount == 0 {
+		msg := "all key groups skipped or failed"
+		if len(fetchErrs) > 0 {
+			msg = strings.Join(fetchErrs, "; ")
+		} else if len(skipReasons) > 0 {
+			msg = strings.Join(skipReasons, "; ")
+		}
+		return s.createAndSaveErrorLog(ctx, provider, msg), nil
+	}
+
+	afterModels, err := collectGroupWhitelistUnion(ctx, s.repos, providerID)
+	if err != nil {
+		return nil, fmt.Errorf("list group models after sync: %w", err)
+	}
+
+	addedModels, removedModels := diffStringSets(beforeModels, afterModels)
 	hasChanges := len(addedModels) > 0 || len(removedModels) > 0
 	status := "success"
 	if !hasChanges {
 		status = "unchanged"
 	}
 
-	if hasChanges {
-		updatedModels := collectUpstreamModelIDs(upstreamModels)
-		newConfig := buildConfigWithAllModels(provider.Config, updatedModels)
-		if _, err := gorm.G[models.Provider](s.db).Where("id = ?", providerID).Update(ctx, "config", newConfig); err != nil {
-			slog.Error("failed to update provider config", "provider_id", providerID, "error", err)
-		}
+	errMsg := ""
+	if len(fetchErrs) > 0 || len(skipReasons) > 0 {
+		parts := append(append([]string{}, fetchErrs...), skipReasons...)
+		errMsg = strings.Join(parts, "; ")
 	}
 
 	syncLog := &models.ModelSyncLog{
 		ProviderID:    providerID,
 		ProviderName:  provider.Name,
 		Status:        status,
+		Error:         errMsg,
 		AddedCount:    len(addedModels),
 		RemovedCount:  len(removedModels),
 		AddedModels:   addedModels,
@@ -112,30 +138,27 @@ func collectUpstreamModelIDs(upstreamModels []providers.Model) []string {
 	return modelIDs
 }
 
-func diffUpstreamModels(currentModels []string, upstreamModels []providers.Model) ([]string, []string) {
-	upstreamModelSet := make(map[string]struct{}, len(upstreamModels))
-	for _, model := range upstreamModels {
-		upstreamModelSet[model.ID] = struct{}{}
+func diffStringSets(before, after []string) (added, removed []string) {
+	afterSet := make(map[string]struct{}, len(after))
+	for _, id := range after {
+		afterSet[id] = struct{}{}
+	}
+	beforeSet := make(map[string]struct{}, len(before))
+	for _, id := range before {
+		beforeSet[id] = struct{}{}
 	}
 
-	currentModelSet := make(map[string]struct{}, len(currentModels))
-	for _, modelID := range currentModels {
-		currentModelSet[modelID] = struct{}{}
-	}
-
-	addedModels := make([]string, 0, len(upstreamModels))
-	for _, model := range upstreamModels {
-		if _, exists := currentModelSet[model.ID]; !exists {
-			addedModels = append(addedModels, model.ID)
+	added = make([]string, 0)
+	for _, id := range after {
+		if _, ok := beforeSet[id]; !ok {
+			added = append(added, id)
 		}
 	}
-
-	removedModels := make([]string, 0, len(currentModels))
-	for _, modelID := range currentModels {
-		if _, exists := upstreamModelSet[modelID]; !exists {
-			removedModels = append(removedModels, modelID)
+	removed = make([]string, 0)
+	for _, id := range before {
+		if _, ok := afterSet[id]; !ok {
+			removed = append(removed, id)
 		}
 	}
-
-	return addedModels, removedModels
+	return added, removed
 }

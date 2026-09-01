@@ -15,7 +15,7 @@ func TestCleanInvalid_DeletesMissingProviderAndModel(t *testing.T) {
 
 	if err := repos.Provider.Create(ctx, &models.Provider{
 		Name: "alive", Type: "openai",
-		Config: `{"upstream_models":["keep-me"]}`,
+		Config: `{}`,
 	}); err != nil {
 		t.Fatalf("create provider: %v", err)
 	}
@@ -24,6 +24,7 @@ func TestCleanInvalid_DeletesMissingProviderAndModel(t *testing.T) {
 		t.Fatalf("providers len = %d", len(providers))
 	}
 	pid := providers[0].ID
+	seedProviderModels(t, repos, pid, "keep-me")
 
 	keep := &models.ModelWithProvider{ModelID: 1, ProviderID: pid, ProviderModel: "keep-me"}
 	goneModel := &models.ModelWithProvider{ModelID: 1, ProviderID: pid, ProviderModel: "gone"}
@@ -57,11 +58,7 @@ func TestCleanInvalid_SkipsWhenProviderModelsUnreadable(t *testing.T) {
 	db := newTestDB(t)
 	repos := repository.New(db)
 
-	// invalid JSON config -> GetProviderModels returns empty list (no error),
-	// so association with unknown model is cleaned. Seed valid config that fails parse differently:
-	// modelsync.GetProviderModels always returns extractAllModels which returns [] on bad JSON without error.
-	// So unreadable path is "error" only if GetProviderModels returns err — currently it never does.
-	// Document current contract: bad config yields empty model list => association removed.
+	// 无分组白名单 + 坏 JSON custom → 目录为空 → 关联被清理
 	if err := repos.Provider.Create(ctx, &models.Provider{
 		Name: "bad", Type: "openai",
 		Config: `{not-json`,
@@ -97,10 +94,15 @@ func TestTriggerAssociateIfEnabled_RespectsSetting(t *testing.T) {
 	}
 	if err := repos.Provider.Create(ctx, &models.Provider{
 		Name: "p1", Type: "openai",
-		Config: `{"upstream_models":["gpt-4o"]}`,
+		Config: `{}`,
 	}); err != nil {
 		t.Fatalf("create provider: %v", err)
 	}
+	providers, err := repos.Provider.List(ctx, repository.ProviderFilter{})
+	if err != nil || len(providers) != 1 {
+		t.Fatalf("list providers: %v", err)
+	}
+	seedProviderModels(t, repos, providers[0].ID, "gpt-4o")
 
 	svc := newTestService(t, db, staticMatcher{"gpt-4o": {1}})
 

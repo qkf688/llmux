@@ -28,10 +28,25 @@ func newTestDB(t *testing.T) *gorm.DB {
 		&models.ModelWithProvider{},
 		&models.ModelTemplateItem{},
 		&models.Setting{},
+		&models.KeyGroup{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	return db
+}
+
+// seedProviderModels 为供应商写入分组白名单（组织级目录来源，替代旧 Config.upstream_models）。
+func seedProviderModels(t *testing.T, repos *repository.Repositories, providerID uint, modelsCSV string) {
+	t.Helper()
+	ctx := context.Background()
+	if err := repos.KeyGroup.Create(ctx, &models.KeyGroup{
+		ProviderID: providerID,
+		Name:       "default",
+		Weight:     1,
+		Models:     modelsCSV,
+	}); err != nil {
+		t.Fatalf("seed key group models: %v", err)
+	}
 }
 
 func newTestService(t *testing.T, db *gorm.DB, matcher NameMatcher) *Service {

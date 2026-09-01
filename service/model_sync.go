@@ -73,7 +73,7 @@ func (s *ModelSyncService) StartAutoSync(ctx context.Context) {
 	s.core.StartAutoSync(ctx)
 }
 
-// GetProviderModels 获取提供商的所有模型列表。
+// GetProviderModels 获取提供商的组织级模型目录（分组白名单并集 ∪ custom_models）。
 func GetProviderModels(ctx context.Context, provider models.Provider) ([]string, error) {
-	return modelsync.GetProviderModels(ctx, provider)
+	return modelsync.GetProviderModels(ctx, provider, repository.Default())
 }

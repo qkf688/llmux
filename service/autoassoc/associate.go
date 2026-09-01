@@ -107,7 +107,7 @@ func (s *Service) forEachMissingAssociation(
 			continue
 		}
 
-		providerModels, err := modelsync.GetProviderModels(ctx, provider)
+		providerModels, err := modelsync.GetProviderModels(ctx, provider, s.repositories())
 		if err != nil {
 			if onProviderModelsError != nil {
 				onProviderModelsError(provider, err)

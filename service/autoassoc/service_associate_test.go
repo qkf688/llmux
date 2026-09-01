@@ -42,13 +42,13 @@ func TestAssociate_SkipsExistingBlacklistAndDisabledModel(t *testing.T) {
 
 	if err := repos.Provider.Create(ctx, &models.Provider{
 		Name: "p1", Type: "openai",
-		Config: `{"upstream_models":["gpt-4o","blocked","extra"]}`,
+		Config: `{}`,
 	}); err != nil {
 		t.Fatalf("create p1: %v", err)
 	}
 	if err := repos.Provider.Create(ctx, &models.Provider{
 		Name: "p-black", Type: "openai", Blacklisted: boolPtr(true),
-		Config: `{"upstream_models":["gpt-4o"]}`,
+		Config: `{}`,
 	}); err != nil {
 		t.Fatalf("create p-black: %v", err)
 	}
@@ -57,14 +57,21 @@ func TestAssociate_SkipsExistingBlacklistAndDisabledModel(t *testing.T) {
 	if err != nil || len(providers) < 1 {
 		t.Fatalf("list providers: %v len=%d", err, len(providers))
 	}
-	var p1ID uint
+	var p1ID, pBlackID uint
 	for _, p := range providers {
 		if p.Name == "p1" {
 			p1ID = p.ID
 		}
+		if p.Name == "p-black" {
+			pBlackID = p.ID
+		}
 	}
 	if p1ID == 0 {
 		t.Fatal("p1 not found")
+	}
+	seedProviderModels(t, repos, p1ID, "gpt-4o,blocked,extra")
+	if pBlackID != 0 {
+		seedProviderModels(t, repos, pBlackID, "gpt-4o")
 	}
 
 	if err := repos.ModelWithProvider.Create(ctx, &models.ModelWithProvider{
@@ -136,10 +143,15 @@ func TestAssociate_UsesPrioritySetting(t *testing.T) {
 	}
 	if err := repos.Provider.Create(ctx, &models.Provider{
 		Name: "p1", Type: "openai",
-		Config: `{"upstream_models":["gpt-4o"]}`,
+		Config: `{}`,
 	}); err != nil {
 		t.Fatalf("create provider: %v", err)
 	}
+	providers, err := repos.Provider.List(ctx, repository.ProviderFilter{})
+	if err != nil || len(providers) != 1 {
+		t.Fatalf("list providers: %v", err)
+	}
+	seedProviderModels(t, repos, providers[0].ID, "gpt-4o")
 	if err := repos.Setting.SetInt(ctx, models.SettingKeyAutoPriorityDecayDefault, 42); err != nil {
 		t.Fatalf("set priority: %v", err)
 	}
@@ -174,10 +186,15 @@ func TestAssociate_UsesWeightSetting(t *testing.T) {
 	}
 	if err := repos.Provider.Create(ctx, &models.Provider{
 		Name: "p1", Type: "openai",
-		Config: `{"upstream_models":["gpt-4o"]}`,
+		Config: `{}`,
 	}); err != nil {
 		t.Fatalf("create provider: %v", err)
 	}
+	providers, err := repos.Provider.List(ctx, repository.ProviderFilter{})
+	if err != nil || len(providers) != 1 {
+		t.Fatalf("list providers: %v", err)
+	}
+	seedProviderModels(t, repos, providers[0].ID, "gpt-4o")
 	if err := repos.Setting.SetInt(ctx, models.SettingKeyAutoWeightDecayDefault, 77); err != nil {
 		t.Fatalf("set weight: %v", err)
 	}
@@ -211,10 +228,15 @@ func TestAssociateAll_BypassesModelSwitch(t *testing.T) {
 	}
 	if err := repos.Provider.Create(ctx, &models.Provider{
 		Name: "p1", Type: "openai",
-		Config: `{"upstream_models":["gpt-4o"]}`,
+		Config: `{}`,
 	}); err != nil {
 		t.Fatalf("create provider: %v", err)
 	}
+	providers, err := repos.Provider.List(ctx, repository.ProviderFilter{})
+	if err != nil || len(providers) != 1 {
+		t.Fatalf("list providers: %v", err)
+	}
+	seedProviderModels(t, repos, providers[0].ID, "gpt-4o")
 
 	svc := newTestService(t, db, staticMatcher{"gpt-4o": {1}})
 
@@ -250,10 +272,17 @@ func TestAssociate_PartialFailureReturnsCountNoError(t *testing.T) {
 	for _, p := range []string{"p1", "p2"} {
 		if err := repos.Provider.Create(ctx, &models.Provider{
 			Name: p, Type: "openai",
-			Config: `{"upstream_models":["gpt-4o"]}`,
+			Config: `{}`,
 		}); err != nil {
 			t.Fatalf("create provider %s: %v", p, err)
 		}
+	}
+	providers, err := repos.Provider.List(ctx, repository.ProviderFilter{})
+	if err != nil {
+		t.Fatalf("list providers: %v", err)
+	}
+	for _, p := range providers {
+		seedProviderModels(t, repos, p.ID, "gpt-4o")
 	}
 
 	// 用包装 repo 使 Create 恒失败

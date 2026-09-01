@@ -87,7 +87,7 @@ func (s *Service) forEachInvalidAssociation(
 			continue
 		}
 
-		providerModels, err := modelsync.GetProviderModels(ctx, *provider)
+		providerModels, err := modelsync.GetProviderModels(ctx, *provider, s.repositories())
 		if err != nil {
 			if onProviderModelsError != nil {
 				onProviderModelsError(provider, err)

@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/qkf688/llmux/repository"
+	"github.com/qkf688/llmux/service/channel"
 	"gorm.io/gorm"
 )
 
@@ -15,13 +17,21 @@ type ActionHooks struct {
 
 // Service 模型同步服务。
 type Service struct {
-	db    *gorm.DB
-	hooks ActionHooks
+	db        *gorm.DB
+	hooks     ActionHooks
+	repos     *repository.Repositories
+	assembler *channel.Assembler
 }
 
 // NewService 创建模型同步服务实例。
 func NewService(db *gorm.DB, hooks ActionHooks) *Service {
-	return &Service{db: db, hooks: hooks}
+	repos := repository.New(db)
+	return &Service{
+		db:        db,
+		hooks:     hooks,
+		repos:     repos,
+		assembler: channel.NewAssembler(repos),
+	}
 }
 
 // AddedModel 新增模型信息。

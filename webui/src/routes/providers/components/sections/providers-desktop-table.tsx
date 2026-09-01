@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/tooltip";
 import type { Provider } from "@/lib/api";
 import { extractAllModels } from "../../utils/config";
-import { countSchedule } from "../../utils/schedule";
 import { ProviderRowActions } from "./provider-row-actions";
 
 interface ProvidersDesktopTableProps {
@@ -80,7 +79,9 @@ export function ProvidersDesktopTable({
         <TableBody>
           {providers.map((provider) => {
             const allModels = extractAllModels(provider.Config);
-            const schedule = countSchedule(provider.Config);
+            // 端点/分组计数读列表 API 附带值（后端批量 COUNT），不再解析 Config._schedule（S6 已废弃该键）
+            const endpointCount = provider.EndpointCount ?? 0;
+            const groupCount = provider.GroupCount ?? 0;
             return (
               <TableRow key={provider.ID} className="group">
                 <TableCell className="font-mono text-xs text-muted-foreground">
@@ -113,9 +114,9 @@ export function ProvidersDesktopTable({
                   </Button>
                 </TableCell>
                 <TableCell>
-                  {schedule.endpoints > 0 || schedule.groups > 0 ? (
+                  {endpointCount > 0 || groupCount > 0 ? (
                     <Badge variant="outline" className="text-[10px]">
-                      端点 {schedule.endpoints} · 分组 {schedule.groups}
+                      端点 {endpointCount} · 分组 {groupCount}
                     </Badge>
                   ) : (
                     <span className="text-xs text-muted-foreground">—</span>

@@ -5,7 +5,7 @@ import { createProvider, updateProvider, type Provider } from "@/lib/api";
 import { providerKeys } from "@/hooks/api/use-providers";
 import { defaultProviderFormValues, type ProviderFormValues } from "../form-schema";
 import { resolveTopLevelAuthType } from "../form-fields";
-import { buildConfigFromForm } from "../utils/config";
+import { buildProviderPayload } from "../utils/config";
 
 type UseProviderMutationsInput = {
   form: UseFormReturn<ProviderFormValues>;
@@ -25,17 +25,19 @@ export function useProviderMutations({
   const handleSubmitProvider = async (values: ProviderFormValues) => {
     if (editingProvider) {
       try {
-        const config = buildConfigFromForm(values);
-        await updateProvider(editingProvider.ID, {
-          name: values.name,
-          type: values.type,
-          config: config,
-          console: values.console || "",
-          proxy: values.proxy || "",
-          model_endpoint: values.model_endpoint,
-          model_filter_enabled: values.model_filter_enabled,
-          auth_type: resolveTopLevelAuthType(values.type, values),
-        });
+        // 表单编辑：全量携带 protocols/endpoints/groups，走结构化四表同步
+        await updateProvider(
+          editingProvider.ID,
+          buildProviderPayload(values, {
+            name: values.name,
+            type: values.type,
+            console: values.console || "",
+            proxy: values.proxy || "",
+            model_endpoint: values.model_endpoint,
+            model_filter_enabled: values.model_filter_enabled,
+            auth_type: resolveTopLevelAuthType(values.type, values),
+          })
+        );
         setOpen(false);
         toast.success(`提供商 ${values.name} 更新成功`);
         setEditingProvider(null);
@@ -50,17 +52,17 @@ export function useProviderMutations({
     }
 
     try {
-      const config = buildConfigFromForm(values);
-      await createProvider({
-        name: values.name,
-        type: values.type,
-        config: config,
-        console: values.console || "",
-        proxy: values.proxy || "",
-        model_endpoint: values.model_endpoint ?? true,
-        model_filter_enabled: values.model_filter_enabled ?? false,
-        auth_type: resolveTopLevelAuthType(values.type, values),
-      });
+      await createProvider(
+        buildProviderPayload(values, {
+          name: values.name,
+          type: values.type,
+          console: values.console || "",
+          proxy: values.proxy || "",
+          model_endpoint: values.model_endpoint ?? true,
+          model_filter_enabled: values.model_filter_enabled ?? false,
+          auth_type: resolveTopLevelAuthType(values.type, values),
+        })
+      );
       setOpen(false);
       toast.success(`提供商 ${values.name} 创建成功`);
       form.reset({ ...defaultProviderFormValues });

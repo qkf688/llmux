@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/tooltip";
 import type { Provider } from "@/lib/api";
 import { extractAllModels } from "../../utils/config";
-import { countSchedule } from "../../utils/schedule";
 import { ProviderRowActions } from "./provider-row-actions";
 
 // 卡片副标题（ID / 类型）行样式：单独成常量避免 JSX 内长行
@@ -63,7 +62,9 @@ export function ProvidersMobileList({
       <AnimatePresence>
         {providers.map((provider) => {
           const allModels = extractAllModels(provider.Config);
-          const schedule = countSchedule(provider.Config);
+          // 端点/分组计数读列表 API 附带值（后端批量 COUNT），不再解析 Config._schedule（S6 已废弃该键）
+          const endpointCount = provider.EndpointCount ?? 0;
+          const groupCount = provider.GroupCount ?? 0;
           return (
             <AnimatedListItem
               key={provider.ID}
@@ -104,9 +105,9 @@ export function ProvidersMobileList({
                   {allModels.length}
                 </Button>
 
-                {schedule.endpoints > 0 || schedule.groups > 0 ? (
+                {endpointCount > 0 || groupCount > 0 ? (
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
-                    端点 {schedule.endpoints} · 分组 {schedule.groups}
+                    端点 {endpointCount} · 分组 {groupCount}
                   </Badge>
                 ) : (
                   <span className="text-[10px] text-muted-foreground">未配置调度</span>

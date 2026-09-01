@@ -1,6 +1,5 @@
-import { Eye, EyeOff } from "lucide-react";
-import type { UseFormReturn } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import type { UseFormReturn } from "react-hook-form";
 import {
   Dialog,
   DialogBody,
@@ -33,8 +32,6 @@ interface ProviderFormDialogProps {
   form: UseFormReturn<ProviderFormValues>;
   providerTemplates: ProviderTemplate[];
   watchedType: string;
-  showApiKey: boolean;
-  toggleShowApiKey: () => void;
   onSubmit: (values: ProviderFormValues) => void | Promise<void>;
 }
 
@@ -45,8 +42,6 @@ export function ProviderFormDialog({
   form,
   providerTemplates,
   watchedType,
-  showApiKey,
-  toggleShowApiKey,
   onSubmit,
 }: ProviderFormDialogProps) {
   const extraFields = getProviderExtraFields(watchedType);
@@ -101,41 +96,7 @@ export function ProviderFormDialog({
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="api_key"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>API Key</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Input
-                          {...field}
-                          type={showApiKey ? "text" : "password"}
-                          autoComplete="new-password"
-                          placeholder="sk-..."
-                          className="pr-10"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8"
-                          onClick={toggleShowApiKey}
-                          aria-label={showApiKey ? "隐藏 API Key" : "显示 API Key"}
-                        >
-                          {showApiKey ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {/* 顶层 API Key 已废除（S6）：凭据在分组内联 keys / 关联号池中维护 */}
 
               {/* type schema 驱动的额外字段（如 anthropic version/beta/auth_type） */}
               {extraFields.map((extra) => (

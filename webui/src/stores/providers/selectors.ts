@@ -9,8 +9,6 @@ export const selectAddingModels = (state: ProvidersPageState) => state.addingMod
 export const selectSyncingModels = (state: ProvidersPageState) => state.syncingModels;
 export const selectSyncingAll = (state: ProvidersPageState) => state.syncingAll;
 
-export const selectShowApiKey = (state: ProvidersPageState) => state.showApiKey;
-
 export const selectProviderDialogOpen = (state: ProvidersPageState) => state.providerDialogOpen;
 export const selectEditingProvider = (state: ProvidersPageState) => state.editingProvider;
 
@@ -44,9 +42,6 @@ export const selectSetModelsLoading = (state: ProvidersPageState) => state.setMo
 export const selectSetAddingModels = (state: ProvidersPageState) => state.setAddingModels;
 export const selectSetSyncingModels = (state: ProvidersPageState) => state.setSyncingModels;
 export const selectSetSyncingAll = (state: ProvidersPageState) => state.setSyncingAll;
-
-export const selectSetShowApiKey = (state: ProvidersPageState) => state.setShowApiKey;
-export const selectToggleShowApiKey = (state: ProvidersPageState) => state.toggleShowApiKey;
 
 export const selectSetProviderDialogOpen = (state: ProvidersPageState) => state.setProviderDialogOpen;
 export const selectSetEditingProvider = (state: ProvidersPageState) => state.setEditingProvider;

@@ -44,17 +44,14 @@ import {
   selectSetProviderDialogOpen,
   selectSetSelectedAllModels,
   selectSetSelectedUpstreamModels,
-  selectSetShowApiKey,
   selectSetSyncingAll,
   selectSetSyncingModels,
   selectSetTypeFilter,
   selectSetUpstreamBatchTesting,
   selectSetUpstreamBatchTestProgress,
   selectSetUpstreamTestResults,
-  selectShowApiKey,
   selectSyncingAll,
   selectSyncingModels,
-  selectToggleShowApiKey,
   selectTypeFilter,
   selectUpstreamBatchTesting,
   selectUpstreamBatchTestProgress,
@@ -149,10 +146,6 @@ export function useProvidersPage() {
   const setUpstreamBatchTesting = useProvidersPageStore(selectSetUpstreamBatchTesting);
   const upstreamBatchTestProgress = useProvidersPageStore(selectUpstreamBatchTestProgress);
   const setUpstreamBatchTestProgress = useProvidersPageStore(selectSetUpstreamBatchTestProgress);
-
-  const showApiKey = useProvidersPageStore(selectShowApiKey);
-  const setShowApiKey = useProvidersPageStore(selectSetShowApiKey);
-  const toggleShowApiKey = useProvidersPageStore(selectToggleShowApiKey);
 
   const resetTransient = useProvidersPageStore(selectResetProvidersTransient);
 
@@ -294,7 +287,6 @@ export function useProvidersPage() {
     form,
     setOpen,
     setEditingProvider,
-    setShowApiKey,
   });
 
   const { handleDelete, handleClearAssociations } = useProviderDangerActions({
@@ -343,8 +335,6 @@ export function useProvidersPage() {
     form,
     providerTemplates,
     watchedType,
-    showApiKey,
-    toggleShowApiKey,
     onSubmit: handleSubmitProvider,
   };
 

@@ -14,8 +14,6 @@ export type ProvidersPageState = {
   syncingModels: boolean;
   syncingAll: boolean;
 
-  showApiKey: boolean;
-
   providerDialogOpen: boolean;
   editingProvider: Provider | null;
 
@@ -49,9 +47,6 @@ export type ProvidersPageState = {
   setAddingModels: (adding: boolean) => void;
   setSyncingModels: (syncing: boolean) => void;
   setSyncingAll: (syncing: boolean) => void;
-
-  setShowApiKey: (show: boolean) => void;
-  toggleShowApiKey: () => void;
 
   setEditingProvider: (provider: Provider | null) => void;
   setModelsOpenId: (id: number | null) => void;
@@ -95,8 +90,6 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
   addingModels: false,
   syncingModels: false,
   syncingAll: false,
-
-  showApiKey: false,
 
   providerDialogOpen: false,
   editingProvider: null,
@@ -143,20 +136,13 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
   setSyncingModels: (syncing: boolean) => set({ syncingModels: syncing }),
   setSyncingAll: (syncing: boolean) => set({ syncingAll: syncing }),
 
-  setShowApiKey: (show: boolean) => set({ showApiKey: show }),
-  toggleShowApiKey: () => {
-    const current = get();
-    const next = !current.showApiKey;
-    set({ showApiKey: next });
-  },
-
   setEditingProvider: (provider: Provider | null) => set({ editingProvider: provider }),
   setModelsOpenId: (id: number | null) => set({ modelsOpenId: id }),
 
   setProviderDialogOpen: (open: boolean) =>
-    set(open ? { providerDialogOpen: true } : { providerDialogOpen: false, editingProvider: null, showApiKey: false }),
-  openCreateProvider: () => set({ providerDialogOpen: true, editingProvider: null, showApiKey: false }),
-  openEditProvider: (provider: Provider) => set({ providerDialogOpen: true, editingProvider: provider, showApiKey: false }),
+    set(open ? { providerDialogOpen: true } : { providerDialogOpen: false, editingProvider: null }),
+  openCreateProvider: () => set({ providerDialogOpen: true, editingProvider: null }),
+  openEditProvider: (provider: Provider) => set({ providerDialogOpen: true, editingProvider: provider }),
 
   openProviderModels: (providerId: number) =>
     set({
@@ -233,7 +219,6 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
       upstreamTestResults: {},
       upstreamBatchTesting: false,
       upstreamBatchTestProgress: { ...DEFAULT_BATCH_TEST_PROGRESS },
-      showApiKey: false,
       modelsLoading: false,
       addingModels: false,
       syncingModels: false,

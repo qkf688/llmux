@@ -28,7 +28,7 @@ export const providerFormSchema = z.object({
   name: z.string().min(1, { message: "提供商名称不能为空" }),
   type: z.string().min(1, { message: "提供商类型不能为空" }),
   base_url: z.string().min(1, { message: "Base URL 不能为空" }),
-  api_key: z.string().min(1, { message: "API Key 不能为空" }),
+  // 顶层 api_key 已废除（S6）：凭据只存在于分组内联 keys / 关联号池，config 不再承载明文 key
   beta: z.string().optional(),
   version: z.string().optional(),
   auth_type: z.string().optional(),
@@ -49,7 +49,6 @@ export const defaultProviderFormValues: ProviderFormValues = {
   name: "",
   type: "",
   base_url: "",
-  api_key: "",
   beta: "",
   version: "",
   auth_type: "x-api-key",

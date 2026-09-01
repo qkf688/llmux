@@ -26,20 +26,23 @@ type GroupInput struct {
 }
 
 // ProviderRequest represents the request body for creating/updating a provider.
-// S6 起必须携带 protocols/endpoints/groups；config 仅存 adapter 字段（不含 api_key/_schedule）。
+// S6 起全量路径必须携带 protocols/endpoints/groups；config 仅存 adapter 字段（不含 api_key/_schedule）。
+// Update 支持 partial-update：Endpoints/Groups 为 nil（键缺失）表示只改顶层标量、不动子表，
+// 供「开关切换」类轻量动作复用同一 PUT（表单提交则全量携带三个字段）。
+// 用指针切片区分「键缺失（nil）」与「显式空数组（非 nil 空）」：普通非指针切片无法区分二者。
 type ProviderRequest struct {
-	Name               string          `json:"name"`
-	Type               string          `json:"type"`
-	Config             string          `json:"config"`
-	Console            string          `json:"console"`
-	Proxy              string          `json:"proxy"`
-	ModelEndpoint      *bool           `json:"model_endpoint"`
-	ModelFilterEnabled *bool           `json:"model_filter_enabled"`
-	Blacklisted        *bool           `json:"blacklisted"` // 是否拉黑（拉黑后跳过自动关联/一键关联）
-	AuthType           string          `json:"auth_type"`   // 认证方式：x-api-key 或 bearer，仅用于 Anthropic 类型
-	Protocols          []string        `json:"protocols"`
-	Endpoints          []EndpointInput `json:"endpoints"`
-	Groups             []GroupInput    `json:"groups"`
+	Name               string           `json:"name"`
+	Type               string           `json:"type"`
+	Config             string           `json:"config"`
+	Console            string           `json:"console"`
+	Proxy              string           `json:"proxy"`
+	ModelEndpoint      *bool            `json:"model_endpoint"`
+	ModelFilterEnabled *bool            `json:"model_filter_enabled"`
+	Blacklisted        *bool            `json:"blacklisted"` // 是否拉黑（拉黑后跳过自动关联/一键关联）
+	AuthType           string           `json:"auth_type"`   // 认证方式：x-api-key 或 bearer，仅用于 Anthropic 类型
+	Protocols          []string         `json:"protocols"`
+	Endpoints          *[]EndpointInput `json:"endpoints"`
+	Groups             *[]GroupInput    `json:"groups"`
 }
 
 // ProviderListItem 供应商列表项：内嵌 models.Provider（含 Protocols）+ 端点/分组计数（列表徽标）。

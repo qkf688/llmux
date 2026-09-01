@@ -23,7 +23,16 @@ const (
 // 避免把「加密未配置 / 引用失效」这类语义错误误报为服务器故障。
 var errValidation = errors.New("provider input validation")
 
+// hasChildren 判断请求体是否携带结构化 children（endpoints/groups 均非 nil）。
+// false = partial-update：只改顶层标量（name/type/config/console/proxy/开关），不动子表。
+// 用指针切片断言「键是否显式提供」：二者必须同现，缺任一个都视为 partial（全量路径由
+// validateStructuredRequest 兜底拒绝不完整结构）。
+func (req *ProviderRequest) hasChildren() bool {
+	return req.Endpoints != nil && req.Groups != nil
+}
+
 // validateStructuredRequest 校验 S6 结构化字段；失败返回可直接给 BadRequest 的文案。
+// 仅全量路径（hasChildren）调用；partial 请求（开关类）跳过本校验。
 func validateStructuredRequest(ctx context.Context, repos *repository.Repositories, req *ProviderRequest) error {
 	if len(req.Protocols) == 0 {
 		return fmt.Errorf("protocols is required (at least one)")
@@ -39,11 +48,16 @@ func validateStructuredRequest(ctx context.Context, repos *repository.Repositori
 		protoSet[p] = struct{}{}
 	}
 
-	if len(req.Endpoints) == 0 {
+	// 全量路径由调用方保证 Endpoints/Groups 非 nil（hasChildren），此处防御性解引用。
+	endpoints := []EndpointInput{}
+	if req.Endpoints != nil {
+		endpoints = *req.Endpoints
+	}
+	if len(endpoints) == 0 {
 		return fmt.Errorf("endpoints is required (at least one)")
 	}
-	epSeen := make(map[string]struct{}, len(req.Endpoints))
-	for _, ep := range req.Endpoints {
+	epSeen := make(map[string]struct{}, len(endpoints))
+	for _, ep := range endpoints {
 		if _, ok := consts.TypeOfProtocol(consts.Protocol(ep.Protocol)); !ok {
 			return fmt.Errorf("invalid endpoint protocol %q", ep.Protocol)
 		}
@@ -61,10 +75,14 @@ func validateStructuredRequest(ctx context.Context, repos *repository.Repositori
 		}
 	}
 
-	if len(req.Groups) == 0 {
+	groups := []GroupInput{}
+	if req.Groups != nil {
+		groups = *req.Groups
+	}
+	if len(groups) == 0 {
 		return fmt.Errorf("groups is required (at least one)")
 	}
-	for i, g := range req.Groups {
+	for i, g := range groups {
 		name := strings.TrimSpace(g.Name)
 		if name == "" {
 			return fmt.Errorf("groups[%d].name is required", i)
@@ -110,12 +128,12 @@ func normalizeInlineKeys(keys []string) []string {
 }
 
 // syncProviderChildren 在事务内按请求体全量同步 endpoints / groups / inline credentials。
-// provider 行本身由调用方已 Create/Update；本函数只写子表。
-func syncProviderChildren(ctx context.Context, repos *repository.Repositories, providerID uint, req *ProviderRequest) error {
-	if err := syncEndpoints(ctx, repos, providerID, req.Endpoints); err != nil {
+// provider 行本身由调用方已 Create/Update；本函数只写子表。仅全量路径调用（调用方已解引用）。
+func syncProviderChildren(ctx context.Context, repos *repository.Repositories, providerID uint, endpoints []EndpointInput, groups []GroupInput) error {
+	if err := syncEndpoints(ctx, repos, providerID, endpoints); err != nil {
 		return err
 	}
-	return syncGroups(ctx, repos, providerID, req.Groups)
+	return syncGroups(ctx, repos, providerID, groups)
 }
 
 func syncEndpoints(ctx context.Context, repos *repository.Repositories, providerID uint, inputs []EndpointInput) error {

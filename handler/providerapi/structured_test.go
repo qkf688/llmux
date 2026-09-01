@@ -274,6 +274,74 @@ func TestStructured_CreateZeroValuesPersistCorrectly(t *testing.T) {
 	}
 }
 
+// TestStructured_UpdatePartialKeepsChildren 锁定 partial-update：PUT 只带顶层标量
+// （无 endpoints/groups 键）时，仅更新 provider 标量字段，子表（endpoints/groups/
+// credentials）与 Protocols 原样保留。开关类动作（模型端点/过滤/拉黑切换）通过此语义
+// 复用 PUT 而无需重提完整结构。防止 partial 请求被强制校验拒绝或误清空 children。
+func TestStructured_UpdatePartialKeepsChildren(t *testing.T) {
+	testsupport.InitTestDB(t)
+	setupProviderCrypto(t)
+
+	ctx := t.Context()
+	created := createProviderViaHandler(t, structuredCreateBody("p-partial", "sk-partial-DDDD9999"))
+	id := uint(gjson.Get(created, "data.ID").Uint())
+	if id == 0 {
+		t.Fatalf("missing ID: %s", created)
+	}
+
+	// partial：只带顶层标量（含 config、name、开关），刻意省略 protocols/endpoints/groups 键。
+	partialBody := `{
+		"name":"p-partial-renamed",
+		"type":"openai",
+		"config":"{\"base_url\":\"https://api.example.com\"}",
+		"console":"",
+		"proxy":"",
+		"model_endpoint":false,
+		"model_filter_enabled":true,
+		"blacklisted":true
+	}`
+	updated := updateProviderViaHandler(t, id, partialBody)
+	if code := gjson.Get(updated, "code").Int(); code != 200 {
+		t.Fatalf("update code = %d, body=%s", code, updated)
+	}
+	if gjson.Get(updated, "data.Name").String() != "p-partial-renamed" {
+		t.Fatalf("Name not updated: %s", updated)
+	}
+	// 标量开关生效
+	if gjson.Get(updated, "data.ModelEndpoint").Bool() {
+		t.Fatalf("ModelEndpoint should be false: %s", updated)
+	}
+	if !gjson.Get(updated, "data.ModelFilterEnabled").Bool() {
+		t.Fatalf("ModelFilterEnabled should be true: %s", updated)
+	}
+	if !gjson.Get(updated, "data.blacklisted").Bool() {
+		t.Fatalf("blacklisted should be true: %s", updated)
+	}
+	// Protocols 保留
+	if gjson.Get(updated, "data.Protocols.0").String() != "openai" {
+		t.Fatalf("Protocols wiped by partial update: %s", updated)
+	}
+
+	// 子表保留：1 端点 + 1 分组 + 1 内联凭据原样
+	eps, err := repository.Default().Endpoint.ListByProvider(ctx, id)
+	if err != nil || len(eps) != 1 {
+		t.Fatalf("endpoints after partial = %+v err=%v", eps, err)
+	}
+	groups, err := repository.Default().KeyGroup.ListByProvider(ctx, id)
+	if err != nil || len(groups) != 1 {
+		t.Fatalf("groups after partial = %+v err=%v", groups, err)
+	}
+	creds, err := repository.Default().Credential.ListByGroups(ctx, []uint{groups[0].ID}, nil)
+	if err != nil || len(creds) != 1 {
+		t.Fatalf("creds after partial = %+v err=%v", creds, err)
+	}
+
+	// 安全不变量：响应里 partial 后仍保留同一条内联 key（未被清空/覆盖）
+	if gjson.Get(updated, "data.Groups.0.InlineKeys.0").String() != "sk-partial-DDDD9999" {
+		t.Fatalf("InlineKeys not preserved: %s", updated)
+	}
+}
+
 func TestSanitizeConfig_StripsKeyAndSchedule(t *testing.T) {
 	got, err := sanitizeConfig(`{"base_url":"https://x","api_key":"sk","_schedule":{"a":1},"beta":"b"}`)
 	if err != nil {

@@ -134,7 +134,15 @@ func CreateProvider(c *gin.Context) {
 			return err
 		}
 		createdID = provider.ID
-		return syncProviderChildren(ctx, txRepos, provider.ID, &req)
+		endpoints := []EndpointInput{}
+		if req.Endpoints != nil {
+			endpoints = *req.Endpoints
+		}
+		groups := []GroupInput{}
+		if req.Groups != nil {
+			groups = *req.Groups
+		}
+		return syncProviderChildren(ctx, txRepos, provider.ID, endpoints, groups)
 	})
 	if err != nil {
 		respondTxError(c, "Failed to create provider", err)
@@ -179,9 +187,14 @@ func UpdateProvider(c *gin.Context) {
 		return
 	}
 
-	if err := validateStructuredRequest(ctx, repos(), &req); err != nil {
-		httpresp.BadRequest(c, err.Error())
-		return
+	// partial-update：endpoints/groups 键缺失时只改顶层标量（开关类切换复用同一 PUT），
+	// 跳过结构化校验与子表重写；表单提交全量携带 children，走完整校验 + 四表同步。
+	childrenProvided := req.hasChildren()
+	if childrenProvided {
+		if err := validateStructuredRequest(ctx, repos(), &req); err != nil {
+			httpresp.BadRequest(c, err.Error())
+			return
+		}
 	}
 
 	sanitized, err := sanitizeConfig(req.Config)
@@ -204,12 +217,25 @@ func UpdateProvider(c *gin.Context) {
 			ModelFilterEnabled: req.ModelFilterEnabled,
 			Blacklisted:        req.Blacklisted,
 			AuthType:           authType,
-			Protocols:          req.Protocols,
 		}
-		if err := txRepos.Provider.Update(ctx, id, &updates); err != nil {
-			return err
+		// 仅全量路径写 Protocols/children；partial 走 struct Updates 零值跳过语义，
+		// 保持 Protocols 与子表现有值不变（nil 切片/指针不会被 Updates 覆盖）。
+		if childrenProvided {
+			endpoints := []EndpointInput{}
+			if req.Endpoints != nil {
+				endpoints = *req.Endpoints
+			}
+			groups := []GroupInput{}
+			if req.Groups != nil {
+				groups = *req.Groups
+			}
+			updates.Protocols = req.Protocols
+			if err := txRepos.Provider.Update(ctx, id, &updates); err != nil {
+				return err
+			}
+			return syncProviderChildren(ctx, txRepos, id, endpoints, groups)
 		}
-		return syncProviderChildren(ctx, txRepos, id, &req)
+		return txRepos.Provider.Update(ctx, id, &updates)
 	})
 	if err != nil {
 		respondTxError(c, "Failed to update provider", err)

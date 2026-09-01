@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { mockPools } from "@/routes/number-pools/mock/data";
+import { usePools } from "@/hooks/api";
 
 export type PoolOption = {
   id: number;
@@ -8,13 +8,12 @@ export type PoolOption = {
 };
 
 /**
- * 号池下拉数据源（S0 原型挂 mock）。
- * S6 正式实现时替换内部实现为 lib/api 调用（TanStack Query），表单组件零改动；
- * 禁止其它位置直接 import number-pools 的 mock 数据。
+ * 号池下拉数据源。表单组件只消费 PoolOption 形状，禁止直接 import 号池页内部实现。
  */
 export function usePoolOptions(): PoolOption[] {
+  const { data: pools = [] } = usePools();
   return useMemo(
-    () => mockPools.map((p) => ({ id: p.id, name: p.name, keyCount: p.credentials.length })),
-    [],
+    () => pools.map((p) => ({ id: p.ID, name: p.Name, keyCount: p.KeyCount })),
+    [pools],
   );
 }

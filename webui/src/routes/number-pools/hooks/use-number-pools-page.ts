@@ -1,77 +1,113 @@
 /**
- * 号池页面总编排（S0 原型：本地 state 替代 TanStack Query）。
- * 状态：号池列表 / 详情弹窗 / 新建-编辑弹窗；凭据级操作（导入/搜索/筛选/批量）
- * 由详情弹窗内部管理，经 handlePoolUpdate 写回。
+ * 号池页面总编排：TanStack Query 拉列表；弹窗开闭本地 state。
+ * 凭据级操作由详情弹窗内部走 API，不再经 onPoolUpdate 写回。
  */
-import { useCallback, useState } from "react";
-import { mockPools } from "../mock/data";
-import type { MockPool } from "../types";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
+import {
+  usePools,
+  useCreatePool,
+  useUpdatePool,
+  useDeletePool,
+} from "@/hooks/api";
+import type { PoolListItem } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 
 export function useNumberPoolsPage() {
-  const [pools, setPools] = useState<MockPool[]>(() => mockPools);
-  const [detailPool, setDetailPool] = useState<MockPool | null>(null);
+  const { data: pools = [], isLoading, isError, error } = usePools();
+  const createPool = useCreatePool();
+  const updatePool = useUpdatePool();
+  const deletePool = useDeletePool();
+
+  const [detailPoolId, setDetailPoolId] = useState<number | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
-  const [formPool, setFormPool] = useState<MockPool | null>(null);
+  const [formPool, setFormPool] = useState<PoolListItem | null>(null);
+
+  // 列表 invalidate 后同步详情弹窗的 KeyCount/StatusCounts/ReferencedBy
+  const detailPool =
+    detailPoolId == null ? null : (pools.find((p) => p.ID === detailPoolId) ?? null);
+
+  useEffect(() => {
+    if (detailOpen && detailPoolId != null && detailPool == null) {
+      setDetailOpen(false);
+      setDetailPoolId(null);
+    }
+  }, [detailOpen, detailPoolId, detailPool]);
 
   const openCreateForm = useCallback(() => {
     setFormPool(null);
     setFormOpen(true);
   }, []);
 
-  const openEditForm = useCallback((pool: MockPool) => {
+  const openEditForm = useCallback((pool: PoolListItem) => {
     setFormPool(pool);
     setFormOpen(true);
   }, []);
 
-  const openDetail = useCallback((pool: MockPool) => {
-    setDetailPool(pool);
+  const openDetail = useCallback((pool: PoolListItem) => {
+    setDetailPoolId(pool.ID);
     setDetailOpen(true);
   }, []);
 
-  /** 凭据级变更（导入/启停/删除）就地写回列表与详情 */
-  const handlePoolUpdate = useCallback((updated: MockPool) => {
-    setPools((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-    setDetailPool((prev) => (prev?.id === updated.id ? updated : prev));
+  const handleDetailOpenChange = useCallback((open: boolean) => {
+    setDetailOpen(open);
+    if (!open) setDetailPoolId(null);
   }, []);
 
-  /** 新建/编辑号池保存（S0：本地 id 自增；S2 由后端返回） */
-  const handlePoolSaved = useCallback((saved: MockPool) => {
-    setPools((prev) => {
-      const exists = prev.some((p) => p.id === saved.id);
-      if (exists) {
-        return prev.map((p) => (p.id === saved.id ? saved : p));
-      }
-      const nextId = prev.length > 0 ? Math.max(...prev.map((p) => p.id)) + 1 : 1;
-      return [...prev, { ...saved, id: nextId }];
-    });
-    setFormOpen(false);
-  }, []);
-
-  const handlePoolDelete = useCallback(
-    (poolId: number) => {
-      setPools((prev) => prev.filter((p) => p.id !== poolId));
-      if (detailPool?.id === poolId) {
-        setDetailOpen(false);
-        setDetailPool(null);
+  const handlePoolSaved = useCallback(
+    async (values: { name: string; note?: string }) => {
+      try {
+        if (formPool) {
+          await updatePool.mutateAsync({
+            id: formPool.ID,
+            data: { name: values.name, note: values.note },
+          });
+          toast.success("号池已更新");
+        } else {
+          await createPool.mutateAsync({ name: values.name, note: values.note });
+          toast.success("号池已创建");
+        }
+        setFormOpen(false);
+      } catch (err) {
+        toast.error(`${formPool ? "更新" : "创建"}失败: ${toErrorMessage(err)}`);
       }
     },
-    [detailPool],
+    [formPool, createPool, updatePool],
+  );
+
+  const handlePoolDelete = useCallback(
+    async (poolId: number) => {
+      try {
+        await deletePool.mutateAsync(poolId);
+        toast.success("号池已删除");
+        if (detailPoolId === poolId) {
+          setDetailOpen(false);
+          setDetailPoolId(null);
+        }
+      } catch (err) {
+        toast.error(`删除失败: ${toErrorMessage(err)}`);
+      }
+    },
+    [deletePool, detailPoolId],
   );
 
   return {
     pools,
+    isLoading,
+    isError,
+    error,
     detailPool,
     detailOpen,
-    setDetailOpen,
+    setDetailOpen: handleDetailOpenChange,
     formOpen,
     setFormOpen,
     formPool,
     openCreateForm,
     openEditForm,
     openDetail,
-    handlePoolUpdate,
     handlePoolSaved,
     handlePoolDelete,
+    isSaving: createPool.isPending || updatePool.isPending,
   };
 }

@@ -21,7 +21,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import type { MockPool } from "../../types";
+import type { PoolListItem } from "@/lib/api";
 
 const poolFormSchema = z.object({
   name: z.string().min(1, { message: "号池名称不能为空" }),
@@ -34,13 +34,18 @@ type PoolFormDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** null = 新建 */
-  pool: MockPool | null;
-  onSaved: (pool: MockPool) => void;
+  pool: PoolListItem | null;
+  onSaved: (values: { name: string; note?: string }) => void | Promise<void>;
+  isSaving?: boolean;
 };
 
-const EMPTY_POOL: MockPool = { id: 0, name: "", credentials: [], refGroups: [] };
-
-export function PoolFormDialog({ open, onOpenChange, pool, onSaved }: PoolFormDialogProps) {
+export function PoolFormDialog({
+  open,
+  onOpenChange,
+  pool,
+  onSaved,
+  isSaving = false,
+}: PoolFormDialogProps) {
   const form = useForm<PoolFormValues>({
     resolver: zodResolver(poolFormSchema),
     defaultValues: { name: "", note: "" },
@@ -48,13 +53,15 @@ export function PoolFormDialog({ open, onOpenChange, pool, onSaved }: PoolFormDi
 
   useEffect(() => {
     if (open) {
-      form.reset({ name: pool?.name ?? "", note: pool?.note ?? "" });
+      form.reset({ name: pool?.Name ?? "", note: pool?.Note ?? "" });
     }
   }, [open, pool, form]);
 
   const onSubmit = (values: PoolFormValues) => {
-    const base = pool ?? EMPTY_POOL;
-    onSaved({ ...base, name: values.name.trim(), note: values.note?.trim() || undefined });
+    void onSaved({
+      name: values.name.trim(),
+      note: values.note?.trim() || undefined,
+    });
   };
 
   return (
@@ -99,10 +106,12 @@ export function PoolFormDialog({ open, onOpenChange, pool, onSaved }: PoolFormDi
             </DialogBody>
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
                 取消
               </Button>
-              <Button type="submit">{pool ? "更新" : "创建"}</Button>
+              <Button type="submit" disabled={isSaving}>
+                {isSaving ? "保存中…" : pool ? "更新" : "创建"}
+              </Button>
             </DialogFooter>
           </form>
         </Form>

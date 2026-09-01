@@ -12,21 +12,23 @@ export default function NumberPoolsPage() {
       <PoolsHeader onCreate={page.openCreateForm} />
       <PoolsListSection
         pools={page.pools}
+        isLoading={page.isLoading}
+        isError={page.isError}
         onOpenDetail={page.openDetail}
         onEdit={page.openEditForm}
-        onDelete={page.handlePoolDelete}
+        onDelete={(id) => void page.handlePoolDelete(id)}
       />
       <PoolFormDialog
         open={page.formOpen}
         onOpenChange={page.setFormOpen}
         pool={page.formPool}
         onSaved={page.handlePoolSaved}
+        isSaving={page.isSaving}
       />
       <PoolDetailDialog
         open={page.detailOpen}
         onOpenChange={page.setDetailOpen}
         pool={page.detailPool}
-        onPoolUpdate={page.handlePoolUpdate}
       />
     </div>
   );

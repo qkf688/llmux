@@ -9,36 +9,30 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { MockCredentialStatus, MockPool } from "../../types";
+import type { PoolListItem } from "@/lib/api";
+import {
+  CREDENTIAL_STATUS_DOT_CLS,
+  CREDENTIAL_STATUS_LABEL,
+  CREDENTIAL_STATUS_ORDER,
+} from "../../constants/credential-status";
 
 type PoolsDesktopTableProps = {
-  pools: MockPool[];
-  onOpenDetail: (pool: MockPool) => void;
-  onEdit: (pool: MockPool) => void;
+  pools: PoolListItem[];
+  onOpenDetail: (pool: PoolListItem) => void;
+  onEdit: (pool: PoolListItem) => void;
   onDelete: (poolId: number) => void;
 };
 
-/** 健康概览：四态计数彩色圆点（对应 CSS 变量 success/warning/destructive/muted） */
-function HealthSummary({ pool }: { pool: MockPool }) {
-  const count = (status: MockCredentialStatus) => pool.credentials.filter((c) => c.status === status).length;
+function HealthSummary({ pool }: { pool: PoolListItem }) {
+  const counts = pool.StatusCounts ?? {};
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-      <span className="inline-flex items-center gap-1">
-        <span className="size-2 rounded-full bg-success" />
-        {count("active")}
-      </span>
-      <span className="inline-flex items-center gap-1">
-        <span className="size-2 rounded-full bg-warning" />
-        {count("cooldown")}
-      </span>
-      <span className="inline-flex items-center gap-1">
-        <span className="size-2 rounded-full bg-destructive" />
-        {count("error")}
-      </span>
-      <span className="inline-flex items-center gap-1">
-        <span className="size-2 rounded-full bg-muted-foreground/40" />
-        {count("disabled")}
-      </span>
+      {CREDENTIAL_STATUS_ORDER.map((status) => (
+        <span key={status} className="inline-flex items-center gap-1" title={CREDENTIAL_STATUS_LABEL[status]}>
+          <span className={`size-2 rounded-full ${CREDENTIAL_STATUS_DOT_CLS[status]}`} />
+          {counts[status] ?? 0}
+        </span>
+      ))}
     </div>
   );
 }
@@ -60,35 +54,29 @@ export function PoolsTableDesktop({ pools, onOpenDetail, onEdit, onDelete }: Poo
         <TableBody>
           {pools.map((pool) => (
             <TableRow
-              key={pool.id}
+              key={pool.ID}
               className="cursor-pointer"
-              tabIndex={0}
               onClick={() => onOpenDetail(pool)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") onOpenDetail(pool);
-              }}
             >
-              <TableCell className="font-mono text-xs text-muted-foreground">{pool.id}</TableCell>
+              <TableCell className="font-mono text-xs text-muted-foreground">{pool.ID}</TableCell>
               <TableCell>
-                <div className="font-medium">{pool.name}</div>
-                {pool.note && <div className="text-xs text-muted-foreground truncate max-w-[240px]">{pool.note}</div>}
+                <div className="font-medium">{pool.Name}</div>
+                {pool.Note && (
+                  <div className="text-xs text-muted-foreground truncate max-w-[240px]">{pool.Note}</div>
+                )}
               </TableCell>
-              <TableCell className="text-xs">{pool.credentials.length}</TableCell>
+              <TableCell className="text-xs">{pool.KeyCount}</TableCell>
               <TableCell>
                 <HealthSummary pool={pool} />
               </TableCell>
               <TableCell>
-                <div className="flex flex-wrap gap-1">
-                  {pool.refGroups.length === 0 ? (
-                    <span className="text-xs text-muted-foreground">未引用</span>
-                  ) : (
-                    pool.refGroups.map((ref) => (
-                      <Badge key={`${ref.providerName}.${ref.groupName}`} variant="outline" className="text-[10px]">
-                        {ref.providerName} · {ref.groupName}
-                      </Badge>
-                    ))
-                  )}
-                </div>
+                {pool.ReferencedBy === 0 ? (
+                  <span className="text-xs text-muted-foreground">未引用</span>
+                ) : (
+                  <Badge variant="outline" className="text-[10px]">
+                    {pool.ReferencedBy} 个分组
+                  </Badge>
+                )}
               </TableCell>
               <TableCell onClick={(e) => e.stopPropagation()}>
                 <div className="flex gap-1">
@@ -112,7 +100,7 @@ export function PoolsTableDesktop({ pools, onOpenDetail, onEdit, onDelete }: Poo
                     variant="ghost"
                     size="sm"
                     className="h-8 px-2 text-destructive hover:text-destructive"
-                    onClick={() => onDelete(pool.id)}
+                    onClick={() => onDelete(pool.ID)}
                   >
                     <Trash2 className="size-4" />
                   </Button>

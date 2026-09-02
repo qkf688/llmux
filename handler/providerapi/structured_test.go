@@ -361,3 +361,126 @@ func TestSanitizeConfig_StripsKeyAndSchedule(t *testing.T) {
 		t.Fatalf("got %v", m)
 	}
 }
+
+// TestStructured_UpdatePartialWithoutConfigKeepsConfig 锁 C1 回归：partial 请求
+// 不带 config 键时，原 Config（base_url 等）必须原样保留。GORM struct Updates 的
+// 零值跳过保护不了本场景——sanitizeConfig("") 经空 map 序列化产出 "{}"（非零值），
+// 照样覆盖原值。修复后 partial 分支仅显式携带 config 时才写该列。
+func TestStructured_UpdatePartialWithoutConfigKeepsConfig(t *testing.T) {
+	testsupport.InitTestDB(t)
+	setupProviderCrypto(t)
+
+	created := createProviderViaHandler(t, structuredCreateBody("p-partial-cfg", "sk-cfg-AAAA1111"))
+	id := uint(gjson.Get(created, "data.ID").Uint())
+	if id == 0 {
+		t.Fatalf("missing ID: %s", created)
+	}
+
+	// 开关类 partial：只带 model_filter_enabled，不带 config 键（前端开关调用方的真实形态）
+	updated := updateProviderViaHandler(t, id, `{"model_filter_enabled": true}`)
+	if code := gjson.Get(updated, "code").Int(); code != 200 {
+		t.Fatalf("update code = %d, body=%s", code, updated)
+	}
+	cfg := gjson.Get(updated, "data.Config").String()
+	if cfg != `{"base_url":"https://api.example.com"}` {
+		t.Fatalf("partial without config key overwrote Config to %q", cfg)
+	}
+}
+
+// TestStructured_UpdateFullClearsProxyAndConsole 锁 W1 回归：全量更新显式传空
+// console/proxy（用户在表单清空）必须落库生效。struct Updates 零值跳过会静默保留
+// 旧值，全量路径改 UpdateFields(map) 后空串按显式清空写入。
+func TestStructured_UpdateFullClearsProxyAndConsole(t *testing.T) {
+	testsupport.InitTestDB(t)
+	setupProviderCrypto(t)
+
+	createBody := `{
+		"name":"p-full-clear",
+		"type":"openai",
+		"config":"{\"base_url\":\"https://api.example.com\"}",
+		"console":"https://console.example.com",
+		"proxy":"http://127.0.0.1:7890",
+		"protocols":["openai"],
+		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
+		"groups":[{"name":"默认组","weight":1,"models":"","source":"inline","inline_keys":["sk-clear-BBBB2222"]}]
+	}`
+	created := createProviderViaHandler(t, createBody)
+	id := uint(gjson.Get(created, "data.ID").Uint())
+	if id == 0 {
+		t.Fatalf("missing ID: %s", created)
+	}
+
+	// 全量更新：children 全带，console/proxy 显式传空串（模拟用户清空表单）
+	updateBody := `{
+		"name":"p-full-clear",
+		"type":"openai",
+		"config":"{\"base_url\":\"https://api.example.com\"}",
+		"console":"",
+		"proxy":"",
+		"protocols":["openai"],
+		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
+		"groups":[{"name":"默认组","weight":1,"models":"","source":"inline","inline_keys":["sk-clear-BBBB2222"]}]
+	}`
+	updated := updateProviderViaHandler(t, id, updateBody)
+	if code := gjson.Get(updated, "code").Int(); code != 200 {
+		t.Fatalf("update code = %d, body=%s", code, updated)
+	}
+	if proxy := gjson.Get(updated, "data.Proxy").String(); proxy != "" {
+		t.Fatalf("clearing proxy did not persist (Proxy=%q)", proxy)
+	}
+	if console := gjson.Get(updated, "data.Console").String(); console != "" {
+		t.Fatalf("clearing console did not persist (Console=%q)", console)
+	}
+}
+
+// TestStructured_UpdateRejectsHalfChildren 锁 W2 回归：请求只带 endpoints/groups
+// 其中一键（半 partial）时必须 400 拒绝，禁止静默丢弃该键。hasChildren 用 || 判定
+// 「任一 children 键出现即全量意图」，缺失键交由 validateStructuredRequest 报错。
+func TestStructured_UpdateRejectsHalfChildren(t *testing.T) {
+	testsupport.InitTestDB(t)
+	setupProviderCrypto(t)
+
+	created := createProviderViaHandler(t, structuredCreateBody("p-half", "sk-half-CCCC3333"))
+	id := uint(gjson.Get(created, "data.ID").Uint())
+	if id == 0 {
+		t.Fatalf("missing ID: %s", created)
+	}
+
+	cases := []struct {
+		name    string
+		body    string
+		wantMsg string
+	}{
+		{
+			name: "only endpoints without groups",
+			body: `{
+				"name":"p-half",
+				"type":"openai",
+				"protocols":["openai"],
+				"endpoints":[{"protocol":"openai","url":"","enabled":true}]
+			}`,
+			wantMsg: "groups",
+		},
+		{
+			name: "only groups without endpoints",
+			body: `{
+				"name":"p-half",
+				"type":"openai",
+				"protocols":["openai"],
+				"groups":[{"name":"默认组","weight":1,"models":"","source":"inline","inline_keys":["sk-half-CCCC3333"]}]
+			}`,
+			wantMsg: "endpoints",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			updated := updateProviderViaHandler(t, id, tc.body)
+			if code := gjson.Get(updated, "code").Int(); code != 400 {
+				t.Fatalf("half-partial should be rejected with code 400, got %d, body=%s", code, updated)
+			}
+			if msg := gjson.Get(updated, "message").String(); !strings.Contains(msg, tc.wantMsg) {
+				t.Fatalf("error message should mention %q, got %q", tc.wantMsg, msg)
+			}
+		})
+	}
+}

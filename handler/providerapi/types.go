@@ -30,6 +30,7 @@ type GroupInput struct {
 // Update 支持 partial-update：Endpoints/Groups 为 nil（键缺失）表示只改顶层标量、不动子表，
 // 供「开关切换」类轻量动作复用同一 PUT（表单提交则全量携带三个字段）。
 // 用指针切片区分「键缺失（nil）」与「显式空数组（非 nil 空）」：普通非指针切片无法区分二者。
+// 只带 endpoints/groups 其中一键（半 partial）会被 400 拒绝，禁止静默丢弃该键。
 type ProviderRequest struct {
 	Name               string           `json:"name"`
 	Type               string           `json:"type"`

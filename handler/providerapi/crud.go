@@ -1,7 +1,9 @@
 package providerapi
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/common/bgtask"
@@ -187,8 +189,9 @@ func UpdateProvider(c *gin.Context) {
 		return
 	}
 
-	// partial-update：endpoints/groups 键缺失时只改顶层标量（开关类切换复用同一 PUT），
+	// partial-update：endpoints/groups 两键均缺失时只改顶层标量（开关类切换复用同一 PUT），
 	// 跳过结构化校验与子表重写；表单提交全量携带 children，走完整校验 + 四表同步。
+	// 半 partial（只带一键）同样进入全量路径，由 validateStructuredRequest 显式 400 拒绝。
 	childrenProvided := req.hasChildren()
 	if childrenProvided {
 		if err := validateStructuredRequest(ctx, repos(), &req); err != nil {
@@ -197,6 +200,10 @@ func UpdateProvider(c *gin.Context) {
 		}
 	}
 
+	// 键缺失判定必须先于 sanitize：sanitizeConfig("") 会把空串加工成 "{}"（非零值），
+	// 之后 struct Updates 的零值跳过不再保护原值——partial 不带 config 键时会把原
+	// Config 覆盖成 "{}" 丢失 base_url 等。空串在此约定为「键缺失 = 不动」。
+	configProvided := req.Config != ""
 	sanitized, err := sanitizeConfig(req.Config)
 	if err != nil {
 		httpresp.BadRequest(c, "Invalid config JSON: "+err.Error())
@@ -207,20 +214,43 @@ func UpdateProvider(c *gin.Context) {
 	authType := resolveAuthType(req.Type, req.AuthType)
 
 	err = repos().RunInTx(ctx, func(txRepos *repository.Repositories) error {
-		updates := models.Provider{
-			Name:               req.Name,
-			Type:               req.Type,
-			Config:             req.Config,
-			Console:            req.Console,
-			Proxy:              req.Proxy,
-			ModelEndpoint:      req.ModelEndpoint,
-			ModelFilterEnabled: req.ModelFilterEnabled,
-			Blacklisted:        req.Blacklisted,
-			AuthType:           authType,
-		}
-		// 仅全量路径写 Protocols/children；partial 走 struct Updates 零值跳过语义，
-		// 保持 Protocols 与子表现有值不变（nil 切片/指针不会被 Updates 覆盖）。
 		if childrenProvided {
+			// 全量路径走 UpdateFields(map)：空串/NULL 是合法的「显式清空」语义，
+			// struct Updates 的零值跳过会静默保留旧值（console/proxy 清空失效）。
+			// protocols 带 serializer:json——map 更新不走 serializer，必须传
+			// json.Marshal 后的字符串，直接传 []string 会写坏列（读回解析失败）。
+			protoJSON, err := json.Marshal(req.Protocols)
+			if err != nil {
+				return fmt.Errorf("marshal protocols: %w", err)
+			}
+			fields := map[string]any{
+				"config":    req.Config,
+				"console":   req.Console,
+				"proxy":     req.Proxy,
+				"auth_type": authType, // *string：nil 写 NULL（切回默认认证是合法清空）
+				"protocols": string(protoJSON),
+			}
+			// name/type 是必填身份字段：空串视为客户端缺省，保留现值
+			// （与旧 struct 零值跳过行为等价，防畸形请求抹掉身份字段）。
+			if req.Name != "" {
+				fields["name"] = req.Name
+			}
+			if req.Type != "" {
+				fields["type"] = req.Type
+			}
+			// 三态开关：指针非 nil 才写，nil = 未提供（保留现值）。
+			if req.ModelEndpoint != nil {
+				fields["model_endpoint"] = *req.ModelEndpoint
+			}
+			if req.ModelFilterEnabled != nil {
+				fields["model_filter_enabled"] = *req.ModelFilterEnabled
+			}
+			if req.Blacklisted != nil {
+				fields["blacklisted"] = *req.Blacklisted
+			}
+			if _, err := txRepos.Provider.UpdateFields(ctx, id, fields); err != nil {
+				return err
+			}
 			endpoints := []EndpointInput{}
 			if req.Endpoints != nil {
 				endpoints = *req.Endpoints
@@ -229,11 +259,22 @@ func UpdateProvider(c *gin.Context) {
 			if req.Groups != nil {
 				groups = *req.Groups
 			}
-			updates.Protocols = req.Protocols
-			if err := txRepos.Provider.Update(ctx, id, &updates); err != nil {
-				return err
-			}
 			return syncProviderChildren(ctx, txRepos, id, endpoints, groups)
+		}
+		// partial：struct Updates 的零值跳过恰是「未提供 = 不动」语义（nil 指针/
+		// 空串跳过）；Config 是唯一例外——经 sanitize 加工空串会变 "{}"，须显式守卫。
+		updates := models.Provider{
+			Name:               req.Name,
+			Type:               req.Type,
+			Console:            req.Console,
+			Proxy:              req.Proxy,
+			ModelEndpoint:      req.ModelEndpoint,
+			ModelFilterEnabled: req.ModelFilterEnabled,
+			Blacklisted:        req.Blacklisted,
+			AuthType:           authType,
+		}
+		if configProvided {
+			updates.Config = req.Config
 		}
 		return txRepos.Provider.Update(ctx, id, &updates)
 	})

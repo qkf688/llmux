@@ -23,12 +23,12 @@ const (
 // 避免把「加密未配置 / 引用失效」这类语义错误误报为服务器故障。
 var errValidation = errors.New("provider input validation")
 
-// hasChildren 判断请求体是否携带结构化 children（endpoints/groups 均非 nil）。
-// false = partial-update：只改顶层标量（name/type/config/console/proxy/开关），不动子表。
-// 用指针切片断言「键是否显式提供」：二者必须同现，缺任一个都视为 partial（全量路径由
-// validateStructuredRequest 兜底拒绝不完整结构）。
+// hasChildren 判断请求体是否携带结构化 children（endpoints/groups 任一非 nil）。
+// true = 全量更新意图；false = partial-update（两键均缺失），只改顶层标量、不动子表。
+// 任一键单独出现（半 partial）同样判 true，交由 validateStructuredRequest 显式拒绝
+// 缺失的另一半——禁止静默丢弃已提供的键。
 func (req *ProviderRequest) hasChildren() bool {
-	return req.Endpoints != nil && req.Groups != nil
+	return req.Endpoints != nil || req.Groups != nil
 }
 
 // validateStructuredRequest 校验 S6 结构化字段；失败返回可直接给 BadRequest 的文案。

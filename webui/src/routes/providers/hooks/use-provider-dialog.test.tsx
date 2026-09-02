@@ -10,6 +10,12 @@ vi.mock("@/lib/api", () => ({
   getProvider: getProviderMock,
 }));
 
+// sonner 是全局 toast：mock 后才能断言「弹窗关闭后晚到的失败不弹提示」（W1 回归）
+vi.mock("sonner", () => ({
+  toast: { error: vi.fn(), success: vi.fn() },
+}));
+
+import { toast } from "sonner";
 import type { Provider, ProviderDetail } from "@/lib/api";
 import { defaultProviderFormValues, providerFormSchema, type ProviderFormValues } from "../form-schema";
 import { useProviderDialog } from "./use-provider-dialog";
@@ -32,24 +38,34 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
-// 组合真实 form hook 与 dialog hook：回填正确性取决于 reset 的实际行为，mock form 会测掉真实语义
+// 组合真实 form hook 与 dialog hook：回填正确性取决于 reset 的实际行为，mock form 会测掉真实语义。
+// open 由外部驱动（模拟 store → UI rerender）：setOpen 更新 openState，测试手动 syncOpen 触发 rerender。
 function renderDialogHook() {
-  const setOpen = vi.fn();
   const setEditingProvider = vi.fn();
   const setDetailLoading = vi.fn();
-  const result = renderHook(() => {
-    const form = useForm<ProviderFormValues>({
-      resolver: zodResolver(providerFormSchema),
-      defaultValues: { ...defaultProviderFormValues },
-    });
-    const dialog = useProviderDialog({ form, setOpen, setEditingProvider, setDetailLoading });
-    return { form, ...dialog };
+  let openState = false;
+  const setOpen = vi.fn((next: boolean) => {
+    openState = next;
   });
-  return { ...result, setOpen, setEditingProvider, setDetailLoading };
+  const result = renderHook(
+    ({ open }: { open: boolean }) => {
+      const form = useForm<ProviderFormValues>({
+        resolver: zodResolver(providerFormSchema),
+        defaultValues: { ...defaultProviderFormValues },
+      });
+      const dialog = useProviderDialog({ open, form, setOpen, setEditingProvider, setDetailLoading });
+      return { form, ...dialog };
+    },
+    { initialProps: { open: false } },
+  );
+  const syncOpen = () => result.rerender({ open: openState });
+  return { ...result, setOpen, setEditingProvider, setDetailLoading, syncOpen };
 }
 
 beforeEach(() => {
   getProviderMock.mockReset();
+  vi.mocked(toast.error).mockClear();
+  vi.mocked(toast.success).mockClear();
 });
 
 describe("useProviderDialog 编辑弹窗竞态与加载状态", () => {
@@ -148,5 +164,89 @@ describe("useProviderDialog 编辑弹窗竞态与加载状态", () => {
     expect(hook.setEditingProvider).toHaveBeenCalledWith(null);
     // 失败路径表单回落为默认值，语义不变
     expect(hook.result.current.form.getValues("name")).toBe("");
+  });
+
+  it("弹窗关闭后晚到的失败：不弹 toast、不再触发关闭、loading 不被晚到写入（W1）", async () => {
+    const providerA = createListProvider(1, "A");
+    const deferredA = createDeferred<ProviderDetail>();
+    getProviderMock.mockReturnValueOnce(deferredA.promise);
+
+    const hook = renderDialogHook();
+    let promiseA!: Promise<void>;
+    act(() => {
+      promiseA = hook.result.current.openEditDialog(providerA);
+    });
+    // 模拟 setOpen(true) 驱动 UI 已打开
+    act(() => hook.syncOpen());
+
+    // 用户点取消/X 关闭弹窗（详情仍在飞）
+    act(() => {
+      hook.setOpen(false);
+      hook.syncOpen();
+    });
+
+    await act(async () => {
+      deferredA.reject(new Error("boom"));
+      await promiseA;
+    });
+
+    // 晚到的失败属于已被关闭的请求：toast / 关闭 / loading 写入都必须被守卫拦下
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(hook.setOpen).toHaveBeenCalledTimes(2); // [true]（打开）+ [false]（用户手动关闭），无第三次
+    expect(hook.setDetailLoading.mock.calls).toEqual([[true], [false]]); // 关闭时显式复位，晚到响应零写入
+  });
+
+  it("弹窗关闭后晚到的成功：不回填已关闭的表单（W1）", async () => {
+    const providerA = createListProvider(1, "A");
+    const deferredA = createDeferred<ProviderDetail>();
+    getProviderMock.mockReturnValueOnce(deferredA.promise);
+
+    const hook = renderDialogHook();
+    let promiseA!: Promise<void>;
+    act(() => {
+      promiseA = hook.result.current.openEditDialog(providerA);
+    });
+    act(() => hook.syncOpen());
+
+    act(() => {
+      hook.setOpen(false);
+      hook.syncOpen();
+    });
+
+    await act(async () => {
+      deferredA.resolve(createDetail(providerA));
+      await promiseA;
+    });
+
+    // 已关闭的弹窗不接受回填（表单保持默认值，下次打开必经 reset）
+    expect(hook.result.current.form.getValues("name")).toBe("");
+    expect(hook.setDetailLoading.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it("双击同一供应商（同一对象引用）：仅最新响应生效（requestId 守卫）", async () => {
+    const providerA = createListProvider(1, "A");
+    const deferred1 = createDeferred<ProviderDetail>();
+    const deferred2 = createDeferred<ProviderDetail>();
+    // 同一 id 两次请求返回不同数据，模拟两轮响应的先后乱序
+    getProviderMock.mockReturnValueOnce(deferred1.promise).mockReturnValueOnce(deferred2.promise);
+
+    const hook = renderDialogHook();
+    let promise1!: Promise<void>;
+    act(() => {
+      promise1 = hook.result.current.openEditDialog(providerA);
+    });
+
+    await act(async () => {
+      void hook.result.current.openEditDialog(providerA);
+      await deferred2.resolve({ ...createDetail(providerA), Name: "A2" });
+    });
+
+    await act(async () => {
+      deferred1.resolve({ ...createDetail(providerA), Name: "A1" });
+      await promise1;
+    });
+
+    // 引用比较守卫会放行同引用的第一轮响应（Name=A1 覆盖 A2）；requestId 守卫按轮次作废
+    expect(hook.result.current.form.getValues("name")).toBe("A2");
   });
 });

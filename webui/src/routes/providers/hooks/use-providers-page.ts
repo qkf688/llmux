@@ -288,6 +288,7 @@ export function useProvidersPage() {
   });
 
   const { openEditDialog, openCreateDialog } = useProviderDialog({
+    open,
     form,
     setOpen,
     setEditingProvider,

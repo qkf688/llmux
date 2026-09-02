@@ -1,12 +1,12 @@
 /**
  * 供应商表单「协议与调度」分区（S0 原型）：
  * 支持类型勾选（= 出站协议，第一个勾选为主类型）/ 协议端点区（跟随勾选，URL 继承/覆盖）/
- * 凭据分组区（价格权重 + 白名单 + 凭据来源二选一）。
+ * 凭据分组区（价格权重 + 白名单 + 凭据来源二选一；关联号池可就地打开号池详情弹窗）。
  * 依赖 ProviderFormDialog 的 <Form> context（useFormContext）。
  * 正式实现（S6）时这些字段改为独立 DTO 提交，本组件结构保留。
  */
 import type { ProviderTemplate } from "@/lib/api";
-import { Trash2 } from "lucide-react";
+import { Eye, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useFieldArray, useFormContext, useWatch } from "react-hook-form";
 import { applyProviderTemplateDefaults } from "../../utils/template-defaults";
@@ -200,8 +200,15 @@ function defaultGroup(): ProviderFormGroup {
   return { name: "", weight: 1, models: "", source: "inline", inlineKeys: "", poolId: "" };
 }
 
-/** 单个分组卡片：名称/价格权重/模型白名单/凭据来源二选一 */
-function GroupCard({ index }: { index: number }) {
+/** 单个分组卡片：名称/价格权重/模型白名单/凭据来源二选一；关联号池时可查看池详情 */
+function GroupCard({
+  index,
+  onViewPoolDetail,
+}: {
+  index: number;
+  /** 打开号池详情弹窗（由 ProviderFormDialog 持 state 并渲染共享 PoolDetailDialog） */
+  onViewPoolDetail?: (poolId: string) => void;
+}) {
   const { control } = useFormContext<ProviderFormValues>();
   const source = useWatch({ control, name: `groups.${index}.source` });
   const pools = usePoolOptions();
@@ -310,20 +317,34 @@ function GroupCard({ index }: { index: number }) {
           render={({ field }) => (
             <FormItem className="space-y-1">
               <FormLabel>关联号池</FormLabel>
-              <FormControl>
-                <Select value={field.value || undefined} onValueChange={field.onChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="选择号池（可在号池页管理凭据）" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pools.map((pool) => (
-                      <SelectItem key={pool.id} value={String(pool.id)}>
-                        {pool.name}（{pool.keyCount} keys）
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FormControl>
+              <div className="flex items-center gap-2">
+                <FormControl>
+                  <Select value={field.value || undefined} onValueChange={field.onChange}>
+                    <SelectTrigger className="min-w-0 flex-1">
+                      <SelectValue placeholder="选择号池（可在号池页管理凭据）" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pools.map((pool) => (
+                        <SelectItem key={pool.id} value={String(pool.id)}>
+                          {pool.name}（{pool.keyCount} keys）
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormControl>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 shrink-0 px-2.5 text-xs"
+                  disabled={!field.value}
+                  onClick={() => onViewPoolDetail?.(field.value)}
+                  title="查看号池详情（凭据列表 / 状态分布）"
+                >
+                  <Eye className="size-3.5" />
+                  查看详情
+                </Button>
+              </div>
               <FormMessage />
             </FormItem>
           )}
@@ -334,7 +355,12 @@ function GroupCard({ index }: { index: number }) {
 }
 
 /** 凭据分组区：分组列表 + 添加分组 */
-export function GroupsSection() {
+export function GroupsSection({
+  onViewPoolDetail,
+}: {
+  /** 透传给各分组卡片：关联号池时打开该池的详情弹窗 */
+  onViewPoolDetail?: (poolId: string) => void;
+}) {
   const { control } = useFormContext<ProviderFormValues>();
   const { fields, append, remove } = useFieldArray({ control, name: "groups" });
 
@@ -348,7 +374,7 @@ export function GroupsSection() {
       </div>
       {fields.map((field, index) => (
         <div key={field.id} className="space-y-2">
-          <GroupCard index={index} />
+          <GroupCard index={index} onViewPoolDetail={onViewPoolDetail} />
           <Button
             type="button"
             variant="ghost"

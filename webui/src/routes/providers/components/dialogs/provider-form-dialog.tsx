@@ -1,5 +1,8 @@
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { UseFormReturn } from "react-hook-form";
+import { PoolDetailDialog } from "@/components/number-pools/pool-detail-dialog";
+import { usePools } from "@/hooks/api";
 import {
   Dialog,
   DialogBody,
@@ -48,6 +51,23 @@ export function ProviderFormDialog({
   onSubmit,
 }: ProviderFormDialogProps) {
   const extraFields = getProviderExtraFields(watchedType);
+
+  // 号池详情子弹窗：state 持在表单层（生命周期跟表单走，不经 page）；
+  // 嵌套模式照 ImportCredentialsDialog——子弹窗渲染在 Dialog 根内兄弟位置，父关闭时重置
+  const [poolDetail, setPoolDetail] = useState<{ open: boolean; poolId: string | null }>({
+    open: false,
+    poolId: null,
+  });
+  const { data: pools = [] } = usePools();
+  const poolDetailTarget = poolDetail.poolId
+    ? (pools.find((p) => String(p.ID) === poolDetail.poolId) ?? null)
+    : null;
+
+  useEffect(() => {
+    if (!open) {
+      setPoolDetail({ open: false, poolId: null });
+    }
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -205,7 +225,7 @@ export function ProviderFormDialog({
                   </p>
                 </div>
                 <EndpointsSection />
-                <GroupsSection />
+                <GroupsSection onViewPoolDetail={(poolId) => setPoolDetail({ open: true, poolId })} />
               </div>
             </DialogBody>
 
@@ -220,6 +240,11 @@ export function ProviderFormDialog({
           </form>
         </Form>
       </DialogContent>
+      <PoolDetailDialog
+        open={poolDetail.open}
+        onOpenChange={(next) => setPoolDetail((prev) => ({ ...prev, open: next }))}
+        pool={poolDetailTarget}
+      />
     </Dialog>
   );
 }

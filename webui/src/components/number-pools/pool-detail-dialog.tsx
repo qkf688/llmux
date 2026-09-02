@@ -40,7 +40,7 @@ import {
   CREDENTIAL_STATUS_ORDER,
   formatCredentialTime,
   isCredentialInCooldown,
-} from "../../constants/credential-status";
+} from "./credential-status";
 
 const PAGE_SIZE = 20;
 const STATUS_FILTER_OPTIONS: Array<"all" | CredentialStatus> = [

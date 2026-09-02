@@ -2,7 +2,7 @@ import { useNumberPoolsPage } from "./hooks/use-number-pools-page";
 import { PoolsHeader } from "./components/sections/pools-header";
 import { PoolsListSection } from "./components/sections/pools-list-section";
 import { PoolFormDialog } from "./components/dialogs/pool-form-dialog";
-import { PoolDetailDialog } from "./components/dialogs/pool-detail-dialog";
+import { PoolDetailDialog } from "@/components/number-pools/pool-detail-dialog";
 
 export default function NumberPoolsPage() {
   const page = useNumberPoolsPage();

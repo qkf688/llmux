@@ -6,7 +6,7 @@ import {
   CREDENTIAL_STATUS_DOT_CLS,
   CREDENTIAL_STATUS_LABEL,
   CREDENTIAL_STATUS_ORDER,
-} from "../../constants/credential-status";
+} from "@/components/number-pools/credential-status";
 
 type PoolsMobileListProps = {
   pools: PoolListItem[];

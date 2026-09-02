@@ -1,6 +1,7 @@
 package pools
 
 import (
+	"context"
 	"errors"
 
 	"github.com/gin-gonic/gin"
@@ -12,7 +13,7 @@ import (
 )
 
 // GetPools 获取号池列表（名称搜索），每项附健康概览统计
-// （key 数 / 状态分布 / 被分组引用数）。
+// （key 数 / 状态分布 / 被分组引用数 + 引用明细）。
 func GetPools(c *gin.Context) {
 	ctx := c.Request.Context()
 	pools, err := repos().Pool.List(ctx, repository.PoolFilter{Name: c.Query("name")})
@@ -30,7 +31,8 @@ func GetPools(c *gin.Context) {
 		httpresp.InternalServerError(c, err.Error())
 		return
 	}
-	refs, err := repos().KeyGroup.CountByPoolIDs(ctx, ids)
+	// 引用明细一次查出：ReferencedBy 计数由明细长度派生（同源不二次查询）。
+	refsByPool, err := poolRefGroups(ctx, ids)
 	if err != nil {
 		httpresp.InternalServerError(c, err.Error())
 		return
@@ -43,16 +45,54 @@ func GetPools(c *gin.Context) {
 			Pool:         p,
 			KeyCount:     s.KeyCount,
 			StatusCounts: s.StatusCount,
-			ReferencedBy: refs[p.ID],
+			ReferencedBy: int64(len(refsByPool[p.ID])),
+			RefGroups:    refsByPool[p.ID],
 		}
 		// 无凭据/无引用的号池聚合不产生条目，序列化为 null 会让前端读不到 0，
-		// 显式置空 map/零值保证键存在且为 0。
+		// 显式置空 map/切片保证键存在且为 0/空数组。
 		if item.StatusCounts == nil {
 			item.StatusCounts = map[string]int64{}
+		}
+		if item.RefGroups == nil {
+			item.RefGroups = []PoolRefGroup{}
 		}
 		items = append(items, item)
 	}
 	httpresp.Success(c, items)
+}
+
+// poolRefGroups 查引用明细并按 PoolID 归并：分组列表（ListByPoolIDs）→
+// 供应商名称映射（ListByIDs，软删行被排除、缺失键名称为空串）→ 组装。
+func poolRefGroups(ctx context.Context, poolIDs []uint) (map[uint][]PoolRefGroup, error) {
+	groups, err := repos().KeyGroup.ListByPoolIDs(ctx, poolIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	providerIDs := make([]uint, 0, len(groups))
+	for _, g := range groups {
+		providerIDs = append(providerIDs, g.ProviderID)
+	}
+	providers, err := repos().Provider.ListByIDs(ctx, providerIDs)
+	if err != nil {
+		return nil, err
+	}
+	names := make(map[uint]string, len(providers))
+	for _, p := range providers {
+		names[p.ID] = p.Name
+	}
+
+	refsByPool := make(map[uint][]PoolRefGroup, len(groups))
+	for _, g := range groups {
+		// ListByPoolIDs 按 pool_id IN 过滤，结果行 PoolID 必非 nil。
+		refsByPool[*g.PoolID] = append(refsByPool[*g.PoolID], PoolRefGroup{
+			ProviderID:   g.ProviderID,
+			ProviderName: names[g.ProviderID],
+			GroupID:      g.ID,
+			GroupName:    g.Name,
+		})
+	}
+	return refsByPool, nil
 }
 
 // CreatePool 创建号池（name 必填且唯一）。

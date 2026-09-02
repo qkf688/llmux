@@ -11,6 +11,9 @@ import (
 type KeyGroupRepo interface {
 	// ListByProvider 返回指定供应商的全部分组。
 	ListByProvider(ctx context.Context, providerID uint) ([]models.KeyGroup, error)
+	// ListByPoolIDs 返回引用了给定号池的分组（pool_id IN，ID ASC）。
+	// 号池列表「被引用明细」用：软删分组被默认排除，语义 = 现存引用。
+	ListByPoolIDs(ctx context.Context, poolIDs []uint) ([]models.KeyGroup, error)
 	// Get 根据 ID 获取分组。
 	Get(ctx context.Context, id uint) (*models.KeyGroup, error)
 	// Create 创建分组。
@@ -42,6 +45,17 @@ type keyGroupRepo struct {
 func (r *keyGroupRepo) ListByProvider(ctx context.Context, providerID uint) ([]models.KeyGroup, error) {
 	var groups []models.KeyGroup
 	if err := r.db.WithContext(ctx).Where("provider_id = ?", providerID).Find(&groups).Error; err != nil {
+		return nil, err
+	}
+	return groups, nil
+}
+
+func (r *keyGroupRepo) ListByPoolIDs(ctx context.Context, poolIDs []uint) ([]models.KeyGroup, error) {
+	if len(poolIDs) == 0 {
+		return nil, nil
+	}
+	var groups []models.KeyGroup
+	if err := r.db.WithContext(ctx).Where("pool_id IN ?", poolIDs).Order("id ASC").Find(&groups).Error; err != nil {
 		return nil, err
 	}
 	return groups, nil

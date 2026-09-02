@@ -6,6 +6,7 @@ import "github.com/gin-gonic/gin"
 func RegisterHead(rg gin.IRoutes) {
 	rg.GET("/providers/template", GetProviderTemplates)
 	rg.GET("/providers", GetProviders)
+	rg.GET("/providers/model-catalog", GetProviderModelCatalog)
 	rg.GET("/providers/:id", GetProvider)
 	rg.GET("/providers/models/:id", GetProviderModels)
 }

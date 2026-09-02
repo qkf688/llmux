@@ -277,3 +277,117 @@ func TestDeletePool_CascadeCredentials(t *testing.T) {
 
 // uintPtr 构建 *uint 指针。
 func uintPtr(v uint) *uint { return &v }
+
+// TestGetPools_RefGroupsDetail 覆盖 #8-4 AC-1：号池列表项含 RefGroups
+// 引用明细（供应商名 + 分组名，双向导航数据源）；未被引用时为空数组
+// （非 null / 非键缺失）；ReferencedBy 计数与 RefGroups 长度一致；
+// 跨供应商同名分组可区分。
+func TestGetPools_RefGroupsDetail(t *testing.T) {
+	testsupport.InitTestDB(t)
+	seedPoolWithCredential(t, "主池", models.CredentialStatusActive)
+	createPoolViaHandler(t, `{"name":"孤池"}`)
+
+	// 两个供应商；p2 也建同名分组「低价组」验证不混淆
+	p1 := &models.Provider{Name: "开阳", Type: "openai"}
+	p2 := &models.Provider{Name: "摇光", Type: "anthropic"}
+	repo := repository.Default()
+	if err := repo.Provider.Create(t.Context(), p1); err != nil {
+		t.Fatalf("seed provider1: %v", err)
+	}
+	if err := repo.Provider.Create(t.Context(), p2); err != nil {
+		t.Fatalf("seed provider2: %v", err)
+	}
+	mainID := gjson.Get(listPoolsViaHandler(t), "data.0.ID").Uint()
+	for _, g := range []*models.KeyGroup{
+		{ProviderID: p1.ID, Name: "低价组", PoolID: uintPtr(uint(mainID))},
+		{ProviderID: p1.ID, Name: "走量组", PoolID: uintPtr(uint(mainID))},
+		{ProviderID: p2.ID, Name: "低价组", PoolID: uintPtr(uint(mainID))},
+	} {
+		if err := repo.KeyGroup.Create(t.Context(), g); err != nil {
+			t.Fatalf("seed key group: %v", err)
+		}
+	}
+
+	body := listPoolsViaHandler(t)
+
+	// 主池：3 条引用明细，与 ReferencedBy 计数一致
+	if got := gjson.Get(body, "data.0.RefGroups.#").Int(); got != 3 {
+		t.Fatalf("主池 RefGroups 数量 = %d, want 3, body=%s", got, body)
+	}
+	if got := gjson.Get(body, "data.0.ReferencedBy").Int(); got != 3 {
+		t.Fatalf("主池 ReferencedBy = %d, want 3, body=%s", got, body)
+	}
+	// 元素四键齐备；ID ASC 稳定顺序下逐条核对名称
+	wantRows := []struct{ provider, group string }{
+		{"开阳", "低价组"}, {"开阳", "走量组"}, {"摇光", "低价组"},
+	}
+	for i, want := range wantRows {
+		base := "data.0.RefGroups." + strconv.Itoa(i) + "."
+		for _, key := range []string{"ProviderID", "ProviderName", "GroupID", "GroupName"} {
+			if !gjson.Get(body, base+key).Exists() {
+				t.Fatalf("%s%s 键缺失, body=%s", base, key, body)
+			}
+		}
+		if got := gjson.Get(body, base+"ProviderName").String(); got != want.provider {
+			t.Fatalf("RefGroups.%d ProviderName = %q, want %q", i, got, want.provider)
+		}
+		if got := gjson.Get(body, base+"GroupName").String(); got != want.group {
+			t.Fatalf("RefGroups.%d GroupName = %q, want %q", i, got, want.group)
+		}
+	}
+	if got := gjson.Get(body, "data.0.RefGroups.0.ProviderID").Int(); got != int64(p1.ID) {
+		t.Fatalf("RefGroups.0 ProviderID = %d, want %d", got, p1.ID)
+	}
+	if got := gjson.Get(body, "data.0.RefGroups.2.ProviderID").Int(); got != int64(p2.ID) {
+		t.Fatalf("RefGroups.2 ProviderID = %d, want %d", got, p2.ID)
+	}
+
+	// 孤池：空数组（Type=JSON 且 0 元素），非 null、非键缺失
+	orphan := gjson.Get(body, "data.1.RefGroups")
+	if !orphan.Exists() || orphan.Type != gjson.JSON {
+		t.Fatalf("孤池 RefGroups 应为空数组, got exists=%v type=%v, body=%s", orphan.Exists(), orphan.Type, body)
+	}
+	if got := gjson.Get(body, "data.1.RefGroups.#").Int(); got != 0 {
+		t.Fatalf("孤池 RefGroups 数量 = %d, want 0", got)
+	}
+	if got := gjson.Get(body, "data.1.ReferencedBy").Int(); got != 0 {
+		t.Fatalf("孤池 ReferencedBy = %d, want 0", got)
+	}
+}
+
+// TestGetPools_RefGroupsProviderMissing_EmptyName 覆盖边界：供应商已被删除
+// 但分组残留（DeleteProvider 不级联删分组）时，明细仍返回且 ProviderName
+// 回空串（软删行被 ListByIDs 排除），不得丢条目或 panic。
+func TestGetPools_RefGroupsProviderMissing_EmptyName(t *testing.T) {
+	testsupport.InitTestDB(t)
+	seedPoolWithCredential(t, "残留池", models.CredentialStatusActive)
+	poolID := gjson.Get(listPoolsViaHandler(t), "data.0.ID").Uint()
+
+	group := &models.Provider{Name: "已删商", Type: "openai"}
+	repo := repository.Default()
+	if err := repo.Provider.Create(t.Context(), group); err != nil {
+		t.Fatalf("seed provider: %v", err)
+	}
+	if _, err := repo.Provider.Delete(t.Context(), group.ID); err != nil {
+		t.Fatalf("delete provider: %v", err)
+	}
+	kg := &models.KeyGroup{ProviderID: group.ID, Name: "孤儿组", PoolID: uintPtr(uint(poolID))}
+	if err := repo.KeyGroup.Create(t.Context(), kg); err != nil {
+		t.Fatalf("seed key group: %v", err)
+	}
+
+	body := listPoolsViaHandler(t)
+
+	if got := gjson.Get(body, "data.0.RefGroups.#").Int(); got != 1 {
+		t.Fatalf("RefGroups 数量 = %d, want 1, body=%s", got, body)
+	}
+	if got := gjson.Get(body, "data.0.RefGroups.0.ProviderID").Int(); got != int64(group.ID) {
+		t.Fatalf("RefGroups.0 ProviderID = %d, want %d", got, group.ID)
+	}
+	if got := gjson.Get(body, "data.0.RefGroups.0.ProviderName").String(); got != "" {
+		t.Fatalf("已删供应商 ProviderName = %q, want 空串", got)
+	}
+	if got := gjson.Get(body, "data.0.RefGroups.0.GroupName").String(); got != "孤儿组" {
+		t.Fatalf("RefGroups.0 GroupName = %q, want 孤儿组", got)
+	}
+}

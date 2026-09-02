@@ -24,6 +24,19 @@ type PoolListItem struct {
 	StatusCounts map[string]int64 `json:"StatusCounts"`
 	// ReferencedBy 被分组（key_groups.PoolID）引用的次数。
 	ReferencedBy int64 `json:"ReferencedBy"`
+	// RefGroups 引用该号池的分组明细（供应商名 + 分组名），号池页引用区
+	// chips 与双向导航数据源。未被引用时为空数组（非 null）。
+	RefGroups []PoolRefGroup `json:"RefGroups"`
+}
+
+// PoolRefGroup 号池被引用明细的一条：哪个供应商的哪个分组引用了该号池。
+// 供应商已被删除但分组残留（DeleteProvider 不级联删分组）时 ProviderName
+// 为空串，前端按需降级展示。
+type PoolRefGroup struct {
+	ProviderID   uint   `json:"ProviderID"`
+	ProviderName string `json:"ProviderName"`
+	GroupID      uint   `json:"GroupID"`
+	GroupName    string `json:"GroupName"`
 }
 
 // CredentialListItem 凭据列表项：掩码后的展示形态，不含明文/密文 Key。

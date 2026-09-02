@@ -29,6 +29,8 @@ interface ProviderFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editingProvider: Provider | null;
+  /** 编辑详情加载中：禁用提交，防止默认 children 全量覆盖真实子表（新建路径恒 false） */
+  detailLoading: boolean;
   form: UseFormReturn<ProviderFormValues>;
   providerTemplates: ProviderTemplate[];
   watchedType: string;
@@ -39,6 +41,7 @@ export function ProviderFormDialog({
   open,
   onOpenChange,
   editingProvider,
+  detailLoading,
   form,
   providerTemplates,
   watchedType,
@@ -210,7 +213,9 @@ export function ProviderFormDialog({
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 取消
               </Button>
-              <Button type="submit">{editingProvider ? "更新" : "创建"}</Button>
+              <Button type="submit" disabled={detailLoading}>
+                {detailLoading ? "加载中…" : editingProvider ? "更新" : "创建"}
+              </Button>
             </DialogFooter>
           </form>
         </Form>

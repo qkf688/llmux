@@ -16,6 +16,8 @@ export type ProvidersPageState = {
 
   providerDialogOpen: boolean;
   editingProvider: Provider | null;
+  /** 编辑弹窗详情加载中：提交按钮据此禁用，防止空默认值全量覆盖子表 */
+  detailLoading: boolean;
 
   modelsOpen: boolean;
   modelsOpenId: number | null;
@@ -50,10 +52,9 @@ export type ProvidersPageState = {
 
   setEditingProvider: (provider: Provider | null) => void;
   setModelsOpenId: (id: number | null) => void;
+  setDetailLoading: (loading: boolean) => void;
 
   setProviderDialogOpen: (open: boolean) => void;
-  openCreateProvider: () => void;
-  openEditProvider: (provider: Provider) => void;
 
   openProviderModels: (providerId: number) => void;
   setModelsOpen: (open: boolean) => void;
@@ -93,6 +94,7 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
 
   providerDialogOpen: false,
   editingProvider: null,
+  detailLoading: false,
 
   modelsOpen: false,
   modelsOpenId: null,
@@ -138,11 +140,10 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
 
   setEditingProvider: (provider: Provider | null) => set({ editingProvider: provider }),
   setModelsOpenId: (id: number | null) => set({ modelsOpenId: id }),
+  setDetailLoading: (loading: boolean) => set({ detailLoading: loading }),
 
   setProviderDialogOpen: (open: boolean) =>
     set(open ? { providerDialogOpen: true } : { providerDialogOpen: false, editingProvider: null }),
-  openCreateProvider: () => set({ providerDialogOpen: true, editingProvider: null }),
-  openEditProvider: (provider: Provider) => set({ providerDialogOpen: true, editingProvider: provider }),
 
   openProviderModels: (providerId: number) =>
     set({
@@ -204,6 +205,7 @@ export const providersPageStore = createStore<ProvidersPageState>()((set, get) =
     set({
       providerDialogOpen: false,
       editingProvider: null,
+      detailLoading: false,
       modelsOpen: false,
       modelsOpenId: null,
       allModelsOpen: false,

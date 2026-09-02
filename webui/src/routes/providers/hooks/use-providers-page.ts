@@ -16,6 +16,7 @@ import {
   selectBatchTesting,
   selectCustomModelInput,
   selectDebouncedNameFilter,
+  selectDetailLoading,
   selectEditingProvider,
   selectFlushNameFilter,
   selectModelsLoading,
@@ -36,6 +37,7 @@ import {
   selectSetBatchTesting,
   selectSetCustomModelInput,
   selectSetDebouncedNameFilter,
+  selectSetDetailLoading,
   selectSetEditingProvider,
   selectSetModelsLoading,
   selectSetModelsOpen,
@@ -109,6 +111,8 @@ export function useProvidersPage() {
   const setOpen = useProvidersPageStore(selectSetProviderDialogOpen);
   const editingProvider = useProvidersPageStore(selectEditingProvider);
   const setEditingProvider = useProvidersPageStore(selectSetEditingProvider);
+  const detailLoading = useProvidersPageStore(selectDetailLoading);
+  const setDetailLoading = useProvidersPageStore(selectSetDetailLoading);
 
   const modelsOpen = useProvidersPageStore(selectModelsOpen);
   const setModelsOpen = useProvidersPageStore(selectSetModelsOpen);
@@ -287,6 +291,7 @@ export function useProvidersPage() {
     form,
     setOpen,
     setEditingProvider,
+    setDetailLoading,
   });
 
   const { handleDelete, handleClearAssociations } = useProviderDangerActions({
@@ -332,6 +337,7 @@ export function useProvidersPage() {
     open,
     onOpenChange: setOpen,
     editingProvider,
+    detailLoading,
     form,
     providerTemplates,
     watchedType,

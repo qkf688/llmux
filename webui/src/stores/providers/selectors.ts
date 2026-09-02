@@ -11,6 +11,7 @@ export const selectSyncingAll = (state: ProvidersPageState) => state.syncingAll;
 
 export const selectProviderDialogOpen = (state: ProvidersPageState) => state.providerDialogOpen;
 export const selectEditingProvider = (state: ProvidersPageState) => state.editingProvider;
+export const selectDetailLoading = (state: ProvidersPageState) => state.detailLoading;
 
 export const selectModelsOpen = (state: ProvidersPageState) => state.modelsOpen;
 export const selectModelsOpenId = (state: ProvidersPageState) => state.modelsOpenId;
@@ -45,8 +46,7 @@ export const selectSetSyncingAll = (state: ProvidersPageState) => state.setSynci
 
 export const selectSetProviderDialogOpen = (state: ProvidersPageState) => state.setProviderDialogOpen;
 export const selectSetEditingProvider = (state: ProvidersPageState) => state.setEditingProvider;
-export const selectOpenCreateProvider = (state: ProvidersPageState) => state.openCreateProvider;
-export const selectOpenEditProvider = (state: ProvidersPageState) => state.openEditProvider;
+export const selectSetDetailLoading = (state: ProvidersPageState) => state.setDetailLoading;
 
 export const selectOpenProviderModels = (state: ProvidersPageState) => state.openProviderModels;
 export const selectSetModelsOpen = (state: ProvidersPageState) => state.setModelsOpen;

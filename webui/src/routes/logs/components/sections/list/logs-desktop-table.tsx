@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import type { ChatLog } from "@/lib/api";
 import { Trash2 } from "lucide-react";
+import { LogScheduleCell } from "../../shared";
 import { formatDateTime, formatTime } from "../../../utils/formatters";
 
 type LogsDesktopTableProps = {
@@ -112,18 +113,7 @@ export function LogsDesktopTable({
                </TableCell>
               <TableCell className="text-xs">{log.provider_name}</TableCell>
               <TableCell>
-                {log.endpoint_protocol || log.endpoint_url || log.key_group_name || log.credential_note ? (
-                  <div className="flex flex-col gap-0.5 text-xs">
-                    <span className="font-medium">
-                      {[log.endpoint_protocol, log.endpoint_url].filter(Boolean).join(" · ") || "—"}
-                    </span>
-                    <span className="text-muted-foreground">
-                      {[log.key_group_name, log.credential_note].filter(Boolean).join(" · ") || "—"}
-                    </span>
-                  </div>
-                ) : (
-                  <span className="text-xs text-muted-foreground">—</span>
-                )}
+                <LogScheduleCell log={log} />
               </TableCell>
               <TableCell>
                 <div className="flex gap-1">

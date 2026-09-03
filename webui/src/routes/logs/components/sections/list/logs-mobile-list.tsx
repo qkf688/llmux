@@ -4,6 +4,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { StaggerItem, StaggerList } from "@/components/ui/stagger-list";
 import type { ChatLog } from "@/lib/api";
 import { Trash2 } from "lucide-react";
+import { LogScheduleCell } from "../../shared";
 import { formatByteLength, formatDateTime, formatTime } from "../../../utils/formatters";
 
 type LogsMobileListProps = {
@@ -105,13 +106,9 @@ export function LogsMobileList({
               <p className="text-muted-foreground text-[10px] uppercase tracking-wide">请求头</p>
               <p className="font-medium">{formatByteLength(log.request_headers)}</p>
             </div>
-            <div className="space-y-0.5">
+            <div className="space-y-0.5 min-w-0">
               <p className="text-muted-foreground text-[10px] uppercase tracking-wide">调度</p>
-              <p className="truncate text-[11px]">
-                {[log.endpoint_protocol, log.endpoint_url].filter(Boolean).join(" · ") ||
-                  [log.key_group_name, log.credential_note].filter(Boolean).join(" · ") ||
-                  "-"}
-              </p>
+              <LogScheduleCell log={log} textClassName="truncate text-[11px]" />
             </div>
             <div className="space-y-0.5 col-span-2">
               <p className="text-muted-foreground text-[10px] uppercase tracking-wide">响应头</p>

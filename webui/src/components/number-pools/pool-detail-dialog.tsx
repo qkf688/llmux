@@ -43,13 +43,8 @@ import {
 } from "./credential-status";
 
 const PAGE_SIZE = 20;
-const STATUS_FILTER_OPTIONS: Array<"all" | CredentialStatus> = [
-  "all",
-  "active",
-  "error",
-  "disabled",
-  "temp_unsched",
-];
+// 筛选下拉 = 「全部」+ 状态顺序单表派生：状态清单只活在 credential-status.ts 一处
+const STATUS_FILTER_OPTIONS: Array<"all" | CredentialStatus> = ["all", ...CREDENTIAL_STATUS_ORDER];
 
 type PoolDetailDialogProps = {
   open: boolean;

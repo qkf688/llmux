@@ -23,6 +23,7 @@ handler/modelsync → service.NewModelSyncService
 ```
 main → service.GetHealthChecker().Start(ctx)      # 定时健康检查
 main → service.NewModelSyncService(...).StartAutoSync(ctx)  # 定时模型同步
+main → credwrite.Start()                          # 凭据写队列单 worker 长驻（#6-4-2；Stop 在 bgtask.Shutdown 前显式 Flush+停收）
 ```
 
 ## 3. Hook 回调（跨域解耦）
@@ -34,6 +35,8 @@ healthcheck → AdjustmentHooks → service/adjustment 调整权重/优先级
   （关联 Status / ConsecutiveFailures 仍由 healthcheck 直接写库；hooks 由 adjustment init 注入）
 modelsync   → ActionHooks     → service/autoassoc.Associate / CleanInvalid
   （HTTP / provider CRUD 同走 service/autoassoc，见 associations 模块）
+chat / credprobe → credwrite.SetHandlers → 凭据落库回调（Cooldown/AuthFail/TouchProbe/Recover）
+  （按非 nil 字段合并注入：chat bridge 注冷却/鉴权、credprobe bridge 注记账/恢复；credwrite 不 import 业务包）
 ```
 
 ## 4. 注册表扩展（OCP）

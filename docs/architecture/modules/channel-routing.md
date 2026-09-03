@@ -51,7 +51,7 @@ consts/protocol.go        # Protocol* 常量 + ProtocolOfType（type→protocol�
 ## 5. 特殊约定
 
 - **错误分层语义**：三层 sentinel（`ErrEndpointUnavailable` / `ErrNoGroupMatches` / `ErrNoCredentialAvailable`）供 chat 链路按层处置——凭据层失败由 #13 组内故障转移消化（`RetryCredential` 换 key，冷却写库在 chat 侧），`ErrNoCredentialAvailable` 上抛即组耗尽 → 组织级淘汰；分组/端点层耗尽同样判供应商整体失败；`ConsecutiveFailures` 组织级语义与凭据级失败不重叠（#13 起层内耗尽才累计）
-- **无 DB/无时钟依赖**：选择函数输入为内存快照，冷却判定时钟由 `Select` 的 `now` 参数注入；IO 收敛在 `assemble.go`（读库）与 `DecryptCredentialKey`（解密单例）；`RetryCredential` 不写冷却——CooldownUntil 与凭据状态的写库是 chat 链路职责（冷却 `chat_credential_cooldown.go`；鉴权判停 `chat_credential_auth_fail.go`，#6-2 起连败达阈值写 `temp_unsched`；探活恢复 `service/credprobe`，#6-3），本模块只读判定（`credentialUsable` 按 Status≠active 与冷却剔除，新增状态枚举无需改本模块）；本包**不** import `providers`（探活在 credprobe）
+- **无 DB/无时钟依赖**：选择函数输入为内存快照，冷却判定时钟由 `Select` 的 `now` 参数注入；IO 收敛在 `assemble.go`（读库）与 `DecryptCredentialKey`（解密单例）；`RetryCredential` 不写冷却——CooldownUntil 与凭据状态的写库是 chat 链路职责，且经 `service/credwrite` 队列异步落库（冷却 `chat_credential_cooldown.go`；鉴权判停 `chat_credential_auth_fail.go`，#6-2 起连败达阈值写 `temp_unsched`；探活恢复 `service/credprobe`，#6-3），本模块只读判定（`credentialUsable` 按 Status≠active 与冷却剔除，新增状态枚举无需改本模块）；本包**不** import `providers`（探活在 credprobe）
 - **档间加权 = 单组权重而非档总权重**：同权重组由轮询打散为等概率，档权重只表达「某权重档的选中概率」，防止多组低权把单个高权组挤出随机池
 - **组内候选顺序稳定性**：装配按凭据 ID ASC 排序，repository List 不保证顺序；轮询取模的正确性依赖该不变式
 - **快照语义**：单供应商数据；`CredentialsByGroup` 组键恒存在（含空切片），选择路径统一收口 `ErrNoCredentialAvailable`

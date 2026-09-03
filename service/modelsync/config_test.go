@@ -39,26 +39,6 @@ func TestDropCustomModels(t *testing.T) {
 	}
 }
 
-func TestExtractAllModels(t *testing.T) {
-	config := `{"upstream_models":["u1","u2"],"custom_models":["c1"]}`
-	expected := []string{"u1", "u2", "c1"}
-
-	got := extractAllModels(config)
-	if !reflect.DeepEqual(got, expected) {
-		t.Fatalf("extractAllModels() = %v, want %v", got, expected)
-	}
-}
-
-func TestExtractUpstreamModels(t *testing.T) {
-	config := `{"upstream_models":["u1","u2"],"custom_models":["c1"]}`
-	expected := []string{"u1", "u2"}
-
-	got := extractUpstreamModels(config)
-	if !reflect.DeepEqual(got, expected) {
-		t.Fatalf("extractUpstreamModels() = %v, want %v", got, expected)
-	}
-}
-
 func TestMatchesAnyRule(t *testing.T) {
 	rules := []string{"gpt", "claude"}
 	if !matchesAnyRule("gpt-4.1", rules) {

@@ -43,53 +43,6 @@ func extractCustomModels(config string) []string {
 	return out
 }
 
-// extractAllModels 保留给旧 Config 解析测；组织级目录请用 mergeProviderModelCatalog。
-func extractAllModels(config string) []string {
-	var parsed map[string]any
-	if err := json.Unmarshal([]byte(config), &parsed); err != nil {
-		return []string{}
-	}
-
-	modelList := make([]string, 0)
-	if upstream, ok := parsed["upstream_models"].([]interface{}); ok {
-		for _, item := range upstream {
-			if modelID, ok := item.(string); ok {
-				modelList = append(modelList, modelID)
-			}
-		}
-	}
-	if custom, ok := parsed["custom_models"].([]interface{}); ok {
-		for _, item := range custom {
-			if modelID, ok := item.(string); ok {
-				modelList = append(modelList, modelID)
-			}
-		}
-	}
-
-	return modelList
-}
-
-func extractUpstreamModels(config string) []string {
-	var parsed map[string]any
-	if err := json.Unmarshal([]byte(config), &parsed); err != nil {
-		return []string{}
-	}
-
-	upstream, ok := parsed["upstream_models"].([]interface{})
-	if !ok {
-		return []string{}
-	}
-
-	modelList := make([]string, 0, len(upstream))
-	for _, item := range upstream {
-		if modelID, ok := item.(string); ok {
-			modelList = append(modelList, modelID)
-		}
-	}
-
-	return modelList
-}
-
 func splitModelsCSV(s string) []string {
 	if strings.TrimSpace(s) == "" {
 		return nil

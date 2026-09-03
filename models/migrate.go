@@ -2,8 +2,12 @@ package models
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 
 	"github.com/qkf688/llmux/common/credentialcrypto"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 	"gorm.io/gorm"
 )
 
@@ -36,6 +40,7 @@ func migrate(ctx context.Context) {
 		panic(err)
 	}
 	migrateLegacyProviders(ctx, DB, credentialcrypto.Default())
+	purgeLegacyUpstreamModels(ctx, DB)
 	purgeSoftDeleted(ctx, &VirtualModelMapping{}, &ModelTemplateItem{}, &VirtualModel{}, &Setting{})
 	cleanupSoftDeletedModels(ctx)
 	// 兼容性考虑
@@ -46,6 +51,33 @@ func migrate(ctx context.Context) {
 		CustomerHeaders: map[string]string{},
 	}); err != nil {
 		panic(err)
+	}
+}
+
+// purgeLegacyUpstreamModels 剥离存量 Provider.Config 中的遗留死键 upstream_models
+// （S5 起后端零读写、#18 起前端零读写，键值无消费者，清掉零丢失）。
+// 幂等：键存在才改写，无键行零 Update；非 JSON 行按已损坏跳过，不阻断启动。
+func purgeLegacyUpstreamModels(ctx context.Context, db *gorm.DB) {
+	var providers []Provider
+	if err := db.WithContext(ctx).Find(&providers).Error; err != nil {
+		panic(err)
+	}
+	for i := range providers {
+		config := providers[i].Config
+		if config == "" || !gjson.Valid(config) {
+			slog.Warn("migrate: provider config is not valid JSON, skip upstream_models purge", "provider_id", providers[i].ID)
+			continue
+		}
+		if !gjson.Get(config, "upstream_models").Exists() {
+			continue
+		}
+		cleaned, err := sjson.Delete(config, "upstream_models")
+		if err != nil {
+			panic(fmt.Errorf("delete upstream_models from config for provider %d: %w", providers[i].ID, err))
+		}
+		if err := db.WithContext(ctx).Model(&providers[i]).Update("config", cleaned).Error; err != nil {
+			panic(fmt.Errorf("update config for provider %d: %w", providers[i].ID, err))
+		}
 	}
 }
 

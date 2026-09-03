@@ -5,8 +5,9 @@ import (
 )
 
 // dropCustomModels 从 config JSON 中移除 custom_models 字段。
-// 注意：与 modelsync 内部实现不同——此处故意不删 upstream_models，
-// 以保持 GetProviderModels?source=upstream 的现网语义。
+// 上游浏览场景只构造临时 config（喂 providers.New，不落库），与 modelsync 版
+// 差异在只剥 custom_models——upstream_models 是遗留死键、无运行时消费者，
+// 残留在临时 config 无害（存量数据由 models 启动迁移统一清理）。
 func dropCustomModels(config string) (string, error) {
 	parsed, err := parseConfigMap(config)
 	if err != nil {

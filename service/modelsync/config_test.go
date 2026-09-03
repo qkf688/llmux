@@ -31,8 +31,10 @@ func TestDropCustomModels(t *testing.T) {
 	if _, exists := parsed["custom_models"]; exists {
 		t.Fatal("custom_models should be removed")
 	}
-	if _, exists := parsed["upstream_models"]; exists {
-		t.Fatal("upstream_models should be removed")
+	// 只剥 custom_models：其它键（含遗留死键 upstream_models）原样保留，
+	// 存量死键由 models 启动迁移统一清理。
+	if _, exists := parsed["upstream_models"]; !exists {
+		t.Fatal("upstream_models should remain untouched")
 	}
 	if parsed["api_key"] != "k" {
 		t.Fatalf("api_key should remain unchanged, got %v", parsed["api_key"])

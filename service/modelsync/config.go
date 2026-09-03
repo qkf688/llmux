@@ -16,7 +16,6 @@ func dropCustomModels(config string) (string, error) {
 	}
 
 	delete(parsed, "custom_models")
-	delete(parsed, "upstream_models")
 
 	updated, err := json.Marshal(parsed)
 	if err != nil {

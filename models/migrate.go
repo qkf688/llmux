@@ -64,7 +64,11 @@ func purgeLegacyUpstreamModels(ctx context.Context, db *gorm.DB) {
 	}
 	for i := range providers {
 		config := providers[i].Config
-		if config == "" || !gjson.Valid(config) {
+		// 空串是合法状态（parseConfigMap 同样容忍），必然不含死键，静默跳过。
+		if config == "" {
+			continue
+		}
+		if !gjson.Valid(config) {
 			slog.Warn("migrate: provider config is not valid JSON, skip upstream_models purge", "provider_id", providers[i].ID)
 			continue
 		}

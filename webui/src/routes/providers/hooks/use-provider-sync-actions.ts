@@ -28,6 +28,8 @@ export function useProviderSyncActions({ setSyncingAll }: UseProviderSyncActions
       }
 
       void queryClient.invalidateQueries({ queryKey: providerKeys.lists() });
+      // 同步改写分组白名单 → 组织级目录随之变化
+      void queryClient.invalidateQueries({ queryKey: providerKeys.catalog() });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast.error(`同步失败: ${message}`);

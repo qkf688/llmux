@@ -77,6 +77,15 @@ export interface ProviderModel {
   owned_by: string;
 }
 
+/** GET /providers/model-catalog 单供应商组织级目录（PascalCase 与后端
+ *  service/modelsync.ProviderModelCatalog 同源）：Upstream = 分组白名单并集（同步真相），
+ *  Custom = config.custom_models（手填）。空值显式空数组（非 null）。 */
+export interface ProviderModelCatalog {
+  ProviderID: number;
+  Upstream: string[];
+  Custom: string[];
+}
+
 export interface ProviderModelTestResult {
   error?: string;
   message?: string;
@@ -140,6 +149,12 @@ export async function deleteProvider(id: number): Promise<void> {
 
 export async function getProviderTemplates(): Promise<ProviderTemplate[]> {
   return apiRequest<ProviderTemplate[]>("/providers/template");
+}
+
+/** 组织级模型目录聚合（分组白名单并集 + custom_models），前端目录页的数据源，
+ *  替代 Config.upstream_models 客户端解析。 */
+export async function getProviderModelCatalog(): Promise<ProviderModelCatalog[]> {
+  return apiRequest<ProviderModelCatalog[]>("/providers/model-catalog");
 }
 
 export async function getProviderModels(

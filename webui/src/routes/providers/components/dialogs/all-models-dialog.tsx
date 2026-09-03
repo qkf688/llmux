@@ -76,7 +76,7 @@ export function AllModelsDialog({
             {allModelsProvider?.Name || "当前提供商"}的全部模型
           </DialogTitle>
           <DialogDescription>
-            手动维护模型缓存，可添加自定义模型或批量删除不再需要的条目。
+            上游模型来自分组白名单（工具栏同步获取），自定义模型可手动增删。
           </DialogDescription>
         </DialogHeader>
 
@@ -148,7 +148,7 @@ export function AllModelsDialog({
               </AnimatePresence>
               {allModelsList.length === 0 ? (
                 <div className="text-sm text-muted-foreground text-center py-4">
-                  暂无缓存模型
+                  暂无模型目录，请先同步上游模型或添加自定义模型
                 </div>
               ) : filteredAllModels.length === 0 ? (
                 <div className="text-sm text-muted-foreground text-center py-4">

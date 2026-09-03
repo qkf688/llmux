@@ -82,7 +82,7 @@ export function UpstreamModelsToolbar({
         <div className="text-sm text-muted-foreground">
           {modelsLoading
             ? "正在从上游获取..."
-            : `上游返回 ${providerModels.length} 个，已缓存 ${cachedModelsCount} 个`}
+            : `上游返回 ${providerModels.length} 个，目录已收录 ${cachedModelsCount} 个`}
         </div>
         <div className="flex gap-1 flex-wrap">
           <BatchTestActionButtons

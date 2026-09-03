@@ -8,6 +8,7 @@ interface ProvidersListSectionProps {
   loading: boolean;
   hasFilter: boolean;
   providers: Provider[];
+  modelCounts: Record<number, number>;
   updatingFilter: Record<number, boolean>;
   updatingAssociationTrigger: Record<number, boolean>;
 
@@ -26,6 +27,7 @@ export function ProvidersListSection({
   loading,
   hasFilter,
   providers,
+  modelCounts,
   updatingFilter,
   updatingAssociationTrigger,
   onOpenAllModelsDialog,
@@ -51,6 +53,7 @@ export function ProvidersListSection({
         <div className="h-full flex flex-col">
           <ProvidersDesktopTable
             providers={providers}
+            modelCounts={modelCounts}
             updatingFilter={updatingFilter}
             updatingAssociationTrigger={updatingAssociationTrigger}
             onOpenAllModelsDialog={onOpenAllModelsDialog}
@@ -64,6 +67,7 @@ export function ProvidersListSection({
           />
           <ProvidersMobileList
             providers={providers}
+            modelCounts={modelCounts}
             updatingFilter={updatingFilter}
             updatingAssociationTrigger={updatingAssociationTrigger}
             onOpenAllModelsDialog={onOpenAllModelsDialog}

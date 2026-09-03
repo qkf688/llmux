@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { getProviderModels, type Provider, type ProviderModel } from "@/lib/api";
-import { parseCustomModelsFromConfig, parseUpstreamModelsFromConfig } from "@/lib/provider-models";
+import { useProviderModelCatalog } from "@/hooks/api/use-providers";
+import { EMPTY_MODEL_CATALOG } from "@/lib/empty-constants";
+import { unionCatalogModels } from "@/lib/provider-models";
 import type { Setter } from "@/stores/core/updater";
 import { buildAutoActionsDescription, type AutoActionsFlags } from "../utils/auto-actions";
-import { getAllModelsForProvider } from "../utils/provider-models";
 
 type UseUpstreamModelsDialogInput = {
   providers: Provider[];
@@ -21,9 +22,8 @@ type UseUpstreamModelsDialogInput = {
   setSelectedUpstreamModels: Setter<string[]>;
 
   allModelsProvider: Provider | null;
-  setAllModelsProvider: (provider: Provider | null) => void;
   setAllModelsList: Setter<string[]>;
-  persistModels: (provider: Provider, upstreamModels: string[], customModels: string[]) => Promise<string>;
+  persistModels: (provider: Provider, customModels: string[]) => Promise<string>;
 
   autoActionsFlags: AutoActionsFlags;
 };
@@ -40,7 +40,6 @@ export function useUpstreamModelsDialog({
   selectedUpstreamModels,
   setSelectedUpstreamModels,
   allModelsProvider,
-  setAllModelsProvider,
   setAllModelsList,
   persistModels,
   autoActionsFlags,
@@ -48,10 +47,15 @@ export function useUpstreamModelsDialog({
   const [providerModels, setProviderModels] = useState<ProviderModel[]>([]);
   const [filteredProviderModels, setFilteredProviderModels] = useState<ProviderModel[]>([]);
   const [upstreamModelsCache, setUpstreamModelsCache] = useState<Record<number, ProviderModel[]>>({});
+  const { data: catalogData = EMPTY_MODEL_CATALOG } = useProviderModelCatalog();
 
-  const savedModelSet = new Set(
-    getAllModelsForProvider(providers, modelsOpenId || 0).map((item) => item.toLowerCase()),
-  );
+  // 去重基准 = 目录已收录模型（分组白名单并集 + custom），数据源与 all-models 弹窗同源
+  const savedModelSet = useMemo(() => {
+    const entry = catalogData.find((item) => item.ProviderID === modelsOpenId);
+    return new Set(
+      (entry ? unionCatalogModels(entry) : []).map((item) => item.toLowerCase()),
+    );
+  }, [catalogData, modelsOpenId]);
 
   const selectableModelIds = filteredProviderModels
     .filter((model) => !savedModelSet.has(model.id.toLowerCase()))
@@ -127,23 +131,29 @@ export function useUpstreamModelsDialog({
     const provider = providers.find((item) => item.ID === modelsOpenId);
     if (!provider) return;
 
-    const upstream = parseUpstreamModelsFromConfig(provider.Config);
-    const custom = parseCustomModelsFromConfig(provider.Config);
-    const merged = Array.from(new Set([...upstream, ...selectedUpstreamModels]));
-    if (merged.length === upstream.length) {
+    // 落点 = custom：S5 后 config.upstream_models 是死键，上游模型入目录只能手填为自定义；
+    // 上游来源的正式编辑入口在供应商表单分组白名单
+    const entry = catalogData.find((item) => item.ProviderID === provider.ID);
+    const custom = entry?.Custom ?? [];
+    const additions = selectedUpstreamModels.filter(
+      (model) => !savedModelSet.has(model.toLowerCase()),
+    );
+    if (additions.length === 0) {
       toast.info("没有新的模型需要添加");
       return;
     }
 
     try {
       setAddingModels(true);
-      const nextConfig = await persistModels(provider, merged, custom);
+      const merged = Array.from(new Set([...custom, ...additions]));
+      await persistModels(provider, merged);
       if (allModelsProvider && allModelsProvider.ID === provider.ID) {
-        setAllModelsProvider({ ...provider, Config: nextConfig });
-        setAllModelsList([...merged, ...custom]);
+        setAllModelsList(
+          unionCatalogModels({ Upstream: entry?.Upstream ?? [], Custom: merged }),
+        );
       }
       setSelectedUpstreamModels([]);
-      toast.success(`已添加 ${merged.length - upstream.length} 个模型到上游模型`, {
+      toast.success(`已添加 ${merged.length - custom.length} 个模型到目录（自定义）`, {
         description: buildAutoActionsDescription({ associate: true }, autoActionsFlags),
       });
     } catch (err) {

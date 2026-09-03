@@ -1,19 +1,7 @@
-import type { Provider } from "@/lib/api";
-import { parseAllModelsFromConfig, toProviderModelList } from "@/lib/provider-models";
-import type { ProviderModelGroup, ProviderModelWithOwner } from "../types";
+import type { ProviderModelGroup } from "@/lib/provider-models";
 
-export const buildProviderModelGroups = (providers: Provider[]): ProviderModelGroup[] =>
-  providers.map((provider) => {
-    const models: ProviderModelWithOwner[] = toProviderModelList(
-      parseAllModelsFromConfig(provider.Config)
-    ).map((model) => ({
-      ...model,
-      providerId: provider.ID,
-      providerName: provider.Name,
-    }));
-
-    return { provider, models };
-  });
+/** 构建逻辑已下沉 lib/provider-models.ts（buildProviderModelGroups，
+ *  数据源为聚合目录 API），本文件保留 models 页专属的折叠/筛选纯函数。 */
 
 export const buildCollapsedProviderState = (
   groups: ProviderModelGroup[],
@@ -56,5 +44,6 @@ export const filterProviderGroups = (
       ...group,
       models: group.models.filter((model) => model.id.toLowerCase().includes(normalizedKeyword)),
     }))
-    .filter((group) => group.models.length > 0);
+    // 无关键词时保留空目录分组（未同步供应商可见，引导先同步）；有关键词时空分组无匹配自然消失
+    .filter((group) => group.models.length > 0 || normalizedKeyword === "");
 };

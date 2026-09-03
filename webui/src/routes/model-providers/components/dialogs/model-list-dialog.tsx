@@ -135,7 +135,12 @@ export function ModelListDialog({
                     </button>
                     {!isCollapsed && (
                       <div className="divide-y">
-                        {group.models.map((model) => {
+                        {group.models.length === 0 ? (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">
+                            未同步模型目录，请先在提供商管理页同步
+                          </div>
+                        ) : (
+                          group.models.map((model) => {
                           const selectionKey = buildSelectionKey(model.providerId, model.id);
                           const isExisting = existingAssociationKeys.has(selectionKey);
                           const checked = selectedKeys.has(selectionKey);
@@ -164,9 +169,10 @@ export function ModelListDialog({
                                 </Label>
                                 <p className="text-xs text-muted-foreground">提供商：{model.providerName}</p>
                               </div>
-                            </div>
-                          );
-                        })}
+                              </div>
+                            );
+                          })
+                        )}
                       </div>
                     )}
                   </div>

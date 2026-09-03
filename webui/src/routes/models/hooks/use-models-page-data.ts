@@ -28,16 +28,17 @@ import {
   useModelsPageStore,
 } from "@/stores/models";
 import { useModels } from "@/hooks/api/use-models";
-import { useProviders } from "@/hooks/api/use-providers";
-import {
-  buildProviderModelGroups,
-  filterProviderGroups,
-} from "../utils/provider-models";
+import { useProviderModelCatalog, useProviders } from "@/hooks/api/use-providers";
+import { EMPTY_MODEL_CATALOG } from "@/lib/empty-constants";
+import { buildProviderModelGroups } from "@/lib/provider-models";
+import { filterProviderGroups } from "../utils/provider-models";
 import { filterModelsByName } from "../utils/selection";
 
 export function useModelsPageData() {
   const { data: models = EMPTY_MODELS, isLoading: loading } = useModels();
-  const { data: providersData = EMPTY_PROVIDERS, isLoading: loadingProviderModels } = useProviders();
+  const { data: providersData = EMPTY_PROVIDERS, isLoading: loadingProviders } = useProviders();
+  const { data: catalogData = EMPTY_MODEL_CATALOG, isLoading: loadingCatalog } =
+    useProviderModelCatalog();
 
   // store 状态
   const batchDeleting = useModelsPageStore((s) => s.batchDeleting);
@@ -67,8 +68,12 @@ export function useModelsPageData() {
 
   const resetTransient = useModelsPageStore(selectResetModelsTransient);
 
-  // 派生数据
-  const providerModelGroups = useMemo(() => buildProviderModelGroups(providersData), [providersData]);
+  // 派生数据（目录数据源：聚合 API，见 lib/provider-models.ts）
+  const loadingProviderModels = loadingProviders || loadingCatalog;
+  const providerModelGroups = useMemo(
+    () => buildProviderModelGroups(providersData, catalogData),
+    [providersData, catalogData],
+  );
   const providerModels = useMemo(
     () => providerModelGroups.flatMap((group) => group.models),
     [providerModelGroups],

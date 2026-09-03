@@ -53,7 +53,7 @@ export function UpstreamModelsListItem({
             {model.id}
           </div>
           {isSaved && (
-            <span className="text-xs text-muted-foreground">已缓存</span>
+            <span className="text-xs text-muted-foreground">已在目录</span>
           )}
         </div>
       </div>

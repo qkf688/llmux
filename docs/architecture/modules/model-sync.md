@@ -43,7 +43,7 @@ models.ModelSyncLog
 
 - **同步粒度 = 分组**：每个 KeyGroup 取活跃凭据调 `Models()`，全量写入该组 `Models` CSV；请求数 ≈ 分组数，与凭据数无关
 - **空白名单**：空 = 未同步/不限制（选路不限；不向组织级目录贡献模型 ID）
-- **不再写 `Config.upstream_models`**：同步真相在分组白名单；组织级目录由 `GetProviderModels` 聚合
+- **不再写 `Config.upstream_models`**：同步真相在分组白名单；组织级目录由 `GetProviderModelCatalogs` 批量聚合（端点 `GET /api/providers/model-catalog`，前端目录唯一数据源，详见 providers.md 契约表）
 - 过滤规则（如仅 `:free`）为配置驱动，适配不同公益站场景；按分组拉回后套用
 - 同步后副作用不内嵌在 Service 硬依赖 handler 包，统一走 `ActionHooks`
 - Hook 实现为 `service/autoassoc` 单一入口；**禁止** modelsync 再实现一套关联/清理循环

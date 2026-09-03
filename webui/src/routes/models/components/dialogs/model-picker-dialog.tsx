@@ -73,7 +73,7 @@ export function ModelPickerDialog({
             <LoadingState text="加载模型列表..." className="h-32" spinnerClassName="h-6 w-6" />
           ) : providerModels.length === 0 ? (
             <div className="flex items-center justify-center h-32 text-muted-foreground">
-              暂无全部模型缓存，请先在提供商管理页同步
+              暂无模型目录，请先在提供商管理页同步
             </div>
           ) : filteredProviderGroups.length === 0 ? (
             <div className="flex items-center justify-center h-32 text-muted-foreground">没有找到匹配的模型</div>
@@ -100,19 +100,25 @@ export function ModelPickerDialog({
                   </button>
                   {!isCollapsed && (
                     <div className="divide-y">
-                      {group.models.map((model) => (
-                        <div
-                          key={`${group.provider.ID}-${model.id}`}
-                          className="p-3 hover:bg-muted cursor-pointer transition-colors"
-                          onClick={() => onSelectModel(model.id)}
-                        >
-                          <div className="font-medium text-sm">{model.id}</div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            提供商: {group.provider.Name}
-                            {model.owned_by ? ` · 归属: ${model.owned_by}` : ""}
-                          </div>
+                      {group.models.length === 0 ? (
+                        <div className="p-3 text-xs text-muted-foreground">
+                          未同步模型目录，请先在提供商管理页同步
                         </div>
-                      ))}
+                      ) : (
+                        group.models.map((model) => (
+                          <div
+                            key={`${group.provider.ID}-${model.id}`}
+                            className="p-3 hover:bg-muted cursor-pointer transition-colors"
+                            onClick={() => onSelectModel(model.id)}
+                          >
+                            <div className="font-medium text-sm">{model.id}</div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              提供商: {group.provider.Name}
+                              {model.owned_by ? ` · 归属: ${model.owned_by}` : ""}
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </div>
                   )}
                 </div>

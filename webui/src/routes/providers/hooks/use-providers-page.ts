@@ -4,7 +4,7 @@
 import { useEffect, useMemo } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { useProviders, useProviderTemplates, useSettings } from "@/hooks/api/use-providers";
+import { useProviders, useProviderModelCatalog, useProviderTemplates, useSettings } from "@/hooks/api/use-providers";
 import {
   selectAddingModels,
   selectAllModelsOpen,
@@ -61,7 +61,7 @@ import {
   useProvidersPageStore,
 } from "@/stores/providers";
 import { defaultProviderFormValues, providerFormSchema, type ProviderFormValues } from "../form-schema";
-import { getAllModelsForProvider } from "../utils/provider-models";
+import { unionCatalogModels } from "@/lib/provider-models";
 import { hasActiveProvidersFilter } from "../utils/filters";
 import { useProviderModelTesting } from "./use-provider-model-testing";
 import { useAllModelsDialog } from "./use-all-models-dialog";
@@ -90,6 +90,7 @@ export function useProvidersPage() {
   );
 
   const { data: providers = [], isLoading: loading } = useProviders(filters);
+  const { data: catalogData = [] } = useProviderModelCatalog();
   const { data: providerTemplates = [] } = useProviderTemplates();
   const { data: settings } = useSettings();
 
@@ -231,7 +232,6 @@ export function useProvidersPage() {
     selectedUpstreamModels,
     setSelectedUpstreamModels,
     allModelsProvider,
-    setAllModelsProvider,
     setAllModelsList,
     persistModels,
     autoActionsFlags,
@@ -318,10 +318,22 @@ export function useProvidersPage() {
     flushNameFilter,
   };
 
+  const providerName = providers.find((v) => v.ID === modelsOpenId)?.Name;
+  // 目录计数与徽标同源（聚合 API）：Upstream（分组白名单并集）+ Custom
+  const modelCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    for (const entry of catalogData) {
+      counts[entry.ProviderID] = unionCatalogModels(entry).length;
+    }
+    return counts;
+  }, [catalogData]);
+  const cachedModelsCount = modelCounts[modelsOpenId ?? 0] ?? 0;
+
   const listSectionProps = {
     loading,
     hasFilter,
     providers,
+    modelCounts,
     updatingFilter,
     updatingAssociationTrigger,
     onOpenAllModelsDialog: openAllModelsDialog,
@@ -381,9 +393,6 @@ export function useProvidersPage() {
     setCustomModelInput,
     handleAddCustomModels,
   };
-
-  const providerName = providers.find((v) => v.ID === modelsOpenId)?.Name;
-  const cachedModelsCount = getAllModelsForProvider(providers, modelsOpenId || 0).length;
 
   const upstreamModelsDialogProps = {
     open: modelsOpen,

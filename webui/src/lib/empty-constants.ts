@@ -1,4 +1,4 @@
-import type { Model, ModelWithProvider, Provider } from "./api";
+import type { Model, ModelWithProvider, Provider, ProviderModelCatalog } from "./api";
 
 /**
  * 稳定空数组，仅作只读 fallback，避免 `data = []` 在 loading 时每次 render 产生新引用触发 effect 循环。
@@ -8,3 +8,4 @@ import type { Model, ModelWithProvider, Provider } from "./api";
 export const EMPTY_MODELS: Model[] = Object.freeze([]) as unknown as Model[];
 export const EMPTY_PROVIDERS: Provider[] = Object.freeze([]) as unknown as Provider[];
 export const EMPTY_MODEL_PROVIDERS: ModelWithProvider[] = Object.freeze([]) as unknown as ModelWithProvider[];
+export const EMPTY_MODEL_CATALOG: ProviderModelCatalog[] = Object.freeze([]) as unknown as ProviderModelCatalog[];

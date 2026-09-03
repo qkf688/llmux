@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getProviders,
+  getProviderModelCatalog,
   getProviderTemplates,
   createProvider,
   updateProvider,
@@ -12,6 +13,7 @@ import {
   getHealthCheckSettings,
   updateHealthCheckSettings,
   type Provider,
+  type ProviderModelCatalog,
   type ProviderTemplate,
   type HealthCheckSettings,
 } from '@/lib/api';
@@ -23,6 +25,7 @@ export const providerKeys = {
   list: (filters?: { name?: string; type?: string }) =>
     [...providerKeys.lists(), filters ?? {}] as const,
   templates: () => [...providerKeys.all, 'templates'] as const,
+  catalog: () => [...providerKeys.all, 'catalog'] as const,
 };
 
 export const settingsKeys = {
@@ -45,6 +48,15 @@ export function useProviderTemplates() {
     queryKey: providerKeys.templates(),
     queryFn: getProviderTemplates,
     staleTime: 5 * 60_000,
+  });
+}
+
+/** 组织级模型目录（分组白名单并集 + custom）：models / model-providers /
+ *  providers 三页的目录数据源。同步或写 custom 后 invalidate 本 key。 */
+export function useProviderModelCatalog() {
+  return useQuery({
+    queryKey: providerKeys.catalog(),
+    queryFn: getProviderModelCatalog,
   });
 }
 
@@ -121,6 +133,8 @@ export function useSyncAllProviders() {
     mutationFn: syncAllProviderModels,
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: providerKeys.lists() });
+      // 同步改写分组白名单 → 组织级目录随之变化
+      void qc.invalidateQueries({ queryKey: providerKeys.catalog() });
     },
   });
 }
@@ -153,4 +167,4 @@ export function useUpdateHealthCheckSettingsMutation() {
   });
 }
 
-export type { Provider, ProviderTemplate, Settings, HealthCheckSettings };
+export type { Provider, ProviderModelCatalog, ProviderTemplate, Settings, HealthCheckSettings };

@@ -266,7 +266,7 @@ export function AllModelsToolbar({
           <TooltipContent>
             {addingModels
               ? "删除中..."
-              : `删除所选${selectedAllModels.length > 0 ? `（${selectedAllModels.length}）` : ""}`}
+              : `删除所选${selectedAllModels.length > 0 ? `（${selectedAllModels.length}）` : ""}（仅自定义模型可删）`}
           </TooltipContent>
         </Tooltip>
         <span

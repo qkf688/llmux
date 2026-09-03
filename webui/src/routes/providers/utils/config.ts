@@ -1,5 +1,4 @@
 import type { ProviderDetail, ProviderWritePayload } from "@/lib/api";
-import { parseAllModelsFromConfig } from "@/lib/provider-models";
 import type { ProviderFormValues } from "../form-schema";
 import { applyExtraFieldsToConfig } from "../form-fields";
 
@@ -133,5 +132,3 @@ export function detailToFormValues(detail: ProviderDetail): ProviderFormValues {
     ),
   };
 }
-
-export const extractAllModels = (config: string) => parseAllModelsFromConfig(config);

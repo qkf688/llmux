@@ -19,11 +19,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { Provider } from "@/lib/api";
-import { extractAllModels } from "../../utils/config";
 import { ProviderRowActions } from "./provider-row-actions";
 
 interface ProvidersDesktopTableProps {
   providers: Provider[];
+  /** 每供应商目录模型数（聚合 API：分组白名单并集 + custom），徽标展示用 */
+  modelCounts: Record<number, number>;
   updatingFilter: Record<number, boolean>;
   updatingAssociationTrigger: Record<number, boolean>;
 
@@ -46,6 +47,7 @@ interface ProvidersDesktopTableProps {
 
 export function ProvidersDesktopTable({
   providers,
+  modelCounts,
   updatingFilter,
   updatingAssociationTrigger,
   onOpenAllModelsDialog,
@@ -78,10 +80,10 @@ export function ProvidersDesktopTable({
         </TableHeader>
         <TableBody>
           {providers.map((provider) => {
-            const allModels = extractAllModels(provider.Config);
             // 端点/分组计数读列表 API 附带值（后端批量 COUNT），不再解析 Config._schedule（S6 已废弃该键）
             const endpointCount = provider.EndpointCount ?? 0;
             const groupCount = provider.GroupCount ?? 0;
+            const modelsCount = modelCounts[provider.ID] ?? 0;
             return (
               <TableRow key={provider.ID} className="group">
                 <TableCell className="font-mono text-xs text-muted-foreground">
@@ -110,7 +112,7 @@ export function ProvidersDesktopTable({
                     className="gap-1.5"
                   >
                     <Boxes className="size-4 opacity-70" />
-                    {allModels.length}
+                    {modelsCount}
                   </Button>
                 </TableCell>
                 <TableCell>

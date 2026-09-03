@@ -2,17 +2,19 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  getProviderModelCatalog,
   getProviderModels,
   getProviders,
   syncProviderModels,
   updateProvider,
   type Provider,
+  type ProviderModelCatalog,
 } from "@/lib/api";
-import { providerKeys } from "@/hooks/api/use-providers";
+import { providerKeys, useProviderModelCatalog } from "@/hooks/api/use-providers";
+import { EMPTY_MODEL_CATALOG } from "@/lib/empty-constants";
 import {
-  buildConfigWithModels,
-  parseCustomModelsFromConfig,
-  parseUpstreamModelsFromConfig,
+  buildConfigWithCustomModels,
+  unionCatalogModels,
 } from "@/lib/provider-models";
 import type { Setter, Updater } from "@/stores/core/updater";
 import type {
@@ -20,7 +22,7 @@ import type {
   ModelTestResult,
   UpstreamStatus,
 } from "../types";
-import { extractAllModels, parseCustomModelsInput } from "../utils/config";
+import { parseCustomModelsInput } from "../utils/config";
 import {
   buildAutoActionsDescription,
   type AutoActionsFlags,
@@ -69,25 +71,18 @@ export function useAllModelsDialog({
   autoActionsFlags,
 }: UseAllModelsDialogInput) {
   const queryClient = useQueryClient();
+  const { data: catalogData = EMPTY_MODEL_CATALOG } = useProviderModelCatalog();
   const [allModelsList, setAllModelsList] = useState<string[]>([]);
   const [upstreamModelsList, setUpstreamModelsList] = useState<string[]>([]);
   const [upstreamStatus, setUpstreamStatus] =
     useState<UpstreamStatus>("disabled");
 
-  const providerConfig = allModelsProvider?.Config;
-  // 标签与筛选统一：在 upstream_models 中 → 上游；否则 → 自定义。
-  // 若模型同时出现在 custom_models 与 upstream_models，按「上游」展示（与行内 badge 一致）。
-  const upstreamSet = useMemo<Set<string>>(
-    () =>
-      providerConfig
-        ? new Set(
-            parseUpstreamModelsFromConfig(providerConfig).map((m) =>
-              m.toLowerCase(),
-            ),
-          )
-        : new Set<string>(),
-    [providerConfig],
-  );
+  // 标签与筛选统一：在目录 Upstream（分组白名单并集）中 → 上游；否则 → 自定义。
+  // 若模型同时出现在 Custom 与 Upstream，按「上游」展示（与行内 badge 一致）。
+  const upstreamSet = useMemo<Set<string>>(() => {
+    const entry = catalogData.find((item) => item.ProviderID === allModelsProvider?.ID);
+    return entry ? new Set(entry.Upstream.map((m) => m.toLowerCase())) : new Set<string>();
+  }, [catalogData, allModelsProvider?.ID]);
 
   const filteredAllModels = useMemo<string[]>(() => {
     let result = allModelsList;
@@ -127,10 +122,20 @@ export function useAllModelsDialog({
     });
   };
 
+  /** 弹窗是事件回调（非渲染期），目录初始化走 fetchQuery：fresh 缓存直接命中，
+   *  否则打一次聚合端点。写/同步后统一 invalidate catalog 再走本入口回填。 */
+  const fetchCatalogEntry = async (providerId: number): Promise<ProviderModelCatalog | null> => {
+    const catalog = await queryClient.fetchQuery({
+      queryKey: providerKeys.catalog(),
+      queryFn: getProviderModelCatalog,
+    });
+    return catalog.find((item) => item.ProviderID === providerId) ?? null;
+  };
+
   const openAllModelsDialog = async (provider: Provider) => {
-    const allModels = extractAllModels(provider.Config);
+    const entry = await fetchCatalogEntry(provider.ID);
     setAllModelsProvider(provider);
-    setAllModelsList(allModels);
+    setAllModelsList(entry ? unionCatalogModels(entry) : []);
     setSelectedAllModels([]);
     setCustomModelInput("");
     setAllModelsSearchQuery("");
@@ -159,19 +164,16 @@ export function useAllModelsDialog({
       patchProviderInLists(updated);
     }
     await queryClient.invalidateQueries({ queryKey: providerKeys.lists() });
+    // 同步改写分组白名单 → 目录随之变化（fetchCatalogEntry 会重取最新值）
+    await queryClient.invalidateQueries({ queryKey: providerKeys.catalog() });
     return updated;
   };
 
-  const persistModels = async (
-    provider: Provider,
-    upstreamModels: string[],
-    customModels: string[],
-  ) => {
-    const nextConfig = buildConfigWithModels(
-      provider.Config,
-      upstreamModels,
-      customModels,
-    );
+  /** 目录写路径唯一入口：只维护 config.custom_models（上游来源的编辑入口在
+   *  供应商表单分组白名单）。legacy partial PUT：req.Config != "" 时后端才写
+   *  config，故空对象 config 也不会误清。 */
+  const persistModels = async (provider: Provider, customModels: string[]) => {
+    const nextConfig = buildConfigWithCustomModels(provider.Config, customModels);
     await updateProvider(provider.ID, {
       name: provider.Name,
       type: provider.Type,
@@ -181,6 +183,9 @@ export function useAllModelsDialog({
     });
     const updatedProvider = { ...provider, Config: nextConfig };
     patchProviderInLists(updatedProvider);
+    // 目录缓存与 config 写不同源（聚合端点重算分组白名单），invalidate 让
+    // upstreamSet / 三页目录随 custom 变化刷新
+    await queryClient.invalidateQueries({ queryKey: providerKeys.catalog() });
     return nextConfig;
   };
 
@@ -191,10 +196,12 @@ export function useAllModelsDialog({
       toast.error("请先输入要添加的模型名称");
       return;
     }
-    const upstream = parseUpstreamModelsFromConfig(allModelsProvider.Config);
-    const custom = parseCustomModelsFromConfig(allModelsProvider.Config);
-    const upstreamLower = new Set(upstream.map((item) => item.toLowerCase()));
-    // 已在上游的模型不再写入 custom，避免列表 key 重复与 config 双写
+    const entry = await fetchCatalogEntry(allModelsProvider.ID);
+    const upstreamLower = new Set(
+      (entry?.Upstream ?? []).map((item) => item.toLowerCase()),
+    );
+    const custom = entry?.Custom ?? [];
+    // 已在上游（分组白名单）的模型不再写入 custom，避免列表 key 重复
     const additionsNotInUpstream = additions.filter(
       (item) => !upstreamLower.has(item.toLowerCase()),
     );
@@ -209,14 +216,11 @@ export function useAllModelsDialog({
     }
     try {
       setAddingModels(true);
-      const nextConfig = await persistModels(
-        allModelsProvider,
-        upstream,
-        merged,
+      await persistModels(allModelsProvider, merged);
+      // 本地立即合并（invalidate 的 refetch 到达前保持弹窗即时反馈）
+      setAllModelsList(
+        unionCatalogModels({ Upstream: entry?.Upstream ?? [], Custom: merged }),
       );
-      const updatedProvider = { ...allModelsProvider, Config: nextConfig };
-      setAllModelsProvider(updatedProvider);
-      setAllModelsList(extractAllModels(nextConfig));
       setCustomModelInput("");
       toast.success(`已添加 ${merged.length - custom.length} 个自定义模型`, {
         description: buildAutoActionsDescription(
@@ -235,21 +239,17 @@ export function useAllModelsDialog({
 
   const removeModelsFromAll = async (modelsToRemove: string[]) => {
     if (!allModelsProvider || modelsToRemove.length === 0) return;
-    const upstream = parseUpstreamModelsFromConfig(allModelsProvider.Config);
-    const custom = parseCustomModelsFromConfig(allModelsProvider.Config);
+    const entry = await fetchCatalogEntry(allModelsProvider.ID);
+    const upstream = entry?.Upstream ?? [];
+    const custom = entry?.Custom ?? [];
     const removalSet = new Set(
       modelsToRemove.map((item) => item.toLowerCase()),
     );
-    const nextUpstream = upstream.filter(
-      (item) => !removalSet.has(item.toLowerCase()),
-    );
+    // 只删 custom 行：上游来源（分组白名单）不可从目录删除，编辑入口在供应商表单
     const nextCustom = custom.filter(
       (item) => !removalSet.has(item.toLowerCase()),
     );
-    const removedCount =
-      upstream.length -
-      nextUpstream.length +
-      (custom.length - nextCustom.length);
+    const removedCount = custom.length - nextCustom.length;
     if (removedCount === 0) {
       toast.info("没有可删除的模型");
       return;
@@ -257,14 +257,10 @@ export function useAllModelsDialog({
 
     try {
       setAddingModels(true);
-      const nextConfig = await persistModels(
-        allModelsProvider,
-        nextUpstream,
-        nextCustom,
+      await persistModels(allModelsProvider, nextCustom);
+      setAllModelsList(
+        unionCatalogModels({ Upstream: upstream, Custom: nextCustom }),
       );
-      const updatedProvider = { ...allModelsProvider, Config: nextConfig };
-      setAllModelsProvider(updatedProvider);
-      setAllModelsList(extractAllModels(nextConfig));
       setSelectedAllModels([]);
       toast.success(`已移除 ${removedCount} 个模型`, {
         description: buildAutoActionsDescription(
@@ -291,7 +287,9 @@ export function useAllModelsDialog({
 
   const applyProviderModelsToDialog = async (provider: Provider) => {
     setAllModelsProvider(provider);
-    setAllModelsList(extractAllModels(provider.Config));
+    // 同步改写的是分组白名单 → 目录在聚合端点侧重算；fetchQuery 拿回最新值
+    const entry = await fetchCatalogEntry(provider.ID);
+    setAllModelsList(entry ? unionCatalogModels(entry) : []);
     try {
       const upstreamModels = await getProviderModels(provider.ID, {
         source: "upstream",

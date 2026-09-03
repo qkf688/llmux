@@ -49,7 +49,7 @@ export function UpstreamModelsDialog({
         <DialogHeader>
           <DialogTitle>{providerName} 上游模型</DialogTitle>
           <DialogDescription>
-            从上游拉取的模型列表，勾选后可加入"全部模型"缓存。
+            从上游拉取的模型列表，勾选后加入目录（以自定义模型保存）。
           </DialogDescription>
         </DialogHeader>
 

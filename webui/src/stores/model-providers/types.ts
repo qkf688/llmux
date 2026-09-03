@@ -1,19 +1,14 @@
-import type { ModelProviderTestResult, Provider, ProviderModel } from "@/lib/api";
+import type { ModelProviderTestResult } from "@/lib/api";
 
-export type ProviderModelWithOwner = ProviderModel & {
-  providerId: number;
-  providerName: string;
-};
+export type {
+  ProviderModelGroup,
+  ProviderModelWithOwner,
+} from "@/lib/provider-models";
 
 export type ProviderModelSelection = {
   providerId: number;
   providerName: string;
   modelId: string;
-};
-
-export type ProviderModelGroup = {
-  provider: Provider;
-  models: ProviderModelWithOwner[];
 };
 
 export type BlacklistFilter = "all" | "blacklisted" | "not-blacklisted";

@@ -93,7 +93,7 @@ export function AllModelsListItem({
               size="icon"
               className="h-7 w-7 text-muted-foreground hover:text-destructive"
               onClick={onRemove}
-              disabled={addingModels || batchTesting}
+              disabled={isUpstream || addingModels || batchTesting}
             >
               <svg
                 className="h-3.5 w-3.5"
@@ -110,7 +110,9 @@ export function AllModelsListItem({
               </svg>
             </Button>
           </TooltipTrigger>
-          <TooltipContent>移除</TooltipContent>
+          <TooltipContent>
+            {isUpstream ? "上游模型由分组白名单管理，请到供应商编辑弹窗调整" : "移除"}
+          </TooltipContent>
         </Tooltip>
       </div>
     </AnimatedListItem>

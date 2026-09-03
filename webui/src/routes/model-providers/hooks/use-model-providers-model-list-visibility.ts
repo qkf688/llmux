@@ -30,14 +30,15 @@ export function useModelProvidersModelListVisibility({
   }, [modelProviders]);
 
   const visibleProviderGroups = useMemo(() => {
-    const searchKeywordLower = modelSearchKeyword.toLowerCase();
+    const searchKeywordLower = modelSearchKeyword.trim().toLowerCase();
     return providerModelGroups
       .filter((group) => (selectedProviderId && selectedProviderId > 0 ? group.provider.ID === selectedProviderId : true))
       .map((group) => ({
         ...group,
         models: group.models.filter((model) => model.id.toLowerCase().includes(searchKeywordLower)),
       }))
-      .filter((group) => group.models.length > 0);
+      // 无关键词时保留空目录分组（未同步供应商可见，引导先同步）；有关键词时空分组无匹配自然消失
+      .filter((group) => group.models.length > 0 || searchKeywordLower === "");
   }, [modelSearchKeyword, providerModelGroups, selectedProviderId]);
 
   const visibleProviderModels = useMemo(() => {

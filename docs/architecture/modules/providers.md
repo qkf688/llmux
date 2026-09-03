@@ -13,10 +13,10 @@
 
 ## 2. 职责与边界
 
-- **负责什么**：`Provider` 工厂与实现（OpenAI / OpenAIRes / Anthropic）；客户端缓存；Metadata（模板、TestBody、HealthCheckBody）；管理端供应商 CRUD、黑名单、上游模型列表展示
+- **负责什么**：`Provider` 工厂与实现（OpenAI / OpenAIRes / Anthropic）；客户端缓存；Metadata（模板、TestBody、HealthCheckBody）；管理端供应商 CRUD、黑名单、上游模型列表展示、组织级模型目录聚合
 - **不负责什么**：模型-供应商关联行（`associations`）；协议互转（`protocol-transform`）；chat 选路与重试；虚拟模型策略
-- **对外暴露**：`providers.Provider`、`Register`/`New`、`RegisterMetadata`/`MetadataOf`/`AllMetadata`、`OpenAICompat`、`BetaFeatureCapable`；`handler/providerapi` REST；`ProviderRepo`
-- **依赖谁**：`models`、`consts`、少量 `common`；handler 侧 `repository`/`httpresp`；拉上游模型时可能经 `service` 辅助
+- **对外暴露**：`providers.Provider`、`Register`/`New`、`RegisterMetadata`/`MetadataOf`/`AllMetadata`、`OpenAICompat`、`BetaFeatureCapable`；`handler/providerapi` REST（含 `/api/providers/model-catalog`）；`ProviderRepo`
+- **依赖谁**：`models`、`consts`、少量 `common`；handler 侧 `repository`/`httpresp`/`service/modelsync`（仅 model-catalog 聚合）；拉上游模型时可能经 `service` 辅助
 
 ## 3. 内部结构
 
@@ -27,8 +27,10 @@ providers/
 ├── openai_base.go       # OpenAI 兼容公共基类
 ├── openai.go / openai_res.go / anthropic.go
 └── cache.go             # HTTP 客户端缓存
-handler/providerapi/     # CRUD、templates、upstream models、blacklist
+handler/providerapi/     # CRUD、templates、upstream models、blacklist、model-catalog
+  model_catalog.go       # GET /api/providers/model-catalog（聚合目录薄层，逻辑在 service/modelsync）
 repository/provider.go
+service/modelsync/config.go  # ProviderModelCatalog 类型 + GetProviderModelCatalogs 批量聚合
 ```
 
 ## 4. 关键接口契约
@@ -42,6 +44,7 @@ repository/provider.go
 | `Metadata` | 配置模板与探测 body | `providers/meta.go` | `RegisterMetadata` |
 | `ProviderRepo` | 供应商持久化 | `repository/provider.go` | GORM 实现 |
 | `models.Provider` | 供应商实体 | `models/model.go` | GORM |
+| `GET /api/providers/model-catalog` | 组织级模型目录聚合：每供应商 `{ProviderID, Upstream(分组白名单并集), Custom(=config.custom_models)}`，PascalCase 无 json tag，空值显式空数组（非 null）；前端三页目录与 all-models 弹窗的**唯一目录数据源**（替代 `Config.upstream_models` 客户端解析，该键为死键）；路由固定段 `model-catalog` 声明在 `/:id` 之前防参数段捕获 | `handler/providerapi/routes.go` + `model_catalog.go`（HTTP 薄层） | `service/modelsync.GetProviderModelCatalogs`（聚合逻辑，SRP） |
 
 ## 5. 特殊约定
 

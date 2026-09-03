@@ -53,7 +53,7 @@ export interface ChatLog {
   name: string;
   provider_model: string;
   provider_name: string;
-  /** 调度明细（S0 原型预留；后端 S3 选路改造后填充）：命中的协议端点 */
+  /** 调度明细（S3-3 起建行时从选路结果原子填充；早期存量行四字段整体为空）：命中的协议端点 */
   endpoint_protocol?: string;
   /** 命中的端点 URL */
   endpoint_url?: string;

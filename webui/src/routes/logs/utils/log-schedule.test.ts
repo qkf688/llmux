@@ -3,34 +3,34 @@ import { describe, expect, it } from "vitest";
 import type { ChatLog } from "@/lib/api";
 import { splitLogSchedule } from "./log-schedule";
 
-/** 只填调度四字段，其余字段与派生无关 */
-const buildLog = (schedule: Partial<ChatLog>): ChatLog =>
-  ({
-    id: 1,
-    created_at: "2026-09-03T00:00:00Z",
-    name: "gpt-x",
-    provider_model: "gpt-x-1",
-    provider_name: "openai",
-    status: "success",
-    style: "openai",
-    user_agent: "curl/8",
-    error: "",
-    retry: 0,
-    proxy_time: 1,
-    first_chunk_time: 1,
-    chunk_time: 1,
-    tps: 1,
-    chat_io: false,
-    prompt_tokens: 0,
-    completion_tokens: 0,
-    total_tokens: 0,
-    prompt_tokens_details: { cached_tokens: 0, audio: 0 },
-    completion_tokens_details: { reasoning_tokens: 0, audio: 0 },
-    usage_source: "upstream",
-    is_virtual_model: false,
-    has_format_conversion: false,
-    ...schedule,
-  }) as ChatLog;
+/** 只填调度四字段，其余字段与派生无关；基座完整 + Partial spread——返回注解代替
+ *  `as` 断言：未来 ChatLog 新增必填字段时漏更基座会在此编译报错而非静默放行 */
+const buildLog = (schedule: Partial<ChatLog>): ChatLog => ({
+  id: 1,
+  created_at: "2026-09-03T00:00:00Z",
+  name: "gpt-x",
+  provider_model: "gpt-x-1",
+  provider_name: "openai",
+  status: "success",
+  style: "openai",
+  user_agent: "curl/8",
+  error: "",
+  retry: 0,
+  proxy_time: 1,
+  first_chunk_time: 1,
+  chunk_time: 1,
+  tps: 1,
+  chat_io: false,
+  prompt_tokens: 0,
+  completion_tokens: 0,
+  total_tokens: 0,
+  prompt_tokens_details: { cached_tokens: 0, audio_tokens: 0 },
+  completion_tokens_details: { reasoning_tokens: 0, audio_tokens: 0 },
+  usage_source: "upstream",
+  is_virtual_model: false,
+  has_format_conversion: false,
+  ...schedule,
+});
 
 describe("splitLogSchedule", () => {
   it.each([

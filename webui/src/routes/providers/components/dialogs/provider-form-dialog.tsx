@@ -97,7 +97,7 @@ export function ProviderFormDialog({
                 )}
               />
 
-              {/* 支持类型（原「类型」位置）：多选勾选，第一个 = 主类型 */}
+              {/* 支持类型（原「类型」位置）：□ 勾选支持协议；○ 显式指定主类型 */}
               <SupportTypesField providerTemplates={providerTemplates} />
 
               <FormField

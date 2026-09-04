@@ -1,6 +1,6 @@
 /**
  * 供应商表单「协议与调度」分区（S0 原型）：
- * 支持类型勾选（= 出站协议，第一个勾选为主类型）/ 协议端点区（跟随勾选，URL 继承/覆盖）/
+ * 主类型（○ 单选）× 支持类型勾选（= 出站协议）/ 协议端点区（跟随勾选，URL 继承/覆盖）/
  * 凭据分组区（价格权重 + 白名单 + 凭据来源二选一；关联号池可就地打开号池详情弹窗）。
  * 依赖 ProviderFormDialog 的 <Form> context（useFormContext）。
  * 正式实现（S6）时这些字段改为独立 DTO 提交，本组件结构保留。
@@ -26,25 +26,13 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { usePoolOptions } from "../../hooks/use-pool-options";
-import type { ProviderFormGroup, ProviderFormValues } from "../../form-schema";
-
-/** 支持类型 = provider type 多选；每个类型对应一种出站协议 */
-const SUPPORTED_TYPE_OPTIONS = [
-  { type: "openai", protocol: "openai", label: "OpenAI（chat/completions）" },
-  { type: "openai-res", protocol: "responses", label: "OpenAI Responses" },
-  { type: "anthropic", protocol: "anthropic", label: "Anthropic" },
-] as const;
-
-const PROTOCOL_LABEL: Record<string, string> = {
-  openai: "OpenAI",
-  anthropic: "Anthropic",
-  responses: "OpenAI Responses",
-};
+import { PROTOCOL_LABEL, SUPPORTED_TYPE_OPTIONS, type ProviderFormGroup, type ProviderFormValues } from "../../form-schema";
 
 /**
- * 支持类型（checkbox 组，替代原「类型」下拉 +「出站协议」勾选）：
- * 勾选类型 → 生成对应协议端点行；第一个勾选 = 主类型（写回 schema 的 type 字段，
- * 决定 providers.New 分发 / 模板默认值 / 模型同步）；取消勾选 → 移除该协议端点行。
+ * 主类型 / 支持类型（S0 原型）：主类型为 Select 下拉（紧凑，决定 providers.New 分发 / 模板默认值 / 模型同步），
+ * 支持类型为 □ checkbox 纵列表选出站协议（每协议一行，生成对应端点行）。主类型必须 ∈ 已勾选协议：
+ * 下拉只列出已勾选项；取消勾选主类型时自动落到剩余第一个（schema superRefine 兜底）。
+ * 首个勾选 = 初始主类型（下拉无候选，此时自动写入并套模板默认值；此后显式改选不覆盖已填字段）。
  */
 export function SupportTypesField({ providerTemplates }: { providerTemplates: ProviderTemplate[] }) {
   const form = useFormContext<ProviderFormValues>();
@@ -61,7 +49,7 @@ export function SupportTypesField({ providerTemplates }: { providerTemplates: Pr
       const next = [...new Set([...current, protocol])];
       setValue("protocols", next, { shouldDirty: true });
       if (current.length === 0) {
-        // 第一个勾选 = 主类型：写回 type 并套模板默认值
+        // 首个勾选 = 初始主类型：写回 type 并套模板默认值
         setValue("type", type, { shouldDirty: true });
         applyProviderTemplateDefaults(type, providerTemplates, form);
       }
@@ -77,8 +65,9 @@ export function SupportTypesField({ providerTemplates }: { providerTemplates: Pr
     if (indices.length > 0) {
       remove(indices);
     }
-    if (next.length > 0) {
-      // 主类型切换到剩余第一个
+    // 仅当移除的是主类型本身时，主类型落到剩余第一个（保持 type ∈ protocols）；
+    // 移除次要协议不触碰主类型（原实现无条件切第一个，会把用户显式选的主类型悄悄改掉）
+    if (getValues("type") === type && next.length > 0) {
       const first = SUPPORTED_TYPE_OPTIONS.find((o) => o.protocol === next[0]);
       if (first) {
         setValue("type", first.type, { shouldDirty: true });
@@ -87,34 +76,62 @@ export function SupportTypesField({ providerTemplates }: { providerTemplates: Pr
   };
 
   return (
-    <div className="space-y-2">
-      <div>
-        <FormLabel>支持类型</FormLabel>
-        <p className="text-xs text-muted-foreground">
-          可多选；第一个勾选为主类型。勾选即生成对应协议端点，请求按入站协议匹配端点（同协议透传）
-        </p>
+    <div className="space-y-3">
+      <FormField
+        control={control}
+        name="type"
+        render={({ field }) => (
+          <FormItem className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <FormLabel className="shrink-0">主类型</FormLabel>
+              <FormControl>
+                <Select onValueChange={field.onChange} value={field.value || undefined}>
+                  <SelectTrigger className="h-8 min-w-0 flex-1">
+                    <SelectValue placeholder="选择主类型" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SUPPORTED_TYPE_OPTIONS.filter((o) => protocols.includes(o.protocol)).map((opt) => (
+                      <SelectItem key={opt.type} value={opt.type}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormControl>
+              <p className="shrink-0 text-xs text-muted-foreground">决定后端实现 / 模板默认值 / 模型同步</p>
+            </div>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <div className="space-y-1.5">
+        <FormLabel title="勾选即生成对应协议端点，请求按入站协议匹配端点（同协议透传）">
+          支持协议
+        </FormLabel>
+        <div className="space-y-1.5">
+          {SUPPORTED_TYPE_OPTIONS.map((opt) => {
+            const supported = protocols.includes(opt.protocol);
+            const lastStanding = protocols.length === 1 && supported;
+            return (
+              <label
+                key={opt.type}
+                title={lastStanding ? "至少保留一个支持协议" : undefined}
+                className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-border/60 px-3 py-2 text-sm transition-colors hover:bg-muted/50"
+              >
+                <Checkbox
+                  checked={supported}
+                  // 最后一个勾选禁取消：至少保留一个出站协议/端点（zod 数组 min(1) 兜底）
+                  disabled={lastStanding}
+                  onCheckedChange={(checked) => toggleType(opt.type, checked === true)}
+                />
+                <span>{opt.label}</span>
+              </label>
+            );
+          })}
+        </div>
+        {protocols.length === 0 && <p className="text-sm font-medium text-destructive">至少勾选一个支持协议</p>}
       </div>
-      <div className="flex flex-wrap gap-2">
-        {SUPPORTED_TYPE_OPTIONS.map((opt) => (
-          <label
-            key={opt.type}
-            className="flex cursor-pointer items-center gap-2 rounded-lg border p-2.5 hover:bg-muted/50"
-          >
-            <Checkbox
-              checked={protocols.includes(opt.protocol)}
-              // 最后一个勾选禁取消：至少保留一个出站协议/端点（zod 数组 min(1) 兜底）
-              disabled={protocols.length === 1 && protocols.includes(opt.protocol)}
-              onCheckedChange={(checked) => toggleType(opt.type, checked === true)}
-            />
-            <span className="text-sm">{opt.label}</span>
-          </label>
-        ))}
-      </div>
-      {protocols.length === 0 ? (
-        <FormMessage>至少勾选一个支持类型</FormMessage>
-      ) : (
-        <p className="text-xs text-muted-foreground">主类型：{PROTOCOL_LABEL[protocols[0]] ?? protocols[0]}</p>
-      )}
     </div>
   );
 }

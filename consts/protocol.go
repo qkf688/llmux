@@ -13,8 +13,8 @@ const (
 )
 
 // ProtocolOfType 给出 provider type 的默认出站协议（存量迁移与新建缺省时用）。
-// 与前端 protocolOfType 同构（webui/src/routes/providers/utils/schedule.ts），
-// 两侧改动必须同步（直返实体两侧同源）。
+// 与前端 SUPPORTED_TYPE_OPTIONS 同构（webui/src/routes/providers/components/dialogs/provider-schedule-fields.tsx，
+// type→protocol 映射），两侧改动必须同步（直返实体两侧同源）。
 func ProtocolOfType(providerType string) Protocol {
 	switch providerType {
 	case "anthropic":

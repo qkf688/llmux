@@ -55,7 +55,9 @@ LLMux 是多供应商 LLM API 网关/代理：对外提供 OpenAI / Anthropic �
 - `handler` → `httpresp` / `handler/httpx` / `middleware`
 - `service` → `providers`（上游请求构造与模型列表）
 - `service` → `models`（实体、设置读、统一协议类型）
-- `service/chat` → `service/transform`、`service/virtualmodel`、`service/chatcore`、`service/chatstats`、`service/adjustment`、`balancer`
+- `service/chat` → `service/transform`、`service/virtualmodel`、`service/chatcore`、`service/chatstats`、`service/adjustment`、`service/channel`（三层选路）、`service/credprobe`（惰性探活）、`balancer`
+- `service/channel` → `consts`、`common/credentialcrypto`（选路产物可被 `providers.New` 反序列化，不依赖 `providers`）
+- `service/modelsync` → `service/channel`（按分组拉取用 `/models`）
 - `service/adjustment` → `service/healthcheck`（仅 `init` 注入 `AdjustmentHooks`，无反向业务依赖）
 - `service/transform` → `models/unified`、`service/anthropic`、`service/responses`
 - `repository` → `models`（GORM 实体与 `models.DB`）
@@ -73,14 +75,14 @@ LLMux 是多供应商 LLM API 网关/代理：对外提供 OpenAI / Anthropic �
 
 ### 层次总览（一句话）
 
-`webui` / 外部客户端 → `middleware` + `handler` → `service`（chat / transform / virtualmodel / healthcheck / modelsync / settings）→ `providers` + `repository` → `models` + SQLite；`common` / `consts` / `balancer` / `httpresp` 被上层依赖，自身不依赖业务。
+`webui` / 外部客户端 → `middleware` + `handler` → `service`（chat / transform / virtualmodel / healthcheck / modelsync / channel / settings）→ `providers` + `repository` → `models` + SQLite；`common` / `consts` / `balancer` / `httpresp` 被上层依赖，自身不依赖业务。
 
 ### 请求主路径（文字）
 
-1. **代理路径**：`POST /v1/chat/completions|responses|messages` → `handler/v1` → `service` 门面 → `service/chat`（可选虚拟模型解析）→ `transform` → `providers.BuildReq` → 上游 → 流式/非流式回写 + `ChatLog`/`Stats`
-2. **管理路径**：`/api/*` + `middleware.Auth` → 各 `handler/*` 子包 → `repository` 和/或 `service` → `models`/SQLite
-3. **后台任务**：`main` 启动 `HealthChecker` 与 `ModelSyncService.StartAutoSync`，ctx 派生自 `signal.NotifyContext`；请求路径里 fire-and-forget 的写库任务经 `common/bgtask` 登记
-4. **优雅关闭**：SIGINT/SIGTERM → 信号 ctx 取消（ticker 服务的停止与「等在途请求」**并行**收敛，不在下述三步之内）→ `srv.Shutdown`（等在途请求）→ `bgtask.Default().Shutdown`（排空后台写库）→ `models.Close()`，逐步限时。`ListenAndServe` 启动失败取消同一 ctx，走同一条关闭序
+1. **代理路径**：`POST /v1/chat/completions|responses|messages` → `handler/v1` → `service` 门面 → `service/chat`（可选虚拟模型解析）→ `channel` 三层选路（端点→分组→凭据，见 [modules/channel-routing.md](modules/channel-routing.md)）→ `transform` → `providers.BuildReq` → 上游 → 流式/非流式回写 + `ChatLog`/`Stats`
+2. **管理路径**：`/api/*` + `middleware.Auth` → 各 `handler/*` 子包（含 `handler/pools` 号池/凭据/端点/分组管理域）→ `repository` 和/或 `service` → `models`/SQLite
+3. **后台任务**：`main` 启动 `HealthChecker`、`ModelSyncService.StartAutoSync` 与 `credwrite.Start`（凭据写队列 worker）；ticker 服务（健康检查/模型同步）ctx 派生自 `signal.NotifyContext`，队列 worker 退出由 `Stop` 的 requestStop 驱动（与 healthcheck 同构）；请求路径里 fire-and-forget 的写库任务经 `common/bgtask` 登记
+4. **优雅关闭**：SIGINT/SIGTERM → 信号 ctx 取消（ticker 服务的停止与「等在途请求」**并行**收敛，不在下述步骤之内）→ `srv.Shutdown`（等在途请求）→ `credwrite.Stop`（Flush 凭据写队列 + 停收）→ `bgtask.Default().Shutdown`（排空后台写库）→ `models.Close()`，逐步限时。`ListenAndServe` 启动失败取消同一 ctx，走同一条关闭序
 
 ### 现状备注（依赖事实）
 

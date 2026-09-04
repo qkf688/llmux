@@ -9,7 +9,7 @@
 |------|-----|
 | 业务领域 | 配置与运维可视化（不实现服务端业务规则） |
 | 目录位置 | `webui/`（源码 `webui/src/`；构建 `webui/dist/` 由 Go embed） |
-| 主要职责 | 供应商/模型/关联/虚拟模型/日志/指标/设置/健康与同步日志/数据库管理界面 |
+| 主要职责 | 供应商（含号池/凭据/协议端点/分组）、模型、关联、虚拟模型、日志、指标、设置、健康与同步日志、数据库管理界面 |
 
 ## 2. 职责与边界
 
@@ -84,6 +84,7 @@ routes/<page>/
 | `/models` | models-catalog |
 | `/model-providers` | associations |
 | `/virtual-models` | virtual-models |
+| `/number-pools` | pools |
 | `/logs`, `/logs/:id/chat-io` | logs-metrics |
 | `/health-check-logs` | health-check |
 | `/model-sync-logs` | model-sync |

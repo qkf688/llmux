@@ -459,7 +459,7 @@ func TestStructured_UpdateRejectsHalfChildren(t *testing.T) {
 				"protocols":["openai"],
 				"endpoints":[{"protocol":"openai","url":"","enabled":true}]
 			}`,
-			wantMsg: "groups",
+			wantMsg: "凭据分组",
 		},
 		{
 			name: "only groups without endpoints",
@@ -469,7 +469,7 @@ func TestStructured_UpdateRejectsHalfChildren(t *testing.T) {
 				"protocols":["openai"],
 				"groups":[{"name":"默认组","weight":1,"models":"","source":"inline","inline_keys":["sk-half-CCCC3333"]}]
 			}`,
-			wantMsg: "endpoints",
+			wantMsg: "协议端点",
 		},
 	}
 	for _, tc := range cases {

@@ -39,8 +39,10 @@ export const providerFormSchema = z.object({
   model_filter_enabled: z.boolean().optional(),
   /** 出站协议勾选（openai / anthropic / responses），至少一个 */
   protocols: z.array(z.string()).min(1, { message: "至少勾选一个出站协议" }).optional(),
-  endpoints: z.array(providerFormEndpointSchema).optional(),
-  groups: z.array(providerFormGroupSchema).optional(),
+  /** 端点/分组数组 min(1)：空数组会在提交时被拦（禁删光交互由 UI disabled 承担，此处是兜底）。
+   * 保留 `.optional()`：仅 undefined 放行、空数组必报，历史遗留无子表的供应商仍能打开补齐后保存。 */
+  endpoints: z.array(providerFormEndpointSchema).min(1, { message: "至少保留一个协议端点" }).optional(),
+  groups: z.array(providerFormGroupSchema).min(1, { message: "至少保留一个凭据分组" }).optional(),
 });
 
 export type ProviderFormValues = z.infer<typeof providerFormSchema>;

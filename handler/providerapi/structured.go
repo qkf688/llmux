@@ -35,7 +35,7 @@ func (req *ProviderRequest) hasChildren() bool {
 // 仅全量路径（hasChildren）调用；partial 请求（开关类）跳过本校验。
 func validateStructuredRequest(ctx context.Context, repos *repository.Repositories, req *ProviderRequest) error {
 	if len(req.Protocols) == 0 {
-		return fmt.Errorf("protocols is required (at least one)")
+		return fmt.Errorf("至少勾选一个出站协议")
 	}
 	protoSet := make(map[string]struct{}, len(req.Protocols))
 	for _, p := range req.Protocols {
@@ -54,7 +54,7 @@ func validateStructuredRequest(ctx context.Context, repos *repository.Repositori
 		endpoints = *req.Endpoints
 	}
 	if len(endpoints) == 0 {
-		return fmt.Errorf("endpoints is required (at least one)")
+		return fmt.Errorf("至少保留一个协议端点")
 	}
 	epSeen := make(map[string]struct{}, len(endpoints))
 	for _, ep := range endpoints {
@@ -80,7 +80,7 @@ func validateStructuredRequest(ctx context.Context, repos *repository.Repositori
 		groups = *req.Groups
 	}
 	if len(groups) == 0 {
-		return fmt.Errorf("groups is required (at least one)")
+		return fmt.Errorf("至少保留一个凭据分组")
 	}
 	for i, g := range groups {
 		name := strings.TrimSpace(g.Name)
@@ -94,7 +94,8 @@ func validateStructuredRequest(ctx context.Context, repos *repository.Repositori
 		case groupSourceInline:
 			keys := normalizeInlineKeys(g.InlineKeys)
 			if len(keys) == 0 {
-				return fmt.Errorf("groups[%d].inline_keys requires at least one key", i)
+				// 统一中文友好文案：前端 zod 对 inlineKeys 无 min 校验，此条是提交兜底（与「至少保留一个分组」同族）
+				return fmt.Errorf("groups[%d].inline_keys 至少填写一个 key", i)
 			}
 		case groupSourcePool:
 			if g.PoolID == nil || *g.PoolID == 0 {

@@ -102,6 +102,8 @@ export function SupportTypesField({ providerTemplates }: { providerTemplates: Pr
           >
             <Checkbox
               checked={protocols.includes(opt.protocol)}
+              // 最后一个勾选禁取消：至少保留一个出站协议/端点（zod 数组 min(1) 兜底）
+              disabled={protocols.length === 1 && protocols.includes(opt.protocol)}
               onCheckedChange={(checked) => toggleType(opt.type, checked === true)}
             />
             <span className="text-sm">{opt.label}</span>
@@ -380,6 +382,9 @@ export function GroupsSection({
             variant="ghost"
             size="sm"
             className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+            // 至少保留一个分组：删到最后一个时禁用（zod 数组 min(1) 兜底）
+            disabled={fields.length <= 1}
+            title={fields.length <= 1 ? "至少保留一个凭据分组" : "删除该分组"}
             onClick={() => remove(index)}
           >
             <Trash2 className="size-3.5" />

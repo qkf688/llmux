@@ -65,9 +65,9 @@ httpresp/ / handler/httpx/ / common/ (dataurl, maputil/, bgtask/) / consts/
 - `database`/`importexport` 允许 PRAGMA/VACUUM/`c.File`/事务 SQL 等白名单直连
 - `httpx`：**存在** Strict/Loose 分页与 `BindJSON`，但 handler 仍大量手写 `ShouldBindJSON`——属渐进落地，非已全量统一
 - `common` 不再依赖 Gin（响应已迁 `httpresp`），避免沦为业务垃圾桶
-- **优雅关闭序**（`main.shutdown`）：`srv.Shutdown`（停收新请求 + 等在途，**必须带 timeout**——SSE 回写无 deadline）→ `bgtask.Default().Shutdown`（排空后台写库 goroutine）→ `models.Close()`；顺序不可颠倒，排空前关库会让在途写库任务撞上「DB 已关闭」。注意 ticker 服务的停止由信号 ctx 取消驱动，与「等在途请求」**并行**发生，不在上述三步之内；排空在两者之后
+- **优雅关闭序**（`main.shutdown`）：`srv.Shutdown`（停收新请求 + 等在途，**必须带 timeout**——SSE 回写无 deadline）→ `credwrite.Stop`（Flush 凭据写队列 + 停收，10s 超时，**必须**在此处、`bgtask.Shutdown` 之前）→ `bgtask.Default().Shutdown`（排空后台写库 goroutine）→ `models.Close()`；顺序不可颠倒，排空前关库会让在途写库任务撞上「DB 已关闭」。注意 ticker 服务的停止由信号 ctx 取消驱动，与「等在途请求」**并行**发生，不在上述四步之内；排空在两者之后
 - 关闭的**唯一入口**是取消 `main` 的可取消 ctx：信号与 `ListenAndServe` 启动失败共用此路径，**禁止**在任何分支用 `os.Exit` 旁路 `shutdown`（会硬切已登记的后台写库任务）
-- 容器/编排部署**必须**把宽限期设到大于关闭预算（`serverShutdownTimeout` + `bgtaskDrainTimeout`）：compose `stop_grace_period`、k8s `terminationGracePeriodSeconds`；否则进程在排空完成前被 SIGKILL，优雅关闭形同虚设
+- 容器/编排部署**必须**把宽限期设到大于关闭预算（`serverShutdownTimeout` + 2×`bgtaskDrainTimeout`，当前 30s+10s+10s）：compose `stop_grace_period`、k8s `terminationGracePeriodSeconds`；否则进程在排空完成前被 SIGKILL，优雅关闭形同虚设
 - **禁止**用裸 `go f(context.Background())` 起会写库的后台 goroutine；**必须**经 `bgtask.Go` 登记。请求内且已用 `sync.WaitGroup` 等待完成的 goroutine 例外（由 `srv.Shutdown` 覆盖）
 - 前端静态：`//go:embed webui/dist`，`NoRoute` 对非 `/api` `/v1` 的 GET 回 `index.html`
 

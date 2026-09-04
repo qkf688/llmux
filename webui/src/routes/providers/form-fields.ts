@@ -1,3 +1,4 @@
+import { SUPPORTED_TYPE_OPTIONS } from "./form-schema";
 import type { ProviderFormValues } from "./form-schema";
 
 export type ProviderExtraFieldName = "version" | "beta" | "auth_type";
@@ -56,13 +57,45 @@ export function hasProviderExtraFields(type: string): boolean {
   return getProviderExtraFields(type).length > 0;
 }
 
-/** 将 schema 中的额外字段写入 config 对象 */
+/**
+ * 按「主类型 + 已勾选协议」合并激活的额外字段（按字段名去重）。
+ * 主类型决定了 providers.New 分发，但协议端点按端点协议实例化 provider——
+ * 主类型是 openai、勾选 anthropic 协议时，anthropic 端点同样消费 config 的
+ * version/beta/auth_type，因此这些字段的显示与写入不能只看 type。
+ * protocols → type 反查复用 SUPPORTED_TYPE_OPTIONS（type↔protocol 一一对应），
+ * 不另维护映射表避免漂移。
+ */
+export function getActiveProviderExtras(
+  type: string,
+  protocols: string[] | undefined,
+): ProviderExtraField[] {
+  const activeTypes = new Set<string>();
+  if (type) {
+    activeTypes.add(type);
+  }
+  for (const protocol of protocols ?? []) {
+    const option = SUPPORTED_TYPE_OPTIONS.find((o) => o.protocol === protocol);
+    if (option) {
+      activeTypes.add(option.type);
+    }
+  }
+  const fields = new Map<string, ProviderExtraField>();
+  for (const t of activeTypes) {
+    for (const field of providerTypeExtras[t] ?? []) {
+      fields.set(field.name, field);
+    }
+  }
+  return [...fields.values()];
+}
+
+/** 将 schema 中的额外字段（主类型 + 已勾选协议激活的部分）写入 config 对象 */
 export function applyExtraFieldsToConfig(
   type: string,
+  protocols: string[] | undefined,
   values: ProviderFormValues,
   config: Record<string, unknown>,
 ): void {
-  for (const field of getProviderExtraFields(type)) {
+  for (const field of getActiveProviderExtras(type, protocols)) {
     const raw = values[field.name];
     const value =
       typeof raw === "string" && raw.trim() !== ""

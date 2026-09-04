@@ -61,6 +61,44 @@ describe("buildConfigFromForm - api_key 治理（AC-2）", () => {
   });
 });
 
+describe("buildConfigFromForm - 协议驱动的 adapter 字段", () => {
+  it("主类型 openai 但勾选 anthropic：config 写入 anthropic 的 version/beta/auth_type", () => {
+    const config = JSON.parse(
+      buildConfigFromForm(
+        formValues({
+          type: "openai",
+          protocols: ["openai", "anthropic"],
+          version: "2023-06-01",
+          beta: "beta-1",
+          auth_type: "bearer",
+        })
+      )
+    );
+    // anthropic 端点按端点协议实例化 provider，读 config.version/beta/auth_type——
+    // 只要勾选 anthropic 协议就必须能配置并写入，与主类型无关
+    expect(config.version).toBe("2023-06-01");
+    expect(config.beta).toBe("beta-1");
+    expect(config.auth_type).toBe("bearer");
+  });
+
+  it("未勾选 anthropic：config 不含 anthropic adapter 字段（不泄漏）", () => {
+    const config = JSON.parse(
+      buildConfigFromForm(
+        formValues({
+          type: "openai",
+          protocols: ["openai"],
+          version: "2023-06-01",
+          beta: "beta-1",
+          auth_type: "bearer",
+        })
+      )
+    );
+    expect(config).not.toHaveProperty("version");
+    expect(config).not.toHaveProperty("beta");
+    expect(config).not.toHaveProperty("auth_type");
+  });
+});
+
 describe("buildProviderPayload - 结构化 DTO（AC-2）", () => {
   it("payload 携带 protocols/endpoints/groups，config 内嵌无 api_key", () => {
     const payload = buildProviderPayload(formValues(), { name: "p", type: "openai" });

@@ -25,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import type { Provider, ProviderTemplate } from "@/lib/api";
 import type { ProviderFormValues } from "../../form-schema";
-import { getProviderExtraFields } from "../../form-fields";
+import { getActiveProviderExtras } from "../../form-fields";
 import { EndpointsSection, GroupsSection, SupportTypesField } from "./provider-schedule-fields";
 
 interface ProviderFormDialogProps {
@@ -37,6 +37,8 @@ interface ProviderFormDialogProps {
   form: UseFormReturn<ProviderFormValues>;
   providerTemplates: ProviderTemplate[];
   watchedType: string;
+  /** 已勾选的出站协议：与主类型共同决定 adapter 额外字段的激活（如主类型 openai + 勾选 anthropic） */
+  watchedProtocols: string[] | undefined;
   onSubmit: (values: ProviderFormValues) => void | Promise<void>;
 }
 
@@ -48,9 +50,10 @@ export function ProviderFormDialog({
   form,
   providerTemplates,
   watchedType,
+  watchedProtocols,
   onSubmit,
 }: ProviderFormDialogProps) {
-  const extraFields = getProviderExtraFields(watchedType);
+  const extraFields = getActiveProviderExtras(watchedType, watchedProtocols);
 
   // 号池详情子弹窗：state 持在表单层（生命周期跟表单走，不经 page）；
   // 嵌套模式照 ImportCredentialsDialog——子弹窗渲染在 Dialog 根内兄弟位置，父关闭时重置
@@ -121,40 +124,52 @@ export function ProviderFormDialog({
 
               {/* 顶层 API Key 已废除（S6）：凭据在分组内联 keys / 关联号池中维护 */}
 
-              {/* type schema 驱动的额外字段（如 anthropic version/beta/auth_type） */}
-              {extraFields.map((extra) => (
-                <FormField
-                  key={extra.name}
-                  control={form.control}
-                  name={extra.name}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{extra.label}</FormLabel>
-                      {extra.kind === "select" ? (
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="请选择" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {(extra.options ?? []).map((opt) => (
-                              <SelectItem key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <FormControl>
-                          <Input {...field} placeholder={extra.placeholder} />
-                        </FormControl>
+              {/* 主类型 / 已勾选协议激活的 adapter 额外字段（如 anthropic version/beta/auth_type）。
+                  协议端点按端点协议实例化 provider，只要勾选 anthropic 协议，这些字段就对
+                  anthropic 端点生效——即使主类型是 openai（config 字段为 provider 级共享）。 */}
+              {extraFields.length > 0 && (
+                <div className="space-y-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Anthropic 协议配置</h3>
+                    <p className="text-xs text-muted-foreground">
+                      作用于 Anthropic 协议端点（版本 / Beta / 认证方式）
+                    </p>
+                  </div>
+                  {extraFields.map((extra) => (
+                    <FormField
+                      key={extra.name}
+                      control={form.control}
+                      name={extra.name}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{extra.label}</FormLabel>
+                          {extra.kind === "select" ? (
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="请选择" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {(extra.options ?? []).map((opt) => (
+                                  <SelectItem key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <FormControl>
+                              <Input {...field} placeholder={extra.placeholder} />
+                            </FormControl>
+                          )}
+                          <FormMessage />
+                        </FormItem>
                       )}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              ))}
+                    />
+                  ))}
+                </div>
+              )}
 
               <FormField
                 control={form.control}

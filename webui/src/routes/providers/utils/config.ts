@@ -32,7 +32,7 @@ export function buildConfigFromForm(values: ProviderFormValues): string {
     base_url: values.base_url,
   };
 
-  applyExtraFieldsToConfig(values.type, values, baseConfig);
+  applyExtraFieldsToConfig(values.type, values.protocols, values, baseConfig);
 
   if (customModels.length > 0) {
     baseConfig.custom_models = customModels;

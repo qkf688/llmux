@@ -166,6 +166,7 @@ export function useProvidersPage() {
   });
 
   const watchedType = form.watch("type");
+  const watchedProtocols = form.watch("protocols");
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -354,6 +355,7 @@ export function useProvidersPage() {
     form,
     providerTemplates,
     watchedType,
+    watchedProtocols,
     onSubmit: handleSubmitProvider,
   };
 

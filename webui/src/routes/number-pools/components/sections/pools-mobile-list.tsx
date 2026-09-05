@@ -12,10 +12,10 @@ type PoolsMobileListProps = {
   pools: PoolListItem[];
   onOpenDetail: (pool: PoolListItem) => void;
   onEdit: (pool: PoolListItem) => void;
-  onDelete: (poolId: number) => void;
+  onRequestDelete: (pool: PoolListItem) => void;
 };
 
-export function PoolsMobileList({ pools, onOpenDetail, onEdit, onDelete }: PoolsMobileListProps) {
+export function PoolsMobileList({ pools, onOpenDetail, onEdit, onRequestDelete }: PoolsMobileListProps) {
   return (
     <StaggerList className="sm:hidden flex-1 min-h-0 overflow-y-auto px-2 py-2 divide-y divide-border">
       {pools.map((pool) => {
@@ -53,7 +53,7 @@ export function PoolsMobileList({ pools, onOpenDetail, onEdit, onDelete }: Pools
                 variant="ghost"
                 size="sm"
                 className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                onClick={() => onDelete(pool.ID)}
+                onClick={() => onRequestDelete(pool)}
               >
                 删除
               </Button>

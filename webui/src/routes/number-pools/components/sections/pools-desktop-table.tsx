@@ -20,7 +20,7 @@ type PoolsDesktopTableProps = {
   pools: PoolListItem[];
   onOpenDetail: (pool: PoolListItem) => void;
   onEdit: (pool: PoolListItem) => void;
-  onDelete: (poolId: number) => void;
+  onRequestDelete: (pool: PoolListItem) => void;
 };
 
 function HealthSummary({ pool }: { pool: PoolListItem }) {
@@ -37,7 +37,7 @@ function HealthSummary({ pool }: { pool: PoolListItem }) {
   );
 }
 
-export function PoolsTableDesktop({ pools, onOpenDetail, onEdit, onDelete }: PoolsDesktopTableProps) {
+export function PoolsTableDesktop({ pools, onOpenDetail, onEdit, onRequestDelete }: PoolsDesktopTableProps) {
   return (
     <div className="hidden sm:block w-full overflow-x-auto">
       <Table className="min-w-[860px]">
@@ -100,7 +100,7 @@ export function PoolsTableDesktop({ pools, onOpenDetail, onEdit, onDelete }: Poo
                     variant="ghost"
                     size="sm"
                     className="h-8 px-2 text-destructive hover:text-destructive"
-                    onClick={() => onDelete(pool.ID)}
+                    onClick={() => onRequestDelete(pool)}
                   >
                     <Trash2 className="size-4" />
                   </Button>

@@ -10,7 +10,8 @@ type PoolsListSectionProps = {
   isError?: boolean;
   onOpenDetail: (pool: PoolListItem) => void;
   onEdit: (pool: PoolListItem) => void;
-  onDelete: (poolId: number) => void;
+  /** 请求删除（弹确认框），不直接删除 */
+  onRequestDelete: (pool: PoolListItem) => void;
 };
 
 export function PoolsListSection({
@@ -19,7 +20,7 @@ export function PoolsListSection({
   isError = false,
   onOpenDetail,
   onEdit,
-  onDelete,
+  onRequestDelete,
 }: PoolsListSectionProps) {
   return (
     <TableCard>
@@ -37,8 +38,8 @@ export function PoolsListSection({
         </div>
       ) : (
         <div className="flex h-full flex-col">
-          <PoolsTableDesktop pools={pools} onOpenDetail={onOpenDetail} onEdit={onEdit} onDelete={onDelete} />
-          <PoolsMobileList pools={pools} onOpenDetail={onOpenDetail} onEdit={onEdit} onDelete={onDelete} />
+          <PoolsTableDesktop pools={pools} onOpenDetail={onOpenDetail} onEdit={onEdit} onRequestDelete={onRequestDelete} />
+          <PoolsMobileList pools={pools} onOpenDetail={onOpenDetail} onEdit={onEdit} onRequestDelete={onRequestDelete} />
         </div>
       )}
     </TableCard>

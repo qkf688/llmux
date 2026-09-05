@@ -2,6 +2,7 @@ import { useNumberPoolsPage } from "./hooks/use-number-pools-page";
 import { PoolsHeader } from "./components/sections/pools-header";
 import { PoolsListSection } from "./components/sections/pools-list-section";
 import { PoolFormDialog } from "./components/dialogs/pool-form-dialog";
+import { PoolDeleteDialog } from "./components/dialogs/pool-delete-dialog";
 import { PoolDetailDialog } from "@/components/number-pools/pool-detail-dialog";
 
 export default function NumberPoolsPage() {
@@ -16,7 +17,7 @@ export default function NumberPoolsPage() {
         isError={page.isError}
         onOpenDetail={page.openDetail}
         onEdit={page.openEditForm}
-        onDelete={(id) => void page.handlePoolDelete(id)}
+        onRequestDelete={page.requestPoolDelete}
       />
       <PoolFormDialog
         open={page.formOpen}
@@ -24,6 +25,12 @@ export default function NumberPoolsPage() {
         pool={page.formPool}
         onSaved={page.handlePoolSaved}
         isSaving={page.isSaving}
+      />
+      <PoolDeleteDialog
+        open={page.deleteOpen}
+        onOpenChange={page.setDeleteOpen}
+        poolName={page.deletePoolName ?? ""}
+        onConfirm={() => void page.handlePoolDelete(page.deletePoolId ?? 0)}
       />
       <PoolDetailDialog
         open={page.detailOpen}

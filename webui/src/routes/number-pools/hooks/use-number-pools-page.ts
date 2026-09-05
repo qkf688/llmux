@@ -23,6 +23,8 @@ export function useNumberPoolsPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [formPool, setFormPool] = useState<PoolListItem | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<PoolListItem | null>(null);
 
   // 列表 invalidate 后同步详情弹窗的 KeyCount/StatusCounts/ReferencedBy
   const detailPool =
@@ -55,6 +57,17 @@ export function useNumberPoolsPage() {
     if (!open) setDetailPoolId(null);
   }, []);
 
+  /** 请求删除：记录目标并打开确认弹窗（真正删除在 handlePoolDelete 中执行） */
+  const requestPoolDelete = useCallback((pool: PoolListItem) => {
+    setDeleteTarget(pool);
+    setDeleteOpen(true);
+  }, []);
+
+  const handleDeleteOpenChange = useCallback((open: boolean) => {
+    setDeleteOpen(open);
+    if (!open) setDeleteTarget(null);
+  }, []);
+
   const handlePoolSaved = useCallback(
     async (values: { name: string; note?: string }) => {
       try {
@@ -81,6 +94,8 @@ export function useNumberPoolsPage() {
       try {
         await deletePool.mutateAsync(poolId);
         toast.success("号池已删除");
+        setDeleteOpen(false);
+        setDeleteTarget(null);
         if (detailPoolId === poolId) {
           setDetailOpen(false);
           setDetailPoolId(null);
@@ -107,6 +122,11 @@ export function useNumberPoolsPage() {
     openEditForm,
     openDetail,
     handlePoolSaved,
+    deleteOpen,
+    setDeleteOpen: handleDeleteOpenChange,
+    deletePoolId: deleteTarget?.ID ?? null,
+    deletePoolName: deleteTarget?.Name,
+    requestPoolDelete,
     handlePoolDelete,
     isSaving: createPool.isPending || updatePool.isPending,
   };

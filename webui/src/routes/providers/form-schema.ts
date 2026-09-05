@@ -34,6 +34,9 @@ export const providerFormGroupSchema = z.object({
   models: z.string(),
   source: z.enum(["inline", "pool"]),
   inlineKeys: z.string(),
+  /** 回填时该组有凭据但全部无法解密显示的条数（后端详情逐条回空串），仅 detailToFormValues 填充。
+   * 必须显式传递：[""].join("\n") 退化为空串，与「全新空组」无法从 value 区分（review W1'） */
+  inlineKeysFailedCount: z.number().optional(),
   poolId: z.string(),
 });
 

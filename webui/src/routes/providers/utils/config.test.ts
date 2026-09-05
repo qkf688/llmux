@@ -145,6 +145,35 @@ describe("buildProviderPayload - 结构化 DTO（AC-2）", () => {
     );
     expect(payload.groups?.[0]).toMatchObject({ source: "inline", inline_keys: [] });
   });
+
+  it("inline 组提交按换行保行边界：行内逗号/空格不二次拆分（分隔符只在批量粘贴入口拆散）", () => {
+    const payload = buildProviderPayload(
+      formValues({
+        groups: [
+          {
+            name: "默认组",
+            weight: 1,
+            models: "",
+            source: "inline",
+            inlineKeys: "sk-a, sk-b\nsk-c sk-d",
+            poolId: "",
+          },
+        ],
+      })
+    );
+    expect(payload.groups?.[0]).toMatchObject({ inline_keys: ["sk-a, sk-b", "sk-c sk-d"] });
+  });
+
+  it("inline 组重复 key 原样保留提交（去重提示在 UI，落库去重由后端兜底）", () => {
+    const payload = buildProviderPayload(
+      formValues({
+        groups: [
+          { name: "默认组", weight: 1, models: "", source: "inline", inlineKeys: "sk-a\nsk-a", poolId: "" },
+        ],
+      })
+    );
+    expect(payload.groups?.[0]).toMatchObject({ inline_keys: ["sk-a", "sk-a"] });
+  });
 });
 
 describe("detailToFormValues - 详情回填（AC-1/AC-5）", () => {
@@ -183,6 +212,48 @@ describe("detailToFormValues - 详情回填（AC-1/AC-5）", () => {
     expect(values.groups).toEqual([
       { name: "池组", weight: 3, models: "gpt-4o", source: "pool", inlineKeys: "", poolId: "9" },
     ]);
+  });
+
+  it("解密失败组（N=1）：InlineKeys 全空串时带出 failedCount，防 join 退化空串与空组混淆", () => {
+    const values = detailToFormValues(
+      detail({
+        Groups: [
+          {
+            ID: 23,
+            ProviderID: 1,
+            Name: "失败组",
+            Weight: 1,
+            Models: "",
+            Source: "inline",
+            InlineKeys: [""],
+            PoolID: null,
+          },
+        ],
+      })
+    );
+
+    expect(values.groups?.[0]).toMatchObject({ source: "inline", inlineKeys: "", inlineKeysFailedCount: 1 });
+  });
+
+  it("解密失败组（N=3）：failedCount 为凭据条数，不为空行数", () => {
+    const values = detailToFormValues(
+      detail({
+        Groups: [
+          {
+            ID: 24,
+            ProviderID: 1,
+            Name: "失败组三",
+            Weight: 1,
+            Models: "",
+            Source: "inline",
+            InlineKeys: ["", "", ""],
+            PoolID: null,
+          },
+        ],
+      })
+    );
+
+    expect(values.groups?.[0]).toMatchObject({ inlineKeys: "\n\n", inlineKeysFailedCount: 3 });
   });
 
   it("anthropic 型：version/beta/auth_type 从 config 解析回填", () => {

@@ -1,6 +1,7 @@
 import type { ProviderDetail, ProviderWritePayload } from "@/lib/api";
 import type { ProviderFormValues } from "../form-schema";
 import { applyExtraFieldsToConfig } from "../form-fields";
+import { inlineKeysToArray } from "./inline-keys";
 
 type ParsedProviderConfig = {
   base_url: string;
@@ -68,7 +69,9 @@ export function buildProviderPayload(values: ProviderFormValues, provider: Provi
           weight: g.weight,
           models: g.models,
           source: "inline" as const,
-          inline_keys: parseCustomModelsInput(g.inlineKeys),
+          // 按换行拆回行边界（inline-keys-field 内部行 join("\n")）；逗号/空格已在批量粘贴入口拆散，
+          // 提交不做二次拆分，避免破坏单行显式内容
+          inline_keys: inlineKeysToArray(g.inlineKeys),
           pool_id: null,
         }
   );
@@ -125,10 +128,22 @@ export function detailToFormValues(detail: ProviderDetail): ProviderFormValues {
     model_filter_enabled: detail.ModelFilterEnabled ?? false,
     protocols: detail.Protocols?.length ? detail.Protocols : [],
     endpoints: (detail.Endpoints ?? []).map((e) => ({ protocol: e.Protocol, url: e.URL, enabled: e.Enabled })),
-    groups: (detail.Groups ?? []).map((g) =>
-      g.Source === "pool"
-        ? { name: g.Name, weight: g.Weight, models: g.Models, source: "pool" as const, inlineKeys: "", poolId: g.PoolID != null ? String(g.PoolID) : "" }
-        : { name: g.Name, weight: g.Weight, models: g.Models, source: "inline" as const, inlineKeys: g.InlineKeys.join("\n"), poolId: "" }
-    ),
+    groups: (detail.Groups ?? []).map((g) => {
+      if (g.Source === "pool") {
+        return { name: g.Name, weight: g.Weight, models: g.Models, source: "pool" as const, inlineKeys: "", poolId: g.PoolID != null ? String(g.PoolID) : "" };
+      }
+      // 解密失败的全部凭据在详情里是空串条目：区分「全失败（N>0 条）」与「真没 key」必须依赖数组长度，
+      // join 会把 [""] 压成空串吞掉标记——失败条数单独带出，供字段组件出警示条
+      const allFailed = g.InlineKeys.length > 0 && g.InlineKeys.every((k) => k === "");
+      return {
+        name: g.Name,
+        weight: g.Weight,
+        models: g.Models,
+        source: "inline" as const,
+        inlineKeys: g.InlineKeys.join("\n"),
+        ...(allFailed ? { inlineKeysFailedCount: g.InlineKeys.length } : {}),
+        poolId: "",
+      };
+    }),
   };
 }

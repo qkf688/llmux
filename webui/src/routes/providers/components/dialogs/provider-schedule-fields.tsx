@@ -24,8 +24,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { usePoolOptions } from "../../hooks/use-pool-options";
+import { InlineKeysField } from "./inline-keys-field";
 import { PROTOCOL_LABEL, SUPPORTED_TYPE_OPTIONS, type ProviderFormGroup, type ProviderFormValues } from "../../form-schema";
 
 /**
@@ -230,6 +230,7 @@ function GroupCard({
 }) {
   const { control } = useFormContext<ProviderFormValues>();
   const source = useWatch({ control, name: `groups.${index}.source` });
+  const inlineKeysFailedCount = useWatch({ control, name: `groups.${index}.inlineKeysFailedCount` });
   const pools = usePoolOptions();
 
   return (
@@ -321,10 +322,11 @@ function GroupCard({
           name={`groups.${index}.inlineKeys`}
           render={({ field }) => (
             <FormItem className="space-y-1">
-              <FormLabel>API Keys（每行一个，可批量粘贴）</FormLabel>
-              <FormControl>
-                <Textarea {...field} rows={2} placeholder={"sk-...\nsk-..."} className="font-mono text-xs" />
-              </FormControl>
+              <InlineKeysField
+                value={field.value ?? ""}
+                onChange={field.onChange}
+                failedCount={inlineKeysFailedCount}
+              />
               <FormMessage />
             </FormItem>
           )}

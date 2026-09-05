@@ -1,23 +1,29 @@
-import { Plus } from "lucide-react";
+import { KeyRound, Plus } from "lucide-react";
+
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 
 type PoolsHeaderProps = {
+  /** 当前号池数量，用于页头副标题 */
+  poolCount: number;
   onCreate: () => void;
 };
 
-export function PoolsHeader({ onCreate }: PoolsHeaderProps) {
+/**
+ * 号池页头：标题栏 + 新建按钮，统一走 PageHeader 配方（与其他管理页一致）。
+ */
+export function PoolsHeader({ poolCount, onCreate }: PoolsHeaderProps) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="space-y-1">
-        <h1 className="text-xl font-semibold tracking-tight">号池</h1>
-        <p className="text-sm text-muted-foreground">
-          凭据池统一管理：批量导入 / 冷却与错误状态可视化 / 分组引用（设计定案 · 号池维度）
-        </p>
-      </div>
-      <Button onClick={onCreate}>
-        <Plus className="size-4" />
-        新建号池
-      </Button>
-    </div>
+    <PageHeader
+      icon={KeyRound}
+      title="号池管理"
+      subtitle={`共 ${poolCount} 个号池`}
+      actions={
+        <Button size="sm" onClick={onCreate}>
+          <Plus className="size-4" />
+          新建号池
+        </Button>
+      }
+    />
   );
 }

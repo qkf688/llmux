@@ -13,6 +13,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -244,20 +251,31 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
             />
-            <select
-              className="flex h-10 w-36 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            <Select
               value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value as "all" | CredentialStatus);
+              onValueChange={(v) => {
+                setStatusFilter(v as "all" | CredentialStatus);
                 setPage(1);
               }}
             >
-              {STATUS_FILTER_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {s === "all" ? "全部状态" : CREDENTIAL_STATUS_LABEL[s]}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="w-36" aria-label="按状态筛选">
+                <SelectValue placeholder="全部状态" />
+              </SelectTrigger>
+              <SelectContent align="start" className="min-w-[9rem]">
+                {STATUS_FILTER_OPTIONS.map((s) =>
+                  s === "all" ? (
+                    <SelectItem key={s} value="all">
+                      全部状态
+                    </SelectItem>
+                  ) : (
+                    <SelectItem key={s} value={s}>
+                      <span className={`size-2 rounded-full ${CREDENTIAL_STATUS_DOT_CLS[s]}`} />
+                      {CREDENTIAL_STATUS_LABEL[s]}
+                    </SelectItem>
+                  ),
+                )}
+              </SelectContent>
+            </Select>
             {selectedIds.size > 0 && (
               <div className="flex items-center gap-1">
                 <span className="text-xs text-muted-foreground">已选 {selectedIds.size} 条</span>

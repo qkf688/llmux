@@ -40,6 +40,10 @@ import type { CredentialStatus, PoolListItem } from "@/lib/api";
 import { toErrorMessage } from "@/lib/errors";
 import { ImportCredentialsDialog } from "./import-credentials-dialog";
 import {
+  CredentialDeleteDialog,
+  type CredentialDeleteTarget,
+} from "./credential-delete-dialog";
+import {
   COOLDOWN_BADGE_CLS,
   CREDENTIAL_STATUS_BADGE_CLS,
   CREDENTIAL_STATUS_DOT_CLS,
@@ -65,6 +69,7 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
   const [statusFilter, setStatusFilter] = useState<"all" | CredentialStatus>("all");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [importOpen, setImportOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<CredentialDeleteTarget | null>(null);
   const [page, setPage] = useState(1);
 
   useEffect(() => {
@@ -73,6 +78,7 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
     setStatusFilter("all");
     setSelectedIds(new Set());
     setImportOpen(false);
+    setDeleteTarget(null);
     setPage(1);
   }, [pool?.ID, open]);
 
@@ -175,6 +181,18 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
       toast.success("已删除凭据");
     } catch (err) {
       toast.error(`删除失败: ${toErrorMessage(err)}`);
+    }
+  };
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    // 确认后先关弹窗，删除动作的 toast 反馈由 handleDelete 负责
+    setDeleteTarget(null);
+    if (target.kind === "single") {
+      void handleDeleteCredential(target.id);
+    } else {
+      void applyBulk("delete");
     }
   };
 
@@ -285,7 +303,7 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
                 <Button size="sm" variant="outline" onClick={() => void applyBulk("disabled")}>
                   停用
                 </Button>
-                <Button size="sm" variant="destructive" onClick={() => void applyBulk("delete")}>
+                <Button size="sm" variant="destructive" onClick={() => setDeleteTarget({ kind: "bulk", count: selectedIds.size })}>
                   删除
                 </Button>
               </div>
@@ -372,7 +390,9 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
                               variant="ghost"
                               size="sm"
                               className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                              onClick={() => void handleDeleteCredential(cred.ID)}
+                              onClick={() =>
+                                setDeleteTarget({ kind: "single", id: cred.ID, keyMasked: cred.KeyMasked })
+                              }
                             >
                               删除
                             </Button>
@@ -420,7 +440,9 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
                           variant="ghost"
                           size="sm"
                           className="h-6 px-2 text-[11px] text-destructive hover:text-destructive"
-                          onClick={() => void handleDeleteCredential(cred.ID)}
+                          onClick={() =>
+                            setDeleteTarget({ kind: "single", id: cred.ID, keyMasked: cred.KeyMasked })
+                          }
                         >
                           删除
                         </Button>
@@ -476,6 +498,14 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
           </div>
         </div>
       </DialogContent>
+      <CredentialDeleteDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        target={deleteTarget}
+        onConfirm={confirmDelete}
+      />
       <ImportCredentialsDialog
         open={importOpen}
         onOpenChange={setImportOpen}

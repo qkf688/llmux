@@ -139,11 +139,16 @@ export async function deleteCredential(poolId: number, credId: number): Promise<
   });
 }
 
+/** 单条凭据明文拉取（受控端点）：号池详情「显示 / 复制」动作才触发。
+ *  `cache: "no-store"` 与服务端同名响应头构成纵深防御：明文不得进浏览器 HTTP 缓存——
+ *  前端 state 清得再干净，缓存文件里的响应体仍然在。 */
 export async function getCredentialRaw(
   poolId: number,
   credId: number,
 ): Promise<{ key: string }> {
-  return apiRequest<{ key: string }>(`/pools/${poolId}/credentials/${credId}/raw`);
+  return apiRequest<{ key: string }>(`/pools/${poolId}/credentials/${credId}/raw`, {
+    cache: "no-store",
+  });
 }
 
 export async function batchUpdateCredentialStatus(

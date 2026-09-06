@@ -28,6 +28,15 @@ func SuccessRaw(c *gin.Context, data any) {
 	c.JSON(http.StatusOK, data)
 }
 
+// SuccessNoStore 成功响应 + 禁止任何缓存层留存（受控明文端点专用）。
+// 明文一旦落进浏览器磁盘缓存或中间代理，前端「翻页即作废 / 隐藏即删 / 关弹窗清空」的
+// 生命周期守卫就形同虚设——缓存里的响应体比内存 state 活得久得多，且不受前端管辖。
+// 与 Success 合并成一个函数，是为了让「返回明文」和「禁缓存」不可能只做一半。
+func SuccessNoStore(c *gin.Context, data any) {
+	c.Header("Cache-Control", "no-store")
+	Success(c, data)
+}
+
 // SuccessWithMessage 带消息的成功响应
 func SuccessWithMessage(c *gin.Context, message string, data any) {
 	c.JSON(http.StatusOK, Response{

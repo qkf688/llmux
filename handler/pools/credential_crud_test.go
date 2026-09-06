@@ -49,7 +49,8 @@ func getCredentialViaHandler(t *testing.T, poolID, credID uint) (string, int) {
 	return w.Body.String(), w.Code
 }
 
-func getCredentialRawViaHandler(t *testing.T, poolID, credID uint) (string, int) {
+// getCredentialRawRecorder 返回完整 recorder：明文端点除 body/code 外还要断言响应头（Cache-Control）
+func getCredentialRawRecorder(t *testing.T, poolID, credID uint) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -57,6 +58,12 @@ func getCredentialRawViaHandler(t *testing.T, poolID, credID uint) (string, int)
 	c.Params = gin.Params{{Key: "id", Value: strconv.FormatUint(uint64(poolID), 10)}, {Key: "credId", Value: strconv.FormatUint(uint64(credID), 10)}}
 	c.Request = httptest.NewRequest("GET", "/pools/"+strconv.FormatUint(uint64(poolID), 10)+"/credentials/"+strconv.FormatUint(uint64(credID), 10)+"/raw", nil)
 	GetCredentialRaw(c)
+	return w
+}
+
+func getCredentialRawViaHandler(t *testing.T, poolID, credID uint) (string, int) {
+	t.Helper()
+	w := getCredentialRawRecorder(t, poolID, credID)
 	return w.Body.String(), w.Code
 }
 
@@ -240,6 +247,22 @@ func TestGetCredentialRaw_Decrypt(t *testing.T) {
 	rawBody2, _ := getCredentialRawViaHandler(t, poolB, credID)
 	if gjson.Get(rawBody2, "code").Int() != 404 {
 		t.Fatalf("raw越池应404 body=%s", rawBody2)
+	}
+}
+
+// TestGetCredentialRaw_NoStore 覆盖：明文响应必须禁缓存。明文一旦落进浏览器磁盘缓存或
+// 中间代理，前端「翻页即作废 / 隐藏即删 / 关弹窗清空」的生命周期守卫就形同虚设——
+// 缓存里的响应体比前端内存活得久，且完全不受前端管辖。
+func TestGetCredentialRaw_NoStore(t *testing.T) {
+	testsupport.InitTestDB(t)
+	setupCipherForCredTest(t)
+	poolID := createPoolAndGetID(t, "raw禁缓存池")
+	body, _ := createCredentialViaHandler(t, poolID, `{"key":"sk-nostore-ABCD1234"}`)
+	credID := uint(gjson.Get(body, "data.ID").Uint())
+
+	w := getCredentialRawRecorder(t, poolID, credID)
+	if got := w.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control=%q want no-store body=%s", got, w.Body.String())
 	}
 }
 

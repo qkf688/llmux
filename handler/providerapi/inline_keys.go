@@ -14,7 +14,8 @@ import (
 // GetGroupInlineKeys 内联组明文查看（受控端点）：解密返回该组全部凭据明文，每项带
 // 凭据 id 供前端按 id 归位（不依赖数组顺序），供编辑弹窗「显示」动作替换掩码行。
 // 明文永不出常规详情响应——与号池 GetCredentialRaw 同一受控语义（JWT 管理域信任级 +
-// 显式用户动作才拉取）。
+// 显式用户动作才拉取）。响应带 `Cache-Control: no-store`：明文落进浏览器磁盘缓存或
+// 中间代理就绕过了前端的生命周期守卫。
 // GET /api/providers/:id/groups/:groupId/inline-keys/raw
 func GetGroupInlineKeys(c *gin.Context) {
 	id, ok := httpx.ParseUintParamAllowZero(c, "id")
@@ -79,5 +80,5 @@ func GetGroupInlineKeys(c *gin.Context) {
 		keys = append(keys, InlineKeyRawItem{ID: cred.ID, Key: plain})
 	}
 
-	httpresp.Success(c, InlineKeysRawData{Keys: keys})
+	httpresp.SuccessNoStore(c, InlineKeysRawData{Keys: keys})
 }

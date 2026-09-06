@@ -152,7 +152,8 @@ func GetCredential(c *gin.Context) {
 	httpresp.Success(c, credentialToListItem(*cred))
 }
 
-// GetCredentialRaw 明文查看（受控端点，解密返回明文 key）。
+// GetCredentialRaw 明文查看（受控端点，解密返回明文 key）。响应带 `Cache-Control: no-store`：
+// 明文落进浏览器磁盘缓存或中间代理就绕过了前端「翻页即作废 / 隐藏即删」的生命周期守卫。
 // GET /api/pools/:id/credentials/:credId/raw
 func GetCredentialRaw(c *gin.Context) {
 	poolID, ok := httpx.ParseUintParamAllowZero(c, "id")
@@ -179,7 +180,7 @@ func GetCredentialRaw(c *gin.Context) {
 		httpresp.InternalServerError(c, "Failed to decrypt key")
 		return
 	}
-	httpresp.Success(c, CredentialRawData{Key: plain})
+	httpresp.SuccessNoStore(c, CredentialRawData{Key: plain})
 }
 
 // UpdateCredential 更新单条凭据（note 可清空，status 需合法）。

@@ -495,7 +495,8 @@ func TestStructured_UpdateRejectsHalfChildren(t *testing.T) {
 	}
 }
 
-func getGroupInlineKeysRawViaHandler(t *testing.T, providerID, groupID uint) (string, int) {
+// getGroupInlineKeysRawRecorder 返回完整 recorder：明文端点除 body/code 外还要断言响应头
+func getGroupInlineKeysRawRecorder(t *testing.T, providerID, groupID uint) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -506,11 +507,17 @@ func getGroupInlineKeysRawViaHandler(t *testing.T, providerID, groupID uint) (st
 	}
 	c.Request = httptest.NewRequest("GET", "/providers/:id/groups/:groupId/inline-keys/raw", nil)
 	GetGroupInlineKeys(c)
+	return w
+}
+
+func getGroupInlineKeysRawViaHandler(t *testing.T, providerID, groupID uint) (string, int) {
+	t.Helper()
+	w := getGroupInlineKeysRawRecorder(t, providerID, groupID)
 	return w.Body.String(), w.Code
 }
 
 // TestStructured_GroupRawRevealsPlaintext 锁定受控明文端点：详情只出掩码，raw 显式
-// 拉取才返回明文 keys（顺序与详情一致，按凭据 id ASC）；明文不出常规响应。
+// 拉取才返回明文 keys（顺序与详情一致，按凭据 id ASC）；明文不出常规响应；响应禁缓存。
 func TestStructured_GroupRawRevealsPlaintext(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupProviderCrypto(t)
@@ -532,7 +539,8 @@ func TestStructured_GroupRawRevealsPlaintext(t *testing.T) {
 		}
 	}
 
-	body, code := getGroupInlineKeysRawViaHandler(t, id, groupID)
+	w := getGroupInlineKeysRawRecorder(t, id, groupID)
+	body, code := w.Body.String(), w.Code
 	if code != 200 {
 		t.Fatalf("raw status=%d body=%s", code, body)
 	}
@@ -541,6 +549,10 @@ func TestStructured_GroupRawRevealsPlaintext(t *testing.T) {
 	}
 	if gjson.Get(body, "data.keys.0.id").Uint() == 0 {
 		t.Fatalf("raw item missing credential id (前端按 id 归位依赖它): %s", body)
+	}
+	// 明文响应禁缓存：落进浏览器磁盘缓存或中间代理，前端的明文生命周期守卫就形同虚设
+	if got := w.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control=%q want no-store, body=%s", got, body)
 	}
 }
 

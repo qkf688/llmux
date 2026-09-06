@@ -147,12 +147,17 @@ export interface ProviderInlineKeyRawItem {
   key: string;
 }
 
-/** 内联组明文拉取（受控端点）：「显示」动作才触发；按 id 归位（删掩码行未保存也能显示剩余） */
+/** 内联组明文拉取（受控端点）：「显示」动作才触发；按 id 归位（删掩码行未保存也能显示剩余）。
+ *  `cache: "no-store"` 与服务端同名响应头构成纵深防御：明文不得进浏览器 HTTP 缓存——
+ *  前端 state 清得再干净，缓存文件里的响应体仍然在。 */
 export async function getProviderGroupInlineKeysRaw(
   providerId: number,
   groupId: number,
 ): Promise<{ keys: ProviderInlineKeyRawItem[] }> {
-  return apiRequest<{ keys: ProviderInlineKeyRawItem[] }>(`/providers/${providerId}/groups/${groupId}/inline-keys/raw`);
+  return apiRequest<{ keys: ProviderInlineKeyRawItem[] }>(
+    `/providers/${providerId}/groups/${groupId}/inline-keys/raw`,
+    { cache: "no-store" },
+  );
 }
 
 export async function createProvider(provider: ProviderWritePayload): Promise<ProviderDetail> {

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { testProviderModel, type Provider, type ProviderModel } from "@/lib/api";
 import type { Updater } from "@/stores/core/updater";
-import { copyTextDetailed } from "../utils/clipboard";
+import { copyTextWithToast } from "@/lib/clipboard";
 import { runConcurrentBatch } from "../utils/batch-test";
 import { DEFAULT_BATCH_TEST_PROGRESS, type BatchTestProgress, type ModelTestResult } from "../types";
 
@@ -47,18 +47,7 @@ export function useProviderModelTesting({
   const [upstreamTestAbortController, setUpstreamTestAbortController] = useState<AbortController | null>(null);
 
   const copyModelName = async (modelName: string) => {
-    const result = await copyTextDetailed(modelName, { showManualPrompt: true });
-    if (result.ok) {
-      toast.success(`已复制模型名称: ${modelName}`);
-      return;
-    }
-
-    if (result.method === "manual_prompt") {
-      toast.info("浏览器限制：通过 IP + HTTP 访问时通常无法自动复制，已弹出手动复制窗口；建议改用 HTTPS/域名访问。");
-      return;
-    } else {
-      toast.error("复制失败：当前环境不支持自动复制，请手动复制（建议使用 HTTPS/域名访问）。");
-    }
+    await copyTextWithToast(modelName, `已复制模型名称: ${modelName}`);
   };
 
   const handleTestAllModel = async (modelName: string): Promise<boolean> => {

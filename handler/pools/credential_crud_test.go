@@ -110,7 +110,7 @@ func TestCreateCredential_Success_MaskNoLeak(t *testing.T) {
 	if gjson.Get(body, "data.Key").Exists() || gjson.Get(body, "data.key").Exists() || gjson.Get(body, "data.KeyHash").Exists() {
 		t.Fatalf("不应返回Key/KeyHash body=%s", body)
 	}
-	expected := plain[:3] + "****" + plain[len(plain)-4:]
+	expected := credentialcrypto.MaskKey(plain)
 	if got := gjson.Get(body, "data.KeyMasked").String(); got != expected {
 		t.Fatalf("KeyMasked=%q want %q body=%s", got, expected, body)
 	}
@@ -136,24 +136,6 @@ func TestCreateCredential_Success_MaskNoLeak(t *testing.T) {
 	}
 	if gjson.Get(body, "data.Status").String() != models.CredentialStatusActive {
 		t.Fatalf("默认Status应为active body=%s", body)
-	}
-}
-
-// TestMaskKey_ShortKeyNoLeak 短 key（≤8）掩码必须完全退化为 ****，不泄漏任何明文片段。
-func TestMaskKey_ShortKeyNoLeak(t *testing.T) {
-	for _, s := range []string{"", "a", "ab12", "abcde", "abcdefgh", "abcdefghi"} {
-		if s == "abcdefghi" {
-			continue // 9 字符走标准掩码，见下方断言
-		}
-		if got := maskKey(s); got != "****" {
-			t.Fatalf("maskKey(%q) = %q, want ****（不应泄漏明文）", s, got)
-		}
-	}
-	if got := maskKey("abcdefghi"); got != "abc****fghi" {
-		t.Fatalf("maskKey(abcdefghi) = %q, want abc****fghi", got)
-	}
-	if got := maskKey("sk-test-create-1234567890AB12"); !strings.Contains(got, "****") || strings.Contains(got, "sk-test-create-1234567890AB12") {
-		t.Fatalf("长 key 掩码异常: %q", got)
 	}
 }
 

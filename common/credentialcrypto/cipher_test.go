@@ -141,3 +141,60 @@ func TestCipher_Hash(t *testing.T) {
 		t.Fatal("空明文哈希应为空串")
 	}
 }
+
+// TestMaskKey_ShortKeyNoLeak 短 key（≤8）掩码必须完全退化为 ****，
+// 不泄漏任何明文片段（1+4 组合在 len 5-8 时几乎完整还原明文）。
+func TestMaskKey_ShortKeyNoLeak(t *testing.T) {
+	for _, s := range []string{"", "a", "ab", "abc", "abcd", "abcde", "abcdef", "abcdefgh"} {
+		if got := MaskKey(s); got != "****" {
+			t.Fatalf("MaskKey(%q) = %q, want ****（不应泄漏明文）", s, got)
+		}
+	}
+	if got := MaskKey("abcdefghi"); got != "abc****fghi" {
+		t.Fatalf("MaskKey(abcdefghi) = %q, want abc****fghi", got)
+	}
+}
+
+// TestMaskKey_PreservesHeadTail 常规长度 key 保留头 3 尾 4，中间一律 ****，
+// 且明文内容绝不出现在掩码中（防半还原泄漏）。
+func TestMaskKey_PreservesHeadTail(t *testing.T) {
+	plain := "sk-test-create-1234567890AB12"
+	got := MaskKey(plain)
+	if !strings.Contains(got, "****") {
+		t.Fatalf("MaskKey 应含 ****: %q", got)
+	}
+	if strings.Contains(got, plain) {
+		t.Fatalf("掩码不应包含完整明文: %q", got)
+	}
+	if got != "sk-****AB12" {
+		t.Fatalf("MaskKey(%q) = %q, want sk-****AB12", plain, got)
+	}
+}
+
+// TestMaskStored_Degradation 锁定读路径降级策略单一来源：cipher 未配置 / 解密失败
+// 一律退化为 ****（绝不输出密文片段——掩密文形似真实值），正常路径与 MaskKey 一致。
+func TestMaskStored_Degradation(t *testing.T) {
+	c := newTestCipher(t)
+	enc, err := c.Encrypt("sk-stored-AAAA1111")
+	if err != nil {
+		t.Fatalf("Encrypt: %v", err)
+	}
+
+	if got := MaskStored(c, enc, "credential_id", uint(1)); got != "sk-****1111" {
+		t.Fatalf("MaskStored 正常路径 = %q, want sk-****1111", got)
+	}
+	if got := MaskStored(nil, enc); got != "****" {
+		t.Fatalf("cipher 未配置应退化 ****，got %q", got)
+	}
+	// 密文损坏（密钥不匹配 / 非 hex）→ ****，且不得回退去掩密文本身
+	other, err := New(strings.Repeat("ff", 32))
+	if err != nil {
+		t.Fatalf("New other: %v", err)
+	}
+	if got := MaskStored(other, enc); got != "****" {
+		t.Fatalf("密钥不匹配应退化 ****，got %q", got)
+	}
+	if got := MaskStored(c, "not-hex-ciphertext"); got != "****" {
+		t.Fatalf("非法密文应退化 ****，got %q", got)
+	}
+}

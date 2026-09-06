@@ -124,27 +124,27 @@ func importCredentialRows(ctx context.Context, repo repository.CredentialRepo, p
 		h := rowHashes[i]
 		if firstIndex[h] != i {
 			data.Skipped++
-			data.Rows = append(data.Rows, BatchImportRow{Index: i, Key: maskKey(trimmed), Status: importStatusSkipped, Reason: importReasonDuplicateInBatch})
+			data.Rows = append(data.Rows, BatchImportRow{Index: i, Key: credentialcrypto.MaskKey(trimmed), Status: importStatusSkipped, Reason: importReasonDuplicateInBatch})
 			continue
 		}
 		if existing[h] {
 			data.Skipped++
-			data.Rows = append(data.Rows, BatchImportRow{Index: i, Key: maskKey(trimmed), Status: importStatusSkipped, Reason: importReasonDuplicateInPool})
+			data.Rows = append(data.Rows, BatchImportRow{Index: i, Key: credentialcrypto.MaskKey(trimmed), Status: importStatusSkipped, Reason: importReasonDuplicateInPool})
 			continue
 		}
 		enc, err := cipher.Encrypt(trimmed)
 		if err != nil {
 			data.Failed++
-			data.Rows = append(data.Rows, BatchImportRow{Index: i, Key: maskKey(trimmed), Status: importStatusFailed, Reason: importReasonEncryptFailed})
+			data.Rows = append(data.Rows, BatchImportRow{Index: i, Key: credentialcrypto.MaskKey(trimmed), Status: importStatusFailed, Reason: importReasonEncryptFailed})
 			continue
 		}
 		if err := repo.Create(ctx, &models.Credential{Key: enc, KeyHash: h, PoolID: &poolID, Status: models.CredentialStatusActive}); err != nil {
 			data.Failed++
-			data.Rows = append(data.Rows, BatchImportRow{Index: i, Key: maskKey(trimmed), Status: importStatusFailed, Reason: importReasonDBFailed})
+			data.Rows = append(data.Rows, BatchImportRow{Index: i, Key: credentialcrypto.MaskKey(trimmed), Status: importStatusFailed, Reason: importReasonDBFailed})
 			continue
 		}
 		data.Imported++
-		data.Rows = append(data.Rows, BatchImportRow{Index: i, Key: maskKey(trimmed), Status: importStatusImported})
+		data.Rows = append(data.Rows, BatchImportRow{Index: i, Key: credentialcrypto.MaskKey(trimmed), Status: importStatusImported})
 	}
 	return data, nil
 }

@@ -64,8 +64,8 @@ func TestBatchImport_AllCreated_MaskedEcho(t *testing.T) {
 		if got := gjson.Get(body, path+".Status").String(); got != importStatusImported {
 			t.Fatalf("row[%d].Status=%q want imported body=%s", i, got, body)
 		}
-		if got := gjson.Get(body, path+".Key").String(); got != maskKey(k) {
-			t.Fatalf("row[%d].Key=%q want %q body=%s", i, got, maskKey(k), body)
+		if got := gjson.Get(body, path+".Key").String(); got != credentialcrypto.MaskKey(k) {
+			t.Fatalf("row[%d].Key=%q want %q body=%s", i, got, credentialcrypto.MaskKey(k), body)
 		}
 		if got := gjson.Get(body, path+".Reason").Exists(); got {
 			t.Fatalf("imported 行不应有 Reason body=%s", body)

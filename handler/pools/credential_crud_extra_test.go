@@ -82,8 +82,8 @@ func TestCreateThenGet_FieldIntegrity(t *testing.T) {
 			t.Fatalf("字段 %s 创建响应 %s != 重新GET响应 %s\n createBody=%s\n getBody=%s", k, createV, getV, createBody, getBody)
 		}
 	}
-	if gjson.Get(createBody, "data.KeyMasked").String() != maskKey(plain) {
-		t.Fatalf("KeyMasked=%q want %q", gjson.Get(createBody, "data.KeyMasked").String(), maskKey(plain))
+	if gjson.Get(createBody, "data.KeyMasked").String() != credentialcrypto.MaskKey(plain) {
+		t.Fatalf("KeyMasked=%q want %q", gjson.Get(createBody, "data.KeyMasked").String(), credentialcrypto.MaskKey(plain))
 	}
 }
 

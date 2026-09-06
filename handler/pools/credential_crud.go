@@ -17,18 +17,9 @@ import (
 
 // credentialToListItem 将 models.Credential 转为 CredentialListItem（掩码形态，不泄漏明文/密文/KeyHash）。
 func credentialToListItem(cred models.Credential) CredentialListItem {
-	cipher := credentialcrypto.Default()
-	var masked string
-	if cipher != nil {
-		if dec, decErr := cipher.Decrypt(cred.Key); decErr == nil {
-			masked = maskKey(dec)
-		} else {
-			slog.Warn("credential decrypt failed, masking as ****", "credential_id", cred.ID, "error", decErr)
-			masked = "****"
-		}
-	} else {
-		masked = maskKey(cred.Key)
-	}
+	// 掩码与降级策略（cipher 未配置/解密失败 → ****）统一走 credentialcrypto.MaskStored，
+	// 与供应商内联 key 详情同源，避免两域各自拼装漂移。
+	masked := credentialcrypto.MaskStored(credentialcrypto.Default(), cred.Key, "credential_id", cred.ID)
 	return CredentialListItem{
 		ID:             cred.ID,
 		PoolID:         cred.PoolID,
@@ -115,7 +106,7 @@ func CreateCredential(c *gin.Context) {
 	}
 	item := credentialToListItem(*saved)
 	// 用明文掩码覆盖（避免解密失败场景的 **** 与新建掩码不一致）
-	item.KeyMasked = maskKey(plain)
+	item.KeyMasked = credentialcrypto.MaskKey(plain)
 	httpresp.Success(c, item)
 }
 

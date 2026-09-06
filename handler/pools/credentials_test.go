@@ -44,10 +44,19 @@ func seedPoolForCredList(t *testing.T, name string) uint {
 	return uint(id)
 }
 
-// seedCredential 直接写库（Key 按传入存，不加密；测试中 cipher nil 时直接当明文掩码）。
-func seedCredential(t *testing.T, poolID uint, key string, status string, note string) {
+// seedCredential 直接写库：**传明文，落密文**（与生产写路径同形态）。cipher 未配置时
+// 自动注入测试密钥——掩码/解密类断言必须打在真实密文上，明文直存会绕过 MaskStored
+// 的降级分支（cipher nil → ****），测出的形状与生产不一致。
+func seedCredential(t *testing.T, poolID uint, plainKey string, status string, note string) {
 	t.Helper()
-	cred := &models.Credential{Key: key, KeyHash: "hash-" + key, PoolID: &poolID, Status: status, Note: note}
+	if credentialcrypto.Default() == nil {
+		setupCipherForCredTest(t)
+	}
+	enc, err := credentialcrypto.Default().Encrypt(plainKey)
+	if err != nil {
+		t.Fatalf("encrypt seed credential: %v", err)
+	}
+	cred := &models.Credential{Key: enc, KeyHash: "hash-" + plainKey, PoolID: &poolID, Status: status, Note: note}
 	if err := repository.Default().Credential.Create(t.Context(), cred); err != nil {
 		t.Fatalf("seed credential: %v", err)
 	}
@@ -202,7 +211,7 @@ func TestListCredentials_Mask_NoLeak(t *testing.T) {
 	if gjson.Get(body, "data.items.0.KeyHash").Exists() {
 		t.Fatalf("不应返回 KeyHash, body=%s", body)
 	}
-	expected := longKey[:3] + "****" + longKey[len(longKey)-4:]
+	expected := credentialcrypto.MaskKey(longKey)
 	if got := gjson.Get(body, "data.items.0.KeyMasked").String(); got != expected {
 		t.Fatalf("KeyMasked = %q, want %q, body=%s", got, expected, body)
 	}
@@ -223,22 +232,21 @@ func TestListCredentials_Mask_NoLeak(t *testing.T) {
 // TestListCredentials_Mask_WithEncryptedKey 覆盖 AC-4 加密路径：密文解密后掩码，响应仍不含密文
 func TestListCredentials_Mask_WithEncryptedKey(t *testing.T) {
 	testsupport.InitTestDB(t)
-	// 生成临时 cipher 并注入 Default（InitTestDB 后注入，不影响库初始化）
-	hexKey := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-	c, err := credentialcrypto.New(hexKey)
-	if err != nil {
-		t.Fatalf("new cipher: %v", err)
-	}
-	credentialcrypto.SetDefault(c)
-	t.Cleanup(func() { credentialcrypto.SetDefault(nil) })
-
 	poolID := seedPoolForCredList(t, "加密掩码池")
 	plain := "sk-encrypted-key-12345678AB12"
-	enc, err := c.Encrypt(plain)
-	if err != nil {
-		t.Fatalf("encrypt: %v", err)
+	// seedCredential 内部注入 cipher 并加密落库（与生产写路径同形态）
+	seedCredential(t, poolID, plain, models.CredentialStatusActive, "")
+
+	// 库内确实是密文，且响应不得泄漏密文或明文
+	ctx := t.Context()
+	creds, err := repository.Default().Credential.List(ctx, repository.CredentialFilter{PoolID: &poolID})
+	if err != nil || len(creds) != 1 {
+		t.Fatalf("list seeded creds = %+v err=%v", creds, err)
 	}
-	seedCredential(t, poolID, enc, models.CredentialStatusActive, "")
+	enc := creds[0].Key
+	if enc == plain || strings.Contains(enc, plain) {
+		t.Fatalf("种子未按加密形态落库: %q", enc)
+	}
 
 	body, _ := listCredentialsViaHandler(t, poolID, "")
 	if gjson.Get(body, "data.items.0.Key").Exists() {
@@ -250,7 +258,7 @@ func TestListCredentials_Mask_WithEncryptedKey(t *testing.T) {
 	if strings.Contains(body, plain) {
 		t.Fatalf("响应体泄漏明文, body=%s", body)
 	}
-	expected := plain[:3] + "****" + plain[len(plain)-4:]
+	expected := credentialcrypto.MaskKey(plain)
 	if got := gjson.Get(body, "data.items.0.KeyMasked").String(); got != expected {
 		t.Fatalf("加密后 KeyMasked = %q, want %q, body=%s", got, expected, body)
 	}

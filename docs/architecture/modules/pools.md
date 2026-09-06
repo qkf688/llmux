@@ -22,7 +22,7 @@
 handler/pools/           # 号池管理 API 域（S2：CRUD + 健康统计 + 凭据单条/批量操作；S6 前端接入）
   routes.go              # Register：/api/pools GET/POST/PUT/:id/DELETE/:id + /:id/credentials 系列
   crud.go                # GetPools(列表+统计) / CreatePool / UpdatePool / DeletePool
-  credentials.go         # ListCredentials（分页/筛选/搜索+掩码）+ maskKey / requirePool（池存在性统一校验）
+  credentials.go         # ListCredentials（分页/筛选/搜索 + 掩码）+ requirePool（池存在性统一校验）；掩码用 common/credentialcrypto.MaskKey
   credential_crud.go     # CreateCredential / GetCredential / GetCredentialRaw / UpdateCredential / DeleteCredential
   credential_batch.go    # BatchUpdateCredentialStatus / BatchDeleteCredentials / BatchImportCredentials（批量粘贴导入）+ maxCredentialImportBatch 上限
   types.go               # PoolRequest / PoolListItem / CredentialListItem + 凭据请求/批量 DTO
@@ -35,7 +35,7 @@ repository/
 models/
   channel.go             # Pool / Credential / Endpoint / KeyGroup 四表实体
   migrate_channels.go    # 存量 Provider 迁移（生成 1 端点+1 分组+1 内联凭据，api_key 加密搬移）
-common/credentialcrypto/ # AES-256-GCM 加密 + KeyHash + 密钥引导
+common/credentialcrypto/ # AES-256-GCM 加密 + KeyHash + MaskKey 掩码 + 密钥引导
 ```
 
 ## 4. 关键接口契约
@@ -50,6 +50,7 @@ common/credentialcrypto/ # AES-256-GCM 加密 + KeyHash + 密钥引导
 | `CredentialRepo.ListByGroups` | 装配侧收敛查询：`group_id IN groupIDs OR pool_id IN poolIDs`，按 `id ASC`；两组皆空返回 nil 不产生 SQL；凭据 GroupID/PoolID 二选一，绝不双计（S3 选路热路径用，避免全表扫描） | `repository/credential.go` | 同文件 |
 | 批量导入语义 | `POST .../batch/import` `{"keys":[...]}`：批内首现 + 池内 `KeyHash` 双重去重（判定顺序：批内首现先于池内——同 key 批内重复∧池内已有时，首现行 duplicate_in_pool、重复行 duplicate_in_batch）；行级失败隔离（逐行独立落库，无共享事务；单行加密/落库异常收集为 failed 不阻断其余行）；逐行回显 `rows`（`Index`/掩码 `Key`/`Status` ∈ imported|skipped|failed/`Reason` 机器码 duplicate_in_batch、duplicate_in_pool、empty、encrypt_failed、db_failed）；单请求上限 500，超限 400；空数组 400；池不存在 404；`Default()==nil` 500 | `handler/pools/credential_batch.go` `BatchImportCredentials` | `importCredentialRows`（加密/落库失败经注入桩覆盖测试） |
 | `KeyGroupRepo.CountByPoolIDs` | 号池被分组引用计数（删除守卫依据） | `repository/key_group.go` | 同文件 |
+| `credentialcrypto.MaskKey` / `MaskStored` | 掩码规则单一来源（前缀3+`****`+后缀4，≤8 全 `****`）；`MaskStored` 统一读路径降级策略——cipher 未配置/解密失败一律 `****` + `slog.Warn`（绝不输出密文片段）。号池凭据列表与供应商内联 key 详情共用，改降级规则只动这一处 | `common/credentialcrypto/cipher.go` | 两域 handler 调用 |
 | `KeyGroupRepo.ListByPoolIDs` | `WHERE pool_id IN ?` 批量返回引用分组（id/provider_id/pool_id 现存值）；GetPools 组装 RefGroups 明细用，照 `ListByProvider` 实体查询模式 | `repository/key_group.go` | 同文件 |
 | `PoolListItem` | `/api/pools` 列表项：内嵌 `models.Pool`（PascalCase 直返）+ `KeyCount`/`StatusCounts`/`ReferencedBy`/`RefGroups` | `handler/pools/types.go` | `handler/pools/crud.go` |
 | `RefGroups` 引用明细 | 列表项字段 `[]PoolRefGroup{ProviderID, ProviderName, GroupID, GroupName}`（PascalCase）；未被引用时**显式空数组**（非 null、非键缺失）；`ReferencedBy` 计数由明细长度派生（单一数据源，不二次查询）；供应商已删但分组残留时 `ProviderName` 空串、条目保留（DeleteProvider 不级联删分组）；两步组装（分组列表 → ProviderRepo.ListByIDs 名称映射）不引入 JOIN 投影。**前端现状零消费**（#17 深链跳转取消，明细为惰性数据） | `handler/pools/types.go` / `crud.go` | `KeyGroupRepo.ListByPoolIDs` + `ProviderRepo.ListByIDs` |

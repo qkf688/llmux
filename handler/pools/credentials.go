@@ -12,15 +12,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// maskKey 将明文 key 掩码为 sk-****ab12 形态（前缀 3 + **** + 后缀 4），
-// 过短时（≤8）一律退化为 ****：1+4 组合在 len 5-8 时几乎完整还原明文。
-func maskKey(plain string) string {
-	if len(plain) <= 8 {
-		return "****"
-	}
-	return plain[:3] + "****" + plain[len(plain)-4:]
-}
-
 // requirePool 校验号池存在：不存在写 404、查询异常写 500，返回 false（响应已写出，
 // 调用方直接 return）；存在返回 true。池存在性判定在 pools 域所有凭据端点统一
 // 走此 helper（防 404/500 语义在各 handler 分裂）。

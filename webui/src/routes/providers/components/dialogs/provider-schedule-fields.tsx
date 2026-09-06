@@ -38,7 +38,21 @@ export function SupportTypesField({ providerTemplates }: { providerTemplates: Pr
   const form = useFormContext<ProviderFormValues>();
   const { control, getValues, setValue } = form;
   const protocols = useWatch({ control, name: "protocols" }) ?? [];
-  const { fields, append, remove } = useFieldArray({ control, name: "endpoints" });
+
+  // 端点严格跟随协议 1:1：勾选补一条空端点、取消勾选移除对应端点。这里用 getValues/setValue
+  // 直接改 endpoints，不引入 useFieldArray——EndpointsSection 以 useWatch 读同一份表单值即可。
+  // 两处若各起一个同名 useFieldArray，RHF 不会让第二个实例随第一个的 append/remove 更新，
+  // 端点显示会卡在初始数量（这正是「勾选多个类型端点不增加」的根因）。
+  const syncEndpoint = (protocol: string, add: boolean) => {
+    const endpoints = getValues("endpoints") ?? [];
+    if (add) {
+      if (!endpoints.some((e) => e.protocol === protocol)) {
+        setValue("endpoints", [...endpoints, { protocol, url: "", enabled: true }], { shouldDirty: true });
+      }
+      return;
+    }
+    setValue("endpoints", endpoints.filter((e) => e.protocol !== protocol), { shouldDirty: true });
+  };
 
   const toggleType = (type: string, checked: boolean) => {
     const option = SUPPORTED_TYPE_OPTIONS.find((o) => o.type === type);
@@ -53,18 +67,13 @@ export function SupportTypesField({ providerTemplates }: { providerTemplates: Pr
         setValue("type", type, { shouldDirty: true });
         applyProviderTemplateDefaults(type, providerTemplates, form);
       }
-      if (!fields.some((f) => f.protocol === protocol)) {
-        append({ protocol, url: "", enabled: true });
-      }
+      syncEndpoint(protocol, true);
       return;
     }
 
     const next = current.filter((p) => p !== protocol);
     setValue("protocols", next, { shouldDirty: true });
-    const indices = fields.map((f, i) => (f.protocol === protocol ? i : -1)).filter((i) => i >= 0);
-    if (indices.length > 0) {
-      remove(indices);
-    }
+    syncEndpoint(protocol, false);
     // 仅当移除的是主类型本身时，主类型落到剩余第一个（保持 type ∈ protocols）；
     // 移除次要协议不触碰主类型（原实现无条件切第一个，会把用户显式选的主类型悄悄改掉）
     if (getValues("type") === type && next.length > 0) {
@@ -137,6 +146,69 @@ export function SupportTypesField({ providerTemplates }: { providerTemplates: Pr
 }
 
 /**
+ * 单条协议端点行：URL 默认继承 Base URL（不显示输入框），点「覆盖 URL」才出现输入框，
+ * 「恢复继承」清空回到继承态。covering 是行内局部状态——行以 protocol 为 key，取消勾选即
+ * 卸载、状态随之消失，重新勾选是全新行（默认继承态），与旧的「行 id 键」语义一致。
+ */
+function EndpointRow({ index, protocol }: { index: number; protocol: string }) {
+  const { control } = useFormContext<ProviderFormValues>();
+  const [covering, setCovering] = useState(false);
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg border p-3">
+      <span className="w-28 shrink-0 text-sm font-medium">{PROTOCOL_LABEL[protocol] ?? protocol}</span>
+      <FormField
+        control={control}
+        name={`endpoints.${index}.url`}
+        render={({ field }) => (
+          <FormItem className="flex-1 space-y-0">
+            <FormControl>
+              {covering || field.value ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    {...field}
+                    placeholder="覆盖 URL（如 https://…/claude/v1）"
+                    className="font-mono text-xs"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 shrink-0 px-2 text-xs text-muted-foreground"
+                    onClick={() => {
+                      field.onChange("");
+                      setCovering(false);
+                    }}
+                  >
+                    恢复继承
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[10px]">
+                    继承 Base URL
+                  </Badge>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setCovering(true)}
+                  >
+                    覆盖 URL
+                  </Button>
+                </div>
+              )}
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    </div>
+  );
+}
+
+/**
  * 协议端点区：每个勾选协议一条端点（不做同协议多 URL）。
  * URL 默认继承 Base URL（不显示输入框）；需要覆盖时点「覆盖 URL」才出现输入框，
  * 输入后显示覆盖值，可「恢复继承」清空。
@@ -144,11 +216,15 @@ export function SupportTypesField({ providerTemplates }: { providerTemplates: Pr
 export function EndpointsSection() {
   const { control } = useFormContext<ProviderFormValues>();
   const protocols = useWatch({ control, name: "protocols" }) ?? [];
-  const { fields } = useFieldArray({ control, name: "endpoints" });
-  const [covering, setCovering] = useState<Record<string, boolean>>({});
+  // endpoints 由 SupportTypesField 独家增删，本组件只读：用 useWatch 读同一份表单值，
+  // 不能另起同名 useFieldArray（RHF 双实例不互相同步，端点行会卡在初始数量）。
+  const endpoints = useWatch({ control, name: "endpoints" }) ?? [];
 
-  // covering 以端点行 id 为键：取消勾选移除行后状态随行消失，重新勾选生成新 id → 回到默认「继承」形态
-  const rows = fields.map((f, i) => ({ f, i })).filter(({ f }) => protocols.includes(f.protocol));
+  // index 取 endpoints 数组的绝对下标，供 EndpointRow 定位 endpoints.{index}.url；
+  // 只渲染已勾选协议的端点（取消勾选的行随即消失）
+  const rows = endpoints
+    .map((endpoint, index) => ({ endpoint, index }))
+    .filter(({ endpoint }) => protocols.includes(endpoint.protocol));
 
   return (
     <div className="space-y-3">
@@ -159,57 +235,8 @@ export function EndpointsSection() {
         </p>
       </div>
       {protocols.length === 0 && <p className="text-xs text-muted-foreground">请先勾选至少一个出站协议</p>}
-      {rows.map(({ f, i }) => (
-        <div key={f.id} className="flex items-center gap-2 rounded-lg border p-3">
-          <span className="w-28 shrink-0 text-sm font-medium">{PROTOCOL_LABEL[f.protocol] ?? f.protocol}</span>
-          <FormField
-            control={control}
-            name={`endpoints.${i}.url`}
-            render={({ field }) => (
-              <FormItem className="flex-1 space-y-0">
-                <FormControl>
-                  {covering[f.id] || field.value ? (
-                    <div className="flex items-center gap-2">
-                      <Input
-                        {...field}
-                        placeholder="覆盖 URL（如 https://…/claude/v1）"
-                        className="font-mono text-xs"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 shrink-0 px-2 text-xs text-muted-foreground"
-                        onClick={() => {
-                          field.onChange("");
-                          setCovering((prev) => ({ ...prev, [f.id]: false }));
-                        }}
-                      >
-                        恢复继承
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-[10px]">
-                        继承 Base URL
-                      </Badge>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        onClick={() => setCovering((prev) => ({ ...prev, [f.id]: true }))}
-                      >
-                        覆盖 URL
-                      </Button>
-                    </div>
-                  )}
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
+      {rows.map(({ endpoint, index }) => (
+        <EndpointRow key={endpoint.protocol} index={index} protocol={endpoint.protocol} />
       ))}
     </div>
   );

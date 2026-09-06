@@ -92,10 +92,14 @@ func validateStructuredRequest(ctx context.Context, repos *repository.Repositori
 		}
 		switch g.Source {
 		case groupSourceInline:
-			keys := normalizeInlineKeys(g.InlineKeys)
+			keys, err := normalizeInlineKeys(g.InlineKeys)
+			if err != nil {
+				return err
+			}
 			if len(keys) == 0 {
-				// 统一中文友好文案：前端 zod 对 inlineKeys 无 min 校验，此条是提交兜底（与「至少保留一个分组」同族）
-				return fmt.Errorf("groups[%d].inline_keys 至少填写一个 key", i)
+				// 统一中文友好文案：前端（zod 无 min 校验）依赖此条兜底——空 key 引用态或
+				// 明文全空都会被 normalize 剔除后落到这里（与「至少保留一个分组」同族）。
+				return fmt.Errorf("groups[%d].inline_keys 至少保留一个 key 或引用", i)
 			}
 		case groupSourcePool:
 			if g.PoolID == nil || *g.PoolID == 0 {
@@ -111,21 +115,35 @@ func validateStructuredRequest(ctx context.Context, repos *repository.Repositori
 	return nil
 }
 
-func normalizeInlineKeys(keys []string) []string {
-	out := make([]string, 0, len(keys))
-	seen := make(map[string]struct{}, len(keys))
+// normalizeInlineKeys 清理内联凭据写入项：剔除「无引用且无明文」的空条目（id=0 且
+// key 空——前端空白行/掩码占位提交的兜底），trim 明文；同 id 重复引用、同明文重复
+// 新增均报错——语义上一条凭据只能被引用一次，同组两条相同明文会让组内轮询给同一
+// key 双份流量权重，与号池「同池重复 KeyHash 400」对齐（不静默去重：用户提交什么
+// 就该得到什么反馈）。错误文本不含明文 key，避免敏感值经 BadRequest message 外泄。
+func normalizeInlineKeys(keys []InlineKeyInput) ([]InlineKeyInput, error) {
+	out := make([]InlineKeyInput, 0, len(keys))
+	seenID := make(map[uint]struct{}, len(keys))
+	seenKey := make(map[string]struct{}, len(keys))
 	for _, k := range keys {
-		plain := strings.TrimSpace(k)
-		if plain == "" {
+		key := strings.TrimSpace(k.Key)
+		if k.ID == 0 {
+			if key == "" {
+				continue
+			}
+			if _, dup := seenKey[key]; dup {
+				return nil, fmt.Errorf("inline_keys 存在重复的明文 key")
+			}
+			seenKey[key] = struct{}{}
+			out = append(out, InlineKeyInput{ID: 0, Key: key})
 			continue
 		}
-		if _, ok := seen[plain]; ok {
-			continue
+		if _, dup := seenID[k.ID]; dup {
+			return nil, fmt.Errorf("inline_keys 重复引用凭据 id=%d", k.ID)
 		}
-		seen[plain] = struct{}{}
-		out = append(out, plain)
+		seenID[k.ID] = struct{}{}
+		out = append(out, InlineKeyInput{ID: k.ID, Key: key})
 	}
-	return out
+	return out, nil
 }
 
 // syncProviderChildren 在事务内按请求体全量同步 endpoints / groups / inline credentials。
@@ -223,6 +241,11 @@ func syncGroups(ctx context.Context, repos *repository.Repositories, providerID 
 			byHash[c.KeyHash] = c
 		}
 	}
+	// byID 供掩码回填引用定位（超 provider 范围/不存在均判别为引用无效）
+	byID := make(map[uint]models.Credential, len(oldCreds))
+	for _, c := range oldCreds {
+		byID[c.ID] = c
+	}
 	usedCred := make(map[uint]struct{}, len(oldCreds))
 
 	for _, g := range existing {
@@ -256,8 +279,50 @@ func syncGroups(ctx context.Context, repos *repository.Repositories, providerID 
 			continue
 		}
 
-		keys := normalizeInlineKeys(in.InlineKeys)
-		for _, plain := range keys {
+		keys, err := normalizeInlineKeys(in.InlineKeys)
+		if err != nil {
+			// 校验路径已前置拦截同形态错误；事务内触达时打哨兵归 400（客户端可修复），
+			// 防被 respondTxError 误分类成 500。
+			return fmt.Errorf("groups[%d]: %w: %w", i, err, errValidation)
+		}
+		for _, item := range keys {
+			if item.ID > 0 {
+				// 引用既有凭据：key 空 = 原样保留；key 非空 = 替换该条内容。
+				// ID 必须属于本 provider 的旧凭据（不存在/重复引用判 400，防跨供应商引用）。
+				old, ok := byID[item.ID]
+				if !ok {
+					return fmt.Errorf("groups[%d] references credential %d not found: %w", i, item.ID, errValidation)
+				}
+				if _, used := usedCred[old.ID]; used {
+					return fmt.Errorf("credential %d referenced twice: %w", item.ID, errValidation)
+				}
+				if item.Key == "" {
+					// 掩码回填未拉明文的条目：沿用原密文，仅迁移到新组（保留语义）
+					if _, err := repos.Credential.UpdateFields(ctx, old.ID, map[string]any{"group_id": group.ID, "pool_id": nil}); err != nil {
+						return fmt.Errorf("reassign credential %d: %w", old.ID, err)
+					}
+					usedCred[old.ID] = struct{}{}
+					continue
+				}
+				// 显式提交新明文：hash 未变（显示后未改）等价保留；变化则更新密文+hash
+				hash := cipher.Hash(item.Key)
+				fields := map[string]any{"group_id": group.ID, "pool_id": nil}
+				if hash != old.KeyHash {
+					enc, encErr := cipher.Encrypt(item.Key)
+					if encErr != nil {
+						return fmt.Errorf("encrypt key: %w", encErr)
+					}
+					fields["key"] = enc
+					fields["key_hash"] = hash
+				}
+				if _, err := repos.Credential.UpdateFields(ctx, old.ID, fields); err != nil {
+					return fmt.Errorf("replace credential %d key: %w", old.ID, err)
+				}
+				usedCred[old.ID] = struct{}{}
+				continue
+			}
+			// 新增明文（id=0）：沿用 hash 复用旧行 / 新建，语义不变
+			plain := item.Key
 			hash := cipher.Hash(plain)
 			if old, ok := byHash[hash]; ok {
 				if _, used := usedCred[old.ID]; !used {
@@ -301,7 +366,7 @@ func syncGroups(ctx context.Context, repos *repository.Repositories, providerID 
 	return nil
 }
 
-// loadProviderDetail 组装详情响应（含解密后的 inline keys）。
+// loadProviderDetail 组装详情响应（inline keys 以服务端掩码项返回，明文仅受控端点拉取）。
 func loadProviderDetail(ctx context.Context, repos *repository.Repositories, provider models.Provider) (*ProviderDetail, error) {
 	endpoints, err := repos.Endpoint.ListByProvider(ctx, provider.ID)
 	if err != nil {
@@ -336,22 +401,20 @@ func loadProviderDetail(ctx context.Context, repos *repository.Repositories, pro
 	for _, g := range groups {
 		gd := GroupDetail{
 			KeyGroup:   g,
-			InlineKeys: []string{},
+			InlineKeys: []InlineKeyItem{},
 		}
 		if g.PoolID != nil {
 			gd.Source = groupSourcePool
 		} else {
 			gd.Source = groupSourceInline
 			for _, c := range credsByGroup[g.ID] {
-				// 解密失败不占有意义的占位符（如 "****"）——前端原样回写会把假 key 落库
-				// 顶替真实凭据。回空串让 normalizeInlineKeys 在提交时跳过该占位。
-				plain := ""
-				if cipher != nil {
-					if dec, decErr := cipher.Decrypt(c.Key); decErr == nil {
-						plain = dec
-					}
-				}
-				gd.InlineKeys = append(gd.InlineKeys, plain)
+				// 详情只出服务端掩码（对齐号池 KeyMasked 体系），明文经受控端点单独拉。
+				// 解密失败/无 cipher 的降级与留痕由 MaskStored 单源负责（与号池同策略）：
+				// 掩码态下用户仍能按 id 保留该条，不会像旧空串方案那样静默丢凭据。
+				gd.InlineKeys = append(gd.InlineKeys, InlineKeyItem{
+					ID:        c.ID,
+					KeyMasked: credentialcrypto.MaskStored(cipher, c.Key, "credential_id", c.ID, "group_id", g.ID),
+				})
 			}
 		}
 		details = append(details, gd)

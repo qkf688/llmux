@@ -240,7 +240,10 @@ export function ProviderFormDialog({
                   </p>
                 </div>
                 <EndpointsSection />
-                <GroupsSection onViewPoolDetail={(poolId) => setPoolDetail({ open: true, poolId })} />
+                <GroupsSection
+                  providerId={editingProvider?.ID}
+                  onViewPoolDetail={(poolId) => setPoolDetail({ open: true, poolId })}
+                />
               </div>
             </DialogBody>
 

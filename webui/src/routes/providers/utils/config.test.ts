@@ -10,7 +10,19 @@ function formValues(overrides: Partial<ProviderFormValues> = {}): ProviderFormVa
     base_url: "https://api.example.com/v1",
     protocols: ["openai"],
     endpoints: [{ protocol: "openai", url: "", enabled: true }],
-    groups: [{ name: "默认组", weight: 1, models: "", source: "inline", inlineKeys: "sk-a\nsk-b", poolId: "" }],
+    groups: [
+      {
+        name: "默认组",
+        weight: 1,
+        models: "",
+        source: "inline",
+        inlineKeys: [
+          { id: 0, key: "sk-a", masked: false },
+          { id: 0, key: "sk-b", masked: false },
+        ],
+        poolId: "",
+      },
+    ],
     ...overrides,
   };
 }
@@ -33,7 +45,10 @@ function detail(overrides: Partial<ProviderDetail> = {}): ProviderDetail {
         Weight: 1,
         Models: "",
         Source: "inline",
-        InlineKeys: ["sk-plain-1", "sk-plain-2"],
+        InlineKeys: [
+          { ID: 101, KeyMasked: "sk-****-1" },
+          { ID: 102, KeyMasked: "sk-****-2" },
+        ],
         PoolID: null,
       },
     ],
@@ -99,7 +114,7 @@ describe("buildConfigFromForm - 协议驱动的 adapter 字段", () => {
   });
 });
 
-describe("buildProviderPayload - 结构化 DTO（AC-2）", () => {
+describe("buildProviderPayload - 行形态 → InlineKeyInput（掩码保留/明文提交）", () => {
   it("payload 携带 protocols/endpoints/groups，config 内嵌无 api_key", () => {
     const payload = buildProviderPayload(formValues(), { name: "p", type: "openai" });
 
@@ -112,7 +127,7 @@ describe("buildProviderPayload - 结构化 DTO（AC-2）", () => {
     expect(config).not.toHaveProperty("_schedule");
   });
 
-  it("inline 组：inlineKeys 文本拆数组、过滤空行，pool_id 为 null", () => {
+  it("明文纯新增行：按 id=0 + key 提交，pool_id 为 null", () => {
     const payload = buildProviderPayload(formValues());
     expect(payload.groups).toEqual([
       {
@@ -120,33 +135,16 @@ describe("buildProviderPayload - 结构化 DTO（AC-2）", () => {
         weight: 1,
         models: "",
         source: "inline",
-        inline_keys: ["sk-a", "sk-b"],
+        inline_keys: [
+          { id: 0, key: "sk-a" },
+          { id: 0, key: "sk-b" },
+        ],
         pool_id: null,
       },
     ]);
   });
 
-  it("pool 组：只带 pool_id（数字），inline_keys 为空数组", () => {
-    const payload = buildProviderPayload(
-      formValues({
-        groups: [{ name: "池组", weight: 2, models: "gpt-4o", source: "pool", inlineKeys: "", poolId: "7" }],
-      })
-    );
-    expect(payload.groups).toEqual([
-      { name: "池组", weight: 2, models: "gpt-4o", source: "pool", inline_keys: [], pool_id: 7 },
-    ]);
-  });
-
-  it("inline 组 textarea 只有空行/空白时 inline_keys 为空数组（后端 normalizeInlineKeys 兜底校验）", () => {
-    const payload = buildProviderPayload(
-      formValues({
-        groups: [{ name: "空组", weight: 1, models: "", source: "inline", inlineKeys: "\n  \n", poolId: "" }],
-      })
-    );
-    expect(payload.groups?.[0]).toMatchObject({ source: "inline", inline_keys: [] });
-  });
-
-  it("inline 组提交按换行保行边界：行内逗号/空格不二次拆分（分隔符只在批量粘贴入口拆散）", () => {
+  it("掩码行提交 key 空串按 id 保留；明文行 key 原样提交", () => {
     const payload = buildProviderPayload(
       formValues({
         groups: [
@@ -155,29 +153,117 @@ describe("buildProviderPayload - 结构化 DTO（AC-2）", () => {
             weight: 1,
             models: "",
             source: "inline",
-            inlineKeys: "sk-a, sk-b\nsk-c sk-d",
+            inlineKeys: [
+              { id: 101, key: "sk-****-1", masked: true },
+              { id: 102, key: "sk-plain-1", masked: false },
+            ],
             poolId: "",
           },
         ],
       })
     );
-    expect(payload.groups?.[0]).toMatchObject({ inline_keys: ["sk-a, sk-b", "sk-c sk-d"] });
+    expect(payload.groups?.[0]).toMatchObject({
+      inline_keys: [
+        { id: 101, key: "" },
+        { id: 102, key: "sk-plain-1" },
+      ],
+    });
   });
 
-  it("inline 组重复 key 原样保留提交（去重提示在 UI，落库去重由后端兜底）", () => {
+  it("新加的空占位/空白明文行被剔除（对齐后端 normalizeInlineKeys 空条目兜底）", () => {
     const payload = buildProviderPayload(
       formValues({
         groups: [
-          { name: "默认组", weight: 1, models: "", source: "inline", inlineKeys: "sk-a\nsk-a", poolId: "" },
+          {
+            name: "默认组",
+            weight: 1,
+            models: "",
+            source: "inline",
+            inlineKeys: [
+              { id: 101, key: "sk-****-1", masked: true },
+              { id: undefined, key: "", masked: false },
+              { id: undefined, key: "  ", masked: false },
+            ],
+            poolId: "",
+          },
         ],
       })
     );
-    expect(payload.groups?.[0]).toMatchObject({ inline_keys: ["sk-a", "sk-a"] });
+    expect(payload.groups?.[0]).toMatchObject({ inline_keys: [{ id: 101, key: "" }] });
+  });
+
+  it("清空已显示行（明文态 + 空文本）= 删除该凭据，不带 id 提交；掩码行仍按 id 保留", () => {
+    const payload = buildProviderPayload(
+      formValues({
+        groups: [
+          {
+            name: "默认组",
+            weight: 1,
+            models: "",
+            source: "inline",
+            inlineKeys: [
+              { id: 101, key: "", masked: false },
+              { id: 102, key: "sk-****-2", masked: true },
+            ],
+            poolId: "",
+          },
+        ],
+      })
+    );
+    expect(payload.groups?.[0]).toMatchObject({ inline_keys: [{ id: 102, key: "" }] });
+  });
+
+  it("pool 组：只带 pool_id（数字），inline_keys 为空数组", () => {
+    const payload = buildProviderPayload(
+      formValues({
+        groups: [{ name: "池组", weight: 2, models: "gpt-4o", source: "pool", inlineKeys: [], poolId: "7" }],
+      })
+    );
+    expect(payload.groups).toEqual([
+      { name: "池组", weight: 2, models: "gpt-4o", source: "pool", inline_keys: [], pool_id: 7 },
+    ]);
+  });
+
+  it("明文重复行原样提交（重复提示在 UI，去重语义由后端 hash 复用/新建兜底）", () => {
+    const payload = buildProviderPayload(
+      formValues({
+        groups: [
+          {
+            name: "默认组",
+            weight: 1,
+            models: "",
+            source: "inline",
+            inlineKeys: [
+              { id: 0, key: "sk-a", masked: false },
+              { id: 0, key: "sk-a", masked: false },
+            ],
+            poolId: "",
+          },
+        ],
+      })
+    );
+    expect(payload.groups?.[0]).toMatchObject({
+      inline_keys: [
+        { id: 0, key: "sk-a" },
+        { id: 0, key: "sk-a" },
+      ],
+    });
+  });
+
+  it("inline 空组（无任何行）提交空数组（后端「至少保留一个 key 或引用」兜底校验）", () => {
+    const payload = buildProviderPayload(
+      formValues({
+        groups: [
+          { name: "空组", weight: 1, models: "", source: "inline", inlineKeys: [], poolId: "" },
+        ],
+      })
+    );
+    expect(payload.groups?.[0]).toMatchObject({ source: "inline", inline_keys: [] });
   });
 });
 
-describe("detailToFormValues - 详情回填（AC-1/AC-5）", () => {
-  it("inline 组回填明文 keys（换行拼接），不含 api_key 表单键", () => {
+describe("detailToFormValues - 详情掩码回填（对齐号池 KeyMasked）", () => {
+  it("inline 组回填掩码行（服务端掩码 + 凭据 ID，masked=true），组 ID 带入供显示拉取", () => {
     const values = detailToFormValues(detail());
 
     expect(values.name).toBe("p-detail");
@@ -185,7 +271,18 @@ describe("detailToFormValues - 详情回填（AC-1/AC-5）", () => {
     expect(values.protocols).toEqual(["openai"]);
     expect(values.endpoints).toEqual([{ protocol: "openai", url: "", enabled: true }]);
     expect(values.groups).toEqual([
-      { name: "默认组", weight: 1, models: "", source: "inline", inlineKeys: "sk-plain-1\nsk-plain-2", poolId: "" },
+      {
+        name: "默认组",
+        weight: 1,
+        models: "",
+        source: "inline",
+        inlineKeys: [
+          { id: 101, key: "sk-****-1", masked: true },
+          { id: 102, key: "sk-****-2", masked: true },
+        ],
+        groupId: 21,
+        poolId: "",
+      },
     ]);
     // 顶层 api_key 已废除：表单值不得再出现该键（防止回写明文进 config）
     expect("api_key" in values).toBe(false);
@@ -209,12 +306,17 @@ describe("detailToFormValues - 详情回填（AC-1/AC-5）", () => {
       })
     );
 
-    expect(values.groups).toEqual([
-      { name: "池组", weight: 3, models: "gpt-4o", source: "pool", inlineKeys: "", poolId: "9" },
-    ]);
+    expect(values.groups?.[0]).toMatchObject({
+      name: "池组",
+      weight: 3,
+      models: "gpt-4o",
+      source: "pool",
+      inlineKeys: [],
+      poolId: "9",
+    });
   });
 
-  it("解密失败组（N=1）：InlineKeys 全空串时带出 failedCount，防 join 退化空串与空组混淆", () => {
+  it("解密失败组：掩码退化 **** 回填（保留引用、保存按 id 原样保留，不再丢凭据）", () => {
     const values = detailToFormValues(
       detail({
         Groups: [
@@ -225,35 +327,18 @@ describe("detailToFormValues - 详情回填（AC-1/AC-5）", () => {
             Weight: 1,
             Models: "",
             Source: "inline",
-            InlineKeys: [""],
+            InlineKeys: [{ ID: 103, KeyMasked: "****" }],
             PoolID: null,
           },
         ],
       })
     );
 
-    expect(values.groups?.[0]).toMatchObject({ source: "inline", inlineKeys: "", inlineKeysFailedCount: 1 });
-  });
-
-  it("解密失败组（N=3）：failedCount 为凭据条数，不为空行数", () => {
-    const values = detailToFormValues(
-      detail({
-        Groups: [
-          {
-            ID: 24,
-            ProviderID: 1,
-            Name: "失败组三",
-            Weight: 1,
-            Models: "",
-            Source: "inline",
-            InlineKeys: ["", "", ""],
-            PoolID: null,
-          },
-        ],
-      })
-    );
-
-    expect(values.groups?.[0]).toMatchObject({ inlineKeys: "\n\n", inlineKeysFailedCount: 3 });
+    expect(values.groups?.[0]).toMatchObject({
+      source: "inline",
+      inlineKeys: [{ id: 103, key: "****", masked: true }],
+      groupId: 23,
+    });
   });
 
   it("anthropic 型：version/beta/auth_type 从 config 解析回填", () => {

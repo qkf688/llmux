@@ -25,6 +25,18 @@ export const providerFormEndpointSchema = z.object({
 
 export type ProviderFormEndpoint = z.infer<typeof providerFormEndpointSchema>;
 
+/** 内联 key 表单行：掩码态（回填）/ 明文态（已显示或新增）二选一。
+ * - masked=true：服务端掩码文本（只读），保存时按 id 保留，key 不提交；
+ * - masked=false：明文（可编辑），保存时 key 原样提交（新增 id 缺省）。 */
+export const providerFormInlineKeyRowSchema = z.object({
+  /** 既有凭据 ID：详情回填的掩码行有值；新增行缺省（提交时按 0 处理） */
+  id: z.number().optional(),
+  key: z.string(),
+  masked: z.boolean(),
+});
+
+export type ProviderFormInlineKeyRow = z.infer<typeof providerFormInlineKeyRowSchema>;
+
 /** 凭据分组：名称 × 价格权重 × 模型白名单 × 凭据来源（内联 Key / 关联号池二选一） */
 export const providerFormGroupSchema = z.object({
   name: z.string().min(1, { message: "分组名称不能为空" }),
@@ -33,10 +45,10 @@ export const providerFormGroupSchema = z.object({
   /** 模型白名单，逗号分隔；空 = 不限 */
   models: z.string(),
   source: z.enum(["inline", "pool"]),
-  inlineKeys: z.string(),
-  /** 回填时该组有凭据但全部无法解密显示的条数（后端详情逐条回空串），仅 detailToFormValues 填充。
-   * 必须显式传递：[""].join("\n") 退化为空串，与「全新空组」无法从 value 区分（review W1'） */
-  inlineKeysFailedCount: z.number().optional(),
+  /** 内联 key 行（掩码/明文混合态）；pool 来源恒为空数组 */
+  inlineKeys: z.array(providerFormInlineKeyRowSchema),
+  /** 回填的既有分组 ID：编辑「显示」明文拉取（raw 端点）的定位用；新建组缺省 */
+  groupId: z.number().optional(),
   poolId: z.string(),
 });
 
@@ -92,5 +104,5 @@ export const defaultProviderFormValues: ProviderFormValues = {
   model_filter_enabled: false,
   protocols: ["openai"],
   endpoints: [{ protocol: "openai", url: "", enabled: true }],
-  groups: [{ name: "默认组", weight: 1, models: "", source: "inline", inlineKeys: "", poolId: "" }],
+  groups: [{ name: "默认组", weight: 1, models: "", source: "inline", inlineKeys: [], poolId: "" }],
 };

@@ -27,6 +27,13 @@ export interface ProviderEndpoint {
   Enabled: boolean;
 }
 
+/** 内联凭据详情项：掩码展示 + 凭据 ID（编辑弹窗引用该条做受控明文拉取） */
+export interface ProviderInlineKeyItem {
+  ID: number;
+  /** 服务端掩码（短 key/解密失败退化 ****）；详情只出掩码，明文走 raw 端点显式拉取 */
+  KeyMasked: string;
+}
+
 /** 凭据分组（详情路径；Source/InlineKeys/PoolID 为派生字段） */
 export interface ProviderGroupDetail {
   ID: number;
@@ -36,8 +43,8 @@ export interface ProviderGroupDetail {
   Models: string;
   /** 凭据来源二选一：inline / pool */
   Source: string;
-  /** 内联明文 keys（管理端 JWT 域）；仅 inline 来源、解密成功时非空 */
-  InlineKeys: string[];
+  /** 内联凭据掩码项（仅 inline 来源非空；明文不受控返回） */
+  InlineKeys: ProviderInlineKeyItem[];
   /** 关联号池 ID；pool 来源非空，inline 来源为 null（三态禁 omitempty） */
   PoolID: number | null;
 }
@@ -55,13 +62,20 @@ export interface ProviderEndpointInput {
   enabled: boolean;
 }
 
+/** 内联凭据写入项：ID>0 引用既有凭据（key 空 = 原样保留；key 非空 = 替换该条），
+ *  ID=0 表示以 key 命名新增。掩码回填的条目提交时 key 传空串由 ID 保留。 */
+export interface ProviderInlineKeyInput {
+  id: number;
+  key: string;
+}
+
 /** 凭据分组写入体（后端 GroupInput；凭据来源二选一：inline_keys / pool_id） */
 export interface ProviderGroupInput {
   name: string;
   weight: number;
   models: string;
   source: "inline" | "pool";
-  inline_keys: string[];
+  inline_keys: ProviderInlineKeyInput[];
   pool_id: number | null;
 }
 
@@ -125,6 +139,20 @@ export async function getProviders(filters: { name?: string; type?: string } = {
 
 export async function getProvider(id: number): Promise<ProviderDetail> {
   return apiRequest<ProviderDetail>(`/providers/${id}`);
+}
+
+/** 受控明文端点返回项：按凭据 id 归位，前端替换掩码行时不依赖数组顺序 */
+export interface ProviderInlineKeyRawItem {
+  id: number;
+  key: string;
+}
+
+/** 内联组明文拉取（受控端点）：「显示」动作才触发；按 id 归位（删掩码行未保存也能显示剩余） */
+export async function getProviderGroupInlineKeysRaw(
+  providerId: number,
+  groupId: number,
+): Promise<{ keys: ProviderInlineKeyRawItem[] }> {
+  return apiRequest<{ keys: ProviderInlineKeyRawItem[] }>(`/providers/${providerId}/groups/${groupId}/inline-keys/raw`);
 }
 
 export async function createProvider(provider: ProviderWritePayload): Promise<ProviderDetail> {

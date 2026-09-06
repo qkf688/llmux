@@ -216,21 +216,24 @@ export function EndpointsSection() {
 }
 
 function defaultGroup(): ProviderFormGroup {
-  return { name: "", weight: 1, models: "", source: "inline", inlineKeys: "", poolId: "" };
+  return { name: "", weight: 1, models: "", source: "inline", inlineKeys: [], poolId: "" };
 }
 
 /** 单个分组卡片：名称/价格权重/模型白名单/凭据来源二选一；关联号池时可查看池详情 */
 function GroupCard({
   index,
+  providerId,
   onViewPoolDetail,
 }: {
   index: number;
+  /** 供应商 ID：既有分组「显示」明文拉取（raw 端点）定位用；新建为空 */
+  providerId?: number;
   /** 打开号池详情弹窗（由 ProviderFormDialog 持 state 并渲染共享 PoolDetailDialog） */
   onViewPoolDetail?: (poolId: string) => void;
 }) {
   const { control } = useFormContext<ProviderFormValues>();
   const source = useWatch({ control, name: `groups.${index}.source` });
-  const inlineKeysFailedCount = useWatch({ control, name: `groups.${index}.inlineKeysFailedCount` });
+  const groupId = useWatch({ control, name: `groups.${index}.groupId` });
   const pools = usePoolOptions();
 
   return (
@@ -323,9 +326,10 @@ function GroupCard({
           render={({ field }) => (
             <FormItem className="space-y-1">
               <InlineKeysField
-                value={field.value ?? ""}
+                value={field.value ?? []}
                 onChange={field.onChange}
-                failedCount={inlineKeysFailedCount}
+                providerId={providerId}
+                groupId={groupId}
               />
               <FormMessage />
             </FormItem>
@@ -377,8 +381,11 @@ function GroupCard({
 
 /** 凭据分组区：分组列表 + 添加分组 */
 export function GroupsSection({
+  providerId,
   onViewPoolDetail,
 }: {
+  /** 供应商 ID：既有分组「显示」明文拉取（raw 端点）定位用；新建为空 */
+  providerId?: number;
   /** 透传给各分组卡片：关联号池时打开该池的详情弹窗 */
   onViewPoolDetail?: (poolId: string) => void;
 }) {
@@ -395,7 +402,7 @@ export function GroupsSection({
       </div>
       {fields.map((field, index) => (
         <div key={field.id} className="space-y-2">
-          <GroupCard index={index} onViewPoolDetail={onViewPoolDetail} />
+          <GroupCard index={index} providerId={providerId} onViewPoolDetail={onViewPoolDetail} />
           <Button
             type="button"
             variant="ghost"

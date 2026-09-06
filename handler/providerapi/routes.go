@@ -9,6 +9,8 @@ func RegisterHead(rg gin.IRoutes) {
 	rg.GET("/providers/model-catalog", GetProviderModelCatalog)
 	rg.GET("/providers/:id", GetProvider)
 	rg.GET("/providers/models/:id", GetProviderModels)
+	// 内联组明文查看（受控端点）：详情默认只出掩码，编辑弹窗「显示」动作单独拉明文
+	rg.GET("/providers/:id/groups/:groupId/inline-keys/raw", GetGroupInlineKeys)
 }
 
 // RegisterCRUD 注册 provider 写操作与清关联（main 中 test 之后）。

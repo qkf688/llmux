@@ -61,6 +61,12 @@ var groupNestedKeys = []responseKeyContract{
 	{key: "InlineKeys"},
 }
 
+// inline key 掩码项契约：详情路径只出 ID + KeyMasked（明文仅受控 raw 端点拉取）。
+var inlineKeyItemNestedKeys = []responseKeyContract{
+	{key: "ID"},
+	{key: "KeyMasked"},
+}
+
 func assertResponseKeys(t *testing.T, raw, prefix string, keys []responseKeyContract) {
 	t.Helper()
 	for _, k := range keys {
@@ -143,13 +149,13 @@ func TestProviderStructuredResponse_KeysPresent(t *testing.T) {
 		})
 	}
 
-	// list 安全不变量：列表绝不展开 Groups / InlineKeys（明文 key 只出现在详情/写路径）。
-	// 负向断言，防止未来把详情结构误并入 ProviderListItem 泄漏凭据。
+	// list 安全不变量：列表绝不展开 Groups / InlineKeys——掩码项只出现在详情路径，
+	// 明文唯一出口是受控 raw 端点。负向断言，防止未来把详情结构误并入 ProviderListItem 泄漏凭据。
 	if gjson.Get(listBody, "data.0.Groups").Exists() {
-		t.Fatalf("list 不应含 Groups：列表项不得展开分组/明文 key。body=%s", listBody)
+		t.Fatalf("list 不应含 Groups：列表项不得展开分组/凭据项。body=%s", listBody)
 	}
 	if gjson.Get(listBody, "data.0.InlineKeys").Exists() {
-		t.Fatalf("list 不应含 InlineKeys：列表项不得携带明文 key。body=%s", listBody)
+		t.Fatalf("list 不应含 InlineKeys：列表项不得携带凭据项（掩码或明文）。body=%s", listBody)
 	}
 
 	// 嵌套 endpoints / groups（详情路径）
@@ -166,6 +172,11 @@ func TestProviderStructuredResponse_KeysPresent(t *testing.T) {
 		t.Run(name+"/nested", func(t *testing.T) {
 			assertResponseKeys(t, body, "data.Endpoints.0.", endpointNestedKeys)
 			assertResponseKeys(t, body, "data.Groups.0.", groupNestedKeys)
+			// inline 组掩码项契约：ID + KeyMasked（服务端掩码；不含任何明文键）
+			assertResponseKeys(t, body, "data.Groups.0.InlineKeys.0.", inlineKeyItemNestedKeys)
+			if got := gjson.Get(body, "data.Groups.0.InlineKeys.0.KeyMasked").String(); got == "" {
+				t.Fatalf("InlineKeys.0.KeyMasked should not be empty: %s", body)
+			}
 			poolID := gjson.Get(body, "data.Groups.0.PoolID")
 			if !poolID.Exists() || poolID.Type != gjson.Null {
 				t.Fatalf("inline group PoolID must exist as null, got %s", poolID.Raw)

@@ -1,7 +1,6 @@
 import type { ProviderDetail, ProviderWritePayload } from "@/lib/api";
 import type { ProviderFormValues } from "../form-schema";
 import { applyExtraFieldsToConfig } from "../form-fields";
-import { inlineKeysToArray } from "./inline-keys";
 
 type ParsedProviderConfig = {
   base_url: string;
@@ -45,7 +44,8 @@ export function buildConfigFromForm(values: ProviderFormValues): string {
 /**
  * 由表单构建 ProviderWritePayload：config + 顶层标量 + 结构化 children。
  * 表单提交（创建/编辑保存）全量携带 protocols/endpoints/groups，走后端结构化四表同步。
- * inline 组的 keys 拆成数组（去空/去占位，对齐后端 normalizeInlineKeys）；pool 组只带 pool_id。
+ * inline 组的 keys 以行形态提交：掩码行按 id 保留（key 空串）、明文行 key 原样（后端按 hash
+ * 识别替换/新增），空新建行剔除；pool 组只带 pool_id。
  */
 export function buildProviderPayload(values: ProviderFormValues, provider: ProviderWritePayload = {}): ProviderWritePayload {
   const endpoints = (values.endpoints ?? []).map((e) => ({
@@ -69,9 +69,12 @@ export function buildProviderPayload(values: ProviderFormValues, provider: Provi
           weight: g.weight,
           models: g.models,
           source: "inline" as const,
-          // 按换行拆回行边界（inline-keys-field 内部行 join("\n")）；逗号/空格已在批量粘贴入口拆散，
-          // 提交不做二次拆分，避免破坏单行显式内容
-          inline_keys: inlineKeysToArray(g.inlineKeys),
+          // 行 → InlineKeyInput：空文本行一律剔除——新增占位行忽略、清空已显示行视为删除该凭据
+          // （旧明文数组语义的等价物）；掩码行按 id 保留（key 空串，掩码文本永不上行）；
+          // 明文行 key 原样提交（后端按 hash 变化识别替换/新增）。
+          inline_keys: (g.inlineKeys ?? [])
+            .filter((r) => r.key.trim() !== "")
+            .map((r) => ({ id: r.id ?? 0, key: r.masked ? "" : r.key.trim() })),
           pool_id: null,
         }
   );
@@ -130,18 +133,17 @@ export function detailToFormValues(detail: ProviderDetail): ProviderFormValues {
     endpoints: (detail.Endpoints ?? []).map((e) => ({ protocol: e.Protocol, url: e.URL, enabled: e.Enabled })),
     groups: (detail.Groups ?? []).map((g) => {
       if (g.Source === "pool") {
-        return { name: g.Name, weight: g.Weight, models: g.Models, source: "pool" as const, inlineKeys: "", poolId: g.PoolID != null ? String(g.PoolID) : "" };
+        return { name: g.Name, weight: g.Weight, models: g.Models, source: "pool" as const, inlineKeys: [], poolId: g.PoolID != null ? String(g.PoolID) : "" };
       }
-      // 解密失败的全部凭据在详情里是空串条目：区分「全失败（N>0 条）」与「真没 key」必须依赖数组长度，
-      // join 会把 [""] 压成空串吞掉标记——失败条数单独带出，供字段组件出警示条
-      const allFailed = g.InlineKeys.length > 0 && g.InlineKeys.every((k) => k === "");
+      // 掩码回填：每条掩码行携带既有凭据 ID（「显示」拉明文的引用、未拉取时按 id 保留保存）。
+      // 掩码行 key 恒为服务端掩码文本——明文永不出常规响应，前端不再自行拼装。
       return {
         name: g.Name,
         weight: g.Weight,
         models: g.Models,
         source: "inline" as const,
-        inlineKeys: g.InlineKeys.join("\n"),
-        ...(allFailed ? { inlineKeysFailedCount: g.InlineKeys.length } : {}),
+        inlineKeys: (g.InlineKeys ?? []).map((k) => ({ id: k.ID, key: k.KeyMasked, masked: true })),
+        groupId: g.ID,
         poolId: "",
       };
     }),

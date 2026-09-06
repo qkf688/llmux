@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
-import {
-  deriveInlineKeyStats,
-  inlineKeysToArray,
-  maskKey,
-  splitInlineKeys,
-} from "./inline-keys";
+import { deriveInlineKeyStats, splitInlineKeys } from "./inline-keys";
+import type { ProviderFormInlineKeyRow } from "../form-schema";
+
+/** 表单行辅助：明文行（可为空占位）/ 掩码行（服务端掩码文本回填形态） */
+function plain(key = "", id?: number): ProviderFormInlineKeyRow {
+  return { id, key, masked: false };
+}
+function masked(key: string, id: number): ProviderFormInlineKeyRow {
+  return { id, key, masked: true };
+}
 
 describe("splitInlineKeys - 批量粘贴拆分（自适应分隔符）", () => {
   it("换行分隔拆成多行、trim 去空行", () => {
@@ -31,82 +35,59 @@ describe("splitInlineKeys - 批量粘贴拆分（自适应分隔符）", () => {
     expect(splitInlineKeys("")).toEqual([]);
     expect(splitInlineKeys("  \t\n  ")).toEqual([]);
   });
-});
-
-describe("inlineKeysToArray - 表单值 → 提交数组（保行边界）", () => {
-  it("换行拆回行边界，trim 去空", () => {
-    expect(inlineKeysToArray("sk-a\n sk-b \n\n")).toEqual(["sk-a", "sk-b"]);
-  });
-
-  it("单行显式内容不被按逗号/空格二次拆散（行内内容即最终内容）", () => {
-    expect(inlineKeysToArray("sk-a sk-b")).toEqual(["sk-a sk-b"]);
-  });
 
   it("CRLF（\\r\\n）粘贴也能正确拆行（trim 吞掉 \\r）", () => {
     expect(splitInlineKeys("sk-a\r\nsk-b\r\n")).toEqual(["sk-a", "sk-b"]);
-    expect(inlineKeysToArray("sk-a\r\nsk-b")).toEqual(["sk-a", "sk-b"]);
-  });
-
-  it("只有空行 → 空数组（后端 normalizeInlineKeys 兜底校验）", () => {
-    expect(inlineKeysToArray("\n  \n")).toEqual([]);
   });
 });
 
-describe("maskKey - 掩码显示", () => {
-  it("保留头尾 4 字符，中间掩码", () => {
-    expect(maskKey("sk-abcdefghijklmnopWXYZ")).toBe("sk-a••••WXYZ");
-  });
-
-  it("短 key（≤8 字符）全掩", () => {
-    expect(maskKey("abcdef")).toBe("••••••");
-  });
-
-  it("8/9 字符边界：8 全掩，9 起保留头尾 4 字符", () => {
-    expect(maskKey("abcdefgh")).toBe("••••••");
-    expect(maskKey("abcdefghi")).toBe("abcd••••fghi");
-  });
-
-  it("空串 → 空", () => {
-    expect(maskKey("  ")).toBe("");
-  });
-});
-
-describe("deriveInlineKeyStats - 统计与空行警示判定", () => {
-  it("正常多行：count/totalLines 正确、无空行、无重复", () => {
-    const s = deriveInlineKeyStats("sk-a\nsk-b\nsk-c");
+describe("deriveInlineKeyStats - 行数组统计与空态警示判定", () => {
+  it("纯明文多行：count 正确、无空行、无重复", () => {
+    const s = deriveInlineKeyStats([plain("sk-a"), plain("sk-b"), plain("sk-c")]);
     expect(s.count).toBe(3);
-    expect(s.totalLines).toBe(3);
     expect(s.duplicates).toBe(0);
     expect(s.hasBlankLine).toBe(false);
     expect(s.allBlank).toBe(false);
   });
 
-  it("重复条目计入 duplicates（trim 后判重）", () => {
-    const s = deriveInlineKeyStats("sk-a\n sk-a\nsk-b");
+  it("掩码行计入 count、不参与重复/空态判定", () => {
+    const s = deriveInlineKeyStats([masked("sk-a****1111", 1), plain("sk-a"), plain("sk-b")]);
+    expect(s.count).toBe(3);
+    expect(s.duplicates).toBe(0);
+    expect(s.hasBlankLine).toBe(false);
+    expect(s.allBlank).toBe(false);
+  });
+
+  it("重复条目计入 duplicates（明文行 trim 后判重，掩码行不参与）", () => {
+    const s = deriveInlineKeyStats([plain("sk-a"), plain(" sk-a "), plain("sk-b")]);
     expect(s.count).toBe(3);
     expect(s.duplicates).toBe(1);
   });
 
-  it("中间空行（部分解密失败/手动空行）→ hasBlankLine 且非 allBlank", () => {
-    const s = deriveInlineKeyStats("sk-a\n\nsk-c");
+  it("存在空明文占位行 → hasBlankLine 且非 allBlank", () => {
+    const s = deriveInlineKeyStats([plain("sk-a"), plain(), plain("sk-c")]);
     expect(s.hasBlankLine).toBe(true);
     expect(s.allBlank).toBe(false);
     expect(s.count).toBe(2);
-    expect(s.totalLines).toBe(3);
   });
 
-  it("整组空行（全量解密失败形态：N-1 个换行）→ allBlank、totalLines 即原凭据条数", () => {
-    const s = deriveInlineKeyStats("\n\n");
+  it("整组空明文行 → allBlank（需重填警示）", () => {
+    const s = deriveInlineKeyStats([plain(), plain()]);
     expect(s.allBlank).toBe(true);
     expect(s.hasBlankLine).toBe(true);
-    expect(s.totalLines).toBe(3);
     expect(s.count).toBe(0);
   });
 
-  it("全新空组（value 为空串）不算空行警示", () => {
-    const s = deriveInlineKeyStats("");
+  it("全新空组（空数组）→ allBlank（无有效 key）", () => {
+    const s = deriveInlineKeyStats([]);
     expect(s.hasBlankLine).toBe(false);
+    expect(s.allBlank).toBe(true);
+  });
+
+  it("回填掩码态（未显示）不触发空态警示——有凭据、保存按 id 保留", () => {
+    const s = deriveInlineKeyStats([masked("sk-****1111", 1)]);
     expect(s.allBlank).toBe(false);
-    expect(s.totalLines).toBe(0);
+    expect(s.count).toBe(1);
+    expect(s.hasBlankLine).toBe(false);
   });
 });

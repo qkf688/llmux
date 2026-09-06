@@ -3,6 +3,8 @@
  * - 详情回填 = 服务端掩码行（masked=true，只读，保存按 id 保留，明文永不出常规响应）；
  * - 点「显示」经受控 raw 端点拉取该组明文，整组切换为可编辑明文行（masked=false）；
  * - 新增/粘贴的行直接是明文态；掩码行不可单独编辑（要改必须先显示）；
+ * - 明文行可单条复制（copyTextWithToast，提示只回显行号不回显明文）；掩码行无复制入口，
+ *   要复制先点「显示」——供应商侧只有整组 raw 端点，没有单条明文出口；
  * - 实时计数徽标：共 N 条 / 明文行重复 M 条（重复仅提示，提交时后端 normalize 显式 400 拒绝）；
  * - 批量粘贴口：换行/逗号/空格/制表自适应拆分（splitInlineKeys），所见即所得防静默并 key；
  * - 空明文行警示条：保存时被忽略（对齐后端 normalizeInlineKeys 空条目兜底）。
@@ -10,7 +12,7 @@
  * 行形态契约（ProviderFormInlineKeyRow）：value 恒为该数组；onChange 吐整个数组，
  * 保存时 buildProviderPayload 把 masked 行映射为 {id, key:""}（保留）、明文行映射为 {id, key}。
  */
-import { ClipboardPaste, Eye, Plus, Trash2, Loader2 } from "lucide-react";
+import { ClipboardPaste, Copy, Eye, Plus, Trash2, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +21,7 @@ import { FormLabel } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { getProviderGroupInlineKeysRaw } from "@/lib/api";
+import { copySecretWithToast } from "@/lib/clipboard";
 import type { ProviderFormInlineKeyRow } from "../../form-schema";
 import { deriveInlineKeyStats, splitInlineKeys } from "../../utils/inline-keys";
 
@@ -120,6 +123,13 @@ export function InlineKeysField({ value, onChange, providerId, groupId }: Inline
     }
   };
 
+  /** 复制明文行。走 copySecretWithToast（禁 prompt 兜底——prompt 会把明文整条弹上屏）；
+   *  成功提示只回显行号：前端不重建掩码（掩码单源在后端 KeyMasked），更不能把明文写进
+   *  任何用户可见文案（契约见 lib/clipboard）。 */
+  const copyRowKey = async (index: number, key: string) => {
+    await copySecretWithToast(key, `已复制第 ${index + 1} 条 key`);
+  };
+
   return (
     <div className="space-y-1.5">
       <FormLabel>API Keys</FormLabel>
@@ -192,7 +202,7 @@ export function InlineKeysField({ value, onChange, providerId, groupId }: Inline
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-7 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                className="size-7 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
                 onClick={() => removeRow(index)}
                 aria-label={`删除第 ${index + 1} 条 key（保存后生效）`}
               >
@@ -215,7 +225,20 @@ export function InlineKeysField({ value, onChange, providerId, groupId }: Inline
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-7 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                className="size-7 shrink-0 text-muted-foreground opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
+                onClick={() => void copyRowKey(index, row.key)}
+                // 空行没有可复制内容（提交时也被忽略），禁用避免复制空串还提示成功
+                disabled={row.key.trim() === ""}
+                aria-label={`复制第 ${index + 1} 条 key`}
+                title="复制明文到剪贴板"
+              >
+                <Copy className="size-3.5" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-7 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
                 onClick={() => removeRow(index)}
                 aria-label={`删除第 ${index + 1} 条 key`}
               >

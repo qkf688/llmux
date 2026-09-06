@@ -43,6 +43,8 @@ import {
   CredentialDeleteDialog,
   type CredentialDeleteTarget,
 } from "./credential-delete-dialog";
+import { CredentialKeyCell } from "./credential-key-cell";
+import { useCredentialKeyReveal } from "./use-credential-key-reveal";
 import {
   COOLDOWN_BADGE_CLS,
   CREDENTIAL_STATUS_BADGE_CLS,
@@ -103,6 +105,12 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
     q: debouncedQ || undefined,
   });
 
+  // 已显示的明文只在当前视图内有效：翻页 / 筛选 / 搜索 / 关弹窗一律作废（契约见 useCredentialKeyReveal）
+  const keyReveal = useCredentialKeyReveal({
+    poolId: open ? poolId : null,
+    view: open ? `${page}|${statusFilter}|${debouncedQ}` : "closed",
+  });
+
   const updateCred = useUpdateCredential();
   const deleteCred = useDeleteCredential();
   const batchStatus = useBatchUpdateCredentialStatus();
@@ -151,6 +159,8 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
     try {
       if (next === "delete") {
         await batchDelete.mutateAsync({ poolId: pool.ID, ids });
+        // 被删凭据的行随即消失，明文必须同时出栈（不等翻页/筛选才作废）
+        keyReveal.forget(ids);
         toast.success(`已删除 ${ids.length} 条凭据`);
       } else {
         await batchStatus.mutateAsync({ poolId: pool.ID, ids, status: next });
@@ -173,6 +183,8 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
   const handleDeleteCredential = async (id: number) => {
     try {
       await deleteCred.mutateAsync({ poolId: pool.ID, credId: id });
+      // 行消失的同时丢弃其明文：被删的 key 往往正因为已泄露，最不该留在内存里
+      keyReveal.forget([id]);
       setSelectedIds((prev) => {
         const next = new Set(prev);
         next.delete(id);
@@ -354,8 +366,12 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
                             aria-label={`选择凭据 ${cred.ID}`}
                           />
                         </TableCell>
-                        <TableCell className="font-mono text-xs" title={cred.KeyMasked}>
-                          {cred.KeyMasked}
+                        <TableCell>
+                          <CredentialKeyCell
+                            credId={cred.ID}
+                            keyMasked={cred.KeyMasked}
+                            reveal={keyReveal}
+                          />
                         </TableCell>
                         <TableCell>{renderStatusBadges(cred.Status, cred.CooldownUntil)}</TableCell>
                         <TableCell
@@ -414,8 +430,13 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
                       aria-label={`选择凭据 ${cred.ID}`}
                     />
                     <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-[11px] truncate">{cred.KeyMasked}</span>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <CredentialKeyCell
+                          credId={cred.ID}
+                          keyMasked={cred.KeyMasked}
+                          reveal={keyReveal}
+                          size="xs"
+                        />
                         {renderStatusBadges(cred.Status, cred.CooldownUntil)}
                       </div>
                       <p className="text-[10px] text-muted-foreground">

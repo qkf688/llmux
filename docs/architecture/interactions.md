@@ -11,7 +11,7 @@
 handler/v1 → service.BalanceChat / Beforer / Processer
   → service/chat → (可选) virtualmodel.SelectRealModelsOrdered
   → transform.ProcessRequest → providers.BuildReq → 上游 HTTP
-handler/providerapi → repository.ProviderRepo / models.DB
+handler/providerapi → repository.ProviderRepo / service/modelsync（model-catalog 聚合、ListUpstreamModels 拉上游模型）
 handler/healthcheck → service.GetHealthChecker()
 handler/modelsync → service.NewModelSyncService
 ```

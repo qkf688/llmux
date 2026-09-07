@@ -78,20 +78,23 @@ export function useUpstreamModelsDialog({
     });
   };
 
-  const fetchProviderModels = async (providerId: number, source: "upstream" | "all" = "upstream") => {
+  const fetchProviderModels = async (providerId: number) => {
     try {
       setModelsLoading(true);
-      const data = await getProviderModels(providerId, { source });
+      const data = await getProviderModels(providerId);
       const models = Array.isArray(data) ? data : [];
       setProviderModels(models);
       setFilteredProviderModels(models);
-      if (source === "upstream") {
-        setUpstreamModelsCache((prev) => ({ ...prev, [providerId]: models }));
-      }
+      setUpstreamModelsCache((prev) => ({ ...prev, [providerId]: models }));
     } catch (err) {
       console.error("获取提供商模型失败", err);
       setProviderModels([]);
       setFilteredProviderModels([]);
+      // 失败必须可见：空列表和「上游没有模型」在 UI 上无法区分，
+      // 而后端 message 里带着真正原因（缺凭据 / 上游 401 原文 / 端点未启用）。
+      toast.error("获取上游模型失败", {
+        description: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setModelsLoading(false);
     }
@@ -108,13 +111,13 @@ export function useUpstreamModelsDialog({
       setFilteredProviderModels(cached);
       return;
     }
-    await fetchProviderModels(providerId, "upstream");
+    await fetchProviderModels(providerId);
   };
 
   const refreshUpstreamModels = async () => {
     if (!modelsOpenId) return;
     setSelectedUpstreamModels([]);
-    await fetchProviderModels(modelsOpenId, "upstream");
+    await fetchProviderModels(modelsOpenId);
   };
 
   const handleUpstreamSearchChange = (value: string) => {

@@ -2,13 +2,13 @@ package modelsync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
-	"github.com/qkf688/llmux/providers"
 	"github.com/qkf688/llmux/service/channel"
 )
 
@@ -25,6 +25,7 @@ type groupSyncOutcome struct {
 
 // syncKeyGroup 用该组活跃凭据拉 /models，全量写入 KeyGroup.Models。
 // 端点：启用且协议 = ProtocolOfType(Provider.Type) 的最小 ID；凭据：组内首个可用。
+// 客户端装配走 groupUpstreamClient（与管理端只读浏览 ListUpstreamModels 共用同一条链路）。
 func (s *Service) syncKeyGroup(
 	ctx context.Context,
 	provider models.Provider,
@@ -41,37 +42,14 @@ func (s *Service) syncKeyGroup(
 		return out
 	}
 
-	cred, err := channel.SelectCredential(&channel.Selector{}, snapshot, group.ID, now)
+	chatModel, err := groupUpstreamClient(provider, snapshot, group, endpoint, now)
 	if err != nil {
-		out.Skipped = true
-		out.SkipReason = "no usable credential"
-		return out
-	}
-
-	plainKey, err := channel.DecryptCredentialKey(cred)
-	if err != nil {
-		out.Err = fmt.Errorf("group %d decrypt credential: %w", group.ID, err)
-		return out
-	}
-	cfg, _, err := channel.BuildConfig(provider, endpoint, plainKey)
-	if err != nil {
-		out.Err = fmt.Errorf("group %d build config: %w", group.ID, err)
-		return out
-	}
-	cfg, err = dropCustomModels(cfg)
-	if err != nil {
-		out.Err = fmt.Errorf("group %d strip custom models: %w", group.ID, err)
-		return out
-	}
-
-	providerType, ok := consts.TypeOfProtocol(consts.Protocol(endpoint.Protocol))
-	if !ok {
-		out.Err = fmt.Errorf("group %d unknown endpoint protocol %q", group.ID, endpoint.Protocol)
-		return out
-	}
-	chatModel, err := providers.New(providerType, cfg, provider.Proxy)
-	if err != nil {
-		out.Err = fmt.Errorf("group %d create provider client: %w", group.ID, err)
+		if errors.Is(err, channel.ErrNoCredentialAvailable) {
+			out.Skipped = true
+			out.SkipReason = "no usable credential"
+			return out
+		}
+		out.Err = fmt.Errorf("group %d build upstream client: %w", group.ID, err)
 		return out
 	}
 

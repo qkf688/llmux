@@ -13,9 +13,9 @@
 
 ## 2. 职责与边界
 
-- **负责什么**：`SyncProviderModels` / `SyncAllProviders` / `StartAutoSync`；过滤与清理配置；同步日志；`ActionHooks` 注入点
+- **负责什么**：`SyncProviderModels` / `SyncAllProviders` / `StartAutoSync`；过滤与清理配置；同步日志；`ActionHooks` 注入点；**上游模型只读浏览**（`ListUpstreamModels`，管理端弹窗数据源）
 - **不负责什么**：供应商 CRUD；直接实现关联表修改（经 Hook 委托 `service/autoassoc`）；协议转换
-- **对外暴露**：`NewModelSyncService`、`Sync*`、`GetRecentAddedModels`、`ActionHooks`；管理端同步与日志 API
+- **对外暴露**：`NewModelSyncService`、`Sync*`、`GetRecentAddedModels`、`ActionHooks`、`ListUpstreamModels`；管理端同步与日志 API
 - **依赖谁**：`models`、`providers`（`Models`）、`service/channel`（Assemble / 凭据 / BuildConfig）、`repository`（KeyGroup 等）；门面注入 autoassoc；`main` 启动自动同步
 
 ## 3. 内部结构
@@ -23,7 +23,7 @@
 ```
 handler/modelsync/                 # 触发同步、日志、stats（薄 handler，编排下沉 service）
 service/model_sync.go              # 门面 + ActionHooks 装配到 autoassoc + GetSyncStats
-service/modelsync/                 # Service 核心、sync_group、filter、cleanup、config、actions、stats
+service/modelsync/                 # Service 核心、sync_group、upstream、filter、cleanup、config、actions、stats
 repository/model_sync_log.go
 models.ModelSyncLog
 ```
@@ -36,12 +36,15 @@ models.ModelSyncLog
 | `Service.GetSyncStats` | 汇总供应商数/各状态计数/上次下次同步时间 | `service/modelsync/stats.go` | 经 `repository` 聚合，不直连 DB |
 | `ActionHooks` | 同步后自动关联/清理 | `service/modelsync/` | `NewModelSyncService` 注入 `GetAutoAssocService` |
 | `GetProviderModels` | 组织级模型目录：各分组白名单并集 ∪ `custom_models` | service 门面/modelsync | 读 KeyGroup + Config（非上游 HTTP） |
+| `ListUpstreamModels(ctx, repos, providerID)` | **只读**拉上游模型（`GET /api/providers/models/:id` 的实现）：与同步共用 `selectSyncEndpoint` + `groupUpstreamClient`，多分组按模型 ID 去重合并；不写 `KeyGroup.Models`、不产 `ModelSyncLog`、不触发 ActionHooks、**不套用过滤规则**（过滤约束的是落库范围，浏览要的是上游授权全集）；单组失败/组内无可用凭据不阻断其余组，全失败才报错 | `service/modelsync/upstream.go` | `service/channel`（Assemble / SelectCredential / BuildConfig）+ `providers.Models` |
+| `groupUpstreamClient`（包内） | 「打上游的那条链路」唯一实现：组内首个可用凭据 → 解密 → 端点 URL/base_url 继承 → 剥 `custom_models`（否则 `Models()` 本地短路不发请求）→ 按端点协议派生 provider 注册类型；新建 `Selector` 而非 `DefaultSelector()`，不推进 chat 轮询指针 | `service/modelsync/upstream.go` | `syncKeyGroup` 与 `ListUpstreamModels` 共用 |
 | `ModelSyncLogRepo.AggregateProviderStats` | 按 provider 取最新一次同步状态并分桶计数 | `repository/model_sync_log.go` | GORM；含旧行空 status 兼容归一化 |
 | `ProviderRepo.EnabledModelEndpointIDs` / `CountEnabledModelEndpoint` | 启用模型端点的供应商 ID/数量（NULL 视为启用） | `repository/provider.go` | GORM |
 
 ## 5. 特殊约定
 
 - **同步粒度 = 分组**：每个 KeyGroup 取活跃凭据调 `Models()`，全量写入该组 `Models` CSV；请求数 ≈ 分组数，与凭据数无关
+- **任何「打上游拿模型」的路径都必须经 `groupUpstreamClient`**：`Provider.Config` 自 S6 起不含 `api_key`（凭据只在 `credentials` 表、运行时由 `channel.BuildConfig` 注入明文），绕过选路直用 config 等于不带 Authorization 打上游 → 恒 401「You didn't provide an API key」。管理端浏览（`ListUpstreamModels`）曾因此失效，现已收口
 - **空白名单**：空 = 未同步/不限制（选路不限；不向组织级目录贡献模型 ID）
 - **不再写 `Config.upstream_models`**：同步真相在分组白名单；组织级目录由 `GetProviderModelCatalogs` 批量聚合（端点 `GET /api/providers/model-catalog`，前端目录唯一数据源，详见 providers.md 契约表）
 - 过滤规则（如仅 `:free`）为配置驱动，适配不同公益站场景；按分组拉回后套用

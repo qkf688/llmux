@@ -190,20 +190,11 @@ export async function getProviderModelCatalog(): Promise<ProviderModelCatalog[]>
   return apiRequest<ProviderModelCatalog[]>("/providers/model-catalog");
 }
 
-export async function getProviderModels(
-  providerId: number,
-  options: { source?: "upstream" | "all" } = {}
-): Promise<ProviderModel[]> {
-  const params = new URLSearchParams();
-  if (options.source) {
-    params.append("source", options.source);
-  }
-
-  const queryString = params.toString();
-  const endpoint = queryString
-    ? `/providers/models/${providerId}?${queryString}`
-    : `/providers/models/${providerId}`;
-  return apiRequest<ProviderModel[]>(endpoint);
+/** 上游模型列表（打真实上游）：后端按「协议端点 + 分组凭据」选路拉取，
+ *  多分组时返回各组授权集的并集。不再有 source 分支——本端点的唯一语义就是打上游，
+ *  本地自定义模型走 getProviderModelCatalog 的 Custom。 */
+export async function getProviderModels(providerId: number): Promise<ProviderModel[]> {
+  return apiRequest<ProviderModel[]>(`/providers/models/${providerId}`);
 }
 
 export async function testProviderModel(providerId: number, model: string): Promise<ProviderModelTestResult> {

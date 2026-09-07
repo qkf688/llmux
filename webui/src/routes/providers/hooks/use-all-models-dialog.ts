@@ -291,9 +291,7 @@ export function useAllModelsDialog({
     const entry = await fetchCatalogEntry(provider.ID);
     setAllModelsList(entry ? unionCatalogModels(entry) : []);
     try {
-      const upstreamModels = await getProviderModels(provider.ID, {
-        source: "upstream",
-      });
+      const upstreamModels = await getProviderModels(provider.ID);
       const modelIds = upstreamModels.map((model) => model.id);
       setUpstreamModelsList(modelIds);
       setUpstreamStatus(modelIds.length > 0 ? "success" : "empty");

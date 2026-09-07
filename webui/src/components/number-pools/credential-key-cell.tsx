@@ -57,6 +57,7 @@ export function CredentialKeyCell({
       >
         {revealed ? plaintext : keyMasked}
       </span>
+      {/* 刻意不设 title：原生 hover 提示在密集表格里频繁弹出干扰阅读，按钮语义由 aria-label 承载 */}
       <div className="flex shrink-0 items-center">
         <Button
           type="button"
@@ -66,11 +67,6 @@ export function CredentialKeyCell({
           disabled={pending}
           onClick={() => void reveal.toggle(credId)}
           aria-label={revealed ? `隐藏 key ${keyMasked}` : `显示 key ${keyMasked} 的明文`}
-          title={
-            revealed
-              ? "隐藏明文（立即从内存删除）"
-              : "显示明文（受控端点，仅当前视图可见；翻页 / 筛选 / 关弹窗自动清除）"
-          }
         >
           {action === "reveal" ? (
             <Loader2 className={`${iconCls} animate-spin`} />
@@ -88,7 +84,6 @@ export function CredentialKeyCell({
           disabled={pending}
           onClick={() => void reveal.copy(credId, keyMasked)}
           aria-label={`复制 key ${keyMasked}`}
-          title="复制明文到剪贴板（不改变显示状态）"
         >
           {action === "copy" ? (
             <Loader2 className={`${iconCls} animate-spin`} />

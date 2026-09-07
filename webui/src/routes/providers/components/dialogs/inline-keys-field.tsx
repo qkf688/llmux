@@ -7,7 +7,9 @@
  *   要复制先点「显示」——供应商侧只有整组 raw 端点，没有单条明文出口；
  * - 实时计数徽标：共 N 条 / 明文行重复 M 条（重复仅提示，提交时后端 normalize 显式 400 拒绝）；
  * - 批量粘贴口：换行/逗号/空格/制表自适应拆分（splitInlineKeys），所见即所得防静默并 key；
- * - 空明文行警示条：保存时被忽略（对齐后端 normalizeInlineKeys 空条目兜底）。
+ * - 空明文行警示条：保存时被忽略（对齐后端 normalizeInlineKeys 空条目兜底）；
+ * - 一律不设原生 title（动作按钮与掩码行文本都不设，与号池 CredentialKeyCell 一致）：hover
+ *   提示在密集表单里频繁弹出干扰阅读，语义由可见文案 / aria-label 承载。
  *
  * 行形态契约（ProviderFormInlineKeyRow）：value 恒为该数组；onChange 吐整个数组，
  * 保存时 buildProviderPayload 把 masked 行映射为 {id, key:""}（保留）、明文行映射为 {id, key}。
@@ -153,7 +155,6 @@ export function InlineKeysField({ value, onChange, providerId, groupId }: Inline
               className="h-7 px-2 text-xs text-muted-foreground"
               onClick={revealPlaintext}
               disabled={!canReveal || revealing}
-              title={canReveal ? "拉取该组明文 keys（受控端点，仅当前编辑会话可见）" : "无可显示的既有 key"}
             >
               {revealing ? <Loader2 className="size-3.5 animate-spin" /> : <Eye className="size-3.5" />}
               显示
@@ -194,7 +195,6 @@ export function InlineKeysField({ value, onChange, providerId, groupId }: Inline
             <div key={index} className="group flex items-center gap-2">
               <div
                 className="flex-1 truncate rounded-md border border-border/60 bg-muted/30 px-3 py-1.5 font-mono text-xs"
-                title="服务端掩码；点右上「显示」查看明文后可编辑"
               >
                 {row.key}
               </div>
@@ -230,7 +230,6 @@ export function InlineKeysField({ value, onChange, providerId, groupId }: Inline
                 // 空行没有可复制内容（提交时也被忽略），禁用避免复制空串还提示成功
                 disabled={row.key.trim() === ""}
                 aria-label={`复制第 ${index + 1} 条 key`}
-                title="复制明文到剪贴板"
               >
                 <Copy className="size-3.5" />
               </Button>

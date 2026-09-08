@@ -12,10 +12,10 @@
 
 ## 2. 职责与边界
 
-- **对外暴露**：`Selector.Select(snapshot, clientWire, modelName, now) → SelectionResult`（S3-2 chat 链路接入点）；`Selector.RetryCredential(snapshot, groupID, endpoint, now) → SelectionResult`（S3-3 组内故障转移：锁组/端点重选凭据）；`Assembler.Assemble(ctx, provider) → Snapshot`（装配输入）
-- **依赖谁**：`repository.*`（构造注入 `*repository.Repositories`，不取包级默认）；`models` 四表实体；`consts.Protocol*`/`WireFormatOfProtocol`；`common/credentialcrypto.Default()`（main 装配注入）
-- **不负责什么**：上游请求构造与协议适配（providers）；透传判定与转换链路编排（chat 链路消费 SelectionResult 后自判）；凭据状态机写入（CooldownUntil 只读不写，S4 接管）；请求日志落库（#13 消费命中信息）
-- **依赖方向**：`service/channel` 不 import `providers`——config 组装是 JSON 字符串操作，产物可被 `providers.New` 反序列化即可
+- **对外暴露**：`Selector.Select(snapshot, clientWire, modelName, now) → SelectionResult`（S3-2 chat 链路接入点）；`Selector.RetryCredential(snapshot, groupID, endpoint, now) → SelectionResult`（S3-3 组内故障转移：锁组/端点重选凭据）；`Assembler.Assemble(ctx, provider) → Snapshot`（装配输入）；**探活/诊断口径**（#20 起为同步、管理端浏览、credprobe 共用，后续 #19/#21/#24 也走这里）：`SelectPrimaryEndpoint` + `GroupCandidates` + `FirstUsableCredential` + `NewClientFromSelection`（→ 可直接 `Models()` 的客户端）
+- **依赖谁**：`repository.*`（构造注入 `*repository.Repositories`，不取包级默认）；`models` 四表实体；`consts.Protocol*`/`WireFormatOfProtocol`/`TypeOfProtocol`；`common/credentialcrypto.Default()`（main 装配注入）；`providers`（仅 `NewClientFromSelection` 用 `providers.New` 造客户端）
+- **不负责什么**：发上游请求与协议字段转换（调用方各自决定打什么端点、超时多少）；透传判定与转换链路编排（chat 链路消费 SelectionResult 后自判）；凭据状态机写入（CooldownUntil 只读不写，S4 接管）；请求日志落库（#13 消费命中信息）
+- **依赖方向**：`service/channel` → `providers` 是合法下沉方向（`service` → `providers`），且 channel 只**装配**客户端（选路产物 → `providers.New`），不发起调用——调用与超时留在 credprobe/modelsync/handler 侧
 
 ## 3. 内部结构
 
@@ -23,13 +23,19 @@
 service/channel/
   types.go                # Snapshot（装配产出）/ SelectionResult（命中+动态 config）/ 三层 sentinel errors
   assemble.go             # Assembler: repository → Snapshot（凭据经 ListByGroups 按分组/号池收敛，三路数据 ID ASC 稳定）
+  selector.go             # Select / RetryCredential 编排门面（三层 + 解密 + config 尾部复用）+ DefaultSelector 单例
   endpoint_select.go      # SelectEndpoint：入站 wire ∈ enabled 端点协议 → 透传路径；否则主协议端点（转换路径）
+                          # SelectPrimaryEndpoint：诊断口径——主协议启用端点取 ID 最小，不碰轮询状态
   group_select.go         # SelectGroup：白名单过滤（空=不限）→ weight 聚合档 → 档间加权随机 → 档内轮询
+                          # GroupCandidates：诊断遍历候选（全部组、ID ASC，不过滤白名单/weight）
   credential_select.go    # SelectCredential：active + 非冷却（CooldownUntil 读判定）→ 组内轮询（选择即推进）
+                          # FirstUsableCredential：诊断口径——组内首个可用，确定性且不推进轮询指针
   config_build.go         # BuildConfig：Provider.Config JSON round-trip + base_url 继承链 + api_key 明文；DecryptCredentialKey 解密（供选路与 credprobe 共用）
-  rrstate.go              # Selector: 轮询指针容器（sync.Mutex + map，分组档/凭据组两维）+ Select 编排门面
+  probe.go                # NewClientFromSelection：解密 → BuildConfig → DropCustomModels → TypeOfProtocol → providers.New（非 chat 流量唯一的客户端装配点）
+                          # DropCustomModels：剥 custom_models，使 Models() 真打上游
+  rrstate.go              # Selector: 轮询指针容器（sync.Mutex + map，分组档/凭据组两维）
                           # 测试：endpoint_group_select_test.go / credential_select_test.go /
-                          #       config_build_test.go / assemble_test.go / rrstate_test.go
+                          #       config_build_test.go / assemble_test.go / rrstate_test.go / probe_test.go
 consts/protocol.go        # Protocol* 常量 + ProtocolOfType（type→protocol）+ TypeOfProtocol / WireFormatOfProtocol（反向映射）
 ```
 
@@ -45,18 +51,24 @@ consts/protocol.go        # Protocol* 常量 + ProtocolOfType（type→protocol�
 | `SelectCredential` | active 且非冷却（`CooldownUntil > now` 剔除）→ 组内轮询选择即推进；空/全不可用 → `ErrNoCredentialAvailable` | `service/channel/credential_select.go` | `Selector.nextCredentialInRR` |
 | `BuildConfig` | Provider.Config round-trip 保留未知字段；base_url 继承链（端点 URL 非空覆盖，否则原 base_url）；api_key 恒为选中凭据明文；两者皆空报错；返回 (config, upstreamURL) | `service/channel/config_build.go` | 同文件 |
 | `DecryptCredentialKey` | 解密凭据明文；`credentialcrypto.Default()==nil` 明确报错（无降级）；选路与 `service/credprobe` 共用 | `service/channel/config_build.go` | `credentialcrypto.Default()` |
+| `SelectPrimaryEndpoint(providerType, endpoints) → (Endpoint, bool)` | **诊断口径端点**：启用 + 协议 = `ProtocolOfType(providerType)` + ID 最小（入参 ID ASC 由 Assembler 保证）。不做入站 wire 匹配、不推进轮询状态；返回 bool 让调用方各自措辞（同步 `SkipReason` / 浏览报错） | `service/channel/endpoint_select.go` | modelsync（同步 + 浏览）；后续 #21/#19/#24 |
+| `GroupCandidates(snapshot) → []KeyGroup` | **诊断遍历分组候选**：全部组、ID ASC 副本。刻意不过滤白名单（白名单正是靠这次同步才填上，过滤＝先有鸡还是先有蛋）也不看 weight（`weight<=0` 只表示不参与生产选路，其凭据仍是真 key）；返回副本防调用方污染快照 | `service/channel/group_select.go` | 同上 |
+| `FirstUsableCredential(snapshot, groupID, now) → Credential` | **诊断口径凭据**：组内首个可用（跳过 disabled/error/temp_unsched/冷却），连续调用结果不漂移，且**不推进** `Selector` 轮询指针（管理员一次点击不得挪动生产 key 分配）。代价已知并接受：只验第一把，逐 key 健康是 credprobe / #24 的职责。无可用 → `ErrNoCredentialAvailable`（与 `SelectCredential` 同一 sentinel 与文案） | `service/channel/credential_select.go` | 同上 |
+| `NewClientFromSelection(provider, endpoint, cred) → providers.Provider` | 非 chat 流量**唯一**客户端装配点：解密 → `BuildConfig` → `DropCustomModels` → `TypeOfProtocol` → `providers.New`。绕过它直用 `Provider.Config` 即不带 Authorization 打上游 → 恒 401（S6 起 config 不含 api_key）。未知端点协议显式失败；只装配不发请求（超时/调用由 caller 决定） | `service/channel/probe.go` | modelsync（`probeClientForGroup`）、`service/credprobe.probeModels`；后续 #19/#21/#24 |
+| `DropCustomModels(config) → string` | 剥 `custom_models` 使 `Models()` 真打上游（不剥则 openai/anthropic 本地短路返回自定义列表 → 管理端浏览拿不到上游授权集、探活把失效 key 误判成功并误恢复 active）。空串/无该键原样返回（不重跑 marshal 改键序） | `service/channel/probe.go` | 同文件 |
 | `consts.TypeOfProtocol` / `WireFormatOfProtocol` | 端点协议 → provider 注册类型 / wire format（responses ↔ openai-res；未知协议不兜底）；与 `ProtocolOfType` 反向 | `consts/protocol.go` | 同文件 |
 | 轮询指针语义 | 进程内内存态 + `sync.Mutex`；选择即推进单轨（无成功后回调——凭据层失败转移本就跳选）；多实例部署不同步可接受 | `service/channel/rrstate.go` | 同文件 |
 
 ## 5. 特殊约定
 
 - **错误分层语义**：三层 sentinel（`ErrEndpointUnavailable` / `ErrNoGroupMatches` / `ErrNoCredentialAvailable`）供 chat 链路按层处置——凭据层失败由 #13 组内故障转移消化（`RetryCredential` 换 key，冷却写库在 chat 侧），`ErrNoCredentialAvailable` 上抛即组耗尽 → 组织级淘汰；分组/端点层耗尽同样判供应商整体失败；`ConsecutiveFailures` 组织级语义与凭据级失败不重叠（#13 起层内耗尽才累计）
-- **无 DB/无时钟依赖**：选择函数输入为内存快照，冷却判定时钟由 `Select` 的 `now` 参数注入；IO 收敛在 `assemble.go`（读库）与 `DecryptCredentialKey`（解密单例）；`RetryCredential` 不写冷却——CooldownUntil 与凭据状态的写库是 chat 链路职责，且经 `service/credwrite` 队列异步落库（冷却 `chat_credential_cooldown.go`；鉴权判停 `chat_credential_auth_fail.go`，#6-2 起连败达阈值写 `temp_unsched`；探活恢复 `service/credprobe`，#6-3），本模块只读判定（`credentialUsable` 按 Status≠active 与冷却剔除，新增状态枚举无需改本模块）；本包**不** import `providers`（探活在 credprobe）
+- **无 DB/无时钟依赖**：选择函数输入为内存快照，冷却判定时钟由 `Select` 的 `now` 参数注入；IO 收敛在 `assemble.go`（读库）与 `DecryptCredentialKey`（解密单例）；`RetryCredential` 不写冷却——CooldownUntil 与凭据状态的写库是 chat 链路职责，且经 `service/credwrite` 队列异步落库（冷却 `chat_credential_cooldown.go`；鉴权判停 `chat_credential_auth_fail.go`，#6-2 起连败达阈值写 `temp_unsched`；探活恢复 `service/credprobe`，#6-3），本模块只读判定（`credentialUsable` 按 Status≠active 与冷却剔除，新增状态枚举无需改本模块）；`probe.go` 是本包唯一 import `providers` 的文件，且只**装配**客户端（`providers.New`），打上游与超时策略留在调用方（credprobe/modelsync/handler）
+- **两套口径不可混用（#20 立）**：**生产选路**＝`Select` / `RetryCredential`（入站 wire 匹配 + 白名单 + 加权随机 + 轮询推进，必须复用 `DefaultSelector()` 才谈得上压力分摊）；**探活/诊断**＝`SelectPrimaryEndpoint` + `GroupCandidates` + `FirstUsableCredential` + `NewClientFromSelection`（确定性、无状态、不碰 `DefaultSelector()`）。把诊断流量接进生产口径的代价已被论证：管理端批量测试（前端并发 3）会把生产轮询指针按点击次数推进，一次点击静默重排真实流量的 key 分配；且上游目录里的模型名通常不在分组白名单，走 `SelectGroup` 会直接 `ErrNoGroupMatches`，把完全可用的 key 测成失败
 - **档间加权 = 单组权重而非档总权重**：同权重组由轮询打散为等概率，档权重只表达「某权重档的选中概率」，防止多组低权把单个高权组挤出随机池
 - **组内候选顺序稳定性**：装配按凭据 ID ASC 排序，repository List 不保证顺序；轮询取模的正确性依赖该不变式
 - **快照语义**：单供应商数据；`CredentialsByGroup` 组键恒存在（含空切片），选择路径统一收口 `ErrNoCredentialAvailable`
-- 契约测试分布在同目录 `*_test.go`：白名单/加权分布/轮询互斥并发（`rrstate_test.go` 锁指针精确语义）/冷却到期恢复/config 被 `providers.New` 反序列化
+- 契约测试分布在同目录 `*_test.go`：白名单/加权分布/轮询互斥并发（`rrstate_test.go` 锁指针精确语义）/冷却到期恢复/config 被 `providers.New` 反序列化/诊断口径确定性（`FirstUsableCredential` 不推进轮询指针、`NewClientFromSelection` 的凭据注入与 `custom_models` 剥离，见 `probe_test.go`）
 
 ---
 
-*本文档随 provider-channels S3-1 落地（2026-08-31）首次建立；S3-2 接入 chat 链路后更新「对外暴露」与 interactions.md。*
+*本文档随 provider-channels S3-1 落地（2026-08-31）首次建立；S3-2 接入 chat 链路后更新「对外暴露」与 interactions.md；#20（2026-09-09）抽出探活/诊断共享装配后补「两套口径」约定与 `probe.go` 契约。*

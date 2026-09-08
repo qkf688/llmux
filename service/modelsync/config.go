@@ -9,21 +9,6 @@ import (
 	"github.com/qkf688/llmux/repository"
 )
 
-func dropCustomModels(config string) (string, error) {
-	var parsed map[string]any
-	if err := json.Unmarshal([]byte(config), &parsed); err != nil {
-		return "", err
-	}
-
-	delete(parsed, "custom_models")
-
-	updated, err := json.Marshal(parsed)
-	if err != nil {
-		return "", err
-	}
-	return string(updated), nil
-}
-
 func extractCustomModels(config string) []string {
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(config), &parsed); err != nil {

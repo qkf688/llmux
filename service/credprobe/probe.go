@@ -2,15 +2,11 @@ package credprobe
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"log/slog"
 	"sort"
 	"time"
 
-	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
-	"github.com/qkf688/llmux/providers"
 	"github.com/qkf688/llmux/service/channel"
 	"github.com/qkf688/llmux/service/credwrite"
 )
@@ -109,53 +105,21 @@ func pickProbeCandidate(creds []models.Credential, now time.Time, interval time.
 	return nil
 }
 
+// probeModels 轻探上游 /models。客户端装配整条链路走 channel.NewClientFromSelection
+// （解密 → 动态 config → 剥 custom_models → 按端点协议派生注册类型）——与模型同步、
+// 管理端上游浏览同源，任何一处修 401/URL 继承链的口径都自动惠及探活。
+//
+// 剥 custom_models 是探活正确性的前提，不是优化：不剥则 openai/anthropic 的 Models()
+// 本地短路返回自定义列表，失效 key 会被判成探活成功并误恢复 active。
 func probeModels(ctx context.Context, timeout time.Duration, provider models.Provider, endpoint models.Endpoint, cred models.Credential) error {
-	plainKey, err := channel.DecryptCredentialKey(cred)
-	if err != nil {
-		return err
-	}
-	cfg, _, err := channel.BuildConfig(provider, endpoint, plainKey)
-	if err != nil {
-		return err
-	}
-	// 剥 custom_models：否则 openai/anthropic Models() 本地短路返回，失效 key
-	// 会被当成探活成功拉回 active（与 modelsync 拉上游前 dropCustomModels 同因）。
-	cfg, err = stripCustomModels(cfg)
-	if err != nil {
-		return err
-	}
-	providerType, ok := consts.TypeOfProtocol(consts.Protocol(endpoint.Protocol))
-	if !ok {
-		return fmt.Errorf("credprobe: unknown endpoint protocol %q", endpoint.Protocol)
-	}
-	chatModel, err := providers.New(providerType, cfg, provider.Proxy)
+	client, err := channel.NewClientFromSelection(provider, endpoint, cred)
 	if err != nil {
 		return err
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	_, err = chatModel.Models(probeCtx)
+	_, err = client.Models(probeCtx)
 	return err
-}
-
-// stripCustomModels 从动态 config JSON 移除 custom_models，强制 Models() 打上游。
-func stripCustomModels(config string) (string, error) {
-	if config == "" {
-		return config, nil
-	}
-	var parsed map[string]any
-	if err := json.Unmarshal([]byte(config), &parsed); err != nil {
-		return "", fmt.Errorf("credprobe: parse config for strip custom_models: %w", err)
-	}
-	if _, ok := parsed["custom_models"]; !ok {
-		return config, nil
-	}
-	delete(parsed, "custom_models")
-	out, err := json.Marshal(parsed)
-	if err != nil {
-		return "", fmt.Errorf("credprobe: marshal config after strip custom_models: %w", err)
-	}
-	return string(out), nil
 }
 
 // touchLastProbeAt 探活失败路径：只记账探活时间，不动 Status/FailCount/CooldownReason。

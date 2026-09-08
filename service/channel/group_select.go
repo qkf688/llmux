@@ -2,6 +2,7 @@ package channel
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/qkf688/llmux/balancer"
@@ -73,4 +74,22 @@ func groupMatchesModel(g models.KeyGroup, modelName string) bool {
 		}
 	}
 	return false
+}
+
+// GroupCandidates 给出需要逐组打上游的候选：**全部**分组，按 ID ASC。用于模型同步、
+// 管理端上游浏览（以及后续 #21 健康检查、#24 按凭据测试）的确定性遍历。
+//
+// 刻意**不**做白名单过滤、也**不**看 weight，与 SelectGroup 的生产选路口径分道：
+//   - 白名单（KeyGroup.Models）约束的是「哪些模型可以被送到这个组」，而拉 /models 要问的是
+//     「这个组的凭据在上游实际授权了什么」；按白名单过滤会漏掉尚未同步的组——那些组的白名单
+//     正是靠这次同步才填上的（先有鸡还是先有蛋）。
+//   - weight<=0 只让组不参与生产选路（前端新增分组的空输入落值），它的凭据仍是真 key，
+//     同步/浏览漏掉它就永远看不到它授权的上游模型。
+//
+// Assembler 已按 ID ASC 装配，这里重排是**契约声明**（遍历顺序不能退化成 SQLite 行序），
+// 同时返回副本：调用方排序或就地修改都不会污染快照。
+func GroupCandidates(snapshot *Snapshot) []models.KeyGroup {
+	out := append([]models.KeyGroup(nil), snapshot.Groups...)
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
 }

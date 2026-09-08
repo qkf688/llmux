@@ -2,7 +2,6 @@ package modelsync
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"testing"
@@ -14,32 +13,6 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
-
-func TestDropCustomModels(t *testing.T) {
-	config := `{"api_key":"k","custom_models":["c1"],"upstream_models":["u1"],"base_url":"https://example.com"}`
-
-	updated, err := dropCustomModels(config)
-	if err != nil {
-		t.Fatalf("dropCustomModels() error = %v", err)
-	}
-
-	var parsed map[string]any
-	if err := json.Unmarshal([]byte(updated), &parsed); err != nil {
-		t.Fatalf("failed to parse updated config: %v", err)
-	}
-
-	if _, exists := parsed["custom_models"]; exists {
-		t.Fatal("custom_models should be removed")
-	}
-	// 只剥 custom_models：其它键（含遗留死键 upstream_models）原样保留，
-	// 存量死键由 models 启动迁移统一清理。
-	if _, exists := parsed["upstream_models"]; !exists {
-		t.Fatal("upstream_models should remain untouched")
-	}
-	if parsed["api_key"] != "k" {
-		t.Fatalf("api_key should remain unchanged, got %v", parsed["api_key"])
-	}
-}
 
 func TestMatchesAnyRule(t *testing.T) {
 	rules := []string{"gpt", "claude"}

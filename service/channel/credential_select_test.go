@@ -230,3 +230,74 @@ func TestRetryCredential_SkipsCooldown_LocksGroupAndEndpoint(t *testing.T) {
 		t.Fatalf("step 3 err = %v, want ErrNoCredentialAvailable sentinel", err)
 	}
 }
+
+// TestFirstUsableCredential_DeterministicAndNoRRAdvance 锁诊断凭据口径两条不变式：
+// ① 恒取组内首个可用（候选按 ID ASC，disabled/temp_unsched/冷却者剔除），连续 5 次不漂移
+// ——管理员重复点同一个测试按钮必须得到同一把 key 的结果，否则「配置没动却时好时坏」；
+// ② 不推进轮询指针——同一 Selector 随后的 SelectCredential 仍从 usable[0] 起算，证明
+// 探活/浏览不会把生产流量的 key 分配挪位（历史上靠「新建 &Selector{}」隐式达成）。
+func TestFirstUsableCredential_DeterministicAndNoRRAdvance(t *testing.T) {
+	now := time.Now()
+	snap := &Snapshot{
+		Provider: models.Provider{Model: gorm.Model{ID: 1}, Type: "openai"},
+		CredentialsByGroup: map[uint][]models.Credential{
+			1: {
+				{KeyHash: "h-disabled", Status: models.CredentialStatusDisabled},
+				{KeyHash: "h-temputsched", Status: models.CredentialStatusTempUnsched},
+				{KeyHash: "h-cooling", CooldownUntil: ptrTime(now.Add(time.Hour))},
+				{KeyHash: "h-first"},
+				{KeyHash: "h-second"},
+			},
+		},
+	}
+
+	s := &Selector{}
+	for range 5 {
+		c, err := FirstUsableCredential(snap, 1, now)
+		if err != nil {
+			t.Fatalf("FirstUsableCredential: %v", err)
+		}
+		if c.KeyHash != "h-first" {
+			t.Fatalf("命中 %s, want h-first（跳过不可用者，取首个可用）", c.KeyHash)
+		}
+	}
+
+	// ② 前 5 次探活式选择不得推进 RR：共享 Selector 的第一次生产选择仍是 h-first。
+	if c, err := SelectCredential(s, snap, 1, now); err != nil || c.KeyHash != "h-first" {
+		t.Fatalf("SelectCredential 首现 = %+v (err=%v), want h-first（探活选择不得推进轮询指针）", c, err)
+	}
+	if c, err := SelectCredential(s, snap, 1, now); err != nil || c.KeyHash != "h-second" {
+		t.Fatalf("SelectCredential 次现 = %+v (err=%v), want h-second（生产轮询照常推进）", c, err)
+	}
+}
+
+// TestFirstUsableCredential_Errors 锁分层错误与 SelectCredential 同源：
+// 「本组无凭据」与「有凭据但全不可用」是两条不同事实（前者多为分组漏配 key，
+// 后者是 key 全挂），文案不得合并；两者都包 ErrNoCredentialAvailable，
+// 调用方（同步/浏览按组跳过）用 errors.Is 判定。
+func TestFirstUsableCredential_Errors(t *testing.T) {
+	now := time.Now()
+	noCreds := &Snapshot{
+		Provider:           models.Provider{Type: "openai"},
+		CredentialsByGroup: map[uint][]models.Credential{1: nil},
+	}
+	_, err := FirstUsableCredential(noCreds, 1, now)
+	if !errors.Is(err, ErrNoCredentialAvailable) || !strings.Contains(err.Error(), "has no credentials") {
+		t.Fatalf("err = %v, want ErrNoCredentialAvailable + 无凭据文案", err)
+	}
+	// 组键完全缺失（装配时该组既无内联也无池凭据）：同一文案，不 panic。
+	if _, err := FirstUsableCredential(noCreds, 99, now); !errors.Is(err, ErrNoCredentialAvailable) {
+		t.Fatalf("err = %v, want ErrNoCredentialAvailable", err)
+	}
+
+	allDown := &Snapshot{
+		Provider: models.Provider{Type: "openai"},
+		CredentialsByGroup: map[uint][]models.Credential{
+			1: {{KeyHash: "h-err", Status: models.CredentialStatusError}},
+		},
+	}
+	_, err = FirstUsableCredential(allDown, 1, now)
+	if !errors.Is(err, ErrNoCredentialAvailable) || !strings.Contains(err.Error(), "all credentials unusable") {
+		t.Fatalf("err = %v, want ErrNoCredentialAvailable + 全不可用文案", err)
+	}
+}

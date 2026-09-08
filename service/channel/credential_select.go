@@ -17,9 +17,44 @@ import (
 // now 由调用方注入（可测）：冷却判定用「CooldownUntil > now 即冷却中」，
 // 到期自动恢复、不占状态位（设计定案第 5 节，S4 完整状态机前的最小冷却语义）。
 func SelectCredential(s *Selector, snapshot *Snapshot, groupID uint, now time.Time) (models.Credential, error) {
+	usable, err := usableCredentials(snapshot, groupID, now)
+	if err != nil {
+		return models.Credential{}, err
+	}
+
+	idx, _ := s.nextCredentialInRR(snapshot.Provider.ID, groupID, len(usable))
+	return usable[idx], nil
+}
+
+// FirstUsableCredential 取组内**首个**可用凭据（候选按 ID ASC，跳过 disabled/error/
+// temp_unsched 与冷却未到期者）——探活/同步/管理端诊断的确定性凭据口径。
+//
+// 为什么不走 SelectCredential：那条路径组内轮询且「选择即推进」，而诊断流量必须可复现
+// （配置没动时前后两次测的是同一把 key），也不该把管理员一次点击计入生产压力分摊。
+// 历史上这一口径靠「新建 &Selector{}、指针恒为 0」隐式达成，这里把它显式化，不再依赖
+// Selector 零值的巧合（选中的凭据也不会推进 DefaultSelector 的指针）。
+//
+// 已知并接受代价：只验组内第一条可用凭据，坏在后面的 key 测不出来——逐 key 健康是
+// credprobe 与号池详情「按凭据测试」(#24) 的职责，不该由模型弹窗的测试按钮隐式承担。
+//
+// 组内无可用凭据 → 包装 ErrNoCredentialAvailable 的错误（errors.Is 可判），调用方按
+// 「跳过该组、继续其余组」处理，与 SelectCredential 同一分层错误语义。
+func FirstUsableCredential(snapshot *Snapshot, groupID uint, now time.Time) (models.Credential, error) {
+	usable, err := usableCredentials(snapshot, groupID, now)
+	if err != nil {
+		return models.Credential{}, err
+	}
+	return usable[0], nil
+}
+
+// usableCredentials 过滤出组内可调度凭据（保持装配顺序 = ID ASC），并把「本组无凭据」
+// 与「有凭据但全不可用」两种情形分成两条 sentinel 文案——两条路径对调用方是不同事实
+// （前者多半是分组配置缺失，后者是 key 全挂了），不能合并成一条。
+// 返回空切片时 err 非 nil，故两个选择器都可先判 err 再直接下标取值。
+func usableCredentials(snapshot *Snapshot, groupID uint, now time.Time) ([]models.Credential, error) {
 	candidates, ok := snapshot.CredentialsByGroup[groupID]
 	if !ok || len(candidates) == 0 {
-		return models.Credential{}, fmt.Errorf("%w: group %d has no credentials", ErrNoCredentialAvailable, groupID)
+		return nil, fmt.Errorf("%w: group %d has no credentials", ErrNoCredentialAvailable, groupID)
 	}
 
 	usable := make([]models.Credential, 0, len(candidates))
@@ -29,11 +64,9 @@ func SelectCredential(s *Selector, snapshot *Snapshot, groupID uint, now time.Ti
 		}
 	}
 	if len(usable) == 0 {
-		return models.Credential{}, fmt.Errorf("%w: group %d all credentials unusable", ErrNoCredentialAvailable, groupID)
+		return nil, fmt.Errorf("%w: group %d all credentials unusable", ErrNoCredentialAvailable, groupID)
 	}
-
-	idx, _ := s.nextCredentialInRR(snapshot.Provider.ID, groupID, len(usable))
-	return usable[idx], nil
+	return usable, nil
 }
 
 // credentialUsable 凭据是否可调度：active（空值按 GORM default 'active' 语义

@@ -9,6 +9,7 @@ import (
 
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/providers"
+	"github.com/qkf688/llmux/service/channel"
 	"gorm.io/gorm"
 )
 
@@ -43,7 +44,7 @@ func (s *Service) SyncProviderModels(ctx context.Context, providerID uint) (*mod
 		fetchErrs   []string
 	)
 
-	for _, group := range snapshot.Groups {
+	for _, group := range channel.GroupCandidates(snapshot) {
 		outcome := s.syncKeyGroup(ctx, provider, snapshot, group, now)
 		if outcome.Skipped {
 			skipReasons = append(skipReasons, fmt.Sprintf("group %q: %s", outcome.GroupName, outcome.SkipReason))

@@ -477,22 +477,6 @@ func TestSyncAllProviders_AssignsSameBatchID(t *testing.T) {
 	}
 }
 
-func TestSelectSyncEndpoint_PrefersMatchingEnabledMinID(t *testing.T) {
-	eps := []models.Endpoint{
-		{Model: gorm.Model{ID: 1}, Protocol: "anthropic", Enabled: true},
-		{Model: gorm.Model{ID: 2}, Protocol: "openai", Enabled: false},
-		{Model: gorm.Model{ID: 3}, Protocol: "openai", Enabled: true},
-		{Model: gorm.Model{ID: 4}, Protocol: "openai", Enabled: true},
-	}
-	got, ok := selectSyncEndpoint("openai", eps)
-	if !ok {
-		t.Fatal("expected endpoint")
-	}
-	if got.ID != 3 {
-		t.Fatalf("ID = %d, want 3 (first enabled openai)", got.ID)
-	}
-}
-
 func TestMergeProviderModelCatalog(t *testing.T) {
 	groups := []models.KeyGroup{
 		{Models: "a, b"},

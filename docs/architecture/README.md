@@ -56,8 +56,9 @@ LLMux 是多供应商 LLM API 网关/代理：对外提供 OpenAI / Anthropic �
 - `service` → `providers`（上游请求构造与模型列表）
 - `service` → `models`（实体、设置读、统一协议类型）
 - `service/chat` → `service/transform`、`service/virtualmodel`、`service/chatcore`、`service/chatstats`、`service/adjustment`、`service/channel`（三层选路）、`service/credprobe`（惰性探活）、`balancer`
-- `service/channel` → `consts`、`common/credentialcrypto`（选路产物可被 `providers.New` 反序列化，不依赖 `providers`）
+- `service/channel` → `consts`、`common/credentialcrypto`、`providers`（仅 `probe.go` 的 `NewClientFromSelection` 用 `providers.New` 装配探活/同步用客户端；选路与 config 组装本身仍不依赖 `providers`，也不发请求）
 - `service/modelsync` → `service/channel`（按分组拉取用 `/models`）
+- `service/credprobe` → `service/channel`（惰性探活的客户端装配走 `channel.NewClientFromSelection`，与 modelsync 同源）
 - `service/adjustment` → `service/healthcheck`（仅 `init` 注入 `AdjustmentHooks`，无反向业务依赖）
 - `service/transform` → `models/unified`、`service/anthropic`、`service/responses`
 - `repository` → `models`（GORM 实体与 `models.DB`）

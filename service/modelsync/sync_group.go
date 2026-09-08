@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/channel"
 )
@@ -24,8 +23,9 @@ type groupSyncOutcome struct {
 }
 
 // syncKeyGroup 用该组活跃凭据拉 /models，全量写入 KeyGroup.Models。
-// 端点：启用且协议 = ProtocolOfType(Provider.Type) 的最小 ID；凭据：组内首个可用。
-// 客户端装配走 groupUpstreamClient（与管理端只读浏览 ListUpstreamModels 共用同一条链路）。
+// 端点：channel.SelectPrimaryEndpoint（启用且协议 = ProtocolOfType(Provider.Type) 的
+// 最小 ID）；凭据：组内首个可用（probeClientForGroup）。
+// 与管理端只读浏览 ListUpstreamModels 共用同一条打上游的链路。
 func (s *Service) syncKeyGroup(
 	ctx context.Context,
 	provider models.Provider,
@@ -35,14 +35,14 @@ func (s *Service) syncKeyGroup(
 ) groupSyncOutcome {
 	out := groupSyncOutcome{GroupID: group.ID, GroupName: group.Name}
 
-	endpoint, ok := selectSyncEndpoint(provider.Type, snapshot.Endpoints)
+	endpoint, ok := channel.SelectPrimaryEndpoint(provider.Type, snapshot.Endpoints)
 	if !ok {
 		out.Skipped = true
 		out.SkipReason = "no enabled endpoint matching provider type"
 		return out
 	}
 
-	chatModel, err := groupUpstreamClient(provider, snapshot, group, endpoint, now)
+	chatModel, err := probeClientForGroup(snapshot, group, endpoint, now)
 	if err != nil {
 		if errors.Is(err, channel.ErrNoCredentialAvailable) {
 			out.Skipped = true
@@ -77,16 +77,4 @@ func (s *Service) syncKeyGroup(
 
 	out.ModelIDs = modelIDs
 	return out
-}
-
-// selectSyncEndpoint 取启用端点中协议匹配 Provider.Type 默认协议、且 ID 最小者。
-// endpoints 调用方应按 ID ASC（Assembler 已保证）。
-func selectSyncEndpoint(providerType string, endpoints []models.Endpoint) (models.Endpoint, bool) {
-	want := string(consts.ProtocolOfType(providerType))
-	for _, ep := range endpoints {
-		if ep.Enabled && ep.Protocol == want {
-			return ep, true
-		}
-	}
-	return models.Endpoint{}, false
 }

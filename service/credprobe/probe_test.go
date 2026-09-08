@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -309,20 +308,6 @@ func TestPickProbeCandidate_SkipsNonTempUnsched(t *testing.T) {
 	}
 	if got := pickProbeCandidate(creds, now, time.Minute); got != nil {
 		t.Fatalf("picked %+v, want nil", got)
-	}
-}
-
-// TestStripCustomModels 锁剥字段纯逻辑。
-func TestStripCustomModels(t *testing.T) {
-	got, err := stripCustomModels(`{"api_key":"k","custom_models":["a"],"base_url":"https://x"}`)
-	if err != nil {
-		t.Fatalf("strip: %v", err)
-	}
-	if strings.Contains(got, "custom_models") {
-		t.Fatalf("still has custom_models: %s", got)
-	}
-	if !strings.Contains(got, `"api_key":"k"`) {
-		t.Fatalf("lost api_key: %s", got)
 	}
 }
 

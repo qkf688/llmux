@@ -233,3 +233,67 @@ func TestSelectGroup_WeightDistribution(t *testing.T) {
 		t.Fatalf("低权组 100 次全未命中, want 至少命中（轮询兜底低概率组）")
 	}
 }
+
+// TestSelectPrimaryEndpoint_PrefersMatchingEnabledMinID 锁诊断链路（同步/浏览/探活）的
+// 端点口径：启用 + 协议匹配 Provider.Type 派生的主协议 + ID 最小。行为与原
+// modelsync.selectSyncEndpoint 一致（收编为共享函数，不改变口径）。
+func TestSelectPrimaryEndpoint_PrefersMatchingEnabledMinID(t *testing.T) {
+	eps := []models.Endpoint{
+		{Model: gorm.Model{ID: 1}, Protocol: string(consts.ProtocolAnthropic), Enabled: true},
+		{Model: gorm.Model{ID: 2}, Protocol: string(consts.ProtocolOpenAI), Enabled: false},
+		{Model: gorm.Model{ID: 3}, Protocol: string(consts.ProtocolOpenAI), Enabled: true},
+		{Model: gorm.Model{ID: 4}, Protocol: string(consts.ProtocolOpenAI), Enabled: true},
+	}
+
+	got, ok := SelectPrimaryEndpoint("openai", eps)
+	if !ok {
+		t.Fatal("want enabled openai endpoint")
+	}
+	if got.ID != 3 {
+		t.Fatalf("ID = %d, want 3（跳过停用端点，取 ID 最小可用者）", got.ID)
+	}
+
+	if got, ok := SelectPrimaryEndpoint("anthropic", eps); !ok || got.ID != 1 {
+		t.Fatalf("anthropic 主协议 = %+v (ok=%v), want ID 1", got, ok)
+	}
+	// responses 协议无端点：调用方（同步 SkipReason / 浏览报错）据此自行措辞。
+	if _, ok := SelectPrimaryEndpoint("openai-res", eps); ok {
+		t.Fatal("无 responses 端点时必须返回 false")
+	}
+	// 未知 type 走 ProtocolOfType 的 openai 兜底（与 SelectEndpoint 同一张表，不另立规则）。
+	if got, ok := SelectPrimaryEndpoint("mystery-type", eps); !ok || got.ID != 3 {
+		t.Fatalf("未知 type = %+v (ok=%v), want 兜底 openai ID 3", got, ok)
+	}
+	if _, ok := SelectPrimaryEndpoint("openai", eps[:2]); ok {
+		t.Fatal("同协议端点全停用时必须返回 false")
+	}
+}
+
+// TestGroupCandidates_IgnoresWhitelistAndWeight 锁探活/同步的遍历口径：**全部**分组、
+// ID ASC，且白名单与 weight 都不参与过滤——白名单正是靠这次同步才填上的（按它过滤＝
+// 先有鸡还是先有蛋），weight<=0 的组凭据仍是真 key，漏测就永远看不到它授权的上游模型。
+func TestGroupCandidates_IgnoresWhitelistAndWeight(t *testing.T) {
+	snap := &Snapshot{Groups: []models.KeyGroup{
+		{Model: gorm.Model{ID: 5}, Name: "g5", Weight: 0, Models: "other"},
+		{Model: gorm.Model{ID: 2}, Name: "g2", Weight: 3, Models: ""},
+		{Model: gorm.Model{ID: 9}, Name: "g9", Weight: -1, Models: "m"},
+	}}
+
+	got := GroupCandidates(snap)
+	if len(got) != 3 {
+		t.Fatalf("候选数 = %d, want 3（weight/白名单不得过滤）", len(got))
+	}
+	if got[0].ID != 2 || got[1].ID != 5 || got[2].ID != 9 {
+		t.Fatalf("顺序 = %v, want ID ASC [2 5 9]", []uint{got[0].ID, got[1].ID, got[2].ID})
+	}
+
+	// 返回副本：调用方就地改名/重排不得污染快照（快照同时供生产选路读取）。
+	got[0].Name = "mutated"
+	if snap.Groups[1].Name == "mutated" {
+		t.Fatal("返回了快照底层切片，遍历方的修改污染了快照")
+	}
+
+	if len(GroupCandidates(&Snapshot{})) != 0 {
+		t.Fatal("空快照必须返回空候选，而不是 nil 语义混淆")
+	}
+}

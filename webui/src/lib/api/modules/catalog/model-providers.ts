@@ -34,6 +34,9 @@ export interface ModelProviderTestResult {
   passed?: boolean;
   error?: string;
   error_type?: ErrorType;
+  /** 后端实际命中的分组（#19 起与 /providers/:id/test 同形状；未选定链路 = 0/空串） */
+  group_id?: number;
+  group_name?: string;
   message?: string;
   raw_output?: string;
   parsed?: unknown;

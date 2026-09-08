@@ -16,7 +16,7 @@ import (
 
 // runOpenAIReactTest 走 OpenAI 兼容能力接口跑 react 流程，SSE 逐块回写。
 // 返回工具调用命中的城市、最终文本与过程中的错误。
-func runOpenAIReactTest(ctx context.Context, c *gin.Context, httpClient *http.Client, header http.Header, chatModel *ChatModel, compat providers.OpenAICompat, scenario reactScenario) ([]string, string, error) {
+func runOpenAIReactTest(ctx context.Context, c *gin.Context, httpClient *http.Client, header http.Header, link *testLink, compat providers.OpenAICompat, scenario reactScenario) ([]string, string, error) {
 	baseURL, apiKey := compat.OpenAICompatBaseURL(), compat.OpenAICompatAPIKey()
 	clientOptions := []option.RequestOption{
 		option.WithBaseURL(baseURL),
@@ -48,7 +48,7 @@ func runOpenAIReactTest(ctx context.Context, c *gin.Context, httpClient *http.Cl
 			openai.UserMessage(scenario.Question),
 		},
 		Tools: tools,
-		Model: chatModel.Model,
+		Model: link.Model,
 	}, GetWeather) {
 		if err != nil {
 			checkError = err

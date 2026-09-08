@@ -4,17 +4,18 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/httpresp"
-	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/providers"
-	"gorm.io/gorm"
 )
 
+// ProviderTestHandler 关联级连通性测试（GET /api/test/:id，id = ModelWithProvider 主键）。
+//
+// 结果形状见 respond.go：链路解析失败按 400/404 或 passed=false 回包，测试本身
+// （含上游非 200）一律 code 200 + data.passed。
 func ProviderTestHandler(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -23,93 +24,56 @@ func ProviderTestHandler(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 
-	chatModel, err := FindChatModel(ctx, id)
+	link, err := ResolveAssociationLink(ctx, id)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			httpresp.NotFound(c, "ModelWithProvider not found")
-			return
-		}
-		httpresp.InternalServerError(c, "Database error")
+		respondResolveFailure(c, err, "ModelWithProvider not found")
 		return
 	}
 
-	providerInstance, err := providers.New(chatModel.Type, chatModel.Config, chatModel.Proxy)
+	proxyURL := link.Client.GetProxy()
+	slog.Info("Testing provider", "proxy", proxyURL, "provider", link.ProviderName, "group", link.Group.Name)
+	httpClient := providers.GetClientWithProxy(time.Second*60, proxyURL)
+
+	testBody, err := buildTestBody(link.Type)
 	if err != nil {
-		httpresp.BadRequest(c, "Failed to create provider: "+err.Error())
+		httpresp.Success(c, failedTestResult(link, "validation", "不支持的提供商类型", err.Error()))
 		return
 	}
 
-	proxyURL := providerInstance.GetProxy()
-	slog.Info("Testing provider", "proxy", proxyURL, "provider", chatModel.Name)
-	client := providers.GetClientWithProxy(time.Second*60, proxyURL)
-
-	testBody, err := buildTestBody(chatModel.Type)
+	header := BuildTestHeaders(c.Request.Header, link.WithHeader, link.CustomerHeaders)
+	req, err := link.Client.BuildReq(ctx, header, link.Model, testBody)
 	if err != nil {
-		httpresp.BadRequest(c, "Invalid provider type")
+		httpresp.Success(c, failedTestResult(link, "network", "构建请求失败", err.Error()))
 		return
 	}
 
-	header := BuildTestHeaders(c.Request.Header, chatModel.WithHeader, chatModel.CustomerHeaders)
-	req, err := providerInstance.BuildReq(ctx, header, chatModel.Model, testBody)
+	res, err := httpClient.Do(req)
 	if err != nil {
-		httpresp.Success(c, map[string]interface{}{
-			"passed": false,
-			"error": BuildDetailedError("network", "构建请求失败", err.Error(), map[string]string{
-				"provider": chatModel.Name,
-				"model":    chatModel.Model,
-			}),
-			"error_type": "network",
-		})
-		return
-	}
-
-	res, err := client.Do(req)
-	if err != nil {
-		httpresp.Success(c, map[string]interface{}{
-			"passed": false,
-			"error": BuildDetailedError("network", "连接提供商失败", err.Error(), map[string]string{
-				"provider": chatModel.Name,
-				"model":    chatModel.Model,
-				"proxy":    proxyURL,
-			}),
-			"error_type": "network",
-		})
+		httpresp.Success(c, failedTestResult(link, "network", "连接提供商失败", err.Error()))
 		return
 	}
 	defer res.Body.Close()
 
+	bodyBytes, readErr := io.ReadAll(res.Body)
+	if readErr != nil {
+		httpresp.Success(c, failedTestResult(link, "network", "读取响应失败", readErr.Error()))
+		return
+	}
+
 	if res.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(res.Body)
-		errorDetail := parseProviderErrorDetail(bodyBytes)
 		errorType := getErrorTypeFromStatus(res.StatusCode)
-		httpresp.Success(c, map[string]interface{}{
-			"passed": false,
-			"error": BuildDetailedError(errorType, "提供商返回错误", errorDetail, map[string]string{
-				"provider":    chatModel.Name,
-				"model":       chatModel.Model,
-				"status_code": strconv.Itoa(res.StatusCode),
-			}),
-			"error_type": errorType,
-		})
+		httpresp.Success(c, failedTestResult(link, errorType, "提供商返回错误", upstreamFailDetail(res.StatusCode, bodyBytes)))
 		return
 	}
 
-	content, err := io.ReadAll(res.Body)
-	if err != nil {
-		httpresp.Success(c, map[string]interface{}{
-			"passed": false,
-			"error": BuildDetailedError("network", "读取响应失败", err.Error(), map[string]string{
-				"provider": chatModel.Name,
-				"model":    chatModel.Model,
-			}),
-			"error_type": "network",
-		})
-		return
-	}
-
-	httpresp.SuccessWithMessage(c, string(content), nil)
+	httpresp.SuccessWithMessage(c, string(bodyBytes), passedTestResult(link))
 }
 
+// ProviderModelTestHandler 供应商级模型测试（POST /api/providers/:id/test），供两个模型
+// 弹窗的「测试」按钮与批量测试使用。
+//
+// 请求体的 group_id 见 ProviderModelTestRequest：0 = 自动口径，>0 = 锁定该分组。
+// 响应恒回传实际命中的分组 id+name（含失败分支），前端据此把 ✓/✕ 归位到正确徽标。
 func ProviderModelTestHandler(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -124,56 +88,46 @@ func ProviderModelTestHandler(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	provider, err := gorm.G[models.Provider](models.DB).Where("id = ?", id).First(ctx)
+	link, err := ResolveProviderLink(ctx, id, strings.TrimSpace(req.Model), req.GroupID)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			httpresp.NotFound(c, "Provider not found")
-			return
-		}
-		httpresp.InternalServerError(c, "Database error")
+		respondResolveFailure(c, err, "Provider not found")
 		return
 	}
 
-	providerInstance, err := providers.New(provider.Type, provider.Config, provider.Proxy)
+	slog.Info("Testing provider model", "provider", link.ProviderName, "model", link.Model, "group", link.Group.Name)
+	httpClient := providers.GetClientWithProxy(time.Second*60, link.Client.GetProxy())
+
+	testBody, err := buildTestBody(link.Type)
 	if err != nil {
-		httpresp.BadRequest(c, "Failed to create provider: "+err.Error())
+		httpresp.Success(c, failedTestResult(link, "validation", "不支持的提供商类型", err.Error()))
 		return
 	}
 
-	proxyURL := providerInstance.GetProxy()
-	slog.Info("Testing provider model", "proxy", proxyURL, "provider", provider.Name, "model", req.Model)
-	client := providers.GetClientWithProxy(time.Second*60, proxyURL)
-
-	testBody, err := buildTestBody(provider.Type)
+	header := BuildTestHeaders(c.Request.Header, link.WithHeader, link.CustomerHeaders)
+	testReq, err := link.Client.BuildReq(ctx, header, link.Model, testBody)
 	if err != nil {
-		httpresp.BadRequest(c, "Invalid provider type")
+		httpresp.Success(c, failedTestResult(link, "network", "构建请求失败", err.Error()))
 		return
 	}
 
-	header := BuildTestHeaders(c.Request.Header, nil, nil)
-	testReq, err := providerInstance.BuildReq(ctx, header, req.Model, testBody)
+	res, err := httpClient.Do(testReq)
 	if err != nil {
-		httpresp.ErrorWithHttpStatus(c, http.StatusOK, http.StatusBadGateway, "Failed to connect to provider: "+err.Error())
-		return
-	}
-
-	res, err := client.Do(testReq)
-	if err != nil {
-		httpresp.ErrorWithHttpStatus(c, http.StatusOK, http.StatusBadGateway, "Failed to connect to provider: "+err.Error())
+		httpresp.Success(c, failedTestResult(link, "network", "连接提供商失败", err.Error()))
 		return
 	}
 	defer res.Body.Close()
 
+	bodyBytes, readErr := io.ReadAll(res.Body)
+	if readErr != nil {
+		httpresp.Success(c, failedTestResult(link, "network", "读取响应失败", readErr.Error()))
+		return
+	}
+
 	if res.StatusCode != http.StatusOK {
-		httpresp.ErrorWithHttpStatus(c, http.StatusOK, res.StatusCode, "Provider returned non-200 status code: "+strconv.Itoa(res.StatusCode))
+		errorType := getErrorTypeFromStatus(res.StatusCode)
+		httpresp.Success(c, failedTestResult(link, errorType, "提供商返回错误", upstreamFailDetail(res.StatusCode, bodyBytes)))
 		return
 	}
 
-	content, err := io.ReadAll(res.Body)
-	if err != nil {
-		httpresp.ErrorWithHttpStatus(c, http.StatusOK, res.StatusCode, "Failed to read res body: "+err.Error())
-		return
-	}
-
-	httpresp.SuccessWithMessage(c, string(content), nil)
+	httpresp.SuccessWithMessage(c, string(bodyBytes), passedTestResult(link))
 }

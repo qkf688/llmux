@@ -1,3 +1,4 @@
+import type { ErrorType } from "@/lib/errors";
 import { apiRequest } from "../../core/client";
 
 export interface Provider {
@@ -100,9 +101,15 @@ export interface ProviderModelCatalog {
   Custom: string[];
 }
 
+/** POST /providers/:id/test 结果（#19 定案形状，与 testapi 另三个测试端点同源）：
+ *  一次失败的测试也是 HTTP 200 + code 200，结论在 `passed`；`group_id`/`group_name`
+ *  是后端实际命中的分组（0/空串 = 链路未选定），前端按 (model, groupId) 把 ✓/✕ 归位。 */
 export interface ProviderModelTestResult {
+  passed?: boolean;
   error?: string;
-  message?: string;
+  error_type?: ErrorType;
+  group_id?: number;
+  group_name?: string;
   [key: string]: unknown;
 }
 
@@ -197,10 +204,16 @@ export async function getProviderModels(providerId: number): Promise<ProviderMod
   return apiRequest<ProviderModel[]>(`/providers/models/${providerId}`);
 }
 
-export async function testProviderModel(providerId: number, model: string): Promise<ProviderModelTestResult> {
+/** 供应商级模型测试。groupId 省略或 0 = 自动口径（后端按白名单外的候选组 ID ASC 取首个
+ *  可用凭据的组）；>0 = 锁定该分组（C2 形态下点分组徽标）。返回值见 ProviderModelTestResult。 */
+export async function testProviderModel(
+  providerId: number,
+  model: string,
+  groupId?: number
+): Promise<ProviderModelTestResult> {
   return apiRequest<ProviderModelTestResult>(`/providers/${providerId}/test`, {
     method: "POST",
-    body: JSON.stringify({ model }),
+    body: JSON.stringify(groupId ? { model, group_id: groupId } : { model }),
   });
 }
 

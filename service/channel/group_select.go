@@ -93,3 +93,31 @@ func GroupCandidates(snapshot *Snapshot) []models.KeyGroup {
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }
+
+// GroupCandidatesForModel 按分组白名单过滤出「可服务 modelName」的候选组，按 ID ASC，
+// **不看 weight、不推进任何轮询状态**——管理端连通性测试（testapi）的确定性口径。
+//
+// 三条分组口径回答的是不同问题，刻意分道（合并任意两条都会让另一条语义失真）：
+//   - SelectGroup：生产**会不会**走这个组（加权随机 + 档内轮询 + weight<=0 排除）；
+//   - GroupCandidates：哪些组的凭据值得逐个打上游拉目录（同步/浏览/健康检测）——
+//     白名单正是这些动作的产物，拿来过滤会陷入先有鸡还是先有蛋；
+//   - 本函数：测「这个模型能不能用」时哪些组**有资格回答**。白名单外的组生产不会用它
+//     跑这个模型，拿它测出「通过」反而误导（管理端按钮不该给出生产走不到的结论）。
+//
+// 与 SelectGroup 不同处只看白名单，不排除 weight<=0 的组：权重决定流量分摊而非可用性，
+// 把 weight=0 判成「不可用」会让管理员看到「无候选组」而该组 key 其实完好。
+// 白名单空 = 不限（与 groupMatchesModel 同一语义）。
+func GroupCandidatesForModel(snapshot *Snapshot, modelName string) []models.KeyGroup {
+	out := make([]models.KeyGroup, 0, len(snapshot.Groups))
+	for _, g := range snapshot.Groups {
+		if g.ProviderID != snapshot.Provider.ID {
+			continue
+		}
+		if !groupMatchesModel(g, modelName) {
+			continue
+		}
+		out = append(out, g)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}

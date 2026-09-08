@@ -16,9 +16,9 @@ import (
 	anthropicsvc "github.com/qkf688/llmux/service/anthropic"
 )
 
-func runAnthropicReactTest(ctx context.Context, c *gin.Context, httpClient *http.Client, header http.Header, chatModel *ChatModel, providerInstance providers.Provider, scenario reactScenario) ([]string, string, error) {
-	if chatModel.Type != providers.TypeAnthropic {
-		return nil, "", fmt.Errorf("invalid provider type for anthropic runner: %s", chatModel.Type)
+func runAnthropicReactTest(ctx context.Context, c *gin.Context, httpClient *http.Client, header http.Header, link *testLink, providerInstance providers.Provider, scenario reactScenario) ([]string, string, error) {
+	if link.Type != providers.TypeAnthropic {
+		return nil, "", fmt.Errorf("invalid provider type for anthropic runner: %s", link.Type)
 	}
 	// 仅依赖 Provider 接口（BuildReq），不强制 *providers.Anthropic 类型断言。
 	if providerInstance == nil {
@@ -45,7 +45,7 @@ func runAnthropicReactTest(ctx context.Context, c *gin.Context, httpClient *http
 	const maxStep = 10
 	for step := 0; step < maxStep; step++ {
 		req := &models.UnifiedRequest{
-			Model:     chatModel.Model,
+			Model:     link.Model,
 			Messages:  messages,
 			Stream:    false,
 			MaxTokens: 1024,
@@ -57,7 +57,7 @@ func runAnthropicReactTest(ctx context.Context, c *gin.Context, httpClient *http
 			return toolCities, finalText.String(), fmt.Errorf("构建 Anthropic 请求失败: %w", err)
 		}
 
-		httpReq, err := providerInstance.BuildReq(ctx, header, chatModel.Model, body)
+		httpReq, err := providerInstance.BuildReq(ctx, header, link.Model, body)
 		if err != nil {
 			return toolCities, finalText.String(), fmt.Errorf("构建请求失败: %w", err)
 		}
@@ -73,8 +73,9 @@ func runAnthropicReactTest(ctx context.Context, c *gin.Context, httpClient *http
 		}
 		if res.StatusCode != http.StatusOK {
 			return toolCities, finalText.String(), errors.New(BuildDetailedError(getErrorTypeFromStatus(res.StatusCode), "提供商返回错误", parseProviderErrorDetail(bodyBytes), map[string]string{
-				"provider":    chatModel.Name,
-				"model":       chatModel.Model,
+				"provider":    link.ProviderName,
+				"model":       link.Model,
+				"group":       link.Group.Name,
 				"status_code": strconv.Itoa(res.StatusCode),
 			}))
 		}

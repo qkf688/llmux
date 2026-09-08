@@ -8,7 +8,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/httpresp"
 	"github.com/qkf688/llmux/providers"
-	"gorm.io/gorm"
 )
 
 func TestReactHandler(c *gin.Context) {
@@ -19,13 +18,15 @@ func TestReactHandler(c *gin.Context) {
 		return
 	}
 
-	chatModel, err := FindChatModel(ctx, id)
+	link, err := ResolveAssociationLink(ctx, id)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			httpresp.NotFound(c, "ModelWithProvider not found")
+		// 与改造前一致：记录/ID 问题回 JSON 信封，链路装配问题回 SSE error 事件
+		// （前端 fetchEventSource 按事件流消费，两类事实各走自己的通道）。
+		if respondRequestError(c, err, "ModelWithProvider not found") {
 			return
 		}
-		httpresp.InternalServerError(c, "Database error")
+		c.SSEvent("error", "装配上游链路失败: "+err.Error())
+		c.Writer.Flush()
 		return
 	}
 
@@ -37,37 +38,31 @@ func TestReactHandler(c *gin.Context) {
 	}
 	scenario := reactScenarios[scenarioIndex]
 
-	providerInstance, err := providers.New(chatModel.Type, chatModel.Config, chatModel.Proxy)
-	if err != nil {
-		c.SSEvent("error", "创建提供商失败: "+err.Error())
-		c.Writer.Flush()
-		return
-	}
-
+	providerInstance := link.Client
 	proxyURL := providerInstance.GetProxy()
 	httpClient := providers.GetClientWithProxy(time.Second*60, proxyURL)
 
-	header := BuildTestHeaders(c.Request.Header, chatModel.WithHeader, chatModel.CustomerHeaders)
+	header := BuildTestHeaders(c.Request.Header, link.WithHeader, link.CustomerHeaders)
 
 	var checkError error
 	toolCities := make([]string, 0)
 	finalText := strings.Builder{}
 
-	c.SSEvent("start", fmt.Sprintf("提供商:%s 模型:%s 类型:%s 场景:%d 问题:%s", chatModel.Name, chatModel.Model, chatModel.Type, scenarioIndex, scenario.Question))
+	c.SSEvent("start", fmt.Sprintf("提供商:%s 模型:%s 类型:%s 分组:%s 场景:%d 问题:%s", link.ProviderName, link.Model, link.Type, link.Group.Name, scenarioIndex, scenario.Question))
 	c.Writer.Flush()
 	start := time.Now()
 
 	// OCP-9：优先 OpenAICompat 能力接口；否则 anthropic 协议族；禁止 *OpenAI/*OpenAIRes/*Anthropic 类型断言。
 	if compat, ok := providerInstance.(providers.OpenAICompat); ok {
 		var final string
-		toolCities, final, checkError = runOpenAIReactTest(ctx, c, httpClient, header, chatModel, compat, scenario)
+		toolCities, final, checkError = runOpenAIReactTest(ctx, c, httpClient, header, link, compat, scenario)
 		finalText.WriteString(final)
-	} else if chatModel.Type == providers.TypeAnthropic {
+	} else if link.Type == providers.TypeAnthropic {
 		var final string
-		toolCities, final, checkError = runAnthropicReactTest(ctx, c, httpClient, header, chatModel, providerInstance, scenario)
+		toolCities, final, checkError = runAnthropicReactTest(ctx, c, httpClient, header, link, providerInstance, scenario)
 		finalText.WriteString(final)
 	} else {
-		c.SSEvent("error", fmt.Sprintf("该测试仅支持 OpenAI 兼容接口（%s/%s）或 %s，当前提供商类型: %s", providers.TypeOpenAI, providers.TypeOpenAIRes, providers.TypeAnthropic, chatModel.Type))
+		c.SSEvent("error", fmt.Sprintf("该测试仅支持 OpenAI 兼容接口（%s/%s）或 %s，当前提供商类型: %s", providers.TypeOpenAI, providers.TypeOpenAIRes, providers.TypeAnthropic, link.Type))
 		c.Writer.Flush()
 		return
 	}

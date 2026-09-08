@@ -297,3 +297,43 @@ func TestGroupCandidates_IgnoresWhitelistAndWeight(t *testing.T) {
 		t.Fatal("空快照必须返回空候选，而不是 nil 语义混淆")
 	}
 }
+
+// TestGroupCandidatesForModel_WhitelistOnlyDeterministic 锁管理端连通性测试的分组口径：
+// 只按白名单过滤（空 = 不限）、ID ASC、weight 不参与，且限本供应商——与
+// GroupCandidates（不过滤白名单，供同步/浏览逐组拉目录）刻意分道。
+func TestGroupCandidatesForModel_WhitelistOnlyDeterministic(t *testing.T) {
+	snap := &Snapshot{
+		Provider: models.Provider{Model: gorm.Model{ID: 1}},
+		Groups: []models.KeyGroup{
+			{Model: gorm.Model{ID: 7}, ProviderID: 1, Name: "白名单含它", Weight: 0, Models: "other, m"},
+			{Model: gorm.Model{ID: 3}, ProviderID: 1, Name: "空白名单=不限", Weight: 5, Models: ""},
+			{Model: gorm.Model{ID: 4}, ProviderID: 1, Name: "白名单不含", Weight: 9, Models: "m2"},
+			{Model: gorm.Model{ID: 2}, ProviderID: 2, Name: "别家供应商组", Weight: 9, Models: ""},
+		},
+	}
+
+	got := GroupCandidatesForModel(snap, "m")
+	if len(got) != 2 {
+		t.Fatalf("候选数 = %d, want 2（白名单命中的两组；weight<=0 不排可用性）", len(got))
+	}
+	if got[0].ID != 3 || got[1].ID != 7 {
+		t.Fatalf("顺序 = %v, want ID ASC [3 7]", []uint{got[0].ID, got[1].ID})
+	}
+	// 快照隔离：遍历方就地改名不得污染快照（同一份快照还要给生产选路读）。
+	got[0].Name = "mutated"
+	if snap.Groups[1].Name == "mutated" {
+		t.Fatal("返回了快照底层切片的引用，修改污染了快照")
+	}
+
+	m2 := GroupCandidatesForModel(snap, "m2")
+	if len(m2) != 2 {
+		t.Fatalf("候选数 = %d, want 2（空白名单=不限的组 + 显式含 m2 的组）", len(m2))
+	}
+	only := GroupCandidatesForModel(snap, "m3")
+	if len(only) != 1 || only[0].ID != 3 {
+		t.Fatalf("候选 = %d 组, want 仅 ID 3 一组（白名单显式不含 m3 的组必须被过滤掉）", len(only))
+	}
+	if len(GroupCandidatesForModel(&Snapshot{}, "m")) != 0 {
+		t.Fatal("空快照必须返回空候选")
+	}
+}

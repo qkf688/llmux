@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { testProviderModel, type Provider, type ProviderModel } from "@/lib/api";
+import {
+  testProviderModel,
+  type Provider,
+  type ProviderModel,
+  type ProviderModelTestResult,
+} from "@/lib/api";
 import type { Updater } from "@/stores/core/updater";
 import { copyTextWithToast } from "@/lib/clipboard";
 import { runConcurrentBatch } from "../utils/batch-test";
@@ -50,6 +55,14 @@ export function useProviderModelTesting({
     await copyTextWithToast(modelName, `已复制模型名称: ${modelName}`);
   };
 
+  /**
+   * #19 起「一次失败的测试」也是 HTTP 200 + code 200，结论只在 `passed`（后端同时回传
+   * 实际命中的分组，供 C2 形态把 ✕ 归位到徽标）。所以不能只靠 apiRequest 抛错判定——
+   * 那样失败会被当成通过。抛错仍是传输/参数层问题，走 catch 分支。
+   */
+  const toTestOutcome = (result: ProviderModelTestResult): { success: boolean; error?: string } =>
+    result?.passed === true ? { success: true } : { success: false, error: result?.error || "测试未通过" };
+
   const handleTestAllModel = async (modelName: string): Promise<boolean> => {
     if (!allModelsProvider) return false;
     setAllModelsTestResults((prev) => ({
@@ -57,12 +70,13 @@ export function useProviderModelTesting({
       [modelName]: { loading: true, success: null },
     }));
     try {
-      await testProviderModel(allModelsProvider.ID, modelName);
+      const result = await testProviderModel(allModelsProvider.ID, modelName);
+      const outcome = toTestOutcome(result);
       setAllModelsTestResults((prev) => ({
         ...prev,
-        [modelName]: { loading: false, success: true },
+        [modelName]: { loading: false, ...outcome },
       }));
-      return true;
+      return outcome.success;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setAllModelsTestResults((prev) => ({
@@ -183,12 +197,13 @@ export function useProviderModelTesting({
       [modelName]: { loading: true, success: null },
     }));
     try {
-      await testProviderModel(modelsOpenId, modelName);
+      const result = await testProviderModel(modelsOpenId, modelName);
+      const outcome = toTestOutcome(result);
       setUpstreamTestResults((prev) => ({
         ...prev,
-        [modelName]: { loading: false, success: true },
+        [modelName]: { loading: false, ...outcome },
       }));
-      return true;
+      return outcome.success;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setUpstreamTestResults((prev) => ({

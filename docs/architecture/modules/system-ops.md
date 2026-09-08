@@ -57,6 +57,8 @@ httpresp/ / handler/httpx/ / common/ (dataurl, maputil/, bgtask/) / consts/
 | `bgtask.Go` / `SetDefault` / `Default` / `(*Manager).Shutdown` | 登记 fire-and-forget 后台 goroutine，关闭时统一排空（有超时上限） | `common/bgtask/bgtask.go` | `main` 注入 Manager；`service/chat`、`service/healthcheck`、`service/modelsync`、`handler/*` 调 `bgtask.Go` |
 | `models.Close` | 关闭底层 `*sql.DB`，**须在** bgtask 排空之后调用 | `models/init.go` | `main.shutdown` |
 | `httpresp.Success/Error*` | 统一管理端响应 | `httpresp/` | 同包 |
+| `testapi.ResolveAssociationLink` / `ResolveProviderLink` | 连通性测试的**唯一**上游链路口径：主协议端点（`SelectPrimaryEndpoint`）→ 候选分组（关联级按白名单 `GroupCandidatesForModel`；供应商级不过滤，显式 `group_id` 时锁组）→ 组内首个可用凭据（`channel.ProbeGroup`，掩码只进 `slog`）。装配失败即 401 类缺陷（#19），四个测试端点（`GET /api/test/:id`、`POST /api/providers/:id/test`、`/test/react/:id`、`/test/structured-output/:id`）**禁止**直用 `Provider.Config` 造客户端 | `handler/testapi/models.go` | `handler/testapi/{provider_handlers,react_handler,structured_output_handler}.go` |
+| `testapi` 测试结果形状 | 链路装配成功之后的一切结论（含上游非 200）都用 HTTP 200 + 信封 `code:200` + `data:{passed, error?, error_type?, group_id, group_name}`；解析**之前**的问题（ID 非数字、显式 `group_id` 不属于该供应商、记录不存在）才是 400/404 信封。`group_id`/`group_name` **恒在**（未选定链路 = `0` / `""`），前端按 `(model, group)` 把 ✓/✕ 归位到分组徽标（C2 形态），所以失败不能走非 200 信封——`apiRequest` 遇 `code!=200` 只抛 message、丢掉 data。`/test/react/:id` 是 SSE 流（`fetchEventSource` 消费），只复用 `respondRequestError` 判调用方错误，其余结论走 `error`/`success` 事件 | `handler/testapi/respond.go` | `webui/src/lib/api/modules/catalog/{providers,model-providers}.ts` 的 `*TestResult` |
 
 ## 5. 特殊约定
 
@@ -69,8 +71,9 @@ httpresp/ / handler/httpx/ / common/ (dataurl, maputil/, bgtask/) / consts/
 - 关闭的**唯一入口**是取消 `main` 的可取消 ctx：信号与 `ListenAndServe` 启动失败共用此路径，**禁止**在任何分支用 `os.Exit` 旁路 `shutdown`（会硬切已登记的后台写库任务）
 - 容器/编排部署**必须**把宽限期设到大于关闭预算（`serverShutdownTimeout` + 2×`bgtaskDrainTimeout`，当前 30s+10s+10s）：compose `stop_grace_period`、k8s `terminationGracePeriodSeconds`；否则进程在排空完成前被 SIGKILL，优雅关闭形同虚设
 - **禁止**用裸 `go f(context.Background())` 起会写库的后台 goroutine；**必须**经 `bgtask.Go` 登记。请求内且已用 `sync.WaitGroup` 等待完成的 goroutine 例外（由 `srv.Shutdown` 覆盖）
+- 连通测试**一次解析一次请求**：`buildLink` 跨候选组只补「本组无可用凭据」，上游返回失败**不**跨组重试——测试体是真实计费的 completion（`providers/meta_bodies.go`）且前端批量并发 3，放大成 N 倍花费不可接受；react 是 SSE 多轮，重跑会重复推事件。代价已知：组内只验首个可用凭据，排在后面的坏 key 由 credprobe / 号池详情按凭据测试覆盖
 - 前端静态：`//go:embed webui/dist`，`NoRoute` 对非 `/api` `/v1` 的 GET 回 `index.html`
 
 ---
 
-*本文档由 Project Architecture Documenter skill 生成，生成日期：2026-07-23；同日审查回写子边界；2026-08-16 补充优雅关闭序与 `bgtask` 契约。*
+*本文档由 Project Architecture Documenter skill 生成，生成日期：2026-07-23；同日审查回写子边界；2026-08-16 补充优雅关闭序与 `bgtask` 契约；2026-09-09 补充 testapi 诊断链路与测试结果形状（#19）。*

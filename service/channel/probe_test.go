@@ -2,12 +2,14 @@ package channel
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/qkf688/llmux/common/credentialcrypto"
 	"github.com/qkf688/llmux/consts"
@@ -166,6 +168,58 @@ func TestNewClientFromSelection_AnthropicUsesAPIKeyHeader(t *testing.T) {
 	}
 	if h.Get("Authorization") != "" {
 		t.Fatalf("anthropic 端点不应带 Authorization: %q", h.Get("Authorization"))
+	}
+}
+
+// TestNewClientForGroup_UsesFirstUsableCredentialAndPropagatesSentinel 锁逐组诊断最小
+// 单元的两条契约：① 取组内**首个**可用凭据（ID ASC，跳过不可用者）装配客户端；
+// ② 组内全不可用时透传 ErrNoCredentialAvailable（errors.Is 可判），调用方据此跳过该组。
+func TestNewClientForGroup_UsesFirstUsableCredentialAndPropagatesSentinel(t *testing.T) {
+	cipher := setupCipherForChannel(t)
+	var hits atomic.Int64
+	var captured atomic.Value
+	srv := httptest.NewServer(modelsHandlerByKey(
+		map[string]string{"Bearer sk-2": modelListBody("m1")}, &hits, &captured))
+	t.Cleanup(srv.Close)
+
+	provider := models.Provider{Model: gorm.Model{ID: 21}, Type: "openai", Config: `{"base_url":"https://should-not-be-used.invalid"}`}
+	endpoint := models.Endpoint{Model: gorm.Model{ID: 31}, Protocol: string(consts.ProtocolOpenAI), URL: srv.URL, Enabled: true}
+	group := models.KeyGroup{Model: gorm.Model{ID: 41}, ProviderID: provider.ID, Name: "g1", Weight: 1}
+	groupID := group.ID
+	snapshot := &Snapshot{
+		Provider:  provider,
+		Endpoints: []models.Endpoint{endpoint},
+		Groups:    []models.KeyGroup{group},
+		CredentialsByGroup: map[uint][]models.Credential{
+			// 第一条停用、第二条可用：诊断口径必须落到 sk-2
+			groupID: {
+				{Model: gorm.Model{ID: 51}, GroupID: &groupID, Key: "irrelevant", Status: models.CredentialStatusDisabled},
+				credWithKey(t, cipher, "sk-2"),
+			},
+		},
+	}
+
+	client, err := NewClientForGroup(snapshot, group, endpoint, time.Now())
+	if err != nil {
+		t.Fatalf("NewClientForGroup: %v", err)
+	}
+	if _, err := client.Models(t.Context()); err != nil {
+		t.Fatalf("Models: %v", err)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("上游 hits = %d, want 1", hits.Load())
+	}
+	h, ok := captured.Load().(http.Header)
+	if !ok {
+		t.Fatal("上游未收到任何请求")
+	}
+	if h.Get("Authorization") != "Bearer sk-2" {
+		t.Fatalf("Authorization = %q, want Bearer sk-2（首个可用，非首个存在）", h.Get("Authorization"))
+	}
+
+	emptyGroup := models.KeyGroup{Model: gorm.Model{ID: 61}, ProviderID: provider.ID, Name: "g-empty", Weight: 1}
+	if _, err := NewClientForGroup(snapshot, emptyGroup, endpoint, time.Now()); !errors.Is(err, ErrNoCredentialAvailable) {
+		t.Fatalf("err = %v, want ErrNoCredentialAvailable", err)
 	}
 }
 

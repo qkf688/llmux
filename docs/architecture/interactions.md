@@ -13,6 +13,7 @@ handler/v1 → service.BalanceChat / Beforer / Processer
   → transform.ProcessRequest → providers.BuildReq → 上游 HTTP
 handler/providerapi → repository.ProviderRepo / service/modelsync（model-catalog 聚合、ListUpstreamModels 拉上游模型）
 handler/healthcheck → service.GetHealthChecker()
+service/healthcheck → service/channel（探测请求的端点/分组/凭据装配，诊断口径；见 channel-routing 模块第 5 节）
 handler/modelsync → service.NewModelSyncService
 ```
 

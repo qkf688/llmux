@@ -16,7 +16,7 @@
 - **负责什么**：`HealthChecker` 单例调度；单条/批量检查；结果处理中经 `ModelWithProviderRepo` 更新关联 Status/连续失败；经 Hook 触发权重/优先级调整；健康日志与保留；健康相关设置读取
 - **不负责什么**：通用 chat 代理路径；**权重/优先级衰减算法本体**（`AdjustmentHooks` → `service/adjustment`）；供应商 CRUD
 - **对外暴露**：`GetHealthChecker()`、`Start`/`Stop`/`Restart`、`GetHealthCheckSettings`、`AdjustmentHooks`；管理端 run/logs API
-- **依赖谁**：`repository`（关联读写、健康日志、保留清理，经 `repos()`）、`models`（实体/设置键）、`providers.Metadata`（HealthCheckBody）；入口由 `main` 启动
+- **依赖谁**：`repository`（关联读写、健康日志、保留清理，经 `repos()`）、`models`（实体/设置键）、`providers.Metadata`（HealthCheckBody）、`service/channel`（打上游的端点/分组/凭据装配，诊断口径）；入口由 `main` 启动
 
 ## 3. 内部结构
 
@@ -39,6 +39,8 @@ models.HealthCheckLog
 ## 5. 特殊约定
 
 - 探针 body 来自 `providers.Metadata`，不在 healthcheck 硬编码各供应商协议细节
+- **打上游走诊断口径装配（#21）**：`doCheck` 经 `channel.Assemble` + `SelectPrimaryEndpoint`（协议 = `ProtocolOfType(Provider.Type)`）+ `GroupCandidates`（全部组、ID ASC，不按白名单过滤）+ `FirstUsableCredential`（组内首个可用）+ `NewClientFromSelection`，**任一分组通过即判健康**——本处失败的代价是自动禁用关联，「首个分组的 key 坏了」不等于关联不可用（生产路由本来会故障转移）；成功即短路不多花钱，失败请求不产生 token 费用。刻意不碰 `DefaultSelector()`：诊断流量要可复现，且一轮巡检不得推进生产轮询指针
+- **逐组失败原因合并进 `health_check_logs.error`**（带分组名）：该字段是排查入口，只报「failed」等于丢掉线索
 - **Hook 解耦范围（现状）**：仅权重/优先级调整走 `AdjustmentHooks`；关联启停/失败计数仍在 healthcheck 结果路径内写库——不是「全部副作用都经 Hook」
 - 禁止 healthcheck 直接 import `service/adjustment` 或 `service/chat` 形成环；Hook 为包级注入（实现在 `service/adjustment` 的 `init`）
 

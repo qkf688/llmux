@@ -36,15 +36,14 @@ models.ModelSyncLog
 | `Service.GetSyncStats` | 汇总供应商数/各状态计数/上次下次同步时间 | `service/modelsync/stats.go` | 经 `repository` 聚合，不直连 DB |
 | `ActionHooks` | 同步后自动关联/清理 | `service/modelsync/` | `NewModelSyncService` 注入 `GetAutoAssocService` |
 | `GetProviderModels` | 组织级模型目录：各分组白名单并集 ∪ `custom_models` | service 门面/modelsync | 读 KeyGroup + Config（非上游 HTTP） |
-| `ListUpstreamModels(ctx, repos, providerID)` | **只读**拉上游模型（`GET /api/providers/models/:id` 的实现）：与同步共用 `channel.GroupCandidates` + `channel.SelectPrimaryEndpoint` + `probeClientForGroup`，多分组按模型 ID 去重合并；不写 `KeyGroup.Models`、不产 `ModelSyncLog`、不触发 ActionHooks、**不套用过滤规则**（过滤约束的是落库范围，浏览要的是上游授权全集）；单组失败/组内无可用凭据不阻断其余组，全失败才报错 | `service/modelsync/upstream.go` | `service/channel`（Assemble / GroupCandidates / SelectPrimaryEndpoint / FirstUsableCredential / NewClientFromSelection）+ `providers.Models` |
-| `probeClientForGroup`（包内） | modelsync 侧薄封装：**组内首个可用凭据**（`channel.FirstUsableCredential`）→ `channel.NewClientFromSelection`（解密 → 动态 config → 剥 `custom_models` → 按端点协议派生注册类型）。#20 起装配链本体在 channel，与 `service/credprobe.probeModels` 同源；诊断口径不碰 `DefaultSelector()`，不推进 chat 轮询指针 | `service/modelsync/upstream.go` | `syncKeyGroup` 与 `ListUpstreamModels` 共用 |
+| `ListUpstreamModels(ctx, repos, providerID)` | **只读**拉上游模型（`GET /api/providers/models/:id` 的实现）：与同步共用 `channel.GroupCandidates` + `channel.SelectPrimaryEndpoint` + `channel.NewClientForGroup`，多分组按模型 ID 去重合并；不写 `KeyGroup.Models`、不产 `ModelSyncLog`、不触发 ActionHooks、**不套用过滤规则**（过滤约束的是落库范围，浏览要的是上游授权全集）；单组失败/组内无可用凭据不阻断其余组，全失败才报错 | `service/modelsync/upstream.go` | `service/channel`（Assemble / GroupCandidates / SelectPrimaryEndpoint / NewClientForGroup）+ `providers.Models` |
 | `ModelSyncLogRepo.AggregateProviderStats` | 按 provider 取最新一次同步状态并分桶计数 | `repository/model_sync_log.go` | GORM；含旧行空 status 兼容归一化 |
 | `ProviderRepo.EnabledModelEndpointIDs` / `CountEnabledModelEndpoint` | 启用模型端点的供应商 ID/数量（NULL 视为启用） | `repository/provider.go` | GORM |
 
 ## 5. 特殊约定
 
 - **同步粒度 = 分组**：每个 KeyGroup 取活跃凭据调 `Models()`，全量写入该组 `Models` CSV；请求数 ≈ 分组数，与凭据数无关
-- **任何「打上游拿模型」的路径都必须经 `channel.NewClientFromSelection`**（modelsync 侧入口是 `probeClientForGroup`）：`Provider.Config` 自 S6 起不含 `api_key`（凭据只在 `credentials` 表、运行时由 `channel.BuildConfig` 注入明文），绕过选路直用 config 等于不带 Authorization 打上游 → 恒 401「You didn't provide an API key」。管理端浏览（`ListUpstreamModels`）曾因此失效，现已收口
+- **任何「打上游拿模型」的路径都必须经 `channel.NewClientFromSelection`**（逐组诊断的入口是 `channel.NewClientForGroup`）：`Provider.Config` 自 S6 起不含 `api_key`（凭据只在 `credentials` 表、运行时由 `channel.BuildConfig` 注入明文），绕过选路直用 config 等于不带 Authorization 打上游 → 恒 401「You didn't provide an API key」。管理端浏览（`ListUpstreamModels`）曾因此失效，现已收口
 - **空白名单**：空 = 未同步/不限制（选路不限；不向组织级目录贡献模型 ID）
 - **不再写 `Config.upstream_models`**：同步真相在分组白名单；组织级目录由 `GetProviderModelCatalogs` 批量聚合（端点 `GET /api/providers/model-catalog`，前端目录唯一数据源，详见 providers.md 契约表）
 - 过滤规则（如仅 `:free`）为配置驱动，适配不同公益站场景；按分组拉回后套用

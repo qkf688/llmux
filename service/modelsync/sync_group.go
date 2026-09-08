@@ -24,8 +24,8 @@ type groupSyncOutcome struct {
 
 // syncKeyGroup 用该组活跃凭据拉 /models，全量写入 KeyGroup.Models。
 // 端点：channel.SelectPrimaryEndpoint（启用且协议 = ProtocolOfType(Provider.Type) 的
-// 最小 ID）；凭据：组内首个可用（probeClientForGroup）。
-// 与管理端只读浏览 ListUpstreamModels 共用同一条打上游的链路。
+// 最小 ID）；凭据：组内首个可用（channel.NewClientForGroup）。
+// 与管理端只读浏览 ListUpstreamModels、健康检测 doCheck 共用同一条打上游的链路。
 func (s *Service) syncKeyGroup(
 	ctx context.Context,
 	provider models.Provider,
@@ -42,7 +42,7 @@ func (s *Service) syncKeyGroup(
 		return out
 	}
 
-	chatModel, err := probeClientForGroup(snapshot, group, endpoint, now)
+	chatModel, err := channel.NewClientForGroup(snapshot, group, endpoint, now)
 	if err != nil {
 		if errors.Is(err, channel.ErrNoCredentialAvailable) {
 			out.Skipped = true

@@ -3,6 +3,7 @@ package channel
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
@@ -10,8 +11,8 @@ import (
 )
 
 // NewClientFromSelection 用「端点 + 凭据」这条已选定链路装配打上游的客户端，是所有
-// **非 chat 流量**（模型同步 / 管理端上游浏览 / 凭据探活 / #19 testapi / #21 healthcheck
-// / #24 按凭据测试）唯一的客户端装配点：
+// **非 chat 流量**（模型同步 / 管理端上游浏览 / 凭据探活 / 健康检测 / 后续 #19 testapi
+// 与 #24 按凭据测试）唯一的客户端装配点：
 //
 //	解密凭据 → BuildConfig 动态 config → 剥 custom_models → 按端点协议派生注册类型 → providers.New
 //
@@ -43,6 +44,21 @@ func NewClientFromSelection(provider models.Provider, endpoint models.Endpoint, 
 		return nil, fmt.Errorf("channel: create upstream client for provider %d: %w", provider.ID, err)
 	}
 	return client, nil
+}
+
+// NewClientForGroup 装配「用某个分组的凭据打上游」的客户端：组内首个可用凭据
+// （FirstUsableCredential）→ NewClientFromSelection。逐组尝试的诊断类流量（模型同步、
+// 管理端上游浏览、健康检查）共用的最小单元——这两步在任何调用方写出来都一样，留成
+// 各包副本就是漂移入口（改一处忘一处 → 有的路径推进轮询、有的不推进）。
+//
+// 组内无可用凭据 → 透传 FirstUsableCredential 包装的 ErrNoCredentialAvailable
+// （errors.Is 可判），调用方按「跳过该组、继续其余组」处理。
+func NewClientForGroup(snapshot *Snapshot, group models.KeyGroup, endpoint models.Endpoint, now time.Time) (providers.Provider, error) {
+	cred, err := FirstUsableCredential(snapshot, group.ID, now)
+	if err != nil {
+		return nil, err
+	}
+	return NewClientFromSelection(snapshot.Provider, endpoint, cred)
 }
 
 // DropCustomModels 从动态 config JSON 移除 custom_models，使 Providers.Models() 真的

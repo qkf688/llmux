@@ -69,16 +69,20 @@ export function useNumberPoolsPage() {
   }, []);
 
   const handlePoolSaved = useCallback(
-    async (values: { name: string; note?: string }) => {
+    async (values: { name: string; note?: string; test_model?: string }) => {
       try {
         if (formPool) {
           await updatePool.mutateAsync({
             id: formPool.ID,
-            data: { name: values.name, note: values.note },
+            data: { name: values.name, note: values.note, test_model: values.test_model },
           });
           toast.success("号池已更新");
         } else {
-          await createPool.mutateAsync({ name: values.name, note: values.note });
+          await createPool.mutateAsync({
+            name: values.name,
+            note: values.note,
+            test_model: values.test_model,
+          });
           toast.success("号池已创建");
         }
         setFormOpen(false);

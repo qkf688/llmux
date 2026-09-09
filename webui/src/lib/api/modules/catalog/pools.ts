@@ -8,6 +8,9 @@ export interface Pool {
   ID: number;
   Name: string;
   Note: string;
+  /** 池级「测试模型」（#24-B 迁移）：按凭据测试打真实最小 completion 用的模型名；
+   *  空 = 未配置，点测直接判 validation 失败。键恒在（后端直返实体无 omitempty）。 */
+  TestModel: string;
   CreatedAt: string;
   UpdatedAt: string;
   DeletedAt?: string | null;
@@ -77,20 +80,23 @@ export async function getPools(filters: { name?: string } = {}): Promise<PoolLis
   return apiRequest<PoolListItem[]>(qs ? `/pools?${qs}` : "/pools");
 }
 
-export async function createPool(body: { name: string; note?: string }): Promise<Pool> {
+/** 号池写请求体为全量语义（后端 PUT 走 UpdateFields）：test_model 缺省按空串提交 = 清空。 */
+export async function createPool(
+  body: { name: string; note?: string; test_model?: string },
+): Promise<Pool> {
   return apiRequest<Pool>("/pools", {
     method: "POST",
-    body: JSON.stringify({ name: body.name, note: body.note ?? "" }),
+    body: JSON.stringify({ name: body.name, note: body.note ?? "", test_model: body.test_model ?? "" }),
   });
 }
 
 export async function updatePool(
   id: number,
-  body: { name: string; note?: string },
+  body: { name: string; note?: string; test_model?: string },
 ): Promise<Pool> {
   return apiRequest<Pool>(`/pools/${id}`, {
     method: "PUT",
-    body: JSON.stringify({ name: body.name, note: body.note ?? "" }),
+    body: JSON.stringify({ name: body.name, note: body.note ?? "", test_model: body.test_model ?? "" }),
   });
 }
 
@@ -156,7 +162,7 @@ export async function getCredentialRaw(
  *  一次失败的测试也是 HTTP 200 + code 200，结论在 `passed`（apiRequest 在 code!=200 时
  *  只抛 message、丢 data，故失败不能用异常判定，必须读 data.passed）。
  *  group_id/group_name/provider_id 是后端实际命中的引用链路（取 ProviderID/GroupID 最小
- *  者；0/空串 = 池无引用组、链路未选定）；model 是本次实际使用的测试模型（来自分组
+ *  者；0/空串 = 池无引用组、链路未选定）；model 是本次实际使用的测试模型（来自号池
  *  test_model；空/缺省 = 链路未选定或未配置测试模型）。**只报不改**：本端点不回写凭据状态。 */
 export interface PoolCredentialTestResult {
   passed?: boolean;

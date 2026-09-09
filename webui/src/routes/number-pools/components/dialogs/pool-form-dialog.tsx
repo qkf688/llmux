@@ -26,6 +26,7 @@ import type { PoolListItem } from "@/lib/api";
 const poolFormSchema = z.object({
   name: z.string().min(1, { message: "号池名称不能为空" }),
   note: z.string().optional(),
+  testModel: z.string().optional(),
 });
 
 type PoolFormValues = z.infer<typeof poolFormSchema>;
@@ -35,7 +36,7 @@ type PoolFormDialogProps = {
   onOpenChange: (open: boolean) => void;
   /** null = 新建 */
   pool: PoolListItem | null;
-  onSaved: (values: { name: string; note?: string }) => void | Promise<void>;
+  onSaved: (values: { name: string; note?: string; test_model?: string }) => void | Promise<void>;
   isSaving?: boolean;
 };
 
@@ -48,12 +49,12 @@ export function PoolFormDialog({
 }: PoolFormDialogProps) {
   const form = useForm<PoolFormValues>({
     resolver: zodResolver(poolFormSchema),
-    defaultValues: { name: "", note: "" },
+    defaultValues: { name: "", note: "", testModel: "" },
   });
 
   useEffect(() => {
     if (open) {
-      form.reset({ name: pool?.Name ?? "", note: pool?.Note ?? "" });
+      form.reset({ name: pool?.Name ?? "", note: pool?.Note ?? "", testModel: pool?.TestModel ?? "" });
     }
   }, [open, pool, form]);
 
@@ -61,6 +62,8 @@ export function PoolFormDialog({
     void onSaved({
       name: values.name.trim(),
       note: values.note?.trim() || undefined,
+      // 全量语义：未填 = 空串 = 清空（后端 PUT 走 UpdateFields），故不设 undefined 分支
+      test_model: values.testModel?.trim() ?? "",
     });
   };
 
@@ -99,6 +102,22 @@ export function PoolFormDialog({
                     <FormControl>
                       <Input {...field} placeholder="用途 / 负责人等" />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="testModel"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>测试模型（可选）</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="如：gpt-4o-mini" />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      详情页「按凭据测试」发最小 completion 用的模型名，须是引用本池分组所属供应商主协议支持的模型；留空 = 未配置，点测直接判失败
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}

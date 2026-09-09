@@ -3,7 +3,11 @@ import { toast } from "sonner";
 import { getProviderModels, type Provider, type ProviderModel } from "@/lib/api";
 import { useProviderModelCatalog } from "@/hooks/api/use-providers";
 import { EMPTY_MODEL_CATALOG } from "@/lib/empty-constants";
-import { unionCatalogModels } from "@/lib/provider-models";
+import {
+  extractUniqueGroups,
+  matchModelGroupFilter,
+  unionCatalogModels,
+} from "@/lib/provider-models";
 import type { Setter } from "@/stores/core/updater";
 import { buildAutoActionsDescription, type AutoActionsFlags } from "../utils/auto-actions";
 
@@ -45,9 +49,21 @@ export function useUpstreamModelsDialog({
   autoActionsFlags,
 }: UseUpstreamModelsDialogInput) {
   const [providerModels, setProviderModels] = useState<ProviderModel[]>([]);
-  const [filteredProviderModels, setFilteredProviderModels] = useState<ProviderModel[]>([]);
+  const [upstreamSearchQuery, setUpstreamSearchQuery] = useState("");
+  const [upstreamGroupFilter, setUpstreamGroupFilter] = useState("all");
   const [upstreamModelsCache, setUpstreamModelsCache] = useState<Record<number, ProviderModel[]>>({});
   const { data: catalogData = EMPTY_MODEL_CATALOG } = useProviderModelCatalog();
+
+  const upstreamAvailableGroups = useMemo(() => extractUniqueGroups(providerModels), [providerModels]);
+
+  const filteredProviderModels = useMemo(() => {
+    let result = providerModels;
+    if (upstreamSearchQuery.trim() !== "") {
+      const q = upstreamSearchQuery.trim().toLowerCase();
+      result = result.filter((m) => m.id.toLowerCase().includes(q));
+    }
+    return result.filter((m) => matchModelGroupFilter(m.Groups, upstreamGroupFilter));
+  }, [providerModels, upstreamSearchQuery, upstreamGroupFilter]);
 
   // 去重基准 = 目录已收录模型（分组白名单并集 + custom），数据源与 all-models 弹窗同源
   const savedModelSet = useMemo(() => {
@@ -84,12 +100,10 @@ export function useUpstreamModelsDialog({
       const data = await getProviderModels(providerId);
       const models = Array.isArray(data) ? data : [];
       setProviderModels(models);
-      setFilteredProviderModels(models);
       setUpstreamModelsCache((prev) => ({ ...prev, [providerId]: models }));
     } catch (err) {
       console.error("获取提供商模型失败", err);
       setProviderModels([]);
-      setFilteredProviderModels([]);
       // 失败必须可见：空列表和「上游没有模型」在 UI 上无法区分，
       // 而后端 message 里带着真正原因（缺凭据 / 上游 401 原文 / 端点未启用）。
       toast.error("获取上游模型失败", {
@@ -104,11 +118,12 @@ export function useUpstreamModelsDialog({
     setModelsOpen(true);
     setModelsOpenId(providerId);
     setSelectedUpstreamModels([]);
+    setUpstreamSearchQuery("");
+    setUpstreamGroupFilter("all");
 
     const cached = upstreamModelsCache[providerId];
     if (cached && cached.length > 0) {
       setProviderModels(cached);
-      setFilteredProviderModels(cached);
       return;
     }
     await fetchProviderModels(providerId);
@@ -121,12 +136,7 @@ export function useUpstreamModelsDialog({
   };
 
   const handleUpstreamSearchChange = (value: string) => {
-    const searchTerm = value.trim().toLowerCase();
-    if (searchTerm === "") {
-      setFilteredProviderModels(providerModels);
-      return;
-    }
-    setFilteredProviderModels(providerModels.filter((model) => model.id.toLowerCase().includes(searchTerm)));
+    setUpstreamSearchQuery(value);
   };
 
   const handleAddUpstreamToAll = async () => {
@@ -171,6 +181,9 @@ export function useUpstreamModelsDialog({
   return {
     providerModels,
     filteredProviderModels,
+    upstreamAvailableGroups,
+    upstreamGroupFilter,
+    setUpstreamGroupFilter,
     savedModelSet,
     selectableModelIds,
     isAllSelectableChecked,

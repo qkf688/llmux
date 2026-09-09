@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { ProviderModel } from "@/lib/api";
 import type { ModelTestResult } from "../../types";
-import { ModelTestStatusButton } from "../shared";
+import { GroupBadges, ModelTestStatusButton } from "../shared";
 
 interface UpstreamModelsListItemProps {
   model: ProviderModel;
@@ -52,9 +52,12 @@ export function UpstreamModelsListItem({
           >
             {model.id}
           </div>
-          {isSaved && (
-            <span className="text-xs text-muted-foreground">已在目录</span>
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            <GroupBadges groups={model.Groups} />
+            {isSaved && (
+              <span className="text-xs text-muted-foreground">已在目录</span>
+            )}
+          </div>
         </div>
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">

@@ -21,12 +21,16 @@ export function AllModelsDialog({
   upstreamStatus,
   upstreamModelsList,
   upstreamSet,
+  modelGroupMap,
   allModelsList,
   filteredAllModels,
   allModelsSearchQuery,
   setAllModelsSearchQuery,
   allModelsTypeFilter,
   setAllModelsTypeFilter,
+  availableGroups,
+  groupFilter,
+  onGroupFilterChange,
   allModelsTestResults,
   batchTesting,
   batchTestProgress,
@@ -94,6 +98,9 @@ export function AllModelsDialog({
               setAllModelsSearchQuery={setAllModelsSearchQuery}
               allModelsTypeFilter={allModelsTypeFilter}
               setAllModelsTypeFilter={setAllModelsTypeFilter}
+              availableGroups={availableGroups}
+              groupFilter={groupFilter}
+              onGroupFilterChange={onGroupFilterChange}
               testStats={testStats}
               batchTesting={batchTesting}
               batchTestProgress={batchTestProgress}
@@ -123,6 +130,7 @@ export function AllModelsDialog({
                     <AllModelsListItem
                       key={model}
                       model={model}
+                      groups={modelGroupMap.get(model)}
                       checked={checked}
                       isUpstream={isUpstream}
                       testResult={testResult}

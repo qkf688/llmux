@@ -1,10 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { ProviderModel } from "@/lib/api";
+import type { GroupRef, ProviderModel } from "@/lib/api";
 import type { BatchTestProgress, ModelTestResult } from "../../types";
 import {
   BatchTestActionButtons,
   BatchTestProgressBar,
+  GroupFilterSelect,
   TestStatsDisplay,
 } from "../shared";
 
@@ -21,6 +22,9 @@ interface UpstreamModelsToolbarProps {
   selectableModelIds: string[];
   isAllSelectableChecked: boolean;
   modelsOpenId: number | null;
+  availableGroups: GroupRef[];
+  groupFilter: string;
+  onGroupFilterChange: (value: string) => void;
   handleBatchTestUpstreamAll: () => void | Promise<void>;
   handleBatchTestUpstreamSelected: () => void | Promise<void>;
   handleCancelUpstreamBatchTest: () => void;
@@ -45,6 +49,9 @@ export function UpstreamModelsToolbar({
   selectableModelIds,
   isAllSelectableChecked,
   modelsOpenId,
+  availableGroups,
+  groupFilter,
+  onGroupFilterChange,
   handleBatchTestUpstreamAll,
   handleBatchTestUpstreamSelected,
   handleCancelUpstreamBatchTest,
@@ -132,11 +139,17 @@ export function UpstreamModelsToolbar({
       </div>
 
       {!modelsLoading && providerModels.length > 0 && (
-        <div className="mb-3">
+        <div className="flex items-center gap-2 mb-3">
           <Input
             placeholder="搜索模型 ID"
             onChange={(e) => handleUpstreamSearchChange(e.target.value)}
-            className="w-full"
+            className="flex-1"
+          />
+          <GroupFilterSelect
+            groups={availableGroups}
+            value={groupFilter}
+            onChange={onGroupFilterChange}
+            disabled={upstreamBatchTesting}
           />
         </div>
       )}

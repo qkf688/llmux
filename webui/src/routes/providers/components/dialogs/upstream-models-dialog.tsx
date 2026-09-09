@@ -22,6 +22,9 @@ export function UpstreamModelsDialog({
   addingModels,
   providerModels,
   filteredProviderModels,
+  availableGroups,
+  groupFilter,
+  onGroupFilterChange,
   cachedModelsCount,
   savedModelSet,
   selectedUpstreamModels,
@@ -66,6 +69,9 @@ export function UpstreamModelsDialog({
           selectableModelIds={selectableModelIds}
           isAllSelectableChecked={isAllSelectableChecked}
           modelsOpenId={modelsOpenId}
+          availableGroups={availableGroups}
+          groupFilter={groupFilter}
+          onGroupFilterChange={onGroupFilterChange}
           handleBatchTestUpstreamAll={handleBatchTestUpstreamAll}
           handleBatchTestUpstreamSelected={handleBatchTestUpstreamSelected}
           handleCancelUpstreamBatchTest={handleCancelUpstreamBatchTest}

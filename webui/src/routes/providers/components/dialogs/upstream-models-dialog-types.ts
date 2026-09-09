@@ -1,4 +1,4 @@
-import type { ProviderModel } from "@/lib/api";
+import type { GroupRef, ProviderModel } from "@/lib/api";
 import type { Setter } from "@/stores/core/updater";
 import type { BatchTestProgress, ModelTestResult } from "../../types";
 
@@ -13,6 +13,9 @@ export interface UpstreamModelsDialogProps {
 
   providerModels: ProviderModel[];
   filteredProviderModels: ProviderModel[];
+  availableGroups: GroupRef[];
+  groupFilter: string;
+  onGroupFilterChange: (value: string) => void;
 
   cachedModelsCount: number;
   savedModelSet: Set<string>;

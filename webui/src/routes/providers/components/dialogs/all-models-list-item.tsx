@@ -6,11 +6,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { GroupRef } from "@/lib/api";
 import type { ModelTestResult } from "../../types";
-import { ModelTestStatusButton } from "../shared";
+import { GroupBadges, ModelTestStatusButton } from "../shared";
 
 interface AllModelsListItemProps {
   model: string;
+  groups: GroupRef[] | undefined;
   checked: boolean;
   isUpstream: boolean;
   testResult: ModelTestResult | undefined;
@@ -24,6 +26,7 @@ interface AllModelsListItemProps {
 
 export function AllModelsListItem({
   model,
+  groups,
   checked,
   isUpstream,
   testResult,
@@ -51,6 +54,7 @@ export function AllModelsListItem({
           >
             {isUpstream ? "上游" : "自定义"}
           </span>
+          <GroupBadges groups={groups} />
         </div>
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">

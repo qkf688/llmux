@@ -1,4 +1,4 @@
-import type { Provider } from "@/lib/api";
+import type { GroupRef, Provider } from "@/lib/api";
 import type { Setter } from "@/stores/core/updater";
 import type {
   AllModelsTypeFilter,
@@ -24,6 +24,7 @@ export interface AllModelsDialogProps {
   upstreamStatus: UpstreamStatus;
   upstreamModelsList: string[];
   upstreamSet: Set<string>;
+  modelGroupMap: Map<string, GroupRef[]>;
 
   allModelsList: string[];
   filteredAllModels: string[];
@@ -33,6 +34,10 @@ export interface AllModelsDialogProps {
 
   allModelsTypeFilter: AllModelsTypeFilter;
   setAllModelsTypeFilter: (value: AllModelsTypeFilter) => void;
+
+  availableGroups: GroupRef[];
+  groupFilter: string;
+  onGroupFilterChange: (value: string) => void;
 
   allModelsTestResults: Record<string, ModelTestResult>;
   batchTesting: boolean;

@@ -6,7 +6,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { Provider } from "@/lib/api";
+import type { GroupRef, Provider } from "@/lib/api";
 import type {
   AllModelsTypeFilter,
   BatchTestProgress,
@@ -14,6 +14,7 @@ import type {
 import {
   BatchTestActionButtons,
   BatchTestProgressBar,
+  GroupFilterSelect,
   TestStatsDisplay,
 } from "../shared";
 import { FILTER_OPTIONS } from "./all-models-dialog-types";
@@ -25,6 +26,9 @@ interface AllModelsToolbarProps {
   setAllModelsSearchQuery: (query: string) => void;
   allModelsTypeFilter: AllModelsTypeFilter;
   setAllModelsTypeFilter: (value: AllModelsTypeFilter) => void;
+  availableGroups: GroupRef[];
+  groupFilter: string;
+  onGroupFilterChange: (value: string) => void;
   testStats: { tested: number; success: number; failed: number };
   batchTesting: boolean;
   batchTestProgress: BatchTestProgress;
@@ -50,6 +54,9 @@ export function AllModelsToolbar({
   setAllModelsSearchQuery,
   allModelsTypeFilter,
   setAllModelsTypeFilter,
+  availableGroups,
+  groupFilter,
+  onGroupFilterChange,
   testStats,
   batchTesting,
   batchTestProgress,
@@ -90,34 +97,42 @@ export function AllModelsToolbar({
         />
       </div>
 
-      {/* 类型筛选 */}
-      <div className="flex items-center gap-1">
-        <span className="text-xs text-muted-foreground mr-1">筛选：</span>
-        <div
-          className="inline-flex rounded-md border border-input bg-background"
-          role="radiogroup"
-          aria-label="模型类型筛选"
-        >
-          {FILTER_OPTIONS.map(({ key, label }) => {
-            const checked = allModelsTypeFilter === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                role="radio"
-                aria-checked={checked}
-                onClick={() => setAllModelsTypeFilter(key)}
-                className={`px-2.5 py-1 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md border-r border-input last:border-r-0 ${
-                  checked
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-background text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
+      {/* 类型筛选 + 分组筛选 */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-muted-foreground mr-1">筛选：</span>
+          <div
+            className="inline-flex rounded-md border border-input bg-background"
+            role="radiogroup"
+            aria-label="模型类型筛选"
+          >
+            {FILTER_OPTIONS.map(({ key, label }) => {
+              const checked = allModelsTypeFilter === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="radio"
+                  aria-checked={checked}
+                  onClick={() => setAllModelsTypeFilter(key)}
+                  className={`px-2.5 py-1 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md border-r border-input last:border-r-0 ${
+                    checked
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
+        <GroupFilterSelect
+          groups={availableGroups}
+          value={groupFilter}
+          onChange={onGroupFilterChange}
+          disabled={batchTesting}
+        />
       </div>
 
       {/* 测试结果统计 */}

@@ -14,6 +14,9 @@ import { providerKeys, useProviderModelCatalog } from "@/hooks/api/use-providers
 import { EMPTY_MODEL_CATALOG } from "@/lib/empty-constants";
 import {
   buildConfigWithCustomModels,
+  buildModelGroupMap,
+  extractUniqueGroupsFromCatalog,
+  matchModelGroupFilter,
   unionCatalogModels,
 } from "@/lib/provider-models";
 import type { Setter, Updater } from "@/stores/core/updater";
@@ -76,13 +79,26 @@ export function useAllModelsDialog({
   const [upstreamModelsList, setUpstreamModelsList] = useState<string[]>([]);
   const [upstreamStatus, setUpstreamStatus] =
     useState<UpstreamStatus>("disabled");
+  const [allModelsGroupFilter, setAllModelsGroupFilter] = useState("all");
+
+  const catalogEntry = useMemo(
+    () => catalogData.find((item) => item.ProviderID === allModelsProvider?.ID),
+    [catalogData, allModelsProvider?.ID],
+  );
 
   // 标签与筛选统一：在目录 Upstream（分组白名单并集）中 → 上游；否则 → 自定义。
   // 若模型同时出现在 Custom 与 Upstream，按「上游」展示（与行内 badge 一致）。
   const upstreamSet = useMemo<Set<string>>(() => {
-    const entry = catalogData.find((item) => item.ProviderID === allModelsProvider?.ID);
-    return entry ? new Set(entry.Upstream.map((m) => m.toLowerCase())) : new Set<string>();
-  }, [catalogData, allModelsProvider?.ID]);
+    return catalogEntry
+      ? new Set(catalogEntry.Upstream.map((m) => m.ID.toLowerCase()))
+      : new Set<string>();
+  }, [catalogEntry]);
+
+  const modelGroupMap = useMemo(() => buildModelGroupMap(catalogEntry), [catalogEntry]);
+  const allModelsAvailableGroups = useMemo(
+    () => extractUniqueGroupsFromCatalog(catalogEntry),
+    [catalogEntry],
+  );
 
   const filteredAllModels = useMemo<string[]>(() => {
     let result = allModelsList;
@@ -95,8 +111,10 @@ export function useAllModelsDialog({
     } else if (allModelsTypeFilter === "custom") {
       result = result.filter((model) => !upstreamSet.has(model.toLowerCase()));
     }
-    return result;
-  }, [allModelsList, allModelsSearchQuery, allModelsTypeFilter, upstreamSet]);
+    return result.filter((model) =>
+      matchModelGroupFilter(modelGroupMap.get(model), allModelsGroupFilter),
+    );
+  }, [allModelsList, allModelsSearchQuery, allModelsTypeFilter, upstreamSet, modelGroupMap, allModelsGroupFilter]);
 
   const selectedSet = useMemo(
     () => new Set(selectedAllModels),
@@ -140,6 +158,7 @@ export function useAllModelsDialog({
     setCustomModelInput("");
     setAllModelsSearchQuery("");
     setAllModelsTypeFilter("all");
+    setAllModelsGroupFilter("all");
     setAllModelsTestResults({});
     setAllModelsOpen(true);
     setUpstreamModelsList([]);
@@ -198,7 +217,7 @@ export function useAllModelsDialog({
     }
     const entry = await fetchCatalogEntry(allModelsProvider.ID);
     const upstreamLower = new Set(
-      (entry?.Upstream ?? []).map((item) => item.toLowerCase()),
+      (entry?.Upstream ?? []).map((item) => item.ID.toLowerCase()),
     );
     const custom = entry?.Custom ?? [];
     // 已在上游（分组白名单）的模型不再写入 custom，避免列表 key 重复
@@ -362,6 +381,10 @@ export function useAllModelsDialog({
     allModelsList,
     filteredAllModels,
     upstreamSet,
+    modelGroupMap,
+    allModelsAvailableGroups,
+    allModelsGroupFilter,
+    setAllModelsGroupFilter,
     isAllFilteredSelected,
     toggleSelectAllModels,
     setAllModelsList,

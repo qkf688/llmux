@@ -182,7 +182,7 @@ func TestListUpstreamModels_PoolCredential(t *testing.T) {
 }
 
 // TestListUpstreamModels_MergesGroupsAndDedups 多分组：逐组各打一次上游，
-// 结果按模型 ID 去重合并（组织级视图 = 各分组授权集并集）。
+// 结果按模型 ID 去重合并并保留分组归属（m2 在两个组 → Groups 含两条）。
 func TestListUpstreamModels_MergesGroupsAndDedups(t *testing.T) {
 	db := setupModelSyncTestDB(t)
 	cipher := setupSyncCipher(t)
@@ -202,8 +202,8 @@ func TestListUpstreamModels_MergesGroupsAndDedups(t *testing.T) {
 	if err := db.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	seedInlineGroup(t, db, cipher, provider.ID, "g1", "sk-g1")
-	seedInlineGroup(t, db, cipher, provider.ID, "g2", "sk-g2")
+	g1 := seedInlineGroup(t, db, cipher, provider.ID, "g1", "sk-g1")
+	g2 := seedInlineGroup(t, db, cipher, provider.ID, "g2", "sk-g2")
 
 	got, err := ListUpstreamModels(context.Background(), repository.New(db), provider.ID)
 	if err != nil {
@@ -218,6 +218,22 @@ func TestListUpstreamModels_MergesGroupsAndDedups(t *testing.T) {
 	}
 	if strings.Join(ids, ",") != "m1,m2,m3" {
 		t.Fatalf("merged ids = %v, want [m1 m2 m3]（m2 去重、分组顺序稳定）", ids)
+	}
+	// 分组归属：m1 只在 g1，m2 在 g1+g2，m3 只在 g2
+	if len(got[0].Groups) != 1 || got[0].Groups[0].Name != "g1" {
+		t.Fatalf("m1.Groups = %+v, want [{g1}]", got[0].Groups)
+	}
+	if got[0].Groups[0].ID != g1.ID {
+		t.Fatalf("m1.Groups[0].ID = %d, want %d", got[0].Groups[0].ID, g1.ID)
+	}
+	if len(got[1].Groups) != 2 || got[1].Groups[0].Name != "g1" || got[1].Groups[1].Name != "g2" {
+		t.Fatalf("m2.Groups = %+v, want [{g1} {g2}]", got[1].Groups)
+	}
+	if got[1].Groups[1].ID != g2.ID {
+		t.Fatalf("m2.Groups[1].ID = %d, want %d", got[1].Groups[1].ID, g2.ID)
+	}
+	if len(got[2].Groups) != 1 || got[2].Groups[0].Name != "g2" {
+		t.Fatalf("m3.Groups = %+v, want [{g2}]", got[2].Groups)
 	}
 }
 

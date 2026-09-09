@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qkf688/llmux/providers"
 	"github.com/qkf688/llmux/repository"
 	"github.com/qkf688/llmux/service/channel"
 )
@@ -19,10 +18,9 @@ import (
 // 不触发同步后动作，也**不应用过滤规则**——过滤规则约束的是「同步落进白名单的范围」，
 // 弹窗要的是上游授权全集供人工挑选，两者语义不同。
 //
-// 多分组时逐组拉取、按模型 ID 去重合并（组织级视图 = 各分组授权集并集，与
-// mergeProviderModelCatalog 的目录口径同构）；单组失败或组内无可用凭据不阻断其余组，
-// 全组都拿不到模型才报错。repos 为 nil 时用 repository.Default()。
-func ListUpstreamModels(ctx context.Context, repos *repository.Repositories, providerID uint) ([]providers.Model, error) {
+// 多分组时逐组拉取、按模型 ID 去重合并并保留分组归属（同一模型在多个组出现时 Groups 追加）；
+// 单组失败或组内无可用凭据不阻断其余组，全组都拿不到模型才报错。repos 为 nil 时用 repository.Default()。
+func ListUpstreamModels(ctx context.Context, repos *repository.Repositories, providerID uint) ([]UpstreamModel, error) {
 	if repos == nil {
 		repos = repository.Default()
 	}
@@ -45,8 +43,8 @@ func ListUpstreamModels(ctx context.Context, repos *repository.Repositories, pro
 	}
 
 	now := time.Now()
-	merged := make([]providers.Model, 0)
-	seen := make(map[string]struct{})
+	merged := make([]UpstreamModel, 0)
+	index := make(map[string]int) // model ID → merged 下标
 	var (
 		failures  []string
 		succeeded bool
@@ -66,12 +64,17 @@ func ListUpstreamModels(ctx context.Context, repos *repository.Repositories, pro
 			continue
 		}
 		succeeded = true
+		ref := GroupRef{ID: group.ID, Name: group.Name}
 		for _, m := range upstreamModels {
-			if _, dup := seen[m.ID]; dup {
+			if idx, dup := index[m.ID]; dup {
+				merged[idx].Groups = append(merged[idx].Groups, ref)
 				continue
 			}
-			seen[m.ID] = struct{}{}
-			merged = append(merged, m)
+			index[m.ID] = len(merged)
+			merged = append(merged, UpstreamModel{
+				Model:  m,
+				Groups: []GroupRef{ref},
+			})
 		}
 	}
 

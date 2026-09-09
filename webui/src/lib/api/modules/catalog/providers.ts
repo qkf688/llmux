@@ -90,14 +90,28 @@ export interface ProviderModel {
   object: string;
   created: number;
   owned_by: string;
+  /** 所属分组列表（ListUpstreamModels 返回时携带；catalog 条目不走此字段） */
+  Groups?: GroupRef[];
+}
+
+/** 分组引用（与后端 modelsync.GroupRef 同源，PascalCase） */
+export interface GroupRef {
+  ID: number;
+  Name: string;
+}
+
+/** 带分组归属的上游模型条目（与后端 modelsync.UpstreamModelEntry 同源） */
+export interface UpstreamModelEntry {
+  ID: string;
+  Groups: GroupRef[];
 }
 
 /** GET /providers/model-catalog 单供应商组织级目录（PascalCase 与后端
- *  service/modelsync.ProviderModelCatalog 同源）：Upstream = 分组白名单并集（同步真相），
- *  Custom = config.custom_models（手填）。空值显式空数组（非 null）。 */
+ *  service/modelsync.ProviderModelCatalog 同源）：Upstream = 分组白名单并集（同步真相，
+ *  带分组归属），Custom = config.custom_models（手填）。空值显式空数组（非 null）。 */
 export interface ProviderModelCatalog {
   ProviderID: number;
-  Upstream: string[];
+  Upstream: UpstreamModelEntry[];
   Custom: string[];
 }
 

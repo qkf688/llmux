@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/providers"
 	"github.com/qkf688/llmux/repository"
 )
 
@@ -96,13 +97,54 @@ func GetProviderModels(ctx context.Context, provider models.Provider, repos *rep
 	return mergeProviderModelCatalog(provider.Config, groups), nil
 }
 
+// GroupRef 分组引用（ID + Name），供前端徽标与筛选使用。
+type GroupRef struct {
+	ID   uint
+	Name string
+}
+
+// UpstreamModel 上游模型条目 + 所属分组列表（ListUpstreamModels 返回）。
+// Groups 按分组遍历顺序追加（GroupCandidates 的 ID ASC）。
+type UpstreamModel struct {
+	providers.Model
+	Groups []GroupRef
+}
+
+// UpstreamModelEntry 单条上游模型及其所属分组列表。
+// Groups 按 KeyGroup.ID ASC 排序（与 ListByProvider 一致）。
+type UpstreamModelEntry struct {
+	ID     string
+	Groups []GroupRef
+}
+
+// buildUpstreamEntries 从分组白名单构建带分组归属的模型条目。
+// 同一模型出现在多个分组时合并 Groups；模型首次出现的顺序决定输出顺序。
+func buildUpstreamEntries(groups []models.KeyGroup) []UpstreamModelEntry {
+	seen := make(map[string][]GroupRef)
+	order := make([]string, 0)
+	for _, g := range groups {
+		ref := GroupRef{ID: g.ID, Name: g.Name}
+		for _, id := range splitModelsCSV(g.Models) {
+			if _, ok := seen[id]; !ok {
+				order = append(order, id)
+			}
+			seen[id] = append(seen[id], ref)
+		}
+	}
+	out := make([]UpstreamModelEntry, 0, len(order))
+	for _, id := range order {
+		out = append(out, UpstreamModelEntry{ID: id, Groups: seen[id]})
+	}
+	return out
+}
+
 // ProviderModelCatalog 单个供应商的组织级目录，按来源分类：
-// Upstream = 各分组白名单并集（同步真相）；Custom = config.custom_models（手填）。
+// Upstream = 各分组白名单并集（同步真相，带分组归属）；Custom = config.custom_models（手填）。
 // 前端目录页（models / model-providers / providers）的 API 数据源，替代
 // Config.upstream_models 遗留客户端解析。
 type ProviderModelCatalog struct {
 	ProviderID uint
-	Upstream   []string
+	Upstream   []UpstreamModelEntry
 	Custom     []string
 }
 
@@ -125,10 +167,10 @@ func GetProviderModelCatalogs(ctx context.Context, repos *repository.Repositorie
 		if err != nil {
 			return nil, err
 		}
-		upstream := mergeGroupWhitelists(groups)
+		upstream := buildUpstreamEntries(groups)
 		custom := extractCustomModels(p.Config)
 		if upstream == nil {
-			upstream = []string{}
+			upstream = []UpstreamModelEntry{}
 		}
 		if custom == nil {
 			custom = []string{}

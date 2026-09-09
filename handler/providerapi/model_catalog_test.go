@@ -28,9 +28,9 @@ func getModelCatalogViaHandler(t *testing.T) string {
 	return w.Body.String()
 }
 
-// TestGetProviderModelCatalog_MergesWhitelistsAndCustom 覆盖 #8-4 AC-4a：
-// 每供应商返回 Upstream（分组白名单并集，CSV 去空格去重）+ Custom
-// （config.custom_models）；空值显式空数组（非 null）。
+// TestGetProviderModelCatalog_MergesWhitelistsAndCustom 覆盖 #8-4 AC-4a + #22 AC-1：
+// 每供应商返回 Upstream（带分组归属的白名单条目）+ Custom（config.custom_models）；
+// 空值显式空数组（非 null）。
 func TestGetProviderModelCatalog_MergesWhitelistsAndCustom(t *testing.T) {
 	testsupport.InitTestDB(t)
 	repo := repository.Default()
@@ -42,12 +42,18 @@ func TestGetProviderModelCatalog_MergesWhitelistsAndCustom(t *testing.T) {
 	if err := repo.Provider.Create(t.Context(), p2); err != nil {
 		t.Fatalf("seed provider2: %v", err)
 	}
+	var g1, g2 *models.KeyGroup
 	for _, g := range []*models.KeyGroup{
 		{ProviderID: p1.ID, Name: "低价组", Models: "gpt-4o, gpt-4o-mini"},
 		{ProviderID: p1.ID, Name: "走量组", Models: "gpt-4o-mini,claude-3"},
 	} {
 		if err := repo.KeyGroup.Create(t.Context(), g); err != nil {
 			t.Fatalf("seed key group: %v", err)
+		}
+		if g1 == nil {
+			g1 = g
+		} else {
+			g2 = g
 		}
 	}
 
@@ -57,7 +63,7 @@ func TestGetProviderModelCatalog_MergesWhitelistsAndCustom(t *testing.T) {
 		t.Fatalf("目录条目数 = %d, want 2, body=%s", got, body)
 	}
 
-	// 一号商：白名单并集 3 个（CSV 空格 trim + 去重）+ custom 1 个
+	// 一号商：白名单 3 个（CSV 空格 trim + 去重）+ custom 1 个
 	p1Base := "data.#(ProviderID==" + uitoa(p1.ID) + ")."
 	if got := gjson.Get(body, p1Base+"Upstream.#").Int(); got != 3 {
 		t.Fatalf("一号商 Upstream 数量 = %d, want 3, body=%s", got, body)
@@ -65,11 +71,44 @@ func TestGetProviderModelCatalog_MergesWhitelistsAndCustom(t *testing.T) {
 	if got := gjson.Get(body, p1Base+"Custom.#").Int(); got != 1 {
 		t.Fatalf("一号商 Custom 数量 = %d, want 1, body=%s", got, body)
 	}
-	if got := gjson.Get(body, p1Base+"Upstream.0").String(); got != "gpt-4o" {
-		t.Fatalf("一号商 Upstream.0 = %q, want gpt-4o", got)
+	// Upstream.0 = gpt-4o（只在低价组）
+	if got := gjson.Get(body, p1Base+"Upstream.0.ID").String(); got != "gpt-4o" {
+		t.Fatalf("一号商 Upstream.0.ID = %q, want gpt-4o", got)
 	}
-	if got := gjson.Get(body, p1Base+"Upstream.1").String(); got != "gpt-4o-mini" {
-		t.Fatalf("一号商 Upstream.1 = %q, want gpt-4o-mini（CSV 空格 trim）", got)
+	if got := gjson.Get(body, p1Base+"Upstream.0.Groups.#").Int(); got != 1 {
+		t.Fatalf("一号商 Upstream.0.Groups 数量 = %d, want 1, body=%s", got, body)
+	}
+	if got := gjson.Get(body, p1Base+"Upstream.0.Groups.0.Name").String(); got != "低价组" {
+		t.Fatalf("一号商 Upstream.0.Groups.0.Name = %q, want 低价组", got)
+	}
+	if got := gjson.Get(body, p1Base+"Upstream.0.Groups.0.ID").Uint(); got != uint64(g1.ID) {
+		t.Fatalf("一号商 Upstream.0.Groups.0.ID = %d, want %d", got, g1.ID)
+	}
+	// Upstream.1 = gpt-4o-mini（在两个组）
+	if got := gjson.Get(body, p1Base+"Upstream.1.ID").String(); got != "gpt-4o-mini" {
+		t.Fatalf("一号商 Upstream.1.ID = %q, want gpt-4o-mini（CSV 空格 trim）", got)
+	}
+	if got := gjson.Get(body, p1Base+"Upstream.1.Groups.#").Int(); got != 2 {
+		t.Fatalf("一号商 Upstream.1.Groups 数量 = %d, want 2, body=%s", got, body)
+	}
+	if got := gjson.Get(body, p1Base+"Upstream.1.Groups.0.Name").String(); got != "低价组" {
+		t.Fatalf("一号商 Upstream.1.Groups.0.Name = %q, want 低价组", got)
+	}
+	if got := gjson.Get(body, p1Base+"Upstream.1.Groups.1.Name").String(); got != "走量组" {
+		t.Fatalf("一号商 Upstream.1.Groups.1.Name = %q, want 走量组", got)
+	}
+	// Upstream.2 = claude-3（只在走量组）
+	if got := gjson.Get(body, p1Base+"Upstream.2.ID").String(); got != "claude-3" {
+		t.Fatalf("一号商 Upstream.2.ID = %q, want claude-3", got)
+	}
+	if got := gjson.Get(body, p1Base+"Upstream.2.Groups.#").Int(); got != 1 {
+		t.Fatalf("一号商 Upstream.2.Groups 数量 = %d, want 1", got)
+	}
+	if got := gjson.Get(body, p1Base+"Upstream.2.Groups.0.Name").String(); got != "走量组" {
+		t.Fatalf("一号商 Upstream.2.Groups.0.Name = %q, want 走量组", got)
+	}
+	if got := gjson.Get(body, p1Base+"Upstream.2.Groups.0.ID").Uint(); got != uint64(g2.ID) {
+		t.Fatalf("一号商 Upstream.2.Groups.0.ID = %d, want %d", got, g2.ID)
 	}
 	if got := gjson.Get(body, p1Base+"Custom.0").String(); got != "x-1" {
 		t.Fatalf("一号商 Custom.0 = %q, want x-1", got)

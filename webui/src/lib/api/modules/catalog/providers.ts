@@ -42,6 +42,8 @@ export interface ProviderGroupDetail {
   Name: string;
   Weight: number;
   Models: string;
+  /** 分组级「测试模型」（#24-B 按凭据测试用）；空 = 未配置，点测直接判失败 */
+  TestModel: string;
   /** 凭据来源二选一：inline / pool */
   Source: string;
   /** 内联凭据掩码项（仅 inline 来源非空；明文不受控返回） */
@@ -75,6 +77,8 @@ export interface ProviderGroupInput {
   name: string;
   weight: number;
   models: string;
+  /** 分组级测试模型（#24-B 按凭据测试用）；空 = 未配置 */
+  test_model: string;
   source: "inline" | "pool";
   inline_keys: ProviderInlineKeyInput[];
   pool_id: number | null;

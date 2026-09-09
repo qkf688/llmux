@@ -96,6 +96,24 @@ type CredentialRawData struct {
 	Key string `json:"key"`
 }
 
+// CredentialTestResult 号池详情「按凭据测试」（#24-B）响应：与 handler/testapi 四个连通测试
+// 端点同族形状——一次失败的测试仍是 code 200 + passed:false，结论只可能在 data 里
+// （前端 apiRequest 在 code!=200 时只抛 message、丢 data，用错误信封回传等于前端读不到）。
+//
+// 只报不改：本端点绝不写回 Credential.Status/FailCount/Cooldown，纯探活结论。
+// group_id/group_name 为实际命中的引用分组（取 ProviderID/GroupID 最小者）；
+// 链路未选定（池无引用组）时为 0/空串，error_type=provider。model 为本次点测实际使用的
+// 测试模型（来自分组 test_model；未配置/链路未选定时为空串）。
+type CredentialTestResult struct {
+	Passed     bool   `json:"passed"`
+	GroupID    uint   `json:"group_id"`
+	GroupName  string `json:"group_name"`
+	ProviderID uint   `json:"provider_id"`
+	Model      string `json:"model,omitempty"`
+	Error      string `json:"error,omitempty"`
+	ErrorType  string `json:"error_type,omitempty"`
+}
+
 // BatchImportCredentialsRequest 批量粘贴导入请求体（设计定案第 7 节：
 // 前端按行拆分后传数组，服务端不做文本解析）。
 type BatchImportCredentialsRequest struct {

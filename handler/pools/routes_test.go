@@ -52,3 +52,33 @@ func TestRegisterRouteOrder_BatchBeforeCredID(t *testing.T) {
 		})
 	}
 }
+
+// TestRegisterRouteOrder_TestSuffixRoutedAndBatchImportNotShadowed 锁定新增的
+// POST /pools/:id/credentials/:credId/test 与既有 POST /pools/:id/credentials/batch/import
+// 互不遮蔽（:credId 参数子树与 batch 静态子树共存）。
+//
+// 判别式：POST .../credentials/5/test → 命中 TestCredential → requirePool(9999 不存在)
+// 回 code=404 "Pool not found"（而非被 batch/import 误吞或 405/404 路由未注册）；
+// POST .../credentials/batch/import → 仍命中批量导入（池存在性 404）。
+func TestRegisterRouteOrder_TestSuffixRoutedAndBatchImportNotShadowed(t *testing.T) {
+	testsupport.InitTestDB(t)
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	Register(r)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/pools/9999/credentials/5/test", strings.NewReader("{}"))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if body := w.Body.String(); !strings.Contains(body, "Pool not found") {
+		t.Fatalf(".../credentials/5/test 未路由到 TestCredential（应命中池存在性 404）: body=%s", body)
+	}
+
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest("POST", "/pools/9999/credentials/batch/import", strings.NewReader(`{"keys":["sk-x"]}`))
+	req2.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w2, req2)
+	if body := w2.Body.String(); !strings.Contains(body, "Pool not found") {
+		t.Fatalf("batch/import 被 :credId/test 遮蔽: body=%s", body)
+	}
+}

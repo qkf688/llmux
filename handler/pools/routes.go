@@ -16,6 +16,7 @@ func Register(rg gin.IRoutes) {
 	rg.POST("/pools/:id/credentials/batch/import", BatchImportCredentials)
 	rg.GET("/pools/:id/credentials/:credId", GetCredential)
 	rg.GET("/pools/:id/credentials/:credId/raw", GetCredentialRaw)
+	rg.POST("/pools/:id/credentials/:credId/test", TestCredential)
 	rg.PATCH("/pools/:id/credentials/:credId", UpdateCredential)
 	rg.DELETE("/pools/:id/credentials/:credId", DeleteCredential)
 }

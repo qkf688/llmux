@@ -44,7 +44,9 @@ import {
   type CredentialDeleteTarget,
 } from "./credential-delete-dialog";
 import { CredentialKeyCell } from "./credential-key-cell";
+import { CredentialTestButton } from "./credential-test-button";
 import { useCredentialKeyReveal } from "./use-credential-key-reveal";
+import { useCredentialTesting } from "./use-credential-testing";
 import {
   COOLDOWN_BADGE_CLS,
   CREDENTIAL_STATUS_BADGE_CLS,
@@ -111,6 +113,12 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
     view: open ? `${page}|${statusFilter}|${debouncedQ}` : "closed",
   });
 
+  // 「按凭据测试」结论与明文同视图生命周期：翻页/筛选/搜索/关弹窗一律作废（契约见 useCredentialTesting）
+  const credentialTesting = useCredentialTesting({
+    poolId: open ? poolId : null,
+    view: open ? `${page}|${statusFilter}|${debouncedQ}` : "closed",
+  });
+
   const updateCred = useUpdateCredential();
   const deleteCred = useDeleteCredential();
   const batchStatus = useBatchUpdateCredentialStatus();
@@ -161,6 +169,7 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
         await batchDelete.mutateAsync({ poolId: pool.ID, ids });
         // 被删凭据的行随即消失，明文必须同时出栈（不等翻页/筛选才作废）
         keyReveal.forget(ids);
+        credentialTesting.forget(ids);
         toast.success(`已删除 ${ids.length} 条凭据`);
       } else {
         await batchStatus.mutateAsync({ poolId: pool.ID, ids, status: next });
@@ -185,6 +194,7 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
       await deleteCred.mutateAsync({ poolId: pool.ID, credId: id });
       // 行消失的同时丢弃其明文：被删的 key 往往正因为已泄露，最不该留在内存里
       keyReveal.forget([id]);
+      credentialTesting.forget([id]);
       setSelectedIds((prev) => {
         const next = new Set(prev);
         next.delete(id);
@@ -353,7 +363,7 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
                       <TableHead>失败</TableHead>
                       <TableHead>最近使用</TableHead>
                       <TableHead>请求/错误</TableHead>
-                      <TableHead className="w-[120px]">操作</TableHead>
+                      <TableHead className="w-[160px]">操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -389,6 +399,11 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
+                            <CredentialTestButton
+                              outcome={credentialTesting.outcomeOf(cred.ID)}
+                              keyMasked={cred.KeyMasked}
+                              onTest={() => void credentialTesting.run(cred.ID)}
+                            />
                             <Button
                               variant="ghost"
                               size="sm"
@@ -444,6 +459,11 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
                         {formatCredentialTime(cred.LastUsedAt)}
                       </p>
                       <div className="flex gap-1">
+                        <CredentialTestButton
+                          outcome={credentialTesting.outcomeOf(cred.ID)}
+                          keyMasked={cred.KeyMasked}
+                          onTest={() => void credentialTesting.run(cred.ID)}
+                        />
                         <Button
                           variant="ghost"
                           size="sm"

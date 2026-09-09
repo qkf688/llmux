@@ -1,4 +1,5 @@
-/** 测试/错误类型值域，镜像后端 handler/testapi 的 error_type（getErrorTypeFromStatus + 硬编码调用点产出） */
+/** 测试/错误类型值域，镜像后端 common.ErrorTypeFromStatus 与 common 的 ErrorType* 常量
+ * （诊断测试 error_type 的单一来源，testapi 与 #24-B 按凭据测试共用） */
 export const ERROR_TYPES = ["network", "auth", "provider", "timeout", "validation", "unknown"] as const;
 
 export type ErrorType = (typeof ERROR_TYPES)[number];

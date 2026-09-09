@@ -12,6 +12,12 @@ type Pool struct {
 	gorm.Model
 	Name string `gorm:"type:varchar(255);uniqueIndex;not null"`
 	Note string `gorm:"type:text"`
+	// TestModel 池级「测试模型」（#24-B 按凭据测试用；2026-09-10 用户拍板从 KeyGroup 迁到池：
+	// 点测入口在号池详情，配置与测试动作必须同屏，原组级 Q1 定案作废）。探针发真实最小
+	// completion 时用的模型名。协议/端点仍由「引用该池的分组里 (ProviderID, GroupID) 最小者」
+	// 的供应商主类型决定，只有模型改自池。空 = 未配置，点测直接判 validation 失败（不回退
+	// 硬编码默认模型，否则未授权模型的 404 会被误判成 key 坏，Q4 语义不变）。
+	TestModel string `gorm:"type:varchar(255)"`
 }
 
 // CredentialStatus 凭据状态枚举。冷却不占状态（用 CooldownUntil 表达），

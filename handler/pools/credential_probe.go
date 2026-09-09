@@ -50,8 +50,9 @@ var errPoolNoReferencingGroup = errors.New("pool is not referenced by any key gr
 // 版靠错误文本 substring 判 401 的退化。代价（计费）可控：B 是单条点测，花费只在管理员
 // 手点一条时产生，不是整池扫描。
 //
-// 模型来自分组级 test_model（#24-B Q1）；未配置直接判 validation 失败、不打上游——不回退
-// 硬编码默认模型，否则未授权模型的 404 会被误判成 key 坏，与 #24 目的相反。
+// 模型来自号池级 test_model（#24-B 迁移：2026-09-10 用户拍板从分组迁到池，配置与点测同屏）；
+// 未配置直接判 validation 失败、不打上游——不回退硬编码默认模型，否则未授权模型的 404
+// 会被误判成 key 坏，与 #24 目的相反。
 //
 // 为什么不能复用 channel.ProbeGroup / credprobe.TryRecover：二者内部都是
 // FirstUsableCredential（组内首个可用），语义是「这个组活不活」，用它测单条坏 key 会
@@ -84,16 +85,16 @@ func TestCredential(c *gin.Context) {
 		return
 	}
 
-	testModel := strings.TrimSpace(link.group.TestModel)
+	testModel := strings.TrimSpace(link.pool.TestModel)
 	if testModel == "" {
-		// Q4：分组未配置 test_model → 一次失败的测试结论（error_type=validation），
-		// 不打上游、不装配 client。硬编码默认模型未必被这把 key 授权，拿它去测会把
-		// 「配置缺失」伪装成「key 坏」（404/无权限），故显式失败而非回退。
-		slog.Info("credential test skipped: group has no test model configured",
+		// Q4（迁移后口径）：号池未配置 test_model → 一次失败的测试结论
+		// （error_type=validation），不打上游、不装配 client。硬编码默认模型未必被这把 key
+		// 授权，拿它去测会把「配置缺失」伪装成「key 坏」（404/无权限），故显式失败而非回退。
+		slog.Info("credential test skipped: pool has no test model configured",
 			"pool_id", poolID, "credential_id", credID,
 			"provider", link.provider.Name, "group", link.group.Name)
 		httpresp.Success(c, failedProbeResult(link, "", common.ErrorTypeValidation,
-			"该分组未配置测试模型，无法按凭据测试"))
+			"该号池未配置测试模型，无法按凭据测试"))
 		return
 	}
 
@@ -165,17 +166,19 @@ func TestCredential(c *gin.Context) {
 	})
 }
 
-// credentialTestLink 按凭据测试解析出的上游链路：分组 → 供应商 → 主协议端点三层定死。
-// 不在此装配 client（明文字段留到 NewClientFromSelection 内部），链路解析失败时也能回显
-// 「测到哪一步」，与 testapi 的 testLink 同一设计意图。
+// credentialTestLink 按凭据测试解析出的上游链路：号池（供测试模型）+ 分组 → 供应商 →
+// 主协议端点（供上游定位）。不在此装配 client（明文字段留到 NewClientFromSelection 内部），
+// 链路解析失败时也能回显「测到哪一步」，与 testapi 的 testLink 同一设计意图。
 type credentialTestLink struct {
+	pool     models.Pool
 	group    models.KeyGroup
 	provider models.Provider
 	endpoint models.Endpoint
 }
 
-// resolveCredentialTestLink 从号池反查上游链路：ListByPoolIDs → 按 (ProviderID, GroupID)
-// 升序取首个分组 → Provider.Get → Assemble → SelectPrimaryEndpoint（主协议启用端点）。
+// resolveCredentialTestLink 从号池解析测试所需上下文：Pool.Get（测试模型来源）→
+// ListByPoolIDs → 按 (ProviderID, GroupID) 升序取首个分组 → Provider.Get → Assemble →
+// SelectPrimaryEndpoint（主协议启用端点）。
 //
 // 「取最小者」不是「取 ListByPoolIDs 的首行」：后者只按 GroupID 升序，跨供应商时 ProviderID
 // 无序，直接 [0] 会随分组创建顺序漂移。显式按 (ProviderID, GroupID) 排序才有确定性口径
@@ -183,12 +186,18 @@ type credentialTestLink struct {
 //
 // 无引用分组 → errPoolNoReferencingGroup（池存在但配不出链路，是一次失败的测试结论）。
 func resolveCredentialTestLink(ctx context.Context, poolID uint) (*credentialTestLink, error) {
+	// 池存在性已被 getCredentialInPool 的 requirePool 挡过 404，此处 Get 失败只可能是
+	// 真实 DB 错误——作为一次配不出链路的测试结论回传（provider 类），不另设 500 分支。
+	pool, err := repos().Pool.Get(ctx, poolID)
+	if err != nil {
+		return nil, fmt.Errorf("get pool: %w", err)
+	}
 	groups, err := repos().KeyGroup.ListByPoolIDs(ctx, []uint{poolID})
 	if err != nil {
-		return nil, fmt.Errorf("list referencing groups: %w", err)
+		return &credentialTestLink{pool: *pool}, fmt.Errorf("list referencing groups: %w", err)
 	}
 	if len(groups) == 0 {
-		return nil, errPoolNoReferencingGroup
+		return &credentialTestLink{pool: *pool}, errPoolNoReferencingGroup
 	}
 	sorted := append([]models.KeyGroup(nil), groups...)
 	sort.Slice(sorted, func(i, j int) bool {
@@ -201,23 +210,24 @@ func resolveCredentialTestLink(ctx context.Context, poolID uint) (*credentialTes
 
 	provider, err := repos().Provider.Get(ctx, group.ProviderID)
 	if err != nil {
+		link := &credentialTestLink{pool: *pool, group: group}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// 供应商已被删但分组残留（DeleteProvider 不级联删分组）：同样是配置态结论。
-			return &credentialTestLink{group: group}, errPoolNoReferencingGroup
+			return link, errPoolNoReferencingGroup
 		}
-		return &credentialTestLink{group: group}, err
+		return link, err
 	}
 
 	snapshot, err := channel.NewAssembler(repos()).Assemble(ctx, *provider)
 	if err != nil {
-		return &credentialTestLink{group: group, provider: *provider}, err
+		return &credentialTestLink{pool: *pool, group: group, provider: *provider}, err
 	}
 	endpoint, ok := channel.SelectPrimaryEndpoint(provider.Type, snapshot.Endpoints)
 	if !ok {
-		return &credentialTestLink{group: group, provider: *provider},
+		return &credentialTestLink{pool: *pool, group: group, provider: *provider},
 			fmt.Errorf("供应商 %q 无启用的 %s 协议端点", provider.Name, consts.ProtocolOfType(provider.Type))
 	}
-	return &credentialTestLink{group: group, provider: *provider, endpoint: endpoint}, nil
+	return &credentialTestLink{pool: *pool, group: group, provider: *provider, endpoint: endpoint}, nil
 }
 
 // credentialProbeBody 按端点协议取该 provider type 注册的「最小 completion 探针体」

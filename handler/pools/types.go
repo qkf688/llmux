@@ -6,10 +6,12 @@ import (
 	"github.com/qkf688/llmux/models"
 )
 
-// PoolRequest 号池创建/更新请求体（设计定案第 2 节：ID / Name / Note）。
+// PoolRequest 号池创建/更新请求体（name / note / test_model）。
+// test_model 为池级「测试模型」（#24-B 迁移）：按凭据测试打真实 completion 用的模型名。
 type PoolRequest struct {
-	Name string `json:"name"`
-	Note string `json:"note"`
+	Name      string `json:"name"`
+	Note      string `json:"note"`
+	TestModel string `json:"test_model"`
 }
 
 // PoolListItem 号池列表项：内嵌 models.Pool 保持直返实体 PascalCase 形状
@@ -103,7 +105,7 @@ type CredentialRawData struct {
 // 只报不改：本端点绝不写回 Credential.Status/FailCount/Cooldown，纯探活结论。
 // group_id/group_name 为实际命中的引用分组（取 ProviderID/GroupID 最小者）；
 // 链路未选定（池无引用组）时为 0/空串，error_type=provider。model 为本次点测实际使用的
-// 测试模型（来自分组 test_model；未配置/链路未选定时为空串）。
+// 测试模型（来自号池 test_model；未配置/链路未选定时为空串）。
 type CredentialTestResult struct {
 	Passed     bool   `json:"passed"`
 	GroupID    uint   `json:"group_id"`

@@ -275,6 +275,40 @@ func TestDeletePool_CascadeCredentials(t *testing.T) {
 	}
 }
 
+// TestPool_TestModelRoundTrip 锁 #24-B 迁移的池级测试模型读写契约：
+// 创建带 test_model → 响应回显；PUT 缺 test_model 键 = 显式清空（与 note 同的全量语义）；
+// 列表项直返实体 TestModel 键恒在（空串也要有序列化，前端据此区分「未配置」）。
+func TestPool_TestModelRoundTrip(t *testing.T) {
+	testsupport.InitTestDB(t)
+
+	created := createPoolViaHandler(t, `{"name":"探针池","test_model":"gpt-4o-mini"}`)
+	if got := gjson.Get(created, "data.TestModel").String(); got != "gpt-4o-mini" {
+		t.Fatalf("创建响应 TestModel = %q, want gpt-4o-mini; body=%s", got, created)
+	}
+	id := uint(gjson.Get(created, "data.ID").Uint())
+
+	listed := listPoolsViaHandler(t)
+	if got := gjson.Get(listed, "data.0.TestModel").String(); got != "gpt-4o-mini" {
+		t.Fatalf("列表 TestModel = %q, want gpt-4o-mini; body=%s", got, listed)
+	}
+
+	// 全量 PUT 不带 test_model → 清空（非保留）
+	updatePoolViaHandler(t, id, `{"name":"探针池"}`)
+	after := listPoolsViaHandler(t)
+	v := gjson.Get(after, "data.0.TestModel")
+	if !v.Exists() || v.String() != "" {
+		t.Fatalf("缺 test_model 键的 PUT 应清空，TestModel = %s; body=%s", v.Raw, after)
+	}
+
+	// 空号池（从未配置）TestModel 键也必须存在且为空串，防 omitempty 类断层
+	createPoolViaHandler(t, `{"name":"裸池"}`)
+	empty := listPoolsViaHandler(t)
+	e := gjson.Get(empty, `data.#(Name=="裸池").TestModel`)
+	if !e.Exists() || e.String() != "" {
+		t.Fatalf("未配置池 TestModel 键应存在且为空串, got %s", e.Raw)
+	}
+}
+
 // uintPtr 构建 *uint 指针。
 func uintPtr(v uint) *uint { return &v }
 

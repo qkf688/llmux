@@ -117,7 +117,7 @@ func CreatePool(c *gin.Context) {
 		return
 	}
 
-	pool := &models.Pool{Name: req.Name, Note: req.Note}
+	pool := &models.Pool{Name: req.Name, Note: req.Note, TestModel: req.TestModel}
 	if err := repos().Pool.Create(ctx, pool); err != nil {
 		httpresp.InternalServerError(c, "Failed to create pool: "+err.Error())
 		return
@@ -164,7 +164,9 @@ func UpdatePool(c *gin.Context) {
 		}
 	}
 
-	if _, err := repos().Pool.UpdateFields(ctx, id, map[string]any{"name": req.Name, "note": req.Note}); err != nil {
+	if _, err := repos().Pool.UpdateFields(ctx, id, map[string]any{
+		"name": req.Name, "note": req.Note, "test_model": req.TestModel,
+	}); err != nil {
 		httpresp.InternalServerError(c, "Failed to update pool: "+err.Error())
 		return
 	}

@@ -71,7 +71,16 @@ func startCredTestUpstream(t *testing.T, allowed map[string]struct{}, sink *cred
 	return srv
 }
 
-// seedCredTestUpstreamChain 建「供应商 + 主协议端点（URL 指向假上游）+ 引用该池的分组」。
+// setPoolTestModel 给号池配置池级测试模型（#24-B 迁移：测试模型归属号池，非分组）。
+func setPoolTestModel(t *testing.T, poolID uint, model string) {
+	t.Helper()
+	if _, err := repos().Pool.UpdateFields(t.Context(), poolID, map[string]any{"test_model": model}); err != nil {
+		t.Fatalf("set pool test_model: %v", err)
+	}
+}
+
+// seedCredTestUpstreamChain 建「供应商 + 主协议端点（URL 指向假上游）+ 引用该池的分组」，
+// 并把**号池**的测试模型配为 gpt-probe（#24-B 迁移：模型来自池，链路仍由分组定位）。
 // Provider.Config 刻意指向不可达主机：只有端点 URL + 凭据明文真正生效才算走对链路，
 // 任何绕过 channel 装配的回归（直用 Config）都会立刻打不通而非静默通过。
 func seedCredTestUpstreamChain(t *testing.T, poolID uint, providerName, providerType, upstreamURL string) models.KeyGroup {
@@ -93,10 +102,11 @@ func seedCredTestUpstreamChain(t *testing.T, poolID uint, providerName, provider
 	if err := models.DB.Create(&endpoint).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	group := models.KeyGroup{ProviderID: provider.ID, Name: providerName + "-组", Weight: 1, TestModel: "gpt-probe", PoolID: &poolID}
+	group := models.KeyGroup{ProviderID: provider.ID, Name: providerName + "-组", Weight: 1, PoolID: &poolID}
 	if err := models.DB.Create(&group).Error; err != nil {
 		t.Fatalf("create group: %v", err)
 	}
+	setPoolTestModel(t, poolID, "gpt-probe")
 	return group
 }
 
@@ -316,14 +326,15 @@ func TestTestCredential_PicksLowestProviderThenGroup(t *testing.T) {
 		t.Fatalf("create endpointLose: %v", err)
 	}
 
-	loseGroup := models.KeyGroup{ProviderID: providerLose.ID, Name: "高ID供应商-组", Weight: 1, TestModel: "gpt-probe", PoolID: &poolID}
+	loseGroup := models.KeyGroup{ProviderID: providerLose.ID, Name: "高ID供应商-组", Weight: 1, PoolID: &poolID}
 	if err := models.DB.Create(&loseGroup).Error; err != nil {
 		t.Fatalf("create loseGroup: %v", err)
 	}
-	winGroup := models.KeyGroup{ProviderID: providerWin.ID, Name: "低ID供应商-组", Weight: 1, TestModel: "gpt-probe", PoolID: &poolID}
+	winGroup := models.KeyGroup{ProviderID: providerWin.ID, Name: "低ID供应商-组", Weight: 1, PoolID: &poolID}
 	if err := models.DB.Create(&winGroup).Error; err != nil {
 		t.Fatalf("create winGroup: %v", err)
 	}
+	setPoolTestModel(t, poolID, "gpt-probe")
 	if winGroup.ID < loseGroup.ID {
 		t.Fatalf("测试前置不成立：期望 winGroup.ID(%d) > loseGroup.ID(%d) 才能证伪『取 ListByPoolIDs 首行』", winGroup.ID, loseGroup.ID)
 	}
@@ -344,22 +355,22 @@ func TestTestCredential_PicksLowestProviderThenGroup(t *testing.T) {
 	}
 }
 
-// TestTestCredential_GroupWithoutTestModel_FailsValidationNoUpstream（Q4 定案）：
-// 分组未配置 test_model → passed:false + error_type=validation，**不打上游、不装配 client**。
+// TestTestCredential_PoolWithoutTestModel_FailsValidationNoUpstream（Q4 迁移后口径）：
+// 号池未配置 test_model → passed:false + error_type=validation，**不打上游、不装配 client**。
 // 锁「不回退硬编码默认模型」：宁可明确报「未配置测试模型」，也不能拿一个未必被这把 key
 // 授权的默认模型去测、把「配置缺失」误判成「key 坏」。仍回显命中的 group/provider。
-func TestTestCredential_GroupWithoutTestModel_FailsValidationNoUpstream(t *testing.T) {
+func TestTestCredential_PoolWithoutTestModel_FailsValidationNoUpstream(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupCipherForCredTest(t)
 
 	sink := &credTestUpstream{}
 	srv := startCredTestUpstream(t, nil, sink)
 
+	// 池故意不设测试模型（createPoolAndGetID 只给 name）。
 	poolID := createPoolAndGetID(t, "缺测试模型池")
 	credBody, _ := createCredentialViaHandler(t, poolID, `{"key":"sk-notm-ABCD1234"}`)
 	credID := uint(gjson.Get(credBody, "data.ID").Uint())
 
-	// 分组故意不设 TestModel（seed 版本会设，这里手建空模型组）。
 	provider := models.Provider{Name: "缺模型供应商", Type: "openai", Config: `{"base_url":"https://should-not-use.example"}`}
 	if err := models.DB.Create(&provider).Error; err != nil {
 		t.Fatalf("create provider: %v", err)

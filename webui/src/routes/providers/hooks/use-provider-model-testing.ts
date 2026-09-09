@@ -63,34 +63,53 @@ export function useProviderModelTesting({
   const toTestOutcome = (result: ProviderModelTestResult): { success: boolean; error?: string } =>
     result?.passed === true ? { success: true } : { success: false, error: result?.error || "测试未通过" };
 
-  const handleTestAllModel = async (modelName: string): Promise<boolean> => {
+  /** C2 结果键：`${model}::${groupId}`，groupId=0 表示自动口径（行尾按钮）。 */
+  const testResultKey = (modelName: string, groupId?: number) => `${modelName}::${groupId ?? 0}`;
+
+  /** 从结果键拆出模型名（select 成功/失败用；只认自动口径 `::0`，分组级结果是诊断不驱动选中）。 */
+  const modelFromKey = (key: string) => key.slice(0, key.lastIndexOf("::"));
+
+  /** 只取自动口径条目，供「选择成功/失败模型」使用。 */
+  const autoResults = (results: Record<string, ModelTestResult>) =>
+    Object.entries(results).filter(([key]) => key.endsWith("::0"));
+
+  const handleTestAllModel = async (modelName: string, groupId?: number): Promise<boolean> => {
     if (!allModelsProvider) return false;
+    const key = testResultKey(modelName, groupId);
     setAllModelsTestResults((prev) => ({
       ...prev,
-      [modelName]: { loading: true, success: null },
+      [key]: { loading: true, success: null },
     }));
     try {
-      const result = await testProviderModel(allModelsProvider.ID, modelName);
+      const result = await testProviderModel(allModelsProvider.ID, modelName, groupId);
       const outcome = toTestOutcome(result);
-      setAllModelsTestResults((prev) => ({
-        ...prev,
-        [modelName]: { loading: false, ...outcome },
-      }));
+      setAllModelsTestResults((prev) => {
+        const next = { ...prev, [key]: { loading: false, ...outcome } };
+        // 自动口径：把结果同步落到后端回传的实际分组徽标上
+        if (!groupId && result?.group_id) {
+          next[testResultKey(modelName, result.group_id)] = { loading: false, ...outcome };
+        }
+        return next;
+      });
       return outcome.success;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setAllModelsTestResults((prev) => ({
         ...prev,
-        [modelName]: { loading: false, success: false, error: message },
+        [key]: { loading: false, success: false, error: message },
       }));
       return false;
     }
   };
 
   const selectAllSuccessful = () => {
-    const successfulModels = Object.entries(allModelsTestResults)
-      .filter(([, result]) => result.success === true)
-      .map(([modelName]) => modelName);
+    const successfulModels = [
+      ...new Set(
+        autoResults(allModelsTestResults)
+          .filter(([, result]) => result.success === true)
+          .map(([key]) => modelFromKey(key)),
+      ),
+    ];
 
     if (successfulModels.length === 0) {
       toast.info("当前没有测试成功的模型");
@@ -102,9 +121,13 @@ export function useProviderModelTesting({
   };
 
   const selectAllFailed = () => {
-    const failedModels = Object.entries(allModelsTestResults)
-      .filter(([, result]) => result.success === false)
-      .map(([modelName]) => modelName);
+    const failedModels = [
+      ...new Set(
+        autoResults(allModelsTestResults)
+          .filter(([, result]) => result.success === false)
+          .map(([key]) => modelFromKey(key)),
+      ),
+    ];
 
     if (failedModels.length === 0) {
       toast.info("当前没有测试失败的模型");
@@ -190,25 +213,30 @@ export function useProviderModelTesting({
     }
   };
 
-  const handleTestUpstreamModel = async (modelName: string): Promise<boolean> => {
+  const handleTestUpstreamModel = async (modelName: string, groupId?: number): Promise<boolean> => {
     if (!modelsOpenId) return false;
+    const key = testResultKey(modelName, groupId);
     setUpstreamTestResults((prev) => ({
       ...prev,
-      [modelName]: { loading: true, success: null },
+      [key]: { loading: true, success: null },
     }));
     try {
-      const result = await testProviderModel(modelsOpenId, modelName);
+      const result = await testProviderModel(modelsOpenId, modelName, groupId);
       const outcome = toTestOutcome(result);
-      setUpstreamTestResults((prev) => ({
-        ...prev,
-        [modelName]: { loading: false, ...outcome },
-      }));
+      setUpstreamTestResults((prev) => {
+        const next = { ...prev, [key]: { loading: false, ...outcome } };
+        // 自动口径：把结果同步落到后端回传的实际分组徽标上
+        if (!groupId && result?.group_id) {
+          next[testResultKey(modelName, result.group_id)] = { loading: false, ...outcome };
+        }
+        return next;
+      });
       return outcome.success;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setUpstreamTestResults((prev) => ({
         ...prev,
-        [modelName]: { loading: false, success: false, error: message },
+        [key]: { loading: false, success: false, error: message },
       }));
       return false;
     }
@@ -290,9 +318,13 @@ export function useProviderModelTesting({
   };
 
   const selectUpstreamSuccessful = () => {
-    const successfulModels = Object.entries(upstreamTestResults)
-      .filter(([, result]) => result.success === true)
-      .map(([modelName]) => modelName);
+    const successfulModels = [
+      ...new Set(
+        autoResults(upstreamTestResults)
+          .filter(([, result]) => result.success === true)
+          .map(([key]) => modelFromKey(key)),
+      ),
+    ];
 
     if (successfulModels.length === 0) {
       toast.info("当前没有测试成功的模型");
@@ -304,9 +336,13 @@ export function useProviderModelTesting({
   };
 
   const selectUpstreamFailed = () => {
-    const failedModels = Object.entries(upstreamTestResults)
-      .filter(([, result]) => result.success === false)
-      .map(([modelName]) => modelName);
+    const failedModels = [
+      ...new Set(
+        autoResults(upstreamTestResults)
+          .filter(([, result]) => result.success === false)
+          .map(([key]) => modelFromKey(key)),
+      ),
+    ];
 
     if (failedModels.length === 0) {
       toast.info("当前没有测试失败的模型");
@@ -317,6 +353,14 @@ export function useProviderModelTesting({
     toast.success(`已选择 ${failedModels.length} 个测试失败的模型`);
   };
 
+  const clearAllTestResults = () => {
+    setAllModelsTestResults({});
+  };
+
+  const clearUpstreamTestResults = () => {
+    setUpstreamTestResults({});
+  };
+
   return {
     copyModelName,
     handleTestAllModel,
@@ -325,10 +369,12 @@ export function useProviderModelTesting({
     handleBatchTestAll,
     handleBatchTestSelected,
     handleCancelBatchTest,
+    clearAllTestResults,
     handleTestUpstreamModel,
     handleBatchTestUpstreamAll,
     handleBatchTestUpstreamSelected,
     handleCancelUpstreamBatchTest,
+    clearUpstreamTestResults,
     selectUpstreamSuccessful,
     selectUpstreamFailed,
   };

@@ -17,9 +17,16 @@ vi.mock("sonner", () => ({
 import type { ModelTestResult } from "../types";
 import { useProviderModelTesting } from "./use-provider-model-testing";
 
-function renderTestingHook() {
+function renderTestingHook(overrides?: {
+  allModelsTestResults?: Record<string, ModelTestResult>;
+  upstreamTestResults?: Record<string, ModelTestResult>;
+  setSelectedAllModels?: Mock;
+  setSelectedUpstreamModels?: Mock;
+}) {
   const setUpstreamTestResults = vi.fn();
   const setAllModelsTestResults = vi.fn();
+  const setSelectedAllModels = overrides?.setSelectedAllModels ?? vi.fn();
+  const setSelectedUpstreamModels = overrides?.setSelectedUpstreamModels ?? vi.fn();
 
   const hook = renderHook(() =>
     useProviderModelTesting({
@@ -29,10 +36,10 @@ function renderTestingHook() {
       filteredProviderModels: [{ id: "m1", object: "model", created: 0, owned_by: "o" }],
       selectedAllModels: [],
       selectedUpstreamModels: [],
-      allModelsTestResults: {},
-      upstreamTestResults: {},
-      setSelectedAllModels: vi.fn(),
-      setSelectedUpstreamModels: vi.fn(),
+      allModelsTestResults: overrides?.allModelsTestResults ?? {},
+      upstreamTestResults: overrides?.upstreamTestResults ?? {},
+      setSelectedAllModels,
+      setSelectedUpstreamModels,
       setAllModelsTestResults,
       setUpstreamTestResults,
       setBatchTesting: vi.fn(),
@@ -44,13 +51,13 @@ function renderTestingHook() {
 
   // hook 用函数式更新写入结果：取最后一次 updater 在空表上求值，即得该模型的落点。
   type ResultsUpdater = (prev: Record<string, ModelTestResult>) => Record<string, ModelTestResult>;
-  const lastEntry = (setter: Mock): ModelTestResult => {
+  const lastEntry = (setter: Mock, key = "m1::0"): ModelTestResult => {
     const calls = setter.mock.calls;
     const updater = calls[calls.length - 1][0] as ResultsUpdater;
-    return updater({}).m1;
+    return updater({})[key];
   };
 
-  return { hook, lastEntry, setUpstreamTestResults, setAllModelsTestResults };
+  return { hook, lastEntry, setUpstreamTestResults, setAllModelsTestResults, setSelectedAllModels, setSelectedUpstreamModels };
 }
 
 describe("useProviderModelTesting 测试结果判定", () => {
@@ -58,14 +65,14 @@ describe("useProviderModelTesting 测试结果判定", () => {
     testProviderModelMock.mockReset();
   });
 
-  it("passed:true → success 为 true", async () => {
+  it("passed:true → success 为 true，结果键为 m1::0", async () => {
     const { hook, lastEntry, setUpstreamTestResults } = renderTestingHook();
     testProviderModelMock.mockResolvedValue({ passed: true, group_id: 3, group_name: "A 组" });
 
     const ok = await hook.result.current.handleTestUpstreamModel("m1");
 
     expect(ok).toBe(true);
-    expect(lastEntry(setUpstreamTestResults)).toMatchObject({ loading: false, success: true });
+    expect(lastEntry(setUpstreamTestResults, "m1::0")).toMatchObject({ loading: false, success: true });
   });
 
   // #19 回归：后端把「测试失败」改成 code 200 + passed:false（失败也要回传分组供归位）。
@@ -83,7 +90,7 @@ describe("useProviderModelTesting 测试结果判定", () => {
     const ok = await hook.result.current.handleTestUpstreamModel("m1");
 
     expect(ok).toBe(false);
-    expect(lastEntry(setUpstreamTestResults)).toMatchObject({
+    expect(lastEntry(setUpstreamTestResults, "m1::0")).toMatchObject({
       loading: false,
       success: false,
       error: "[认证错误] 提供商返回错误",
@@ -97,7 +104,7 @@ describe("useProviderModelTesting 测试结果判定", () => {
     const ok = await hook.result.current.handleTestUpstreamModel("m1");
 
     expect(ok).toBe(false);
-    expect(lastEntry(setUpstreamTestResults).success).toBe(false);
+    expect(lastEntry(setUpstreamTestResults, "m1::0").success).toBe(false);
   });
 
   it("传输层抛错 → success 为 false 并用错误消息兜底", async () => {
@@ -107,7 +114,7 @@ describe("useProviderModelTesting 测试结果判定", () => {
     const ok = await hook.result.current.handleTestAllModel("m1");
 
     expect(ok).toBe(false);
-    expect(lastEntry(setAllModelsTestResults)).toMatchObject({
+    expect(lastEntry(setAllModelsTestResults, "m1::0")).toMatchObject({
       loading: false,
       success: false,
       error: "API request failed: 500",
@@ -120,6 +127,98 @@ describe("useProviderModelTesting 测试结果判定", () => {
 
     await hook.result.current.handleTestUpstreamModel("m1");
 
-    expect(testProviderModelMock).toHaveBeenCalledWith(7, "m1");
+    // groupId 未传时第三参为 undefined，API 层按 falsy 处理为自动口径
+    expect(testProviderModelMock).toHaveBeenCalledWith(7, "m1", undefined);
+  });
+
+  // AC-1：点分组徽标只测该组
+  it("传 groupId 时锁定该分组，结果键为 m1::5", async () => {
+    const { hook, lastEntry, setUpstreamTestResults } = renderTestingHook();
+    testProviderModelMock.mockResolvedValue({ passed: true, group_id: 5, group_name: "B 组" });
+
+    const ok = await hook.result.current.handleTestUpstreamModel("m1", 5);
+
+    expect(ok).toBe(true);
+    expect(testProviderModelMock).toHaveBeenCalledWith(7, "m1", 5);
+    expect(lastEntry(setUpstreamTestResults, "m1::5")).toMatchObject({ loading: false, success: true });
+    // 锁组测试不写自动口径键
+    expect(lastEntry(setUpstreamTestResults, "m1::0")).toBeUndefined();
+  });
+
+  // AC-2：自动口径按响应回传分组把状态落到正确徽标
+  it("自动口径完成后，结果同时落到 ::0 与回传分组 ::3", async () => {
+    const { hook, setUpstreamTestResults } = renderTestingHook();
+    testProviderModelMock.mockResolvedValue({ passed: true, group_id: 3, group_name: "A 组" });
+
+    await hook.result.current.handleTestUpstreamModel("m1");
+
+    const calls = setUpstreamTestResults.mock.calls;
+    const updater = calls[calls.length - 1][0] as (
+      prev: Record<string, ModelTestResult>,
+    ) => Record<string, ModelTestResult>;
+    const result = updater({});
+    expect(result["m1::0"]).toMatchObject({ success: true });
+    expect(result["m1::3"]).toMatchObject({ success: true });
+  });
+
+  it("自动口径 group_id 为 0 时不写分组键", async () => {
+    const { hook, setUpstreamTestResults } = renderTestingHook();
+    testProviderModelMock.mockResolvedValue({ passed: true, group_id: 0 });
+
+    await hook.result.current.handleTestUpstreamModel("m1");
+
+    const calls = setUpstreamTestResults.mock.calls;
+    const updater = calls[calls.length - 1][0] as (
+      prev: Record<string, ModelTestResult>,
+    ) => Record<string, ModelTestResult>;
+    const result = updater({});
+    expect(result["m1::0"]).toMatchObject({ success: true });
+    expect(result["m1::3"]).toBeUndefined();
+  });
+});
+
+describe("select 成功/失败按自动口径条目拆键", () => {
+  beforeEach(() => {
+    testProviderModelMock.mockReset();
+  });
+
+  it("selectUpstreamSuccessful 只取 ::0 条目并拆出模型名", () => {
+    const setSelectedUpstreamModels = vi.fn();
+    const { hook } = renderTestingHook({
+      upstreamTestResults: {
+        "m1::0": { loading: false, success: true },
+        "m1::3": { loading: false, success: false },
+        "m2::0": { loading: false, success: false },
+      },
+      setSelectedUpstreamModels,
+    });
+
+    hook.result.current.selectUpstreamSuccessful();
+
+    expect(setSelectedUpstreamModels).toHaveBeenCalledWith(["m1"]);
+  });
+
+  it("selectUpstreamFailed 只取 ::0 条目并拆出模型名", () => {
+    const setSelectedUpstreamModels = vi.fn();
+    const { hook } = renderTestingHook({
+      upstreamTestResults: {
+        "m1::0": { loading: false, success: true },
+        "m2::0": { loading: false, success: false },
+        "m3::5": { loading: false, success: false },
+      },
+      setSelectedUpstreamModels,
+    });
+
+    hook.result.current.selectUpstreamFailed();
+
+    expect(setSelectedUpstreamModels).toHaveBeenCalledWith(["m2"]);
+  });
+
+  it("clearUpstreamTestResults 清空结果表", () => {
+    const { hook, setUpstreamTestResults } = renderTestingHook();
+
+    hook.result.current.clearUpstreamTestResults();
+
+    expect(setUpstreamTestResults).toHaveBeenCalledWith({});
   });
 });

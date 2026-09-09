@@ -50,6 +50,7 @@ export function AllModelsDialog({
   handleTestAllModel,
   copyModelName,
   handleRemoveModelFromAll,
+  clearAllTestResults,
   customModelInput,
   setCustomModelInput,
   handleAddCustomModels,
@@ -59,14 +60,18 @@ export function AllModelsDialog({
     [selectedAllModels],
   );
   const testStats = useMemo(() => {
+    // 只统计自动口径条目（::0），双写的分组条目不参与计数（与 select 同源）
+    const autoEntries = Object.entries(allModelsTestResults).filter(([key]) =>
+      key.endsWith("::0"),
+    );
     let success = 0;
     let failed = 0;
-    for (const r of Object.values(allModelsTestResults)) {
+    for (const [, r] of autoEntries) {
       if (r.success === true) success += 1;
       else if (r.success === false) failed += 1;
     }
     return {
-      tested: Object.keys(allModelsTestResults).length,
+      tested: autoEntries.length,
       success,
       failed,
     };
@@ -117,6 +122,7 @@ export function AllModelsDialog({
               selectAllFailed={selectAllFailed}
               handleRemoveSelectedModels={handleRemoveSelectedModels}
               toggleSelectAllModels={toggleSelectAllModels}
+              clearAllTestResults={clearAllTestResults}
             />
 
             <DialogBody className="rounded-md border">
@@ -125,7 +131,7 @@ export function AllModelsDialog({
                 {filteredAllModels.map((model) => {
                   const checked = selectedSet.has(model);
                   const isUpstream = upstreamSet.has(model.toLowerCase());
-                  const testResult = allModelsTestResults[model];
+                  const testResult = allModelsTestResults[`${model}::0`];
                   return (
                     <AllModelsListItem
                       key={model}
@@ -134,6 +140,7 @@ export function AllModelsDialog({
                       checked={checked}
                       isUpstream={isUpstream}
                       testResult={testResult}
+                      groupTestResults={allModelsTestResults}
                       batchTesting={batchTesting}
                       addingModels={addingModels}
                       onToggle={(value) => {
@@ -148,6 +155,7 @@ export function AllModelsDialog({
                         }
                       }}
                       onTest={() => handleTestAllModel(model)}
+                      onGroupTest={(group) => handleTestAllModel(model, group.ID)}
                       onCopy={() => copyModelName(model)}
                       onRemove={() => handleRemoveModelFromAll(model)}
                     />

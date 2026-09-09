@@ -16,10 +16,12 @@ interface AllModelsListItemProps {
   checked: boolean;
   isUpstream: boolean;
   testResult: ModelTestResult | undefined;
+  groupTestResults: Record<string, ModelTestResult>;
   batchTesting: boolean;
   addingModels: boolean;
   onToggle: (checked: boolean) => void;
   onTest: () => void;
+  onGroupTest: (group: GroupRef) => void;
   onCopy: () => void;
   onRemove: () => void;
 }
@@ -30,13 +32,22 @@ export function AllModelsListItem({
   checked,
   isUpstream,
   testResult,
+  groupTestResults,
   batchTesting,
   addingModels,
   onToggle,
   onTest,
+  onGroupTest,
   onCopy,
   onRemove,
 }: AllModelsListItemProps) {
+  // 从结果表提取本模型各分组的状态，GroupBadges 不感知键格式
+  const groupStatuses: Record<number, ModelTestResult> = {};
+  for (const g of groups ?? []) {
+    const entry = groupTestResults[`${model}::${g.ID}`];
+    if (entry) groupStatuses[g.ID] = entry;
+  }
+
   return (
     <AnimatedListItem
       className={`flex items-center justify-between px-3 py-2.5 text-sm gap-2 transition-colors border-b last:border-b-0 ${checked ? "bg-info-tint" : "hover:bg-muted/50"}`}
@@ -54,7 +65,12 @@ export function AllModelsListItem({
           >
             {isUpstream ? "上游" : "自定义"}
           </span>
-          <GroupBadges groups={groups} />
+          <GroupBadges
+            groups={groups}
+            groupStatuses={groupStatuses}
+            onGroupClick={onGroupTest}
+            disabled={batchTesting}
+          />
         </div>
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">

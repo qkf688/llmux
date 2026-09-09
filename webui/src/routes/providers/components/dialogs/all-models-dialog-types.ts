@@ -58,9 +58,10 @@ export interface AllModelsDialogProps {
   selectAllFailed: () => void;
   handleRemoveSelectedModels: () => void | Promise<void>;
 
-  handleTestAllModel: (modelId: string) => void | Promise<unknown>;
+  handleTestAllModel: (modelId: string, groupId?: number) => void | Promise<unknown>;
   copyModelName: (modelId: string) => void;
   handleRemoveModelFromAll: (modelId: string) => void | Promise<void>;
+  clearAllTestResults: () => void;
 
   customModelInput: string;
   setCustomModelInput: (value: string) => void;

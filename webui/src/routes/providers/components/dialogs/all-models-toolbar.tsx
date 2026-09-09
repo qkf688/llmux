@@ -45,6 +45,7 @@ interface AllModelsToolbarProps {
   selectAllFailed: () => void;
   handleRemoveSelectedModels: () => void | Promise<void>;
   toggleSelectAllModels: () => void;
+  clearAllTestResults: () => void;
 }
 
 export function AllModelsToolbar({
@@ -73,6 +74,7 @@ export function AllModelsToolbar({
   selectAllFailed,
   handleRemoveSelectedModels,
   toggleSelectAllModels,
+  clearAllTestResults,
 }: AllModelsToolbarProps) {
   return (
     <div className="flex flex-col gap-2 flex-shrink-0">
@@ -153,6 +155,16 @@ export function AllModelsToolbar({
       )}
 
       <div className="flex items-center gap-1 flex-wrap">
+        {testStats.tested > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearAllTestResults}
+            disabled={batchTesting}
+          >
+            清除结果
+          </Button>
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -290,6 +302,12 @@ export function AllModelsToolbar({
           已选 {selectedAllModels.length} 个
         </span>
       </div>
+
+      {filteredAllModels.length > 0 && (
+        <div className="text-[11px] text-muted-foreground">
+          批量测试将发起 {filteredAllModels.length} 次真实计费请求
+        </div>
+      )}
     </div>
   );
 }

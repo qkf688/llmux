@@ -243,7 +243,7 @@ export function EndpointsSection() {
 }
 
 function defaultGroup(): ProviderFormGroup {
-  return { name: "", weight: 1, models: "", testModel: "", source: "inline", inlineKeys: [], poolId: "" };
+  return { name: "", weight: 1, models: "", source: "inline", inlineKeys: [], poolId: "" };
 }
 
 /** 单个分组卡片：名称/价格权重/模型白名单/凭据来源二选一；关联号池时可查看池详情 */
@@ -314,23 +314,6 @@ function GroupCard({
             <FormControl>
               <Input {...field} placeholder="gpt-4o, gpt-4o-mini（逗号分隔，留空 = 不限）" />
             </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-
-      <FormField
-        control={control}
-        name={`groups.${index}.testModel`}
-        render={({ field }) => (
-          <FormItem className="space-y-1">
-            <FormLabel>测试模型</FormLabel>
-            <FormControl>
-              <Input {...field} placeholder="留空 = 未配置（按凭据测试将直接判失败）" />
-            </FormControl>
-            <p className="text-xs text-muted-foreground">
-              号池详情「按凭据测试」发最小 completion 用的模型名，须是该供应商主类型协议支持的模型
-            </p>
             <FormMessage />
           </FormItem>
         )}

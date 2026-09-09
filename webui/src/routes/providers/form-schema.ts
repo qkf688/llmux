@@ -37,15 +37,13 @@ export const providerFormInlineKeyRowSchema = z.object({
 
 export type ProviderFormInlineKeyRow = z.infer<typeof providerFormInlineKeyRowSchema>;
 
-/** 凭据分组：名称 × 价格权重 × 模型白名单 × 测试模型 × 凭据来源（内联 Key / 关联号池二选一） */
+/** 凭据分组：名称 × 价格权重 × 模型白名单 × 凭据来源（内联 Key / 关联号池二选一） */
 export const providerFormGroupSchema = z.object({
   name: z.string().min(1, { message: "分组名称不能为空" }),
   /** 价格导向权重：便宜的分组权重高 → 加权随机命中概率大 */
   weight: z.number().int().min(0).max(100),
   /** 模型白名单，逗号分隔；空 = 不限 */
   models: z.string(),
-  /** 按凭据测试（#24-B）发最小 completion 用的模型名；须是该供应商主类型协议支持的模型；空 = 未配置 */
-  testModel: z.string(),
   source: z.enum(["inline", "pool"]),
   /** 内联 key 行（掩码/明文混合态）；pool 来源恒为空数组 */
   inlineKeys: z.array(providerFormInlineKeyRowSchema),
@@ -106,5 +104,5 @@ export const defaultProviderFormValues: ProviderFormValues = {
   model_filter_enabled: false,
   protocols: ["openai"],
   endpoints: [{ protocol: "openai", url: "", enabled: true }],
-  groups: [{ name: "默认组", weight: 1, models: "", testModel: "", source: "inline", inlineKeys: [], poolId: "" }],
+  groups: [{ name: "默认组", weight: 1, models: "", source: "inline", inlineKeys: [], poolId: "" }],
 };

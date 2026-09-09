@@ -15,7 +15,6 @@ function formValues(overrides: Partial<ProviderFormValues> = {}): ProviderFormVa
         name: "默认组",
         weight: 1,
         models: "",
-        testModel: "",
         source: "inline",
         inlineKeys: [
           { id: 0, key: "sk-a", masked: false },
@@ -45,7 +44,6 @@ function detail(overrides: Partial<ProviderDetail> = {}): ProviderDetail {
         Name: "默认组",
         Weight: 1,
         Models: "",
-        TestModel: "",
         Source: "inline",
         InlineKeys: [
           { ID: 101, KeyMasked: "sk-****-1" },
@@ -136,7 +134,6 @@ describe("buildProviderPayload - 行形态 → InlineKeyInput（掩码保留/明
         name: "默认组",
         weight: 1,
         models: "",
-        test_model: "",
         source: "inline",
         inline_keys: [
           { id: 0, key: "sk-a" },
@@ -147,25 +144,6 @@ describe("buildProviderPayload - 行形态 → InlineKeyInput（掩码保留/明
     ]);
   });
 
-  it("test_model 原样上行（inline 组），未配置传空串", () => {
-    const payload = buildProviderPayload(
-      formValues({
-        groups: [
-          {
-            name: "默认组",
-            weight: 1,
-            models: "gpt-4o",
-            testModel: "gpt-4o-mini",
-            source: "inline",
-            inlineKeys: [{ id: 0, key: "sk-a", masked: false }],
-            poolId: "",
-          },
-        ],
-      })
-    );
-    expect(payload.groups?.[0]).toMatchObject({ test_model: "gpt-4o-mini" });
-  });
-
   it("掩码行提交 key 空串按 id 保留；明文行 key 原样提交", () => {
     const payload = buildProviderPayload(
       formValues({
@@ -174,7 +152,6 @@ describe("buildProviderPayload - 行形态 → InlineKeyInput（掩码保留/明
             name: "默认组",
             weight: 1,
             models: "",
-            testModel: "",
             source: "inline",
             inlineKeys: [
               { id: 101, key: "sk-****-1", masked: true },
@@ -201,7 +178,6 @@ describe("buildProviderPayload - 行形态 → InlineKeyInput（掩码保留/明
             name: "默认组",
             weight: 1,
             models: "",
-            testModel: "",
             source: "inline",
             inlineKeys: [
               { id: 101, key: "sk-****-1", masked: true },
@@ -224,7 +200,6 @@ describe("buildProviderPayload - 行形态 → InlineKeyInput（掩码保留/明
             name: "默认组",
             weight: 1,
             models: "",
-            testModel: "",
             source: "inline",
             inlineKeys: [
               { id: 101, key: "", masked: false },
@@ -241,11 +216,11 @@ describe("buildProviderPayload - 行形态 → InlineKeyInput（掩码保留/明
   it("pool 组：只带 pool_id（数字），inline_keys 为空数组", () => {
     const payload = buildProviderPayload(
       formValues({
-        groups: [{ name: "池组", weight: 2, models: "gpt-4o", testModel: "gpt-4o-mini", source: "pool", inlineKeys: [], poolId: "7" }],
+        groups: [{ name: "池组", weight: 2, models: "gpt-4o", source: "pool", inlineKeys: [], poolId: "7" }],
       })
     );
     expect(payload.groups).toEqual([
-      { name: "池组", weight: 2, models: "gpt-4o", test_model: "gpt-4o-mini", source: "pool", inline_keys: [], pool_id: 7 },
+      { name: "池组", weight: 2, models: "gpt-4o", source: "pool", inline_keys: [], pool_id: 7 },
     ]);
   });
 
@@ -257,7 +232,6 @@ describe("buildProviderPayload - 行形态 → InlineKeyInput（掩码保留/明
             name: "默认组",
             weight: 1,
             models: "",
-            testModel: "",
             source: "inline",
             inlineKeys: [
               { id: 0, key: "sk-a", masked: false },
@@ -280,7 +254,7 @@ describe("buildProviderPayload - 行形态 → InlineKeyInput（掩码保留/明
     const payload = buildProviderPayload(
       formValues({
         groups: [
-          { name: "空组", weight: 1, models: "", testModel: "", source: "inline", inlineKeys: [], poolId: "" },
+          { name: "空组", weight: 1, models: "", source: "inline", inlineKeys: [], poolId: "" },
         ],
       })
     );
@@ -301,7 +275,6 @@ describe("detailToFormValues - 详情掩码回填（对齐号池 KeyMasked）", 
         name: "默认组",
         weight: 1,
         models: "",
-        testModel: "",
         source: "inline",
         inlineKeys: [
           { id: 101, key: "sk-****-1", masked: true },
@@ -315,27 +288,6 @@ describe("detailToFormValues - 详情掩码回填（对齐号池 KeyMasked）", 
     expect("api_key" in values).toBe(false);
   });
 
-  it("test_model 从详情回填到表单（详情 TestModel → 表单 testModel）", () => {
-    const values = detailToFormValues(
-      detail({
-        Groups: [
-          {
-            ID: 21,
-            ProviderID: 1,
-            Name: "默认组",
-            Weight: 1,
-            Models: "gpt-4o",
-            TestModel: "gpt-4o-mini",
-            Source: "inline",
-            InlineKeys: [{ ID: 101, KeyMasked: "sk-****-1" }],
-            PoolID: null,
-          },
-        ],
-      })
-    );
-    expect(values.groups?.[0]).toMatchObject({ testModel: "gpt-4o-mini" });
-  });
-
   it("pool 组回填 poolId（字符串），inlineKeys 置空", () => {
     const values = detailToFormValues(
       detail({
@@ -346,7 +298,6 @@ describe("detailToFormValues - 详情掩码回填（对齐号池 KeyMasked）", 
             Name: "池组",
             Weight: 3,
             Models: "gpt-4o",
-            TestModel: "",
             Source: "pool",
             InlineKeys: [],
             PoolID: 9,
@@ -375,7 +326,6 @@ describe("detailToFormValues - 详情掩码回填（对齐号池 KeyMasked）", 
             Name: "失败组",
             Weight: 1,
             Models: "",
-            TestModel: "",
             Source: "inline",
             InlineKeys: [{ ID: 103, KeyMasked: "****" }],
             PoolID: null,

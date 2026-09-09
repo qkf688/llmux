@@ -34,5 +34,6 @@ func init() {
 		TestBody:        []byte(testBodyOpenAI),
 		StructuredBody:  []byte(structuredBodyOpenAI),
 		HealthCheckBody: []byte(healthCheckBodyOpenAI),
+		ProbeBody:       []byte(probeBodyOpenAI),
 	})
 }

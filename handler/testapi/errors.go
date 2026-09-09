@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/qkf688/llmux/common"
 )
 
 func parseProviderErrorDetail(bodyBytes []byte) string {
@@ -46,23 +48,12 @@ func BuildDetailedError(errorType string, summary string, detail string, context
 	return sb.String()
 }
 
-// 只负责状态码 → 错误类型的映射，产出 auth / provider / validation / unknown 四类。
-// network 由调用点硬编码（构建请求/连接/读取失败）；timeout 为预留值——当前 60s
-// 客户端超时（context.DeadlineExceeded）仍归类为 network，若需细分可在 client.Do
-// 错误分支用 errors.Is 区分，届时 error_type 与 getErrorTypeLabel 同步补充。
+// 状态码 → 错误类型映射委托给 common.ErrorTypeFromStatus（诊断测试 error_type 的单一
+// 来源，前端 webui/src/lib/errors.ts 镜像该值域）。network 由调用点硬编码、timeout 为
+// 预留值——当前 60s 客户端超时仍归类 network，若需细分在 client.Do 错误分支用 errors.Is
+// 区分，届时值域与 common 常量、getErrorTypeLabel 同步补充。
 func getErrorTypeFromStatus(statusCode int) string {
-	switch {
-	case statusCode == 401 || statusCode == 403:
-		return "auth"
-	case statusCode == 404:
-		return "provider"
-	case statusCode >= 400 && statusCode < 500:
-		return "validation"
-	case statusCode >= 500:
-		return "provider"
-	default:
-		return "unknown"
-	}
+	return common.ErrorTypeFromStatus(statusCode)
 }
 
 func getErrorTypeLabel(errorType string) string {

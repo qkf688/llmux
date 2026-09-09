@@ -46,6 +46,7 @@ func init() {
 		TestBody:        []byte(testBodyAnthropic),
 		StructuredBody:  []byte(structuredBodyAnthropic),
 		HealthCheckBody: []byte(healthCheckBodyAnthropic),
+		ProbeBody:       []byte(probeBodyAnthropic),
 	})
 }
 

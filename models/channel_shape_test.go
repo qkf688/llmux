@@ -24,6 +24,7 @@ var (
 	poolResponseKeys = []channelResponseKeyContract{
 		{key: "Name", wantSetType: gjson.String},
 		{key: "Note", wantSetType: gjson.String},
+		{key: "TestModel", wantSetType: gjson.String},
 	}
 	credentialResponseKeys = []channelResponseKeyContract{
 		{key: "Key", wantSetType: gjson.String},
@@ -52,7 +53,6 @@ var (
 		{key: "Name", wantSetType: gjson.String},
 		{key: "Weight", wantSetType: gjson.Number},
 		{key: "Models", wantSetType: gjson.String},
-		{key: "TestModel", wantSetType: gjson.String},
 		{key: "PoolID", wantSetType: gjson.Number, nilable: true},
 	}
 	providerProtocolsKeys = []channelResponseKeyContract{
@@ -100,7 +100,7 @@ func TestChannelEntities_KeysPresent_WhenSet(t *testing.T) {
 	now := time.Now()
 	creds := uint(3)
 
-	pool := Pool{Name: "主池", Note: "生产密钥池"}
+	pool := Pool{Name: "主池", Note: "生产密钥池", TestModel: "gpt-4o-mini"}
 	credential := Credential{
 		Key:            "hex-ciphertext",
 		KeyHash:        "sha256-hex",
@@ -118,7 +118,7 @@ func TestChannelEntities_KeysPresent_WhenSet(t *testing.T) {
 		TotalTokens:    5000,
 	}
 	endpoint := Endpoint{ProviderID: 1, Protocol: "openai", URL: "https://x.example.com", Enabled: true}
-	keyGroup := KeyGroup{ProviderID: 2, Name: "低价组", Weight: 3, Models: "gpt-4o-mini", TestModel: "gpt-4o-mini", PoolID: &creds}
+	keyGroup := KeyGroup{ProviderID: 2, Name: "低价组", Weight: 3, Models: "gpt-4o-mini", PoolID: &creds}
 	provider := Provider{Protocols: []string{"openai", "responses"}}
 
 	checkShapeTable(t, marshalShape(t, pool), "", poolResponseKeys, true)

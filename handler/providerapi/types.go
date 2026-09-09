@@ -28,8 +28,7 @@ type GroupInput struct {
 	Name       string           `json:"name"`
 	Weight     int              `json:"weight"`
 	Models     string           `json:"models"`
-	TestModel  string           `json:"test_model"` // #24-B 按凭据测试用的分组级测试模型；空=未配置
-	Source     string           `json:"source"`     // "inline" | "pool"
+	Source     string           `json:"source"` // "inline" | "pool"
 	InlineKeys []InlineKeyInput `json:"inline_keys"`
 	PoolID     *uint            `json:"pool_id"`
 }

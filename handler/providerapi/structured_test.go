@@ -352,48 +352,6 @@ func TestStructured_UpdatePartialKeepsChildren(t *testing.T) {
 	}
 }
 
-func TestStructured_GroupTestModelRoundTrip(t *testing.T) {
-	testsupport.InitTestDB(t)
-	setupProviderCrypto(t)
-
-	ctx := t.Context()
-	// 分组带 test_model 建供应商：写入 + 响应体回显 + repository 读回三点同源。
-	body := `{
-		"name":"p-testmodel",
-		"type":"openai",
-		"config":"{\"base_url\":\"https://api.example.com\"}",
-		"console":"",
-		"proxy":"",
-		"protocols":["openai"],
-		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"models":"gpt-4o","test_model":"gpt-4o-mini","source":"inline","inline_keys":[{"id":0,"key":"sk-tm-BBBB2222"}]}]
-	}`
-	created := createProviderViaHandler(t, body)
-	id := uint(gjson.Get(created, "data.ID").Uint())
-	if id == 0 {
-		t.Fatalf("missing ID: %s", created)
-	}
-	// 契约打在响应体 JSON（GroupDetail 内嵌 KeyGroup，PascalCase 无 tag）。
-	if got := gjson.Get(created, "data.Groups.0.TestModel").String(); got != "gpt-4o-mini" {
-		t.Fatalf("响应 Groups.0.TestModel = %q, want gpt-4o-mini: %s", got, created)
-	}
-	groups, err := repository.Default().KeyGroup.ListByProvider(ctx, id)
-	if err != nil || len(groups) != 1 {
-		t.Fatalf("groups=%+v err=%v", groups, err)
-	}
-	if groups[0].TestModel != "gpt-4o-mini" {
-		t.Fatalf("持久化 TestModel = %q, want gpt-4o-mini", groups[0].TestModel)
-	}
-
-	// 全量再更新把 test_model 留空 = 显式清空（同步走全删重建，非 struct 零值跳过）。
-	reBody := strings.Replace(body, `"test_model":"gpt-4o-mini"`, `"test_model":""`, 1)
-	reBody = strings.Replace(reBody, `"p-testmodel"`, `"p-testmodel-renamed"`, 1)
-	updated := updateProviderViaHandler(t, id, reBody)
-	if got := gjson.Get(updated, "data.Groups.0.TestModel"); got.Type != gjson.String || got.String() != "" {
-		t.Fatalf("清空后 TestModel 应为存在且空串，got type=%v raw=%s: %s", got.Type, got.Raw, updated)
-	}
-}
-
 func TestSanitizeConfig_StripsKeyAndSchedule(t *testing.T) {
 	got, err := sanitizeConfig(`{"base_url":"https://x","api_key":"sk","_schedule":{"a":1},"beta":"b"}`)
 	if err != nil {

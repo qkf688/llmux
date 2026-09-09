@@ -93,5 +93,10 @@ type KeyGroup struct {
 	Name       string `gorm:"type:varchar(255)"`
 	Weight     int    `gorm:"default:1"` // 价格导向权重：便宜的分组权重高
 	Models     string `gorm:"type:text"` // 模型白名单，逗号分隔，空 = 不限
-	PoolID     *uint  `gorm:"index"`
+	// TestModel 分组级「测试模型」（#24-B 按凭据测试用）：探针发真实最小 completion 时
+	// 用的模型名。必须是该供应商**主类型协议**（Provider.Type → ProtocolOfType）支持的
+	// 模型——#24 只测主类型那条端点，故单值即可。空 = 未配置，此时点测直接判失败（不回退
+	// 硬编码默认模型，否则未授权模型的 404 会被误判成 key 坏）。
+	TestModel string `gorm:"type:varchar(255)"`
+	PoolID    *uint  `gorm:"index"`
 }

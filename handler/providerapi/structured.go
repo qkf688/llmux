@@ -260,6 +260,7 @@ func syncGroups(ctx context.Context, repos *repository.Repositories, providerID 
 			Name:       strings.TrimSpace(in.Name),
 			Weight:     in.Weight,
 			Models:     in.Models,
+			TestModel:  strings.TrimSpace(in.TestModel),
 		}
 		if in.Source == groupSourcePool {
 			group.PoolID = in.PoolID

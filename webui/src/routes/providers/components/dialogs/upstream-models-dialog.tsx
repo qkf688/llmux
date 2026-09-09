@@ -45,6 +45,7 @@ export function UpstreamModelsDialog({
   handleAddUpstreamToAll,
   handleTestUpstreamModel,
   copyModelName,
+  clearUpstreamTestResults,
 }: UpstreamModelsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -81,6 +82,7 @@ export function UpstreamModelsDialog({
           refreshUpstreamModels={refreshUpstreamModels}
           handleAddUpstreamToAll={handleAddUpstreamToAll}
           handleUpstreamSearchChange={handleUpstreamSearchChange}
+          clearUpstreamTestResults={clearUpstreamTestResults}
         />
 
         <DialogBody className="space-y-2">
@@ -96,7 +98,7 @@ export function UpstreamModelsDialog({
             filteredProviderModels.map((model) => {
               const isSaved = savedModelSet.has(model.id.toLowerCase());
               const checked = selectedUpstreamModels.includes(model.id);
-              const testResult = upstreamTestResults[model.id];
+              const testResult = upstreamTestResults[`${model.id}::0`];
               return (
                 <UpstreamModelsListItem
                   key={model.id}
@@ -104,6 +106,7 @@ export function UpstreamModelsDialog({
                   checked={checked}
                   isSaved={isSaved}
                   testResult={testResult}
+                  groupTestResults={upstreamTestResults}
                   batchTesting={upstreamBatchTesting}
                   onToggle={(value) => {
                     if (value) {
@@ -117,6 +120,7 @@ export function UpstreamModelsDialog({
                     }
                   }}
                   onTest={() => handleTestUpstreamModel(model.id)}
+                  onGroupTest={(group) => handleTestUpstreamModel(model.id, group.ID)}
                   onCopy={() => copyModelName(model.id)}
                 />
               );

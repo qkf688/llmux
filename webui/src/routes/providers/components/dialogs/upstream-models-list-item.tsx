@@ -5,7 +5,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { ProviderModel } from "@/lib/api";
+import type { GroupRef, ProviderModel } from "@/lib/api";
 import type { ModelTestResult } from "../../types";
 import { GroupBadges, ModelTestStatusButton } from "../shared";
 
@@ -14,9 +14,11 @@ interface UpstreamModelsListItemProps {
   checked: boolean;
   isSaved: boolean;
   testResult: ModelTestResult | undefined;
+  groupTestResults: Record<string, ModelTestResult>;
   batchTesting: boolean;
   onToggle: (checked: boolean) => void;
   onTest: () => void;
+  onGroupTest: (group: GroupRef) => void;
   onCopy: () => void;
 }
 
@@ -25,11 +27,20 @@ export function UpstreamModelsListItem({
   checked,
   isSaved,
   testResult,
+  groupTestResults,
   batchTesting,
   onToggle,
   onTest,
+  onGroupTest,
   onCopy,
 }: UpstreamModelsListItemProps) {
+  // 从结果表提取本模型各分组的状态，GroupBadges 不感知键格式
+  const groupStatuses: Record<number, ModelTestResult> = {};
+  for (const g of model.Groups ?? []) {
+    const entry = groupTestResults[`${model.id}::${g.ID}`];
+    if (entry) groupStatuses[g.ID] = entry;
+  }
+
   return (
     <div
       className={`flex items-center justify-between p-2 border rounded-lg ${
@@ -53,7 +64,12 @@ export function UpstreamModelsListItem({
             {model.id}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <GroupBadges groups={model.Groups} />
+            <GroupBadges
+              groups={model.Groups}
+              groupStatuses={groupStatuses}
+              onGroupClick={onGroupTest}
+              disabled={batchTesting}
+            />
             {isSaved && (
               <span className="text-xs text-muted-foreground">已在目录</span>
             )}

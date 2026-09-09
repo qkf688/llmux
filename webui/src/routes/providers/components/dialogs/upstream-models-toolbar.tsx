@@ -34,6 +34,7 @@ interface UpstreamModelsToolbarProps {
   refreshUpstreamModels: () => void | Promise<void>;
   handleAddUpstreamToAll: () => void | Promise<void>;
   handleUpstreamSearchChange: (value: string) => void;
+  clearUpstreamTestResults: () => void;
 }
 
 export function UpstreamModelsToolbar({
@@ -61,14 +62,15 @@ export function UpstreamModelsToolbar({
   refreshUpstreamModels,
   handleAddUpstreamToAll,
   handleUpstreamSearchChange,
+  clearUpstreamTestResults,
 }: UpstreamModelsToolbarProps) {
-  const tested = Object.keys(upstreamTestResults).length;
-  const success = Object.values(upstreamTestResults).filter(
-    (r) => r.success === true,
-  ).length;
-  const failed = Object.values(upstreamTestResults).filter(
-    (r) => r.success === false,
-  ).length;
+  // 只统计自动口径条目（::0），双写的分组条目不参与计数（与 select 同源）
+  const autoEntries = Object.entries(upstreamTestResults).filter(([key]) =>
+    key.endsWith("::0"),
+  );
+  const tested = autoEntries.length;
+  const success = autoEntries.filter(([, r]) => r.success === true).length;
+  const failed = autoEntries.filter(([, r]) => r.success === false).length;
 
   return (
     <>
@@ -91,7 +93,17 @@ export function UpstreamModelsToolbar({
             ? "正在从上游获取..."
             : `上游返回 ${providerModels.length} 个，目录已收录 ${cachedModelsCount} 个`}
         </div>
-        <div className="flex gap-1 flex-wrap">
+        <div className="flex gap-1 flex-wrap items-center">
+          {tested > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearUpstreamTestResults}
+              disabled={upstreamBatchTesting}
+            >
+              清除结果
+            </Button>
+          )}
           <BatchTestActionButtons
             onBatchTestAll={handleBatchTestUpstreamAll}
             onBatchTestSelected={handleBatchTestUpstreamSelected}
@@ -137,6 +149,12 @@ export function UpstreamModelsToolbar({
           </Button>
         </div>
       </div>
+
+      {!modelsLoading && filteredProviderModels.length > 0 && (
+        <div className="text-[11px] text-muted-foreground">
+          批量测试将发起 {filteredProviderModels.length} 次真实计费请求
+        </div>
+      )}
 
       {!modelsLoading && providerModels.length > 0 && (
         <div className="flex items-center gap-2 mb-3">

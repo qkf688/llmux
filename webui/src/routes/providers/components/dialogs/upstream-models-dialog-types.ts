@@ -41,6 +41,7 @@ export interface UpstreamModelsDialogProps {
   handleUpstreamSearchChange: (value: string) => void;
   handleAddUpstreamToAll: () => void | Promise<void>;
 
-  handleTestUpstreamModel: (modelId: string) => void | Promise<unknown>;
+  handleTestUpstreamModel: (modelId: string, groupId?: number) => void | Promise<unknown>;
   copyModelName: (modelId: string) => void;
+  clearUpstreamTestResults: () => void;
 }

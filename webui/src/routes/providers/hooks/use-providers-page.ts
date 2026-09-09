@@ -261,10 +261,12 @@ export function useProvidersPage() {
     handleBatchTestAll,
     handleBatchTestSelected,
     handleCancelBatchTest,
+    clearAllTestResults,
     handleTestUpstreamModel,
     handleBatchTestUpstreamAll,
     handleBatchTestUpstreamSelected,
     handleCancelUpstreamBatchTest,
+    clearUpstreamTestResults,
     selectUpstreamSuccessful,
     selectUpstreamFailed,
   } = useProviderModelTesting({
@@ -402,6 +404,7 @@ export function useProvidersPage() {
     handleTestAllModel,
     copyModelName,
     handleRemoveModelFromAll,
+    clearAllTestResults,
     customModelInput,
     setCustomModelInput,
     handleAddCustomModels,
@@ -439,6 +442,7 @@ export function useProvidersPage() {
     handleAddUpstreamToAll,
     handleTestUpstreamModel,
     copyModelName,
+    clearUpstreamTestResults,
   };
 
   return {

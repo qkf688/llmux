@@ -396,6 +396,11 @@ func TestTestCredential_PoolWithoutTestModel_FailsValidationNoUpstream(t *testin
 	if got := gjson.Get(resp, "data.error_type").String(); got != "validation" {
 		t.Fatalf("error_type = %q, want validation; body=%s", got, resp)
 	}
+	// 锁前后端文案契约：必须明说「号池」未配置（迁池后若回退成「分组」字样即口径漂移，
+	// 管理员会被指向错误的配置入口）。
+	if msg := gjson.Get(resp, "data.error").String(); !strings.Contains(msg, "该号池未配置测试模型") {
+		t.Fatalf("error 文案应指明号池未配置，got %q; body=%s", msg, resp)
+	}
 	if gjson.Get(resp, "data.group_id").Uint() != uint64(group.ID) {
 		t.Fatalf("回显 group_id = %d, want %d; body=%s", gjson.Get(resp, "data.group_id").Uint(), group.ID, resp)
 	}

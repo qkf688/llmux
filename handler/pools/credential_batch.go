@@ -61,7 +61,7 @@ func BatchImportCredentials(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	if !requirePool(c, ctx, poolID) {
+	if _, ok := requirePool(c, ctx, poolID); !ok {
 		return
 	}
 	cipher := credentialcrypto.Default()
@@ -169,7 +169,7 @@ func BatchUpdateCredentialStatus(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	if !requirePool(c, ctx, poolID) {
+	if _, ok := requirePool(c, ctx, poolID); !ok {
 		return
 	}
 	// 恢复 active 时按状态机约定连带重置鉴权失败计数（单一来源 models.CredentialRecoveryFields）
@@ -201,7 +201,7 @@ func BatchDeleteCredentials(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	if !requirePool(c, ctx, poolID) {
+	if _, ok := requirePool(c, ctx, poolID); !ok {
 		return
 	}
 	deleted, err := repos().Credential.DeleteByIDs(ctx, poolID, req.IDs)

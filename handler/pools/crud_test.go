@@ -307,6 +307,19 @@ func TestPool_TestModelRoundTrip(t *testing.T) {
 	if !e.Exists() || e.String() != "" {
 		t.Fatalf("未配置池 TestModel 键应存在且为空串, got %s", e.Raw)
 	}
+
+	// 写侧 trim（后端契约边界不依赖调用方自觉）：首尾空白落库即去除，
+	// 纯空白 = 未配置——否则「回显非空、点测判未配置」两套口径分叉。
+	spaced := createPoolViaHandler(t, `{"name":"空白池","test_model":"  gpt-4o  "}`)
+	if got := gjson.Get(spaced, "data.TestModel").String(); got != "gpt-4o" {
+		t.Fatalf("首尾空白应被 trim，TestModel = %q, want gpt-4o; body=%s", got, spaced)
+	}
+	spacedID := uint(gjson.Get(spaced, "data.ID").Uint())
+	updatePoolViaHandler(t, spacedID, `{"name":"空白池","test_model":"   "}`)
+	purged := listPoolsViaHandler(t)
+	if got := gjson.Get(purged, `data.#(Name=="空白池").TestModel`).String(); got != "" {
+		t.Fatalf("纯空白 test_model 应 trim 成空串（=未配置），got %q; body=%s", got, purged)
+	}
 }
 
 // uintPtr 构建 *uint 指针。

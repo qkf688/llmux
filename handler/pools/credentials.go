@@ -12,19 +12,22 @@ import (
 	"gorm.io/gorm"
 )
 
-// requirePool 校验号池存在：不存在写 404、查询异常写 500，返回 false（响应已写出，
-// 调用方直接 return）；存在返回 true。池存在性判定在 pools 域所有凭据端点统一
-// 走此 helper（防 404/500 语义在各 handler 分裂）。
-func requirePool(c *gin.Context, ctx context.Context, poolID uint) bool {
-	if _, err := repos().Pool.Get(ctx, poolID); err != nil {
+// requirePool 校验号池存在并带出池实体：不存在写 404、查询异常写 500，返回 (nil, false)
+// （响应已写出，调用方直接 return）；存在返回 (*Pool, true)。池存在性判定在 pools 域
+// 所有凭据端点统一走此 helper（防 404/500 语义在各 handler 分裂）。
+// 池实体随返回值带出：存在性判定与加载本是同一动作，按凭据测试（probe）直接消费，
+// 避免同请求对同一行重复查询。
+func requirePool(c *gin.Context, ctx context.Context, poolID uint) (*models.Pool, bool) {
+	pool, err := repos().Pool.Get(ctx, poolID)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			httpresp.NotFound(c, "Pool not found")
-			return false
+			return nil, false
 		}
 		httpresp.InternalServerError(c, err.Error())
-		return false
+		return nil, false
 	}
-	return true
+	return pool, true
 }
 
 // ListCredentials 获取指定号池的凭据分页列表（分页/状态筛选/关键词搜索+掩码）。
@@ -37,7 +40,7 @@ func ListCredentials(c *gin.Context) {
 
 	// 号池存在性校验：不存在直接 404
 	ctx := c.Request.Context()
-	if !requirePool(c, ctx, poolID) {
+	if _, ok := requirePool(c, ctx, poolID); !ok {
 		return
 	}
 

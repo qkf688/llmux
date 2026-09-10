@@ -48,7 +48,7 @@ func CreateCredential(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	if !requirePool(c, ctx, poolID) {
+	if _, ok := requirePool(c, ctx, poolID); !ok {
 		return
 	}
 
@@ -112,25 +112,27 @@ func CreateCredential(c *gin.Context) {
 
 // getCredentialInPool 获取指定号池下的凭据，统一「池校验 + 凭据获取 + 越池判断」：
 // 池不存在 404、凭据不存在 404、越池 404（不暴露凭据存在性）。
-// 返回 false 时响应已写出，调用方直接 return。
-func getCredentialInPool(c *gin.Context, ctx context.Context, poolID, credID uint) (*models.Credential, bool) {
-	if !requirePool(c, ctx, poolID) {
-		return nil, false
+// 返回 false 时响应已写出，调用方直接 return。池实体随校验一并带出（按凭据测试
+// 要读池级 test_model，免二次查询）；不需要的调用方忽略第二个返回值。
+func getCredentialInPool(c *gin.Context, ctx context.Context, poolID, credID uint) (*models.Credential, *models.Pool, bool) {
+	pool, ok := requirePool(c, ctx, poolID)
+	if !ok {
+		return nil, nil, false
 	}
 	cred, err := repos().Credential.Get(ctx, credID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			httpresp.NotFound(c, "Credential not found")
-			return nil, false
+			return nil, nil, false
 		}
 		httpresp.InternalServerError(c, err.Error())
-		return nil, false
+		return nil, nil, false
 	}
 	if cred.PoolID == nil || *cred.PoolID != poolID {
 		httpresp.NotFound(c, "Credential not found")
-		return nil, false
+		return nil, nil, false
 	}
-	return cred, true
+	return cred, pool, true
 }
 
 // GetCredential 获取单条凭据（掩码形态，池内限界防越池）。
@@ -145,7 +147,7 @@ func GetCredential(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	cred, ok := getCredentialInPool(c, ctx, poolID, credID)
+	cred, _, ok := getCredentialInPool(c, ctx, poolID, credID)
 	if !ok {
 		return
 	}
@@ -165,7 +167,7 @@ func GetCredentialRaw(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	cred, ok := getCredentialInPool(c, ctx, poolID, credID)
+	cred, _, ok := getCredentialInPool(c, ctx, poolID, credID)
 	if !ok {
 		return
 	}
@@ -209,7 +211,7 @@ func UpdateCredential(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	_, ok = getCredentialInPool(c, ctx, poolID, credID)
+	_, _, ok = getCredentialInPool(c, ctx, poolID, credID)
 	if !ok {
 		return
 	}
@@ -249,7 +251,7 @@ func DeleteCredential(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	_, ok = getCredentialInPool(c, ctx, poolID, credID)
+	_, _, ok = getCredentialInPool(c, ctx, poolID, credID)
 	if !ok {
 		return
 	}

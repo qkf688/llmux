@@ -3,6 +3,7 @@ package pools
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/handler/httpx"
@@ -117,7 +118,9 @@ func CreatePool(c *gin.Context) {
 		return
 	}
 
-	pool := &models.Pool{Name: req.Name, Note: req.Note, TestModel: req.TestModel}
+	// test_model 写侧 trim：后端是契约边界，不能依赖调用方自觉（探针读侧的 trim 保留作防御）。
+	// 纯空白值 trim 后为空串 = 未配置，与点测判定口径一致，避免「回显非空却测不了」。
+	pool := &models.Pool{Name: req.Name, Note: req.Note, TestModel: strings.TrimSpace(req.TestModel)}
 	if err := repos().Pool.Create(ctx, pool); err != nil {
 		httpresp.InternalServerError(c, "Failed to create pool: "+err.Error())
 		return
@@ -165,7 +168,8 @@ func UpdatePool(c *gin.Context) {
 	}
 
 	if _, err := repos().Pool.UpdateFields(ctx, id, map[string]any{
-		"name": req.Name, "note": req.Note, "test_model": req.TestModel,
+		// test_model 与 Create 同口径写侧 trim（见 CreatePool 注释）
+		"name": req.Name, "note": req.Note, "test_model": strings.TrimSpace(req.TestModel),
 	}); err != nil {
 		httpresp.InternalServerError(c, "Failed to update pool: "+err.Error())
 		return

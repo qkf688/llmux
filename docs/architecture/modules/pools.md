@@ -30,7 +30,7 @@ handler/pools/           # 号池管理 API 域（S2：CRUD + 健康统计 + 凭
   repos.go               # repos() 访问 repository.Default()
 repository/
   pool.go                # PoolRepo + StatsByIDs（GROUP BY 聚合健康统计）+ UpdateFields
-  credential.go          # CredentialRepo + DeleteByPoolID + UpdateFieldsByIDs/DeleteByIDs（池内限界）+ ExistingHashes（批量导入查重）+ UpdateFields
+  credential.go          # CredentialRepo + DeleteByPoolID + UpdateFieldsByIDs/DeleteByIDs（池内限界）+ ExistingHashes（批量导入查重）+ UpdateFields + RecordCredentialSuccess/Error（终身统计原子自增）
   endpoint.go            # EndpointRepo
   key_group.go           # KeyGroupRepo + CountByPoolIDs（引用守卫）+ ListByPoolIDs（引用明细）+ UpdateFields
 models/
@@ -49,6 +49,7 @@ common/credentialcrypto/ # AES-256-GCM 加密 + KeyHash + MaskKey 掩码 + 密�
 | `CredentialRepo.DeleteByIDs` | 批量软删同一号池下 IDs 凭据（池内限界，防越池误删） | `repository/credential.go` | 同文件 |
 | `CredentialRepo.ExistingHashes` | 批量导入查重：返回号池下现存（未软删）凭据命中的 KeyHash 集合，一次查询防 N+1 | `repository/credential.go` | 同文件 |
 | `CredentialRepo.ListByGroups` | 装配侧收敛查询：`group_id IN groupIDs OR pool_id IN poolIDs`，按 `id ASC`；两组皆空返回 nil 不产生 SQL；凭据 GroupID/PoolID 二选一，绝不双计（S3 选路热路径用，避免全表扫描） | `repository/credential.go` | 同文件 |
+| 凭据终身统计 | `credentials.total_requests/total_errors/last_used_at` **只由 chat 真实流量写入**：成功尝试（上游 200 被接受；流式中途断流不回拨）→ `total_requests`+1 且 `last_used_at`=成功时刻；凭据级失败（401/403/429/5xx/网络超时，与冷却/判停同一 `classifyCredentialFailure` 判定域）→ `total_errors`+1；组织级出口（能力 skip、转换失败、其余 4xx）不记账；探针/探活/健康检查/testapi 走诊断口径不进 attempt，结构性零记账（与 #24「只报不改」同族，`credential_test_link_test.go` 有统计列断言锁）。落库经 `credwrite` 队列 `KindRecordSuccess/KindRecordError` 异步执行（热路径不等待 DB；drop-oldest 容忍极端背压下极小丢失，`DroppedCount` 可观测）。终身累计：不随人工恢复/启停清零（`CredentialRecoveryFields` 只清连败瞬态），历史不回填。号池详情弹窗以单列「统计」渲染 `请求 N · 失败 M · 相对时间`（null → 「从未使用」） | `service/chat/chat_credential_stats.go`（写点）+ `repository/credential.go`（落库原语） | `webui` `credential-stats-cell.tsx` + `formatCredentialLastUsed`（`credential-status.ts`） |
 | 批量导入语义 | `POST .../batch/import` `{"keys":[...]}`：批内首现 + 池内 `KeyHash` 双重去重（判定顺序：批内首现先于池内——同 key 批内重复∧池内已有时，首现行 duplicate_in_pool、重复行 duplicate_in_batch）；行级失败隔离（逐行独立落库，无共享事务；单行加密/落库异常收集为 failed 不阻断其余行）；逐行回显 `rows`（`Index`/掩码 `Key`/`Status` ∈ imported|skipped|failed/`Reason` 机器码 duplicate_in_batch、duplicate_in_pool、empty、encrypt_failed、db_failed）；单请求上限 500，超限 400；空数组 400；池不存在 404；`Default()==nil` 500 | `handler/pools/credential_batch.go` `BatchImportCredentials` | `importCredentialRows`（加密/落库失败经注入桩覆盖测试） |
 | `KeyGroupRepo.CountByPoolIDs` | 号池被分组引用计数（删除守卫依据） | `repository/key_group.go` | 同文件 |
 | `credentialcrypto.MaskKey` / `MaskStored` | 掩码规则单一来源（前缀3+`****`+后缀4，≤8 全 `****`）；`MaskStored` 统一读路径降级策略——cipher 未配置/解密失败一律 `****` + `slog.Warn`（绝不输出密文片段）。号池凭据列表与供应商内联 key 详情共用，改降级规则只动这一处 | `common/credentialcrypto/cipher.go` | 两域 handler 调用 |
@@ -70,6 +71,7 @@ common/credentialcrypto/ # AES-256-GCM 加密 + KeyHash + MaskKey 掩码 + 密�
 - **三态字段**（`Credential.GroupID/PoolID/CooldownUntil/LastUsedAt/LastProbeAt`、`KeyGroup.PoolID`）为指针，nil 序列化 JSON `null`（禁 omitempty）；清除必须走 `UpdateFields`（map 显式写 NULL），struct Update 跳过零值
 - **`LastProbeAt`**：#6-3 惰性探活频控字段（成败都更新）；列表 DTO `CredentialListItem` 已暴露；恢复 active 不经 `CredentialRecoveryFields` 清该字段
 - **`StatusCounts` 用 map 而非固定字段**：S4 新增状态（如 temp_unsched）不改响应结构，前端按状态配置遍历
+- **两套"失败"语义并存勿混**：`FailCount`=鉴权**连败**瞬态计数（成功/恢复清零，驱动判停状态机，UI 已不展示）；`TotalErrors`=凭据级失败**终身**累计（UI「统计」列的「失败」）。UI 展示后者，行为处置读前者
 - **未做**：号池列表分页（数量级小）；`GET /api/pools/:id` 详情端点（列表项携带足够）；批量导入逐行独立落库（无共享事务：500 条 ≈ 2s，低频粘贴可接受；单事务改造需扩仓储接口，未做）；`(pool_id, key_hash)` 无唯一约束，并发导入同 key 双插竞态与单条创建同语义（#11 起接受，不做复合唯一索引）
 - 契约测试：`handler/pools/crud_test.go`、`credentials_test.go`、`credential_crud_test.go`、`credential_batch_test.go`、`credential_import_test.go` 断言打在响应体 JSON（gjson `Exists()` 区分键存在与 null）；仓储测试在 `repository/channel_crud_test.go`
 - 路由注册顺序：`/pools/:id/credentials/batch/*` 固定段（含 `/batch/import`）**先于** `/pools/:id/credentials/:credId` 声明，避免 gin 把 `batch` 当成 `credId` 捕获；行为判别测试 `TestRegisterRouteOrder_BatchBeforeCredID` 覆盖三条批量路由

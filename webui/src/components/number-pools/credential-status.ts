@@ -42,14 +42,17 @@ export function isCredentialInCooldown(cooldownUntil: string | null | undefined)
   return !Number.isNaN(t) && t > Date.now();
 }
 
-export function formatCredentialTime(iso: string | null | undefined): string {
-  if (!iso) return "-";
+export function formatCredentialLastUsed(iso: string | null | undefined): string {
+  // 统计格专用相对时间：null = 从未成功用过（坏 key 停格可读），紧凑无空格。
+  // 与旧 formatCredentialTime 的区别只在 null/非法语义与空格——旧函数无消费方后删除，
+  // 避免两套时间口径并存漂移。
+  if (!iso) return "从未使用";
   const t = Date.parse(iso);
-  if (Number.isNaN(t)) return "-";
+  if (Number.isNaN(t)) return "从未使用";
   const diffSec = Math.round((Date.now() - t) / 1000);
   if (diffSec < 60) return "刚刚";
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} 分钟前`;
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} 小时前`;
-  if (diffSec < 86400 * 7) return `${Math.floor(diffSec / 86400)} 天前`;
-  return new Date(t).toLocaleString();
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}分钟前`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}小时前`;
+  if (diffSec < 86400 * 7) return `${Math.floor(diffSec / 86400)}天前`;
+  return new Date(t).toLocaleDateString();
 }

@@ -53,9 +53,9 @@ import {
   CREDENTIAL_STATUS_DOT_CLS,
   CREDENTIAL_STATUS_LABEL,
   CREDENTIAL_STATUS_ORDER,
-  formatCredentialTime,
   isCredentialInCooldown,
 } from "./credential-status";
+import { CredentialStats } from "./credential-stats-cell";
 
 const PAGE_SIZE = 20;
 // 筛选下拉 = 「全部」+ 状态顺序单表派生：状态清单只活在 credential-status.ts 一处
@@ -360,9 +360,7 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
                       <TableHead>Key</TableHead>
                       <TableHead>状态</TableHead>
                       <TableHead>备注</TableHead>
-                      <TableHead>失败</TableHead>
-                      <TableHead>最近使用</TableHead>
-                      <TableHead>请求/错误</TableHead>
+                      <TableHead>统计</TableHead>
                       <TableHead className="w-[160px]">操作</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -390,12 +388,12 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
                         >
                           {cred.Note || "-"}
                         </TableCell>
-                        <TableCell className="text-xs">{cred.FailCount}</TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                          {formatCredentialTime(cred.LastUsedAt)}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {cred.TotalRequests} / {cred.TotalErrors}
+                        <TableCell className="text-xs whitespace-nowrap">
+                          <CredentialStats
+                            totalRequests={cred.TotalRequests}
+                            totalErrors={cred.TotalErrors}
+                            lastUsedAt={cred.LastUsedAt}
+                          />
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
@@ -454,10 +452,13 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
                         />
                         {renderStatusBadges(cred.Status, cred.CooldownUntil)}
                       </div>
-                      <p className="text-[10px] text-muted-foreground">
-                        {cred.Note || "-"} · 失败 {cred.FailCount} · 最近{" "}
-                        {formatCredentialTime(cred.LastUsedAt)}
-                      </p>
+                      <p className="text-[10px] text-muted-foreground">{cred.Note || "-"}</p>
+                      <CredentialStats
+                        totalRequests={cred.TotalRequests}
+                        totalErrors={cred.TotalErrors}
+                        lastUsedAt={cred.LastUsedAt}
+                        className="text-[10px]"
+                      />
                       <div className="flex gap-1">
                         <CredentialTestButton
                           outcome={credentialTesting.outcomeOf(cred.ID)}

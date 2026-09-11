@@ -77,6 +77,8 @@ func handleNonOKProviderResponse(
 	// 其余（429/5xx）写最小冷却，窗口内选路跳过该凭据并允许同组换 key。
 	// 组织级淘汰标记保留，单 key 组（存量迁移形态）组耗尽后行为与现状完全等价。
 	if classifyCredentialFailure(res.StatusCode) {
+		// 终身统计：凭据级失败域（401/403/429/5xx）一处收口，与下方状态机处置正交。
+		recordCredentialStatsError(ctx, cred)
 		if classifyAuthFailure(res.StatusCode) {
 			applyCredentialAuthFailure(ctx, cred)
 		} else {

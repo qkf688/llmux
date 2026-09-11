@@ -38,6 +38,12 @@ type CredentialRepo interface {
 	// IncrementFailCountAndStopIfThreshold 原子自增 fail_count；仅当 status 为 active
 	// （或空串视同 active）且自增后达阈值时判停 temp_unsched 并写 stopReason、清 cooldown_until。
 	IncrementFailCountAndStopIfThreshold(ctx context.Context, id uint, threshold int, stopReason string) (int64, error)
+	// RecordCredentialSuccess 原子自增 total_requests 并刷新 last_used_at=at
+	// （凭据终身统计，chat 成功尝试记账；软删行不写，RowsAffected=0）。
+	RecordCredentialSuccess(ctx context.Context, id uint, at time.Time) (int64, error)
+	// RecordCredentialError 原子自增 total_errors（凭据级失败尝试记账；
+	// 失败不刷新 last_used_at——「最近使用」语义为上次成功，软删行不写）。
+	RecordCredentialError(ctx context.Context, id uint) (int64, error)
 	// ClaimLastProbeAt 探活前 CAS：仅当 last_probe_at 为空或早于 cutoff 时写入 now。
 	// RowsAffected==0 表示他路已 claim 或仍在间隔内——调用方不得打上游（#6-4-2）。
 	ClaimLastProbeAt(ctx context.Context, id uint, now, cutoff time.Time) (int64, error)
@@ -212,6 +218,24 @@ WHERE id = ? AND deleted_at IS NULL`,
 		models.CredentialStatusActive, threshold,
 		id,
 	)
+	return result.RowsAffected, result.Error
+}
+
+func (r *credentialRepo) RecordCredentialSuccess(ctx context.Context, id uint, at time.Time) (int64, error) {
+	// 单语句原子自增+时间刷新，与 IncrementFailCount... 同族（无读回，#6-4-1 纪律）。
+	result := r.db.WithContext(ctx).Exec(`
+UPDATE credentials SET
+  total_requests = total_requests + 1,
+  last_used_at = ?
+WHERE id = ? AND deleted_at IS NULL`, at, id)
+	return result.RowsAffected, result.Error
+}
+
+func (r *credentialRepo) RecordCredentialError(ctx context.Context, id uint) (int64, error) {
+	result := r.db.WithContext(ctx).Exec(`
+UPDATE credentials SET
+  total_errors = total_errors + 1
+WHERE id = ? AND deleted_at IS NULL`, id)
 	return result.RowsAffected, result.Error
 }
 

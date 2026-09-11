@@ -228,6 +228,12 @@ func TestTestCredential_UpstreamAuthFailureReportsNotWriteBack(t *testing.T) {
 	if saved.Status != models.CredentialStatusActive || saved.FailCount != 0 {
 		t.Fatalf("失败测试回写了凭据状态：status=%q fail_count=%d（要求只报不改）", saved.Status, saved.FailCount)
 	}
+	// 终身统计同属「只报不改」保护范围：探针走诊断口径不进 attempt，
+	// 请求/失败/最近使用三列必须零变化（2026-09-12 统计口径定案 AC-4）。
+	if saved.TotalRequests != 0 || saved.TotalErrors != 0 || saved.LastUsedAt != nil {
+		t.Fatalf("失败测试回写了统计列：total_requests=%d total_errors=%d last_used_at=%v（要求只报不改）",
+			saved.TotalRequests, saved.TotalErrors, saved.LastUsedAt)
+	}
 }
 
 // TestTestCredential_CrossPoolIsNotFound：越池 404（信封 code=404，非 2xx），且零上游请求。

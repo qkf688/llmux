@@ -20,7 +20,9 @@ const (
 	KindAuthFail
 	KindTouchProbe
 	KindRecover
-	kindFlush // 内部：Flush 哨兵，不落库、不可被 drop-oldest 丢掉
+	KindRecordSuccess // 成功尝试统计：total_requests+1 且 last_used_at 刷新
+	KindRecordError   // 凭据级失败统计：total_errors+1（终身累计，独立于连败判停）
+	kindFlush         // 内部：Flush 哨兵，不落库、不可被 drop-oldest 丢掉
 )
 
 // Job 单条凭据写任务；payload 尽量小，窗口/阈值在 worker 侧读设置。
@@ -39,6 +41,10 @@ type Handlers struct {
 	AuthFail   func(ctx context.Context, credID uint) error
 	TouchProbe func(ctx context.Context, credID uint, at time.Time) error
 	Recover    func(ctx context.Context, credID uint, at time.Time) (recovered bool, err error)
+	// RecordSuccess/RecordError：凭据终身统计落库（chat 尝试记账，每请求必写，
+	// 是唯一无条件热路径写——sync 家族其他成员都是条件写）。
+	RecordSuccess func(ctx context.Context, credID uint, at time.Time) error
+	RecordError   func(ctx context.Context, credID uint) error
 }
 
 var (
@@ -96,6 +102,12 @@ func SetHandlers(h Handlers) {
 	}
 	if h.Recover != nil {
 		handlers.Recover = h.Recover
+	}
+	if h.RecordSuccess != nil {
+		handlers.RecordSuccess = h.RecordSuccess
+	}
+	if h.RecordError != nil {
+		handlers.RecordError = h.RecordError
 	}
 }
 
@@ -172,6 +184,22 @@ func EnqueueRecover(credID uint, at time.Time) bool {
 		return false
 	}
 	return processRecoverJob(context.Background(), credID, at)
+}
+
+// EnqueueRecordSuccess 投递成功尝试统计写（200 被接受即记，流式中途断流不回拨）。
+func EnqueueRecordSuccess(credID uint, at time.Time) {
+	if credID == 0 {
+		return
+	}
+	defaultQueue.enqueue(Job{Kind: KindRecordSuccess, CredID: credID, At: at})
+}
+
+// EnqueueRecordError 投递凭据级失败统计写（classifyCredentialFailure/网络域）。
+func EnqueueRecordError(credID uint) {
+	if credID == 0 {
+		return
+	}
+	defaultQueue.enqueue(Job{Kind: KindRecordError, CredID: credID})
 }
 
 func processRecoverJob(ctx context.Context, credID uint, at time.Time) bool {
@@ -339,6 +367,18 @@ func processJob(ctx context.Context, job Job) {
 			return
 		}
 		_, err = h.Recover(ctx, job.CredID, job.At)
+	case KindRecordSuccess:
+		if h.RecordSuccess == nil {
+			slog.Warn("credential write queue: record-success handler nil", "credential_id", job.CredID)
+			return
+		}
+		err = h.RecordSuccess(ctx, job.CredID, job.At)
+	case KindRecordError:
+		if h.RecordError == nil {
+			slog.Warn("credential write queue: record-error handler nil", "credential_id", job.CredID)
+			return
+		}
+		err = h.RecordError(ctx, job.CredID)
 	default:
 		slog.Warn("credential write queue: unknown job kind", "kind", job.Kind)
 		return

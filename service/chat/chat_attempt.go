@@ -132,6 +132,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		// 网络/超时属凭据级失败：写冷却，组内换 key 可能救回（#13）。
 		// 组织级淘汰标记仍返回（现状语义不变，组耗尽才消费）。
 		applyCredentialCooldown(input.Ctx, input.Selection.Credential, cooldownReasonNetwork)
+		recordCredentialStatsError(input.Ctx, input.Selection.Credential)
 		return singleProviderAttemptResult{CredentialFailure: true, RemoveWeight: true, RemovePriority: true}
 	}
 
@@ -206,6 +207,8 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 	adjustment.ApplySuccessAdjustments(input.Ctx, input.ModelWithProvider.ID)
 	// 成功重置鉴权失败计数（#6-2）：FailCount>0 才写，常态成功请求零凭据写。
 	resetCredentialAuthFailCount(input.Ctx, input.Selection.Credential)
+	// 终身统计与状态机正交：每成功尝试必记（经 credwrite 异步，不占请求路径）。
+	recordCredentialStatsSuccess(input.Ctx, input.Selection.Credential)
 	return singleProviderAttemptResult{
 		Response:    res,
 		LogID:       logID,

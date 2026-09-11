@@ -75,7 +75,9 @@ type Credential struct {
 	// LastProbeAt 上次惰性探活尝试时间（#6-3）：成败都更新，供频控判定
 	// 「距上次探活 > 间隔才再探」；nil = 从未探过。三态指针禁 omitempty。
 	LastProbeAt *time.Time
-	// 统计字段（号池页概览用；S3/S4 起写入）
+	// 统计字段：号池详情「统计」列数据源。只由 chat 真实流量经 credwrite 写入
+	// （成功尝试 +1 且 touch LastUsedAt；凭据级失败 +1）——终身累计，不随恢复/
+	// 启停清零；探针/探活/健康检查一律不记。口径契约见 pools.md「凭据终身统计」。
 	TotalRequests int64
 	TotalErrors   int64
 	TotalTokens   int64

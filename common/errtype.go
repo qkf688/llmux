@@ -14,8 +14,9 @@ const (
 // ErrorTypeFromStatus 把上游 HTTP 状态码映射到诊断测试的 error_type。非 2xx 的
 // 「打到了上游、上游回了错误」结论都走这里，产出 auth / provider / validation / unknown。
 //
-// network / timeout 不在此产出——它们来自调用点 http.Client.Do 的连接失败 / 上下文超时
-// （没有状态码可判），由 testapi 与 #24 各自在 Do 错误分支用 errors.Is 区分。
+// network / timeout 不在此产出——它们来自 http.Client.Do 的连接失败 / 上下文超时
+// （没有状态码可判），统一由 `service/credprobe.RunCompletionProbe` 在 Do 错误分支用
+// errors.Is(DeadlineExceeded) 区分；react 多轮 loop 因流程不同仍各自判定。
 //
 // 单一来源：值域曾散落在 handler/testapi，#24-B 若另写一份 switch 必与 testapi 漂移、
 // 并让前端镜像的 ERROR_TYPES 对不上，故下沉到 common 供两域共用。

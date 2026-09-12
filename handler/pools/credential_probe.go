@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"sort"
 	"strings"
 	"time"
@@ -19,21 +17,14 @@ import (
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/providers"
 	"github.com/qkf688/llmux/service/channel"
+	"github.com/qkf688/llmux/service/credprobe"
 	"gorm.io/gorm"
 )
 
-// completion 探针超时：真实补全含上游生成 + 排队，比 /models 轻探（credprobe 的 5s 口径）宽；
-// 且刻意让 ctx deadline（credProbeTimeout）**早于** transport 超时（+ credProbeClientBuffer），
-// 使「慢上游」稳定命中 context.DeadlineExceeded → 归类 timeout，而非 transport 的
-// "awaiting response headers"（非 DeadlineExceeded）被误归 network。
-const (
-	credProbeTimeout      = 15 * time.Second
-	credProbeClientBuffer = 1 * time.Second
-)
-
-// probeMaxDetailBytes 非 2xx 时回显的上游原文截断上限（只报不改、诊断用，防超长响应灌进
-// 前端；C2 定案失败只显红，正文主要给服务端日志留证）。
-const probeMaxDetailBytes = 512
+// completion 探针超时：真实补全含上游生成 + 排队，比 /models 轻探（credprobe 的 5s 口径）宽。
+// ctx deadline 早于 transport 超时（+ credprobe.CompletionTransportBuffer）的机制在
+// credprobe.RunCompletionProbe 内统一实现：慢上游稳定归 timeout 而非误归 network。
+const credProbeTimeout = 15 * time.Second
 
 // errPoolNoReferencingGroup 号池未被任何分组引用：无法从「池 → 分组 → 供应商 → 端点」
 // 这条链定位上游，用 sentinel 与真正的内部错误区分（前者是一次失败的测试结论 →
@@ -116,45 +107,19 @@ func TestCredential(c *gin.Context) {
 		return
 	}
 
-	probeCtx, cancel := context.WithTimeout(ctx, credProbeTimeout)
-	defer cancel()
-
-	req, err := client.BuildReq(probeCtx, nil, testModel, probeBody)
-	if err != nil {
-		respondProbeFailure(c, link, testModel, common.ErrorTypeNetwork, "构建探针请求失败", err.Error())
-		return
-	}
-
-	httpClient := providers.GetClientWithProxy(credProbeTimeout+credProbeClientBuffer, client.GetProxy())
-	res, err := httpClient.Do(req)
-	if err != nil {
-		// Do 失败没有状态码：区分超时与其他网络错误（与 testapi「network/timeout 由调用点
-		// 判定」同一约定）。
-		errType := common.ErrorTypeNetwork
-		if errors.Is(err, context.DeadlineExceeded) {
-			errType = common.ErrorTypeTimeout
-		}
-		slog.Warn("credential test probe connect failed",
-			"pool_id", poolID, "credential_id", credID,
-			"provider", link.provider.Name, "group", link.group.Name, "error", err)
-		respondProbeFailure(c, link, testModel, errType, "连接上游失败", err.Error())
-		return
-	}
-	defer res.Body.Close()
-
-	bodyBytes, readErr := io.ReadAll(res.Body)
-	if readErr != nil {
-		respondProbeFailure(c, link, testModel, common.ErrorTypeNetwork, "读取上游响应失败", readErr.Error())
-		return
-	}
-
-	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
-		errType := common.ErrorTypeFromStatus(res.StatusCode)
+	out := credprobe.RunCompletionProbe(credprobe.CompletionProbeRequest{
+		Ctx:     ctx,
+		Client:  client,
+		Timeout: credProbeTimeout,
+		Model:   testModel,
+		Body:    probeBody,
+	})
+	if !out.Passed {
 		slog.Warn("credential test probe failed",
 			"pool_id", poolID, "credential_id", credID,
 			"provider", link.provider.Name, "group", link.group.Name,
-			"status", res.StatusCode, "error_type", errType)
-		respondProbeFailure(c, link, testModel, errType, "上游返回错误", truncateDetail(bodyBytes))
+			"status", out.StatusCode, "error_type", out.ErrorType, "detail", out.Detail)
+		respondProbeFailure(c, link, testModel, out.ErrorType, out.Summary, out.Detail)
 		return
 	}
 
@@ -271,12 +236,4 @@ func failedProbeResult(link *credentialTestLink, testModel, errorType, msg strin
 		res.ProviderID = link.provider.ID
 	}
 	return res
-}
-
-// truncateDetail 截断上游原文到诊断够用长度，避免超长响应灌进前端/日志。
-func truncateDetail(b []byte) string {
-	if len(b) <= probeMaxDetailBytes {
-		return string(b)
-	}
-	return string(b[:probeMaxDetailBytes]) + "…(truncated)"
 }

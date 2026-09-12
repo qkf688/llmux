@@ -217,6 +217,13 @@ func TestTestCredential_UpstreamAuthFailureReportsNotWriteBack(t *testing.T) {
 	if got := gjson.Get(body, "data.error_type").String(); got != "auth" {
 		t.Fatalf("error_type = %q, want auth; body=%s", got, body)
 	}
+	// 统一文案锁（credprobe+common 单一来源）：detail 解析 error.message 且带状态码行——
+	// pools 旧版只回显截断原文、无状态码行，收敛后与 testapi 同口径。
+	if errText := gjson.Get(body, "data.error").String(); !strings.Contains(errText, "上游返回错误") ||
+		!strings.Contains(errText, "invalid api key") ||
+		!strings.Contains(errText, "HTTP 状态码: 401") {
+		t.Fatalf("data.error = %q, want 含「上游返回错误」+ 解析出的 message + 「HTTP 状态码: 401」; body=%s", errText, body)
+	}
 	if sink.hits.Load() != 1 {
 		t.Fatalf("upstream hits = %d, want 1（失败不重试）", sink.hits.Load())
 	}

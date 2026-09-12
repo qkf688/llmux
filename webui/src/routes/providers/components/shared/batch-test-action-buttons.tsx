@@ -31,6 +31,8 @@ export function BatchTestActionButtons({
   successCount,
   failedCount,
 }: BatchTestActionButtonsProps) {
+  // 「选中成功/失败」只在已有判定结果时出现：无结果时常驻置灰既无信息量又挤占按钮行
+  const hasSettledResults = successCount > 0 || failedCount > 0;
   return (
     <>
       <Tooltip>
@@ -98,59 +100,63 @@ export function BatchTestActionButtons({
         </TooltipContent>
       </Tooltip>
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            onClick={onSelectSuccessful}
-            disabled={successCount === 0 || batchTesting}
-          >
-            <svg
-              className="h-4 w-4 text-success"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>选择测试成功的模型</TooltipContent>
-      </Tooltip>
+      {hasSettledResults && (
+        <>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                onClick={onSelectSuccessful}
+                disabled={batchTesting}
+              >
+                <svg
+                  className="h-4 w-4 text-success"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>选择测试成功的模型</TooltipContent>
+          </Tooltip>
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            onClick={onSelectFailed}
-            disabled={failedCount === 0 || batchTesting}
-          >
-            <svg
-              className="h-4 w-4 text-destructive"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>选择测试失败的模型</TooltipContent>
-      </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                onClick={onSelectFailed}
+                disabled={batchTesting}
+              >
+                <svg
+                  className="h-4 w-4 text-destructive"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>选择测试失败的模型</TooltipContent>
+          </Tooltip>
+        </>
+      )}
     </>
   );
 }

@@ -76,58 +76,55 @@ export function AllModelsToolbar({
   toggleSelectAllModels,
   clearAllTestResults,
 }: AllModelsToolbarProps) {
+  const isFiltering =
+    allModelsSearchQuery.trim() !== "" ||
+    allModelsTypeFilter !== "all" ||
+    groupFilter !== "all";
   return (
     <div className="flex flex-col gap-2 flex-shrink-0">
-      {/* 第一行：标题 + 数量 + 搜索框 */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold whitespace-nowrap">
-            模型列表
-          </p>
-          <span className="text-xs text-muted-foreground whitespace-nowrap">
-            {allModelsSearchQuery.trim() !== "" ||
-            allModelsTypeFilter !== "all"
-              ? `匹配 ${filteredAllModels.length} / ${allModelsList.length}`
-              : `${allModelsList.length} 个`}
-          </span>
+      {/* 第一行：搜索（总数进 placeholder，筛选中显匹配胶囊）+ 类型筛选 + 分组筛选 */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 min-w-0">
+          <Input
+            placeholder={
+              isFiltering
+                ? "搜索模型名称..."
+                : `搜索模型名称（${allModelsList.length} 个）`
+            }
+            value={allModelsSearchQuery}
+            onChange={(e) => setAllModelsSearchQuery(e.target.value)}
+            className={`h-8 ${isFiltering ? "pr-24" : ""}`}
+          />
+          {isFiltering && (
+            <span className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground whitespace-nowrap tabular-nums">
+              匹配 {filteredAllModels.length} / {allModelsList.length}
+            </span>
+          )}
         </div>
-        <Input
-          placeholder="搜索模型名称..."
-          value={allModelsSearchQuery}
-          onChange={(e) => setAllModelsSearchQuery(e.target.value)}
-          className="h-8 flex-1 min-w-0"
-        />
-      </div>
-
-      {/* 类型筛选 + 分组筛选 */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex items-center gap-1">
-          <span className="text-xs text-muted-foreground mr-1">筛选：</span>
-          <div
-            className="inline-flex rounded-md border border-input bg-background"
-            role="radiogroup"
-            aria-label="模型类型筛选"
-          >
-            {FILTER_OPTIONS.map(({ key, label }) => {
-              const checked = allModelsTypeFilter === key;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  role="radio"
-                  aria-checked={checked}
-                  onClick={() => setAllModelsTypeFilter(key)}
-                  className={`px-2.5 py-1 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md border-r border-input last:border-r-0 ${
-                    checked
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background text-muted-foreground hover:bg-muted"
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
+        <div
+          className="inline-flex rounded-md border border-input bg-background shrink-0"
+          role="radiogroup"
+          aria-label="模型类型筛选"
+        >
+          {FILTER_OPTIONS.map(({ key, label }) => {
+            const checked = allModelsTypeFilter === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                role="radio"
+                aria-checked={checked}
+                onClick={() => setAllModelsTypeFilter(key)}
+                className={`px-2.5 py-1 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md border-r border-input last:border-r-0 ${
+                  checked
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
         <GroupFilterSelect
           groups={availableGroups}
@@ -301,13 +298,12 @@ export function AllModelsToolbar({
         >
           已选 {selectedAllModels.length} 个
         </span>
+        {filteredAllModels.length > 0 && (
+          <span className="text-[11px] text-muted-foreground ml-auto whitespace-nowrap">
+            批量测试将发起 {filteredAllModels.length} 次真实计费请求
+          </span>
+        )}
       </div>
-
-      {filteredAllModels.length > 0 && (
-        <div className="text-[11px] text-muted-foreground">
-          批量测试将发起 {filteredAllModels.length} 次真实计费请求
-        </div>
-      )}
     </div>
   );
 }

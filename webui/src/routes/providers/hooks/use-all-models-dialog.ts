@@ -208,12 +208,12 @@ export function useAllModelsDialog({
     return nextConfig;
   };
 
-  const handleAddCustomModels = async () => {
-    if (!allModelsProvider) return;
+  const handleAddCustomModels = async (): Promise<boolean> => {
+    if (!allModelsProvider) return false;
     const additions = parseCustomModelsInput(customModelInput);
     if (additions.length === 0) {
       toast.error("请先输入要添加的模型名称");
-      return;
+      return false;
     }
     const entry = await fetchCatalogEntry(allModelsProvider.ID);
     const upstreamLower = new Set(
@@ -231,7 +231,7 @@ export function useAllModelsDialog({
           ? "模型已在上游列表中"
           : "没有新的模型需要添加",
       );
-      return;
+      return false;
     }
     try {
       setAddingModels(true);
@@ -247,10 +247,12 @@ export function useAllModelsDialog({
           autoActionsFlags,
         ),
       });
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast.error(`添加自定义模型失败: ${message}`);
       console.error(err);
+      return false;
     } finally {
       setAddingModels(false);
     }

@@ -65,5 +65,6 @@ export interface AllModelsDialogProps {
 
   customModelInput: string;
   setCustomModelInput: (value: string) => void;
-  handleAddCustomModels: () => void | Promise<void>;
+  /** 返回 true 表示确有新增并写入成功（成功路径会清空输入草稿） */
+  handleAddCustomModels: () => Promise<boolean>;
 }

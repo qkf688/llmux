@@ -40,7 +40,7 @@ service/
 │   ├── chat_provider_meta.go # 供应商元数据装配 + 模型-供应商查询
 │   ├── chat_log_storage.go # ChatLog 落库与保留
 │   └── preprocess/openai/  # OpenAI 预处理
-├── credprobe/              # 凭据惰性探活叶子包（#6-3）：/models 轻探 + ClaimLastProbeAt CAS + 条件恢复写；不掺选路/重试
+├── credprobe/              # 凭据探针叶子包（#6-3）：/models 轻探 + ClaimLastProbeAt CAS + 条件恢复写；另为 completion 探针编排单一来源（RunCompletionProbe，testapi/pools 各测试端点共用超时归类与细节提取）；不掺选路/重试
 ├── credwrite/              # 凭据写异步队列叶子包（#6-4-2）：cooldown/auth-fail/touch-probe/recover/record-success/record-error 六 Kind 集中落库；单 worker 串行 + 有界 drop-oldest
 ├── chatstats/              # 请求/token/供应商统计写入（叶子）
 ├── adjustment/             # 权重/优先级调整 + AdjustmentHooks 注入（叶子）
@@ -51,7 +51,7 @@ balancer/                   # 加权随机纯算法
 各子目录职责：
 - `handler/v1/`：HTTP 接入与 style 分发
 - `service/chat/`：端到端编排与注册表；日志落库编排；调用旁路包
-- `service/credprobe/`：temp_unsched 惰性探活与恢复写（chat 只编排何时触发）
+- `service/credprobe/`：temp_unsched 惰性探活与恢复写（chat 只编排何时触发）；`completion_probe.go` 是 completion 探针（BuildReq→Do→归类→细节）的单一 owner，管理端各 completion 类测试端点只调 `RunCompletionProbe`，禁止再抄编排
 - `service/credwrite/`：凭据健康写的有界异步队列（单 worker 串行落库、满时 drop-oldest 降级；chat/credprobe 经 SetHandlers 注入落库实现）
 - `service/chatstats/`：Stats* 累加（无 chat 类型依赖）
 - `service/adjustment/`：关联权重/优先级/连续失败；向 healthcheck 注入 hooks

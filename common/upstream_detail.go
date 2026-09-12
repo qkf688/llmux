@@ -3,6 +3,7 @@ package common
 import (
 	"encoding/json"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -10,38 +11,79 @@ import (
 // 不截断会灌进管理端 JSON（testapi 旧实现无上限，pools 旧实现有——收敛取保守口径）。
 const upstreamDetailMaxBytes = 512
 
-// ExtractUpstreamErrorDetail 上游错误体的细节提取单一来源：优先取常见错误信封的
-// message（{"error":{"message":…}} 或 {"error":{"error":…}} 两种形状），解析不出则回退原文，
-// 最终统一截断。completion 探针（testapi / #24-B）与 react/structured-output 测试端点共用，
-// 消灭「JSON 解析」与「原文截断」两套实现各说各话的漂移。
+// upstreamUnwrapMaxDepth 错误信封递归剥套的层数上限：网关会把上游 provider 的原始错误体
+// JSON 编码成字符串再嵌进自己的 message（opencode go 即此形状），实际观测 2~3 层封顶，
+// 该上限只挡病态自嵌套，不构成对真实层数的约束。
+const upstreamUnwrapMaxDepth = 5
+
+// ExtractUpstreamErrorDetail 上游错误体的细节提取单一来源：沿 JSON 信封的
+// error / message 字段递归追到最内层人读文本（{"error":{"message":…}}、
+// {"error":"<内嵌JSON字符串>"}、{"type":…,"message":…} 等形状及其任意嵌套），
+// 解析不出则回退原文，最终统一截断。completion 探针（testapi / #24-B）与
+// react/structured-output 测试端点共用，消灭「JSON 解析」与「原文截断」两套实现各说各话的漂移。
 func ExtractUpstreamErrorDetail(bodyBytes []byte) string {
-	bodyStr := string(bodyBytes)
 	if len(bodyBytes) == 0 {
-		return bodyStr
+		return ""
 	}
 
-	errorDetail := ""
-	var jsonErr map[string]any
-	if json.Unmarshal(bodyBytes, &jsonErr) == nil {
-		if errMsg, ok := jsonErr["error"].(map[string]any); ok {
-			if message, ok := errMsg["message"].(string); ok {
-				errorDetail = message
-			} else if msg, ok := errMsg["error"].(string); ok {
-				errorDetail = msg
-			}
-		}
+	detail := ""
+	var envelope map[string]any
+	if json.Unmarshal(bodyBytes, &envelope) == nil {
+		detail = upstreamMessageFromObject(envelope, upstreamUnwrapMaxDepth)
 	}
-	if errorDetail == "" {
-		errorDetail = bodyStr
+	if detail == "" {
+		detail = string(bodyBytes)
 	}
 
-	return truncateUpstreamDetail(errorDetail)
+	return truncateUpstreamDetail(detail)
 }
 
 // UpstreamErrorDetail 非 2xx 结论的完整细节：提取内容 + 状态码行。状态码必须出现在回显
 // 文本里（改造前它由 ErrorWithHttpStatus 的 code 承载，收敛进 data.error 后不能丢这个事实）。
 func UpstreamErrorDetail(statusCode int, bodyBytes []byte) string {
 	return ExtractUpstreamErrorDetail(bodyBytes) + "\nHTTP 状态码: " + strconv.Itoa(statusCode)
+}
+
+// upstreamMessageFromObject 从一个 JSON 错误对象追人读文本：
+// error 字段是对象→继续向内剥；是字符串→按文本解套；都没有再看本层 message。
+func upstreamMessageFromObject(envelope map[string]any, depthBudget int) string {
+	if depthBudget <= 0 {
+		return ""
+	}
+	if errField, ok := envelope["error"]; ok {
+		switch node := errField.(type) {
+		case map[string]any:
+			if message := upstreamMessageFromObject(node, depthBudget-1); message != "" {
+				return message
+			}
+		case string:
+			if message := upstreamMessageFromText(node, depthBudget-1); message != "" {
+				return message
+			}
+		}
+	}
+	if message, ok := envelope["message"].(string); ok {
+		return upstreamMessageFromText(message, depthBudget-1)
+	}
+	return ""
+}
+
+// upstreamMessageFromText 处理字符串形态的错误载荷：本身是 JSON 对象则递归解套
+// （网关把 provider 错误原文塞进 message 的场景），否则它就是人读文本。
+func upstreamMessageFromText(text string, depthBudget int) string {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return ""
+	}
+	if strings.HasPrefix(trimmed, "{") {
+		var nested map[string]any
+		if json.Unmarshal([]byte(trimmed), &nested) == nil {
+			if message := upstreamMessageFromObject(nested, depthBudget); message != "" {
+				return message
+			}
+		}
+	}
+	return trimmed
 }
 
 func truncateUpstreamDetail(detail string) string {

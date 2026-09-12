@@ -42,7 +42,10 @@ function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          "bg-primary text-primary-foreground animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 w-fit origin-(--radix-tooltip-content-transform-origin) rounded-md px-3 py-1.5 text-xs text-balance",
+          // 诊断类 tooltip（如按凭据测试的上游错误）可达数百字符：不在 primitive 上
+          // 限宽，w-fit 会把 tooltip 撑满整个视口。pre-wrap 保留后端错误文本里的
+          // 换行（如「\nHTTP 状态码: 4xx」），break-words 防长 URL 撑破窄列。
+          "bg-primary text-primary-foreground animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 w-fit max-w-xs whitespace-pre-wrap break-words origin-(--radix-tooltip-content-transform-origin) rounded-md px-3 py-1.5 text-xs",
           className,
         )}
         {...props}

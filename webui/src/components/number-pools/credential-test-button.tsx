@@ -18,23 +18,19 @@ interface CredentialTestButtonProps {
  * 未测灰圈 / loading 转圈 / 成功绿勾 / 失败红叉，tooltip 带结论。
  * 独立于此域而非跨域 import providers 组件：两者结果类型不同（此处是
  * CredentialTestOutcome，且失败 tooltip 额外带被测 key 掩码，帮管理员定位是哪把 key）。
+ * tooltip 按「结论 / 链路 / 失败详情」分行陈述：诊断错误含多行文本与长 URL，
+ * 拼成一条串会挤成一坨读不出层次。
  */
 export function CredentialTestButton({ outcome, keyMasked, onTest }: CredentialTestButtonProps) {
   // 回显实际命中的链路（#24-B）：多引用组时让管理员看得见测的是哪个分组、用的哪个模型。
-  const link = [
+  const linkLine = [
     outcome?.group ? `组 ${outcome.group}` : "",
     outcome?.model ? `模型 ${outcome.model}` : "",
   ]
     .filter(Boolean)
     .join(" · ");
-  const linkSuffix = link ? ` · ${link}` : "";
-  const tooltip = outcome?.loading
-    ? "测试中..."
-    : outcome?.success === true
-      ? `凭据可用（${keyMasked}）${linkSuffix}`
-      : outcome?.success === false
-        ? `${keyMasked}: ${outcome.error || "测试失败"}${linkSuffix}`
-        : "测试该凭据可用性";
+
+  const hasResult = outcome != null && !outcome.loading;
 
   return (
     <Tooltip>
@@ -86,7 +82,21 @@ export function CredentialTestButton({ outcome, keyMasked, onTest }: CredentialT
           )}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{tooltip}</TooltipContent>
+      <TooltipContent>
+        {outcome?.loading ? (
+          "测试中…"
+        ) : hasResult ? (
+          <div className="space-y-1 text-left">
+            <div className="font-medium">
+              {keyMasked} · {outcome?.success === true ? "凭据可用" : "凭据不可用"}
+            </div>
+            {linkLine && <div className="opacity-75">链路：{linkLine}</div>}
+            {outcome?.success === false && <div>{outcome.error || "测试失败"}</div>}
+          </div>
+        ) : (
+          "测试该凭据可用性"
+        )}
+      </TooltipContent>
     </Tooltip>
   );
 }

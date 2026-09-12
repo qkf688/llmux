@@ -90,16 +90,12 @@ export function buildUpstreamModelGroupMap(models: ProviderModel[]): Map<string,
   return map;
 }
 
-/** 分组筛选值约定：`"all"`=不筛、`"__solo__"`=仅单分组可服务、其余=分组 ID 字符串。 */
-export const GROUP_FILTER_SOLO = "__solo__";
-
-/** 判断模型的分组列表是否匹配当前筛选值。 */
+/** 判断模型的分组列表是否匹配当前筛选值（`"all"`=不筛，其余=分组 ID 字符串）。 */
 export function matchModelGroupFilter(
   groups: GroupRef[] | undefined,
   filter: string
 ): boolean {
   if (!filter || filter === "all") return true;
-  if (filter === GROUP_FILTER_SOLO) return !!groups && groups.length === 1;
   return !!groups && groups.some((g) => String(g.ID) === filter);
 }
 

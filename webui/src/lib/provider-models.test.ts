@@ -6,7 +6,6 @@ import {
   buildProviderModelGroups,
   extractUniqueGroups,
   extractUniqueGroupsFromCatalog,
-  GROUP_FILTER_SOLO,
   matchModelGroupFilter,
 } from "./provider-models";
 
@@ -153,13 +152,6 @@ describe("matchModelGroupFilter（分组筛选匹配）", () => {
     expect(matchModelGroupFilter(undefined, "all")).toBe(true);
     expect(matchModelGroupFilter([], "all")).toBe(true);
     expect(matchModelGroupFilter([g1], "")).toBe(true);
-  });
-
-  it("__solo__ = 恰好 1 组；0 组或多组均 false", () => {
-    expect(matchModelGroupFilter([g1], GROUP_FILTER_SOLO)).toBe(true);
-    expect(matchModelGroupFilter(undefined, GROUP_FILTER_SOLO)).toBe(false);
-    expect(matchModelGroupFilter([], GROUP_FILTER_SOLO)).toBe(false);
-    expect(matchModelGroupFilter([g1, g2], GROUP_FILTER_SOLO)).toBe(false);
   });
 
   it("指定组 ID = 该组在列表中即 true", () => {

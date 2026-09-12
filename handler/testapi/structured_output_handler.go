@@ -1,14 +1,13 @@
 package testapi
 
 import (
-	"io"
 	"log/slog"
-	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/httpresp"
 	"github.com/qkf688/llmux/providers"
+	"github.com/qkf688/llmux/service/credprobe"
 )
 
 // TestStructuredOutputHandler 结构化输出能力测试（GET /api/test/structured-output/:id）。
@@ -29,9 +28,7 @@ func TestStructuredOutputHandler(c *gin.Context) {
 		return
 	}
 
-	proxyURL := link.Client.GetProxy()
-	slog.Info("Testing structured output", "proxy", proxyURL, "provider", link.ProviderName, "model", link.Model, "type", link.Type, "group", link.Group.Name)
-	httpClient := providers.GetClientWithProxy(time.Second*60, proxyURL)
+	slog.Info("Testing structured output", "proxy", link.Client.GetProxy(), "provider", link.ProviderName, "model", link.Model, "type", link.Type, "group", link.Group.Name)
 
 	fail := func(errorType, summary, detail string, rawOutput ...string) {
 		payload := failedTestResult(link, errorType, summary, detail)
@@ -43,35 +40,30 @@ func TestStructuredOutputHandler(c *gin.Context) {
 
 	testBody, err := buildStructuredOutputTestBody(link.Type)
 	if err != nil {
-		fail("validation", "不支持的提供商类型", err.Error())
+		fail(common.ErrorTypeValidation, "不支持的提供商类型", err.Error())
 		return
 	}
 
 	header := BuildTestHeaders(c.Request.Header, link.WithHeader, link.CustomerHeaders)
-	req, err := link.Client.BuildReq(ctx, header, link.Model, testBody)
-	if err != nil {
-		fail("network", "构建请求失败", err.Error())
+	out := credprobe.RunCompletionProbe(credprobe.CompletionProbeRequest{
+		Ctx:     ctx,
+		Client:  link.Client,
+		Timeout: providerTestTimeout,
+		Headers: header,
+		Model:   link.Model,
+		Body:    testBody,
+	})
+	if !out.Passed {
+		// raw_output 口径与改造前一致：拿到上游响应且成功读完（含空 body、非 2xx）才带键；
+		// BuildReq/连接/读体失败无原文，不带键。
+		if out.Summary == credprobe.ProbeSummaryUpstreamError {
+			fail(out.ErrorType, out.Summary, out.Detail, string(out.Body))
+		} else {
+			fail(out.ErrorType, out.Summary, out.Detail)
+		}
 		return
 	}
-
-	res, err := httpClient.Do(req)
-	if err != nil {
-		fail("network", "连接提供商失败", err.Error())
-		return
-	}
-	defer res.Body.Close()
-
-	bodyBytes, readErr := io.ReadAll(res.Body)
-	if readErr != nil {
-		fail("network", "读取响应失败", readErr.Error())
-		return
-	}
-
-	if res.StatusCode != http.StatusOK {
-		fail(getErrorTypeFromStatus(res.StatusCode), "提供商返回错误",
-			upstreamFailDetail(res.StatusCode, bodyBytes), string(bodyBytes))
-		return
-	}
+	bodyBytes := out.Body
 
 	// 上游响应体形状由 provider metadata 声明；未声明时传零值，落到
 	// extractStructuredOutputJSON 的 default 分支（按 OpenAI Chat 形状取），与改造前一致。
@@ -79,13 +71,13 @@ func TestStructuredOutputHandler(c *gin.Context) {
 	upstreamFormat, _ := providers.WireFormatOf(link.Type)
 	payload, rawOutput, err := extractStructuredOutputJSON(upstreamFormat, bodyBytes)
 	if err != nil {
-		fail("validation", "提取结构化输出失败", err.Error(), string(bodyBytes))
+		fail(common.ErrorTypeValidation, "提取结构化输出失败", err.Error(), string(bodyBytes))
 		return
 	}
 
 	parsed, err := validateStructuredOutputPayload(payload)
 	if err != nil {
-		fail("validation", "结构化输出验证失败", err.Error(), rawOutput)
+		fail(common.ErrorTypeValidation, "结构化输出验证失败", err.Error(), rawOutput)
 		return
 	}
 

@@ -526,6 +526,13 @@ func TestProviderModelTestHandler_UpstreamFailureStillReportsGroup(t *testing.T)
 	if got := gjson.Get(w.Body.String(), "data.error_type").String(); got != "auth" {
 		t.Fatalf("error_type = %q, want auth", got)
 	}
+	// 探针收敛到 credprobe.RunCompletionProbe 后统一口径：失败文案单一来源（「上游返回错误」
+	// 而非各端点自造措辞）、细节 = 解析出的 error.message + HTTP 状态码行。
+	if errText := gjson.Get(w.Body.String(), "data.error").String(); !strings.Contains(errText, "上游返回错误") ||
+		!strings.Contains(errText, "You didn't provide an API key.") ||
+		!strings.Contains(errText, "HTTP 状态码: 401") {
+		t.Fatalf("error = %q, want 含「上游返回错误」+ 解析出的 message + 「HTTP 状态码: 401」", errText)
+	}
 	if got := gjson.Get(w.Body.String(), "data.group_id").Uint(); got != uint64(group.ID) {
 		t.Fatalf("data.group_id = %d, want %d（失败也要能归位）", got, group.ID)
 	}

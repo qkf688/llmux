@@ -1,21 +1,24 @@
 package testapi
 
 import (
-	"io"
 	"log/slog"
-	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/httpresp"
-	"github.com/qkf688/llmux/providers"
+	"github.com/qkf688/llmux/service/credprobe"
 )
+
+// providerTestTimeout 诊断 completion 探针的上游超时。ctx deadline 早于 transport 的
+// 超时分级机制（network vs timeout）在 credprobe.RunCompletionProbe 内统一实现。
+const providerTestTimeout = 60 * time.Second
 
 // ProviderTestHandler 关联级连通性测试（GET /api/test/:id，id = ModelWithProvider 主键）。
 //
 // 结果形状见 respond.go：链路解析失败按 400/404 或 passed=false 回包，测试本身
-// （含上游非 200）一律 code 200 + data.passed。
+// （含上游非 2xx）一律 code 200 + data.passed。探针编排单一来源见 credprobe.RunCompletionProbe。
 func ProviderTestHandler(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -30,43 +33,29 @@ func ProviderTestHandler(c *gin.Context) {
 		return
 	}
 
-	proxyURL := link.Client.GetProxy()
-	slog.Info("Testing provider", "proxy", proxyURL, "provider", link.ProviderName, "group", link.Group.Name)
-	httpClient := providers.GetClientWithProxy(time.Second*60, proxyURL)
+	slog.Info("Testing provider", "proxy", link.Client.GetProxy(), "provider", link.ProviderName, "group", link.Group.Name)
 
 	testBody, err := buildTestBody(link.Type)
 	if err != nil {
-		httpresp.Success(c, failedTestResult(link, "validation", "不支持的提供商类型", err.Error()))
+		httpresp.Success(c, failedTestResult(link, common.ErrorTypeValidation, "不支持的提供商类型", err.Error()))
 		return
 	}
 
 	header := BuildTestHeaders(c.Request.Header, link.WithHeader, link.CustomerHeaders)
-	req, err := link.Client.BuildReq(ctx, header, link.Model, testBody)
-	if err != nil {
-		httpresp.Success(c, failedTestResult(link, "network", "构建请求失败", err.Error()))
+	out := credprobe.RunCompletionProbe(credprobe.CompletionProbeRequest{
+		Ctx:     ctx,
+		Client:  link.Client,
+		Timeout: providerTestTimeout,
+		Headers: header,
+		Model:   link.Model,
+		Body:    testBody,
+	})
+	if !out.Passed {
+		httpresp.Success(c, failedTestResult(link, out.ErrorType, out.Summary, out.Detail))
 		return
 	}
 
-	res, err := httpClient.Do(req)
-	if err != nil {
-		httpresp.Success(c, failedTestResult(link, "network", "连接提供商失败", err.Error()))
-		return
-	}
-	defer res.Body.Close()
-
-	bodyBytes, readErr := io.ReadAll(res.Body)
-	if readErr != nil {
-		httpresp.Success(c, failedTestResult(link, "network", "读取响应失败", readErr.Error()))
-		return
-	}
-
-	if res.StatusCode != http.StatusOK {
-		errorType := getErrorTypeFromStatus(res.StatusCode)
-		httpresp.Success(c, failedTestResult(link, errorType, "提供商返回错误", upstreamFailDetail(res.StatusCode, bodyBytes)))
-		return
-	}
-
-	httpresp.SuccessWithMessage(c, string(bodyBytes), passedTestResult(link))
+	httpresp.SuccessWithMessage(c, string(out.Body), passedTestResult(link))
 }
 
 // ProviderModelTestHandler 供应商级模型测试（POST /api/providers/:id/test），供两个模型
@@ -74,6 +63,7 @@ func ProviderTestHandler(c *gin.Context) {
 //
 // 请求体的 group_id 见 ProviderModelTestRequest：0 = 自动口径，>0 = 锁定该分组。
 // 响应恒回传实际命中的分组 id+name（含失败分支），前端据此把 ✓/✕ 归位到正确徽标。
+// 探针编排单一来源见 credprobe.RunCompletionProbe。
 func ProviderModelTestHandler(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -95,39 +85,26 @@ func ProviderModelTestHandler(c *gin.Context) {
 	}
 
 	slog.Info("Testing provider model", "provider", link.ProviderName, "model", link.Model, "group", link.Group.Name)
-	httpClient := providers.GetClientWithProxy(time.Second*60, link.Client.GetProxy())
 
 	testBody, err := buildTestBody(link.Type)
 	if err != nil {
-		httpresp.Success(c, failedTestResult(link, "validation", "不支持的提供商类型", err.Error()))
+		httpresp.Success(c, failedTestResult(link, common.ErrorTypeValidation, "不支持的提供商类型", err.Error()))
 		return
 	}
 
 	header := BuildTestHeaders(c.Request.Header, link.WithHeader, link.CustomerHeaders)
-	testReq, err := link.Client.BuildReq(ctx, header, link.Model, testBody)
-	if err != nil {
-		httpresp.Success(c, failedTestResult(link, "network", "构建请求失败", err.Error()))
+	out := credprobe.RunCompletionProbe(credprobe.CompletionProbeRequest{
+		Ctx:     ctx,
+		Client:  link.Client,
+		Timeout: providerTestTimeout,
+		Headers: header,
+		Model:   link.Model,
+		Body:    testBody,
+	})
+	if !out.Passed {
+		httpresp.Success(c, failedTestResult(link, out.ErrorType, out.Summary, out.Detail))
 		return
 	}
 
-	res, err := httpClient.Do(testReq)
-	if err != nil {
-		httpresp.Success(c, failedTestResult(link, "network", "连接提供商失败", err.Error()))
-		return
-	}
-	defer res.Body.Close()
-
-	bodyBytes, readErr := io.ReadAll(res.Body)
-	if readErr != nil {
-		httpresp.Success(c, failedTestResult(link, "network", "读取响应失败", readErr.Error()))
-		return
-	}
-
-	if res.StatusCode != http.StatusOK {
-		errorType := getErrorTypeFromStatus(res.StatusCode)
-		httpresp.Success(c, failedTestResult(link, errorType, "提供商返回错误", upstreamFailDetail(res.StatusCode, bodyBytes)))
-		return
-	}
-
-	httpresp.SuccessWithMessage(c, string(bodyBytes), passedTestResult(link))
+	httpresp.SuccessWithMessage(c, string(out.Body), passedTestResult(link))
 }

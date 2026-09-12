@@ -2,7 +2,6 @@ package testapi
 
 import (
 	"errors"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/httpresp"
@@ -84,10 +83,4 @@ func failedTestResult(link *testLink, errorType, summary, detail string) map[str
 // passedTestResult 一次通过的测试（上游原文由调用方放进 message，与既有端点一致）。
 func passedTestResult(link *testLink) map[string]any {
 	return testResultBase(link, true)
-}
-
-// upstreamFailDetail 上游非 200 时的详细信息：把状态码并进文本（改造前它由
-// ErrorWithHttpStatus 的 code 承载，收敛到 data.error 后不能丢这个事实）。
-func upstreamFailDetail(statusCode int, bodyBytes []byte) string {
-	return parseProviderErrorDetail(bodyBytes) + "\nHTTP 状态码: " + strconv.Itoa(statusCode)
 }

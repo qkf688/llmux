@@ -5,39 +5,9 @@ import (
 	"testing"
 )
 
-func TestParseProviderErrorDetail(t *testing.T) {
-	tests := []struct {
-		name string
-		body string
-		want string
-	}{
-		{
-			name: "nested error message",
-			body: `{"error":{"message":"bad key"}}`,
-			want: "bad key",
-		},
-		{
-			name: "nested error field",
-			body: `{"error":{"error":"provider error"}}`,
-			want: "provider error",
-		},
-		{
-			name: "fallback raw body",
-			body: `plain error`,
-			want: "plain error",
-		},
-	}
-
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			got := parseProviderErrorDetail([]byte(tc.body))
-			if got != tc.want {
-				t.Fatalf("parseProviderErrorDetail() = %q, want %q", got, tc.want)
-			}
-		})
-	}
-}
+// TestParseProviderErrorDetail 与 TestGetErrorTypeFromStatus 已随实现收敛迁走：
+// 细节提取 → common/upstream_detail_test.go，状态码映射 → common/errtype_test.go
+// （单一来源在 common 直接测，不靠调用方委托测试间接覆盖）。
 
 func TestBuildDetailedError(t *testing.T) {
 	message := BuildDetailedError("network", "连接失败", "dial timeout", map[string]string{
@@ -53,24 +23,5 @@ func TestBuildDetailedError(t *testing.T) {
 	}
 	if !strings.Contains(message, "provider: openai") || !strings.Contains(message, "model: gpt-4.1") {
 		t.Fatalf("unexpected context in message: %s", message)
-	}
-}
-
-func TestGetErrorTypeFromStatus(t *testing.T) {
-	tests := []struct {
-		status int
-		want   string
-	}{
-		{status: 401, want: "auth"},
-		{status: 404, want: "provider"},
-		{status: 422, want: "validation"},
-		{status: 500, want: "provider"},
-		{status: 302, want: "unknown"},
-	}
-
-	for _, tc := range tests {
-		if got := getErrorTypeFromStatus(tc.status); got != tc.want {
-			t.Fatalf("getErrorTypeFromStatus(%d) = %q, want %q", tc.status, got, tc.want)
-		}
 	}
 }

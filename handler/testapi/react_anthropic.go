@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/providers"
 	anthropicsvc "github.com/qkf688/llmux/service/anthropic"
@@ -72,7 +73,7 @@ func runAnthropicReactTest(ctx context.Context, c *gin.Context, httpClient *http
 			return toolCities, finalText.String(), fmt.Errorf("读取响应失败: %w", readErr)
 		}
 		if res.StatusCode != http.StatusOK {
-			return toolCities, finalText.String(), errors.New(BuildDetailedError(getErrorTypeFromStatus(res.StatusCode), "提供商返回错误", parseProviderErrorDetail(bodyBytes), map[string]string{
+			return toolCities, finalText.String(), errors.New(BuildDetailedError(common.ErrorTypeFromStatus(res.StatusCode), "提供商返回错误", common.ExtractUpstreamErrorDetail(bodyBytes), map[string]string{
 				"provider":    link.ProviderName,
 				"model":       link.Model,
 				"group":       link.Group.Name,

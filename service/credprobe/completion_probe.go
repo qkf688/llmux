@@ -50,8 +50,9 @@ type CompletionProbeRequest struct {
 }
 
 // CompletionProbeResult 探针结论。Passed=false 时 ErrorType/Summary/Detail 有值；
-// Body 为上游原文（成功时供回显 message，失败时供日志/raw_output——Detail 已截断，
-// 原文不受此限）。
+// Body 为上游响应体（成功时供回显 message，失败时供日志/raw_output）：不受 Detail 的 ≤512B
+// 截断影响，但仍受 common 诊断读体上限（1 MiB）约束——合法探针响应远小于此，仅上游异常回
+// 超大响应时才会被截前缀。
 type CompletionProbeResult struct {
 	Passed     bool
 	StatusCode int // 0 = 未打到上游或未拿到响应

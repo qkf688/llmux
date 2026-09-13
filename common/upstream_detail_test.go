@@ -120,23 +120,37 @@ func TestUpstreamErrorDetailCarriesStatusCode(t *testing.T) {
 	}
 }
 
-// TestReadCappedBody 锁诊断/探针/测试路径读取上游 Body 的上限契约：超大响应只读前
-// UpstreamDiagnosticReadLimitBytes 字节（防御上游异常/被篡改时整块进内存），未超上限原样读出，
-// 且读取错误原样上抛（供调用方区分 timeout/network，归类逻辑依赖此事实）。
+// TestReadCappedBody 锁 ReadCappedBody 的「上限 × EOF」边界契约：超限截到上限、恰好等于上限/
+// 小于上限/空 reader 原样读出。这几档正是截断与 EOF 交互最易被后续改动（误写 limit±1、换原语）
+// 回归的点，用表驱动钉死长度与原样性。
 func TestReadCappedBody(t *testing.T) {
-	oversized := bytes.Repeat([]byte("x"), UpstreamDiagnosticReadLimitBytes+4096)
-	got, err := ReadCappedBody(bytes.NewReader(oversized))
-	if err != nil {
-		t.Fatalf("读取失败: %v", err)
-	}
-	if len(got) != UpstreamDiagnosticReadLimitBytes {
-		t.Fatalf("上限未生效: got %d bytes, want %d", len(got), UpstreamDiagnosticReadLimitBytes)
-	}
-
+	limit := upstreamDiagnosticReadLimitBytes
 	small := []byte(`{"id":"cmpl-1"}`)
-	got, err = ReadCappedBody(bytes.NewReader(small))
-	if err != nil || !bytes.Equal(got, small) {
-		t.Fatalf("未超上限应原样读出: got %q, want %q, err %v", got, small, err)
+	tests := []struct {
+		name    string
+		input   []byte
+		wantLen int
+	}{
+		{"oversized truncated to limit", bytes.Repeat([]byte("x"), limit+4096), limit},
+		{"exactly limit reads all", bytes.Repeat([]byte("y"), limit), limit},
+		{"limit minus one reads all", bytes.Repeat([]byte("z"), limit-1), limit - 1},
+		{"small body reads all", small, len(small)},
+		{"empty body reads empty", []byte{}, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ReadCappedBody(bytes.NewReader(tc.input))
+			if err != nil {
+				t.Fatalf("读取失败: %v", err)
+			}
+			if len(got) != tc.wantLen {
+				t.Fatalf("读出长度 = %d, want %d", len(got), tc.wantLen)
+			}
+			// 未超限的用例内容必须原样；超限用例只保证长度（前缀由 LimitReader 语义保证）。
+			if len(tc.input) <= limit && !bytes.Equal(got, tc.input) {
+				t.Fatalf("未超限应原样读出: got %q", got)
+			}
+		})
 	}
 }
 

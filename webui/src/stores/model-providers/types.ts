@@ -13,7 +13,7 @@ export type ProviderModelSelection = {
 
 export type BlacklistFilter = "all" | "blacklisted" | "not-blacklisted";
 
-export type TestType = "connectivity" | "react" | "structured_output";
+export type TestType = "connectivity" | "react" | "structured_output" | "thinking";
 
 export type BatchTestProgress = {
   total: number;

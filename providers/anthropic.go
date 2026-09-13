@@ -45,6 +45,7 @@ func init() {
 		ConfigTemplate:  configTemplateAnthropic,
 		TestBody:        []byte(testBodyAnthropic),
 		StructuredBody:  []byte(structuredBodyAnthropic),
+		ThinkingBody:    []byte(thinkingBodyAnthropic),
 		HealthCheckBody: []byte(healthCheckBodyAnthropic),
 		ProbeBody:       []byte(probeBodyAnthropic),
 	})

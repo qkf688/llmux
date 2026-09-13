@@ -32,3 +32,15 @@ func buildStructuredOutputTestBody(providerType string) ([]byte, error) {
 	copy(out, m.StructuredBody)
 	return out, nil
 }
+
+// buildThinkingTestBody 从 provider 元数据取 thinking 能力测试体。
+// 未知 type 或字段缺失：返回 error（与现有 TestBody/StructuredBody 一致）。
+func buildThinkingTestBody(providerType string) ([]byte, error) {
+	m, ok := providers.MetadataOf(providerType)
+	if !ok || len(m.ThinkingBody) == 0 {
+		return nil, errInvalidProviderType
+	}
+	out := make([]byte, len(m.ThinkingBody))
+	copy(out, m.ThinkingBody)
+	return out, nil
+}

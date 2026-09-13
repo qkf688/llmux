@@ -5,6 +5,7 @@ import { toErrorMessage } from "@/lib/errors";
 import {
   testModelProvider,
   testModelProviderStructuredOutput,
+  testModelProviderThinking,
   type ModelProviderTestResult,
 } from "@/lib/api";
 import type { Updater } from "@/stores/core/updater";
@@ -41,6 +42,9 @@ export function useModelProvidersTesting({
     Record<number, { loading: boolean; result: ModelProviderTestResult | null }>
   >({});
   const [structuredTestResults, setStructuredTestResults] = useState<
+    Record<number, { loading: boolean; result: ModelProviderTestResult | null }>
+  >({});
+  const [thinkingTestResults, setThinkingTestResults] = useState<
     Record<number, { loading: boolean; result: ModelProviderTestResult | null }>
   >({});
 
@@ -89,6 +93,23 @@ export function useModelProvidersTesting({
     } catch (err) {
       const message = `测试失败: ${toErrorMessage(err)}`;
       setStructuredTestResults((prev) => ({
+        ...prev,
+        [id]: { loading: false, result: { passed: false, error: message } },
+      }));
+      console.error(err);
+      return { passed: false, error: message };
+    }
+  }, []);
+
+  const handleThinkingTest = useCallback(async (id: number): Promise<ModelProviderTestResult> => {
+    try {
+      setThinkingTestResults((prev) => ({ ...prev, [id]: { loading: true, result: null } }));
+      const result = await testModelProviderThinking(id);
+      setThinkingTestResults((prev) => ({ ...prev, [id]: { loading: false, result } }));
+      return result;
+    } catch (err) {
+      const message = `测试失败: ${toErrorMessage(err)}`;
+      setThinkingTestResults((prev) => ({
         ...prev,
         [id]: { loading: false, result: { passed: false, error: message } },
       }));
@@ -162,14 +183,16 @@ export function useModelProvidersTesting({
       await handleConnectivityTest(selectedTestId);
     } else if (testType === "react") {
       await handleReactTest(selectedTestId);
+    } else if (testType === "thinking") {
+      await handleThinkingTest(selectedTestId);
     } else {
       await handleStructuredOutputTest(selectedTestId);
     }
-  }, [handleConnectivityTest, handleReactTest, handleStructuredOutputTest, selectedTestId, testType]);
+  }, [handleConnectivityTest, handleReactTest, handleStructuredOutputTest, handleThinkingTest, selectedTestId, testType]);
 
   const executeTestNow = useCallback(() => {
     void executeTest();
   }, [executeTest]);
 
-  return { testResults, structuredTestResults, handleTest, dialogClose, executeTestNow };
+  return { testResults, structuredTestResults, thinkingTestResults, handleTest, dialogClose, executeTestNow };
 }

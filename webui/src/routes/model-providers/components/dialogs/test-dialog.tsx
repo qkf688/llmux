@@ -23,6 +23,7 @@ type TestDialogProps = {
   selectedTestId: number | null;
   testResults: Record<number, { loading: boolean; result: ModelProviderTestResult | null }>;
   structuredTestResults: Record<number, { loading: boolean; result: ModelProviderTestResult | null }>;
+  thinkingTestResults: Record<number, { loading: boolean; result: ModelProviderTestResult | null }>;
   reactTestResult: {
     loading: boolean;
     messages: string;
@@ -41,9 +42,15 @@ const TEST_OPTIONS: { value: TestType; label: string; description: string }[] = 
     label: "结构化输出能力测试",
     description: "测试模型是否支持结构化输出（JSON Schema / Tool Output）",
   },
+  {
+    value: "thinking",
+    label: "Thinking 能力测试",
+    description:
+      "测试模型是否支持推理（thinking）：请求携带 reasoning_effort / thinking block，响应须返回推理内容。可作为开启关联 thinking 开关的依据。",
+  },
 ];
 
-// 日志/输出统一展示块：react 日志、结构化原始输出与解析结果三处复用。
+// 日志/输出统一展示块：react 日志、结构化与 thinking 的原始输出/推理内容等处复用。
 // wrap=false 时保留原始换行并横向滚动（适合日志/原始文本）；wrap=true 时自动换行（适合 JSON）。
 function LogBlock({ label, value, wrap }: { label: string; value: string; wrap?: boolean }) {
   return (
@@ -78,14 +85,21 @@ export function TestDialog({
   selectedTestId,
   testResults,
   structuredTestResults,
+  thinkingTestResults,
   reactTestResult,
   onClose,
   onExecute,
 }: TestDialogProps) {
   const connectivityLoading = selectedTestId ? testResults[selectedTestId]?.loading : false;
   const structuredLoading = selectedTestId ? structuredTestResults[selectedTestId]?.loading : false;
-  const executeDisabled =
-    testType === "connectivity" ? connectivityLoading : testType === "react" ? reactTestResult.loading : structuredLoading;
+  const thinkingLoading = selectedTestId ? thinkingTestResults[selectedTestId]?.loading : false;
+  const executeDisabled = testType === "connectivity"
+    ? connectivityLoading
+    : testType === "react"
+      ? reactTestResult.loading
+      : testType === "thinking"
+        ? thinkingLoading
+        : structuredLoading;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -187,6 +201,34 @@ export function TestDialog({
                       />
                       {rawOutput && <LogBlock label="原始输出" value={rawOutput} />}
                       {parsed != null && <LogBlock label="解析结果" value={JSON.stringify(parsed, null, 2)} wrap />}
+                    </div>
+                  );
+                })()
+              ) : (
+                <ResultPlaceholder />
+              ))}
+            {testType === "thinking" &&
+              (selectedTestId && thinkingTestResults[selectedTestId]?.loading ? (
+                <LoadingState text="测试中..." />
+              ) : selectedTestId && thinkingTestResults[selectedTestId]?.result ? (
+                (() => {
+                  const result = thinkingTestResults[selectedTestId]?.result;
+                  const passed = result?.passed === true;
+                  const errorType = result?.error_type;
+                  const errorMessage =
+                    result?.error || result?.message || (passed ? "Thinking 能力测试通过" : "Thinking 能力测试失败");
+                  const thinkingText = result?.thinking_text ?? "";
+                  const rawOutput = result?.raw_output ?? "";
+
+                  return (
+                    <div className="space-y-3">
+                      <ExpandableError
+                        error={{ message: errorMessage, summary: passed ? "测试成功" : "测试失败", type: errorType }}
+                        isSuccess={passed}
+                        defaultExpanded={!passed}
+                      />
+                      {thinkingText && <LogBlock label="推理内容" value={thinkingText} wrap />}
+                      {rawOutput && <LogBlock label="原始输出" value={rawOutput} />}
                     </div>
                   );
                 })()

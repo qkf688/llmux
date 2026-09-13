@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 本文件收敛「一次诊断测试结果」的回包形状。四个测试端点共用同一形状的原因：
+// 本文件收敛「一次诊断测试结果」的回包形状。全部 JSON 测试端点共用同一形状的原因：
 // 前端（webui/src/lib/api 的 ModelProviderTestResult / ProviderModelTestResult 与
 // routes/providers 的测试 hook）要能只看 `data.passed` 判定、并把结果按响应回传的
 // `group_id` 归位到正确的分组徽标（C2 定案），而 apiRequest 在信封 code!=200 时只抛

@@ -33,6 +33,7 @@ func init() {
 		ConfigTemplate:  configTemplateOpenAIRes,
 		TestBody:        []byte(testBodyOpenAIRes),
 		StructuredBody:  []byte(structuredBodyOpenAIRes),
+		ThinkingBody:    []byte(thinkingBodyOpenAIRes),
 		HealthCheckBody: []byte(healthCheckBodyOpenAIRes),
 		ProbeBody:       []byte(probeBodyOpenAIRes),
 	})

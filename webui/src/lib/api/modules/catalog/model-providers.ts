@@ -40,6 +40,8 @@ export interface ModelProviderTestResult {
   message?: string;
   raw_output?: string;
   parsed?: unknown;
+  /** thinking 能力测试提取出的推理内容 */
+  thinking_text?: string;
   [key: string]: unknown;
 }
 
@@ -166,6 +168,10 @@ export async function testModelProvider(id: number): Promise<ModelProviderTestRe
 
 export async function testModelProviderStructuredOutput(id: number): Promise<ModelProviderTestResult> {
   return apiRequest<ModelProviderTestResult>(`/test/structured-output/${id}`);
+}
+
+export async function testModelProviderThinking(id: number): Promise<ModelProviderTestResult> {
+  return apiRequest<ModelProviderTestResult>(`/test/thinking/${id}`);
 }
 
 export async function previewAutoAssociate(): Promise<AssociationPreview[]> {

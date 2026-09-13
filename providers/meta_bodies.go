@@ -170,4 +170,43 @@ const (
 		],
 		"tool_choice": { "type": "tool", "name": "structured_output" }
 	}`
+
+	// --- OCP-7 thinking 能力测试体 ---
+	// effort 固定 medium：兼容面最广（个别上游对高级档不识别，见测试弹窗方案「已知风险」）。
+	// 问题刻意选一个能触发推理过程的小算术题，非空推理内容即判通过。
+	thinkingBodyOpenAI = `{
+        "model": "gpt-4.1",
+        "reasoning_effort": "medium",
+        "messages": [
+            {
+                "role": "user",
+                "content": "2 的 10 次方减 8 等于多少？请一步步推理。"
+            }
+        ]
+    }`
+
+	thinkingBodyOpenAIRes = `{
+        "model": "gpt-5-nano",
+        "input": "2 的 10 次方减 8 等于多少？请一步步推理。",
+        "reasoning": {
+            "effort": "medium"
+        }
+    }`
+
+	// Anthropic 硬性约束：max_tokens ≥ budget_tokens + 1024，取 budget 2048 + max 4096。
+	// extended thinking 已 GA，无需 beta 头（provider 未配 beta 时 setAnthropicBeta 会删头，不影响本测试）。
+	thinkingBodyAnthropic = `{
+     	"model": "claude-sonnet-4-5",
+     	"max_tokens": 4096,
+     	"thinking": {
+     		"type": "enabled",
+     		"budget_tokens": 2048
+     	},
+     	"messages": [
+       		{
+         		"role": "user",
+         		"content": "2 的 10 次方减 8 等于多少？请一步步推理。"
+       		}
+     	]
+	}`
 )

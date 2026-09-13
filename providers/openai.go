@@ -33,6 +33,7 @@ func init() {
 		ConfigTemplate:  configTemplateOpenAI,
 		TestBody:        []byte(testBodyOpenAI),
 		StructuredBody:  []byte(structuredBodyOpenAI),
+		ThinkingBody:    []byte(thinkingBodyOpenAI),
 		HealthCheckBody: []byte(healthCheckBodyOpenAI),
 		ProbeBody:       []byte(probeBodyOpenAI),
 	})

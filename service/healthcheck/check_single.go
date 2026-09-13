@@ -3,12 +3,12 @@ package healthcheck
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/common/bgtask"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
@@ -152,7 +152,7 @@ func requestUpstream(ctx context.Context, client providers.Provider, headers htt
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(res.Body)
+		raw, _ := common.ReadCappedBody(res.Body)
 		return &HealthCheckError{StatusCode: res.StatusCode, Body: string(raw)}
 	}
 

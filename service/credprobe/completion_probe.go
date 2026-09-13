@@ -3,7 +3,6 @@ package credprobe
 import (
 	"context"
 	"errors"
-	"io"
 	"net/http"
 	"time"
 
@@ -101,7 +100,7 @@ func RunCompletionProbe(req CompletionProbeRequest) CompletionProbeResult {
 	}
 	defer res.Body.Close()
 
-	bodyBytes, readErr := io.ReadAll(res.Body)
+	bodyBytes, readErr := common.ReadCappedBody(res.Body)
 	if readErr != nil {
 		// headers 已回、body 滴流时 deadline 到期同样落在这里（transport 的
 		// ResponseHeaderTimeout 管不到读体）：与 Do 分支同款归类，否则「慢上游稳定

@@ -6,11 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/consts"
 	"github.com/tidwall/sjson"
 )
@@ -154,8 +154,8 @@ func (a *Anthropic) Models(ctx context.Context) ([]Model, error) {
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		// 读取响应体以获取详细错误信息
-		bodyBytes, readErr := io.ReadAll(res.Body)
+		// 读取响应体以获取详细错误信息（上限内，防超大错误页整块进内存）
+		bodyBytes, readErr := common.ReadCappedBody(res.Body)
 		if readErr != nil {
 			return nil, fmt.Errorf("status code: %d, failed to read response body: %v", res.StatusCode, readErr)
 		}

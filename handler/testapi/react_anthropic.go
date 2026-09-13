@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -67,7 +66,7 @@ func runAnthropicReactTest(ctx context.Context, c *gin.Context, httpClient *http
 		if err != nil {
 			return toolCities, finalText.String(), fmt.Errorf("连接提供商失败: %w", err)
 		}
-		bodyBytes, readErr := io.ReadAll(res.Body)
+		bodyBytes, readErr := common.ReadCappedBody(res.Body)
 		_ = res.Body.Close()
 		if readErr != nil {
 			return toolCities, finalText.String(), fmt.Errorf("读取响应失败: %w", readErr)

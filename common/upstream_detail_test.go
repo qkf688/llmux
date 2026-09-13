@@ -1,6 +1,8 @@
 package common
 
 import (
+	"bytes"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -117,3 +119,34 @@ func TestUpstreamErrorDetailCarriesStatusCode(t *testing.T) {
 		t.Fatalf("UpstreamErrorDetail() = %q, want %q", got, want)
 	}
 }
+
+// TestReadCappedBody 锁诊断/探针/测试路径读取上游 Body 的上限契约：超大响应只读前
+// UpstreamDiagnosticReadLimitBytes 字节（防御上游异常/被篡改时整块进内存），未超上限原样读出，
+// 且读取错误原样上抛（供调用方区分 timeout/network，归类逻辑依赖此事实）。
+func TestReadCappedBody(t *testing.T) {
+	oversized := bytes.Repeat([]byte("x"), UpstreamDiagnosticReadLimitBytes+4096)
+	got, err := ReadCappedBody(bytes.NewReader(oversized))
+	if err != nil {
+		t.Fatalf("读取失败: %v", err)
+	}
+	if len(got) != UpstreamDiagnosticReadLimitBytes {
+		t.Fatalf("上限未生效: got %d bytes, want %d", len(got), UpstreamDiagnosticReadLimitBytes)
+	}
+
+	small := []byte(`{"id":"cmpl-1"}`)
+	got, err = ReadCappedBody(bytes.NewReader(small))
+	if err != nil || !bytes.Equal(got, small) {
+		t.Fatalf("未超上限应原样读出: got %q, want %q, err %v", got, small, err)
+	}
+}
+
+func TestReadCappedBodyPropagatesReadError(t *testing.T) {
+	sentinel := errors.New("read boom")
+	if _, err := ReadCappedBody(alwaysErrorReader{sentinel}); !errors.Is(err, sentinel) {
+		t.Fatalf("读取错误必须原样上抛（否则 timeout 归类漏回 network）: got %v", err)
+	}
+}
+
+type alwaysErrorReader struct{ err error }
+
+func (r alwaysErrorReader) Read([]byte) (int, error) { return 0, r.err }

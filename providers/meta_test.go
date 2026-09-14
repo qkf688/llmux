@@ -36,6 +36,9 @@ func TestMetadata_RegisteredTypes(t *testing.T) {
 		if len(m.ThinkingBody) == 0 {
 			t.Errorf("%s: empty ThinkingBody", typ)
 		}
+		if len(m.VisionBody) == 0 {
+			t.Errorf("%s: empty VisionBody", typ)
+		}
 		if len(m.HealthCheckBody) == 0 {
 			t.Errorf("%s: empty HealthCheckBody", typ)
 		}

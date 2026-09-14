@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { TestType } from "../../types";
 import type { ModelProviderTestResult } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -14,6 +15,9 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ExpandableError } from "@/components/expandable-error";
 import { LoadingState } from "@/components/ui/loading-state";
+import { visionTestImageDataURL } from "../../vision-test-image";
+
+type TestResultsById = Record<number, { loading: boolean; result: ModelProviderTestResult | null }>;
 
 type TestDialogProps = {
   open: boolean;
@@ -21,9 +25,10 @@ type TestDialogProps = {
   testType: TestType;
   onTestTypeChange: (value: TestType) => void;
   selectedTestId: number | null;
-  testResults: Record<number, { loading: boolean; result: ModelProviderTestResult | null }>;
-  structuredTestResults: Record<number, { loading: boolean; result: ModelProviderTestResult | null }>;
-  thinkingTestResults: Record<number, { loading: boolean; result: ModelProviderTestResult | null }>;
+  testResults: TestResultsById;
+  structuredTestResults: TestResultsById;
+  thinkingTestResults: TestResultsById;
+  visionTestResults: TestResultsById;
   reactTestResult: {
     loading: boolean;
     messages: string;
@@ -48,9 +53,15 @@ const TEST_OPTIONS: { value: TestType; label: string; description: string }[] = 
     description:
       "测试模型是否支持推理（thinking）：请求携带 reasoning_effort / thinking block，响应须返回推理内容。可作为开启关联 thinking 开关的依据。",
   },
+  {
+    value: "vision",
+    label: "图片识别能力测试",
+    description:
+      "测试模型是否支持视觉输入：内嵌 64×64 纯红色测试图并提问颜色，回答须识别出红色。可作为开启关联视觉能力的依据。",
+  },
 ];
 
-// 日志/输出统一展示块：react 日志、结构化与 thinking 的原始输出/推理内容等处复用。
+// 日志/输出统一展示块：react 日志、各能力测试的原始输出/提取内容等处复用。
 // wrap=false 时保留原始换行并横向滚动（适合日志/原始文本）；wrap=true 时自动换行（适合 JSON）。
 function LogBlock({ label, value, wrap }: { label: string; value: string; wrap?: boolean }) {
   return (
@@ -77,6 +88,44 @@ function ResultPlaceholder() {
   );
 }
 
+// JSON 型能力测试（结构化输出 / thinking / vision）共用同一形状的回包：
+// loading → 占位 → 结论 + 类型专属提取文本 + 原始输出。三态切换收敛进本组件，
+// 新增测试类型不再逐块复制 JSX（DRY）。renderDetail 返回 null 时不渲染该块。
+function CapabilityResultSection({
+  loading,
+  result,
+  passedLabel,
+  failedLabel,
+  renderDetail,
+}: {
+  loading: boolean;
+  result: ModelProviderTestResult | null;
+  passedLabel: string;
+  failedLabel: string;
+  renderDetail?: (result: ModelProviderTestResult) => ReactNode;
+}) {
+  if (loading) {
+    return <LoadingState text="测试中..." />;
+  }
+  if (!result) {
+    return <ResultPlaceholder />;
+  }
+  const passed = result.passed === true;
+  const errorMessage = result.error || result.message || (passed ? passedLabel : failedLabel);
+  const rawOutput = result.raw_output ?? "";
+  return (
+    <div className="space-y-3">
+      <ExpandableError
+        error={{ message: errorMessage, summary: passed ? "测试成功" : "测试失败", type: result.error_type }}
+        isSuccess={passed}
+        defaultExpanded={!passed}
+      />
+      {renderDetail ? renderDetail(result) : null}
+      {rawOutput && <LogBlock label="原始输出" value={rawOutput} />}
+    </div>
+  );
+}
+
 export function TestDialog({
   open,
   onOpenChange,
@@ -86,20 +135,26 @@ export function TestDialog({
   testResults,
   structuredTestResults,
   thinkingTestResults,
+  visionTestResults,
   reactTestResult,
   onClose,
   onExecute,
 }: TestDialogProps) {
-  const connectivityLoading = selectedTestId ? testResults[selectedTestId]?.loading : false;
-  const structuredLoading = selectedTestId ? structuredTestResults[selectedTestId]?.loading : false;
-  const thinkingLoading = selectedTestId ? thinkingTestResults[selectedTestId]?.loading : false;
-  const executeDisabled = testType === "connectivity"
-    ? connectivityLoading
-    : testType === "react"
-      ? reactTestResult.loading
-      : testType === "thinking"
-        ? thinkingLoading
-        : structuredLoading;
+  const entryOf = (map: TestResultsById) => (selectedTestId ? map[selectedTestId] : undefined);
+  const structuredEntry = entryOf(structuredTestResults);
+  const thinkingEntry = entryOf(thinkingTestResults);
+  const visionEntry = entryOf(visionTestResults);
+
+  // 测试类型 → 是否执行中。Record 穷尽性保证新增 TestType 时这里被类型系统强制补一行，
+  // 不再用嵌套三元（旧链的 else 分支会把未知类型误当 structured 的 loading）。
+  const loadingByTestType: Record<TestType, boolean> = {
+    connectivity: !!(selectedTestId && testResults[selectedTestId]?.loading),
+    react: reactTestResult.loading,
+    structured_output: !!structuredEntry?.loading,
+    thinking: !!thinkingEntry?.loading,
+    vision: !!visionEntry?.loading,
+  };
+  const executeDisabled = loadingByTestType[testType];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -132,6 +187,22 @@ export function TestDialog({
               </label>
             ))}
           </RadioGroup>
+
+          {/* vision 测试图预览：常量前端自内嵌（不经 API 回显），选中测试类型时即可看到「会给模型看什么图」 */}
+          {testType === "vision" && (
+            <div className="flex items-center gap-3 rounded-md border p-3">
+              <img
+                src={visionTestImageDataURL}
+                width={64}
+                height={64}
+                alt="图片识别能力测试用图：64×64 纯红色"
+                className="shrink-0 rounded border"
+              />
+              <p className="text-xs text-muted-foreground">
+                测试时将发给模型的图片（64×64 纯色块）。模型回答识别出该颜色即判定通过。
+              </p>
+            </div>
+          )}
 
           {/* 固定高度结果区：切换测试类型 / 展开错误 / 追加日志时，dialog 外框尺寸恒定，仅此处内部滚动 */}
           <div className="h-64 overflow-y-auto rounded-md border bg-muted/20 p-3">
@@ -179,62 +250,43 @@ export function TestDialog({
                 <ResultPlaceholder />
               ))}
 
-            {testType === "structured_output" &&
-              (selectedTestId && structuredTestResults[selectedTestId]?.loading ? (
-                <LoadingState text="测试中..." />
-              ) : selectedTestId && structuredTestResults[selectedTestId]?.result ? (
-                (() => {
-                  const result = structuredTestResults[selectedTestId]?.result;
-                  const passed = result?.passed === true;
-                  const errorType = result?.error_type;
-                  const errorMessage =
-                    result?.error || result?.message || (passed ? "结构化输出能力测试通过" : "结构化输出能力测试失败");
-                  const rawOutput = result?.raw_output ?? "";
-                  const parsed = result?.parsed;
+            {testType === "structured_output" && (
+              <CapabilityResultSection
+                loading={!!structuredEntry?.loading}
+                result={structuredEntry?.result ?? null}
+                passedLabel="结构化输出能力测试通过"
+                failedLabel="结构化输出能力测试失败"
+                renderDetail={(result) =>
+                  result.parsed != null ? (
+                    <LogBlock label="解析结果" value={JSON.stringify(result.parsed, null, 2)} wrap />
+                  ) : null
+                }
+              />
+            )}
 
-                  return (
-                    <div className="space-y-3">
-                      <ExpandableError
-                        error={{ message: errorMessage, summary: passed ? "测试成功" : "测试失败", type: errorType }}
-                        isSuccess={passed}
-                        defaultExpanded={!passed}
-                      />
-                      {rawOutput && <LogBlock label="原始输出" value={rawOutput} />}
-                      {parsed != null && <LogBlock label="解析结果" value={JSON.stringify(parsed, null, 2)} wrap />}
-                    </div>
-                  );
-                })()
-              ) : (
-                <ResultPlaceholder />
-              ))}
-            {testType === "thinking" &&
-              (selectedTestId && thinkingTestResults[selectedTestId]?.loading ? (
-                <LoadingState text="测试中..." />
-              ) : selectedTestId && thinkingTestResults[selectedTestId]?.result ? (
-                (() => {
-                  const result = thinkingTestResults[selectedTestId]?.result;
-                  const passed = result?.passed === true;
-                  const errorType = result?.error_type;
-                  const errorMessage =
-                    result?.error || result?.message || (passed ? "Thinking 能力测试通过" : "Thinking 能力测试失败");
-                  const thinkingText = result?.thinking_text ?? "";
-                  const rawOutput = result?.raw_output ?? "";
+            {testType === "thinking" && (
+              <CapabilityResultSection
+                loading={!!thinkingEntry?.loading}
+                result={thinkingEntry?.result ?? null}
+                passedLabel="Thinking 能力测试通过"
+                failedLabel="Thinking 能力测试失败"
+                renderDetail={(result) =>
+                  result.thinking_text ? <LogBlock label="推理内容" value={result.thinking_text} wrap /> : null
+                }
+              />
+            )}
 
-                  return (
-                    <div className="space-y-3">
-                      <ExpandableError
-                        error={{ message: errorMessage, summary: passed ? "测试成功" : "测试失败", type: errorType }}
-                        isSuccess={passed}
-                        defaultExpanded={!passed}
-                      />
-                      {thinkingText && <LogBlock label="推理内容" value={thinkingText} wrap />}
-                      {rawOutput && <LogBlock label="原始输出" value={rawOutput} />}
-                    </div>
-                  );
-                })()
-              ) : (
-                <ResultPlaceholder />
-              ))}
+            {testType === "vision" && (
+              <CapabilityResultSection
+                loading={!!visionEntry?.loading}
+                result={visionEntry?.result ?? null}
+                passedLabel="图片识别能力测试通过"
+                failedLabel="图片识别能力测试失败"
+                renderDetail={(result) =>
+                  result.vision_text ? <LogBlock label="识别结果" value={result.vision_text} wrap /> : null
+                }
+              />
+            )}
           </div>
         </DialogBody>
 

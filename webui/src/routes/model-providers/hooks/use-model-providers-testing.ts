@@ -6,6 +6,7 @@ import {
   testModelProvider,
   testModelProviderStructuredOutput,
   testModelProviderThinking,
+  testModelProviderVision,
   type ModelProviderTestResult,
 } from "@/lib/api";
 import type { Updater } from "@/stores/core/updater";
@@ -45,6 +46,9 @@ export function useModelProvidersTesting({
     Record<number, { loading: boolean; result: ModelProviderTestResult | null }>
   >({});
   const [thinkingTestResults, setThinkingTestResults] = useState<
+    Record<number, { loading: boolean; result: ModelProviderTestResult | null }>
+  >({});
+  const [visionTestResults, setVisionTestResults] = useState<
     Record<number, { loading: boolean; result: ModelProviderTestResult | null }>
   >({});
 
@@ -118,6 +122,23 @@ export function useModelProvidersTesting({
     }
   }, []);
 
+  const handleVisionTest = useCallback(async (id: number): Promise<ModelProviderTestResult> => {
+    try {
+      setVisionTestResults((prev) => ({ ...prev, [id]: { loading: true, result: null } }));
+      const result = await testModelProviderVision(id);
+      setVisionTestResults((prev) => ({ ...prev, [id]: { loading: false, result } }));
+      return result;
+    } catch (err) {
+      const message = `测试失败: ${toErrorMessage(err)}`;
+      setVisionTestResults((prev) => ({
+        ...prev,
+        [id]: { loading: false, result: { passed: false, error: message } },
+      }));
+      console.error(err);
+      return { passed: false, error: message };
+    }
+  }, []);
+
   const handleReactTest = useCallback(
     async (id: number) => {
       setReactTestResult((prev) => ({ ...prev, messages: "", loading: true }));
@@ -176,23 +197,32 @@ export function useModelProvidersTesting({
     [setReactTestResult]
   );
 
+  // 测试类型 → 执行函数的分发表（OCP）：新增 TestType 时 Record 穷尽性会强制补一行，
+  // 不再像旧 if/else 链那样把未知类型静默落进 structured_output 的 else 分支。
+  // 表在回调内构造：外提成每次渲染新建的对象会击穿 useCallback 的依赖稳定。
   const executeTest = useCallback(async () => {
     if (!selectedTestId) return;
-
-    if (testType === "connectivity") {
-      await handleConnectivityTest(selectedTestId);
-    } else if (testType === "react") {
-      await handleReactTest(selectedTestId);
-    } else if (testType === "thinking") {
-      await handleThinkingTest(selectedTestId);
-    } else {
-      await handleStructuredOutputTest(selectedTestId);
-    }
-  }, [handleConnectivityTest, handleReactTest, handleStructuredOutputTest, handleThinkingTest, selectedTestId, testType]);
+    const testRunnerByType: Record<TestType, (id: number) => Promise<unknown>> = {
+      connectivity: handleConnectivityTest,
+      react: handleReactTest,
+      structured_output: handleStructuredOutputTest,
+      thinking: handleThinkingTest,
+      vision: handleVisionTest,
+    };
+    await testRunnerByType[testType](selectedTestId);
+  }, [handleConnectivityTest, handleReactTest, handleStructuredOutputTest, handleThinkingTest, handleVisionTest, selectedTestId, testType]);
 
   const executeTestNow = useCallback(() => {
     void executeTest();
   }, [executeTest]);
 
-  return { testResults, structuredTestResults, thinkingTestResults, handleTest, dialogClose, executeTestNow };
+  return {
+    testResults,
+    structuredTestResults,
+    thinkingTestResults,
+    visionTestResults,
+    handleTest,
+    dialogClose,
+    executeTestNow,
+  };
 }

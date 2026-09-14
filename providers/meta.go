@@ -19,6 +19,7 @@ type Metadata struct {
 	TestBody        []byte // OCP-7：连通性测试体；未知 type 由调用方决定 error 或回退
 	StructuredBody  []byte // OCP-7：结构化输出测试体
 	ThinkingBody    []byte // OCP-7：thinking 能力测试体（请求按协议形状带 thinking 参数，非空推理内容即通过；Responses 纯推理模型例外：reasoning item 存在即过，见 testapi/thinking.go）
+	VisionBody      []byte // OCP-7：图片识别能力测试体（带 64x64 纯红测试图 + 颜色提问，回答命中 red(词边界)/红色 即过，见 testapi/vision.go）
 	HealthCheckBody []byte // OCP-8：健康检查体（可与 TestBody 不同；未知 type 回退 openai）
 	// ProbeBody 是 #24-B「按凭据测试」的最小 completion 探针体（比 TestBody/HealthCheckBody
 	// 更小，只求 2xx 判 key 活性）。按 provider type 注册而非 handler 写协议 switch（OCP-7 同源）：

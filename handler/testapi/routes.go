@@ -13,4 +13,5 @@ func Register(rg gin.IRoutes) {
 	rg.GET("/test/react/:id", TestReactHandler)
 	rg.GET("/test/structured-output/:id", TestStructuredOutputHandler)
 	rg.GET("/test/thinking/:id", TestThinkingHandler)
+	rg.GET("/test/vision/:id", TestVisionHandler)
 }

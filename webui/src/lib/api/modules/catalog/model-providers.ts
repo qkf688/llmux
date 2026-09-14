@@ -42,6 +42,8 @@ export interface ModelProviderTestResult {
   parsed?: unknown;
   /** thinking 能力测试提取出的推理内容 */
   thinking_text?: string;
+  /** 图片识别能力测试提取出的模型回答文本 */
+  vision_text?: string;
   [key: string]: unknown;
 }
 
@@ -172,6 +174,10 @@ export async function testModelProviderStructuredOutput(id: number): Promise<Mod
 
 export async function testModelProviderThinking(id: number): Promise<ModelProviderTestResult> {
   return apiRequest<ModelProviderTestResult>(`/test/thinking/${id}`);
+}
+
+export async function testModelProviderVision(id: number): Promise<ModelProviderTestResult> {
+  return apiRequest<ModelProviderTestResult>(`/test/vision/${id}`);
 }
 
 export async function previewAutoAssociate(): Promise<AssociationPreview[]> {

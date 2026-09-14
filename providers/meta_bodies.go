@@ -209,4 +209,55 @@ const (
        		}
      	]
 	}`
+
+	// --- OCP-7 图片识别能力测试体 ---
+	// visionTestImageBase64 是 64x64 纯红色（#FF0000）PNG 的 base64，
+	// 生成脚本 .local/tools/gen_vision_test_image.py（Anthropic 要求图片 ≥32x32，纯色块判定最稳）。
+	// 前端 routes/model-providers/vision-test-image.ts 内嵌同一 base64 做弹窗预览，两侧改动必须同步。
+	// 图片块放文本之前（Anthropic 建议 image-first，三协议保持同序）；
+	// model 硬编码默认名仅为字面量合法，运行时由 credprobe 以关联实际模型 sjson 注入覆盖。
+	visionTestImageBase64 = "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAYklEQVR42u3QMREAAAgAoe9fWnN4MlCApuazBAgQIECAAAECBAgQIECAAAECBAgQIECAAAECBAgQIECAAAECBAgQIECAAAECBAgQIECAAAECBAgQIECAAAECBAgQIECAgPsWQ4jh0jwfLk0AAAAASUVORK5CYII="
+
+	visionTestPrompt = "这张图片是什么颜色？What color is this image?"
+
+	visionBodyOpenAI = `{
+        "model": "gpt-4.1",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,` + visionTestImageBase64 + `"}},
+                    {"type": "text", "text": "` + visionTestPrompt + `"}
+                ]
+            }
+        ]
+    }`
+
+	visionBodyOpenAIRes = `{
+        "model": "gpt-5-nano",
+        "input": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "input_image", "image_url": "data:image/png;base64,` + visionTestImageBase64 + `"},
+                    {"type": "input_text", "text": "` + visionTestPrompt + `"}
+                ]
+            }
+        ]
+    }`
+
+	// Anthropic Messages API max_tokens 必填（漏写直接 400，会把 Claude 系全量误判成「不支持视觉」）；1024 足够答颜色题。
+	visionBodyAnthropic = `{
+     	"model": "claude-sonnet-4-5",
+     	"max_tokens": 1024,
+     	"messages": [
+       		{
+         		"role": "user",
+         		"content": [
+           			{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "` + visionTestImageBase64 + `"}},
+           			{"type": "text", "text": "` + visionTestPrompt + `"}
+         		]
+       		}
+     	]
+	}`
 )

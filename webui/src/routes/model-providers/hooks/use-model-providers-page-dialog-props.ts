@@ -65,6 +65,7 @@ export function useModelProvidersPageDialogProps(ctx: DialogPropsContext) {
     testResults: testing.testResults,
     structuredTestResults: testing.structuredTestResults,
     thinkingTestResults: testing.thinkingTestResults,
+    visionTestResults: testing.visionTestResults,
     reactTestResult: store.reactTestResult,
     onClose: testing.dialogClose,
     onExecute: testing.executeTestNow,

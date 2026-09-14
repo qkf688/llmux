@@ -44,3 +44,15 @@ func buildThinkingTestBody(providerType string) ([]byte, error) {
 	copy(out, m.ThinkingBody)
 	return out, nil
 }
+
+// buildVisionTestBody 从 provider 元数据取图片识别能力测试体。
+// 未知 type 或字段缺失：返回 error（与现有 TestBody/StructuredBody/ThinkingBody 一致）。
+func buildVisionTestBody(providerType string) ([]byte, error) {
+	m, ok := providers.MetadataOf(providerType)
+	if !ok || len(m.VisionBody) == 0 {
+		return nil, errInvalidProviderType
+	}
+	out := make([]byte, len(m.VisionBody))
+	copy(out, m.VisionBody)
+	return out, nil
+}

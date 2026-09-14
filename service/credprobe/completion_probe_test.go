@@ -15,16 +15,29 @@ import (
 	"github.com/qkf688/llmux/providers"
 )
 
+// probeRequestCapture 记录最后一次 BuildReq 的入参，供断言「探针注入了什么 body/头」
+// （流式探针要证明它把 stream:true 写进了测试体、并带了 Accept 头）。
+type probeRequestCapture struct {
+	body   []byte
+	header http.Header
+}
+
 // probeFakeClient 最小 providers.Provider 替身：BuildReq 直接指向假上游 URL，
 // headers 原样透传（探针本体不关心凭据装配，那是调用方链路的职责）。
 type probeFakeClient struct {
 	url         string
 	buildReqErr error
+	// capture 非 nil 时记录入参；用指针是因为 BuildReq 是值接收者，写自身字段传不出去。
+	capture *probeRequestCapture
 }
 
 func (f probeFakeClient) BuildReq(ctx context.Context, header http.Header, model string, rawData []byte) (*http.Request, error) {
 	if f.buildReqErr != nil {
 		return nil, f.buildReqErr
+	}
+	if f.capture != nil {
+		f.capture.body = append([]byte(nil), rawData...)
+		f.capture.header = header.Clone()
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, f.url, bytes.NewReader(rawData))
 	if err != nil {

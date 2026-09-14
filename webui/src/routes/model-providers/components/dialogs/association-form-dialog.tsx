@@ -391,7 +391,7 @@ export function AssociationFormDialog({
                     <div className="space-y-1 leading-none">
                       <FormLabel>请求头透传</FormLabel>
                       <FormDescription>
-                        诊断/连通测试仅透传调试性请求头（X-* 自定义头、User-Agent、协议 beta/版本头）给上游；
+                        开启后，生产转发与诊断/连通测试均只透传调试性请求头（X-* 自定义头、User-Agent、协议 beta/版本头）给上游；
                         Authorization、Cookie 等会话信息不会外发。需要额外头部请用下方自定义头部。
                       </FormDescription>
                     </div>

@@ -9,7 +9,6 @@ import (
 	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/httpresp"
-	"github.com/qkf688/llmux/providers"
 	"github.com/tidwall/gjson"
 )
 
@@ -36,31 +35,27 @@ func visionAnswerMatches(text string) bool {
 // 公共流程（链路装配、探针、失败回包）在 runCompletionTestFlow；本 handler 只做领域判定。
 // 测试图不经 API 回显：它是静态常量，前端自内嵌同一 base64 在弹窗预览（vision-test-image.ts）。
 func TestVisionHandler(c *gin.Context) {
-	link, bodyBytes, fail, ok := runCompletionTestFlow(c, "vision", buildVisionTestBody)
+	stream := queryStreamMode(c)
+	link, outcome, fail, ok := runCompletionTestFlow(c, "vision", buildVisionTestBody, stream)
 	if !ok {
 		return
 	}
 
-	// 上游响应体形状由 provider metadata 声明；判定用 wire format 而非 provider type（同 thinking）。
-	upstreamFormat, _ := providers.WireFormatOf(link.Type)
-	visionText, err := extractVisionText(upstreamFormat, bodyBytes)
+	// 流式模式下 outcome.body 已是折叠出的非流式形状，extractVisionText 一行都不用改。
+	visionText, err := extractVisionText(outcome.format, outcome.body)
 	if err != nil {
 		// raw_output 是区分「上游不支持视觉」与「上游忽略图片参数」的唯一排查手段，失败必带。
-		fail(common.ErrorTypeValidation, "提取识别结果失败", err.Error(), string(bodyBytes))
+		fail(common.ErrorTypeValidation, "提取识别结果失败", err.Error(), outcome.rawText)
 		return
 	}
 	if !visionAnswerMatches(visionText) {
-		fail(common.ErrorTypeValidation, "图片识别未通过", "模型回答未命中期望颜色（red/红色/紅色）: "+visionText, string(bodyBytes))
+		fail(common.ErrorTypeValidation, "图片识别未通过", "模型回答未命中期望颜色（red/红色/紅色）: "+visionText, outcome.rawText)
 		return
 	}
 
-	result := passedTestResult(link)
-	result["message"] = "图片识别能力测试通过"
-	result["provider"] = link.ProviderName
-	result["model"] = link.Model
-	result["provider_type"] = link.Type
-	result["raw_output"] = string(bodyBytes)
-	result["vision_text"] = visionText
+	result := passedCapabilityResult(link, outcome, "图片识别能力测试通过"+modeSuffix(stream), map[string]any{
+		"vision_text": visionText,
+	})
 	httpresp.Success(c, result)
 }
 

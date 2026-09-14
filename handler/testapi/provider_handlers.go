@@ -18,44 +18,25 @@ const providerTestTimeout = 60 * time.Second
 // ProviderTestHandler 关联级连通性测试（GET /api/test/:id，id = ModelWithProvider 主键）。
 //
 // 结果形状见 respond.go：链路解析失败按 400/404 或 passed=false 回包，测试本身
-// （含上游非 2xx）一律 code 200 + data.passed。探针编排单一来源见 credprobe.RunCompletionProbe。
+// （含上游非 2xx）一律 code 200 + data.passed。
+//
+// 与三个能力测试共用 runCompletionTestFlow（此前自装一套编排，是同一份链路代码的第二副本）。
+// 唯一的形状差异是成功回包把上游原文放在 message 而非 raw_output——那是 /api/test/:id 的既有
+// 契约（前端 ExpandableError 直接吃 message），保留不变。
+//
+// 本端点是四个测试端点里唯一「不判领域内容」的，因此 ?stream=1 时它天然就是
+// 「这条链路能不能正常流式」的探测器（严格三门见 completion_flow.go）。
 func ProviderTestHandler(c *gin.Context) {
-	id := c.Param("id")
-	if id == "" {
-		httpresp.BadRequest(c, "Invalid ID format")
-		return
-	}
-	ctx := c.Request.Context()
-
-	link, err := ResolveAssociationLink(ctx, id)
-	if err != nil {
-		respondResolveFailure(c, err, "ModelWithProvider not found")
+	stream := queryStreamMode(c)
+	// fail 用不到：本端点没有领域判定，流里能到这里就说明探针已过（流式时含三门校验）。
+	link, outcome, _, ok := runCompletionTestFlow(c, "provider", buildTestBody, stream)
+	if !ok {
 		return
 	}
 
-	slog.Info("Testing provider", "proxy", link.Client.GetProxy(), "provider", link.ProviderName, "group", link.Group.Name)
-
-	testBody, err := buildTestBody(link.Type)
-	if err != nil {
-		httpresp.Success(c, failedTestResult(link, common.ErrorTypeValidation, "不支持的提供商类型", err.Error()))
-		return
-	}
-
-	header := BuildTestHeaders(c.Request.Header, link.WithHeader, link.CustomerHeaders)
-	out := credprobe.RunCompletionProbe(credprobe.CompletionProbeRequest{
-		Ctx:     ctx,
-		Client:  link.Client,
-		Timeout: providerTestTimeout,
-		Headers: header,
-		Model:   link.Model,
-		Body:    testBody,
-	})
-	if !out.Passed {
-		httpresp.Success(c, failedTestResult(link, out.ErrorType, out.Summary, out.Detail))
-		return
-	}
-
-	httpresp.SuccessWithMessage(c, string(out.Body), passedTestResult(link))
+	result := passedTestResult(link)
+	applyOutcomeFields(result, outcome)
+	httpresp.SuccessWithMessage(c, outcome.rawText, result)
 }
 
 // ProviderModelTestHandler 供应商级模型测试（POST /api/providers/:id/test），供两个模型

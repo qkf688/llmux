@@ -8,7 +8,6 @@ import (
 	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/httpresp"
-	"github.com/qkf688/llmux/providers"
 	"github.com/tidwall/gjson"
 )
 
@@ -21,29 +20,23 @@ var errThinkingNotFound = errors.New("上游未返回推理内容，模型可能
 // 即使关联 SupportsThinking=false 也允许执行（结果可作为开启该开关的决策依据）。
 // 公共流程（链路装配、探针、失败回包）在 runCompletionTestFlow；本 handler 只做领域判定。
 func TestThinkingHandler(c *gin.Context) {
-	link, bodyBytes, fail, ok := runCompletionTestFlow(c, "thinking", buildThinkingTestBody)
+	stream := queryStreamMode(c)
+	link, outcome, fail, ok := runCompletionTestFlow(c, "thinking", buildThinkingTestBody, stream)
 	if !ok {
 		return
 	}
 
-	// 上游响应体形状由 provider metadata 声明；判定用 wire format 而非 provider type——
-	// OpenAI 兼容上游的响应体同样是 OpenAI Chat 形状。类型取链路的注册类型（按端点协议
-	// 派生，与 chat 主链路同源）。
-	upstreamFormat, _ := providers.WireFormatOf(link.Type)
-	thinkingText, err := extractThinking(upstreamFormat, bodyBytes)
+	// 流式模式下 outcome.body 已是折叠出的非流式形状，extractThinking 一行都不用改。
+	thinkingText, err := extractThinking(outcome.format, outcome.body)
 	if err != nil {
 		// raw_output 是区分「上游不支持 thinking」与「上游忽略该参数」的唯一排查手段，失败必带。
-		fail(common.ErrorTypeValidation, "提取推理内容失败", err.Error(), string(bodyBytes))
+		fail(common.ErrorTypeValidation, "提取推理内容失败", err.Error(), outcome.rawText)
 		return
 	}
 
-	result := passedTestResult(link)
-	result["message"] = "Thinking 能力测试通过"
-	result["provider"] = link.ProviderName
-	result["model"] = link.Model
-	result["provider_type"] = link.Type
-	result["raw_output"] = string(bodyBytes)
-	result["thinking_text"] = thinkingText
+	result := passedCapabilityResult(link, outcome, "Thinking 能力测试通过"+modeSuffix(stream), map[string]any{
+		"thinking_text": thinkingText,
+	})
 	httpresp.Success(c, result)
 }
 

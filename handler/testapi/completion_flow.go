@@ -9,7 +9,7 @@ import (
 	"github.com/qkf688/llmux/service/credprobe"
 )
 
-// runCompletionTestFlow 是 JSON 型 completion 测试端点（结构化输出 / thinking）共享的公共流程：
+// runCompletionTestFlow 是所有 JSON 型 completion 测试端点共享的公共流程：
 // 解析关联链路 → 取测试体 → credprobe 探针上游。任一失败按 testapi 结果形状回包并返回
 // ok=false（调用方直接 return）；探针通过后把链路与上游原始响应体交回，由各端点做
 // **领域判定**——提取逻辑与通过标准是端点间唯一的差异点。

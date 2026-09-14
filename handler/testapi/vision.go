@@ -21,14 +21,17 @@ var visionRedWordRe = regexp.MustCompile(`\bred\b`)
 
 // visionAnswerMatches 判定模型回答是否命中期望颜色（纯函数）。
 // 真在看图的模型必然答「红色/red」；猜颜色撞中概率可忽略（测试图固定纯色）。
+// 中文含简繁两形（紅色）：zh-Hant 上游必答繁体，漏收会把有视觉能力的模型误判失败。
 func visionAnswerMatches(text string) bool {
-	return visionRedWordRe.MatchString(strings.ToLower(text)) || strings.Contains(text, "红色")
+	return visionRedWordRe.MatchString(strings.ToLower(text)) ||
+		strings.Contains(text, "红色") ||
+		strings.Contains(text, "紅色")
 }
 
 // TestVisionHandler 图片识别能力测试（GET /api/test/vision/:id）。
 //
 // 测的是上游模型本身是否具备视觉能力：请求体按协议形状内嵌 64x64 纯红测试图并提问颜色，
-// 回答命中 red/红色 即通过——直连上游、不走网关转换层，因此即使关联未开视觉开关也允许执行
+// 回答命中 red/红色/紅色 即通过——直连上游、不走网关转换层，因此即使关联未开视觉开关也允许执行
 // （结果可作为「该关联是否具备视觉能力」的决策依据）。
 // 公共流程（链路装配、探针、失败回包）在 runCompletionTestFlow；本 handler 只做领域判定。
 // 测试图不经 API 回显：它是静态常量，前端自内嵌同一 base64 在弹窗预览（vision-test-image.ts）。
@@ -47,7 +50,7 @@ func TestVisionHandler(c *gin.Context) {
 		return
 	}
 	if !visionAnswerMatches(visionText) {
-		fail(common.ErrorTypeValidation, "图片识别未通过", "模型回答未命中期望颜色（red/红色）: "+visionText, string(bodyBytes))
+		fail(common.ErrorTypeValidation, "图片识别未通过", "模型回答未命中期望颜色（red/红色/紅色）: "+visionText, string(bodyBytes))
 		return
 	}
 

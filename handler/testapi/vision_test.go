@@ -94,6 +94,7 @@ func TestVisionAnswerMatches(t *testing.T) {
 		{name: "english uppercase", text: "RED", want: true},
 		{name: "english mixed case", text: "The color is Red", want: true},
 		{name: "chinese", text: "这张图片是红色的。", want: true},
+		{name: "traditional chinese", text: "這張圖片是紅色的。", want: true},
 		{name: "bilingual", text: "The image appears red（红色）", want: true},
 		{name: "refusal", text: "I cannot see any image.", want: false},
 		{name: "chinese refusal", text: "我无法查看图片内容。", want: false},
@@ -107,7 +108,6 @@ func TestVisionAnswerMatches(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			if got := visionAnswerMatches(tc.text); got != tc.want {
 				t.Fatalf("visionAnswerMatches(%q) = %v, want %v", tc.text, got, tc.want)

@@ -22,6 +22,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -389,6 +390,10 @@ export function AssociationFormDialog({
                     </FormControl>
                     <div className="space-y-1 leading-none">
                       <FormLabel>请求头透传</FormLabel>
+                      <FormDescription>
+                        诊断/连通测试仅透传调试性请求头（X-* 自定义头、User-Agent、协议 beta/版本头）给上游；
+                        Authorization、Cookie 等会话信息不会外发。需要额外头部请用下方自定义头部。
+                      </FormDescription>
                     </div>
                   </FormItem>
                 )}

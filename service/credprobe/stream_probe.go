@@ -124,9 +124,11 @@ func RunStreamProbe(req StreamProbeRequest) (out StreamProbeResult) {
 		headers = http.Header{}
 	}
 	headers.Set("Accept", sseContentType)
-	// 关联开启「透传请求头」时，浏览器/运维工具的 Accept-Encoding 会跟着上来；一旦由调用方
-	// 设定，Go Transport 就**不再透明解压**，探针会对着 gzip 字节流分帧、把好的流式渠道判成
-	// 「无内容增量」。解压交回 Transport 自己处理才有正确的分帧输入。
+	// 防 `customer_headers` 显式配错：透传路径已在 `testapi.BuildTestHeaders` 白名单封死
+	// Accept-Encoding，但 customer_headers 是设计上的无限制显式通道——管理员配了
+	// `Accept-Encoding: gzip` 仍会走到这里；一旦由调用方设定，Go Transport 就**不再透明解压**，
+	// 探针会对着 gzip 字节流分帧、把好的流式渠道判成「无内容增量」。解压交回 Transport 自己处理
+	// 才有正确的分帧输入。（非流式 RunCompletionProbe 未做同款 Del：误配后果由显式通道自负。）
 	headers.Del("Accept-Encoding")
 
 	probeCtx, cancel := context.WithTimeout(req.Ctx, req.Timeout)

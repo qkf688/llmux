@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/textproto"
 	"strconv"
 	"strings"
 	"time"
@@ -229,11 +230,47 @@ func linkErrorType(err error) string {
 	}
 }
 
+// passthroughAllowedHeader 判定入站请求头能否在 with_header=true 时透传给第三方供应商。
+// 默认拒绝（白名单），放行的是无会话/来源泄露风险的调试性头：X- 前缀自定义头（中转渠道
+// 的 org ID、beta 开关等多走这里）、UA 与协议 beta/版本头。排除项各有实因：
+// Authorization/Cookie/X-Api-Key＝管理端会话与网关凭据；Referer/Origin＝内部地址结构；
+// Accept-Encoding/Connection/Proxy-*/Host＝传输层头，自设会禁用 Go Transport 透明解压，
+// gzip 上游会被探针误判死；Sec-*＝浏览器握手内部头。
+// X- 前缀不是可信分区（IETF 早已放弃其语义），反代写入的 IP/URI 变体逐名挡掉。
+// 注意：Anthropic-Beta/Version 两项对 anthropic 供应商实为死通道——providers/anthropic.go
+// 的 BuildReq 以供应商配置为权威无条件覆写/清除；放行它们只为不无谓地丢头（openai 式
+// 端点仍消费 Openai-Beta），统一「透传 ⊂ 出站候选」的口径。
+// key 必须先经 textproto.CanonicalMIMEHeaderKey 规范化再进来比较。
+func passthroughAllowedHeader(canonicalKey string) bool {
+	switch canonicalKey {
+	case "User-Agent", "Openai-Beta", "Anthropic-Beta", "Anthropic-Version":
+		return true
+	}
+	switch {
+	case strings.HasPrefix(canonicalKey, "X-Forwarded-"),
+		canonicalKey == "X-Real-Ip",
+		canonicalKey == "X-Client-Ip",
+		canonicalKey == "X-True-Ip",
+		canonicalKey == "X-Remote-Addr",
+		canonicalKey == "X-Original-Uri":
+		return false // 客户端 IP / 内部路由信息外泄给第三方，无调试价值
+	}
+	return strings.HasPrefix(canonicalKey, "X-") && canonicalKey != "X-Api-Key"
+}
+
+// BuildTestHeaders 组装诊断测试的出站头。with_header 的语义是「白名单透传入站头」
+// 而非整包转发（旧实现 Clone 整份入站头，会把管理员 JWT/Cookie 发给供应商）；
+// customer_headers 是管理员显式配置的通道，不设白名单限制且后写覆盖透传结果。
 func BuildTestHeaders(source http.Header, withHeader *bool, customHeaders map[string]string) http.Header {
 	header := http.Header{}
 
 	if withHeader != nil && *withHeader {
-		header = source.Clone()
+		for key, values := range source {
+			canonical := textproto.CanonicalMIMEHeaderKey(key)
+			if passthroughAllowedHeader(canonical) {
+				header[canonical] = append(header[canonical], values...)
+			}
+		}
 	}
 
 	for key, value := range customHeaders {

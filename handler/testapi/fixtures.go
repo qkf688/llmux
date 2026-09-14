@@ -8,51 +8,36 @@ import (
 
 var errInvalidProviderType = errors.New("invalid provider type")
 
-// buildTestBody 从 provider 元数据取连通性测试体。
-// 未知 type：返回 error（与 healthcheck 回退 OpenAI 策略不同）。
+// buildTestBodyFrom 是各测试体构建函数的共同骨架：按 pick 从 provider 元数据取对应字段，
+// 未知 type 或字段缺失返回 errInvalidProviderType（与 healthcheck 回退 OpenAI 策略不同）。
+// 返回副本：调用方（BuildReq 的 sjson 注入路径）不改全局元数据（元数据是包级共享状态，改脏会扩散到所有链路）。
+func buildTestBodyFrom(providerType string, pick func(providers.Metadata) []byte) ([]byte, error) {
+	m, ok := providers.MetadataOf(providerType)
+	body := pick(m)
+	if !ok || len(body) == 0 {
+		return nil, errInvalidProviderType
+	}
+	out := make([]byte, len(body))
+	copy(out, body)
+	return out, nil
+}
+
+// buildTestBody 取连通性测试体。
 func buildTestBody(providerType string) ([]byte, error) {
-	m, ok := providers.MetadataOf(providerType)
-	if !ok || len(m.TestBody) == 0 {
-		return nil, errInvalidProviderType
-	}
-	// 返回副本，避免调用方改写全局元数据
-	out := make([]byte, len(m.TestBody))
-	copy(out, m.TestBody)
-	return out, nil
+	return buildTestBodyFrom(providerType, func(m providers.Metadata) []byte { return m.TestBody })
 }
 
-// buildStructuredOutputTestBody 从 provider 元数据取结构化输出测试体。
-// 未知 type 或字段缺失：返回 error（与现网一致）。
+// buildStructuredOutputTestBody 取结构化输出测试体。
 func buildStructuredOutputTestBody(providerType string) ([]byte, error) {
-	m, ok := providers.MetadataOf(providerType)
-	if !ok || len(m.StructuredBody) == 0 {
-		return nil, errInvalidProviderType
-	}
-	out := make([]byte, len(m.StructuredBody))
-	copy(out, m.StructuredBody)
-	return out, nil
+	return buildTestBodyFrom(providerType, func(m providers.Metadata) []byte { return m.StructuredBody })
 }
 
-// buildThinkingTestBody 从 provider 元数据取 thinking 能力测试体。
-// 未知 type 或字段缺失：返回 error（与现有 TestBody/StructuredBody 一致）。
+// buildThinkingTestBody 取 thinking 能力测试体。
 func buildThinkingTestBody(providerType string) ([]byte, error) {
-	m, ok := providers.MetadataOf(providerType)
-	if !ok || len(m.ThinkingBody) == 0 {
-		return nil, errInvalidProviderType
-	}
-	out := make([]byte, len(m.ThinkingBody))
-	copy(out, m.ThinkingBody)
-	return out, nil
+	return buildTestBodyFrom(providerType, func(m providers.Metadata) []byte { return m.ThinkingBody })
 }
 
-// buildVisionTestBody 从 provider 元数据取图片识别能力测试体。
-// 未知 type 或字段缺失：返回 error（与现有 TestBody/StructuredBody/ThinkingBody 一致）。
+// buildVisionTestBody 取图片识别能力测试体。
 func buildVisionTestBody(providerType string) ([]byte, error) {
-	m, ok := providers.MetadataOf(providerType)
-	if !ok || len(m.VisionBody) == 0 {
-		return nil, errInvalidProviderType
-	}
-	out := make([]byte, len(m.VisionBody))
-	copy(out, m.VisionBody)
-	return out, nil
+	return buildTestBodyFrom(providerType, func(m providers.Metadata) []byte { return m.VisionBody })
 }

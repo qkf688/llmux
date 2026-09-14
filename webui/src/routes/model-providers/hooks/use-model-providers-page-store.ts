@@ -41,6 +41,7 @@ import {
   selectModelProvidersTemplateLoading,
   selectModelProvidersTemplateNewItem,
   selectModelProvidersTestDialogOpen,
+  selectModelProvidersTestMode,
   selectModelProvidersTestType,
   selectResetModelProvidersTransient,
   selectSetModelProvidersAssociationTestResults,
@@ -85,6 +86,7 @@ import {
   selectSetModelProvidersTemplateLoading,
   selectSetModelProvidersTemplateNewItem,
   selectSetModelProvidersTestDialogOpen,
+  selectSetModelProvidersTestMode,
   selectSetModelProvidersTestType,
   useModelProvidersPageStore,
 } from "@/stores/model-providers";
@@ -103,6 +105,8 @@ export function useModelProvidersPageStoreState() {
   const setSelectedTestId = useModelProvidersPageStore(selectSetModelProvidersSelectedTestId);
   const testType = useModelProvidersPageStore(selectModelProvidersTestType);
   const setTestType = useModelProvidersPageStore(selectSetModelProvidersTestType);
+  const testMode = useModelProvidersPageStore(selectModelProvidersTestMode);
+  const setTestMode = useModelProvidersPageStore(selectSetModelProvidersTestMode);
   const reactTestResult = useModelProvidersPageStore(selectModelProvidersReactTestResult);
   const setReactTestResult = useModelProvidersPageStore(selectSetModelProvidersReactTestResult);
   const isSubmitting = useModelProvidersPageStore(selectModelProvidersIsSubmitting);
@@ -201,6 +205,8 @@ export function useModelProvidersPageStoreState() {
     setSelectedTestId,
     testType,
     setTestType,
+    testMode,
+    setTestMode,
     reactTestResult,
     setReactTestResult,
     isSubmitting,

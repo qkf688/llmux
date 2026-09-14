@@ -105,9 +105,11 @@ export function useModelProvidersPage() {
     setTestDialogOpen: store.setTestDialogOpen,
     setSelectedTestId: store.setSelectedTestId,
     setTestType: store.setTestType,
+    setTestMode: store.setTestMode,
     setReactTestResult: store.setReactTestResult,
     selectedTestId: store.selectedTestId,
     testType: store.testType,
+    testMode: store.testMode,
   });
 
   const associationDialog = useModelProvidersAssociationDialog({

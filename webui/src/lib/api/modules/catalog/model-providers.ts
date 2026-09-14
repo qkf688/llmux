@@ -1,6 +1,18 @@
 import type { ErrorType } from "@/lib/errors";
 import { apiRequest } from "../../core/client";
 
+// 测试执行模式与流式诊断块是**回包契约**（值域镜像后端 handler/testapi 的
+// testModeStream/testModeNonStream 与 streamStatsPayload），故定义在 API 层，
+// 由 stores 侧按需导入——反向导入会让 lib/api 依赖 stores。
+export type TestMode = "non_stream" | "stream";
+
+export type StreamTestStats = {
+  frames: number;
+  first_frame_ms: number;
+  duration_ms: number;
+  terminated_by: string;
+};
+
 export interface ModelWithProvider {
   ID: number;
   ModelID: number;
@@ -34,6 +46,10 @@ export interface ModelProviderTestResult {
   passed?: boolean;
   error?: string;
   error_type?: ErrorType;
+  /** 本次执行的模式（后端恒回传；值域见本文件顶部的 TestMode） */
+  mode?: TestMode;
+  /** 流式诊断块：仅流式模式且已进入分帧阶段时存在（非流式、或上游连 SSE 都没起时缺席） */
+  stream?: StreamTestStats;
   /** 后端实际命中的分组（#19 起与 /providers/:id/test 同形状；未选定链路 = 0/空串） */
   group_id?: number;
   group_name?: string;
@@ -164,20 +180,33 @@ export async function batchUpdateModelProvidersCapabilities(
   });
 }
 
-export async function testModelProvider(id: number): Promise<ModelProviderTestResult> {
-  return apiRequest<ModelProviderTestResult>(`/test/${id}`);
+// 四个能力测试端点的模式参数：流式靠 ?stream=1 表达（同一 GET 承载两种模式，
+// 后端不新增路由）。非流式不带参数，请求与改造前逐字节一致。
+const streamModeSuffix = (mode: TestMode) => (mode === "stream" ? "?stream=1" : "");
+
+export async function testModelProvider(id: number, mode: TestMode = "non_stream"): Promise<ModelProviderTestResult> {
+  return apiRequest<ModelProviderTestResult>(`/test/${id}${streamModeSuffix(mode)}`);
 }
 
-export async function testModelProviderStructuredOutput(id: number): Promise<ModelProviderTestResult> {
-  return apiRequest<ModelProviderTestResult>(`/test/structured-output/${id}`);
+export async function testModelProviderStructuredOutput(
+  id: number,
+  mode: TestMode = "non_stream"
+): Promise<ModelProviderTestResult> {
+  return apiRequest<ModelProviderTestResult>(`/test/structured-output/${id}${streamModeSuffix(mode)}`);
 }
 
-export async function testModelProviderThinking(id: number): Promise<ModelProviderTestResult> {
-  return apiRequest<ModelProviderTestResult>(`/test/thinking/${id}`);
+export async function testModelProviderThinking(
+  id: number,
+  mode: TestMode = "non_stream"
+): Promise<ModelProviderTestResult> {
+  return apiRequest<ModelProviderTestResult>(`/test/thinking/${id}${streamModeSuffix(mode)}`);
 }
 
-export async function testModelProviderVision(id: number): Promise<ModelProviderTestResult> {
-  return apiRequest<ModelProviderTestResult>(`/test/vision/${id}`);
+export async function testModelProviderVision(
+  id: number,
+  mode: TestMode = "non_stream"
+): Promise<ModelProviderTestResult> {
+  return apiRequest<ModelProviderTestResult>(`/test/vision/${id}${streamModeSuffix(mode)}`);
 }
 
 export async function previewAutoAssociate(): Promise<AssociationPreview[]> {

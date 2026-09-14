@@ -9,6 +9,7 @@ import type {
   ModelProvidersPagePreferences,
   ProviderModelSelection,
   ReactTestResultState,
+  TestMode,
   TestType,
 } from "@/stores/model-providers/types";
 
@@ -30,6 +31,7 @@ export type ModelProvidersPageState = {
   testDialogOpen: boolean;
   selectedTestId: number | null;
   testType: TestType;
+  testMode: TestMode;
   isSubmitting: boolean;
 
   modelListDialogOpen: boolean;
@@ -86,6 +88,7 @@ export type ModelProvidersPageState = {
   setTestDialogOpen: (open: boolean) => void;
   setSelectedTestId: (id: number | null) => void;
   setTestType: (type: TestType) => void;
+  setTestMode: (mode: TestMode) => void;
   setIsSubmitting: (loading: boolean) => void;
 
   setModelListDialogOpen: (open: boolean) => void;
@@ -159,6 +162,8 @@ export const modelProvidersPageStore = createStore<ModelProvidersPageState>()((s
   testDialogOpen: false,
   selectedTestId: null,
   testType: "connectivity",
+  // 默认非流式：与改造前的行为一致，流式是显式选择（弹窗里另有一处开关）。
+  testMode: "non_stream",
   isSubmitting: false,
 
   modelListDialogOpen: false,
@@ -215,6 +220,7 @@ export const modelProvidersPageStore = createStore<ModelProvidersPageState>()((s
   setTestDialogOpen: (open: boolean) => set({ testDialogOpen: open }),
   setSelectedTestId: (id: number | null) => set({ selectedTestId: id }),
   setTestType: (type: TestType) => set({ testType: type }),
+  setTestMode: (mode: TestMode) => set({ testMode: mode }),
   setIsSubmitting: (loading: boolean) => set({ isSubmitting: loading }),
 
   setModelListDialogOpen: (open: boolean) => set({ modelListDialogOpen: open }),
@@ -292,6 +298,7 @@ export const modelProvidersPageStore = createStore<ModelProvidersPageState>()((s
       testDialogOpen: false,
       selectedTestId: null,
       testType: "connectivity",
+      testMode: "non_stream",
       isSubmitting: false,
       modelListDialogOpen: false,
       modelSearchKeyword: "",

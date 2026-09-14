@@ -7,10 +7,13 @@ export type {
   AssociationBatchTestResult,
   BatchTestProgress,
   BlacklistFilter,
+  CapabilityTestKey,
   ModelProvidersPagePreferences,
   ProviderModelGroup,
   ProviderModelSelection,
   ProviderModelWithOwner,
   ReactTestResultState,
+  StreamTestStats,
+  TestMode,
   TestType,
 } from "@/stores/model-providers/types";

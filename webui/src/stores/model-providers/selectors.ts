@@ -7,6 +7,7 @@ export const selectModelProvidersDeleteId = (state: ModelProvidersPageState) => 
 export const selectModelProvidersTestDialogOpen = (state: ModelProvidersPageState) => state.testDialogOpen;
 export const selectModelProvidersSelectedTestId = (state: ModelProvidersPageState) => state.selectedTestId;
 export const selectModelProvidersTestType = (state: ModelProvidersPageState) => state.testType;
+export const selectModelProvidersTestMode = (state: ModelProvidersPageState) => state.testMode;
 export const selectModelProvidersIsSubmitting = (state: ModelProvidersPageState) => state.isSubmitting;
 
 export const selectModelProvidersModelListDialogOpen = (state: ModelProvidersPageState) => state.modelListDialogOpen;
@@ -60,6 +61,7 @@ export const selectSetModelProvidersDeleteId = (state: ModelProvidersPageState) 
 export const selectSetModelProvidersTestDialogOpen = (state: ModelProvidersPageState) => state.setTestDialogOpen;
 export const selectSetModelProvidersSelectedTestId = (state: ModelProvidersPageState) => state.setSelectedTestId;
 export const selectSetModelProvidersTestType = (state: ModelProvidersPageState) => state.setTestType;
+export const selectSetModelProvidersTestMode = (state: ModelProvidersPageState) => state.setTestMode;
 export const selectSetModelProvidersIsSubmitting = (state: ModelProvidersPageState) => state.setIsSubmitting;
 
 export const selectSetModelProvidersModelListDialogOpen = (state: ModelProvidersPageState) => state.setModelListDialogOpen;

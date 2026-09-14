@@ -61,6 +61,8 @@ export function useModelProvidersPageDialogProps(ctx: DialogPropsContext) {
     onOpenChange: store.setTestDialogOpen,
     testType: store.testType,
     onTestTypeChange: store.setTestType,
+    testMode: store.testMode,
+    onTestModeChange: store.setTestMode,
     selectedTestId: store.selectedTestId,
     testResults: testing.testResults,
     structuredTestResults: testing.structuredTestResults,

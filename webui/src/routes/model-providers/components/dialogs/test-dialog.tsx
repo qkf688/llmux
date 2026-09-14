@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { TestType } from "../../types";
+import type { TestMode, TestType } from "../../types";
 import type { ModelProviderTestResult } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -16,19 +16,25 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ExpandableError } from "@/components/expandable-error";
 import { LoadingState } from "@/components/ui/loading-state";
 import { visionTestImageDataURL } from "../../vision-test-image";
+// 复合键与结果表类型都从执行单元导入：键格式是「关联结果存储」的隐式契约，
+// 两处各拼一遍 `${id}:${mode}` 会在改键时静默读空。
+import { capabilityTestKey, type CapabilityTestResults } from "../../hooks/use-model-providers-testing";
 
-type TestResultsById = Record<number, { loading: boolean; result: ModelProviderTestResult | null }>;
+// 结果按「关联:模式」存一格；键的构造与类型都来自执行单元（capabilityTestKey），
+// 避免两处各拼一遍格式在改键时静默读空。
 
 type TestDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   testType: TestType;
   onTestTypeChange: (value: TestType) => void;
+  testMode: TestMode;
+  onTestModeChange: (value: TestMode) => void;
   selectedTestId: number | null;
-  testResults: TestResultsById;
-  structuredTestResults: TestResultsById;
-  thinkingTestResults: TestResultsById;
-  visionTestResults: TestResultsById;
+  testResults: CapabilityTestResults;
+  structuredTestResults: CapabilityTestResults;
+  thinkingTestResults: CapabilityTestResults;
+  visionTestResults: CapabilityTestResults;
   reactTestResult: {
     loading: boolean;
     messages: string;
@@ -61,6 +67,28 @@ const TEST_OPTIONS: { value: TestType; label: string; description: string }[] = 
   },
 ];
 
+// 执行模式：与测试类型正交（同一能力的两种跑法）。流式的判定输入是 SSE 折叠出的响应体，
+// 通过标准与非流式完全一致，额外要求「真是 SSE 流 + 有内容增量 + 有终止事件」。
+const TEST_MODE_OPTIONS: { value: TestMode; label: string; description: string }[] = [
+  { value: "non_stream", label: "非流式", description: "一次性返回完整响应（默认，最快）" },
+  {
+    value: "stream",
+    label: "流式",
+    description: "带 stream=true：响应必须是 SSE 流、有内容增量、且以终止事件收尾。耗时明显更长。",
+  },
+];
+
+// 终止事件值域（镜像后端 handler/testapi 的 streamTerminal*）。未知值原样展示，
+// 后端加新值时不至于在这里静默显示成空。
+const TERMINAL_EVENT_LABELS: Record<string, string> = {
+  "[DONE]": "[DONE]",
+  message_stop: "message_stop",
+  "response.completed": "response.completed",
+  "response.failed": "response.failed",
+  "response.incomplete": "response.incomplete",
+  none: "未收到（流被切断）",
+};
+
 // 日志/输出统一展示块：react 日志、各能力测试的原始输出/提取内容等处复用。
 // wrap=false 时保留原始换行并横向滚动（适合日志/原始文本）；wrap=true 时自动换行（适合 JSON）。
 function LogBlock({ label, value, wrap }: { label: string; value: string; wrap?: boolean }) {
@@ -88,8 +116,35 @@ function ResultPlaceholder() {
   );
 }
 
+// 流式诊断块：帧数 / 首帧耗时 / 总耗时 / 终止事件。这四个数是判断「渠道是不是真支持流式」
+// 的直接证据（缺终止事件 = 流被切断，是最常见也最难从一句「失败」里看出来的缺陷）。
+function StreamStatsSection({ result }: { result: ModelProviderTestResult }) {
+  const stats = result.stream;
+  if (!stats) {
+    return null;
+  }
+  const items: { label: string; value: string }[] = [
+    { label: "SSE 帧数", value: String(stats.frames) },
+    // 一帧都没收到时首帧耗时是 0，与「瞬时首帧」看起来一样——显示成占位符，
+    // 免得把「上游压根没吐字」读成「响应飞快」。
+    { label: "首帧耗时", value: stats.frames > 0 ? `${stats.first_frame_ms} ms` : "—" },
+    { label: "总耗时", value: `${stats.duration_ms} ms` },
+    { label: "终止事件", value: TERMINAL_EVENT_LABELS[stats.terminated_by] ?? stats.terminated_by },
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-md border bg-background/40 p-2 text-xs sm:grid-cols-4">
+      {items.map((item) => (
+        <div key={item.label} className="flex flex-col">
+          <span className="text-muted-foreground">{item.label}</span>
+          <span className="font-mono">{item.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // JSON 型能力测试（结构化输出 / thinking / vision）共用同一形状的回包：
-// loading → 占位 → 结论 + 类型专属提取文本 + 原始输出。三态切换收敛进本组件，
+// loading → 占位 → 结论 + 流式诊断 + 类型专属提取文本 + 原始输出。三态切换收敛进本组件，
 // 新增测试类型不再逐块复制 JSX（DRY）。renderDetail 返回 null 时不渲染该块。
 function CapabilityResultSection({
   loading,
@@ -113,6 +168,7 @@ function CapabilityResultSection({
   const passed = result.passed === true;
   const errorMessage = result.error || result.message || (passed ? passedLabel : failedLabel);
   const rawOutput = result.raw_output ?? "";
+  const isStreamMode = result.mode === "stream";
   return (
     <div className="space-y-3">
       <ExpandableError
@@ -120,8 +176,9 @@ function CapabilityResultSection({
         isSuccess={passed}
         defaultExpanded={!passed}
       />
+      <StreamStatsSection result={result} />
       {renderDetail ? renderDetail(result) : null}
-      {rawOutput && <LogBlock label="原始输出" value={rawOutput} />}
+      {rawOutput && <LogBlock label={isStreamMode ? "原始 SSE 输出" : "原始输出"} value={rawOutput} />}
     </div>
   );
 }
@@ -131,6 +188,8 @@ export function TestDialog({
   onOpenChange,
   testType,
   onTestTypeChange,
+  testMode,
+  onTestModeChange,
   selectedTestId,
   testResults,
   structuredTestResults,
@@ -140,7 +199,10 @@ export function TestDialog({
   onClose,
   onExecute,
 }: TestDialogProps) {
-  const entryOf = (map: TestResultsById) => (selectedTestId ? map[selectedTestId] : undefined);
+  // 结果格按「关联:模式」定位：切换模式就是换一个格子，不会读到上一模式的结论。
+  const entryOf = (map: CapabilityTestResults) =>
+    selectedTestId ? map[capabilityTestKey(selectedTestId, testMode)] : undefined;
+  const connectivityEntry = entryOf(testResults);
   const structuredEntry = entryOf(structuredTestResults);
   const thinkingEntry = entryOf(thinkingTestResults);
   const visionEntry = entryOf(visionTestResults);
@@ -148,13 +210,17 @@ export function TestDialog({
   // 测试类型 → 是否执行中。Record 穷尽性保证新增 TestType 时这里被类型系统强制补一行，
   // 不再用嵌套三元（旧链的 else 分支会把未知类型误当 structured 的 loading）。
   const loadingByTestType: Record<TestType, boolean> = {
-    connectivity: !!(selectedTestId && testResults[selectedTestId]?.loading),
+    connectivity: !!connectivityEntry?.loading,
     react: reactTestResult.loading,
     structured_output: !!structuredEntry?.loading,
     thinking: !!thinkingEntry?.loading,
     vision: !!visionEntry?.loading,
   };
   const executeDisabled = loadingByTestType[testType];
+
+  // ReAct 端点自己发流（第三方 agent 库），模式开关对它没有意义——禁用而不是隐藏，
+  // 是为了让「为什么这里不能选」有地方写说明，而不是留个凭空消失的控件。
+  const modeSelectionDisabled = testType === "react" || executeDisabled;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -169,6 +235,7 @@ export function TestDialog({
             value={testType}
             onValueChange={(value: string) => onTestTypeChange(value as TestType)}
             className="gap-2"
+            disabled={executeDisabled}
           >
             {TEST_OPTIONS.map((opt) => (
               <label
@@ -188,6 +255,35 @@ export function TestDialog({
             ))}
           </RadioGroup>
 
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">执行模式</p>
+            <RadioGroup
+              value={testMode}
+              onValueChange={(value: string) => onTestModeChange(value as TestMode)}
+              className="grid grid-cols-2 gap-2"
+              disabled={modeSelectionDisabled}
+            >
+              {TEST_MODE_OPTIONS.map((opt) => (
+                <label
+                  key={opt.value}
+                  htmlFor={`mode-${opt.value}`}
+                  className={cn(
+                    "flex cursor-pointer items-start gap-2 rounded-md border p-2 transition-colors",
+                    testMode === opt.value ? "border-primary bg-primary/5" : "hover:bg-muted/50",
+                    modeSelectionDisabled && "cursor-not-allowed opacity-60",
+                  )}
+                >
+                  <RadioGroupItem value={opt.value} id={`mode-${opt.value}`} className="mt-0.5" />
+                  <div className="space-y-0.5">
+                    <span className="text-sm font-medium leading-none">{opt.label}</span>
+                    <p className="text-xs text-muted-foreground">{opt.description}</p>
+                  </div>
+                </label>
+              ))}
+            </RadioGroup>
+            {testType === "react" && <p className="text-xs text-muted-foreground">React 测试本身即流式，模式对其无影响。</p>}
+          </div>
+
           {/* vision 测试图预览：常量前端自内嵌（不经 API 回显），选中测试类型时即可看到「会给模型看什么图」 */}
           {testType === "vision" && (
             <div className="flex items-center gap-3 rounded-md border p-3">
@@ -206,25 +302,14 @@ export function TestDialog({
 
           {/* 固定高度结果区：切换测试类型 / 展开错误 / 追加日志时，dialog 外框尺寸恒定，仅此处内部滚动 */}
           <div className="h-64 overflow-y-auto rounded-md border bg-muted/20 p-3">
-            {testType === "connectivity" &&
-              (selectedTestId && testResults[selectedTestId]?.loading ? (
-                <LoadingState text="测试中..." />
-              ) : selectedTestId && testResults[selectedTestId] ? (
-                <ExpandableError
-                  error={{
-                    message:
-                      testResults[selectedTestId].result?.error ||
-                      testResults[selectedTestId].result?.message ||
-                      "测试成功",
-                    summary: testResults[selectedTestId].result?.error ? "测试失败" : "测试成功",
-                    type: testResults[selectedTestId].result?.error_type,
-                  }}
-                  isSuccess={!testResults[selectedTestId].result?.error}
-                  defaultExpanded={!!testResults[selectedTestId].result?.error}
-                />
-              ) : (
-                <ResultPlaceholder />
-              ))}
+            {testType === "connectivity" && (
+              <CapabilityResultSection
+                loading={!!connectivityEntry?.loading}
+                result={connectivityEntry?.result ?? null}
+                passedLabel="连通性测试通过"
+                failedLabel="连通性测试失败"
+              />
+            )}
 
             {testType === "react" &&
               (reactTestResult.loading ? (

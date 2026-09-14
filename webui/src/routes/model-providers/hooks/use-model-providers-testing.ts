@@ -31,6 +31,37 @@ type UseModelProvidersTestingInput = {
   testType: TestType;
 };
 
+// JSON 型能力测试执行单元：按关联 id 记录 loading/结果 + 单次执行与异常兜底。
+// 此前 connectivity/structured/thinking/vision 各抄一份同款 try/catch（第 5 类测试就要抄第 5 份），
+// 收敛后新增测试类型只需多调一次本 hook（OCP）。api 传模块级函数引用，天然稳定。
+function useCapabilityTest(api: (id: number) => Promise<ModelProviderTestResult>) {
+  const [results, setResults] = useState<
+    Record<number, { loading: boolean; result: ModelProviderTestResult | null }>
+  >({});
+
+  const run = useCallback(
+    async (id: number): Promise<ModelProviderTestResult> => {
+      try {
+        setResults((prev) => ({ ...prev, [id]: { loading: true, result: null } }));
+        const result = await api(id);
+        setResults((prev) => ({ ...prev, [id]: { loading: false, result } }));
+        return result;
+      } catch (err) {
+        const message = `测试失败: ${toErrorMessage(err)}`;
+        setResults((prev) => ({
+          ...prev,
+          [id]: { loading: false, result: { passed: false, error: message } },
+        }));
+        console.error(err);
+        return { passed: false, error: message };
+      }
+    },
+    [api]
+  );
+
+  return { results, run };
+}
+
 export function useModelProvidersTesting({
   setTestDialogOpen,
   setSelectedTestId,
@@ -39,18 +70,10 @@ export function useModelProvidersTesting({
   selectedTestId,
   testType,
 }: UseModelProvidersTestingInput) {
-  const [testResults, setTestResults] = useState<
-    Record<number, { loading: boolean; result: ModelProviderTestResult | null }>
-  >({});
-  const [structuredTestResults, setStructuredTestResults] = useState<
-    Record<number, { loading: boolean; result: ModelProviderTestResult | null }>
-  >({});
-  const [thinkingTestResults, setThinkingTestResults] = useState<
-    Record<number, { loading: boolean; result: ModelProviderTestResult | null }>
-  >({});
-  const [visionTestResults, setVisionTestResults] = useState<
-    Record<number, { loading: boolean; result: ModelProviderTestResult | null }>
-  >({});
+  const connectivityTest = useCapabilityTest(testModelProvider);
+  const structuredTest = useCapabilityTest(testModelProviderStructuredOutput);
+  const thinkingTest = useCapabilityTest(testModelProviderThinking);
+  const visionTest = useCapabilityTest(testModelProviderVision);
 
   const currentControllerRef = useRef<AbortController | null>(null);
 
@@ -73,71 +96,6 @@ export function useModelProvidersTesting({
     },
     [setReactTestResult, setSelectedTestId, setTestDialogOpen, setTestType]
   );
-
-  const handleConnectivityTest = useCallback(async (id: number): Promise<ModelProviderTestResult> => {
-    try {
-      setTestResults((prev) => ({ ...prev, [id]: { loading: true, result: null } }));
-      const result = await testModelProvider(id);
-      setTestResults((prev) => ({ ...prev, [id]: { loading: false, result } }));
-      return result;
-    } catch (err) {
-      const message = `测试失败: ${toErrorMessage(err)}`;
-      setTestResults((prev) => ({ ...prev, [id]: { loading: false, result: { error: message } } }));
-      console.error(err);
-      return { error: message };
-    }
-  }, []);
-
-  const handleStructuredOutputTest = useCallback(async (id: number): Promise<ModelProviderTestResult> => {
-    try {
-      setStructuredTestResults((prev) => ({ ...prev, [id]: { loading: true, result: null } }));
-      const result = await testModelProviderStructuredOutput(id);
-      setStructuredTestResults((prev) => ({ ...prev, [id]: { loading: false, result } }));
-      return result;
-    } catch (err) {
-      const message = `测试失败: ${toErrorMessage(err)}`;
-      setStructuredTestResults((prev) => ({
-        ...prev,
-        [id]: { loading: false, result: { passed: false, error: message } },
-      }));
-      console.error(err);
-      return { passed: false, error: message };
-    }
-  }, []);
-
-  const handleThinkingTest = useCallback(async (id: number): Promise<ModelProviderTestResult> => {
-    try {
-      setThinkingTestResults((prev) => ({ ...prev, [id]: { loading: true, result: null } }));
-      const result = await testModelProviderThinking(id);
-      setThinkingTestResults((prev) => ({ ...prev, [id]: { loading: false, result } }));
-      return result;
-    } catch (err) {
-      const message = `测试失败: ${toErrorMessage(err)}`;
-      setThinkingTestResults((prev) => ({
-        ...prev,
-        [id]: { loading: false, result: { passed: false, error: message } },
-      }));
-      console.error(err);
-      return { passed: false, error: message };
-    }
-  }, []);
-
-  const handleVisionTest = useCallback(async (id: number): Promise<ModelProviderTestResult> => {
-    try {
-      setVisionTestResults((prev) => ({ ...prev, [id]: { loading: true, result: null } }));
-      const result = await testModelProviderVision(id);
-      setVisionTestResults((prev) => ({ ...prev, [id]: { loading: false, result } }));
-      return result;
-    } catch (err) {
-      const message = `测试失败: ${toErrorMessage(err)}`;
-      setVisionTestResults((prev) => ({
-        ...prev,
-        [id]: { loading: false, result: { passed: false, error: message } },
-      }));
-      console.error(err);
-      return { passed: false, error: message };
-    }
-  }, []);
 
   const handleReactTest = useCallback(
     async (id: number) => {
@@ -203,24 +161,24 @@ export function useModelProvidersTesting({
   const executeTest = useCallback(async () => {
     if (!selectedTestId) return;
     const testRunnerByType: Record<TestType, (id: number) => Promise<unknown>> = {
-      connectivity: handleConnectivityTest,
+      connectivity: connectivityTest.run,
       react: handleReactTest,
-      structured_output: handleStructuredOutputTest,
-      thinking: handleThinkingTest,
-      vision: handleVisionTest,
+      structured_output: structuredTest.run,
+      thinking: thinkingTest.run,
+      vision: visionTest.run,
     };
     await testRunnerByType[testType](selectedTestId);
-  }, [handleConnectivityTest, handleReactTest, handleStructuredOutputTest, handleThinkingTest, handleVisionTest, selectedTestId, testType]);
+  }, [connectivityTest.run, handleReactTest, structuredTest.run, thinkingTest.run, visionTest.run, selectedTestId, testType]);
 
   const executeTestNow = useCallback(() => {
     void executeTest();
   }, [executeTest]);
 
   return {
-    testResults,
-    structuredTestResults,
-    thinkingTestResults,
-    visionTestResults,
+    testResults: connectivityTest.results,
+    structuredTestResults: structuredTest.results,
+    thinkingTestResults: thinkingTest.results,
+    visionTestResults: visionTest.results,
     handleTest,
     dialogClose,
     executeTestNow,

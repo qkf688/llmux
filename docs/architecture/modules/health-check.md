@@ -43,7 +43,8 @@ models.HealthCheckLog
 - **逐组失败原因合并进 `health_check_logs.error`**（带分组名）：该字段是排查入口，只报「failed」等于丢掉线索
 - **Hook 解耦范围（现状）**：仅权重/优先级调整走 `AdjustmentHooks`；关联启停/失败计数仍在 healthcheck 结果路径内写库——不是「全部副作用都经 Hook」
 - 禁止 healthcheck 直接 import `service/adjustment` 或 `service/chat` 形成环；Hook 为包级注入（实现在 `service/adjustment` 的 `init`）
+- **`with_header` 在健康检查路径是空语义**：本链路是后台任务、无终端用户入站请求可透传，关联的 `with_header=true` 实际只生效 `customer_headers`（`check_single.go`）。勿按「三链路同源白名单透传」误解——共用 `common` 判据的只有 chat 生产转发与 testapi 诊断两条
 
 ---
 
-*本文档由 Project Architecture Documenter skill 生成，生成日期：2026-07-23；同日审查回写。*
+*本文档由 Project Architecture Documenter skill 生成，生成日期：2026-07-23；同日审查回写；2026-09-15 记录 healthcheck 路径 `with_header` 的空语义（白名单收口仅涉 chat+testapi 两链路）。*

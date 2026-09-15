@@ -14,6 +14,12 @@ type ApiKey struct {
 	Name    string `gorm:"type:varchar(100);not null"`
 	Key     string `gorm:"column:api_key;type:text;not null"`
 	KeyHash string `gorm:"column:api_key_hash;type:varchar(64);uniqueIndex;not null"`
+	// Headers 是 key 级自定义出站头（#6，方案 §2 切片 B）：网关转发 /v1 请求时按
+	// 四层优先级链注入（入站透传 < key 头 < 关联级 customer_headers < providers 权威）。
+	// 明文 JSON 列非密文——伪装客户端头族是展示配置不是凭据，鉴权 FindByHash 直读。
+	// 与 ModelWithProvider.CustomerHeaders 同构（serializer:json；注意 map-Updates
+	// 不吃 serializer，PATCH 序列化责任在 handler，见 apikeys/crud.go）。
+	Headers map[string]string `gorm:"serializer:json"`
 	// Enabled 不加 gorm default tag：default 标签会让「显式传 false 建行」被
 	// 零值吞掉改写成 true（gorm 视为未设置），创建语义交给调用方显式赋值。
 	Enabled bool `gorm:"not null"`

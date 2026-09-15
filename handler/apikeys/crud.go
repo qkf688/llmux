@@ -1,6 +1,7 @@
 package apikeys
 
 import (
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"strings"
@@ -18,28 +19,35 @@ import (
 )
 
 // createApiKeyRequest：value 可省略（省略 = 系统生成随机合规 key，裁决见
-// .plan/plan.md Rulings）；name 仅展示用、允许重名（方案 §5）。
+// .plan/plan.md Rulings）；name 仅展示用、允许重名（方案 §5）；headers 可选
+// （key 级自定义出站头，#6 方案 §2 切片 B——管理员显式通道，不设黑名单）。
 type createApiKeyRequest struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
+	Name    string            `json:"name"`
+	Value   string            `json:"value"`
+	Headers map[string]string `json:"headers"`
 }
 
 // updateApiKeyRequest：三态指针——nil = 不改该字段。不提供 value：key 值
-// 创建后不可改（轮换 = 新建 + 停用/删除，方案 §2 定案）。
+// 创建后不可改（轮换 = 新建 + 停用/删除，方案 §2 定案）。headers 同为三态指针：
+// nil（JSON 缺该键）= 不改；指向 map（含空 map {}）= 整体覆盖，空 map 即清空
+// （AGENTS §5 三态禁 omitempty——「不改」与「清空」两语义必须可区分）。
 type updateApiKeyRequest struct {
-	Name    *string `json:"name"`
-	Enabled *bool   `json:"enabled"`
+	Name    *string            `json:"name"`
+	Enabled *bool              `json:"enabled"`
+	Headers *map[string]string `json:"headers"`
 }
 
 // apiKeyResponse 管理端形状。api_key = 解密明文（复制用，故响应恒 no-store）；
 // 解密失败退化为 ****（与 credentialcrypto.MaskStored 同一降级口径：掩密文
-// 形似真实值毫无意义，绝不能输出）。
+// 形似真实值毫无意义，绝不能输出）。headers 键恒在无 omitempty：null=未配置，
+// 缺键会让前端无法区分「未配置」与「旧后端」（AGENTS §5 三态纪律）。
 type apiKeyResponse struct {
-	ID        uint      `json:"id"`
-	Name      string    `json:"name"`
-	APIKey    string    `json:"api_key"`
-	Enabled   bool      `json:"enabled"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        uint              `json:"id"`
+	Name      string            `json:"name"`
+	APIKey    string            `json:"api_key"`
+	Enabled   bool              `json:"enabled"`
+	CreatedAt time.Time         `json:"created_at"`
+	Headers   map[string]string `json:"headers"`
 }
 
 func toApiKeyResponse(key *models.ApiKey, cipher *credentialcrypto.Cipher) apiKeyResponse {
@@ -54,6 +62,7 @@ func toApiKeyResponse(key *models.ApiKey, cipher *credentialcrypto.Cipher) apiKe
 		APIKey:    plain,
 		Enabled:   key.Enabled,
 		CreatedAt: key.CreatedAt,
+		Headers:   key.Headers,
 	}
 }
 
@@ -123,6 +132,9 @@ func CreateApiKey(c *gin.Context) {
 		KeyHash: cipher.Hash(plain),
 		// Enabled 无 gorm default tag，建库语义「新 key 即可用」在此显式赋值
 		Enabled: true,
+		// Create 走 struct 路径，serializer:json 自动编码（PATCH map 路径才需手动
+		// marshal——两路径不对称由契约测试钉死）
+		Headers: req.Headers,
 	}
 	if err := repos().ApiKey.Create(c.Request.Context(), row); err != nil {
 		if errors.Is(err, repository.ErrApiKeyExists) {
@@ -180,6 +192,17 @@ func UpdateApiKey(c *gin.Context) {
 	}
 	if req.Enabled != nil {
 		fields["enabled"] = *req.Enabled
+	}
+	if req.Headers != nil {
+		// UpdateFields 走 map[string]any，GORM serializer:json 对 map-Updates 不生效
+		// （已知坑）——序列化收在 handler（DTO 翻译职责），repository 不感知 JSON。
+		// 空 map 编码为 "{}" 即「清空」，与 nil（键缺席=不改）语义正交。
+		encoded, err := json.Marshal(*req.Headers)
+		if err != nil {
+			httpresp.BadRequest(c, "invalid headers: "+err.Error())
+			return
+		}
+		fields["headers"] = string(encoded)
 	}
 	if len(fields) == 0 {
 		httpresp.BadRequest(c, "No fields to update")

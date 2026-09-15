@@ -254,6 +254,80 @@ func TestUpdateApiKey_RenameAndToggle(t *testing.T) {
 	}
 }
 
+// —— #6 AC-1/AC-2：key 级 headers 存储与三态 PATCH ——————————————————
+
+// AC-1：创建携带 headers → 响应回显同名键，库内 serializer 还原为 map。
+func TestCreateApiKey_WithHeadersStoredAndEchoed(t *testing.T) {
+	setTestCipher(t)
+	engine := newApiKeyTestRouter(t)
+
+	rec := doJSON(t, engine, http.MethodPost, "/api/api-keys",
+		`{"name":"codex","value":"sk-llmux-headers-create-01","headers":{"User-Agent":"codex_cli_rs/0.1.0","X-Codex-Turn-State":"active"}}`)
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("HTTP %d: %s", rec.Code, body)
+	}
+	if got := gjson.Get(body, "data.headers.User-Agent").String(); got != "codex_cli_rs/0.1.0" {
+		t.Fatalf("回显 headers.User-Agent = %q: %s", got, body)
+	}
+	var stored models.ApiKey
+	if err := models.DB.Where("name = ?", "codex").First(&stored).Error; err != nil {
+		t.Fatalf("读回存储行: %v", err)
+	}
+	if stored.Headers["User-Agent"] != "codex_cli_rs/0.1.0" || stored.Headers["X-Codex-Turn-State"] != "active" {
+		t.Fatalf("落库 headers 不符: %v", stored.Headers)
+	}
+}
+
+// AC-1/AC-2 三态纪律：未配置时响应 `headers` 键恒在且为 null（缺键=断层）。
+func TestCreateApiKey_ResponseHeadersKeyAlwaysPresent(t *testing.T) {
+	setTestCipher(t)
+	engine := newApiKeyTestRouter(t)
+
+	rec := doJSON(t, engine, http.MethodPost, "/api/api-keys", `{"name":"plain","value":"sk-llmux-headers-absent-01"}`)
+	created := gjson.Get(rec.Body.String(), "data.headers")
+	if !created.Exists() || created.Type != gjson.Null {
+		t.Fatalf("创建未配 headers 应回 null 键，实得 %s", rec.Body.String())
+	}
+	list := doJSON(t, engine, http.MethodGet, "/api/api-keys", "")
+	item := gjson.Get(list.Body.String(), "data.0.headers")
+	if !item.Exists() || item.Type != gjson.Null {
+		t.Fatalf("列表同理键恒在且 null，实得 %s", list.Body.String())
+	}
+}
+
+// AC-2 三态：PATCH 带对象=落库；不带键=既有值不动；带 {}=清空。
+// 单 headers 更新体不得被「No fields to update」误拒。
+func TestUpdateApiKey_HeadersTriState(t *testing.T) {
+	setTestCipher(t)
+	engine := newApiKeyTestRouter(t)
+	id := createKeyViaHandler(t, engine, "h", "sk-llmux-headers-patch-01")
+	path := "/api/api-keys/" + strconv.FormatUint(uint64(id), 10)
+
+	set := doJSON(t, engine, http.MethodPatch, path, `{"headers":{"X-App":"cli"}}`)
+	if set.Code != http.StatusOK {
+		t.Fatalf("仅带 headers 的 PATCH 应成功，实得 %d: %s", set.Code, set.Body.String())
+	}
+	if got := gjson.Get(set.Body.String(), "data.headers.X-App").String(); got != "cli" {
+		t.Fatalf("PATCH 回显 headers.X-App = %q: %s", got, set.Body.String())
+	}
+
+	nameOnly := doJSON(t, engine, http.MethodPatch, path, `{"name":"h2"}`)
+	if got := gjson.Get(nameOnly.Body.String(), "data.headers.X-App").String(); got != "cli" {
+		t.Fatalf("无 headers 键的 PATCH 不得改既有 headers，实得 %s", nameOnly.Body.String())
+	}
+
+	cleared := doJSON(t, engine, http.MethodPatch, path, `{"headers":{}}`)
+	clearedHeaders := gjson.Get(cleared.Body.String(), "data.headers")
+	if !clearedHeaders.Exists() || clearedHeaders.Type != gjson.JSON || len(clearedHeaders.Map()) != 0 {
+		t.Fatalf("headers {} 应清空为 {}，实得 %s", cleared.Body.String())
+	}
+	reopened := doJSON(t, engine, http.MethodGet, "/api/api-keys", "")
+	if item := gjson.Get(reopened.Body.String(), "data.0.headers"); item.Type != gjson.JSON || len(item.Map()) != 0 {
+		t.Fatalf("清空须持久（列表回显仍为 {}），实得 %s", reopened.Body.String())
+	}
+}
+
 func TestDeleteApiKey_Hard(t *testing.T) {
 	setTestCipher(t)
 	engine := newApiKeyTestRouter(t)

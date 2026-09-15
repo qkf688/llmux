@@ -33,6 +33,9 @@ func newReqMeta(c *gin.Context) models.ReqMeta {
 		callerID := caller.ID
 		meta.ApiKeyID = &callerID
 		meta.ApiKeyName = caller.Name
+		// headers 已由 AuthAPIKey 浅拷贝定格，此处传引用不再拷第二层（快照链上
+		// 唯一可写点在装配前不存在：BuildHeaders 只读源 map）。
+		meta.Headers = caller.Headers
 	}
 	return meta
 }

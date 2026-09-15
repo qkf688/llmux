@@ -102,7 +102,7 @@ func AuthAPIKey(apiKeyRepo repository.ApiKeyRepo, userRepo repository.UserRepo) 
 		}
 
 		c.Set(ContextKeyUser, user)
-		c.Set(ContextKeyCallerKey, &CallerKey{ID: callerKey.ID, Name: callerKey.Name})
+		c.Set(ContextKeyCallerKey, &CallerKey{ID: callerKey.ID, Name: callerKey.Name, Headers: cloneKeyHeaders(callerKey.Headers)})
 		c.Next()
 	}
 }

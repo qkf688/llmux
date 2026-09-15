@@ -12,6 +12,10 @@ const ContextKeyCallerKey = "callerKey"
 type CallerKey struct {
 	ID   uint
 	Name string
+	// Headers 是该 key 配置的出站头只读快照（#6）——定入 context 即定格，
+	// 下游（ReqMeta → BuildHeaders）只读不写。浅拷贝自 DB 行，与本结构「值在
+	// 请求入口定格」的既有不变量同构（鉴权不依赖加密装配态的语义不变）。
+	Headers map[string]string
 }
 
 // CurrentCallerKey 从 gin context 取调用 key 快照。
@@ -23,4 +27,18 @@ func CurrentCallerKey(c *gin.Context) *CallerKey {
 	}
 	caller, _ := v.(*CallerKey)
 	return caller
+}
+
+// cloneKeyHeaders 把 DB 行的 headers 浅拷贝进快照：nil 源保持 nil（不伪造空
+// map——「未配置」与「配置成空」在日志/装配层语义不同）。key 值均标量，浅拷贝
+// 即彻底定格，切掉与 GORM 行对象的内存共享（沿 #4-3 `&caller.ID` 防御拷贝先例）。
+func cloneKeyHeaders(src map[string]string) map[string]string {
+	if src == nil {
+		return nil
+	}
+	clone := make(map[string]string, len(src))
+	for name, value := range src {
+		clone[name] = value
+	}
+	return clone
 }

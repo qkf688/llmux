@@ -59,9 +59,10 @@ func newAuthTestEnv(t *testing.T) (*gin.Engine, *repository.Repositories) {
 		user := CurrentUser(c)
 		caller := CurrentCallerKey(c)
 		c.JSON(http.StatusOK, gin.H{
-			"user_id":  user.ID,
-			"key_id":   caller.ID,
-			"key_name": caller.Name,
+			"user_id":     user.ID,
+			"key_id":      caller.ID,
+			"key_name":    caller.Name,
+			"key_headers": caller.Headers,
 		})
 	})
 	return engine, repos
@@ -332,5 +333,44 @@ func TestAuthAPIKey_DisabledCheckedBeforeOwnerLookup(t *testing.T) {
 	}
 	if got := gjson.Get(rec.Body.String(), "message").String(); got != "API key is disabled" {
 		t.Fatalf("message = %q, want %q（enabled 门必须先于 owner 解析）", got, "API key is disabled")
+	}
+}
+
+// #6 AC-3：放行时 CallerKey 快照携带该 key 的 headers（明文 JSON 列直读，
+// 全程无 cipher——占位密文再次钉「鉴权不依赖加密装配态」）；未配置 → nil。
+func TestAuthAPIKey_InjectsHeadersSnapshot(t *testing.T) {
+	engine, repos := newAuthTestEnv(t)
+	ownerID := mustAdmin(t, repos)
+	plain := "sk-llmux-headers-snapshot-1"
+	row := &models.ApiKey{
+		OwnerID: ownerID,
+		Name:    "codex",
+		Key:     "placeholder-not-decryptable",
+		KeyHash: credentialcrypto.HashKey(plain),
+		Enabled: true,
+		Headers: map[string]string{"User-Agent": "codex_cli_rs/0.1.0", "Originator": "codex_cli_rs"},
+	}
+	if err := repos.ApiKey.Create(context.Background(), row); err != nil {
+		t.Fatalf("seed headers key: %v", err)
+	}
+
+	rec := doPing(t, engine, map[string]string{"Authorization": "Bearer " + plain})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if got := gjson.Get(body, "key_headers.User-Agent").String(); got != "codex_cli_rs/0.1.0" {
+		t.Fatalf("快照 headers.User-Agent = %q: %s", got, body)
+	}
+	if got := gjson.Get(body, "key_headers.Originator").String(); got != "codex_cli_rs" {
+		t.Fatalf("快照 headers.Originator = %q: %s", got, body)
+	}
+
+	// 未配置 headers 的 key：快照为 nil（JSON null），不伪造空对象
+	plainNoHeaders := "sk-llmux-headers-none-key-1"
+	seedCallerKey(t, repos, ownerID, "plain", plainNoHeaders, true)
+	rec2 := doPing(t, engine, map[string]string{"Authorization": "Bearer " + plainNoHeaders})
+	if got := gjson.Get(rec2.Body.String(), "key_headers"); !got.Exists() || got.Type != gjson.Null {
+		t.Fatalf("未配置 headers 的快照应为 null，实得 %s", rec2.Body.String())
 	}
 }

@@ -536,6 +536,9 @@ type ReqMeta struct {
 	// #6（key 级出站头）落地时在此加 Headers 字段，读方不动（OCP）。
 	ApiKeyID   *uint
 	ApiKeyName string
+	// Headers 是 key 级自定义出站头快照（#6，方案 §2 切片 B）：整包透传至
+	// chat_attempt 的唯一装配点 chatcore.BuildHeaders，链上零读方改动。
+	Headers map[string]string
 }
 
 // Setting 系统设置

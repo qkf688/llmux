@@ -43,7 +43,12 @@ func TestNewReqMeta_CallerKeySnapshotTranslation(t *testing.T) {
 	withCaller, _ := gin.CreateTestContext(httptest.NewRecorder())
 	withCaller.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 	callerID := uint(9)
-	withCaller.Set(middleware.ContextKeyCallerKey, &middleware.CallerKey{ID: callerID, Name: "claude-code"})
+	withCaller.Set(middleware.ContextKeyCallerKey, &middleware.CallerKey{
+		ID:   callerID,
+		Name: "claude-code",
+		// #6：headers 快照随翻译点拷值，ReqMeta 不与 gin context 共享可变 map
+		Headers: map[string]string{"User-Agent": "claude-cli/1.0.0"},
+	})
 
 	meta := newReqMeta(withCaller)
 	if meta.ApiKeyID == nil || *meta.ApiKeyID != callerID {
@@ -51,6 +56,9 @@ func TestNewReqMeta_CallerKeySnapshotTranslation(t *testing.T) {
 	}
 	if meta.ApiKeyName != "claude-code" {
 		t.Fatalf("ApiKeyName = %q, want %q", meta.ApiKeyName, "claude-code")
+	}
+	if meta.Headers["User-Agent"] != "claude-cli/1.0.0" {
+		t.Fatalf("Headers = %v, want User-Agent=claude-cli/1.0.0", meta.Headers)
 	}
 
 	withoutCaller, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -62,5 +70,8 @@ func TestNewReqMeta_CallerKeySnapshotTranslation(t *testing.T) {
 	}
 	if empty.ApiKeyName != "" {
 		t.Fatalf("ApiKeyName = %q, want 空串", empty.ApiKeyName)
+	}
+	if empty.Headers != nil {
+		t.Fatalf("Headers = %v, want nil（无 CallerKey 不伪造空 map）", empty.Headers)
 	}
 }

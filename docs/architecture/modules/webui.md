@@ -29,7 +29,7 @@ webui/src/
 ├── components/             # ui/、charts/、page-header.tsx、page-toolbar.tsx、table-card.tsx、stat-card.tsx
 │   └── number-pools/       # 号池域跨路由共享（pool-detail-dialog / credential-key-cell / use-credential-key-reveal / credential-status / 删除确认弹窗）
 ├── lib/animations/         # 动效 token 单一来源（EASING / NUMBER_ANIMATION_MS）
-├── lib/api/                # core client + modules（catalog/logs/system）
+├── lib/api/                # core client + modules（auth/catalog/logs/system；auth 走全路径 import 不进 index 桶）
 ├── lib/clipboard.ts        # 剪贴板写入跨域单源（三级降级 + 普通/机密两个提示入口）
 ├── hooks/                  # 含 hooks/api 查询封装
 ├── stores/                 # Zustand（含 core/updater）

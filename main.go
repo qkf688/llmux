@@ -86,12 +86,12 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	plain, err := auth.BootstrapAdmin(ctx, repository.Default().User, adminPassword)
+	boot, err := auth.BootstrapAdmin(ctx, repository.Default(), adminPassword)
 	if err != nil {
 		slog.Error("bootstrap admin", "error", err)
 		os.Exit(1)
 	}
-	auth.LogBootstrap(plain, fromEnv)
+	auth.LogBootstrap(boot, fromEnv)
 
 	startBackgroundServices(ctx)
 

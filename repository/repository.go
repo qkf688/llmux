@@ -30,6 +30,7 @@ type Repositories struct {
 	Credential          CredentialRepo
 	Endpoint            EndpointRepo
 	KeyGroup            KeyGroupRepo
+	ApiKey              ApiKeyRepo
 }
 
 // New 根据 *gorm.DB 创建所有 Repository 实例。
@@ -54,6 +55,7 @@ func New(db *gorm.DB) *Repositories {
 		Credential:          NewCredentialRepo(db),
 		Endpoint:            NewEndpointRepo(db),
 		KeyGroup:            NewKeyGroupRepo(db),
+		ApiKey:              NewApiKeyRepo(db),
 	}
 }
 

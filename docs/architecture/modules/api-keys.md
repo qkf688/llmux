@@ -1,0 +1,43 @@
+# api-keys 模块（调用方 API Key 管理）
+
+> 多 api-key 方案切片 A（2026-09，`.local/方案/多api-key与key级自定义出站头-方案.md`）。管理「谁在调 /v1」：一人多把 key，替代 users 表单 key + 轮换的老模式。
+
+## 1. 模块概述
+
+- **业务领域**：/v1 代理 API 的调用方 key 生命周期——创建（自定义值或系统生成）、列表（明文回显供复制）、重命名、启停、删除。
+- **切片进度**：本模块当前只管**存储与管理面**；`/v1` 鉴权切到查 `api_keys.api_key_hash` 属 #4-2（进行中，`middleware/auth.go` 暂仍走 `users.api_key`），key 级自定义出站头属切片 B（#6）。
+
+## 2. 职责与边界
+
+- **做**：`api_keys` 表的 CRUD 与密钥三态（明文规范化 → AES-GCM 密文 + SHA-256 hash）；bootstrap 首把 `default` key 的生成归 `service/auth`（本模块提供存储与规则 `common/apikeyvalue.go`）。
+- **不做**：/v1 请求期鉴权判定（`middleware/auth.go`，#4-2）；上游供应商凭据（`pools`/credentials 表——那是「网关→上游」方向的 key，与这里「调用方→网关」方向相反，勿混）；key 值修改（轮换 = 新建 + 停用/删除旧，方案 §2 定案）。
+
+## 3. 内部结构
+
+```
+models/api_key.go               # ApiKey 实体：OwnerID/Name/Key(密文)/KeyHash(uniqueIndex)/Enabled
+common/apikeyvalue.go           # 值规则单一来源：NormalizeCallerKeyValue / GenerateCallerKeyValue
+repository/api_key.go           # ApiKeyRepo（唯一冲突→ErrApiKeyExists；Delete 硬删）
+handler/apikeys/
+├── routes.go                  # Register：POST/GET /api-keys, PATCH/DELETE /api-keys/:id
+├── repos.go                   # repository.Default() 注入（同 pools/auth 模式）
+└── crud.go                    # 编解码 + 加解密 + 409/400 映射（DTO snake_case，见 §4）
+```
+
+## 4. 关键接口契约
+
+| 接口 | 契约 |
+|------|------|
+| `POST /api/api-keys` | 体 `{name, value?}`；`value` 省略=系统生成 `sk-llmux-`+32hex；缺前缀自动补 `sk-llmux-`、补后总长 <16 拒绝（信封 400）；hash 撞库→**真实 HTTP 409**（`httpresp.Conflict`，应用层不预查——方案 §5）。响应 `data` = apiKeyResponse，恒 `Cache-Control: no-store`。⚠️ 前端 `apiRequest` 对非 2xx 直接 throw 并**丢弃响应体**（`lib/api/core/client.ts`），#5 落地页要按 HTTP 409 特判消费 body 才能拿到冲突原因。 |
+| `GET /api/api-keys` | 全量列表（含 disabled）；`api_key` 为解密明文（管理端复制用），单行解密失败降级 `"****"` + slog.Warn（同 MaskStored 口径）；no-store。 |
+| `PATCH /api/api-keys/:id` | `{name?, enabled?}` 三态指针=部分更新；不提供改值端点；rows=0→信封 404。 |
+| `DELETE /api/api-keys/:id` | **硬删**（Unscoped）：软删残留会永久挡死同值重建（uniqueIndex 不含 deleted_at）；在途流不受影响（鉴权只在入口执行一次）。 |
+| `apiKeyResponse` | `{id, name, api_key, enabled, created_at}`（snake_case）；前端 interface 必须逐键对齐（AGENTS §5 契约测试纪律）。 |
+| `repository.ApiKeyRepo` | 加解密不在 repo 层（存取已加密行，与 CredentialRepo 同边界）；空 Key/KeyHash 的 Create 显式拒绝（防占死唯一索引空槽）。 |
+| `common.NormalizeCallerKeyValue / GenerateCallerKeyValue` | 规则跨 handler/apikeys 与 service/auth（bootstrap default key）两域共用，故落 common；产物恒满足「带前缀且 ≥16」。 |
+| bootstrap 首启 | users 空时 admin + `default` key 同事务创建（防半套状态）；key 明文仅 stderr 打印一次（不进 slog 收集器，同密码先例）。 |
+
+## 5. 安全边界
+
+- 明文只出现在管理 API（JWT 保护 + no-store）与首启 stderr；库内永无明文（密文 hex(nonce‖ciphertext) 与 credentials 表同构，密钥 = `CREDENTIAL_ENCRYPTION_KEY`/`./db/credential.key`）。
+- 启停/删除不打断已鉴权通过的在途请求（octopus 同款语义，方案 §2）。

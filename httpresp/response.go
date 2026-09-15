@@ -95,6 +95,16 @@ func Unauthorized(c *gin.Context, message string) {
 	})
 }
 
+// Conflict 资源冲突（真实 HTTP 409）。
+// 与 BadRequest/NotFound 不同类：那些只把码塞进信封（HTTP 恒 200），而 key 查重等
+// 「与既有资源撞唯一约束」的语义需要真实状态码供调用方分支（多 api-key 方案 §5）。
+func Conflict(c *gin.Context, message string) {
+	c.JSON(http.StatusConflict, Response{
+		Code:    http.StatusConflict,
+		Message: message,
+	})
+}
+
 // Forbidden 禁止访问
 func Forbidden(c *gin.Context, message string) {
 	c.JSON(http.StatusForbidden, Response{

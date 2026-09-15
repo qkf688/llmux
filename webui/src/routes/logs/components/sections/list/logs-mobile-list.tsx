@@ -88,6 +88,10 @@ export function LogsMobileList({
               <p className="text-muted-foreground text-[10px] uppercase tracking-wide">提供商</p>
               <p className="truncate">{log.provider_name}</p>
             </div>
+            <div className="space-y-0.5 min-w-0">
+              <p className="text-muted-foreground text-[10px] uppercase tracking-wide">密钥</p>
+              <p className="truncate" title={log.api_key_name}>{log.api_key_name || "-"}</p>
+            </div>
             <div className="space-y-0.5">
               <p className="text-muted-foreground text-[10px] uppercase tracking-wide">格式</p>
                <p>

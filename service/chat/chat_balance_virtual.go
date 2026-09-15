@@ -48,13 +48,13 @@ func balanceChatVirtual(ctx context.Context, in BalanceInput) (*BalanceResult, e
 		modelWithProviders, err := queryEnabledModelProviders(ctx, realModel.ID, in.Before)
 		if err != nil {
 			slog.Error("failed to get providers for real model", "real_model", realModel.Name, "error", err)
-			saveVirtualSkipLog(ctx, pwm.VirtualModelName, realModel.Name, in.Style,
+			saveVirtualSkipLog(ctx, in.ReqMeta, pwm.VirtualModelName, realModel.Name, in.Style,
 				fmt.Sprintf("virtual model skip: failed to query providers for real model %q: %v", realModel.Name, err))
 			continue
 		}
 		if len(modelWithProviders) == 0 {
 			slog.Warn("no providers for real model", "real_model", realModel.Name)
-			saveVirtualSkipLog(ctx, pwm.VirtualModelName, realModel.Name, in.Style,
+			saveVirtualSkipLog(ctx, in.ReqMeta, pwm.VirtualModelName, realModel.Name, in.Style,
 				fmt.Sprintf("virtual model skip: no enabled providers for real model %q", realModel.Name))
 			continue
 		}
@@ -105,8 +105,9 @@ func balanceChatVirtual(ctx context.Context, in BalanceInput) (*BalanceResult, e
 }
 
 // saveVirtualSkipLog 记录「某个真实模型被整体跳过」的日志：此时尚未选出供应商，
-// 故只有模型层面的信息可填。
-func saveVirtualSkipLog(ctx context.Context, virtualModelName, realModelName, style, errMsg string) {
+// 故只有模型层面的信息可填。ReqMeta 整包传入（与 retryLoopInput 同风格）——
+// 归因快照随建行落库，散参会让下一个旁路建行点再次漏掉。
+func saveVirtualSkipLog(ctx context.Context, reqMeta models.ReqMeta, virtualModelName, realModelName, style, errMsg string) {
 	if _, err := SaveChatLog(ctx, models.ChatLog{
 		Name:          virtualModelName,
 		RealModelName: realModelName,
@@ -114,6 +115,8 @@ func saveVirtualSkipLog(ctx context.Context, virtualModelName, realModelName, st
 		Status:        "error",
 		Style:         style,
 		Error:         errMsg,
+		ApiKeyID:      reqMeta.ApiKeyID,
+		ApiKeyName:    reqMeta.ApiKeyName,
 	}); err != nil {
 		slog.Error("failed to save virtual model skip log", "real_model", realModelName, "error", err)
 	}

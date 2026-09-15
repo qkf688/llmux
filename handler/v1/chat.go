@@ -11,11 +11,31 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/httpresp"
+	"github.com/qkf688/llmux/middleware"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/providers"
 	"github.com/qkf688/llmux/service"
 	"gorm.io/gorm"
 )
+
+// newReqMeta 组装请求元数据：头/IP/UA 之外还把鉴权中间件放下的 CallerKey
+// 快照翻译成 models 侧标量（models 不 import middleware，翻译只在此一处）。
+// JWT 管理端路径 CallerKey 恒 nil → 归因空态，是区分两类入口的现成判据。
+func newReqMeta(c *gin.Context) models.ReqMeta {
+	meta := models.ReqMeta{
+		Header:    c.Request.Header,
+		RemoteIP:  c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	}
+	if caller := middleware.CurrentCallerKey(c); caller != nil {
+		// 拷值不取 &caller.ID：快照定格进 ReqMeta，不与 gin context 内共享对象
+		// 绑同一块内存（#6 给 CallerKey 加字段后该不变量依然成立）。
+		callerID := caller.ID
+		meta.ApiKeyID = &callerID
+		meta.ApiKeyName = caller.Name
+	}
+	return meta
+}
 
 // ModelsHandler 列出当前可用模型，直接从数据库读取基础信息并按 OpenAI 协议返回。
 func ModelsHandler(c *gin.Context) {
@@ -108,9 +128,11 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 		httpresp.ErrorWithHttpStatus(c, http.StatusBadRequest, http.StatusBadRequest, err.Error())
 		return
 	}
-	// 按模型获取可用 provider
+	// 按模型获取可用 provider（reqMeta 先于解析构造：模型不存在/虚拟选模失败的
+	// 错误日志也在这一步落库，归因快照必须已在场）
 	ctx := c.Request.Context()
-	providersWithMeta, err := service.ProvidersWithMetaBymodelsName(ctx, style, *before)
+	reqMeta := newReqMeta(c)
+	providersWithMeta, err := service.ProvidersWithMetaBymodelsName(ctx, style, *before, reqMeta)
 	if err != nil {
 		httpresp.InternalServerError(c, err.Error())
 		return
@@ -123,11 +145,7 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 		Style:             style,
 		Before:            *before,
 		ProvidersWithMeta: *providersWithMeta,
-		ReqMeta: models.ReqMeta{
-			Header:    c.Request.Header,
-			RemoteIP:  c.ClientIP(),
-			UserAgent: c.Request.UserAgent(),
-		},
+		ReqMeta:           reqMeta,
 	})
 	if err != nil {
 		var statusCoder interface{ StatusCode() int }

@@ -126,6 +126,8 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDet
                   />
                 <DetailCard label="用户代理" value={detailLog.user_agent || "-"} mono />
                 <DetailCard label="远端 IP" value={detailLog.remote_ip || "-"} mono />
+                {/* 归因快照：显示写入时名称，key 之后改名/删除不回写历史行 */}
+                <DetailCard label="调用密钥" value={detailLog.api_key_name || "-"} />
                 <DetailCard label="记录 IO" value={detailLog.chat_io ? "是" : "否"} />
                 <DetailCard label="重试次数" value={detailLog.retry ?? 0} />
               </div>

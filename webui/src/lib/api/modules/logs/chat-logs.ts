@@ -61,6 +61,10 @@ export interface ChatLog {
   key_group_name?: string;
   /** 命中的凭据（note / 脱敏标识） */
   credential_note?: string;
+  /** 调用方密钥归因快照：key id，null = 无归因（键恒在，勿把缺键当常态） */
+  api_key_id?: number | null;
+  /** 归因快照：写入时的 key 名（key 之后改名/删除，历史日志仍显当时名） */
+  api_key_name?: string;
   status: string;
   style: string;
   user_agent: string;

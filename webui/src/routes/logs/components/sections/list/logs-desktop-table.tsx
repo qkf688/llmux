@@ -60,6 +60,7 @@ export function LogsDesktopTable({
             <TableHead>提供商模型</TableHead>
             <TableHead>格式</TableHead>
             <TableHead>提供商</TableHead>
+            <TableHead>密钥</TableHead>
             <TableHead>调度</TableHead>
             <TableHead className="w-[180px]">操作</TableHead>
           </TableRow>
@@ -112,6 +113,9 @@ export function LogsDesktopTable({
                  )}
                </TableCell>
               <TableCell className="text-xs">{log.provider_name}</TableCell>
+              <TableCell className="max-w-[120px] truncate text-xs" title={log.api_key_name}>
+                {log.api_key_name || "-"}
+              </TableCell>
               <TableCell>
                 <LogScheduleCell log={log} />
               </TableCell>

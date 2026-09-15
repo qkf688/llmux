@@ -29,6 +29,8 @@ export type ChatLogExportPayload = {
   has_format_conversion?: boolean;
   source_format?: string | null;
   target_format?: string | null;
+  api_key_id?: number | null;
+  api_key_name?: string | null;
   error?: string | null;
   performance?: {
     proxy_time: number;
@@ -80,6 +82,8 @@ export function buildChatLogExportPayload(log: ChatLog, sections: ChatLogExportS
     payload.has_format_conversion = log.has_format_conversion;
     payload.source_format = toNullableString(log.source_format);
     payload.target_format = toNullableString(log.target_format);
+    payload.api_key_id = log.api_key_id ?? null;
+    payload.api_key_name = toNullableString(log.api_key_name);
   }
 
   if (sections.error) {

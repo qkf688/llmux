@@ -55,6 +55,12 @@ type chatLogResponse struct {
 	KeyGroupName     string `json:"key_group_name"`
 	CredentialNote   string `json:"credential_note"`
 
+	// 调用方密钥归因快照（多 api-key 方案 §4）：name 是写入时定格，key 之后
+	// 改名/删除历史日志仍显当时名。api_key_id **禁止 omitempty**——null 是
+	// 「无归因」的有效语义，键整个消失会让前端无法区分空态与后端漏返（AGENTS §5）。
+	ApiKeyID   *uint  `json:"api_key_id"`
+	ApiKeyName string `json:"api_key_name"`
+
 	IsVirtualModel      bool `json:"is_virtual_model"`
 	HasFormatConversion bool `json:"has_format_conversion"`
 	// 仅在 HasFormatConversion 为真时有值，此时两者必非空（见 enrichChatLogs 的判定）。
@@ -202,6 +208,9 @@ func buildChatLogResponse(log models.ChatLog, enrich chatLogEnrichResult, includ
 		EndpointURL:      log.EndpointURL,
 		KeyGroupName:     log.KeyGroupName,
 		CredentialNote:   log.CredentialNote,
+
+		ApiKeyID:   log.ApiKeyID,
+		ApiKeyName: log.ApiKeyName,
 
 		IsVirtualModel:      enrich.isVirtualModel,
 		HasFormatConversion: enrich.hasFormatConversion,

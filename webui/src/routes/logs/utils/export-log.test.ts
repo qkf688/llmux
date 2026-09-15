@@ -33,6 +33,8 @@ const buildBaseLog = (): ChatLog => ({
   raw_response_body: "{\"output\": \"hello\"}",
   is_virtual_model: false,
   has_format_conversion: false,
+  api_key_id: 5,
+  api_key_name: "codex-key",
 });
 
 describe("buildChatLogExportPayload", () => {
@@ -42,6 +44,8 @@ describe("buildChatLogExportPayload", () => {
     expect(payload).toMatchObject({
       log_id: 123,
       model_name: "gpt-x",
+      api_key_id: 5,
+      api_key_name: "codex-key",
       performance: {
         proxy_time: 1000,
         first_chunk_time: 2000,

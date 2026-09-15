@@ -36,8 +36,8 @@ func GetProcesser(style string) (Processer, error) { return chat.GetProcesser(st
 
 type ProvidersWithMeta = chat.ProvidersWithMeta
 
-func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Before) (*ProvidersWithMeta, error) {
-	return chat.ProvidersWithMetaBymodelsName(ctx, style, before)
+func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Before, reqMeta models.ReqMeta) (*ProvidersWithMeta, error) {
+	return chat.ProvidersWithMetaBymodelsName(ctx, style, before, reqMeta)
 }
 
 type BalanceInput = chat.BalanceInput

@@ -27,6 +27,8 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		Style:         input.Style,
 		UserAgent:     input.ReqMeta.UserAgent,
 		RemoteIP:      input.ReqMeta.RemoteIP,
+		ApiKeyID:      input.ReqMeta.ApiKeyID,
+		ApiKeyName:    input.ReqMeta.ApiKeyName,
 		ChatIO:        input.IOLog,
 		Retry:         input.Retry,
 		// 仅作占位快照：此刻上游请求尚未发出，取到的只是准备阶段耗时。

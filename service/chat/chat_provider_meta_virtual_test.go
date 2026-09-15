@@ -70,7 +70,7 @@ func TestProvidersWithMetaBymodelsName_VirtualModel_FirstRealModelNoProvider_Doe
 		t.Fatalf("create mapping 2: %v", err)
 	}
 
-	got, err := ProvidersWithMetaBymodelsName(context.Background(), "openai", Before{Model: virtual.Name})
+	got, err := ProvidersWithMetaBymodelsName(context.Background(), "openai", Before{Model: virtual.Name}, models.ReqMeta{})
 	if err != nil {
 		t.Fatalf("ProvidersWithMetaBymodelsName error: %v", err)
 	}

@@ -377,6 +377,13 @@ type ChatLog struct {
 	KeyGroupName     string // 命中的凭据分组名
 	CredentialNote   string // 命中的凭据标识（Note 非空用 Note，否则 KeyHash 前 8 位）
 
+	// 调用方密钥归因快照（多 api-key 方案 §4）：建行时从 ReqMeta 定格，
+	// key 之后改名/删除不影响历史行——故无外键、查询不 JOIN api_keys，
+	// ApiKeyName 即「当时名」。*uint 的 nil 表达「无归因」（内部路径/存量行），
+	// 与 id=0 区分（主键恒 ≥1）。
+	ApiKeyID   *uint
+	ApiKeyName string
+
 	// 原始请求和响应内容
 	RequestHeaders  string // 请求头JSON字符串
 	RequestBody     string // 请求体（转换后，发给上游的）
@@ -523,6 +530,12 @@ type ReqMeta struct {
 	UserAgent string `gorm:"index"` // 用户代理
 	RemoteIP  string // 访问ip
 	Header    http.Header
+	// 调用方密钥归因快照（ChatLog.ApiKeyID/ApiKeyName 的传值来源）：
+	// handler/v1 从 middleware.CallerKey 翻译至此——models 不 import middleware，
+	// 传递链只经本结构（auth→gin context→ReqMeta→建行点）。
+	// #6（key 级出站头）落地时在此加 Headers 字段，读方不动（OCP）。
+	ApiKeyID   *uint
+	ApiKeyName string
 }
 
 // Setting 系统设置

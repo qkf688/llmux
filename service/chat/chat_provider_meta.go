@@ -59,7 +59,7 @@ type ProvidersWithMeta struct {
 	OrderedRealModels []virtualmodel.OrderedRealModel // 有序的真实模型列表
 }
 
-func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Before) (*ProvidersWithMeta, error) {
+func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Before, reqMeta models.ReqMeta) (*ProvidersWithMeta, error) {
 	// 首先检查是否是虚拟模型
 	virtualModel, err := repos().VirtualModel.GetEnabledByName(ctx, before.Model)
 	if err == nil {
@@ -71,9 +71,11 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 			if _, err := SaveChatLog(ctx, models.ChatLog{
 				Name: before.Model,
 				// RealModelName unknown: virtual selection failed before any real model was chosen.
-				Status: "error",
-				Style:  style,
-				Error:  fmt.Sprintf("virtual model selection failed: %v", err),
+				Status:     "error",
+				Style:      style,
+				Error:      fmt.Sprintf("virtual model selection failed: %v", err),
+				ApiKeyID:   reqMeta.ApiKeyID,
+				ApiKeyName: reqMeta.ApiKeyName,
 			}); err != nil {
 				return nil, err
 			}
@@ -123,6 +125,8 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 				Status:        "error",
 				Style:         style,
 				Error:         err.Error(),
+				ApiKeyID:      reqMeta.ApiKeyID,
+				ApiKeyName:    reqMeta.ApiKeyName,
 			}); err != nil {
 				return nil, err
 			}

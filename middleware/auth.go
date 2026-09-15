@@ -1,14 +1,18 @@
 package middleware
 
 import (
+	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/common/credentialcrypto"
 	"github.com/qkf688/llmux/httpresp"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/repository"
 	"github.com/qkf688/llmux/service/auth"
+	"gorm.io/gorm"
 )
 
 // ContextKey 当前用户在 gin context 中的键。
@@ -50,9 +54,12 @@ func AuthJWT(secret string, repo repository.UserRepo) gin.HandlerFunc {
 	}
 }
 
-// AuthAPIKey 校验 /v1 代理 API 的 per-user API key。
-// 优先 Authorization: Bearer <key>，回退 x-api-key（Anthropic 兼容）。
-func AuthAPIKey(repo repository.UserRepo) gin.HandlerFunc {
+// AuthAPIKey 校验 /v1 代理 API 的调用 key（多 api-key 方案 #4-2）。
+// 优先 Authorization: Bearer <key>，回退 x-api-key（Anthropic 兼容）；
+// 按 SHA-256(明文) 直接 SQL 点查 api_keys（单进程 SQLite 索引点查，不做内存
+// 索引——方案 §6 定案）。hash 用 credentialcrypto.HashKey（纯原语，鉴权不依赖
+// 加密装配态）。放行后注入 owner 用户（保留 per-user 语义）与 CallerKey 快照。
+func AuthAPIKey(apiKeyRepo repository.ApiKeyRepo, userRepo repository.UserRepo) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		key := extractAPIKey(c)
 		if key == "" {
@@ -61,14 +68,41 @@ func AuthAPIKey(repo repository.UserRepo) gin.HandlerFunc {
 			return
 		}
 
-		user, err := repo.FindByAPIKey(c.Request.Context(), key)
+		ctx := c.Request.Context()
+		callerKey, err := apiKeyRepo.FindByHash(ctx, credentialcrypto.HashKey(key))
 		if err != nil {
-			httpresp.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Invalid API key")
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				httpresp.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Invalid API key")
+			} else {
+				// 基础设施故障不伪装成鉴权失败（否则 DB 坏了看起来像所有人 key 都错）；
+				// err 只进服务端日志不进响应（不外泄驱动细节，运维需能区分两故障点）
+				slog.Error("v1 auth: api key lookup failed", "error", err)
+				httpresp.InternalServerError(c, "failed to verify api key")
+			}
+			c.Abort()
+			return
+		}
+		if !callerKey.Enabled {
+			// 独立文案无泄露面：能命中该行本身以持有合法明文为前提
+			httpresp.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "API key is disabled")
+			c.Abort()
+			return
+		}
+
+		user, err := userRepo.GetByID(ctx, callerKey.OwnerID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				httpresp.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "api key owner not found")
+			} else {
+				slog.Error("v1 auth: owner lookup failed", "error", err, "api_key_id", callerKey.ID)
+				httpresp.InternalServerError(c, "failed to resolve api key owner")
+			}
 			c.Abort()
 			return
 		}
 
 		c.Set(ContextKeyUser, user)
+		c.Set(ContextKeyCallerKey, &CallerKey{ID: callerKey.ID, Name: callerKey.Name})
 		c.Next()
 	}
 }

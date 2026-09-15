@@ -11,6 +11,5 @@ func RegisterLogin(rg gin.IRoutes, secret string) {
 // Register 挂接需要 JWT 鉴权的 auth 路由。
 func Register(rg gin.IRoutes) {
 	rg.GET("/auth/me", Me)
-	rg.POST("/auth/api-key/rotate", RotateAPIKey)
 	rg.POST("/auth/password", ChangePassword)
 }

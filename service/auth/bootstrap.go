@@ -53,11 +53,6 @@ func BootstrapAdmin(ctx context.Context, repos *repository.Repositories, passwor
 	if err != nil {
 		return BootstrapResult{}, fmt.Errorf("hash password: %w", err)
 	}
-	// users.api_key 在 #4-2 随字段一并退役；本切片期间 /v1 旧鉴权仍需要它。
-	legacyAPIKey, err := GenerateAPIKey()
-	if err != nil {
-		return BootstrapResult{}, fmt.Errorf("generate legacy api key: %w", err)
-	}
 	defaultKey, err := common.GenerateCallerKeyValue()
 	if err != nil {
 		return BootstrapResult{}, fmt.Errorf("generate default api key: %w", err)
@@ -71,7 +66,6 @@ func BootstrapAdmin(ctx context.Context, repos *repository.Repositories, passwor
 		user := &models.User{
 			Username:     AdminUsername,
 			PasswordHash: hash,
-			APIKey:       legacyAPIKey,
 			Role:         RoleAdmin,
 		}
 		if err := tx.User.Create(ctx, user); err != nil {

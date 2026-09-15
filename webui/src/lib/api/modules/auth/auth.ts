@@ -10,24 +10,10 @@ export interface LoginResponse {
   user: AuthUser;
 }
 
-export interface RotateAPIKeyResponse {
-  api_key: string;
-}
-
 export async function login(password: string): Promise<LoginResponse> {
   return apiRequest<LoginResponse>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ password } satisfies LoginRequest),
-  });
-}
-
-export async function getCurrentUser(): Promise<AuthUser> {
-  return apiRequest<AuthUser>("/auth/me");
-}
-
-export async function rotateAPIKey(): Promise<RotateAPIKeyResponse> {
-  return apiRequest<RotateAPIKeyResponse>("/auth/api-key/rotate", {
-    method: "POST",
   });
 }
 

@@ -5,28 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { selectAuthUser, useAuthStore } from "@/stores/auth";
-import { rotateAPIKey, changePassword } from "@/lib/api/modules/auth/auth";
+import { changePassword } from "@/lib/api/modules/auth/auth";
 
 export function AccountSettings() {
   const user = useAuthStore(selectAuthUser);
-  const [newAPIKey, setNewAPIKey] = useState<string | null>(null);
-  const [keyError, setKeyError] = useState("");
   const [oldPwd, setOldPwd] = useState("");
   const [newPwd, setNewPwd] = useState("");
   const [pwdMsg, setPwdMsg] = useState("");
   const [pwdError, setPwdError] = useState("");
-
-  const rotateMutation = useMutation({
-    mutationFn: () => rotateAPIKey(),
-    onSuccess: (res) => {
-      setNewAPIKey(res.api_key);
-      setKeyError("");
-    },
-    onError: (err) => {
-      setKeyError(err instanceof Error ? err.message : "轮换失败");
-      setNewAPIKey(null);
-    },
-  });
 
   const pwdMutation = useMutation({
     mutationFn: () => changePassword(oldPwd, newPwd),
@@ -42,12 +28,6 @@ export function AccountSettings() {
     },
   });
 
-  const handleRotate = () => {
-    if (!confirm("确定轮换 API key？旧 key 将立即失效。")) return;
-    setNewAPIKey(null);
-    rotateMutation.mutate();
-  };
-
   const handleChangePassword = (e: React.FormEvent) => {
     e.preventDefault();
     if (!oldPwd.trim() || !newPwd.trim()) return;
@@ -58,7 +38,7 @@ export function AccountSettings() {
     <div className="space-y-4 md:space-y-6">
       <div>
         <h2 className="text-lg md:text-xl font-semibold">账户</h2>
-        <p className="text-xs md:text-sm text-muted-foreground">管理登录账户与 API key</p>
+        <p className="text-xs md:text-sm text-muted-foreground">管理登录账户</p>
       </div>
 
       <Card>
@@ -69,31 +49,6 @@ export function AccountSettings() {
         <CardContent className="space-y-2 text-sm">
           <div>用户名：<strong>{user?.username ?? "admin"}</strong></div>
           <div>角色：<strong>{user?.role ?? "admin"}</strong></div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>/v1 API Key</CardTitle>
-          <CardDescription>
-            用于调用代理 API（/v1）的鉴权 key。轮换后旧 key 立即失效，新 key 仅显示一次。
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {newAPIKey ? (
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">新 API Key（请立即保存）</Label>
-              <Input readOnly value={newAPIKey} className="font-mono text-xs" />
-            </div>
-          ) : (
-            <p className="text-xs md:text-sm text-muted-foreground">
-              当前 key 已隐藏。点击下方按钮轮换以获取新 key。
-            </p>
-          )}
-          {keyError && <p className="text-sm text-destructive">{keyError}</p>}
-          <Button onClick={handleRotate} disabled={rotateMutation.isPending}>
-            {rotateMutation.isPending ? "轮换中..." : "轮换 API Key"}
-          </Button>
         </CardContent>
       </Card>
 

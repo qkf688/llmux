@@ -73,14 +73,21 @@ func (c *Cipher) Decrypt(ciphertext string) (string, error) {
 	return string(plain), nil
 }
 
-// Hash 计算 KeyHash（SHA-256 hex），用于批量导入去重 / 搜索 / 日志关联，
-// 无需解密即可完成。空明文返回空串（无有效 key 语义）。
-func (c *Cipher) Hash(plaintext string) string {
+// HashKey 计算任意 key 明文的 KeyHash（SHA-256 hex），用于去重 / 鉴权点查 /
+// 日志关联，无需解密即可完成。空明文返回空串（无有效 key 语义）。
+// 与加密密钥无关的纯原语（同 MaskKey），故不挂在 Cipher 实例上：/v1 鉴权只算
+// hash、永不解密，不该被迫依赖 credentialcrypto.Default() 的装配态。
+func HashKey(plaintext string) string {
 	if plaintext == "" {
 		return ""
 	}
 	sum := sha256.Sum256([]byte(plaintext))
 	return hex.EncodeToString(sum[:])
+}
+
+// Hash 计算 KeyHash（SHA-256 hex），语义见 HashKey（单源委托，禁第二副本）。
+func (c *Cipher) Hash(plaintext string) string {
+	return HashKey(plaintext)
 }
 
 // MaskKey 将明文 key 掩码为 sk-****ab12 形态（前缀 3 + **** + 后缀 4），

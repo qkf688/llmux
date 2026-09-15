@@ -17,7 +17,7 @@
 | 子边界 | 目录/入口 | 负责什么 |
 |--------|-----------|----------|
 | **bootstrap** | `main.go`、`middleware/`、`handler/register*.go`、`repos.go` | 进程启动与优雅关闭、鉴权、`RegisterAll`、默认 Repo、embed WebUI、admin bootstrap |
-| **auth** | `service/auth/`、`handler/auth/`、`middleware/auth.go` | 密码哈希、JWT 签发/解析、登录/me/轮换 API key/改密码、JWT+API key 中间件 |
+| **auth** | `service/auth/`、`handler/auth/`、`middleware/auth.go` | 密码哈希、JWT 签发/解析、登录/me/改密码、JWT 中间件 + /v1 调用 key 鉴权（api_keys 多 key，key 管理域见 api-keys 模块） |
 | **ops-io** | `handler/importexport/`、`handler/database/` | 配置导入导出、DB stats/vacuum/export |
 | **test** | `handler/testapi/`、`handler/testsupport/` | 供应商连通/工具/structured/thinking/vision 测试（四类关联级测试各有非流式与流式两种模式）与测试辅助 |
 | **shared-http** | `httpresp/`、`handler/httpx/` | 管理端 JSON 信封；分页/绑定辅助（**渐进采用**） |
@@ -25,7 +25,7 @@
 
 - **不负责什么**：chat 选路、虚拟模型策略、协议转换、各业务 CRUD 规则
 - **对外暴露**：`RegisterAll`、`Deps`、`middleware.AuthJWT`、`middleware.AuthAPIKey`、`service/auth.{HashPassword,VerifyPassword,Sign,Parse}`、`httpresp.*`、`httpx.*`、`bgtask.{Go,SetDefault,Default}`、import/export/database/test REST
-- **依赖谁**：聚合各 handler 子包与 service 启动接口；`middleware`/`handler/auth` 依赖 `repository.UserRepo`（DIP）；`service/auth` 只依赖 bcrypt/jwt 标准库，无循环 import
+- **依赖谁**：聚合各 handler 子包与 service 启动接口；`middleware` 依赖 `repository.ApiKeyRepo` + `UserRepo`、`handler/auth` 依赖 `repository.UserRepo`（DIP）；`service/auth` 只依赖 bcrypt/jwt 标准库，无循环 import
 
 ## 3. 内部结构
 
@@ -49,7 +49,7 @@ httpresp/ / handler/httpx/ / common/ (dataurl, headerpassthrough, maputil/, bgta
 | `handler.RegisterAll` | 注册全部业务路由（新域需改此函数挂接） | `handler/register.go` | 调用各子包 `Register*` |
 | `handler.Deps` | 注入 JWTSecret 等启动依赖 | `handler/register.go` | `main` 构造 |
 | `middleware.AuthJWT` | 管理后台 JWT 鉴权（注入 currentUser 到 context） | `middleware/auth.go` | 同文件 |
-| `middleware.AuthAPIKey` | /v1 代理 API 的 per-user API key 鉴权 | `middleware/auth.go` | 同文件 |
+| `middleware.AuthAPIKey` | /v1 代理 API 的调用 key 鉴权：按 `credentialcrypto.HashKey(明文)` SQL 点查 `api_keys.api_key_hash`（无内存索引），`enabled=false`→401，按 `OwnerID` 注入 owner 用户（`ContextKeyUser`）与 `CallerKey{ID,Name}` 快照（`ContextKeyCallerKey`，#4-3 归因/#6 头注入共用）；兼容 `Authorization: Bearer` 与 `x-api-key` | `middleware/auth.go` + `callerkey.go` | `handler/register_v1.go` 挂接 |
 | `service/auth.Sign/Parse` | JWT 签发与解析 | `service/auth/jwt.go` | 同包 |
 | `service/auth.HashPassword/VerifyPassword` | bcrypt 密码哈希与校验 | `service/auth/password.go` | 同包 |
 | `service/auth.BootstrapAdmin` | 首启动创建 admin 账号 | `service/auth/bootstrap.go` | `main` 调用 |
@@ -70,7 +70,7 @@ httpresp/ / handler/httpx/ / common/ (dataurl, headerpassthrough, maputil/, bgta
 ## 5. 特殊约定
 
 - **禁止**在 `main.go` 增加业务路由明细；新 API 域改 `RegisterAll` + 子包 `Register*`
-- 鉴权：`/api/*` 用 `middleware.AuthJWT`（登录路由 `auth.RegisterLogin` 在 AuthJWT 之前挂，免鉴权）；`/v1/*` 用 `middleware.AuthAPIKey`（per-user key，兼容 `Authorization: Bearer` 与 `x-api-key`）。`service/auth` 是纯工具层，不依赖 repository/models
+- 鉴权：`/api/*` 用 `middleware.AuthJWT`（登录路由 `auth.RegisterLogin` 在 AuthJWT 之前挂，免鉴权）；`/v1/*` 用 `middleware.AuthAPIKey`（api_keys 表多 key hash 点查，兼容 `Authorization: Bearer` 与 `x-api-key`；key 生命周期管理见 api-keys 模块）。`service/auth` 是纯工具层，不依赖 repository/models
 - `database`/`importexport` 允许 PRAGMA/VACUUM/`c.File`/事务 SQL 等白名单直连
 - `httpx`：**存在** Strict/Loose 分页与 `BindJSON`，但 handler 仍大量手写 `ShouldBindJSON`——属渐进落地，非已全量统一
 - `common` 不再依赖 Gin（响应已迁 `httpresp`），避免沦为业务垃圾桶

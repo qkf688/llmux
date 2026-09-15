@@ -5,12 +5,12 @@
 ## 1. 模块概述
 
 - **业务领域**：/v1 代理 API 的调用方 key 生命周期——创建（自定义值或系统生成）、列表（明文回显供复制）、重命名、启停、删除。
-- **切片进度**：本模块当前只管**存储与管理面**；`/v1` 鉴权切到查 `api_keys.api_key_hash` 属 #4-2（进行中，`middleware/auth.go` 暂仍走 `users.api_key`），key 级自定义出站头属切片 B（#6）。
+- **切片进度**：`/v1` 鉴权已切到查 `api_keys.api_key_hash`（#4-2，2026-09-15），users 单 key 路径已全退；key 级自定义出站头属切片 B（#6）、前端管理页属 #5（均未落地，当前 key 生命周期仅可通过 `/api/api-keys` 管理 API 操作）。
 
 ## 2. 职责与边界
 
 - **做**：`api_keys` 表的 CRUD 与密钥三态（明文规范化 → AES-GCM 密文 + SHA-256 hash）；bootstrap 首把 `default` key 的生成归 `service/auth`（本模块提供存储与规则 `common/apikeyvalue.go`）。
-- **不做**：/v1 请求期鉴权判定（`middleware/auth.go`，#4-2）；上游供应商凭据（`pools`/credentials 表——那是「网关→上游」方向的 key，与这里「调用方→网关」方向相反，勿混）；key 值修改（轮换 = 新建 + 停用/删除旧，方案 §2 定案）。
+- **不做**：/v1 请求期鉴权判定（`middleware/auth.go:AuthAPIKey`，已接线本表 `repository.ApiKeyRepo.FindByHash`，见 §4 调用方契约）；上游供应商凭据（`pools`/credentials 表——那是「网关→上游」方向的 key，与这里「调用方→网关」方向相反，勿混）；key 值修改（轮换 = 新建 + 停用/删除旧，方案 §2 定案）。
 
 ## 3. 内部结构
 
@@ -35,6 +35,7 @@ handler/apikeys/
 | `apiKeyResponse` | `{id, name, api_key, enabled, created_at}`（snake_case）；前端 interface 必须逐键对齐（AGENTS §5 契约测试纪律）。 |
 | `repository.ApiKeyRepo` | 加解密不在 repo 层（存取已加密行，与 CredentialRepo 同边界）；空 Key/KeyHash 的 Create 显式拒绝（防占死唯一索引空槽）。 |
 | `common.NormalizeCallerKeyValue / GenerateCallerKeyValue` | 规则跨 handler/apikeys 与 service/auth（bootstrap default key）两域共用，故落 common；产物恒满足「带前缀且 ≥16」。 |
+| /v1 调用方鉴权（`middleware.AuthAPIKey`） | 按 `credentialcrypto.HashKey(明文)` SQL 点查 `api_keys.api_key_hash`（无内存索引）；放行注入 owner（`ContextKeyUser`）与 `CallerKey{ID,Name}` 快照（`ContextKeyCallerKey`，#4-3/#6 共用）；401 分态「missing / Invalid API key / API key is disabled / owner not found」，仓储非 not-found 故障回 500；鉴权不解密、不依赖 `credentialcrypto.Default()` 装配态（hash 为纯 SHA-256 单源 `HashKey`）。 |
 | bootstrap 首启 | users 空时 admin + `default` key 同事务创建（防半套状态）；key 明文仅 stderr 打印一次（不进 slog 收集器，同密码先例）。 |
 
 ## 5. 安全边界

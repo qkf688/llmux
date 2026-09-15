@@ -28,17 +28,3 @@ func CurrentCallerKey(c *gin.Context) *CallerKey {
 	caller, _ := v.(*CallerKey)
 	return caller
 }
-
-// cloneKeyHeaders 把 DB 行的 headers 浅拷贝进快照：nil 源保持 nil（不伪造空
-// map——「未配置」与「配置成空」在日志/装配层语义不同）。key 值均标量，浅拷贝
-// 即彻底定格，切掉与 GORM 行对象的内存共享（沿 #4-3 `&caller.ID` 防御拷贝先例）。
-func cloneKeyHeaders(src map[string]string) map[string]string {
-	if src == nil {
-		return nil
-	}
-	clone := make(map[string]string, len(src))
-	for name, value := range src {
-		clone[name] = value
-	}
-	return clone
-}

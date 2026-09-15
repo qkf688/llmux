@@ -3,8 +3,8 @@
  * Record ↔ 行数组双向转换 + 预设按名覆盖合并。
  * HTTP 头名大小写不敏感（RFC 9110），三处判等统一 toLowerCase——
  * 与后端 chatcore.BuildHeaders 的 header.Set 规范化行为同口径。
+ * 注：后端 apikeys 写入闸（headers_guard.go）是最终防线，此处去重只优化 UI 语义。
  */
-import type { HeaderPresetRow } from "../constants/header-presets";
 
 export type HeaderRow = { key: string; value: string };
 
@@ -34,7 +34,7 @@ export function rowsToHeaders(rows: HeaderRow[]): Record<string, string> {
  * 其余手配行保留，预设独有项追加。再点一次幂等——保护用户已改的其它行，
  * 想全量重来用逐行删除。
  */
-export function mergePresetRows(current: HeaderRow[], preset: HeaderPresetRow[]): HeaderRow[] {
+export function mergePresetRows(current: HeaderRow[], preset: HeaderRow[]): HeaderRow[] {
   const merged = current.map((row) => {
     const hit = preset.find((p) => p.key.toLowerCase() === row.key.trim().toLowerCase());
     return hit ? { key: hit.key, value: hit.value } : row;

@@ -46,7 +46,9 @@ func TestNewReqMeta_CallerKeySnapshotTranslation(t *testing.T) {
 	withCaller.Set(middleware.ContextKeyCallerKey, &middleware.CallerKey{
 		ID:   callerID,
 		Name: "claude-code",
-		// #6：headers 快照随翻译点拷值，ReqMeta 不与 gin context 共享可变 map
+		// Headers 已由 AuthAPIKey 在鉴权边界浅拷贝成请求私有份；翻译点是**传引用**
+		// （同一 map），定格不变量的真正防线是"鉴权处单次拷贝 + 下游只读"，
+		// 不是此处二次拷贝。见 chat.go:newReqMeta 注释。
 		Headers: map[string]string{"User-Agent": "claude-cli/1.0.0"},
 	})
 

@@ -125,6 +125,11 @@ func CreateApiKey(c *gin.Context) {
 		httpresp.InternalServerError(c, "failed to encrypt api key")
 		return
 	}
+	cleanHeaders, err := sanitizeOutboundHeaders(req.Headers)
+	if err != nil {
+		httpresp.BadRequest(c, "invalid headers: "+err.Error())
+		return
+	}
 	row := &models.ApiKey{
 		OwnerID: user.ID,
 		Name:    name,
@@ -133,8 +138,8 @@ func CreateApiKey(c *gin.Context) {
 		// Enabled 无 gorm default tag，建库语义「新 key 即可用」在此显式赋值
 		Enabled: true,
 		// Create 走 struct 路径，serializer:json 自动编码（PATCH map 路径才需手动
-		// marshal——两路径不对称由契约测试钉死）
-		Headers: req.Headers,
+		// marshal——两路径不对称由契约测试钉死）；headers 已过写入闸规范化
+		Headers: cleanHeaders,
 	}
 	if err := repos().ApiKey.Create(c.Request.Context(), row); err != nil {
 		if errors.Is(err, repository.ErrApiKeyExists) {
@@ -194,12 +199,20 @@ func UpdateApiKey(c *gin.Context) {
 		fields["enabled"] = *req.Enabled
 	}
 	if req.Headers != nil {
+		// 与 Create 同一写入闸（语法关 + 规范化 + 重名拒斥），两入口不留裸通道
+		cleanHeaders, err := sanitizeOutboundHeaders(*req.Headers)
+		if err != nil {
+			httpresp.BadRequest(c, "invalid headers: "+err.Error())
+			return
+		}
 		// UpdateFields 走 map[string]any，GORM serializer:json 对 map-Updates 不生效
 		// （已知坑）——序列化收在 handler（DTO 翻译职责），repository 不感知 JSON。
 		// 空 map 编码为 "{}" 即「清空」，与 nil（键缺席=不改）语义正交。
-		encoded, err := json.Marshal(*req.Headers)
+		// map[string]string 恒可编码，err 分支纯防御（真触发说明 runtime 故障，非用户输入）。
+		encoded, err := json.Marshal(cleanHeaders)
 		if err != nil {
-			httpresp.BadRequest(c, "invalid headers: "+err.Error())
+			slog.Error("marshal api key headers failed (unreachable for map[string]string)", "api_key_id", id, "error", err)
+			httpresp.InternalServerError(c, "failed to encode headers")
 			return
 		}
 		fields["headers"] = string(encoded)

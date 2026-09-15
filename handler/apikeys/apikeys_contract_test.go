@@ -328,6 +328,68 @@ func TestUpdateApiKey_HeadersTriState(t *testing.T) {
 	}
 }
 
+// 审查收敛 W2/W3：写入点语法关 + 大小写规范化 + 重名拒斥（裸 API 直连路径的
+// 确定性防线，UI 前端去重只有弹窗一条路）。非法名/值 400，不落库。
+func TestCreateApiKey_HeadersSanitization(t *testing.T) {
+	setTestCipher(t)
+	engine := newApiKeyTestRouter(t)
+
+	// 名含空格 → 400
+	badName := doJSON(t, engine, http.MethodPost, "/api/api-keys", `{"name":"a","value":"sk-llmux-sanitize-name-001","headers":{"Bad Name":"v"}}`)
+	if gjson.Get(badName.Body.String(), "code").Int() != http.StatusBadRequest {
+		t.Fatalf("非法头名应 400: %s", badName.Body.String())
+	}
+	// 值含 CR → 400（防入库后 Go transport 拒发、该 key 全量失败还误伤凭据冷却）
+	badValue := doJSON(t, engine, http.MethodPost, "/api/api-keys", "{\"name\":\"a\",\"value\":\"sk-llmux-sanitize-value-01\",\"headers\":{\"X-A\":\"line1\\r\\nX-B: injected\"}}")
+	if gjson.Get(badValue.Body.String(), "code").Int() != http.StatusBadRequest {
+		t.Fatalf("CRLF 头值应 400: %s", badValue.Body.String())
+	}
+	// 大小写撞名 → 400（map 迭代序随机，无法「后者赢」，拒绝才是确定语义）
+	dup := doJSON(t, engine, http.MethodPost, "/api/api-keys", `{"name":"a","value":"sk-llmux-sanitize-dup-001","headers":{"x-app":"1","X-App":"2"}}`)
+	if gjson.Get(dup.Body.String(), "code").Int() != http.StatusBadRequest {
+		t.Fatalf("大小写重名应 400: %s", dup.Body.String())
+	}
+	var rowCount int64
+	if err := models.DB.Model(&models.ApiKey{}).Where("name = ?", "a").Count(&rowCount).Error; err != nil {
+		t.Fatalf("count rows: %v", err)
+	}
+	if rowCount != 0 {
+		t.Fatalf("400 拒绝不得留下任何行，实得 %d", rowCount)
+	}
+	// 合法小写名 → 规范化为 MIME Title-Case 存储与回显（与 Go client 出站 Set 的
+	// 规范化同口径；session_id 首字母也大写——CanonicalMIMEHeaderKey 的真实行为，
+	// 出站时 wire 上本就是这个形状，存储显示与发送不再两套样子）
+	ok := doJSON(t, engine, http.MethodPost, "/api/api-keys", `{"name":"a","value":"sk-llmux-sanitize-ok-001","headers":{"x-app":"cli","session_id":"s-1"}}`)
+	if got := gjson.Get(ok.Body.String(), "data.headers.X-App").String(); got != "cli" {
+		t.Fatalf("应回显规范化键名 X-App: %s", ok.Body.String())
+	}
+	if got := gjson.Get(ok.Body.String(), "data.headers.Session_id").String(); got != "s-1" {
+		t.Fatalf("session_id 应规范化为 Session_id: %s", ok.Body.String())
+	}
+}
+
+// PATCH 路径与 Create 同闸（两写入口共用净化，不留裸通道）。
+func TestUpdateApiKey_HeadersSanitizationSameGate(t *testing.T) {
+	setTestCipher(t)
+	engine := newApiKeyTestRouter(t)
+	id := createKeyViaHandler(t, engine, "gate", "sk-llmux-sanitize-patch-01")
+	path := "/api/api-keys/" + strconv.FormatUint(uint64(id), 10)
+
+	rec := doJSON(t, engine, http.MethodPatch, path, `{"headers":{"Cookie":"session=hijack"}}`)
+	if gjson.Get(rec.Body.String(), "code").Int() != http.StatusOK {
+		t.Fatalf("Cookie 名合法（黑名单不做是方案裁决），应可写: %s", rec.Body.String())
+	}
+	bad := doJSON(t, engine, http.MethodPatch, path, `{"headers":{"中文":"v"}}`)
+	if gjson.Get(bad.Body.String(), "code").Int() != http.StatusBadRequest {
+		t.Fatalf("非法头名应 400: %s", bad.Body.String())
+	}
+	// 拒绝后既有值不被半写覆盖
+	after := doJSON(t, engine, http.MethodGet, "/api/api-keys", "")
+	if gjson.Get(after.Body.String(), "data.0.headers.Cookie").String() != "session=hijack" {
+		t.Fatalf("400 后既有 headers 应原样: %s", after.Body.String())
+	}
+}
+
 func TestDeleteApiKey_Hard(t *testing.T) {
 	setTestCipher(t)
 	engine := newApiKeyTestRouter(t)

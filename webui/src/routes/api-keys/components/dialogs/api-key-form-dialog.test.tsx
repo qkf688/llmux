@@ -3,6 +3,8 @@
  * IP+HTTP 环境剪贴板不可用时，明文查看走编辑弹窗兜底——
  * 默认掩码、显式点击才展开（明文不进 DOM 直到显式动作）、可收起、
  * 关窗重开回落掩码；解密失败降级行只给不可用提示。
+ * 「明文不进 DOM」的「明文」特指 api_key 密钥值；#6 headers 编辑区的值属
+ * 展示配置（非密钥语义），无条件渲染进 Input，不受 reveal 门控（Rulings 语境）。
  *
  * Radix Dialog 经 Portal 挂到 document.body，断言一律用 screen / body，
  * 不用 render() 返回的 container（里面只有空的 root）。

@@ -3,6 +3,7 @@ package middleware
 import (
 	"errors"
 	"log/slog"
+	"maps"
 	"net/http"
 	"strings"
 
@@ -102,7 +103,10 @@ func AuthAPIKey(apiKeyRepo repository.ApiKeyRepo, userRepo repository.UserRepo) 
 		}
 
 		c.Set(ContextKeyUser, user)
-		c.Set(ContextKeyCallerKey, &CallerKey{ID: callerKey.ID, Name: callerKey.Name, Headers: cloneKeyHeaders(callerKey.Headers)})
+		// maps.Clone：nil→nil（不伪造空 map，「未配置」与「配置成空」语义有别）；
+		// 浅拷贝切掉与 GORM 行对象的内存共享，CallerKey「定入 context 即定格」成立
+		// （沿 #4-3 &caller.ID 防御拷贝先例，Rulings 3）。
+		c.Set(ContextKeyCallerKey, &CallerKey{ID: callerKey.ID, Name: callerKey.Name, Headers: maps.Clone(callerKey.Headers)})
 		c.Next()
 	}
 }

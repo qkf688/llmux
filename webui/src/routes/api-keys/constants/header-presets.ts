@@ -6,10 +6,12 @@
  * （方案 §2 定案），每行可删可改；渠道实测偏差只改本文件一处。
  * 值为空的行是给动态标识（session/thread/request id）留的占位：由用户按实际
  * 客户端行为填写，未填会原样发出空头（与关联级 customer_headers 显式通道同权）。
+ * 适用渠道：Anthropic-Beta/Version 两行在**原生 anthropic 供应商**会被 setAnthropicBeta
+ * 清除/被 provider 配置覆写（providers 权威层最高），预设主要对 openai 兼容中转生效。
  */
-export type HeaderPresetRow = { key: string; value: string };
+import type { HeaderRow } from "../utils/header-fields";
 
-export const CODEX_HEADER_PRESET: HeaderPresetRow[] = [
+export const CODEX_HEADER_PRESET: HeaderRow[] = [
   { key: "Originator", value: "codex_cli_rs" },
   { key: "User-Agent", value: "codex_cli_rs/0.1 (Windows 11; x86_64)" },
   { key: "Session_id", value: "" },
@@ -20,7 +22,7 @@ export const CODEX_HEADER_PRESET: HeaderPresetRow[] = [
   { key: "X-OpenAI-Internal-Codex-Responses-Lite", value: "" },
 ];
 
-export const CLAUDE_CODE_HEADER_PRESET: HeaderPresetRow[] = [
+export const CLAUDE_CODE_HEADER_PRESET: HeaderRow[] = [
   { key: "User-Agent", value: "claude-cli/1.0.70 (external, cli)" },
   { key: "X-App", value: "cli" },
   { key: "Anthropic-Beta", value: "claude-code-20250219" },

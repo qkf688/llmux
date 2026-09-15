@@ -55,7 +55,7 @@ balancer/                   # 加权随机纯算法
 - `service/credwrite/`：凭据健康写的有界异步队列（单 worker 串行落库、满时 drop-oldest 降级；chat/credprobe 经 SetHandlers 注入落库实现）
 - `service/chatstats/`：Stats* 累加（无 chat 类型依赖）
 - `service/adjustment/`：关联权重/优先级/连续失败；向 healthcheck 注入 hooks
-- `service/chatcore/`：供应商选择算法与请求头（透传判据下沉 `common/headerpassthrough.go`，与 testapi 同源）
+- `service/chatcore/`：供应商选择算法与请求头（`BuildHeaders` 为 /v1 出站头唯一装配点，四层优先级链：入站白名单透传 < key 级头 < 关联级 customer_headers < providers 权威覆写；透传判据下沉 `common/headerpassthrough.go`，与 testapi 同源；#6）
 - `balancer/`：无状态加权随机
 
 ## 4. 关键接口契约
@@ -67,7 +67,7 @@ balancer/                   # 加权随机纯算法
 | `runProviderRetryLoop` | 在**单个候选池**上执行「选候选 → channel 三层选路（端点→分组→凭据）→ 尝试 → 淘汰」重试循环，产出 `retryLoopOutcome`（成功/穷尽/中止）；候选内嵌**组内凭据循环**（#13）：凭据级失败（429/5xx/鉴权/网络）写冷却或判停后刷新快照、`channel.RetryCredential` 锁组换 key 重试；`ErrNoCredentialAvailable` 时先惰性探活（#6-3）再决定是否组织级淘汰；`MaxRetry`/`ClientTimeout`/`Deadline` 的取值已全局化（见 settings 模块「请求参数」，per-model time_out/max_retry 已移除） | `service/chat/chat_retry_loop.go` | `service/chat`（包内，真实与虚拟路径共用） |
 | `ProvidersWithMetaBymodelsName` | 按模型名解析候选供应商元信息（含虚拟模型分支） | `service/chat` | `service/chat` |
 | `chatcore.SelectByPriorityAndWeight` | 在关联列表上按优先级与权重选供应商 | `service/chatcore/` | `service/chatcore` |
-| `chatcore.BuildHeaders` | 生产转发（/v1 热路径）出站头构造：`with_header=true`＝**白名单透传**（判据 `common.PassthroughAllowedHeader` / `MergePassthroughHeaders`，与 testapi 诊断链路单一同源——旧整包 `Clone()` 会把终端用户 Cookie/Referer/Accept-Encoding 外发第三方且 gzip 上游被误判死）；`stream=true` 默认置 `X-Accel-Buffering: no`（custom 同名头可覆盖终值，旧实现同序）；`customer_headers` 不经白名单、后写覆盖（显式配的 Authorization 仍可达上游）。契约测试 `TestBuildHeaders_PassThroughWhitelist` 断言键级外泄面 | `service/chatcore/headers.go` | `service/chat/chat_attempt.go`（其后 `providers` BuildReq 以凭据为权威覆写鉴权/Content-Type）；前端关联表单文案同步该语义 |
+| `chatcore.BuildHeaders` | 生产转发（/v1 热路径）出站头构造，**唯一装配点**（禁止第二套拼装，方案 §2）。签名 `BuildHeaders(source, withHeader, keyHeaders, customHeaders, stream)`，**四层优先级链**（低→高，后写覆盖）：入站白名单透传 < key 级头 < 关联级 customer_headers < providers 权威覆写。① `with_header=true`＝白名单透传（判据 `common.PassthroughAllowedHeader` / `MergePassthroughHeaders`，与 testapi 同源）；② `stream=true` 置 `X-Accel-Buffering: no`；③ `keyHeaders` 来自 `middleware.CallerKey.Headers`（经 `ReqMeta.Headers` 整包透传，#6），显式通道不设黑名单、与 `with_header` 正交；④ `customHeaders`（关联级）同名覆盖 key 级（渠道要求比客户端伪装更具体）；⑤ `providers.BuildReq` 以凭据为权威覆写 `Authorization`/`Content-Type`（第 ④⑤ 层发生在本函数之后，key/关联级配 `Authorization` 为死通道）。契约测试：`TestBuildHeaders_FourLayerPriority`（单测钉三层）+ `chat` 包 `TestExecuteSingleProviderAttempt_KeyHeadersFourLayerPrecedence`（httptest 打真实上游收到的头，钉第四层） | `service/chatcore/headers.go` | `service/chat/chat_attempt.go`（真实与虚拟路径共用同一 attempt）|
 | `balancer.WeightedRandom` | 加权随机选取 | `balancer/balancer.go` | 泛型算法 |
 | `chatstats.Record*` | 请求/token/供应商/真实模型统计写入 | `service/chatstats/` | 同包 |
 | `adjustment.Apply*` | 成功增权、失败衰减、连续失败 | `service/adjustment/` | 同包（兼 healthcheck hooks） |

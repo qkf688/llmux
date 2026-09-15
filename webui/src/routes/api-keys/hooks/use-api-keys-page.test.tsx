@@ -107,6 +107,35 @@ describe("useApiKeysPage 改名 / 启停 / 删除", () => {
     expect(toast.success).toHaveBeenCalled();
   });
 
+  // #6：弹窗提交的 headers 原样进 PATCH（三态：未传不带键=后端不改）
+  it("#6 编辑保存带 headers：PATCH 同时提交 name 与 headers", async () => {
+    updateApiKeyMock.mockResolvedValue({ ...EXISTING_KEY, name: "新名字" });
+    const { result } = renderHook(() => useApiKeysPage(), { wrapper: createWrapper() });
+
+    act(() => result.current.openEditForm(EXISTING_KEY));
+    await act(async () => {
+      await result.current.handleApiKeySaved({ name: "新名字", headers: { "X-App": "cli" } });
+    });
+
+    expect(updateApiKeyMock).toHaveBeenCalledWith(EXISTING_KEY.id, {
+      name: "新名字",
+      headers: { "X-App": "cli" },
+    });
+  });
+
+  // #6：创建路径 headers 原样进 POST body（lib 层负责缺席语义）
+  it("#6 创建保存带 headers：createApiKey 收到 headers", async () => {
+    createApiKeyMock.mockResolvedValue({ ...EXISTING_KEY, name: "新 key" });
+    const { result } = renderHook(() => useApiKeysPage(), { wrapper: createWrapper() });
+
+    act(() => result.current.openCreateForm());
+    await act(async () => {
+      await result.current.handleApiKeySaved({ name: "新 key", headers: {} });
+    });
+
+    expect(createApiKeyMock).toHaveBeenCalledWith({ name: "新 key", headers: {} });
+  });
+
   it("启停切换：PATCH {enabled} 取反值，成功后列表失效（AC-6）", async () => {
     updateApiKeyMock.mockResolvedValue({ ...EXISTING_KEY, enabled: false });
     const { result } = renderHook(() => useApiKeysPage(), { wrapper: createWrapper() });

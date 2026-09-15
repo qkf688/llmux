@@ -10,15 +10,20 @@ export interface ApiKeyItem {
   api_key: string;
   enabled: boolean;
   created_at: string;
+  /** #6 key 级自定义出站头。optional + 可空与后端三态纪律一致：null=未配置、
+   *  对象=已配置（{} 为显式清空后的持久形态，按空配置处理）。 */
+  headers?: Record<string, string> | null;
 }
 
 /** 创建提交体（表单/编排层共用单源，#6 加 headers 只改这里）。
- *  value 省略/空 = 后端随机生成；前缀补全与 ≥16 校验单源在后端 NormalizeCallerKeyValue。 */
-export type ApiKeyCreateInput = { name: string; value?: string };
+ *  value 省略/空 = 后端随机生成；前缀补全与 ≥16 校验单源在后端 NormalizeCallerKeyValue。
+ *  headers 省略 = 不带该键（后端不写列）；弹窗 UI 恒带（表单即真相，见 Rulings 5）。 */
+export type ApiKeyCreateInput = { name: string; value?: string; headers?: Record<string, string> };
 
 /** PATCH 部分更新体：三态语义——未传字段整个键缺席（JSON.stringify 丢 undefined），
- *  后端才不会误改；不提供 value，key 值创建后不可改（轮换 = 新建 + 停用/删除）。 */
-export type ApiKeyUpdateInput = { name?: string; enabled?: boolean };
+ *  后端才不会误改；不提供 value，key 值创建后不可改（轮换 = 新建 + 停用/删除）。
+ *  headers 三态：缺席=不改、对象（含 {}）=整体覆盖。 */
+export type ApiKeyUpdateInput = { name?: string; enabled?: boolean; headers?: Record<string, string> };
 
 /** GET /api/api-keys 全量列表（含 disabled）。 */
 export async function listApiKeys(): Promise<ApiKeyItem[]> {
@@ -35,7 +40,8 @@ export async function createApiKey(body: ApiKeyCreateInput): Promise<ApiKeyItem>
   const response = await fetchWithAuth("/api-keys", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: body.name, value: body.value?.trim() || "" }),
+    // headers 未传时整个键缺席（展开 undefined 不产生键），后端才区分「不写列」
+    body: JSON.stringify({ name: body.name, value: body.value?.trim() || "", ...(body.headers ? { headers: body.headers } : {}) }),
   });
 
   if (!response.ok) {

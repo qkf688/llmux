@@ -16,13 +16,14 @@ function jsonResponse(status: number, body: unknown) {
 }
 
 // 期望值独立来源：handler/apikeys/crud.go 的 apiKeyResponse 实测形状
-// （{id,name,api_key,enabled,created_at} snake_case），非由实现反推。
+// （{id,name,api_key,enabled,created_at,headers} snake_case），非由实现反推。
 const ROW_ACTIVE = {
   id: 1,
   name: "codex 专用",
   api_key: "sk-llmux-0a1b2c3d4e5f60718293a4b5c6d7e8f9",
   enabled: true,
   created_at: "2026-09-15T10:00:00Z",
+  headers: null,
 };
 const ROW_DISABLED_MASKED = {
   id: 2,
@@ -30,6 +31,7 @@ const ROW_DISABLED_MASKED = {
   api_key: "****",
   enabled: false,
   created_at: "2026-09-14T08:30:00Z",
+  headers: { "User-Agent": "claude-cli/1.0.70", "X-App": "cli" },
 };
 
 beforeEach(() => {
@@ -114,6 +116,21 @@ describe("createApiKey", () => {
       "API request failed: invalid success response body",
     );
   });
+
+  // #6：create 支持可选 headers（表单/编排层共用单源，键缺席=后端不写该列）
+  it("#6 携带 headers 时 POST body 含 headers 对象；未带时该键缺席", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { code: 200, message: "success", data: ROW_DISABLED_MASKED }));
+
+    await createApiKey({ name: "codex", value: "", headers: { "User-Agent": "codex_cli_rs/0.1" } });
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1].body))).toEqual({
+      name: "codex",
+      value: "",
+      headers: { "User-Agent": "codex_cli_rs/0.1" },
+    });
+
+    await createApiKey({ name: "no-headers" });
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1].body))).not.toHaveProperty("headers");
+  });
 });
 
 describe("updateApiKey", () => {
@@ -139,6 +156,20 @@ describe("updateApiKey", () => {
 
     const [, init] = fetchMock.mock.calls[0];
     expect(JSON.parse(String(init.body))).toEqual({ name: "改名后" });
+  });
+
+  // #6 三态：headers 键随传入出现（{}=清空 是有效载荷必须可表达）；不传则缺席
+  it("#6 PATCH 携带 headers（含空对象=清空）时键在 body；未传时缺席", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { code: 200, message: "success", data: ROW_ACTIVE }));
+
+    await updateApiKey(1, { headers: { "X-App": "cli" } });
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1].body))).toEqual({ headers: { "X-App": "cli" } });
+
+    await updateApiKey(1, { headers: {} });
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1].body))).toEqual({ headers: {} });
+
+    await updateApiKey(1, { name: "仅改名" });
+    expect(JSON.parse(String(fetchMock.mock.calls[2][1].body))).not.toHaveProperty("headers");
   });
 });
 

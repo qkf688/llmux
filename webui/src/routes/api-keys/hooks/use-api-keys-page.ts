@@ -46,9 +46,11 @@ export function useApiKeysPage() {
     async (values: ApiKeyCreateInput) => {
       try {
         if (editingKey) {
+          // headers 三态转发：弹窗恒带（表单即真相）；undefined（非弹窗调用方）
+          // 不带键=后端不改。启停走 toggleApiKey，不经此路径。
           await updateApiKeyMutation.mutateAsync({
             id: editingKey.id,
-            data: { name: values.name },
+            data: values.headers === undefined ? { name: values.name } : { name: values.name, headers: values.headers },
           });
           toast.success("API Key 已更新");
         } else {

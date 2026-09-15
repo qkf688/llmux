@@ -96,11 +96,13 @@ describe("编辑模式默认掩码", () => {
     expect(valueInput.value).toBe("dead0000beef");
 
     // zodResolver 异步校验：handleSubmit 的回调在微任务之后才触发，必须 waitFor
+    // #6 契约：弹窗恒提交 headers 键（表单即真相；空区={}，Rulings 5）
     fireEvent.click(screen.getByText("创建"));
     await waitFor(() =>
       expect(onSaved).toHaveBeenCalledWith({
         name: "my",
         value: "sk-llmux-dead0000beef",
+        headers: {},
       }),
     );
 
@@ -108,7 +110,7 @@ describe("编辑模式默认掩码", () => {
     fireEvent.change(valueInput, { target: { value: "" } });
     fireEvent.click(screen.getByText("创建"));
     await waitFor(() =>
-      expect(onSaved).toHaveBeenLastCalledWith({ name: "my", value: undefined }),
+      expect(onSaved).toHaveBeenLastCalledWith({ name: "my", value: undefined, headers: {} }),
     );
   });
 });
@@ -163,5 +165,108 @@ describe("弹窗标题语义", () => {
   it("编辑态标题为「编辑 API Key」（改名 + 查看 + 复制三合一入口）", () => {
     renderDialog(EDITING_KEY);
     expect(screen.getByText("编辑 API Key")).toBeTruthy();
+  });
+});
+
+// —— #6 key 级自定义出站头编辑区（方案 §2 切片 B；Rulings 1/2/5） ——————————
+
+const KEYED_HEADERS_ITEM: ApiKeyItem = {
+  ...EDITING_KEY,
+  id: 4,
+  headers: { "User-Agent": "claude-cli/1.0.70", "X-App": "cli" },
+};
+
+describe("#6 headers 编辑区", () => {
+  it("创建与编辑两模式都渲染编辑区与诊断边界提示", () => {
+    renderDialog(null);
+    expect(screen.getByText("自定义出站头")).toBeTruthy();
+    expect(document.body.textContent ?? "").toContain("不参与诊断");
+
+    render(<TooltipProvider><ApiKeyFormDialog open onOpenChange={vi.fn()} apiKey={KEYED_HEADERS_ITEM} onSaved={vi.fn()} /></TooltipProvider>);
+    expect(screen.getAllByText("自定义出站头").length).toBeGreaterThan(1);
+  });
+
+  it("编辑模式回显既有 headers（round-trip 的读侧）", () => {
+    renderDialog(KEYED_HEADERS_ITEM);
+    const keyInputs = screen.getAllByPlaceholderText("Header 名") as HTMLInputElement[];
+    const values = keyInputs.map((input) => input.value);
+    expect(values).toContain("User-Agent");
+    expect(values).toContain("X-App");
+    const valueInputs = screen.getAllByPlaceholderText("值") as HTMLInputElement[];
+    expect(valueInputs.map((input) => input.value)).toContain("claude-cli/1.0.70");
+  });
+
+  it("手动行：空名行跳过、同名后者赢、提交得到 Record", async () => {
+    const { onSaved } = renderDialog(null);
+    fireEvent.change(screen.getByLabelText("名称"), { target: { value: "k" } });
+
+    const add = screen.getByText("添加出站头");
+    fireEvent.click(add);
+    fireEvent.click(add);
+    fireEvent.click(add);
+    const keyInputs = screen.getAllByPlaceholderText("Header 名") as HTMLInputElement[];
+    const valueInputs = screen.getAllByPlaceholderText("值") as HTMLInputElement[];
+    // 第 1 行留空（应被跳过）；第 2/3 行同名不同大小写（后者赢，键名取后者）
+    fireEvent.change(keyInputs[1], { target: { value: "X-Foo" } });
+    fireEvent.change(valueInputs[1], { target: { value: "first" } });
+    fireEvent.change(keyInputs[2], { target: { value: "X-FOO" } });
+    fireEvent.change(valueInputs[2], { target: { value: "second" } });
+
+    fireEvent.click(screen.getByText("创建"));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(onSaved).toHaveBeenLastCalledWith({
+      name: "k",
+      value: undefined,
+      headers: { "X-FOO": "second" },
+    });
+  });
+
+  it("点「填充 Codex 预设」注入种子行；再点不重复堆行（按名覆盖合并，Rulings 2）", () => {
+    renderDialog(null);
+    fireEvent.click(screen.getByText("填充 Codex 预设"));
+    const afterFirst = (screen.getAllByPlaceholderText("Header 名") as HTMLInputElement[]).map((i) => i.value);
+    // 独立期望值：种子清单来自 new-api channel_affinity_setting.go 的 codex 组
+    expect(afterFirst).toContain("Originator");
+    expect(afterFirst).toContain("User-Agent");
+
+    fireEvent.click(screen.getByText("填充 Codex 预设"));
+    const afterSecond = (screen.getAllByPlaceholderText("Header 名") as HTMLInputElement[]).map((i) => i.value);
+    expect(afterSecond.length).toBe(afterFirst.length);
+  });
+
+  it("预设与手配行撞名（大小写不敏感）：预设覆盖该行的名与值，其余手配行保留", () => {
+    renderDialog(null);
+    fireEvent.click(screen.getByText("添加出站头"));
+    let keyInputs = screen.getAllByPlaceholderText("Header 名") as HTMLInputElement[];
+    let valueInputs = screen.getAllByPlaceholderText("值") as HTMLInputElement[];
+    fireEvent.change(keyInputs[0], { target: { value: "user-agent" } });
+    fireEvent.change(valueInputs[0], { target: { value: "my-agent" } });
+    fireEvent.click(screen.getByText("添加出站头"));
+    keyInputs = screen.getAllByPlaceholderText("Header 名") as HTMLInputElement[];
+    valueInputs = screen.getAllByPlaceholderText("值") as HTMLInputElement[];
+    fireEvent.change(keyInputs[1], { target: { value: "X-Mine" } });
+    fireEvent.change(valueInputs[1], { target: { value: "kept" } });
+
+    fireEvent.click(screen.getByText("填充 Claude Code 预设"));
+
+    keyInputs = screen.getAllByPlaceholderText("Header 名") as HTMLInputElement[];
+    valueInputs = screen.getAllByPlaceholderText("值") as HTMLInputElement[];
+    const uaIndex = keyInputs.findIndex((i) => i.value.toLowerCase() === "user-agent");
+    expect(uaIndex).toBeGreaterThanOrEqual(0);
+    // 覆盖后只有一行 UA（合并非追加），且值换成预设值、名规范为预设拼写
+    expect(keyInputs.filter((i) => i.value.toLowerCase() === "user-agent").length).toBe(1);
+    expect(valueInputs[uaIndex].value).toContain("claude-cli/");
+    expect(keyInputs.map((i) => i.value)).toContain("X-Mine");
+  });
+
+  it("删行按钮移除对应行", async () => {
+    const { onSaved } = renderDialog(KEYED_HEADERS_ITEM);
+    const removes = screen.getAllByLabelText("删除出站头");
+    fireEvent.click(removes[0]);
+
+    fireEvent.click(screen.getByText("保存"));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    const payload = onSaved.mock.calls.at(-1)?.[0] as { headers: Record<string, string> };
+    expect(payload.headers).toEqual({ "X-App": "cli" });
   });
 });

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { AlertTriangle, Copy, Eye, EyeOff, Info } from "lucide-react";
+import { AlertTriangle, Copy, Eye, EyeOff, Info, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,6 +29,8 @@ import {
 } from "@/components/ui/tooltip";
 import { copySecretWithToast } from "@/lib/clipboard";
 import type { ApiKeyItem } from "@/lib/api";
+import { CODEX_HEADER_PRESET, CLAUDE_CODE_HEADER_PRESET } from "../../constants/header-presets";
+import { headersToRows, mergePresetRows, rowsToHeaders } from "../../utils/header-fields";
 
 /** handler/apikeys 解密失败降级值（与 card-list / credentialcrypto.MaskStored 同口径） */
 const MASKED_FALLBACK = "****";
@@ -60,10 +62,13 @@ const DIALOG_COPY_FAILURE_HINT =
   "复制失败：浏览器限制了自动复制。可点「显示明文」后手动选中复制（建议使用 HTTPS/域名访问）。";
 
 // key 值规则（补前缀、≥16）单一来源在后端 NormalizeCallerKeyValue——本地只钉
-// 「名称必填（先 trim 再判，防空格名绕过）」，不复制长度校验（AGENTS：勿扩大前端硬编码缺口）
+// 「名称必填（先 trim 再判，防空格名绕过）」，不复制长度校验（AGENTS：勿扩大前端硬编码缺口）。
+// headers 是编辑行数组（键值对可增删改）；提交前经 rowsToHeaders 折成 Record，
+// 校验只到形状层（空名行由转换跳过，不当错误——留半截输入不打断保存）。
 const apiKeyFormSchema = z.object({
   name: z.string().trim().min(1, { message: "名称不能为空" }),
   value: z.string().trim().optional(),
+  headers: z.array(z.object({ key: z.string(), value: z.string() })),
 });
 
 type ApiKeyFormValues = z.infer<typeof apiKeyFormSchema>;
@@ -71,9 +76,9 @@ type ApiKeyFormValues = z.infer<typeof apiKeyFormSchema>;
 type ApiKeyFormDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** null = 新建；非 null = 编辑（改名 + 查看/复制明文——key 值不可改，轮换 = 新建 + 停用旧） */
+  /** null = 新建；非 null = 编辑（改名 + 查看/复制明文 + key 级头——key 值不可改，轮换 = 新建 + 停用旧） */
   apiKey: ApiKeyItem | null;
-  onSaved: (values: { name: string; value?: string }) => void | Promise<void>;
+  onSaved: (values: { name: string; value?: string; headers?: Record<string, string> }) => void | Promise<void>;
   isSaving?: boolean;
 };
 
@@ -86,17 +91,27 @@ export function ApiKeyFormDialog({
 }: ApiKeyFormDialogProps) {
   const form = useForm<ApiKeyFormValues>({
     resolver: zodResolver(apiKeyFormSchema),
-    defaultValues: { name: "", value: "" },
+    defaultValues: { name: "", value: "", headers: [] },
   });
+  const headerRows = useFieldArray({ control: form.control, name: "headers" });
   // 明文显示态是弹窗本地一次性状态：每次打开回落掩码（明文只在显式动作后可见）
   const [revealed, setRevealed] = useState(false);
 
   useEffect(() => {
     if (open) {
-      form.reset({ name: apiKey?.name ?? "", value: "" });
+      form.reset({
+        name: apiKey?.name ?? "",
+        value: "",
+        // 编辑回显既有 headers（round-trip 读侧）；新建从空表起
+        headers: headersToRows(apiKey?.headers),
+      });
       setRevealed(false);
     }
   }, [open, apiKey, form]);
+
+  const applyPreset = (preset: typeof CODEX_HEADER_PRESET) => {
+    headerRows.replace(mergePresetRows(form.getValues("headers"), preset));
+  };
 
   const onSubmit = (values: ApiKeyFormValues) => {
     const suffix = stripKeyPrefix((values.value ?? "").trim());
@@ -105,6 +120,8 @@ export function ApiKeyFormDialog({
       // 编辑模式无 value 字段（后端 PATCH 也不接受改值），undefined 保证不带上；
       // 创建模式输入框只存后缀，拼回前缀提交（留空 = undefined，交后端自动生成）
       value: apiKey ? undefined : suffix ? `${CALLER_KEY_PREFIX}${suffix}` : undefined,
+      // 表单即真相：弹窗恒提交 headers 键（空区折成 {}=清空，Rulings 5）
+      headers: rowsToHeaders(values.headers),
     });
   };
 
@@ -254,6 +271,59 @@ export function ApiKeyFormDialog({
                   )}
                 />
               )}
+              {/* #6 key 级自定义出站头：键值行编辑 + 一键预设（创建/编辑两模式同现，Rulings 1） */}
+              <div className="space-y-3 rounded-md border p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <FormLabel className="text-sm">自定义出站头</FormLabel>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => applyPreset(CODEX_HEADER_PRESET)}>
+                      填充 Codex 预设
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => applyPreset(CLAUDE_CODE_HEADER_PRESET)}>
+                      填充 Claude Code 预设
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  网关转发 /v1 请求时为该 key 注入下列头（伪装 Codex/Claude Code 客户端头族）。
+                  不参与诊断/连通测试，验证靠真实流量与日志归因；撞同名时关联级自定义头优先，
+                  Authorization 恒被供应商凭据覆写。
+                </p>
+                {headerRows.fields.map((rowField, index) => (
+                  <div key={rowField.id} className="flex items-center gap-2">
+                    <Input
+                      placeholder="Header 名"
+                      className="min-w-0 flex-1 font-mono text-sm"
+                      {...form.register(`headers.${index}.key` as const)}
+                    />
+                    <Input
+                      placeholder="值"
+                      className="min-w-0 flex-1 font-mono text-sm"
+                      {...form.register(`headers.${index}.value` as const)}
+                    />
+                    {/* 纯图标按钮：语义走 aria-label（沿密集操作区惯例） */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      onClick={() => headerRows.remove(index)}
+                      aria-label="删除出站头"
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => headerRows.append({ key: "", value: "" })}
+                >
+                  <Plus className="size-4" />
+                  添加出站头
+                </Button>
+              </div>
             </DialogBody>
 
             <DialogFooter>

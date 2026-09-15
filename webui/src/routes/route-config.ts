@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Database,
   Layers,
+  Key,
   Settings,
 } from "lucide-react";
 
@@ -66,6 +67,12 @@ export const appRoutes: AppRouteConfig[] = [
     layout: "app",
     lazy: () => import("./number-pools"),
     nav: { label: "号池", order: 25, icon: KeyRound },
+  },
+  {
+    path: "/api-keys",
+    layout: "app",
+    lazy: () => import("./api-keys"),
+    nav: { label: "API Keys", order: 26, icon: Key },
   },
   {
     path: "/models",

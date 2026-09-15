@@ -3,6 +3,7 @@ export * from "./modules/catalog/models";
 export * from "./modules/catalog/model-providers";
 export * from "./modules/catalog/virtual-models";
 export * from "./modules/catalog/pools";
+export * from "./modules/api-keys/api-keys";
 
 export * from "./modules/logs/chat-logs";
 

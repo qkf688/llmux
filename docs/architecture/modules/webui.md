@@ -88,6 +88,7 @@ routes/<page>/
 | `/model-providers` | associations |
 | `/virtual-models` | virtual-models |
 | `/number-pools` | pools |
+| `/api-keys` | api-keys |
 | `/logs`, `/logs/:id/chat-io` | logs-metrics |
 | `/health-check-logs` | health-check |
 | `/model-sync-logs` | model-sync |

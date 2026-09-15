@@ -47,3 +47,10 @@ export function formatTimeNs(nanoseconds?: number): string {
   return `${(nanoseconds / 1_000_000_000).toFixed(2)} s`;
 }
 
+/** ISO/RFC3339 时间串 → 本地可读格式（新页面统一用本函数；存量 routes/*
+ *  各自的本地 formatDateTime 副本沉并另行登记，locale 不一致属存量债） */
+export function formatDateTime(value?: string): string {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("zh-CN");
+}
+

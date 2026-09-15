@@ -51,7 +51,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 	if input.ModelWithProvider.WithHeader != nil {
 		withHeader = *input.ModelWithProvider.WithHeader
 	}
-	header := chatcore.BuildHeaders(input.ReqMeta.Header, withHeader, input.ModelWithProvider.CustomerHeaders, input.Before.Stream)
+	header := chatcore.BuildHeaders(input.ReqMeta.Header, withHeader, input.ReqMeta.Headers, input.ModelWithProvider.CustomerHeaders, input.Before.Stream)
 
 	reqCtx := withOptionalRequestTrace(input.Ctx)
 

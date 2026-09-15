@@ -13,7 +13,7 @@ func TestBuildHeaders_WithHeaderAndCustom(t *testing.T) {
 	source.Set("X-Trace", "trace-1")
 	source.Set("X-Custom", "from-source")
 
-	got := BuildHeaders(source, true, map[string]string{
+	got := BuildHeaders(source, true, nil, map[string]string{
 		"X-Custom": "from-custom",
 		"X-New":    "new-value",
 	}, true)
@@ -47,7 +47,7 @@ func TestBuildHeaders_WithoutSourceClone(t *testing.T) {
 	source := http.Header{}
 	source.Set("X-Trace", "trace-1")
 
-	got := BuildHeaders(source, false, map[string]string{
+	got := BuildHeaders(source, false, nil, map[string]string{
 		"X-Custom": "from-custom",
 	}, false)
 
@@ -89,7 +89,7 @@ func TestBuildHeaders_PassThroughWhitelist(t *testing.T) {
 	source.Set("Anthropic-Beta", "fine-tuning-2024")
 	source.Set("X-Organization-Id", "org-9")
 
-	got := BuildHeaders(source, true, nil, false)
+	got := BuildHeaders(source, true, nil, nil, false)
 
 	mustNotLeak := []string{
 		"Authorization", "Cookie", "X-Api-Key", "Referer", "Origin",
@@ -122,7 +122,7 @@ func TestBuildHeaders_CustomHeadersBypassWhitelist(t *testing.T) {
 	source := http.Header{}
 	source.Set("X-Request-Id", "req-from-client")
 
-	got := BuildHeaders(source, true, map[string]string{
+	got := BuildHeaders(source, true, nil, map[string]string{
 		"X-Request-Id":  "req-custom",
 		"Authorization": "Bearer relay-key",
 	}, false)
@@ -133,5 +133,53 @@ func TestBuildHeaders_CustomHeadersBypassWhitelist(t *testing.T) {
 	if got.Get("Authorization") != "Bearer relay-key" {
 		t.Errorf("custom Authorization = %q, want %q（显式配置必须可达上游，保旧语义）",
 			got.Get("Authorization"), "Bearer relay-key")
+	}
+}
+
+// TestBuildHeaders_FourLayerPriority 钉方案 §3 的四层链（低→高）：
+// 入站白名单透传 < key 级头 < 关联级 customer_headers < providers 权威（第四层发生
+// 在 BuildHeaders 之后，由 service/chat 的 e2e 用例打在真实上游收到的头上）。
+// 撞名裁决是产品语义不是实现细节：渠道要求（关联级）比客户端伪装（key 级）更具体。
+func TestBuildHeaders_FourLayerPriority(t *testing.T) {
+	source := http.Header{}
+	source.Set("User-Agent", "browser/1.0") // 白名单头：入站值最低层
+	source.Set("X-Relay", "inbound-relay")  // 三层撞名的公共基准
+	source.Set("X-Inbound-Only", "pass-me") // 只有入站有 → 应存活
+
+	got := BuildHeaders(source, true,
+		map[string]string{
+			"User-Agent": "codex_cli_rs/0.1", // 覆盖入站
+			"X-Relay":    "key-relay",        // 将被关联级再覆盖
+			"X-App":      "codex",            // key 独占头
+		},
+		map[string]string{
+			"X-Relay": "association-relay", // 关联级赢
+		},
+		false)
+
+	if got.Get("User-Agent") != "codex_cli_rs/0.1" {
+		t.Errorf("User-Agent = %q, want key 级覆盖入站透传", got.Get("User-Agent"))
+	}
+	if got.Get("X-Relay") != "association-relay" {
+		t.Errorf("X-Relay = %q, want 关联级覆盖 key 级（撞名裁决）", got.Get("X-Relay"))
+	}
+	if got.Get("X-App") != "codex" {
+		t.Errorf("X-App = %q, want key 独占头送达", got.Get("X-App"))
+	}
+	if got.Get("X-Inbound-Only") != "pass-me" {
+		t.Errorf("X-Inbound-Only = %q, want 透传存活", got.Get("X-Inbound-Only"))
+	}
+}
+
+// key 级头是显式通道：不受白名单限制（Authorization/Cookie 等被入站封死的头
+// 管理员仍可经 key 级送达上游，providers 权威覆写在其后兜底）；with_header=false
+// 时入站不透传但 key 头照样注入——两开关正交。
+func TestBuildHeaders_KeyHeadersBypassWhitelistAndOrthogonalToWithHeader(t *testing.T) {
+	source := http.Header{}
+	source.Set("Cookie", "session=secret")
+
+	got := BuildHeaders(source, false, map[string]string{"Cookie": "configured-by-key"}, nil, false)
+	if got.Get("Cookie") != "configured-by-key" {
+		t.Errorf("Cookie = %q, want key 级显式配置送达（不受 with_header/白名单限制）", got.Get("Cookie"))
 	}
 }

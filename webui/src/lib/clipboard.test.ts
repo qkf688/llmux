@@ -287,4 +287,14 @@ describe("copySecretWithToast", () => {
     expect(vi.mocked(toast.success)).toHaveBeenCalledWith(LABEL);
     expect(String(vi.mocked(toast.success).mock.calls[0]?.[0])).not.toContain(SECRET);
   });
+
+  it("caller-supplied failure hint replaces the default 先显示 guidance", async () => {
+    // 明文永不渲染的页面（api-keys 卡片列表）传自定义引导；不传时维持默认文案（上一组用例钉住）
+    const ok = await copySecretWithToast(SECRET, LABEL, "复制失败：请改用 HTTPS 访问后重试。");
+
+    expect(ok).toBe(false);
+    expect(String(vi.mocked(toast.error).mock.calls[0]?.[0])).toBe(
+      "复制失败：请改用 HTTPS 访问后重试。",
+    );
+  });
 });

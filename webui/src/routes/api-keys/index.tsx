@@ -14,8 +14,6 @@ export default function ApiKeysPage() {
         apiKeys={page.apiKeys}
         isLoading={page.isLoading}
         isError={page.isError}
-        revealedId={page.revealedId}
-        onToggleReveal={page.toggleReveal}
         onToggle={page.toggleApiKey}
         onEdit={page.openEditForm}
         onRequestDelete={page.requestDelete}

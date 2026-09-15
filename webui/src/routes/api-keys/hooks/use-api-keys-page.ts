@@ -1,5 +1,5 @@
 /**
- * API Keys 页面总编排：TanStack Query 拉列表；弹窗开闭与明文显示态本地 state。
+ * API Keys 页面总编排：TanStack Query 拉列表；弹窗开闭本地 state。
  * 失败提示透传 API 层 Error.message——409 冲突文案（响应体信封）能原样到 toast，
  * 依赖的是 api-keys 模块「一切失败 = Error(可展示文案)」的单错误通道契约。
  */
@@ -21,12 +21,10 @@ export function useApiKeysPage() {
   const deleteApiKeyMutation = useDeleteApiKey();
 
   const [formOpen, setFormOpenState] = useState(false);
-  // null = 新建；非 null = 编辑该 key（仅改名，值不可改）
+  // null = 新建；非 null = 编辑该 key（改名 + 查看/复制明文，值不可改）
   const [editingKey, setEditingKey] = useState<ApiKeyItem | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ApiKeyItem | null>(null);
-  // 明文显示态提升到此处（而非 cell 本地）：桌面/移动两视图同时挂载，共享避免分叉
-  const [revealedId, setRevealedId] = useState<number | null>(null);
 
   const setFormOpen = useCallback((open: boolean) => {
     setFormOpenState(open);
@@ -44,10 +42,6 @@ export function useApiKeysPage() {
     setFormOpenState(true);
   }, []);
 
-  const toggleReveal = useCallback((id: number) => {
-    setRevealedId((current) => (current === id ? null : id));
-  }, []);
-
   const handleApiKeySaved = useCallback(
     async (values: ApiKeyCreateInput) => {
       try {
@@ -59,7 +53,8 @@ export function useApiKeysPage() {
           toast.success("API Key 已更新");
         } else {
           await createApiKeyMutation.mutateAsync(values);
-          toast.success("API Key 已创建");
+          // 引导写进成功 toast：IP+HTTP 环境复制常失败，而新建后用户最需要的就是拿到明文
+          toast.success("API Key 已创建；若复制失败，可在其编辑弹窗点「显示明文」手动选中复制");
         }
         setFormOpen(false);
       } catch (err) {
@@ -122,8 +117,6 @@ export function useApiKeysPage() {
     openEditForm,
     handleApiKeySaved,
     toggleApiKey,
-    revealedId,
-    toggleReveal,
     deleteOpen,
     deleteKeyName: deleteTarget?.name ?? "",
     setDeleteOpen: handleDeleteOpenChange,

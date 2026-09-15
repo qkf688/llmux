@@ -2,7 +2,8 @@ import { apiRequest, fetchWithAuth } from "../../core/client";
 
 /** 管理端 key 条目，逐键对齐后端 `handler/apikeys` 的 apiKeyResponse
  * （snake_case，AGENTS §5 契约纪律）；api_key 为解密明文（列表端点恒回显，
- * 后端 no-store），单行解密失败时后端降级 "****"，本层按原样透出不特判。 */
+ * 后端 no-store），单行解密失败时后端降级 "****"，本层按原样透出不特判
+ * （消费端 api-keys 卡片列表据 "****" 禁用复制入口）。 */
 export interface ApiKeyItem {
   id: number;
   name: string;

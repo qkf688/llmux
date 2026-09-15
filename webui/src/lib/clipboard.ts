@@ -155,11 +155,20 @@ export async function copyTextWithToast(text: string, successMessage: string): P
  *
  * 失败时引导用户走「先显示、再手动选中复制」：那条路径的明文是用户显式动作换来的。
  */
-export async function copySecretWithToast(secret: string, successMessage: string): Promise<boolean> {
+export async function copySecretWithToast(
+  secret: string,
+  successMessage: string,
+  /**
+   * 覆写失败引导文案。默认文案指向「先显示再手动选中复制」，仅适用于存在
+   * 显式显示路径的页面；明文永不渲染的页面（如 api-keys 卡片列表）必须传
+   * 本页可执行的替代引导，否则提示不可照做。
+   */
+  failureMessage = "复制失败：浏览器限制了自动复制。请先点「显示」，再手动选中明文复制（建议使用 HTTPS/域名访问）。",
+): Promise<boolean> {
   return reportCopyResult(
     await copyTextDetailed(secret, { showManualPrompt: false }),
     successMessage,
-    "复制失败：浏览器限制了自动复制。请先点「显示」，再手动选中明文复制（建议使用 HTTPS/域名访问）。",
+    failureMessage,
   );
 }
 

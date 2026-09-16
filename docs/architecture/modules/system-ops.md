@@ -31,7 +31,7 @@
 
 ```
 # bootstrap
-main.go / middleware/ / handler/register*.go / repos.go
+main.go / middleware/ / handler/register*.go / repos.go / models/（gorm_logger.go：SQL 日志 slog 桥接与脱敏闸，见 §4 契约表）
 # auth
 service/auth/ / handler/auth/ / middleware/auth.go
 # ops-io
@@ -56,6 +56,7 @@ httpresp/ / handler/httpx/ / common/ (dataurl, headerpassthrough, sseframe, mapu
 | `repository.SetDefault` / `Default` | 默认仓储绑定 | `repository/repository.go` | `main` + handler `repos()` |
 | `bgtask.Go` / `SetDefault` / `Default` / `(*Manager).Shutdown` | 登记 fire-and-forget 后台 goroutine，关闭时统一排空（有超时上限） | `common/bgtask/bgtask.go` | `main` 注入 Manager；`service/chat`、`service/healthcheck`、`service/modelsync`、`handler/*` 调 `bgtask.Go` |
 | `models.Close` | 关闭底层 `*sql.DB`，**须在** bgtask 排空之后调用 | `models/init.go` | `main.shutdown` |
+| `models.gormConfig` / `gormSlogLogger` | 生产 `gorm.Open` 配置**单源**：gorm SQL 日志经适配器进 slog（日志门面统一，Stage 1）；`ParameterizedQueries`（失败/慢语句只见占位符 SQL，不见 api_keys/credentials 的密文 hex 与 hash 值）与 `IgnoreRecordNotFoundError`（/v1 鉴权点查 miss 不留痕，防外部刷日志）两闸恒开，Warn 级 + 200ms 慢阈值与 gorm 默认同参。**闸只护常规回调路径**：`db.Scan()`/`Raw(...).Scan()` finisher 在 gorm 内部经 `logger.Recorder`（`RecorderParamsFilter` 默认透传）旁路 ParamsFilter，拿到的是已内插值的 SQL——含敏感绑定值的查询**禁用** Scan finisher，一律走 `Find`/`First` | `models/gorm_logger.go` | `models.Init`（`models/init.go`）；行为契约测试 `models/gorm_logger_test.go` |
 | `httpresp.Success/Error*` | 统一管理端响应 | `httpresp/` | 同包 |
 | `testapi.ResolveAssociationLink` / `ResolveProviderLink` | 连通性测试的**唯一**上游链路口径：主协议端点（`SelectPrimaryEndpoint`）→ 候选分组（关联级按白名单 `GroupCandidatesForModel`；供应商级不过滤，显式 `group_id` 时锁组）→ 组内首个可用凭据（`channel.ProbeGroup`，掩码只进 `slog`）。装配失败即 401 类缺陷（#19），六个测试端点（`GET /api/test/:id`、`POST /api/providers/:id/test`、`/test/react/:id`、`/test/structured-output/:id`、`/test/thinking/:id`、`/test/vision/:id`）**禁止**直用 `Provider.Config` 造客户端 | `handler/testapi/models.go` | `handler/testapi/{provider_handlers,react_handler,structured_output_handler,thinking,vision}.go`（`/test/:id` 与 structured/thinking/vision 的装配/探针/模式分叉/失败回包公共流在 `completion_flow.go`；`POST /providers/:id/test` 因链路入参与回包不同仍直用探针） |
 | `testapi.BuildTestHeaders` | 诊断测试出站头构造点，`with_header` 语义＝**白名单透传**（默认拒绝），判据在 `common.PassthroughAllowedHeader` / `common.MergePassthroughHeaders`（与生产转发同源，见 chat-gateway 模块）：放行 `X-*` 自定义头（`X-Api-Key` 除外，它可能是入站网关凭据）、`User-Agent`、`OpenAI-Beta`/`Anthropic-Beta`/`Anthropic-Version`；剥除 `Authorization`/`Cookie`（管理端会话材料）、`Referer`/`Origin`（内部地址）、`X-Forwarded-*`/`X-Real-Ip`/`X-Client-Ip`/`X-True-Ip`/`X-Remote-Addr`/`X-Original-Uri`（反代写入的客户端 IP / 内部路由）、`Accept-Encoding`/`Connection`/`Proxy-*`/`Host`/`Sec-*`（传输层/浏览器内部头——自设 `Accept-Encoding` 会禁用 Go Transport 透明解压，gzip 上游会被探针误判死）。旧实现整包 `Clone()` 入站头会把管理员 JWT 发给第三方（Anthropic `x-api-key` 分支不覆写 `Authorization`）。`customer_headers` 为管理员显式通道，**不受白名单限制**且后写覆盖透传结果。契约测试 `TestBuildTestHeaders_PassThroughWhitelist` 断言键级外泄面 | `handler/testapi/models.go` | 三处调用（`completion_flow.go`/`provider_handlers.go`/`react_handler.go`）→ `providers/{openai_base,anthropic}.go` 的 `req.Header = header`；前端关联表单 `association-form-dialog.tsx` 的说明文案 |

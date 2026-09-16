@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -19,7 +20,11 @@ func Init(ctx context.Context, path string) {
 	}
 	// busy_timeout + WAL：凭据健康异步写与前台读并发时降低 database is locked 概率。
 	dsn := path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
-	db, err := gorm.Open(sqlite.Open(dsn))
+	// logger 走 slog 桥接且常开参数脱敏（Stage 1：默认 logger 会把失败语句参数值——
+	// 含 api_keys/credentials 密文与 hash——整条打进 stdout），配置单源见 gormConfig。
+	// 注意：此处捕获调用时刻的 slog.Default()，main 若将来自定义 handler 须在
+	// models.Init 之前完成装配。
+	db, err := gorm.Open(sqlite.Open(dsn), gormConfig(slog.Default()))
 	if err != nil {
 		panic(err)
 	}

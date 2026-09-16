@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/adjustment"
 	"github.com/qkf688/llmux/service/chatstats"
@@ -25,7 +25,10 @@ func handleNonOKProviderResponse(
 	start time.Time, // 请求开始时刻（handler startReq）：用于回填 ProxyTime 终值
 	cred models.Credential, // 本次尝试选中的凭据：凭据级失败时写冷却（#13）
 ) singleProviderAttemptResult {
-	byteBody, err := io.ReadAll(res.Body)
+	// Stage 2 资源防御：错误体走诊断单源上限（1 MiB）——成败判定只依赖状态码，
+	// 错误细节提取与 RawResponseBody 采集都不需要超限部分；超大 body 的病态/被
+	// 劫持上游在此被 LimitReader 拦下，不再整块进内存再拼进日志。
+	byteBody, err := common.ReadCappedBody(res.Body)
 	if err != nil {
 		slog.Error("read body error", "error", err)
 	}

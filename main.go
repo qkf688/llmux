@@ -20,6 +20,7 @@ import (
 	"github.com/qkf688/llmux/common/bgtask"
 	"github.com/qkf688/llmux/common/credentialcrypto"
 	"github.com/qkf688/llmux/handler"
+	"github.com/qkf688/llmux/middleware"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/repository"
 	"github.com/qkf688/llmux/service"
@@ -95,7 +96,12 @@ func main() {
 
 	startBackgroundServices(ctx)
 
-	router := gin.Default()
+	// 组装顺序即请求路径顺序：编号最先（错误/访问/上游三处日志共用同一号），
+	// 访问日志读已回写的请求头，等价于原 gin.Default()（Logger+Recovery）。
+	router := gin.New()
+	router.Use(middleware.RequestID())
+	router.Use(middleware.AccessLog())
+	router.Use(gin.Recovery())
 
 	router.Use(gzip.Gzip(gzip.DefaultCompression, gzip.WithExcludedPaths([]string{"/v1/"})))
 

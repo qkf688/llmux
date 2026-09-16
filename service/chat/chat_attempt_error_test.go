@@ -66,9 +66,10 @@ func TestExecuteSingleProviderAttempt_NonOKErrorBodyCapped(t *testing.T) {
 	if row.Status != "error" {
 		t.Fatalf("Status = %q, want error", row.Status)
 	}
-	// Error = "status: %d, body: %s"，body 部分被读侧截到 ≤1 MiB，整串不可能上到 4 MiB。
-	if len(row.Error) > (1<<20)+64 {
-		t.Fatalf("Error 长度 %d, want ≤ 1MiB+64（读侧未收口）", len(row.Error))
+	// Error = "status: %d, body: %s"：读侧 1 MiB 封顶后，Stage 2-D 再把落库文本截到
+	// 采集上限（默认 256 KiB）——整串必须 ≤ 256KiB + 前缀/标记余量。
+	if len(row.Error) > (256<<10)+128 {
+		t.Fatalf("Error 长度 %d, want ≤ 256KiB+128（采集截断未生效）", len(row.Error))
 	}
 	if !strings.HasPrefix(row.Error, "status: 500") {
 		t.Fatalf("Error = %q, want 前缀 status: 500", row.Error[:min(64, len(row.Error))])

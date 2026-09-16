@@ -2,7 +2,6 @@ package chat
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -42,12 +41,7 @@ func handleNonOKProviderResponse(
 
 	if logRawOptions.RequestHeaders || logRawOptions.RequestBody || logRawOptions.RawRequestBody || logRawOptions.ResponseHeaders || logRawOptions.RawResponseBody {
 		if logRawOptions.ResponseHeaders {
-			responseHeadersJSON, marshalErr := json.Marshal(res.Header)
-			if marshalErr != nil {
-				slog.Error("failed to marshal response headers", "error", marshalErr)
-				responseHeadersJSON = []byte("{}")
-			}
-			errorUpdate.ResponseHeaders = string(responseHeadersJSON)
+			errorUpdate.ResponseHeaders = string(responseHeadersJSON(res.Header))
 		}
 		if logRawOptions.RequestHeaders {
 			errorUpdate.RequestHeaders = string(logSnapshot.RequestHeadersJSON)

@@ -2,7 +2,6 @@ package chat
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -142,6 +141,17 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		return handleNonOKProviderResponse(input.Ctx, res, logID, logRawOptions, logSnapshot, input.ModelWithProvider, input.Provider, input.Start, input.Selection.Credential)
 	}
 
+	// Stage 2-C 资源防御：非流式上游响应整读体积闸（超限=组织级转移不冷却 key；
+	// 读体错误=与 Do 分支同归凭据级网络）。SSE 直通本闸（见 limitUpstreamResponseBody）。
+	switch guardErr := limitUpstreamResponseBody(input.Ctx, res); {
+	case guardErr == nil:
+		// 正常：Body 已回填为可重读内存字节，下游采集/转换/直通照常消费。
+	case errors.Is(guardErr, errUpstreamBodyOverflow):
+		return handleUpstreamBodyOverflow(input, res, logID, logRawOptions, logSnapshot, guardErr)
+	default:
+		return handleUpstreamBodyReadError(input, res, logID, logRawOptions, logSnapshot, guardErr)
+	}
+
 	rawResponseBodyStr := captureRawResponseBody(logRawOptions, res)
 
 	// 流式响应的原始 body 不能在入口读取（会阻塞流），改用侧信道在转换 goroutine 内旁路记录。
@@ -171,12 +181,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 				ProxyTime: time.Since(input.Start),
 			}
 			if logRawOptions.ResponseHeaders {
-				responseHeadersJSON, marshalErr := json.Marshal(res.Header)
-				if marshalErr != nil {
-					slog.Error("failed to marshal response headers", "error", marshalErr)
-					responseHeadersJSON = []byte("{}")
-				}
-				errorUpdate.ResponseHeaders = string(responseHeadersJSON)
+				errorUpdate.ResponseHeaders = string(responseHeadersJSON(res.Header))
 			}
 			if logRawOptions.RequestHeaders {
 				errorUpdate.RequestHeaders = string(logSnapshot.RequestHeadersJSON)

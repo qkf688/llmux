@@ -90,6 +90,13 @@ func getRequestMaxRetry(ctx context.Context) int {
 	return settingsReader.Int(ctx, models.SettingKeyRequestMaxRetry, 3, 1)
 }
 
+// getUpstreamMaxResponseBytes 获取「上游最大响应体」并换算为字节（设置单位 MiB，
+// 见 models.SettingKeyUpstreamMaxResponseMiB）。默认与 schema 一致（32 MiB）；
+// Int 的 min 参数与 schema Min 同为 1 MiB——脏值（0/负数）读出来仍是防线内取值。
+func getUpstreamMaxResponseBytes(ctx context.Context) int64 {
+	return int64(settingsReader.Int(ctx, models.SettingKeyUpstreamMaxResponseMiB, 32, 1)) << 20
+}
+
 // getCredHealthCooldown429Sec 获取凭据 429 限流冷却窗口（秒）。
 // 默认值与 setting schema 一致（60），驱动 applyCredentialCooldown 的 429 分窗。
 func getCredHealthCooldown429Sec(ctx context.Context) int {

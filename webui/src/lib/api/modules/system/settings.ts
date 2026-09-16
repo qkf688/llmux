@@ -55,6 +55,7 @@ export interface Settings {
   request_total_timeout: number;
   stream_first_byte_timeout: number;
   request_max_retry: number;
+  upstream_max_response_mib: number;
   cred_health_cooldown_429_sec: number;
   cred_health_cooldown_server_sec: number;
   cred_health_auth_fail_threshold: number;

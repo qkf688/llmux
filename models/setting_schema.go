@@ -152,6 +152,9 @@ func buildSettingSchemas() map[string]SettingSchema {
 		{Key: SettingKeyRequestTotalTimeout, Field: "RequestTotalTimeout", Type: SettingTypeInt, Default: 90, Category: "request", Min: intPtr(1)},
 		{Key: SettingKeyStreamFirstByteTimeout, Field: "StreamFirstByteTimeout", Type: SettingTypeInt, Default: 15, Category: "request", Min: intPtr(1)},
 		{Key: SettingKeyRequestMaxRetry, Field: "RequestMaxRetry", Type: SettingTypeInt, Default: 3, Category: "request", Min: intPtr(1)},
+		// Stage 2 资源防御：上游单条非流式响应体上限（MiB）。下限 1 = 「不可关闭」的落点——
+		// 防线不设 0/关档，真需更大值把数调大（决策记录见 .plan/stages.md Stage 2）。
+		{Key: SettingKeyUpstreamMaxResponseMiB, Field: "UpstreamMaxResponseMiB", Type: SettingTypeInt, Default: 32, Category: "request", Min: intPtr(1)},
 
 		// 凭据健康（S4 状态机 #6-1/#6-2/#6-3）：429 与过载合并一个窗口字段，5xx/超时/网络共用一个
 		// 窗口（设计定案第 5 节）；鉴权失败(401/403)不走冷却，连续失败达阈值后判停 temp_unsched；

@@ -39,6 +39,10 @@ func TestDefaultSettingsResponse(t *testing.T) {
 	if response.LogRawRequestResponseErrorsOnly {
 		t.Fatalf("expected LogRawRequestResponseErrorsOnly default to be false")
 	}
+	// Stage 2-C：上游最大响应体默认 32 MiB（文生图 base64 合法场景 ×4 余量，见 schema 注释）。
+	if response.UpstreamMaxResponseMiB != 32 {
+		t.Fatalf("expected UpstreamMaxResponseMiB default to be 32, got %d", response.UpstreamMaxResponseMiB)
+	}
 }
 
 func TestApplySettingToResponse(t *testing.T) {

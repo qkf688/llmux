@@ -68,6 +68,8 @@ type Settings struct {
 	RequestTotalTimeout    int `json:"request_total_timeout"`     // 整个请求总预算超时（秒）
 	StreamFirstByteTimeout int `json:"stream_first_byte_timeout"` // 流式响应头后首字节等待超时（秒）
 	RequestMaxRetry        int `json:"request_max_retry"`         // 单候选池最大尝试次数
+	// UpstreamMaxResponseMiB 上游单条非流式响应体上限（MiB，Stage 2 资源防御；下限 1，不可关闭）
+	UpstreamMaxResponseMiB int `json:"upstream_max_response_mib"`
 	// 凭据健康相关设置
 	CredHealthCooldown429Sec    int `json:"cred_health_cooldown_429_sec"`    // 凭据 429 限流冷却窗口（秒）
 	CredHealthCooldownServerSec int `json:"cred_health_cooldown_server_sec"` // 凭据服务端错误冷却窗口（秒，5xx/超时/网络）

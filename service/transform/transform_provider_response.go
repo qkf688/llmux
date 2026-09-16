@@ -31,6 +31,9 @@ func TransformProviderResponse(response *http.Response, upstreamFormat, clientFo
 	}
 
 	// 非流式响应：读取完整响应体后转换
+	// 豁免（Stage 2 质量门）：本处整读是协议转换的固有需求，且体积已被上游闸
+	// limitUpstreamResponseBody 限定在「上游最大响应体」设置内（流式不走此函数），
+	// 此处无需二次限幅——新增无界读请勿照抄本行。
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, err

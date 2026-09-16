@@ -628,6 +628,10 @@ const (
 	SettingKeyRequestTotalTimeout    = "request_total_timeout"     // 整个请求的总预算超时（秒，含所有重试/故障转移）
 	SettingKeyStreamFirstByteTimeout = "stream_first_byte_timeout" // 流式响应头到达后等待首个数据字节的超时（秒）
 	SettingKeyRequestMaxRetry        = "request_max_retry"         // 单候选池最大尝试次数
+	// SettingKeyUpstreamMaxResponseMiB 上游单条**非流式**响应体的体积上限（MiB，Stage 2 资源防御）。
+	// 合法大响应主场景是文生图 base64（单张高清图编码后 4~8MB），默认 32 = 最大合法场景 ×4 余量；
+	// 病态/被劫持上游的超大 body 在响应头提交给客户端之前即被拦截并故障转移。下限 1 MiB（不可关闭）。
+	SettingKeyUpstreamMaxResponseMiB = "upstream_max_response_mib"
 
 	// 凭据健康相关设置
 	SettingKeyCredHealthCooldown429Sec    = "cred_health_cooldown_429_sec"    // 凭据 429 限流冷却窗口（秒）

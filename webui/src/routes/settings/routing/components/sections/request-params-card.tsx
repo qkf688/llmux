@@ -4,13 +4,14 @@ import { Label } from "@/components/ui/label";
 import type { RoutingSettingsSectionProps } from "../../types";
 
 /**
- * 请求参数卡：全局超时/重试的四项设置（替代原 per-model time_out/max_retry）。
+ * 请求参数卡：全局超时/重试与上游响应体积防御的设置。
  * 语义分区明确——响应头超时只管"等头"，总超时是整请求预算帽子，
  * 首字节等待是流式"头后无数据"的看门狗窗口；等头超时不再一击致命
- * （总预算独立，后续候选仍有完整窗口，见 service/chat/chat_balance.go）。
+ * （总预算独立，后续候选仍有完整窗口，见 service/chat/chat_balance.go）；
+ * 上游响应上限是 Stage 2 资源防御（超限=供应商异常→故障转移，不冷却凭据）。
  */
 const intFields: Array<{
-  key: "request_header_timeout" | "request_total_timeout" | "stream_first_byte_timeout" | "request_max_retry";
+  key: "request_header_timeout" | "request_total_timeout" | "stream_first_byte_timeout" | "request_max_retry" | "upstream_max_response_mib";
   label: string;
   description: string;
   suffix?: string;
@@ -38,6 +39,13 @@ const intFields: Array<{
     label: "最大重试",
     description: "单个候选池的最大尝试次数，失败后按优先级/权重换下一个候选。",
     suffix: "次",
+  },
+  {
+    key: "upstream_max_response_mib",
+    label: "上游响应上限",
+    description:
+      "单条上游非流式响应体的体积上限（MiB，最小 1，不可关闭）；超限判供应商异常、故障转移换下一家且不冷却凭据。流式响应不受此项约束。",
+    suffix: "MiB",
   },
 ];
 

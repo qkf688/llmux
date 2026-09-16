@@ -1,0 +1,131 @@
+package chat
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/qkf688/llmux/consts"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/providers"
+)
+
+// runAttemptAgainstURL 以 OpenAI 协议直通形态对指定上游跑一次 attempt（Stage 2-C 体积闸测试共用）。
+func runAttemptAgainstURL(t *testing.T, providerName, url string, client *http.Client, ctx context.Context) singleProviderAttemptResult {
+	t.Helper()
+	providerRow := models.Provider{Name: providerName, Type: providers.TypeOpenAI}
+	if err := models.DB.Create(&providerRow).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	enabled := true
+	mwp := models.ModelWithProvider{ProviderID: providerRow.ID, ProviderModel: "pm1", Status: &enabled}
+	if err := models.DB.Create(&mwp).Error; err != nil {
+		t.Fatalf("create association: %v", err)
+	}
+	chatModel, err := providers.New(providers.TypeOpenAI, fmt.Sprintf(`{"base_url":%q,"api_key":"sk-limit"}`, url), "")
+	if err != nil {
+		t.Fatalf("new provider: %v", err)
+	}
+	return executeSingleProviderAttempt(singleProviderAttemptInput{
+		Ctx:               ctx,
+		Start:             time.Now(),
+		Style:             string(consts.StyleOpenAI),
+		Before:            Before{Model: "m1", raw: []byte(`{"model":"m1","messages":[{"role":"user","content":"hi"}]}`)},
+		RealModelName:     "m1",
+		ReqMeta:           models.ReqMeta{Header: http.Header{}},
+		Provider:          providerRow,
+		ModelWithProvider: mwp,
+		Selection:         selectionForEndpoint(string(consts.ProtocolOpenAI)),
+		ChatModel:         chatModel,
+		Client:            client,
+	}, make(chan models.ChatLog, 8))
+}
+
+// Stage 2-C 超限出口：33 MiB > 默认 32 MiB → **组织级**淘汰（换下一家）、不标凭据级、
+// 不写冷却；错误日志带超限原因。锁死共识里「超大 body 是端点级行为，与 key 无关」。
+func TestLimitUpstreamResponseBody_OverflowFailsOverWithoutCooldown(t *testing.T) {
+	initChatRecordTestDB(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(strings.Repeat("a", 33<<20)))
+	}))
+	t.Cleanup(srv.Close)
+
+	result := runAttemptAgainstURL(t, "p-ovf", srv.URL, srv.Client(), context.Background())
+	if result.Success {
+		t.Fatalf("超限响应不得判成功")
+	}
+	if result.CredentialFailure {
+		t.Fatalf("超限是端点级异常, 不得标凭据级失败: %+v", result)
+	}
+	if !result.RemoveWeight || !result.RemovePriority {
+		t.Fatalf("超限应组织级淘汰候选: %+v", result)
+	}
+
+	var row models.ChatLog
+	if err := models.DB.Where("provider_name = ?", "p-ovf").First(&row).Error; err != nil {
+		t.Fatalf("reload log: %v", err)
+	}
+	if row.Status != "error" || !strings.Contains(row.Error, "exceeds configured limit") {
+		t.Fatalf("log = %q/%q, want error + 超限原因", row.Status, row.Error)
+	}
+}
+
+// Stage 2-C 正常出口：闸内响应必须原样可重读（回填不吞尾字节、不改内容）——
+// 采集/转换/直通 io.Copy 都从这份内存字节再读一遍，闸不能成为数据完整性回归点。
+func TestLimitUpstreamResponseBody_UnderLimitBodySurvivesIntact(t *testing.T) {
+	initChatRecordTestDB(t)
+
+	payload := `{"id":"chatcmpl-l","object":"chat.completion","created":0,"model":"pm1","choices":[{"index":0,"message":{"role":"assistant","content":"` + strings.Repeat("字", 5000) + `"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, payload)
+	}))
+	t.Cleanup(srv.Close)
+
+	result := runAttemptAgainstURL(t, "p-intact", srv.URL, srv.Client(), context.Background())
+	if !result.Success {
+		t.Fatalf("闸内响应应判成功: %+v", result)
+	}
+	defer result.Response.Body.Close()
+	got, err := io.ReadAll(result.Response.Body)
+	if err != nil {
+		t.Fatalf("read restored body: %v", err)
+	}
+	if string(got) != payload {
+		t.Fatalf("回填后 body 不完整: got %d bytes, want %d", len(got), len(payload))
+	}
+}
+
+// Stage 2-C 读体超时出口：headers 先到、body 滴灌中被 ctx deadline 打断 →
+// 必须与 Do 分支成对归类为**凭据级网络**失败（RULES「Go HTTP 超时：body 是懒流」——
+// 分类只挂 Do 侧则此路径静默漏走）。
+func TestLimitUpstreamResponseBody_ReadDeadlineIsNetworkClass(t *testing.T) {
+	initChatRecordTestDB(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush() // headers 先到达，把失败点逼进读体阶段
+		time.Sleep(800 * time.Millisecond)
+		_, _ = io.WriteString(w, `{"id":"late"}`)
+	}))
+	t.Cleanup(srv.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	result := runAttemptAgainstURL(t, "p-deadline", srv.URL, srv.Client(), ctx)
+	if result.Success {
+		t.Fatalf("读体超时不得判成功")
+	}
+	if !result.CredentialFailure {
+		t.Fatalf("读体超时应与 Do 失败同归凭据级网络: %+v", result)
+	}
+}

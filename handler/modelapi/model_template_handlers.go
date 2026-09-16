@@ -16,13 +16,13 @@ func getModelTemplateData(
 ) (associations []models.ModelWithProvider, manualItems []models.ModelTemplateItem, ok bool) {
 	associations, err := repos().ModelWithProvider.ListByModelID(ctx.Request.Context(), modelID)
 	if err != nil {
-		httpresp.InternalServerError(ctx, "Failed to get associations: "+err.Error())
+		httpresp.InternalErrorMessage(ctx, "Failed to get associations", err)
 		return nil, nil, false
 	}
 
 	manualItems, err = repos().ModelTemplateItem.ListByModelID(ctx.Request.Context(), modelID)
 	if err != nil {
-		httpresp.InternalServerError(ctx, "Failed to get template items: "+err.Error())
+		httpresp.InternalErrorMessage(ctx, "Failed to get template items", err)
 		return nil, nil, false
 	}
 
@@ -45,7 +45,7 @@ func loadModelOrRespond(c *gin.Context, id uint) (models.Model, bool) {
 			httpresp.NotFound(c, "Model not found")
 			return models.Model{}, false
 		}
-		httpresp.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Database error", err)
 		return models.Model{}, false
 	}
 	return model, true
@@ -100,7 +100,7 @@ func AddModelTemplateItem(c *gin.Context) {
 
 	count, err := repos().ModelTemplateItem.CountByModelIDAndName(c.Request.Context(), id, name)
 	if err != nil {
-		httpresp.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Database error", err)
 		return
 	}
 
@@ -110,7 +110,7 @@ func AddModelTemplateItem(c *gin.Context) {
 			Name:    name,
 		}
 		if err := repos().ModelTemplateItem.Create(c.Request.Context(), &item); err != nil {
-			httpresp.InternalServerError(c, "Failed to create template item: "+err.Error())
+			httpresp.InternalErrorMessage(c, "Failed to create template item", err)
 			return
 		}
 	}
@@ -136,7 +136,7 @@ func DeleteModelTemplateItem(c *gin.Context) {
 	}
 
 	if _, err := repos().ModelTemplateItem.DeleteByModelIDAndNameUnscoped(c.Request.Context(), id, name); err != nil {
-		httpresp.InternalServerError(c, "Failed to delete template item: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to delete template item", err)
 		return
 	}
 

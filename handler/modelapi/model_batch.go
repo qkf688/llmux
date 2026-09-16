@@ -35,7 +35,7 @@ func BatchDeleteModels(c *gin.Context) {
 		return nil
 	})
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to delete models: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to delete models", err)
 		return
 	}
 
@@ -63,7 +63,7 @@ func BatchUpdateModels(c *gin.Context) {
 
 	updated, err := repos().Model.BatchUpdate(c.Request.Context(), req.IDs, updates)
 	if err != nil {
-		httpresp.InternalServerError(c, "更新失败: "+err.Error())
+		httpresp.InternalErrorMessage(c, "更新失败", err)
 		return
 	}
 

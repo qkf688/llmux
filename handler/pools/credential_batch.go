@@ -66,12 +66,12 @@ func BatchImportCredentials(c *gin.Context) {
 	}
 	cipher := credentialcrypto.Default()
 	if cipher == nil {
-		httpresp.InternalServerError(c, "encryption not configured")
+		httpresp.InternalErrorMessage(c, "encryption not configured", nil)
 		return
 	}
 	data, err := importCredentialRows(ctx, repos().Credential, poolID, req.Keys, cipher)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to import credentials: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to import credentials", err)
 		return
 	}
 	httpresp.Success(c, data)
@@ -179,7 +179,7 @@ func BatchUpdateCredentialStatus(c *gin.Context) {
 	}
 	updated, err := repos().Credential.UpdateFieldsByIDs(ctx, poolID, req.IDs, fields)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to update status: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update status", err)
 		return
 	}
 	httpresp.Success(c, map[string]any{"updated": updated})
@@ -206,7 +206,7 @@ func BatchDeleteCredentials(c *gin.Context) {
 	}
 	deleted, err := repos().Credential.DeleteByIDs(ctx, poolID, req.IDs)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to delete credentials: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to delete credentials", err)
 		return
 	}
 	httpresp.Success(c, map[string]any{"deleted": deleted})

@@ -46,7 +46,7 @@ func ModelsHandler(c *gin.Context) {
 	// 获取真实模型
 	llmModels, err := gorm.G[models.Model](models.DB).Find(c.Request.Context())
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 
@@ -63,7 +63,7 @@ func ModelsHandler(c *gin.Context) {
 	// 获取虚拟模型
 	virtualModels, err := gorm.G[models.VirtualModel](models.DB).Find(c.Request.Context())
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 
@@ -123,7 +123,7 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 	// /v1 由调用方 key 鉴权、攻击者可控，Stage 2 资源防御）。
 	reqBody, err := io.ReadAll(io.LimitReader(c.Request.Body, consts.MaxInboundBodyBytes+1))
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 	c.Request.Body.Close()
@@ -146,7 +146,7 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 	reqMeta := newReqMeta(c)
 	providersWithMeta, err := service.ProvidersWithMetaBymodelsName(ctx, style, *before, reqMeta)
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 
@@ -166,7 +166,7 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 			httpresp.ErrorWithHttpStatus(c, status, status, err.Error())
 			return
 		}
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 	res := balanced.Response
@@ -212,7 +212,7 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 			// processer 走错误分支（Status:error + ProxyTime 回填）。
 			writeStreamErrorEvent(c, style)
 		} else {
-			httpresp.InternalServerError(c, err.Error())
+			httpresp.InternalServerError(c, err)
 		}
 		pw.CloseWithError(err)
 		return

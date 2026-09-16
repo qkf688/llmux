@@ -23,7 +23,7 @@ func MetricsDailies(c *gin.Context) {
 
 	dailies, err := repos().Stats.ListDailiesSince(c.Request.Context(), startOfDaysAgo(time.Now(), days))
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to query daily metrics: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to query daily metrics", err)
 		return
 	}
 

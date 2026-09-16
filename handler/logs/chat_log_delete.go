@@ -29,7 +29,7 @@ func DeleteLog(c *gin.Context) {
 
 	affected, err := repos().ChatLog.HardDelete(ctx, id)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to delete log: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to delete log", err)
 		return
 	}
 	if affected == 0 {
@@ -58,7 +58,7 @@ func BatchDeleteLogs(c *gin.Context) {
 
 	affected, err := repos().ChatLog.HardDeleteByIDs(ctx, req.IDs)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to delete logs: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to delete logs", err)
 		return
 	}
 
@@ -76,7 +76,7 @@ func ClearAllLogs(c *gin.Context) {
 
 	affected, err := repos().ChatLog.HardDeleteAll(ctx)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to clear logs: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to clear logs", err)
 		return
 	}
 
@@ -102,7 +102,7 @@ func ClearFilteredLogs(c *gin.Context) {
 
 	deleted, err := repos().ChatLog.HardDeleteFiltered(c.Request.Context(), filter)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to clear logs: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to clear logs", err)
 		return
 	}
 

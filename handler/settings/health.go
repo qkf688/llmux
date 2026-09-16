@@ -50,7 +50,7 @@ func UpdateHealthCheckSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyHealthCheckEnabled).
 		Update(ctx, "value", enabledValue); err != nil {
-		httpresp.InternalServerError(c, "Failed to update settings: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update settings", err)
 		return
 	}
 
@@ -61,7 +61,7 @@ func UpdateHealthCheckSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyHealthCheckInterval).
 		Update(ctx, "value", strconv.Itoa(req.Interval)); err != nil {
-		httpresp.InternalServerError(c, "Failed to update settings: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update settings", err)
 		return
 	}
 
@@ -72,7 +72,7 @@ func UpdateHealthCheckSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyHealthCheckFailureThreshold).
 		Update(ctx, "value", strconv.Itoa(req.FailureThreshold)); err != nil {
-		httpresp.InternalServerError(c, "Failed to update settings: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update settings", err)
 		return
 	}
 
@@ -84,7 +84,7 @@ func UpdateHealthCheckSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyHealthCheckFailureDisableEnabled).
 		Update(ctx, "value", failureDisableEnabledValue); err != nil {
-		httpresp.InternalServerError(c, "Failed to update settings: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update settings", err)
 		return
 	}
 
@@ -96,7 +96,7 @@ func UpdateHealthCheckSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyHealthCheckAutoEnable).
 		Update(ctx, "value", autoEnableValue); err != nil {
-		httpresp.InternalServerError(c, "Failed to update settings: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update settings", err)
 		return
 	}
 
@@ -107,7 +107,7 @@ func UpdateHealthCheckSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyHealthCheckLogRetentionCount).
 		Update(ctx, "value", strconv.Itoa(req.LogRetentionCount)); err != nil {
-		httpresp.InternalServerError(c, "Failed to update settings: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update settings", err)
 		return
 	}
 
@@ -118,7 +118,7 @@ func UpdateHealthCheckSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyHealthCheckCountAsSuccess).
 		Update(ctx, "value", countHealthCheckSuccess); err != nil {
-		httpresp.InternalServerError(c, "Failed to update settings: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update settings", err)
 		return
 	}
 
@@ -129,7 +129,7 @@ func UpdateHealthCheckSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyHealthCheckCountAsFailure).
 		Update(ctx, "value", countHealthCheckFailure); err != nil {
-		httpresp.InternalServerError(c, "Failed to update settings: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update settings", err)
 		return
 	}
 
@@ -141,7 +141,7 @@ func UpdateHealthCheckSettings(c *gin.Context) {
 	if _, err := gorm.G[models.Setting](models.DB).
 		Where("key = ?", models.SettingKeyHealthCheckCheckDisabledOnly).
 		Update(ctx, "value", checkDisabledOnly); err != nil {
-		httpresp.InternalServerError(c, "Failed to update settings: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update settings", err)
 		return
 	}
 

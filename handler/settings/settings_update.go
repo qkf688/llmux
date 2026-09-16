@@ -59,7 +59,7 @@ func handleUpdateSettingsError(c *gin.Context, err error) {
 		return
 	}
 
-	httpresp.InternalServerError(c, "Failed to update settings: "+err.Error())
+	httpresp.InternalErrorMessage(c, "Failed to update settings", err)
 }
 
 // triggerBatchImportForAutoSave 是「首次开启自动保存模板」的副作用出口。

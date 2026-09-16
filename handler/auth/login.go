@@ -46,7 +46,7 @@ func Login(secret string) gin.HandlerFunc {
 
 		token, err := authservice.Sign(secret, user.ID, user.Username)
 		if err != nil {
-			httpresp.InternalServerError(c, "failed to sign token")
+			httpresp.InternalErrorMessage(c, "failed to sign token", err)
 			return
 		}
 

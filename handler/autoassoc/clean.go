@@ -14,7 +14,7 @@ func PreviewCleanInvalid(c *gin.Context) {
 	previews, err := service.GetAutoAssocService().PreviewClean(c.Request.Context())
 	if err != nil {
 		slog.Error("auto-clean preview failed", "error", err)
-		httpresp.InternalServerError(c, "failed to preview invalid associations")
+		httpresp.InternalErrorMessage(c, "failed to preview invalid associations", err)
 		return
 	}
 	httpresp.Success(c, previews)
@@ -26,7 +26,7 @@ func CleanInvalidAssociations(c *gin.Context) {
 	result, err := service.GetAutoAssocService().CleanInvalid(c.Request.Context())
 	if err != nil {
 		slog.Error("auto-clean failed", "error", err)
-		httpresp.InternalServerError(c, "failed to clean invalid associations")
+		httpresp.InternalErrorMessage(c, "failed to clean invalid associations", err)
 		return
 	}
 	httpresp.Success(c, map[string]interface{}{

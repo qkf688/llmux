@@ -13,7 +13,7 @@ import (
 func GetModels(c *gin.Context) {
 	modelsList, err := repos().Model.List(c.Request.Context())
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 
@@ -30,7 +30,7 @@ func CreateModel(c *gin.Context) {
 
 	exists, err := repos().Model.ExistsByName(c.Request.Context(), req.Name)
 	if err != nil {
-		httpresp.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Database error", err)
 		return
 	}
 	if exists {
@@ -47,7 +47,7 @@ func CreateModel(c *gin.Context) {
 		ThinkingLevels:   req.ThinkingLevels,
 	}
 	if err := repos().Model.Create(c.Request.Context(), &model); err != nil {
-		httpresp.InternalServerError(c, "Failed to create model: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to create model", err)
 		return
 	}
 
@@ -91,18 +91,18 @@ func UpdateModel(c *gin.Context) {
 	// map-based UpdateFields 不走 serializer，直接传 []string 会报 unsupported type。
 	thinkingLevelsVal, err := models.SerializeThinkingLevelsForUpdate(req.ThinkingLevels)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to serialize thinking_levels: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to serialize thinking_levels", err)
 		return
 	}
 	updates["thinking_levels"] = thinkingLevelsVal
 	if _, err := repos().Model.UpdateFields(c.Request.Context(), id, updates); err != nil {
-		httpresp.InternalServerError(c, "Failed to update model: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update model", err)
 		return
 	}
 
 	updatedModel, err := getModelByID(c.Request.Context(), id)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to retrieve updated model: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to retrieve updated model", err)
 		return
 	}
 
@@ -131,7 +131,7 @@ func DeleteModel(c *gin.Context) {
 		return nil
 	})
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to delete model: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to delete model", err)
 		return
 	}
 	if result == 0 {

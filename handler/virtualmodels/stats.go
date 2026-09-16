@@ -25,7 +25,7 @@ func GetVirtualModelStats(c *gin.Context) {
 	virtualModelService := service.NewVirtualModelService(models.DB)
 	stats, err := virtualModelService.GetVirtualModelStats(ctx, id)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to get stats: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to get stats", err)
 		return
 	}
 

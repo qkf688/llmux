@@ -42,13 +42,13 @@ func UpdateModelProviderStatus(c *gin.Context) {
 			httpresp.NotFound(c, "Model-provider association not found")
 			return
 		}
-		httpresp.InternalServerError(c, "Failed to retrieve model-provider association: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to retrieve model-provider association", err)
 		return
 	}
 
 	status := req.Status
 	if _, err := repos().ModelWithProvider.UpdateFields(ctx, uint(id), statusUpdateFields(status)); err != nil {
-		httpresp.InternalServerError(c, "Failed to update status: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update status", err)
 		return
 	}
 
@@ -71,7 +71,7 @@ func BatchUpdateModelProvidersStatus(c *gin.Context) {
 
 	result, err := repos().ModelWithProvider.UpdateFieldsByIDs(c.Request.Context(), req.IDs, statusUpdateFields(req.Status))
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to update status: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update status", err)
 		return
 	}
 

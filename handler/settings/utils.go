@@ -117,7 +117,7 @@ func ResetModelWeights(c *gin.Context) {
 	result := db.Where("weight <> ?", defaultWeight).Update("weight", defaultWeight)
 	if result.Error != nil {
 		slog.Error("重置模型权重失败", "error", result.Error)
-		httpresp.InternalServerError(c, "重置模型权重失败: "+result.Error.Error())
+		httpresp.InternalErrorMessage(c, "重置模型权重失败", result.Error)
 		return
 	}
 
@@ -154,7 +154,7 @@ func ResetModelPriorities(c *gin.Context) {
 	result := db.Where("priority <> ?", defaultPriority).Update("priority", defaultPriority)
 	if result.Error != nil {
 		slog.Error("重置模型优先级失败", "error", result.Error)
-		httpresp.InternalServerError(c, "重置模型优先级失败: "+result.Error.Error())
+		httpresp.InternalErrorMessage(c, "重置模型优先级失败", result.Error)
 		return
 	}
 
@@ -188,7 +188,7 @@ func EnableAllAssociations(c *gin.Context) {
 	result := db.Where("status = ?", false).Update("status", true)
 	if result.Error != nil {
 		slog.Error("启用所有模型关联失败", "error", result.Error)
-		httpresp.InternalServerError(c, "启用所有模型关联失败: "+result.Error.Error())
+		httpresp.InternalErrorMessage(c, "启用所有模型关联失败", result.Error)
 		return
 	}
 

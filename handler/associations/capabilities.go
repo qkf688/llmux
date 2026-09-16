@@ -32,7 +32,7 @@ func BatchUpdateModelProvidersCapabilities(c *gin.Context) {
 
 	result, err := repos().ModelWithProvider.UpdateByIDs(c.Request.Context(), req.IDs, updates)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to update capabilities: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update capabilities", err)
 		return
 	}
 

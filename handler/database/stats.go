@@ -108,7 +108,7 @@ func GetDatabaseStats(c *gin.Context) {
 	}
 	if err != nil {
 		slog.Error("无法访问数据库文件", "error", err, "path", dbPath)
-		httpresp.InternalServerError(c, "无法访问数据库文件")
+		httpresp.InternalErrorMessage(c, "无法访问数据库文件", err)
 		return
 	}
 

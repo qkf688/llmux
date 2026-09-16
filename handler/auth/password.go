@@ -33,12 +33,12 @@ func ChangePassword(c *gin.Context) {
 
 	hash, err := authservice.HashPassword(req.NewPassword)
 	if err != nil {
-		httpresp.InternalServerError(c, "failed to hash password")
+		httpresp.InternalErrorMessage(c, "failed to hash password", err)
 		return
 	}
 
 	if err := repos().User.UpdatePassword(c.Request.Context(), user.ID, hash); err != nil {
-		httpresp.InternalServerError(c, "failed to update password")
+		httpresp.InternalErrorMessage(c, "failed to update password", err)
 		return
 	}
 

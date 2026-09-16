@@ -35,7 +35,7 @@ func GetRequestLogs(c *gin.Context) {
 		PageSize:   pageSize,
 	})
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to query logs: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to query logs", err)
 		return
 	}
 
@@ -63,7 +63,7 @@ func GetRequestLogDetail(c *gin.Context) {
 			httpresp.NotFound(c, "Log not found")
 			return
 		}
-		httpresp.InternalServerError(c, "Failed to query log: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to query log", err)
 		return
 	}
 

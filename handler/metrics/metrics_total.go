@@ -16,7 +16,7 @@ func MetricsTotal(c *gin.Context) {
 			httpresp.Success(c, MetricsRes{Reqs: 0, Tokens: 0})
 			return
 		}
-		httpresp.InternalServerError(c, "Failed to query total metrics: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to query total metrics", err)
 		return
 	}
 

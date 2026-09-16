@@ -25,7 +25,7 @@ func RunHealthCheck(c *gin.Context) {
 
 	log, err := service.GetHealthChecker().CheckSingle(ctx, id)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to run health check: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to run health check", err)
 		return
 	}
 
@@ -73,7 +73,7 @@ func GetBatchHealthCheckStatus(c *gin.Context) {
 	// 获取所有模型提供商数量
 	totalCount, err := gorm.G[models.ModelWithProvider](models.DB).Count(ctx, "id")
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to count model providers: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to count model providers", err)
 		return
 	}
 
@@ -83,7 +83,7 @@ func GetBatchHealthCheckStatus(c *gin.Context) {
 		Order("checked_at DESC").
 		Find(ctx)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to fetch health check logs: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to fetch health check logs", err)
 		return
 	}
 

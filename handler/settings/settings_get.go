@@ -25,13 +25,13 @@ func GetSettings(c *gin.Context) {
 	ctx := c.Request.Context()
 	settingsList, err := gorm.G[models.Setting](models.DB).Find(ctx)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to get settings: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to get settings", err)
 		return
 	}
 
 	response, err := buildSettingsResponse(settingsList)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to build settings response: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to build settings response", err)
 		return
 	}
 

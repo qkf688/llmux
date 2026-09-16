@@ -33,7 +33,7 @@ func BatchDeleteVirtualModelMapping(c *gin.Context) {
 
 	deleted, err := repos().VirtualModelMapping.BatchDelete(ctx, id, req.IDs)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to delete mappings: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to delete mappings", err)
 		return
 	}
 
@@ -67,7 +67,7 @@ func BatchCreateVirtualModelMapping(c *gin.Context) {
 
 	existingModels, err := repos().Model.ListByIDs(ctx, realModelIDs)
 	if err != nil {
-		httpresp.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Database error", err)
 		return
 	}
 
@@ -78,7 +78,7 @@ func BatchCreateVirtualModelMapping(c *gin.Context) {
 
 	existingMappings, err := repos().VirtualModelMapping.ListByVirtualModelAndRealModelIDs(ctx, id, realModelIDs)
 	if err != nil {
-		httpresp.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Database error", err)
 		return
 	}
 

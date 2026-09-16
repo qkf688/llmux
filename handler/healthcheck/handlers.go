@@ -29,7 +29,7 @@ func GetHealthCheckLogs(c *gin.Context) {
 		PageSize: pageSize,
 	})
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to query health check logs: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to query health check logs", err)
 		return
 	}
 
@@ -46,7 +46,7 @@ func GetHealthCheckLogs(c *gin.Context) {
 func ClearHealthCheckLogs(c *gin.Context) {
 	deleted, err := repos().HealthCheckLog.HardDeleteAll(c.Request.Context())
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to clear health check logs: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to clear health check logs", err)
 		return
 	}
 

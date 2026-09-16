@@ -28,7 +28,7 @@ func GetModelProviders(c *gin.Context) {
 
 	modelProviders, err := repos().ModelWithProvider.ListByModelID(c.Request.Context(), uint(modelID))
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 
@@ -51,7 +51,7 @@ func CreateModelProvider(c *gin.Context) {
 			httpresp.BadRequest(c, "Model not found")
 			return
 		}
-		httpresp.InternalServerError(c, "Failed to get model: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to get model", err)
 		return
 	}
 	// 校验 provider 存在，避免悬空关联（与 Update 对齐）。
@@ -61,7 +61,7 @@ func CreateModelProvider(c *gin.Context) {
 				httpresp.BadRequest(c, "Provider not found")
 				return
 			}
-			httpresp.InternalServerError(c, "Failed to get provider: "+err.Error())
+			httpresp.InternalErrorMessage(c, "Failed to get provider", err)
 			return
 		}
 	}
@@ -99,7 +99,7 @@ func CreateModelProvider(c *gin.Context) {
 	modelProvider.Status = &defaultStatus
 
 	if err := repos().ModelWithProvider.Create(ctx, &modelProvider); err != nil {
-		httpresp.InternalServerError(c, "Failed to create model-provider association: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to create model-provider association", err)
 		return
 	}
 
@@ -141,7 +141,7 @@ func UpdateModelProvider(c *gin.Context) {
 			httpresp.NotFound(c, "Model-provider association not found")
 			return
 		}
-		httpresp.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Database error", err)
 		return
 	}
 
@@ -153,7 +153,7 @@ func UpdateModelProvider(c *gin.Context) {
 				httpresp.BadRequest(c, "Model not found")
 				return
 			}
-			httpresp.InternalServerError(c, "Failed to get model: "+err.Error())
+			httpresp.InternalErrorMessage(c, "Failed to get model", err)
 			return
 		}
 	}
@@ -163,7 +163,7 @@ func UpdateModelProvider(c *gin.Context) {
 				httpresp.BadRequest(c, "Provider not found")
 				return
 			}
-			httpresp.InternalServerError(c, "Failed to get provider: "+err.Error())
+			httpresp.InternalErrorMessage(c, "Failed to get provider", err)
 			return
 		}
 	}
@@ -203,13 +203,13 @@ func UpdateModelProvider(c *gin.Context) {
 		})
 		return err
 	}); err != nil {
-		httpresp.InternalServerError(c, "Failed to update model-provider association: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update model-provider association", err)
 		return
 	}
 
 	updatedModelProvider, err := repos().ModelWithProvider.Get(ctx, uint(id))
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to retrieve updated model-provider association: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to retrieve updated model-provider association", err)
 		return
 	}
 
@@ -227,7 +227,7 @@ func DeleteModelProvider(c *gin.Context) {
 
 	result, err := repos().ModelWithProvider.Delete(c.Request.Context(), uint(id))
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to delete model-provider association: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to delete model-provider association", err)
 		return
 	}
 
@@ -254,7 +254,7 @@ func BatchDeleteModelProviders(c *gin.Context) {
 
 	result, err := repos().ModelWithProvider.DeleteByIDs(c.Request.Context(), req.IDs)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to delete model-provider associations: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to delete model-provider associations", err)
 		return
 	}
 

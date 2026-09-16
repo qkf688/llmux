@@ -19,7 +19,7 @@ func GetPools(c *gin.Context) {
 	ctx := c.Request.Context()
 	pools, err := repos().Pool.List(ctx, repository.PoolFilter{Name: c.Query("name")})
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 
@@ -29,13 +29,13 @@ func GetPools(c *gin.Context) {
 	}
 	stats, err := repos().Pool.StatsByIDs(ctx, ids)
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 	// 引用明细一次查出：ReferencedBy 计数由明细长度派生（同源不二次查询）。
 	refsByPool, err := poolRefGroups(ctx, ids)
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 
@@ -110,7 +110,7 @@ func CreatePool(c *gin.Context) {
 	ctx := c.Request.Context()
 	exists, err := repos().Pool.ExistsByName(ctx, req.Name)
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 	if exists {
@@ -122,7 +122,7 @@ func CreatePool(c *gin.Context) {
 	// 纯空白值 trim 后为空串 = 未配置，与点测判定口径一致，避免「回显非空却测不了」。
 	pool := &models.Pool{Name: req.Name, Note: req.Note, TestModel: strings.TrimSpace(req.TestModel)}
 	if err := repos().Pool.Create(ctx, pool); err != nil {
-		httpresp.InternalServerError(c, "Failed to create pool: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to create pool", err)
 		return
 	}
 	httpresp.Success(c, pool)
@@ -151,14 +151,14 @@ func UpdatePool(c *gin.Context) {
 			httpresp.NotFound(c, "Pool not found")
 			return
 		}
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 
 	if req.Name != pool.Name {
 		exists, err := repos().Pool.ExistsByName(ctx, req.Name)
 		if err != nil {
-			httpresp.InternalServerError(c, err.Error())
+			httpresp.InternalServerError(c, err)
 			return
 		}
 		if exists {
@@ -171,13 +171,13 @@ func UpdatePool(c *gin.Context) {
 		// test_model 与 Create 同口径写侧 trim（见 CreatePool 注释）
 		"name": req.Name, "note": req.Note, "test_model": strings.TrimSpace(req.TestModel),
 	}); err != nil {
-		httpresp.InternalServerError(c, "Failed to update pool: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update pool", err)
 		return
 	}
 
 	updated, err := repos().Pool.Get(ctx, id)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to retrieve updated pool: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to retrieve updated pool", err)
 		return
 	}
 	httpresp.Success(c, updated)
@@ -198,13 +198,13 @@ func DeletePool(c *gin.Context) {
 			httpresp.NotFound(c, "Pool not found")
 			return
 		}
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 
 	refs, err := repos().KeyGroup.CountByPoolIDs(ctx, []uint{pool.ID})
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 	if refs[pool.ID] > 0 {
@@ -222,7 +222,7 @@ func DeletePool(c *gin.Context) {
 		return nil
 	})
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to delete pool: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to delete pool", err)
 		return
 	}
 

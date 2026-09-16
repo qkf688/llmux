@@ -20,7 +20,7 @@ func ProviderMetrics(c *gin.Context) {
 	// 从供应商统计表直接读取，不再依赖 chat_logs 聚合
 	rows, err := repos().Stats.ListProviderTotalsDesc(c.Request.Context())
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to query provider metrics: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to query provider metrics", err)
 		return
 	}
 

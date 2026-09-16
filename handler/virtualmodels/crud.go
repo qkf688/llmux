@@ -14,7 +14,7 @@ import (
 func GetVirtualModels(c *gin.Context) {
 	list, err := repos().VirtualModel.List(c.Request.Context())
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 	httpresp.Success(c, list)
@@ -31,7 +31,7 @@ func CreateVirtualModel(c *gin.Context) {
 	ctx := c.Request.Context()
 	exists, err := repos().VirtualModel.ExistsByName(ctx, req.Name)
 	if err != nil {
-		httpresp.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Database error", err)
 		return
 	}
 	if exists {
@@ -43,7 +43,7 @@ func CreateVirtualModel(c *gin.Context) {
 		httpresp.BadRequest(c, "Virtual model name conflicts with existing real model")
 		return
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		httpresp.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Database error", err)
 		return
 	}
 
@@ -58,7 +58,7 @@ func CreateVirtualModel(c *gin.Context) {
 	}
 
 	if err := repos().VirtualModel.Create(ctx, &virtualModel); err != nil {
-		httpresp.InternalServerError(c, "Failed to create virtual model: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to create virtual model", err)
 		return
 	}
 
@@ -88,7 +88,7 @@ func UpdateVirtualModel(c *gin.Context) {
 	if req.Name != virtualModel.Name {
 		exists, err := repos().VirtualModel.ExistsByNameExceptID(ctx, req.Name, id)
 		if err != nil {
-			httpresp.InternalServerError(c, "Database error: "+err.Error())
+			httpresp.InternalErrorMessage(c, "Database error", err)
 			return
 		}
 		if exists {
@@ -100,7 +100,7 @@ func UpdateVirtualModel(c *gin.Context) {
 			httpresp.BadRequest(c, "Virtual model name conflicts with existing real model")
 			return
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-			httpresp.InternalServerError(c, "Database error: "+err.Error())
+			httpresp.InternalErrorMessage(c, "Database error", err)
 			return
 		}
 	}
@@ -113,14 +113,14 @@ func UpdateVirtualModel(c *gin.Context) {
 		"enabled":     req.Enabled,
 	}
 	if _, err := repos().VirtualModel.UpdateFields(ctx, id, updates); err != nil {
-		httpresp.InternalServerError(c, "Failed to update virtual model: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update virtual model", err)
 		return
 	}
 
 	// 重读返回最新 DB 值，避免本地 struct 与 DB 偏离
 	updatedVM, err := repos().VirtualModel.Get(ctx, id)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to retrieve updated virtual model: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to retrieve updated virtual model", err)
 		return
 	}
 	httpresp.Success(c, updatedVM)
@@ -140,12 +140,12 @@ func DeleteVirtualModel(c *gin.Context) {
 	}
 
 	if _, err := repos().VirtualModelMapping.HardDeleteByVirtualModelID(ctx, id); err != nil {
-		httpresp.InternalServerError(c, "Failed to delete virtual model mappings: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to delete virtual model mappings", err)
 		return
 	}
 
 	if _, err := repos().VirtualModel.Delete(ctx, id); err != nil {
-		httpresp.InternalServerError(c, "Failed to delete virtual model: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to delete virtual model", err)
 		return
 	}
 

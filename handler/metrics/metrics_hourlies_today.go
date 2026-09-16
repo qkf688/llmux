@@ -17,7 +17,7 @@ type HourlyMetricsRes struct {
 func MetricsHourliesToday(c *gin.Context) {
 	rows, err := repos().Stats.ListHourliesByDate(c.Request.Context(), startOfDay(time.Now()))
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to query hourly metrics: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to query hourly metrics", err)
 		return
 	}
 

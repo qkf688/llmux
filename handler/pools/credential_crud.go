@@ -64,7 +64,7 @@ func CreateCredential(c *gin.Context) {
 
 	cipher := credentialcrypto.Default()
 	if cipher == nil {
-		httpresp.InternalServerError(c, "encryption not configured")
+		httpresp.InternalErrorMessage(c, "encryption not configured", nil)
 		return
 	}
 
@@ -72,7 +72,7 @@ func CreateCredential(c *gin.Context) {
 	// 池内 KeyHash 去重（跨池同 key 允许复用）
 	existing, err := repos().Credential.List(ctx, repository.CredentialFilter{PoolID: &poolID, KeyHash: hash})
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 	if len(existing) > 0 {
@@ -82,7 +82,7 @@ func CreateCredential(c *gin.Context) {
 
 	enc, err := cipher.Encrypt(plain)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to encrypt key: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to encrypt key", err)
 		return
 	}
 
@@ -94,14 +94,14 @@ func CreateCredential(c *gin.Context) {
 		Note:    req.Note,
 	}
 	if err := repos().Credential.Create(ctx, cred); err != nil {
-		httpresp.InternalServerError(c, "Failed to create credential: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to create credential", err)
 		return
 	}
 
 	// 重新取回以获得完整 GORM 字段（CreatedAt 等），但 KeyMasked 基于明文直接掩码避免二次解密
 	saved, err := repos().Credential.Get(ctx, cred.ID)
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 	item := credentialToListItem(*saved)
@@ -125,7 +125,7 @@ func getCredentialInPool(c *gin.Context, ctx context.Context, poolID, credID uin
 			httpresp.NotFound(c, "Credential not found")
 			return nil, nil, false
 		}
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return nil, nil, false
 	}
 	if cred.PoolID == nil || *cred.PoolID != poolID {
@@ -173,13 +173,13 @@ func GetCredentialRaw(c *gin.Context) {
 	}
 	cipher := credentialcrypto.Default()
 	if cipher == nil {
-		httpresp.InternalServerError(c, "encryption not configured")
+		httpresp.InternalErrorMessage(c, "encryption not configured", nil)
 		return
 	}
 	plain, err := cipher.Decrypt(cred.Key)
 	if err != nil {
 		slog.Warn("credential decrypt failed for raw view", "credential_id", cred.ID, "error", err)
-		httpresp.InternalServerError(c, "Failed to decrypt key")
+		httpresp.InternalErrorMessage(c, "Failed to decrypt key", err)
 		return
 	}
 	httpresp.SuccessNoStore(c, CredentialRawData{Key: plain})
@@ -228,12 +228,12 @@ func UpdateCredential(c *gin.Context) {
 		}
 	}
 	if _, err := repos().Credential.UpdateFields(ctx, credID, fields); err != nil {
-		httpresp.InternalServerError(c, "Failed to update credential: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update credential", err)
 		return
 	}
 	updated, err := repos().Credential.Get(ctx, credID)
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 	httpresp.Success(c, credentialToListItem(*updated))
@@ -256,7 +256,7 @@ func DeleteCredential(c *gin.Context) {
 		return
 	}
 	if _, err := repos().Credential.Delete(ctx, credID); err != nil {
-		httpresp.InternalServerError(c, "Failed to delete credential: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to delete credential", err)
 		return
 	}
 	httpresp.Success(c, nil)

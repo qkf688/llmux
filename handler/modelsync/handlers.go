@@ -32,7 +32,7 @@ func GetModelSyncLogs(c *gin.Context) {
 			httpresp.BadRequest(c, "Invalid status parameter (must be success, error, or unchanged)")
 			return
 		}
-		httpresp.InternalServerError(c, "Failed to get logs: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to get logs", err)
 		return
 	}
 
@@ -64,7 +64,7 @@ func DeleteModelSyncLogs(c *gin.Context) {
 
 	deleted, err := repos().ModelSyncLog.HardDeleteByIDs(c.Request.Context(), req.IDs)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to delete logs: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to delete logs", err)
 		return
 	}
 
@@ -77,7 +77,7 @@ func DeleteModelSyncLogs(c *gin.Context) {
 func ClearModelSyncLogs(c *gin.Context) {
 	deleted, err := repos().ModelSyncLog.HardDeleteAll(c.Request.Context())
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to clear logs: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to clear logs", err)
 		return
 	}
 
@@ -97,7 +97,7 @@ func ClearModelSyncErrorLogs(c *gin.Context) {
 
 	deleted, err := repos().ModelSyncLog.HardDeleteErrors(c.Request.Context(), req.ProviderIDs)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to clear error logs: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to clear error logs", err)
 		return
 	}
 

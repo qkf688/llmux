@@ -33,7 +33,7 @@ func GetGroupInlineKeys(c *gin.Context) {
 			httpresp.NotFound(c, "Provider not found")
 			return
 		}
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 
@@ -43,7 +43,7 @@ func GetGroupInlineKeys(c *gin.Context) {
 			httpresp.NotFound(c, "Group not found")
 			return
 		}
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 	// 越组访问按 404 处理：不暴露分组存在性（对齐号池 getCredentialInPool 语义）
@@ -58,12 +58,12 @@ func GetGroupInlineKeys(c *gin.Context) {
 
 	creds, err := repos().Credential.ListByGroups(ctx, []uint{group.ID}, nil)
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 	cipher := credentialcrypto.Default()
 	if cipher == nil {
-		httpresp.InternalServerError(c, "encryption not configured")
+		httpresp.InternalErrorMessage(c, "encryption not configured", nil)
 		return
 	}
 
@@ -74,7 +74,7 @@ func GetGroupInlineKeys(c *gin.Context) {
 			// 任一条失败整组拒绝：明文替换是覆盖动作，部分成功会静默丢无法显示的条目。
 			// （与号池 raw 单条 500 一致的失败语义，扩展为整组。）
 			slog.Warn("inline key decrypt failed for raw view", "credential_id", cred.ID, "group_id", group.ID, "error", decErr)
-			httpresp.InternalServerError(c, "Failed to decrypt keys")
+			httpresp.InternalErrorMessage(c, "Failed to decrypt keys", err)
 			return
 		}
 		keys = append(keys, InlineKeyRawItem{ID: cred.ID, Key: plain})

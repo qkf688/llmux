@@ -12,7 +12,7 @@ func GetProviderBlacklist(c *gin.Context) {
 	trueVal := true
 	list, err := repos().Provider.List(ctx, repository.ProviderFilter{Blacklisted: &trueVal})
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to get blacklist: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to get blacklist", err)
 		return
 	}
 	ids := make([]uint, 0, len(list))
@@ -35,7 +35,7 @@ func UpdateProviderBlacklist(c *gin.Context) {
 
 	rowsAffected, err := repos().Provider.UpdateBlacklist(ctx, req.ProviderIDs)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to update blacklist: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update blacklist", err)
 		return
 	}
 

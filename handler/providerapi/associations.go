@@ -26,14 +26,14 @@ func ClearProviderAssociations(c *gin.Context) {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			httpresp.NotFound(c, "Provider not found")
 		} else {
-			httpresp.InternalServerError(c, "Failed to get provider: "+err.Error())
+			httpresp.InternalErrorMessage(c, "Failed to get provider", err)
 		}
 		return
 	}
 
 	deleted, err := repos().ModelWithProvider.DeleteByProviderID(ctx, uint(id))
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to clear associations: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to clear associations", err)
 		return
 	}
 

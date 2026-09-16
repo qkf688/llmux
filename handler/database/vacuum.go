@@ -13,7 +13,7 @@ import (
 func VacuumDatabase(c *gin.Context) {
 	if err := models.DB.Exec("VACUUM").Error; err != nil {
 		slog.Error("执行数据库真空操作失败", "error", err)
-		httpresp.InternalServerError(c, "执行数据库真空操作失败: "+err.Error())
+		httpresp.InternalErrorMessage(c, "执行数据库真空操作失败", err)
 		return
 	}
 

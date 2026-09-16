@@ -12,7 +12,7 @@ import (
 func GetProviderModelCatalog(c *gin.Context) {
 	items, err := modelsync.GetProviderModelCatalogs(c.Request.Context(), repos())
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to build model catalog: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to build model catalog", err)
 		return
 	}
 	httpresp.Success(c, items)

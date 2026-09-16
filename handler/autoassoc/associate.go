@@ -14,7 +14,7 @@ func PreviewAutoAssociate(c *gin.Context) {
 	previews, err := service.GetAutoAssocService().PreviewAssociate(c.Request.Context())
 	if err != nil {
 		slog.Error("auto-associate preview failed", "error", err)
-		httpresp.InternalServerError(c, "failed to preview auto associations")
+		httpresp.InternalErrorMessage(c, "failed to preview auto associations", err)
 		return
 	}
 	httpresp.Success(c, previews)
@@ -26,7 +26,7 @@ func AutoAssociateModels(c *gin.Context) {
 	result, err := service.GetAutoAssocService().AssociateAll(c.Request.Context())
 	if err != nil {
 		slog.Error("auto-associate failed", "error", err)
-		httpresp.InternalServerError(c, "failed to auto associate models")
+		httpresp.InternalErrorMessage(c, "failed to auto associate models", err)
 		return
 	}
 	httpresp.Success(c, map[string]interface{}{

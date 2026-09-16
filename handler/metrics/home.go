@@ -22,7 +22,7 @@ func Metrics(c *gin.Context) {
 
 	sum, err := repos().Stats.SumDailiesSince(c.Request.Context(), startOfDaysAgo(time.Now(), days))
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to query metrics: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to query metrics", err)
 		return
 	}
 
@@ -40,7 +40,7 @@ type Count struct {
 func Counts(c *gin.Context) {
 	rows, err := repos().Stats.ListModelCallsDesc(c.Request.Context())
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 
@@ -55,7 +55,7 @@ func Counts(c *gin.Context) {
 func RealModelCounts(c *gin.Context) {
 	rows, err := repos().Stats.ListRealModelCallsDesc(c.Request.Context())
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 

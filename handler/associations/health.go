@@ -31,7 +31,7 @@ func GetModelProviderStatus(c *gin.Context) {
 	ctx := c.Request.Context()
 	provider, err := repos().Provider.Get(ctx, uint(providerID))
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to retrieve provider: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to retrieve provider", err)
 		return
 	}
 
@@ -43,7 +43,7 @@ func GetModelProviderStatus(c *gin.Context) {
 		Order("created_at DESC").
 		Find(ctx)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to retrieve chat log: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to retrieve chat log", err)
 		return
 	}
 
@@ -88,7 +88,7 @@ func GetModelProviderHealthStatus(c *gin.Context) {
 		Limit(limit).
 		Find(c.Request.Context())
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to retrieve health check logs: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to retrieve health check logs", err)
 		return
 	}
 

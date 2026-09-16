@@ -24,7 +24,7 @@ func requirePool(c *gin.Context, ctx context.Context, poolID uint) (*models.Pool
 			httpresp.NotFound(c, "Pool not found")
 			return nil, false
 		}
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return nil, false
 	}
 	return pool, true
@@ -69,7 +69,7 @@ func ListCredentials(c *gin.Context) {
 		Q:      q,
 	}, page, pageSize)
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 

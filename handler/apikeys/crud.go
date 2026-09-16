@@ -75,7 +75,7 @@ const maskedApiKey = "****"
 func requireCipher(c *gin.Context) (*credentialcrypto.Cipher, bool) {
 	cipher := credentialcrypto.Default()
 	if cipher == nil {
-		httpresp.InternalServerError(c, "credential encryption key not configured")
+		httpresp.InternalErrorMessage(c, "credential encryption key not configured", nil)
 		return nil, false
 	}
 	return cipher, true
@@ -107,7 +107,7 @@ func CreateApiKey(c *gin.Context) {
 	if plain == "" {
 		generated, err := common.GenerateCallerKeyValue()
 		if err != nil {
-			httpresp.InternalServerError(c, "failed to generate api key")
+			httpresp.InternalErrorMessage(c, "failed to generate api key", err)
 			return
 		}
 		plain = generated
@@ -122,7 +122,7 @@ func CreateApiKey(c *gin.Context) {
 
 	encrypted, err := cipher.Encrypt(plain)
 	if err != nil {
-		httpresp.InternalServerError(c, "failed to encrypt api key")
+		httpresp.InternalErrorMessage(c, "failed to encrypt api key", err)
 		return
 	}
 	cleanHeaders, err := sanitizeOutboundHeaders(req.Headers)
@@ -146,7 +146,7 @@ func CreateApiKey(c *gin.Context) {
 			httpresp.Conflict(c, "api key value already exists")
 			return
 		}
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 	httpresp.SuccessNoStore(c, toApiKeyResponse(row, cipher))
@@ -161,7 +161,7 @@ func ListApiKeys(c *gin.Context) {
 	}
 	keys, err := repos().ApiKey.List(c.Request.Context())
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 	items := make([]apiKeyResponse, 0, len(keys))
@@ -212,7 +212,7 @@ func UpdateApiKey(c *gin.Context) {
 		encoded, err := json.Marshal(cleanHeaders)
 		if err != nil {
 			slog.Error("marshal api key headers failed (unreachable for map[string]string)", "api_key_id", id, "error", err)
-			httpresp.InternalServerError(c, "failed to encode headers")
+			httpresp.InternalErrorMessage(c, "failed to encode headers", err)
 			return
 		}
 		fields["headers"] = string(encoded)
@@ -224,7 +224,7 @@ func UpdateApiKey(c *gin.Context) {
 
 	rows, err := repos().ApiKey.UpdateFields(c.Request.Context(), id, fields)
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 	if rows == 0 {
@@ -238,7 +238,7 @@ func UpdateApiKey(c *gin.Context) {
 			httpresp.NotFound(c, "api key not found")
 			return
 		}
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 	httpresp.SuccessNoStore(c, toApiKeyResponse(updated, cipher))
@@ -253,7 +253,7 @@ func DeleteApiKey(c *gin.Context) {
 	}
 	rows, err := repos().ApiKey.Delete(c.Request.Context(), id)
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 	if rows == 0 {

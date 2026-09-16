@@ -24,7 +24,7 @@ func respondTxError(c *gin.Context, action string, err error) {
 		httpresp.BadRequest(c, err.Error())
 		return
 	}
-	httpresp.InternalServerError(c, action+": "+err.Error())
+	httpresp.InternalErrorMessage(c, action, err)
 }
 
 // GetProviders 获取所有提供商列表（支持名称搜索和类型筛选），附端点/分组计数。
@@ -38,13 +38,13 @@ func GetProviders(c *gin.Context) {
 		Type: providerType,
 	})
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 
 	items, err := buildProviderListItems(ctx, repos(), list)
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 
@@ -65,13 +65,13 @@ func GetProvider(c *gin.Context) {
 			httpresp.NotFound(c, "Provider not found")
 			return
 		}
-		httpresp.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Database error", err)
 		return
 	}
 
 	detail, err := loadProviderDetail(ctx, repos(), *provider)
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 	httpresp.Success(c, detail)
@@ -99,7 +99,7 @@ func CreateProvider(c *gin.Context) {
 
 	exists, err := repos().Provider.ExistsByName(ctx, req.Name)
 	if err != nil {
-		httpresp.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Database error", err)
 		return
 	}
 	if exists {
@@ -153,12 +153,12 @@ func CreateProvider(c *gin.Context) {
 
 	provider, err := repos().Provider.Get(ctx, createdID)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to retrieve created provider: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to retrieve created provider", err)
 		return
 	}
 	detail, err := loadProviderDetail(ctx, repos(), *provider)
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 
@@ -185,7 +185,7 @@ func UpdateProvider(c *gin.Context) {
 			httpresp.NotFound(c, "Provider not found")
 			return
 		}
-		httpresp.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Database error", err)
 		return
 	}
 
@@ -285,12 +285,12 @@ func UpdateProvider(c *gin.Context) {
 
 	updatedProvider, err := repos().Provider.Get(ctx, id)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to retrieve updated provider: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to retrieve updated provider", err)
 		return
 	}
 	detail, err := loadProviderDetail(ctx, repos(), *updatedProvider)
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 
@@ -310,7 +310,7 @@ func DeleteProvider(c *gin.Context) {
 	ctx := c.Request.Context()
 	result, err := repos().Provider.Delete(ctx, id)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to delete provider: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to delete provider", err)
 		return
 	}
 
@@ -319,7 +319,7 @@ func DeleteProvider(c *gin.Context) {
 		bgtask.Go(autoassoc.TriggerAutoClean)
 	} else {
 		if _, err := repos().ModelWithProvider.DeleteByProviderID(ctx, id); err != nil {
-			httpresp.InternalServerError(c, "Failed to delete provider: "+err.Error())
+			httpresp.InternalErrorMessage(c, "Failed to delete provider", err)
 			return
 		}
 	}

@@ -1,9 +1,12 @@
 package httpresp
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/qkf688/llmux/consts"
 )
 
 // Response 统一响应结构
@@ -62,13 +65,55 @@ func ErrorWithHttpStatus(c *gin.Context, httpStatus int, code int, message strin
 	})
 }
 
-// InternalServerError 内部服务器错误
-func InternalServerError(c *gin.Context, message string) {
+// InternalServerError HTTP 500 出口收口（Stage 3）：原始 err 只进服务端 slog
+// （带 request_id/method/path），对外一律发内嵌编号的通用文案。响应体因此不含
+// 任何内部错误串（表名/列名/约束名），调用方仅凭编号即可让运维在日志中定位本次请求。
+// 编号源自 RequestID 中间件；缺席时（如单测直连）退化为不带后缀的恒定文案，形状稳定。
+//
+// 新代码禁止绕过本函数用 c.JSON(500, gin.H{...}) 手搓错误响应（AGENTS 5.x：响应走 httpresp）。
+func InternalServerError(c *gin.Context, err error) {
+	rid := c.GetString(consts.ContextKeyRequestID)
+	logInternalError(c, rid, err)
+	msg := "internal server error"
+	if rid != "" {
+		msg = "internal server error [req=" + rid + "]"
+	}
+	c.JSON(http.StatusInternalServerError, Response{
+		Code:    500,
+		Error:   msg,
+		Message: msg,
+	})
+}
+
+// InternalErrorMessage 已审查静态文案的 500 出口（不含内部信息的固定提示，如
+// "encryption not configured"）：对外原样返回该文案（不拼编号），对内仍留痕。
+//
+// message 参数必须是常量字面量、禁止拼接任何错误文本（一键自查见
+// docs/guides/framework-conventions.md 500 收口节）；err 为仅服务端可见的原始错误，可为 nil。
+func InternalErrorMessage(c *gin.Context, message string, err error) {
+	rid := c.GetString(consts.ContextKeyRequestID)
+	logInternalError(c, rid, err)
 	c.JSON(http.StatusInternalServerError, Response{
 		Code:    500,
 		Error:   message,
 		Message: message,
 	})
+}
+
+// logInternalError 统一 500 的服务端留痕：结构化记 request_id、method、path 与原始 err。
+// err 为 nil 时不写 error 字段（避免日志出现 error="<nil>" 噪声）。
+func logInternalError(c *gin.Context, rid string, err error) {
+	attrs := []any{"request_id", rid}
+	if c.Request != nil {
+		attrs = append(attrs, "method", c.Request.Method)
+		if c.Request.URL != nil {
+			attrs = append(attrs, "path", c.Request.URL.Path)
+		}
+	}
+	if err != nil {
+		attrs = append(attrs, "error", err)
+	}
+	slog.Error("internal server error", attrs...)
 }
 
 // BadRequest 请求参数错误

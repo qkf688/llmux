@@ -20,7 +20,7 @@ func SyncProviderModels(c *gin.Context) {
 	syncService := service.NewModelSyncService(models.DB, nil)
 	syncLog, err := syncService.SyncProviderModels(c.Request.Context(), id)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to sync models: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to sync models", err)
 		return
 	}
 
@@ -41,7 +41,7 @@ func SyncAllProviders(c *gin.Context) {
 
 	logs, err := syncService.SyncAllProviders(ctx)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to sync models: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to sync models", err)
 		return
 	}
 
@@ -86,7 +86,7 @@ func GetModelSyncStats(c *gin.Context) {
 	syncService := service.NewModelSyncService(models.DB, nil)
 	stats, err := syncService.GetSyncStats(c.Request.Context())
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to get sync stats: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to get sync stats", err)
 		return
 	}
 
@@ -110,7 +110,7 @@ func GetRecentAddedModels(c *gin.Context) {
 	syncService := service.NewModelSyncService(models.DB, nil)
 	result, err := syncService.GetRecentAddedModels(ctx)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to get recent added models: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to get recent added models", err)
 		return
 	}
 

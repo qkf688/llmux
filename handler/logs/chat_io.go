@@ -29,7 +29,7 @@ func GetChatIO(c *gin.Context) {
 func GetUserAgents(c *gin.Context) {
 	userAgents, err := repos().ChatLog.DistinctUserAgents(c.Request.Context())
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to query user agents: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to query user agents", err)
 		return
 	}
 	httpresp.Success(c, userAgents)

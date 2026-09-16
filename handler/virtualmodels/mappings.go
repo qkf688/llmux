@@ -26,7 +26,7 @@ func GetVirtualModelMappings(c *gin.Context) {
 
 	mappings, err := repos().VirtualModelMapping.ListByVirtualModel(ctx, id)
 	if err != nil {
-		httpresp.InternalServerError(c, err.Error())
+		httpresp.InternalServerError(c, err)
 		return
 	}
 
@@ -60,7 +60,7 @@ func CreateVirtualModelMapping(c *gin.Context) {
 
 	count, err := repos().VirtualModelMapping.CountByPair(ctx, id, req.RealModelID)
 	if err != nil {
-		httpresp.InternalServerError(c, "Database error: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Database error", err)
 		return
 	}
 	if count > 0 {
@@ -85,7 +85,7 @@ func CreateVirtualModelMapping(c *gin.Context) {
 	}
 
 	if err := repos().VirtualModelMapping.Create(ctx, &mapping); err != nil {
-		httpresp.InternalServerError(c, "Failed to create mapping: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to create mapping", err)
 		return
 	}
 
@@ -126,14 +126,14 @@ func UpdateVirtualModelMapping(c *gin.Context) {
 		"enabled":  req.Enabled,
 	}
 	if _, err := repos().VirtualModelMapping.UpdateFields(ctx, mappingID, updates); err != nil {
-		httpresp.InternalServerError(c, "Failed to update mapping: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to update mapping", err)
 		return
 	}
 
 	// 重读返回最新 DB 值
 	updatedMapping, err := repos().VirtualModelMapping.GetByVirtualModelAndID(ctx, id, mappingID)
 	if err != nil {
-		httpresp.InternalServerError(c, "Failed to retrieve updated mapping: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to retrieve updated mapping", err)
 		return
 	}
 	httpresp.Success(c, updatedMapping)
@@ -158,7 +158,7 @@ func DeleteVirtualModelMapping(c *gin.Context) {
 
 	if _, err := repos().VirtualModelMapping.GetByVirtualModelAndID(ctx, id, mappingID); err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			httpresp.InternalServerError(c, "Database error: "+err.Error())
+			httpresp.InternalErrorMessage(c, "Database error", err)
 			return
 		}
 		httpresp.NotFound(c, "Mapping not found")
@@ -166,7 +166,7 @@ func DeleteVirtualModelMapping(c *gin.Context) {
 	}
 
 	if _, err := repos().VirtualModelMapping.DeleteByVirtualModelAndID(ctx, id, mappingID); err != nil {
-		httpresp.InternalServerError(c, "Failed to delete mapping: "+err.Error())
+		httpresp.InternalErrorMessage(c, "Failed to delete mapping", err)
 		return
 	}
 

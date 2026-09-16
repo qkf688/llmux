@@ -236,6 +236,30 @@ describe("#6 headers 编辑区", () => {
     expect(afterSecond.length).toBe(afterFirst.length);
   });
 
+  it("切换预设互斥（Rulings 2 修订）：Codex→Claude 不残留 Codex 独有头，手配非清单行保留", () => {
+    renderDialog(null);
+    fireEvent.click(screen.getByText("添加出站头"));
+    fireEvent.change(screen.getAllByPlaceholderText("Header 名")[0], { target: { value: "X-Mine" } });
+    fireEvent.change(screen.getAllByPlaceholderText("值")[0], { target: { value: "kept" } });
+
+    fireEvent.click(screen.getByText("填充 Codex 预设"));
+    expect((screen.getAllByPlaceholderText("Header 名") as HTMLInputElement[]).map((i) => i.value)).toContain("Originator");
+
+    fireEvent.click(screen.getByText("填充 Claude Code 预设"));
+    const keyInputs = screen.getAllByPlaceholderText("Header 名") as HTMLInputElement[];
+    const valueInputs = screen.getAllByPlaceholderText("值") as HTMLInputElement[];
+    const keys = keyInputs.map((i) => i.value);
+    // Codex 独有头整行移除；Claude 独有头就位；两预设共有头只剩一行且值为 Claude 侧
+    expect(keys).not.toContain("Originator");
+    expect(keys).not.toContain("Session_id");
+    expect(keys).toContain("X-App");
+    const userAgentIndices = keys.filter((k) => k.toLowerCase() === "user-agent");
+    expect(userAgentIndices).toHaveLength(1);
+    expect(valueInputs[keys.indexOf("User-Agent")].value).toContain("claude-cli/");
+    // 手配行不撞任何预设清单 → 互斥切换不误伤
+    expect(keys).toContain("X-Mine");
+  });
+
   it("预设与手配行撞名（大小写不敏感）：预设覆盖该行的名与值，其余手配行保留", () => {
     renderDialog(null);
     fireEvent.click(screen.getByText("添加出站头"));

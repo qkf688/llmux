@@ -29,9 +29,9 @@ import {
 } from "@/components/ui/tooltip";
 import { copySecretWithToast } from "@/lib/clipboard";
 import type { ApiKeyItem } from "@/lib/api";
-import { CODEX_HEADER_PRESET, CLAUDE_CODE_HEADER_PRESET } from "../../constants/header-presets";
+import { ALL_HEADER_PRESETS, CODEX_HEADER_PRESET, CLAUDE_CODE_HEADER_PRESET } from "../../constants/header-presets";
 import type { HeaderRow } from "../../utils/header-fields";
-import { headersToRows, mergePresetRows, rowsToHeaders } from "../../utils/header-fields";
+import { applyPresetRows, headersToRows, rowsToHeaders } from "../../utils/header-fields";
 
 /** handler/apikeys 解密失败降级值（与 card-list / credentialcrypto.MaskStored 同口径） */
 const MASKED_FALLBACK = "****";
@@ -111,7 +111,14 @@ export function ApiKeyFormDialog({
   }, [open, apiKey, form]);
 
   const applyPreset = (preset: HeaderRow[]) => {
-    headerRows.replace(mergePresetRows(form.getValues("headers"), preset));
+    // 预设间互斥（Rulings 2 修订）：其它预设独有的头名行先移除，见 applyPresetRows
+    headerRows.replace(
+      applyPresetRows(
+        form.getValues("headers"),
+        preset,
+        ALL_HEADER_PRESETS.filter((candidate) => candidate !== preset),
+      ),
+    );
   };
 
   const onSubmit = (values: ApiKeyFormValues) => {

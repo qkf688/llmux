@@ -36,3 +36,6 @@ export const CLAUDE_CODE_HEADER_PRESET: HeaderRow[] = [
   { key: "X-Stainless-Runtime-Version", value: "v24.3.0" },
   { key: "X-Stainless-Timeout", value: "600000" },
 ];
+
+/** 全体预设单源清单：弹窗据此算「互斥的其它预设」（applyPresetRows），新增预设只在这里多挂一行 */
+export const ALL_HEADER_PRESETS: HeaderRow[][] = [CODEX_HEADER_PRESET, CLAUDE_CODE_HEADER_PRESET];

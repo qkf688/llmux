@@ -26,7 +26,7 @@ webui/src/lib/api/modules/api-keys/api-keys.ts  # 前端 API 层（#5）：ApiKe
 webui/src/hooks/api/use-api-keys.ts             # queryKey 工厂 + useApiKeys/useCreate/useUpdate/useDelete（invalidate 列表）
 webui/src/routes/api-keys/                      # 「API Keys」管理页（#5）：index + hooks/use-api-keys-page 编排 + sections（octopus 式卡片列表：行内不渲染密钥值、复制/编辑/启停/删除，解密失败降级行禁复制）+ dialogs（编辑：改名 + 掩码/显示明文/复制 + key 级 headers 编辑区，创建：名称 + 可选值 + headers；删除确认）+ route-config 挂导航
 ├── constants/header-presets.ts  # #6 Codex / Claude Code 出站头预设种子（头名抄 new-api 实战清单，值可改）
-└── utils/header-fields.ts       # #6 Record↔编辑行转换 + 预设按名覆盖合并（纯函数）
+└── utils/header-fields.ts       # #6 Record↔编辑行转换 + 预设互斥应用（他预设独有头名行先移除再按名覆盖合并，纯函数）
 ```
 
 ## 4. 关键接口契约

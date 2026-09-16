@@ -6,6 +6,7 @@
 ## 1. Go / Gin
 
 - 路由：`RegisterAll` 建 `/v1` 与 `/api`；`/v1` 挂 `middleware.AuthAPIKey(apiKeyRepo, userRepo)`，`/api` 登录路由免鉴权，其余挂 `middleware.AuthJWT(secret, repo)`。
+- 引擎装配（`main.go`，**不用** `gin.Default()`）：`RequestID()`（请求编号，Stage 3，见 §5）→ `AccessLog()`（等价原 gin Logger + rid）→ `Recovery()` → gzip。**禁止**把 `RequestID` 挪到鉴权/路由之后——401/404 也要有号可对。
 - 子包注册函数只接收 `gin.IRoutes`（或项目既有签名），**不**在子包内 `Group` 出与全局不一致的鉴权边界。
 - 后台任务在 `main` 启动：`HealthChecker.Start`、`ModelSyncService.StartAutoSync`，两者的 ctx 均派生自 `signal.NotifyContext`（取消即退出信号）。
 - **禁止**用裸 `go f(context.Background())` 启动会写库的后台 goroutine；**必须**经 `common/bgtask` 的 `bgtask.Go` 登记，否则进程关闭时落库/权重衰减会被硬切。请求内且已用 `sync.WaitGroup` 等待完成的 goroutine 不在此列（由 `srv.Shutdown` 等在途请求覆盖）。
@@ -45,3 +46,16 @@
 - 流式 SSE 不整读、天然不在本防线内；帧级/累积侧信道截断策略另有约定（见 logs-metrics.md），提高上限需单独立项。
 
 豁免**必须**在读取处注释说明「体积已被上游哪一道限定」——现存唯一豁免：`service/transform/transform_provider_response.go` 整读（已被 attempt 体积闸限定）。可机械复核：`rg 'io\.ReadAll' --type go -g '!*_test.go'` 的命中只允许是上述白名单入口或带豁免注释处。
+
+## 5. HTTP 500 错误响应收口（Stage 3 质量门，2026-09-17）
+
+HTTP 500（本机自己坏）**禁止**把内部 `err` 原文回给调用方（SQLite/gorm 报错含表名/列名/约束名）；原始错误只进服务端日志。**禁止**绕过 httpresp 用 `c.JSON(500, ...)` 手搓错误响应。合法出口只有两个，两者都先 `slog.Error`（带 `request_id`/`method`/`path`/原始 `error`）再回响应：
+
+- `httpresp.InternalServerError(c, err error)`：对外恒发通用文案 `internal server error [req=<编号>]`（编号内嵌，SDK 用户报障时拿得走），原始 err 只进日志。绝大多数「拿到 err 就直接失败」的分支走这个。
+- `httpresp.InternalErrorMessage(c, message string, err error)`：仅用于**已审查、不含内部信息**的静态提示（如 `"encryption not configured"`）。`message` **必须**是字符串字面量或纯业务标识符变量，**禁止**拼接任何错误文本（`err.Error()`/`fmt.*`/`+`）；`err` 为仅服务端可见的原始错误，配置守卫类无 err 时传 `nil`。
+
+**范围边界**：只收本机 500。① 4xx 原文（校验/绑定错误，管理端表单报错提示依赖它）不改；② `/v1` 上游状态码透传（`handler/v1/chat.go` 的 `errors.As(statusCoder)` 分支，转发的是供应商错误，属协议内容）不在本防线。
+
+**请求编号**：`middleware.RequestID()` 挂在所有路由最外层（`main.go` 于 gzip 之前），为每请求定一号——入站 `X-Request-Id` 格式规矩则沿用（对齐调用方自家 trace），否则生成 12 位 hex；编号写三处（context / 响应头 / 回写入站头，令 `middleware.AccessLog` 访问行与 `/v1` 上游透传白名单都指向同一号）。
+
+可机械复核（两条均须零命中）：`rg -n 'httpresp\.InternalServerError\(c(t)?, .*\.Error\(\)\)' --type go -g '!*_test.go'`（旧字符串直入形式，改签名后虽已编译不过，仍留作闸）与 `rg -n 'httpresp\.InternalErrorMessage\([^)]*(\+|\.Error\(\)|fmt\.)' --type go -g '!*_test.go'`（静态文案入口塞错误文本）。

@@ -136,7 +136,7 @@ make webui            # 生产构建供 Go embed：cd webui && pnpm install && p
 > 命名大小写、import 顺序、`any` 禁用等交给 `go fmt` / `eslint` / `tsc`，本节不重复。命名现状见 `conventions.md`。
 
 - 错误处理：返回带上下文的 `fmt.Errorf("...: %w", err)`（或等价包装），**禁止**静默吞错。日志用标准库 `log/slog` 结构化键值，**禁止**引入第二套日志门面。
-- HTTP 响应统一走 `httpresp`（`Success` / `BadRequest` / `NotFound` / `InternalServerError` 等），**禁止**各 handler 自造不一致信封。
+- HTTP 响应统一走 `httpresp`（`Success` / `BadRequest` / `NotFound` / `InternalServerError` 等），**禁止**各 handler 自造不一致信封。**HTTP 500 收口**：`InternalServerError(c, err)` 对外只发 `internal server error [req=<编号>]`、原始 err 进 `slog`；已审查静态文案走 `InternalErrorMessage(c, message, err)`（`message` 禁拼错误文本）。**禁止**把内部 err 原文回客户端。详见 `framework-conventions.md §5`。
 - 注册表重复注册：必须 **panic**（与现有 `Register*` 行为一致），测试用 `TestRegister*_DuplicatePanics` 类用例覆盖。
 - **直返实体的 JSON 形状必须两侧同源。** 被 handler 直接序列化返回的 GORM 实体（`models.Model` / `ModelWithProvider` / `Provider` / `VirtualModel` / 日志类）对外**以 PascalCase 为主**（多数字段无 json tag，走 Go 字段名），少数存量字段带 snake_case tag（限于 `models.Model` 上的 `auto_associate` / `supports_thinking` / `thinking_levels`，前端按 snake_case 消费）——形状是混合的，**不要假设整体统一**。**注意**：`ModelWithProvider` 的同名能力字段 `SupportsThinking` / `ThinkingLevels` 反而是 **PascalCase**（`ThinkingLevels` 显式 `json:"ThinkingLevels"`），即同一 thinking 语义在两个实体上键名风格**相反**，跨实体新增/复制字段时**尤其**要逐一核对。新增/修改字段**必须**先确认前端 `lib/api` 的 interface 实际读哪个键名并保证两侧一致；**禁止**只改一侧。
 - **三态指针字段禁止 `omitempty`。** `*bool` / `*[]string` 等三态字段的 nil 是「继承 / 未设置」的**有效语义**，必须序列化成 JSON `null`。`omitempty` 会把键整个省略，前端无法区分「继承」与「键不存在」，会把继承误判成 override 并在保存时回写错误值——`ModelWithProvider.ThinkingLevels` 曾因此把「继承」静默改写成「显式不约束」，使 `ClampReasoningEffort` 的白名单钳制失效。
@@ -164,6 +164,7 @@ make webui            # 生产构建供 Go embed：cd webui && pnpm install && p
 - [ ] 会写库的后台 goroutine 已走 `bgtask.Go` 登记，未用裸 `go f(context.Background())`
 - [ ] HTTP 响应走 `httpresp`；日志为 `slog`；错误带上下文返回
 - [ ] 体积闸：`rg 'io\.ReadAll' --type go -g '!*_test.go'` 命中仅为 framework-conventions §4 白名单入口或带豁免注释处（新增无界整读禁止；入站/上游/落库上限口径见该节）
+- [ ] 500 收口：`rg -n 'httpresp\.InternalServerError\(c(t)?, .*\.Error\(\)\)|httpresp\.InternalErrorMessage\([^)]*(\+|\.Error\(\)|fmt\.)' --type go -g '!*_test.go'` 零命中（对外不回内部 err、静态文案入口禁止拼错误文本；约定见 framework-conventions §5）
 - [ ] 直返实体新增/改 json tag：前端 `lib/api` interface 与测试 mock 已同步；三态指针字段无 `omitempty`；有响应体 JSON 断言覆盖（`rg 'omitempty' models/model.go` 命中的字段须确认非三态）
 - [ ] `models.ModelWithProvider` 增删字段：`handler/associations/crud_response_shape_test.go` 的 `modelWithProviderResponseKeys` 表已同步加/删一行（该表是 `/api/model-providers` 响应键契约的单一数据源，覆盖 Create/Update/List 三路径的键存在性与 null 语义）
 - [ ] 命名符合 `docs/architecture/conventions.md`（Go snake_case 文件名、JSON snake_case、前端 kebab-case 路由目录等）

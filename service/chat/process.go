@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"io"
 	"iter"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 	"github.com/tidwall/gjson"
@@ -26,60 +26,9 @@ const (
 
 type Processer func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error)
 
-type SSEEvent struct {
-	Event string
-	Data  string
-}
-
-func ScanSSEEvents(reader *bufio.Scanner) iter.Seq[SSEEvent] {
-	return func(yield func(SSEEvent) bool) {
-		var eventName string
-		dataLines := make([]string, 0, 4)
-
-		flush := func() bool {
-			if len(dataLines) == 0 {
-				eventName = ""
-				return true
-			}
-
-			data := strings.Join(dataLines, "\n")
-			dataLines = dataLines[:0]
-
-			ev := SSEEvent{Event: eventName, Data: data}
-			eventName = ""
-
-			return yield(ev)
-		}
-
-		for reader.Scan() {
-			line := strings.TrimRight(reader.Text(), "\r")
-			if line == "" {
-				if !flush() {
-					return
-				}
-				continue
-			}
-
-			if after, ok := strings.CutPrefix(line, "event:"); ok {
-				eventName = strings.TrimSpace(after)
-				continue
-			}
-			if strings.HasPrefix(line, ":") {
-				continue
-			}
-			if after, ok := strings.CutPrefix(line, "data:"); ok {
-				data := strings.TrimSpace(after)
-				if data == "" {
-					continue
-				}
-				dataLines = append(dataLines, data)
-				continue
-			}
-		}
-
-		_ = flush()
-	}
-}
+// SSEEvent 流式事件的日志侧名字；分帧判据单源于 common.ScanSSEFrames，
+// 此别名保住 processerConfig.streamUsageExtract 的既有签名。
+type SSEEvent = common.SSEFrame
 
 // processerConfig 配置各协议 Processer 的差异点，供 createProcesser 使用。
 type processerConfig struct {
@@ -127,8 +76,6 @@ func createProcesser(cfg processerConfig) Processer {
 		var usageStr string
 		var output models.OutputUnion
 
-		scanner := bufio.NewScanner(pr)
-		scanner.Buffer(make([]byte, 0, InitScannerBufferSize), MaxScannerBufferSize)
 		chunkCount := 0
 
 		if stream {
@@ -136,6 +83,8 @@ func createProcesser(cfg processerConfig) Processer {
 		}
 
 		if !stream {
+			scanner := bufio.NewScanner(pr)
+			scanner.Buffer(make([]byte, 0, InitScannerBufferSize), MaxScannerBufferSize)
 			for chunk := range ScannerToken(scanner) {
 				if !disablePerformanceTracking {
 					once.Do(func() {
@@ -149,40 +98,48 @@ func createProcesser(cfg processerConfig) Processer {
 				}
 				break
 			}
+			if err := scanner.Err(); err != nil {
+				return nil, nil, err
+			}
 		} else {
-			for ev := range ScanSSEEvents(scanner) {
-				if !disablePerformanceTracking {
-					once.Do(func() {
-						firstChunkTime = time.Since(start)
-					})
-				}
+			// 分帧走全库唯一判据（common.ScanSSEFrames），与网关转发读的是同一份代码。
+			// 终止符用哨兵错误触发提前停：它不是失败，判定归调用方收敛。
+			streamDone := errors.New("sse stream done")
+			_, scanErr := common.ScanSSEFrames(pr, common.SSEScanConfig{MaxLineBytes: MaxScannerBufferSize},
+				func(ev SSEEvent, _ common.SSEScanStats) error {
+					if !disablePerformanceTracking {
+						once.Do(func() {
+							firstChunkTime = time.Since(start)
+						})
+					}
 
-				chunk := ev.Data
-				if cfg.streamDoneTerminator != "" && chunk == cfg.streamDoneTerminator {
-					break
-				}
+					chunk := ev.Data
+					if cfg.streamDoneTerminator != "" && chunk == cfg.streamDoneTerminator {
+						return streamDone
+					}
 
-				if cfg.enableErrorCheck {
-					chunkCount++
-					if chunkCount <= MaxErrorCheckChunks {
-						errStr := gjson.Get(chunk, "error")
-						if errStr.Exists() {
-							return nil, nil, errors.New(errStr.String())
+					if cfg.enableErrorCheck {
+						chunkCount++
+						if chunkCount <= MaxErrorCheckChunks {
+							errStr := gjson.Get(chunk, "error")
+							if errStr.Exists() {
+								return errors.New(errStr.String())
+							}
 						}
 					}
-				}
 
-				if chunk != "" {
-					output.OfStringArray = append(output.OfStringArray, chunk)
-				}
+					if chunk != "" {
+						output.OfStringArray = append(output.OfStringArray, chunk)
+					}
 
-				if !disableTokenCounting && usageStr == "" && cfg.streamUsageExtract != nil {
-					usageStr = cfg.streamUsageExtract(ev)
-				}
+					if !disableTokenCounting && usageStr == "" && cfg.streamUsageExtract != nil {
+						usageStr = cfg.streamUsageExtract(ev)
+					}
+					return nil
+				})
+			if scanErr != nil && !errors.Is(scanErr, streamDone) {
+				return nil, nil, scanErr
 			}
-		}
-		if err := scanner.Err(); err != nil {
-			return nil, nil, err
 		}
 
 		var usage models.Usage

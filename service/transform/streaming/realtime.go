@@ -1,13 +1,12 @@
 package streaming
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 )
@@ -194,10 +193,6 @@ func transformResponseRealtimeViaResponses(response *http.Response, upstreamForm
 }
 
 func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, upstreamFormat, clientFormat consts.WireFormat, sideChannel *models.TransformSideChannel) error {
-	scanner := bufio.NewScanner(src)
-	// Increase initial buffer to 64KB, and cap at maxSSEEventSize (avoid "token too long").
-	scanner.Buffer(make([]byte, 0, 64*1024), maxSSEEventSize)
-
 	state := &realtimeStreamState{
 		writer:                     dst,
 		upstreamFormat:             upstreamFormat,
@@ -230,72 +225,41 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, upstream
 		}()
 	}
 
-	var eventName string
-	var dataLines []string
-	eventSize := 0
-
-	flushEvent := func() error {
-		if len(dataLines) == 0 {
-			eventName = ""
-			eventSize = 0
-			return nil
-		}
-
-		state.currentEvent = eventName
-		data := strings.Join(dataLines, "\n")
-
-		eventName = ""
-		dataLines = dataLines[:0]
-		eventSize = 0
-
+	// 分帧走全库唯一判据（common.ScanSSEFrames）：「测试判通过的流」与「网关实际
+	// 处理的流」从此是同一份代码，不再靠注释约定同步。
+	var dispatchedInCallbackErr bool
+	handleFrame := func(frame common.SSEFrame, stats common.SSEScanStats) error {
+		state.lineCount = stats.Lines
+		data := frame.Data
 		if data == "" {
 			state.currentEvent = ""
 			return nil
 		}
+		// 单事件体积守卫（R5：从按行累计改为按帧交付长度判定，阈值与文案不变）。
+		if len(data) > maxSSEEventSize {
+			return fmt.Errorf("sse event too large: %d > %d", len(data), maxSSEEventSize)
+		}
+
+		state.currentEvent = frame.Event
 
 		// 累积原始 SSE 字节流供日志记录 RawResponseBody（头尾双段保留，见 raw_accumulator.go）。
 		accumulateRawSSE(state, data)
 
 		if err := dispatchRealtimeStreamChunk(state, data); err != nil {
+			dispatchedInCallbackErr = true
 			return err
 		}
 		state.currentEvent = ""
 		return nil
 	}
 
-	for scanner.Scan() {
-		state.lineCount++
-		line := strings.TrimRight(scanner.Text(), "\r")
-		if line == "" {
-			// blank line indicates end of a SSE event.
-			if err := flushEvent(); err != nil {
-				return err
-			}
-			continue
-		}
-
-		if strings.HasPrefix(line, "event:") {
-			eventName = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
-			continue
-		}
-		if strings.HasPrefix(line, ":") {
-			continue
-		}
-		if strings.HasPrefix(line, "data:") {
-			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-			if data == "" {
-				continue
-			}
-			eventSize += len(data)
-			if eventSize > maxSSEEventSize {
-				return fmt.Errorf("sse event too large: %d > %d", eventSize, maxSSEEventSize)
-			}
-			dataLines = append(dataLines, data)
-			continue
-		}
+	stats, scanErr := common.ScanSSEFrames(src, common.SSEScanConfig{MaxLineBytes: maxSSEEventSize}, handleFrame)
+	if dispatchedInCallbackErr {
+		// 错误来自写下游 pipe 失败或事件超预算：finalize 同样是写下游，必然一起失败，
+		// 不做补救交付（与旧实现一致）。
+		return scanErr
 	}
-
-	if err := scanner.Err(); err != nil {
+	if scanErr != nil {
 		// 读上游失败，但下游 pipe 仍可写：尽力把延后的终态事件交付出去，
 		// 否则「finish 之后、流末之前断流」这一窗口内客户端连 completed 都收不到
 		// （旧实现在 finish 时立即发出，此处保持同等的尽力交付语义）。
@@ -310,33 +274,21 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, upstream
 		slog.Error("scanner error in stream transformation",
 			"upstream_format", state.upstreamFormat,
 			"client_format", state.clientFormat,
-			"lines_processed", state.lineCount,
+			"lines_processed", stats.Lines,
 			"errors_encountered", state.errorCount,
-			"error", err)
-		return err
-	}
-
-	// EOF but without trailing blank line: flush last event once.
-	if err := flushEvent(); err != nil {
-		// 这里不像 scanner.Err() 分支那样再尝试 finalize：该错误来自**写下游** pipe 失败，
-		// finalize 同样是写下游，必然一起失败；而 scanner.Err() 是读上游失败、下游仍可写。
-		slog.Error("failed to flush last SSE event in stream transformation",
-			"upstream_format", state.upstreamFormat,
-			"client_format", state.clientFormat,
-			"lines_processed", state.lineCount,
-			"errors_encountered", state.errorCount,
-			"error", err)
-		return err
+			"error", scanErr)
+		return scanErr
 	}
 
 	// 上游可能不发 [DONE] 就直接 EOF，此时延后的事件（如等 usage 尾包的
 	// response.completed）还压在 state 里，必须在此收尾，否则客户端收不到终态。
+	// 末帧交付已含在 ScanSSEFrames 的 EOF flush 语义内。
 	if state.finalize != nil {
 		if err := state.finalize(state); err != nil {
 			slog.Error("failed to finalize stream transformation",
 				"upstream_format", state.upstreamFormat,
 				"client_format", state.clientFormat,
-				"lines_processed", state.lineCount,
+				"lines_processed", stats.Lines,
 				"error", err)
 			return err
 		}
@@ -345,7 +297,7 @@ func transformStreamBodyRealtime(src io.ReadCloser, dst *io.PipeWriter, upstream
 	slog.Debug("stream transformation completed",
 		"upstream_format", state.upstreamFormat,
 		"client_format", state.clientFormat,
-		"lines_processed", state.lineCount,
+		"lines_processed", stats.Lines,
 		"errors_encountered", state.errorCount)
 	return nil
 }

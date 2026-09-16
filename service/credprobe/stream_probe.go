@@ -1,11 +1,9 @@
 package credprobe
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -23,15 +21,9 @@ import (
 // **不判断内容对不对**——哪些 delta 算推理、终止事件是否缺失、能力是否具备，属调用方
 // （handler/testapi）的协议语义。因此空流也算探针通过，由端点判失败。
 
-// SSEFrame 一个已分帧的 SSE 事件。Event 取自 event: 行（OpenAI Chat 通常为空，
-// Anthropic / OpenAI Responses 有值）；Data 是该事件内所有 data: 行按 SSE 规范以 \n 合并的载荷。
-//
-// 载荷逐字节原样保留、不做反序列化再序列化：折叠层依赖 delta 字段名，任何「顺手规范化」
-// 都会静默改变折叠结果。
-type SSEFrame struct {
-	Event string
-	Data  string
-}
+// SSEFrame 一个已分帧的 SSE 事件。分帧判据全库单源于 common.ScanSSEFrames，
+// 此别名保住本包与 handler/testapi 折叠链的既有引用面。
+type SSEFrame = common.SSEFrame
 
 // ProbeSummaryStreamUnsupported 上游 2xx 但没按 SSE 回（含吃掉 stream 参数直接回 JSON 的
 // 兼容网关）：是能力缺失而非网络故障，故 error_type 归 validation。
@@ -40,8 +32,6 @@ const (
 	ProbeSummaryStreamUnsupported = "上游不支持流式"
 	ProbeSummaryStreamTooLarge    = "流式响应超出预算"
 )
-
-const sseContentType = "text/event-stream"
 
 const (
 	// streamProbeMaxLineBytes 单行（单帧内任一行）上限：与 common.ReadCappedBody 的诊断口径
@@ -123,7 +113,7 @@ func RunStreamProbe(req StreamProbeRequest) (out StreamProbeResult) {
 	if headers == nil {
 		headers = http.Header{}
 	}
-	headers.Set("Accept", sseContentType)
+	headers.Set("Accept", common.SSEContentType)
 	// 防 `customer_headers` 显式配错：透传路径已在 `testapi.BuildTestHeaders` 白名单封死
 	// Accept-Encoding，但 customer_headers 是设计上的无限制显式通道——管理员配了
 	// `Accept-Encoding: gzip` 仍会走到这里；一旦由调用方设定，Go Transport 就**不再透明解压**，
@@ -167,7 +157,7 @@ func RunStreamProbe(req StreamProbeRequest) (out StreamProbeResult) {
 
 	// Content-Type 硬门放在 2xx 之后：非 2xx 无论什么形状都是「上游回了错误」，
 	// 归状态码更有诊断价值；只有 2xx 时才需要区分「回了内容但不是流」。
-	if !isEventStreamContentType(res.Header.Get("Content-Type")) {
+	if !common.IsEventStreamContentType(res.Header.Get("Content-Type")) {
 		bodyBytes, bodyErr := common.ReadCappedBody(res.Body)
 		actualContentType := strings.TrimSpace(res.Header.Get("Content-Type"))
 		if actualContentType == "" {
@@ -188,8 +178,25 @@ func RunStreamProbe(req StreamProbeRequest) (out StreamProbeResult) {
 		}
 	}
 
-	frames, firstFrameMS, overBudget, readErr := readSSEFrames(res.Body, start)
-	if overBudget != nil {
+	// 分帧走全库唯一判据（common.ScanSSEFrames）：探针攒帧、首帧计时是消费侧策略，
+	// 预算数值经 cfg 注入（探针止损语义不变）。
+	var frames []SSEFrame
+	var firstFrameMS int64
+	_, scanErr := common.ScanSSEFrames(res.Body, common.SSEScanConfig{
+		MaxLineBytes:  streamProbeMaxLineBytes,
+		MaxTotalBytes: streamProbeMaxTotalBytes,
+		MaxFrames:     streamProbeMaxFrames,
+	}, func(frame SSEFrame, _ common.SSEScanStats) error {
+		if len(frames) == 0 {
+			firstFrameMS = time.Since(start).Milliseconds()
+		}
+		frames = append(frames, frame)
+		return nil
+	})
+
+	var overBudget *common.SSEBudgetError
+	switch {
+	case errors.As(scanErr, &overBudget):
 		return StreamProbeResult{
 			StatusCode:   res.StatusCode,
 			ErrorType:    common.ErrorTypeProvider,
@@ -199,13 +206,12 @@ func RunStreamProbe(req StreamProbeRequest) (out StreamProbeResult) {
 			Framed:       true,
 			FirstFrameMS: firstFrameMS,
 		}
-	}
-	if readErr != nil {
+	case scanErr != nil:
 		return StreamProbeResult{
 			StatusCode:   res.StatusCode,
-			ErrorType:    classifyStreamDoError(readErr),
+			ErrorType:    classifyStreamDoError(scanErr),
 			Summary:      ProbeSummaryReadResponse,
-			Detail:       readErr.Error(),
+			Detail:       scanErr.Error(),
 			RawOutput:    renderSSEText(frames, streamProbeRawHeadBytes, streamProbeRawTailBytes),
 			Framed:       true,
 			FirstFrameMS: firstFrameMS,
@@ -230,82 +236,6 @@ func classifyStreamDoError(err error) string {
 		return common.ErrorTypeTimeout
 	}
 	return common.ErrorTypeNetwork
-}
-
-// isEventStreamContentType 判定「上游是否真的回了 SSE」。**判据必须与转发链路一致**：
-// service/transform/transform_provider_response.go 与 service/chat/chat_attempt_log.go
-// 都用 Contains，探针若用 HasPrefix 就会出现「网关按流处理、测试判它不支持流」的分裂结论。
-// 参数（charset 等）出现在媒体类型之前/之后都算流式，参数本身由上游负责。
-func isEventStreamContentType(contentType string) bool {
-	return strings.Contains(strings.ToLower(contentType), sseContentType)
-}
-
-// readSSEFrames 按 SSE 规范分帧读取。切帧语义与 service/transform/streaming 的网关读流
-// 保持一致（空行交付、event: 记名、多行 data 以 \n 合并、: 开头为注释），因为「网关能解析
-// 的流」与「测试能解析的流」必须是同一条判据——否则测试判通过的流在真实转发链路上仍可能崩。
-//
-// 与网关那份的一处有意差异：这里去掉 data: 后的**一个**前导空格（SSE 规范），而非
-// TrimSpace——行首空白在 JSON 里虽无意义，但 TrimSpace 会把上游原样该保留的内容改掉，
-// 而本函数的输出要喂给逐字节比对帧的折叠层。
-//
-// overBudget 与 err 互斥：前者是「上游超预算，主动止损」，后者是读流失败。
-// 无副作用、不解析 JSON：纯分帧。
-func readSSEFrames(body io.Reader, start time.Time) (frames []SSEFrame, firstFrameMS int64, overBudget error, err error) {
-	scanner := bufio.NewScanner(body)
-	scanner.Buffer(make([]byte, 0, 64*1024), streamProbeMaxLineBytes)
-
-	var eventName string
-	var dataLines []string
-	totalBytes := 0
-	firstSeen := false
-
-	flush := func() {
-		if len(dataLines) == 0 {
-			eventName = ""
-			return
-		}
-		frames = append(frames, SSEFrame{Event: eventName, Data: strings.Join(dataLines, "\n")})
-		if !firstSeen {
-			firstSeen = true
-			firstFrameMS = time.Since(start).Milliseconds()
-		}
-		eventName = ""
-		dataLines = dataLines[:0]
-	}
-
-	for scanner.Scan() {
-		totalBytes += len(scanner.Bytes()) + 1 // +1 计入换行符，与「消费字节数」同口径
-		if totalBytes > streamProbeMaxTotalBytes {
-			return frames, firstFrameMS, fmt.Errorf("字节数超过 %d 预算", streamProbeMaxTotalBytes), nil
-		}
-		if len(frames) >= streamProbeMaxFrames {
-			return frames, firstFrameMS, fmt.Errorf("帧数超过 %d 预算", streamProbeMaxFrames), nil
-		}
-
-		line := strings.TrimRight(scanner.Text(), "\r")
-		switch {
-		case line == "":
-			flush()
-		case strings.HasPrefix(line, "event:"):
-			eventName = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
-		case strings.HasPrefix(line, ":"):
-			// SSE 注释行（Anthropic 的 ping/keep-alive 常见）：不成帧。
-		case strings.HasPrefix(line, "data:"):
-			value := strings.TrimPrefix(strings.TrimPrefix(line, "data:"), " ")
-			if value == "" {
-				continue
-			}
-			dataLines = append(dataLines, value)
-		}
-		// 其余行（无冒号的裸行、id:/retry: 等字段）对判定无信息量，忽略。
-	}
-	if err = scanner.Err(); err != nil {
-		return frames, firstFrameMS, nil, err
-	}
-	// EOF 且末帧没有分隔空行：仍要交付，否则 message_stop 这类收尾事件会凭空消失，
-	// 端点会把「正常结束的流」误判成「缺终止事件」。
-	flush()
-	return frames, firstFrameMS, nil, nil
 }
 
 // renderSSEText 由帧重建给人看的 SSE 文本并按头尾预算截断。

@@ -5,8 +5,8 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"strings"
 
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/transform/streaming"
@@ -22,9 +22,8 @@ func TransformProviderResponse(response *http.Response, upstreamFormat, clientFo
 		return response, nil
 	}
 
-	// 检查是否是流式响应
-	contentType := response.Header.Get("Content-Type")
-	isStream := strings.Contains(strings.ToLower(contentType), "text/event-stream")
+	// 检查是否是流式响应（判据单源 common.IsEventStreamContentType，与探针/chat 日志同一条）
+	isStream := common.IsEventStreamContentType(response.Header.Get("Content-Type"))
 
 	if isStream {
 		// 流式响应：直接从 Body 读取器进行实时转换

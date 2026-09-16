@@ -7,8 +7,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/models"
 )
 
@@ -44,7 +44,8 @@ func captureRawResponseBody(options models.RawLogOptions, res *http.Response) st
 	}
 
 	// For SSE streams, avoid reading the entire body here (it would block streaming and buffer unbounded data).
-	if strings.Contains(strings.ToLower(res.Header.Get("Content-Type")), "text/event-stream") {
+	// 判据单源 common.IsEventStreamContentType（与网关分流/探针同一条件，见 #3 收敛）。
+	if common.IsEventStreamContentType(res.Header.Get("Content-Type")) {
 		return ""
 	}
 

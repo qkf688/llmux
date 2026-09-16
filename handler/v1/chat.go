@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/httpresp"
 	"github.com/qkf688/llmux/middleware"
@@ -238,7 +239,8 @@ func writeHeader(c *gin.Context, ctx context.Context, stream bool, header http.H
 	}
 
 	if stream {
-		c.Header("Content-Type", "text/event-stream")
+		// 媒体类型字面量与读侧判据同源（common.SSEContentType），「声明流式」与「判定流式」不会再分叉。
+		c.Header("Content-Type", common.SSEContentType)
 		c.Header("Cache-Control", "no-cache")
 		c.Header("Connection", "keep-alive")
 		c.Header("X-Accel-Buffering", "no")

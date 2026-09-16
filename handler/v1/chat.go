@@ -119,13 +119,21 @@ func chatHandlerByStyle(c *gin.Context, style consts.Style) {
 }
 
 func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor service.Processer, style string) {
-	// 读取原始请求体
-	reqBody, err := io.ReadAll(c.Request.Body)
+	// 读取原始请求体：多读 1 字节探测超限（入站硬上限 consts.MaxInboundBodyBytes，
+	// /v1 由调用方 key 鉴权、攻击者可控，Stage 2 资源防御）。
+	reqBody, err := io.ReadAll(io.LimitReader(c.Request.Body, consts.MaxInboundBodyBytes+1))
 	if err != nil {
 		httpresp.InternalServerError(c, err.Error())
 		return
 	}
 	c.Request.Body.Close()
+	if int64(len(reqBody)) > consts.MaxInboundBodyBytes {
+		// 413 信封与既有 /v1 错误出口同形状（ErrorWithHttpStatus），不另造协议错误体；
+		// 选 413 而非 400：与「JSON 写坏了」区分原因，且 SDK 不会对 413 自动重试。
+		httpresp.ErrorWithHttpStatus(c, http.StatusRequestEntityTooLarge, http.StatusRequestEntityTooLarge,
+			"request body too large (limit 20 MiB)")
+		return
+	}
 	// 预处理、提取模型参数
 	before, err := preProcessor(reqBody)
 	if err != nil {

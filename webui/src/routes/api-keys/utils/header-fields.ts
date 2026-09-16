@@ -32,7 +32,7 @@ export function rowsToHeaders(rows: HeaderRow[]): Record<string, string> {
 /**
  * 预设按名覆盖合并（Rulings 2）：撞名行换成预设的名与值（不重复堆行），
  * 其余手配行保留，预设独有项追加。再点一次幂等——保护用户已改的其它行，
- * 想全量重来用逐行删除。
+ * 想全量重来用编辑区的「清空」按钮。
  */
 export function mergePresetRows(current: HeaderRow[], preset: HeaderRow[]): HeaderRow[] {
   const merged = current.map((row) => {

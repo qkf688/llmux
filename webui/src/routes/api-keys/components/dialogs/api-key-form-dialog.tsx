@@ -317,15 +317,24 @@ export function ApiKeyFormDialog({
                     </Button>
                   </div>
                 ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => headerRows.append({ key: "", value: "" })}
-                >
-                  <Plus className="size-4" />
-                  添加出站头
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => headerRows.append({ key: "", value: "" })}
+                  >
+                    <Plus className="size-4" />
+                    添加出站头
+                  </Button>
+                  {/* grilling 选 A：批量清空替代逐行删除。不加二次确认——保存前不落库，
+                      误点的恢复成本 = 重按一次预设；空区时按钮不渲染（无意义操作面不留） */}
+                  {headerRows.fields.length > 0 && (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => headerRows.replace([])}>
+                      清空
+                    </Button>
+                  )}
+                </div>
               </div>
             </DialogBody>
 

@@ -261,6 +261,24 @@ describe("#6 headers 编辑区", () => {
     expect(keyInputs.map((i) => i.value)).toContain("X-Mine");
   });
 
+  it("「清空」一次移除全部行，保存得 {}（grilling 选 A：批量清空，不做按出身分组/撤销栈）", async () => {
+    const { onSaved } = renderDialog(KEYED_HEADERS_ITEM);
+    expect(screen.getAllByPlaceholderText("Header 名")).toHaveLength(2);
+
+    fireEvent.click(screen.getByText("填充 Codex 预设"));
+    expect(screen.getAllByPlaceholderText("Header 名").length).toBeGreaterThan(2);
+
+    fireEvent.click(screen.getByText("清空"));
+    expect(screen.queryAllByPlaceholderText("Header 名")).toHaveLength(0);
+    // 空区时按钮不再渲染（无意义操作面不留）
+    expect(screen.queryByText("清空")).toBeNull();
+
+    fireEvent.click(screen.getByText("保存"));
+    await waitFor(() =>
+      expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ headers: {} })),
+    );
+  });
+
   it("删行按钮移除对应行", async () => {
     const { onSaved } = renderDialog(KEYED_HEADERS_ITEM);
     const removes = screen.getAllByLabelText("删除出站头");

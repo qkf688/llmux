@@ -55,6 +55,9 @@ models.Setting
   - `SettingKeyStreamFirstByteTimeout`：int，Default=`15`，Min=1。流式响应头后首字节等待窗口，驱动 `handler/v1` 的首字节看门狗。
   - `SettingKeyRequestMaxRetry`：int，Default=`3`，Min=1。单候选池尝试次数。
   - 消费方：`service/chat` 的 `getRequestHeaderTimeout / getRequestTotalTimeout / GetStreamFirstByteTimeout / getRequestMaxRetry`（`chat_settings.go`）经 `settingsReader` 读取；`handler/v1` 经 `service` facade 读首字节等待。响应头超时与总超时**解耦**：等头超时不再拖垮后续候选窗口（`chat_balance.go` / `chat_balance_virtual.go`）。
+- **资源防御相关设置（Stage 2，2026-09-17）**：
+  - `SettingKeyUpstreamMaxResponseMiB`：int，Default=`32`，Min=`1`。上游单条**非流式**响应体上限（MiB，不可关闭）；消费方 `service/chat` 的 `getUpstreamMaxResponseBytes` → `limitUpstreamResponseBody`（`upstream_body_limit.go`）在 attempt 内整读加限，超限判供应商异常→组织级转移（不冷却凭据）。入站侧不走配置：硬上限 `consts.MaxInboundBodyBytes`（20 MiB）+ 错误体 1 MiB 诊断单源（`common.ReadCappedBody`），防线刻意不可被运营调小。
+  - `SettingKeyRawLogFieldMaxKiB`：int，Default=`256`，Min=`16`。原始采集落库文本的单字段上限（KiB），一个设置项盖 `RequestBody`/`RawRequestBody`/`RawResponseBody`/`Error` 四字段；消费方 `getRawLogFieldMaxBytes`（`chat_settings.go`）→ 采集点统一 `common.TruncateUTF8`（rune 边界+标记）。
 - **凭据健康相关设置（S4 #6-1/#6-2/#6-3：可配冷却窗口 + 按失败类型分窗 + 鉴权失败判停阈值 + 惰性探活间隔）**：
   - `SettingKeyCredHealthCooldown429Sec`：int，Default=`60`，Min=1。凭据 429 限流冷却窗口（秒）。
   - `SettingKeyCredHealthCooldownServerSec`：int，Default=`60`，Min=1。凭据服务端错误冷却窗口（秒，5xx/超时/网络）。

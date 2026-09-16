@@ -163,6 +163,7 @@ make webui            # 生产构建供 Go embed：cd webui && pnpm install && p
 - [ ] 自动关联规则变更：只改 `service/autoassoc`；handler / modelsync hooks 无重复业务逻辑
 - [ ] 会写库的后台 goroutine 已走 `bgtask.Go` 登记，未用裸 `go f(context.Background())`
 - [ ] HTTP 响应走 `httpresp`；日志为 `slog`；错误带上下文返回
+- [ ] 体积闸：`rg 'io\.ReadAll' --type go -g '!*_test.go'` 命中仅为 framework-conventions §4 白名单入口或带豁免注释处（新增无界整读禁止；入站/上游/落库上限口径见该节）
 - [ ] 直返实体新增/改 json tag：前端 `lib/api` interface 与测试 mock 已同步；三态指针字段无 `omitempty`；有响应体 JSON 断言覆盖（`rg 'omitempty' models/model.go` 命中的字段须确认非三态）
 - [ ] `models.ModelWithProvider` 增删字段：`handler/associations/crud_response_shape_test.go` 的 `modelWithProviderResponseKeys` 表已同步加/删一行（该表是 `/api/model-providers` 响应键契约的单一数据源，覆盖 Create/Update/List 三路径的键存在性与 null 语义）
 - [ ] 命名符合 `docs/architecture/conventions.md`（Go snake_case 文件名、JSON snake_case、前端 kebab-case 路由目录等）

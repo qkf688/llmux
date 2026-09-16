@@ -584,8 +584,8 @@ const (
 	// SettingKeyRawLogFieldMaxKiB 原始采集文本字段的单字段上限（KiB，Stage 2-D）：
 	// 一个设置项统一盖 RequestBody/RawRequestBody/RawResponseBody/Error 四字段，
 	// 挡原始日志把 SQLite 撑大（体积闸管内存瞬时峰值，本上限管库，抓手不同）。
-	SettingKeyRawLogFieldMaxKiB           = "raw_log_field_max_kib"                    // 原始采集字段单字段文本上限（KiB）
-	SettingKeyDisableAllLogs              = "disable_all_logs"                          // 是否完全关闭所有日志记录
+	SettingKeyRawLogFieldMaxKiB = "raw_log_field_max_kib" // 原始采集字段单字段文本上限（KiB）
+	SettingKeyDisableAllLogs    = "disable_all_logs"      // 是否完全关闭所有日志记录
 
 	// 模型健康检测相关设置
 	SettingKeyHealthCheckEnabled               = "health_check_enabled"                 // 健康检测总开关

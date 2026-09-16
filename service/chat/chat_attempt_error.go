@@ -32,9 +32,13 @@ func handleNonOKProviderResponse(
 		slog.Error("read body error", "error", err)
 	}
 
+	// Stage 2-B/D：错误体读侧 1 MiB 诊断单源封顶，落库文本再截到采集上限（四字段同源）。
+	fieldLimit := getRawLogFieldMaxBytes(ctx)
+	rawBody := common.TruncateUTF8(string(byteBody), fieldLimit)
+
 	errorUpdate := models.ChatLog{
 		Status: "error",
-		Error:  fmt.Sprintf("status: %d, body: %s", res.StatusCode, string(byteBody)),
+		Error:  fmt.Sprintf("status: %d, body: %s", res.StatusCode, rawBody),
 		// 回填端到端耗时：上游已返回完整错误响应，建行快照不含上游耗时。
 		ProxyTime: time.Since(start),
 	}
@@ -53,7 +57,7 @@ func handleNonOKProviderResponse(
 			errorUpdate.RawRequestBody = logSnapshot.RawRequestBodyStr
 		}
 		if logRawOptions.RawResponseBody {
-			errorUpdate.RawResponseBody = string(byteBody)
+			errorUpdate.RawResponseBody = rawBody
 		}
 	}
 

@@ -33,6 +33,14 @@ func getLogRawRequestResponseErrorsOnly(ctx context.Context) bool {
 	return settingsReader.Bool(ctx, models.SettingKeyLogRawRequestResponseErrorsOnly, false)
 }
 
+// getRawLogFieldMaxBytes 原始日志落库的单字段文本上限（设置单位 KiB，默认 256、
+// 下限 16，Stage 2-D）。一个上限统一盖四字段（请求体/原始请求体/原始响应体/Error）：
+// 体积闸（upstream_max_response_mib）管内存瞬时峰值，这里管 SQLite 体积——单行 MiB 级
+// 大文本会拖慢日志页查询；截断按 UTF-8 rune 边界并带标记（common.TruncateUTF8 单源）。
+func getRawLogFieldMaxBytes(ctx context.Context) int {
+	return settingsReader.Int(ctx, models.SettingKeyRawLogFieldMaxKiB, 256, 16) << 10
+}
+
 // getDisableAllLogs 获取是否完全关闭日志记录
 func getDisableAllLogs(ctx context.Context) bool {
 	return settingsReader.Bool(ctx, models.SettingKeyDisableAllLogs, false)

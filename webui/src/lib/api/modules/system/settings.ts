@@ -29,6 +29,7 @@ export interface Settings {
   log_retention_count: number;
   log_raw_request_response: RawLogOptions;
   log_raw_request_response_errors_only: boolean;
+  raw_log_field_max_kib: number;
   disable_all_logs: boolean;
   count_health_check_as_success: boolean;
   count_health_check_as_failure: boolean;

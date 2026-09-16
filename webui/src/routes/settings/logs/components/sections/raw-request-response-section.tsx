@@ -1,3 +1,4 @@
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { LogsSettingsSectionProps } from "../../types";
@@ -145,6 +146,33 @@ export function RawRequestResponseSection({ localSettings, updateLocalSettings }
               updateLocalSettings(buildRawRequestResponseUpdates(localSettings, { raw_response_body: checked }));
             }}
           />
+        </div>
+
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <Label htmlFor="log-field-max-kib" className="text-xs md:text-sm font-medium">
+              原始字段上限
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              请求体/原始请求体/原始响应体/错误四类采集文本的单字段上限（KiB，最小 16）；超出部分截断并留标记，防止原始日志把数据库撑大。
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Input
+              id="log-field-max-kib"
+              type="number"
+              min={16}
+              className="w-24 text-right"
+              value={localSettings ? Number(localSettings.raw_log_field_max_kib) : ""}
+              onChange={(event) => {
+                const value = Number(event.target.value);
+                if (!Number.isNaN(value)) {
+                  updateLocalSettings({ raw_log_field_max_kib: value });
+                }
+              }}
+            />
+            <span className="text-xs text-muted-foreground">KiB</span>
+          </div>
         </div>
       </div>
     </div>

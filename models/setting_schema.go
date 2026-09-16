@@ -98,6 +98,8 @@ func buildSettingSchemas() map[string]SettingSchema {
 		{Key: SettingKeyLogRetentionCount, Field: "LogRetentionCount", Type: SettingTypeInt, Default: 100, Category: "log", Min: intPtr(0)},
 		{Key: SettingKeyLogRawRequestResponse, Field: "LogRawRequestResponse", Type: SettingTypeJSON, Default: RawLogOptions{}, Category: "log"},
 		{Key: SettingKeyLogRawRequestResponseErrorsOnly, Field: "LogRawRequestResponseErrorsOnly", Type: SettingTypeBool, Default: false, Category: "log"},
+		// Stage 2-D：四字段共用一个截断上限（KiB），headers 字段天然小、不纳入。
+		{Key: SettingKeyRawLogFieldMaxKiB, Field: "RawLogFieldMaxKiB", Type: SettingTypeInt, Default: 256, Category: "log", Min: intPtr(16)},
 		{Key: SettingKeyDisableAllLogs, Field: "DisableAllLogs", Type: SettingTypeBool, Default: false, Category: "log"},
 
 		// 健康检查

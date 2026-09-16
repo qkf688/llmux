@@ -5,7 +5,6 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 )
 
 // upstreamDetailMaxBytes 诊断细节回显的截断上限：上游错误响应偶有整页 HTML/超长回显，
@@ -102,15 +101,6 @@ func upstreamMessageFromText(text string, depthBudget int) string {
 }
 
 func truncateUpstreamDetail(detail string) string {
-	if len(detail) <= upstreamDetailMaxBytes {
-		return detail
-	}
-	// 回退到 rune 边界：按字节切会把多字节字符劈半，json.Marshal 将残字节替换成
-	// U+FFFD——上游中文错误文案在 512B 处稳定出乱码尾（pools 旧实现的存量毛病，
-	// 收敛为单一来源时一并修）。
-	cut := upstreamDetailMaxBytes
-	for cut > 0 && !utf8.RuneStart(detail[cut]) {
-		cut--
-	}
-	return detail[:cut] + "…(truncated)"
+	// rune 边界回退与截断标记见 common.TruncateUTF8 单源（Stage 2-D 收敛，勿在此另造一套）。
+	return TruncateUTF8(detail, upstreamDetailMaxBytes)
 }

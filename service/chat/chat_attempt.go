@@ -88,7 +88,9 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 	}
 
 	logRawOptions := getLogRawRequestResponse(input.Ctx)
-	logSnapshot := captureRequestLogSnapshot(logRawOptions, input.ReqMeta.Header, requestBody, input.Before.raw)
+	// Stage 2-D：单字段采集上限一处读取，喂给请求快照与响应采集两个采集点。
+	rawLogFieldLimit := getRawLogFieldMaxBytes(input.Ctx)
+	logSnapshot := captureRequestLogSnapshot(logRawOptions, input.ReqMeta.Header, requestBody, input.Before.raw, rawLogFieldLimit)
 
 	req, err := input.ChatModel.BuildReq(reqCtx, header, input.ModelWithProvider.ProviderModel, requestBody)
 	if err != nil {
@@ -152,7 +154,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		return handleUpstreamBodyReadError(input, res, logID, logRawOptions, logSnapshot, guardErr)
 	}
 
-	rawResponseBodyStr := captureRawResponseBody(logRawOptions, res)
+	rawResponseBodyStr := captureRawResponseBody(input.Ctx, logRawOptions, res)
 
 	// 流式响应的原始 body 不能在入口读取（会阻塞流），改用侧信道在转换 goroutine 内旁路记录。
 	// 侧信道同时承载**上游原始 usage**：转换后的下游流受目标协议表达能力限制，

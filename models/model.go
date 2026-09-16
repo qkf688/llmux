@@ -581,7 +581,11 @@ const (
 	SettingKeyLogRetentionCount               = "log_retention_count"                  // 日志保留条数，0表示不限制
 	SettingKeyLogRawRequestResponse           = "log_raw_request_response"             // 原始请求响应记录选项（JSON格式的RawLogOptions）
 	SettingKeyLogRawRequestResponseErrorsOnly = "log_raw_request_response_errors_only" // 是否仅保留错误日志的原始请求响应（成功调用会自动清空）
-	SettingKeyDisableAllLogs                  = "disable_all_logs"                     // 是否完全关闭所有日志记录
+	// SettingKeyRawLogFieldMaxKiB 原始采集文本字段的单字段上限（KiB，Stage 2-D）：
+	// 一个设置项统一盖 RequestBody/RawRequestBody/RawResponseBody/Error 四字段，
+	// 挡原始日志把 SQLite 撑大（体积闸管内存瞬时峰值，本上限管库，抓手不同）。
+	SettingKeyRawLogFieldMaxKiB           = "raw_log_field_max_kib"                    // 原始采集字段单字段文本上限（KiB）
+	SettingKeyDisableAllLogs              = "disable_all_logs"                          // 是否完全关闭所有日志记录
 
 	// 模型健康检测相关设置
 	SettingKeyHealthCheckEnabled               = "health_check_enabled"                 // 健康检测总开关

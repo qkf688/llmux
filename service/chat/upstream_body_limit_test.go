@@ -15,8 +15,9 @@ import (
 	"github.com/qkf688/llmux/providers"
 )
 
-// runAttemptAgainstURL 以 OpenAI 协议直通形态对指定上游跑一次 attempt（Stage 2-C 体积闸测试共用）。
-func runAttemptAgainstURL(t *testing.T, providerName, url string, client *http.Client, ctx context.Context) singleProviderAttemptResult {
+// runAttemptAgainstURL 以 OpenAI 协议直通形态对指定上游跑一次 attempt（Stage 2-C/D 测试共用）。
+// reqRaw 为入站原始请求体（原始采集截断测试需要超大 raw）。
+func runAttemptAgainstURL(t *testing.T, providerName, url string, client *http.Client, ctx context.Context, reqRaw string) singleProviderAttemptResult {
 	t.Helper()
 	providerRow := models.Provider{Name: providerName, Type: providers.TypeOpenAI}
 	if err := models.DB.Create(&providerRow).Error; err != nil {
@@ -35,7 +36,7 @@ func runAttemptAgainstURL(t *testing.T, providerName, url string, client *http.C
 		Ctx:               ctx,
 		Start:             time.Now(),
 		Style:             string(consts.StyleOpenAI),
-		Before:            Before{Model: "m1", raw: []byte(`{"model":"m1","messages":[{"role":"user","content":"hi"}]}`)},
+		Before:            Before{Model: "m1", raw: []byte(reqRaw)},
 		RealModelName:     "m1",
 		ReqMeta:           models.ReqMeta{Header: http.Header{}},
 		Provider:          providerRow,
@@ -45,6 +46,8 @@ func runAttemptAgainstURL(t *testing.T, providerName, url string, client *http.C
 		Client:            client,
 	}, make(chan models.ChatLog, 8))
 }
+
+const smallReqRaw = `{"model":"m1","messages":[{"role":"user","content":"hi"}]}`
 
 // Stage 2-C 超限出口：33 MiB > 默认 32 MiB → **组织级**淘汰（换下一家）、不标凭据级、
 // 不写冷却；错误日志带超限原因。锁死共识里「超大 body 是端点级行为，与 key 无关」。
@@ -58,7 +61,7 @@ func TestLimitUpstreamResponseBody_OverflowFailsOverWithoutCooldown(t *testing.T
 	}))
 	t.Cleanup(srv.Close)
 
-	result := runAttemptAgainstURL(t, "p-ovf", srv.URL, srv.Client(), context.Background())
+	result := runAttemptAgainstURL(t, "p-ovf", srv.URL, srv.Client(), context.Background(), smallReqRaw)
 	if result.Success {
 		t.Fatalf("超限响应不得判成功")
 	}
@@ -90,7 +93,7 @@ func TestLimitUpstreamResponseBody_UnderLimitBodySurvivesIntact(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	result := runAttemptAgainstURL(t, "p-intact", srv.URL, srv.Client(), context.Background())
+	result := runAttemptAgainstURL(t, "p-intact", srv.URL, srv.Client(), context.Background(), smallReqRaw)
 	if !result.Success {
 		t.Fatalf("闸内响应应判成功: %+v", result)
 	}
@@ -121,7 +124,7 @@ func TestLimitUpstreamResponseBody_ReadDeadlineIsNetworkClass(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
-	result := runAttemptAgainstURL(t, "p-deadline", srv.URL, srv.Client(), ctx)
+	result := runAttemptAgainstURL(t, "p-deadline", srv.URL, srv.Client(), ctx, smallReqRaw)
 	if result.Success {
 		t.Fatalf("读体超时不得判成功")
 	}

@@ -43,6 +43,10 @@ func TestDefaultSettingsResponse(t *testing.T) {
 	if response.UpstreamMaxResponseMiB != 32 {
 		t.Fatalf("expected UpstreamMaxResponseMiB default to be 32, got %d", response.UpstreamMaxResponseMiB)
 	}
+	// Stage 2-D：原始采集字段上限默认 256 KiB（普通响应完整、异常大响应截尾）。
+	if response.RawLogFieldMaxKiB != 256 {
+		t.Fatalf("expected RawLogFieldMaxKiB default to be 256, got %d", response.RawLogFieldMaxKiB)
+	}
 }
 
 func TestApplySettingToResponse(t *testing.T) {

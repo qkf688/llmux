@@ -2,6 +2,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  STICKY_ACTIONS_CELL_CLS,
+  STICKY_ACTIONS_HEAD_CLS,
+  STICKY_HEADER_CLS,
   Table,
   TableBody,
   TableCell,
@@ -9,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import type { ChatLog } from "@/lib/api";
 import { Trash2 } from "lucide-react";
 import { LogScheduleCell } from "../../shared";
@@ -42,10 +46,10 @@ export function LogsDesktopTable({
   onOpenDelete,
 }: LogsDesktopTableProps) {
   return (
-    <div className="flex-1 overflow-y-auto hidden sm:block w-full">
+    <div className="flex-1 overflow-auto hidden sm:block w-full">
       <Table className="min-w-[850px]">
-        <TableHeader className="z-10 sticky top-0 bg-secondary/90 backdrop-blur text-secondary-foreground">
-          <TableRow className="hover:bg-secondary/90">
+        <TableHeader className={`z-10 ${STICKY_HEADER_CLS}`}>
+          <TableRow>
             <TableHead className="w-[40px]">
               <Checkbox
                 checked={isSomeSelected ? "indeterminate" : isAllSelected}
@@ -62,12 +66,13 @@ export function LogsDesktopTable({
             <TableHead>提供商</TableHead>
             <TableHead>密钥</TableHead>
             <TableHead>调度</TableHead>
-            <TableHead className="w-[180px]">操作</TableHead>
+            {/* 操作列钉右：横向滚动时始终可见，与 providers / 关联表格一致 */}
+            <TableHead className={`w-[180px] ${STICKY_ACTIONS_HEAD_CLS}`}>操作</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {logs.map((log) => (
-            <TableRow key={log.id} className={selectedIds.has(log.id) ? "bg-muted/50" : ""}>
+            <TableRow key={log.id} className={cn("group", selectedIds.has(log.id) && "bg-muted/50")}>
               <TableCell>
                 <Checkbox
                   checked={selectedIds.has(log.id)}
@@ -119,7 +124,12 @@ export function LogsDesktopTable({
               <TableCell>
                 <LogScheduleCell log={log} />
               </TableCell>
-              <TableCell>
+              <TableCell
+                className={cn(
+                  STICKY_ACTIONS_CELL_CLS,
+                  selectedIds.has(log.id) && "bg-[var(--table-head-bg)]",
+                )}
+              >
                 <div className="flex gap-1">
                   <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => onOpenDetail(log)}>
                     详情

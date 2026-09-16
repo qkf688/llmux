@@ -74,7 +74,7 @@ func GetGroupInlineKeys(c *gin.Context) {
 			// 任一条失败整组拒绝：明文替换是覆盖动作，部分成功会静默丢无法显示的条目。
 			// （与号池 raw 单条 500 一致的失败语义，扩展为整组。）
 			slog.Warn("inline key decrypt failed for raw view", "credential_id", cred.ID, "group_id", group.ID, "error", decErr)
-			httpresp.InternalErrorMessage(c, "Failed to decrypt keys", err)
+			httpresp.InternalErrorMessage(c, "Failed to decrypt keys", decErr)
 			return
 		}
 		keys = append(keys, InlineKeyRawItem{ID: cred.ID, Key: plain})

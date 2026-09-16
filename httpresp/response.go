@@ -1,8 +1,12 @@
 package httpresp
 
 import (
+	"context"
+	"errors"
+	"io"
 	"log/slog"
 	"net/http"
+	"syscall"
 
 	"github.com/gin-gonic/gin"
 
@@ -73,7 +77,7 @@ func ErrorWithHttpStatus(c *gin.Context, httpStatus int, code int, message strin
 // 新代码禁止绕过本函数用 c.JSON(500, gin.H{...}) 手搓错误响应（AGENTS 5.x：响应走 httpresp）。
 func InternalServerError(c *gin.Context, err error) {
 	rid := c.GetString(consts.ContextKeyRequestID)
-	logInternalError(c, rid, err)
+	logInternalError(c, rid, "", err)
 	msg := "internal server error"
 	if rid != "" {
 		msg = "internal server error [req=" + rid + "]"
@@ -92,7 +96,7 @@ func InternalServerError(c *gin.Context, err error) {
 // docs/guides/framework-conventions.md 500 收口节）；err 为仅服务端可见的原始错误，可为 nil。
 func InternalErrorMessage(c *gin.Context, message string, err error) {
 	rid := c.GetString(consts.ContextKeyRequestID)
-	logInternalError(c, rid, err)
+	logInternalError(c, rid, message, err)
 	c.JSON(http.StatusInternalServerError, Response{
 		Code:    500,
 		Error:   message,
@@ -100,9 +104,12 @@ func InternalErrorMessage(c *gin.Context, message string, err error) {
 	})
 }
 
-// logInternalError 统一 500 的服务端留痕：结构化记 request_id、method、path 与原始 err。
-// err 为 nil 时不写 error 字段（避免日志出现 error="<nil>" 噪声）。
-func logInternalError(c *gin.Context, rid string, err error) {
+// logInternalError 统一 500 的服务端留痕：结构化记 request_id、method、path、
+// （静态出口的）message 与原始 err。err 为 nil 时不写 error 字段（避免
+// error="<nil>" 噪声）。message 为空（通用出口）则不写 message 字段。
+// 客户端断连/上传中断不是服务器故障，降 Warn——否则「建连即断」可把 ERROR
+// 通道刷满、按 ERROR 配的告警失灵（log flooding）。
+func logInternalError(c *gin.Context, rid string, message string, err error) {
 	attrs := []any{"request_id", rid}
 	if c.Request != nil {
 		attrs = append(attrs, "method", c.Request.Method)
@@ -110,10 +117,26 @@ func logInternalError(c *gin.Context, rid string, err error) {
 			attrs = append(attrs, "path", c.Request.URL.Path)
 		}
 	}
+	if message != "" {
+		attrs = append(attrs, "message", message)
+	}
 	if err != nil {
 		attrs = append(attrs, "error", err)
 	}
+	if isClientDisconnect(err) {
+		slog.Warn("internal server error", attrs...)
+		return
+	}
 	slog.Error("internal server error", attrs...)
+}
+
+// isClientDisconnect 识别「对端先挂断」类错误（ctx 取消 / 坏管道 / 连接重置）：
+// 它们是调用方行为而非本服务故障，不该占用 ERROR 通道。
+func isClientDisconnect(err error) bool {
+	return errors.Is(err, context.Canceled) ||
+		errors.Is(err, io.ErrClosedPipe) ||
+		errors.Is(err, syscall.EPIPE) ||
+		errors.Is(err, syscall.ECONNRESET)
 }
 
 // BadRequest 请求参数错误

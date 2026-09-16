@@ -6,7 +6,7 @@
 ## 1. Go / Gin
 
 - 路由：`RegisterAll` 建 `/v1` 与 `/api`；`/v1` 挂 `middleware.AuthAPIKey(apiKeyRepo, userRepo)`，`/api` 登录路由免鉴权，其余挂 `middleware.AuthJWT(secret, repo)`。
-- 引擎装配（`main.go`，**不用** `gin.Default()`）：`RequestID()`（请求编号，Stage 3，见 §5）→ `AccessLog()`（等价原 gin Logger + rid）→ `Recovery()` → gzip。**禁止**把 `RequestID` 挪到鉴权/路由之后——401/404 也要有号可对。
+- 引擎装配（`main.go`，**不用** `gin.Default()`）：`RequestID()`（请求编号，Stage 3，见 §5）→ `AccessLog()`（等价原 gin Logger + rid，path 走 %q 防换行注入）→ `Recovery()`（Stage 3 自建，替代 `gin.Recovery`：panic 型 500 同走 httpresp 收口，见 §5）→ gzip。**禁止**把 `RequestID` 挪到鉴权/路由之后——401/404 也要有号可对。
 - 子包注册函数只接收 `gin.IRoutes`（或项目既有签名），**不**在子包内 `Group` 出与全局不一致的鉴权边界。
 - 后台任务在 `main` 启动：`HealthChecker.Start`、`ModelSyncService.StartAutoSync`，两者的 ctx 均派生自 `signal.NotifyContext`（取消即退出信号）。
 - **禁止**用裸 `go f(context.Background())` 启动会写库的后台 goroutine；**必须**经 `common/bgtask` 的 `bgtask.Go` 登记，否则进程关闭时落库/权重衰减会被硬切。请求内且已用 `sync.WaitGroup` 等待完成的 goroutine 不在此列（由 `srv.Shutdown` 等在途请求覆盖）。
@@ -49,13 +49,14 @@
 
 ## 5. HTTP 500 错误响应收口（Stage 3 质量门，2026-09-17）
 
-HTTP 500（本机自己坏）**禁止**把内部 `err` 原文回给调用方（SQLite/gorm 报错含表名/列名/约束名）；原始错误只进服务端日志。**禁止**绕过 httpresp 用 `c.JSON(500, ...)` 手搓错误响应。合法出口只有两个，两者都先 `slog.Error`（带 `request_id`/`method`/`path`/原始 `error`）再回响应：
+HTTP 500（本机自己坏，**含 panic**）**禁止**把内部 `err` 原文回给调用方（SQLite/gorm 报错含表名/列名/约束名）；原始错误只进服务端日志。**禁止**绕过 httpresp 手搓 500（`c.JSON(500,…)`、`http.Error`、直用 `StatusInternalServerError` 常量）。合法出口只有两个，两者都先 `slog`（带 `request_id`/`method`/`path`/原始 `error`）再回响应；静态出口的 `message` 也一并进日志（同名分支靠它定位是哪一处）：
 
-- `httpresp.InternalServerError(c, err error)`：对外恒发通用文案 `internal server error [req=<编号>]`（编号内嵌，SDK 用户报障时拿得走），原始 err 只进日志。绝大多数「拿到 err 就直接失败」的分支走这个。
-- `httpresp.InternalErrorMessage(c, message string, err error)`：仅用于**已审查、不含内部信息**的静态提示（如 `"encryption not configured"`）。`message` **必须**是字符串字面量或纯业务标识符变量，**禁止**拼接任何错误文本（`err.Error()`/`fmt.*`/`+`）；`err` 为仅服务端可见的原始错误，配置守卫类无 err 时传 `nil`。
+- `httpresp.InternalServerError(c, err error)`：对外恒发通用文案 `internal server error [req=<编号>]`（编号内嵌，SDK 用户报障时拿得走），原始 err 只进日志。拼接式旧写法（`"前缀: "+err.Error()`）拆到这里或下面的静态入口（前缀留下、err 进日志）。
+- `httpresp.InternalErrorMessage(c, message string, err error)`：仅用于**已审查、不含内部信息**的静态提示（如 `"encryption not configured"`）。`message` **必须**是字符串字面量或纯业务标识符（`action`、`ie.Message`——其取值须可追回常量），**禁止**拼接任何错误文本（`err.Error()`/`fmt.*`/`+`）；`err` 为仅服务端可见的原始错误，配置守卫类无 err 时传 `nil`。
+- **级别约定**：客户端断连类（`context.Canceled`/坏管道/连接重置）留痕降 `Warn`——不是服务器故障，防「建连即断」刷爆 ERROR 告警通道；其余一律 `Error`。
 
 **范围边界**：只收本机 500。① 4xx 原文（校验/绑定错误，管理端表单报错提示依赖它）不改；② `/v1` 上游状态码透传（`handler/v1/chat.go` 的 `errors.As(statusCoder)` 分支，转发的是供应商错误，属协议内容）不在本防线。
 
-**请求编号**：`middleware.RequestID()` 挂在所有路由最外层（`main.go` 于 gzip 之前），为每请求定一号——入站 `X-Request-Id` 格式规矩则沿用（对齐调用方自家 trace），否则生成 12 位 hex；编号写三处（context / 响应头 / 回写入站头，令 `middleware.AccessLog` 访问行与 `/v1` 上游透传白名单都指向同一号）。
+**请求编号**：`middleware.RequestID()` 挂在所有路由最外层（`main.go` 于 gzip 之前），为每请求定一号——入站 `X-Request-Id` 格式规矩则沿用（对齐调用方自家 trace），否则生成 12 位 hex；编号写三处（context / 响应头 / 回写入站头，令 `middleware.AccessLog` 访问行与 `/v1` 上游请求透传都指向同一号）。上游**响应**自带的 `X-Request-Id` 在 `writeHeader` 改名 `X-Upstream-Request-Id` 回传——网关命名空间唯一，报障编号无双义。`middleware.Recovery` 替代 `gin.Recovery`：panic 栈经 slog 留痕（带 rid），未提交的响应走 `InternalServerError` 收口（客户端拿得到 `[req=]`），已提交半开流不追加 body。
 
-可机械复核（两条均须零命中）：`rg -n 'httpresp\.InternalServerError\(c(t)?, .*\.Error\(\)\)' --type go -g '!*_test.go'`（旧字符串直入形式，改签名后虽已编译不过，仍留作闸）与 `rg -n 'httpresp\.InternalErrorMessage\([^)]*(\+|\.Error\(\)|fmt\.)' --type go -g '!*_test.go'`（静态文案入口塞错误文本）。
+执法：两条静态判据编进 `go test ./...`（`gate_500_test.go`，见上「禁止绕过」「message 禁拼接」）；人肉复核命令（与门同判据）：`rg -n 'httpresp\.InternalErrorMessage\([^,]+, [^,)]*(\+|\.Error\(\)|fmt\.)' --type go -g '!*_test.go'` 零命中。

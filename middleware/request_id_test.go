@@ -93,6 +93,20 @@ func TestRequestID_RegeneratesInvalidInbound(t *testing.T) {
 	}
 }
 
+func TestRequestID_GeneratedIDsAreDistinct(t *testing.T) {
+	// 48-bit 熵下单实例排障够用，但撞号=两条请求共享同一取证键；100 次抽样去重
+	// 是成本最低的回归哨兵（真撞了这里先红）。
+	r := newRequestIDRouter()
+	seen := map[string]bool{}
+	for i := 0; i < 100; i++ {
+		rid := doProbe(t, r, "", false).Header().Get(consts.HeaderRequestID)
+		if seen[rid] {
+			t.Fatalf("第 %d 次生成撞号: %q", i, rid)
+		}
+		seen[rid] = true
+	}
+}
+
 // 中间件必须同时把编号回写入站头：/v1 透传白名单从请求头取值，
 // 访问日志 formatter 也读请求头——三处（日志/响应/上游）指向同一个号。
 func TestRequestID_NormalizesRequestHeader(t *testing.T) {

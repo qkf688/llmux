@@ -2,7 +2,9 @@ package httpresp
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -87,8 +89,8 @@ func TestInternalServerError_WithoutRequestID(t *testing.T) {
 	}
 }
 
-// 静态文案入口：对外原样返回已审查文案（不拼编号），对内仍留痕（含编号与原始 err，
-// err 可为 nil）。泄密防线在调用侧纪律 + 一键自查（message 参数禁止拼接错误文本）。
+// 静态文案入口：对外原样返回已审查文案（不拼编号），对内仍留痕（含编号、message
+// 与原始 err——同名分支多，message 是日志里区分「哪一处」的坐标）。
 func TestInternalErrorMessage_KeepsVettedMessageButLogs(t *testing.T) {
 	logs := captureSlog(t)
 	c, w := newCtx("f6e5d4c3b2a1")
@@ -102,10 +104,42 @@ func TestInternalErrorMessage_KeepsVettedMessageButLogs(t *testing.T) {
 		t.Errorf("HTTP 状态 = %d, want 500", w.Code)
 	}
 	line := logs.String()
-	for _, frag := range []string{"cipher is nil", "request_id=f6e5d4c3b2a1"} {
+	for _, frag := range []string{"cipher is nil", "request_id=f6e5d4c3b2a1", `message="encryption not configured"`} {
 		if !strings.Contains(line, frag) {
 			t.Errorf("日志行缺片段 %q，实际:\n%s", frag, line)
 		}
+	}
+}
+
+// 客户端断连/上传中断不是服务器故障：降 Warn，防止「建连即断」刷满 ERROR 告警通道。
+func TestInternalServerError_ClientDisconnectDowngradesToWarn(t *testing.T) {
+	logs := captureSlog(t)
+	c, w := newCtx("9f8e7d6c5b4a")
+
+	InternalServerError(c, fmt.Errorf("read body: %w", context.Canceled))
+
+	// 对外形状不变（仍然 500 + 编号），只有日志级别降级。
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("HTTP 状态 = %d, want 500", w.Code)
+	}
+	line := logs.String()
+	if !strings.Contains(line, "level=WARN") {
+		t.Errorf("断连类错误应为 WARN，实际:\n%s", line)
+	}
+	if !strings.Contains(line, "request_id=9f8e7d6c5b4a") {
+		t.Errorf("降级不得丢掉留痕字段:\n%s", line)
+	}
+}
+
+// 真故障必须保持 ERROR（降级判定不许吞掉正常告警）。
+func TestInternalServerError_RealFaultStaysError(t *testing.T) {
+	logs := captureSlog(t)
+	c, _ := newCtx("112233445566")
+
+	InternalServerError(c, errors.New("db is locked"))
+
+	if line := logs.String(); !strings.Contains(line, "level=ERROR") {
+		t.Errorf("非断连故障应维持 ERROR:\n%s", line)
 	}
 }
 

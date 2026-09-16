@@ -3,7 +3,9 @@ package middleware
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"regexp"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -20,25 +22,32 @@ var validRequestIDPattern = regexp.MustCompile(`^[A-Za-z0-9_\-]{1,64}$`)
 // （访问日志与 /v1 上游透传白名单都从请求头取值，三处指向同一个号）。
 func RequestID() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id := c.GetHeader(consts.HeaderRequestID)
+		// c.Request 由 gin 引擎保证非 nil；此处判空只护裸 Context 单测，
+		// 与 httpresp.logInternalError 的 nil 姿态保持一致。
+		id := ""
+		if c.Request != nil {
+			id = c.Request.Header.Get(consts.HeaderRequestID)
+		}
 		if !validRequestIDPattern.MatchString(id) {
 			id = generateRequestID()
 		}
 		c.Set(consts.ContextKeyRequestID, id)
-		c.Request.Header.Set(consts.HeaderRequestID, id)
+		if c.Request != nil {
+			c.Request.Header.Set(consts.HeaderRequestID, id)
+		}
 		c.Header(consts.HeaderRequestID, id)
 		c.Next()
 	}
 }
 
-// generateRequestID 生成 12 位小写 hex（6 字节熵）。单实例排障够用；
+// generateRequestID 生成 12 位小写 hex（48 bit 熵，crypto/rand）。单实例排障够用；
 // 不引第三方 ID 库（低影响可换库自己定）。
 func generateRequestID() string {
 	var b [6]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		// crypto/rand 失败属系统级异常，退化为固定前缀也比 panic 好——
-		// 编号缺失只影响日志关联，不影响正确性。
-		return "000000000000"
+		// crypto/rand 失败属系统级异常，退化为纳秒时间戳低位——绝不能退化成
+		// 常量哨兵：那会让并发请求全部撞号，且常量值可被入站伪造混入同一桶。
+		return fmt.Sprintf("%012x", uint64(time.Now().UnixNano())&0xFFFFFFFFFFFF)
 	}
 	return hex.EncodeToString(b[:])
 }

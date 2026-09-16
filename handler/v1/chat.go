@@ -241,8 +241,15 @@ func writeHeader(c *gin.Context, ctx context.Context, stream bool, header http.H
 		if stripHeaders && !essentialHeaders[k] {
 			continue
 		}
+		// 响应头 X-Request-Id 唯一归属网关（Stage 3：报障编号不允许双语义）。
+		// 上游常自带同名头（Azure/OpenAI），Add 会让客户端看到 [网关号, 供应商号]
+		// 两值、取哪个全凭 SDK 实现——上游值改名回传，向供应商报障时仍拿得到原号。
+		out := k
+		if http.CanonicalHeaderKey(k) == consts.HeaderRequestID {
+			out = "X-Upstream-Request-Id"
+		}
 		for _, value := range values {
-			c.Writer.Header().Add(k, value)
+			c.Writer.Header().Add(out, value)
 		}
 	}
 

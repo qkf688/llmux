@@ -97,11 +97,12 @@ func main() {
 	startBackgroundServices(ctx)
 
 	// 组装顺序即请求路径顺序：编号最先（错误/访问/上游三处日志共用同一号），
-	// 访问日志读已回写的请求头，等价于原 gin.Default()（Logger+Recovery）。
+	// 访问日志读已回写的请求头，Recovery 替代 gin.Recovery——panic 型 500 同样
+	// 走 httpresp 收口出口并带 rid 进 slog（Stage 3）。
 	router := gin.New()
 	router.Use(middleware.RequestID())
 	router.Use(middleware.AccessLog())
-	router.Use(gin.Recovery())
+	router.Use(middleware.Recovery())
 
 	router.Use(gzip.Gzip(gzip.DefaultCompression, gzip.WithExcludedPaths([]string{"/v1/"})))
 

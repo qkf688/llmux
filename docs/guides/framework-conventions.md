@@ -39,7 +39,7 @@
 
 读取上游响应或请求体的代码**禁止**无上限 `io.ReadAll(r.Body)`。合法入口白名单：
 
-- 诊断 / 探针 / 连通测试路径：`common.ReadCappedBody`（1 MiB 单源；上游非 200 错误体同口径）。
+- 诊断 / 探针 / 连通测试路径：`common.ReadCappedBody`（1 MiB 单源；上游未通过（非 2xx）的错误体同口径）。
 - 入站请求体：`consts.MaxInboundBodyBytes`（20 MiB 硬上限，代码常量刻意不做成设置——可被调小的防线不是防线）+ `io.LimitReader(body, max+1)` 多探 1 字节拒绝；`/v1` 超限回真实 413（SDK 不自动重试），管理端按该端点信封惯例（前端对非 2xx 不解析 body）。
 - 上游非流式成功响应：`service/chat` 的 `limitUpstreamResponseBody` 在 attempt 内、响应头提交给客户端**之前**整读加限（设置项 `upstream_max_response_mib`，默认 32 MiB、下限 1 不可关闭），未超限回填为可重读内存字节。失败语义：超限=端点级异常 → 组织级转移**不冷却凭据**；读体错误（含 ctx 超时打断读体）与 `Client.Do` 失败**成对**归凭据级网络——超时分类只挂 Do 侧会让读体超时静默漏走（见全局 RULES「Go HTTP 超时」）。
 - 原始采集落库：四文本字段（`RequestBody`/`RawRequestBody`/`RawResponseBody`/`Error`）共用单字段上限（设置项 `raw_log_field_max_kib`，默认 256 KiB），截断一律 `common.TruncateUTF8`（rune 边界 + `…(truncated)` 标记，按字节劈半进 JSON 必出 U+FFFD 乱码尾）。采集读头不吞尾（MultiReader 回填），旁路不得成为下游截断点。
@@ -60,3 +60,13 @@ HTTP 500（本机自己坏，**含 panic**）**禁止**把内部 `err` 原文回
 **请求编号**：`middleware.RequestID()` 挂在所有路由最外层（`main.go` 于 gzip 之前），为每请求定一号——入站 `X-Request-Id` 格式规矩则沿用（对齐调用方自家 trace），否则生成 12 位 hex；编号写三处（context / 响应头 / 回写入站头，令 `middleware.AccessLog` 访问行与 `/v1` 上游请求透传都指向同一号）。上游**响应**自带的 `X-Request-Id` 在 `writeHeader` 改名 `X-Upstream-Request-Id` 回传——网关命名空间唯一，报障编号无双义。`middleware.Recovery` 替代 `gin.Recovery`：panic 栈经 slog 留痕（带 rid），未提交的响应走 `InternalServerError` 收口（客户端拿得到 `[req=]`），已提交半开流不追加 body。
 
 执法：两条静态判据编进 `go test ./...`（`gate_500_test.go`，见上「禁止绕过」「message 禁拼接」）；人肉复核命令（与门同判据）：`rg -n 'httpresp\.InternalErrorMessage\([^,]+, [^,)]*(\+|\.Error\(\)|fmt\.)' --type go -g '!*_test.go'` 零命中。
+
+## 6. 上游响应状态码通过口径（Stage 5 质量门，2026-09-17）
+
+判「这次上游算不算成功」的**唯一入口是 `common.IsPassingStatus(statusCode int) bool`：2xx（`[200,300)`）即通过**。非测试代码**禁止**对上游状态码做判通过的裸比较（`res.StatusCode != http.StatusOK`、`statusCode == 200` 这类），无论写在哪个包。
+
+- **为什么是 2xx 而不是正好 200**：OpenAI 兼容网关有相当一部分照抄 OpenAI 某些接口的习惯回 201，它们工作正常、内容有效。旧的严格 `== 200` 把这类供应商判死；而健康检查这一处判失败的代价不是「诊断报错」，是**自动停用模型-供应商关联**（`handleCheckResult` 连续失败到阈值即停用，且停用原因不入库）——线上静默少一条可用线路，后台只显示「已停用」，看不出是状态码口径造成的。
+- **为什么落 `common` 而不是由 `credprobe` 导出**：同一条判定有 7 处需要（`service/healthcheck`、`service/credprobe` 两个探针、`service/chat` attempt、`providers` 两处 `Models()`、`handler/testapi` react），其中 providers 层**禁止** import service 子包（依赖方向），跨 2 域以上的纯逻辑必须下沉 `common`（AGENTS §4.4）。
+- **边界（刻意不管的两件事）**：① 只判状态码、**不判内容**——上游回 2xx 但内容并非合法响应（被重定向到登录页、一页 HTML 错误）不在此拦截；各调用点对内容的要求本就不同（聊天要能解析成回复、模型列表要清单、流式测试要真在吐字），捆进同一个判定会让改聊天校验连带牵动模型列表（已登记残留待办）。② 按**具体失败码**分类的写法合法（401/403 归鉴权、429 归限流、5xx 归供应商，如 `chat_attempt_error.go` 的 429 降权、`common.ErrorTypeFromStatus`）——那是「失败之后怎么处置」的另一个决定，不在「算不算通过」这条线上。
+- **执法**：`gate_upstream_status_test.go` 编进 `go test ./...`——裸比较 2xx 成功码即红；豁免表按文件登记，且**列了却不再命中也算红**（防清单悄悄过期成橡皮图章）；同文件另有判据样例测试钉住门本身不漏判/不误判。所有机械门共用的目录遍历带**空转哨兵**（扫到源文件数 < 100 即红）：2026-09-17 发现 `gate_500_test.go` 因把遍历根目录 `.` 当隐藏目录跳掉而从未真正扫到任何文件——**新增门必须保留这道哨兵**，否则门是绿的、约束不存在。人肉复核：`rg -n '\.StatusCode\s*(==|!=|<|>|<=|>=)' --type go -g '!*_test.go'`，命中处须是按具体失败码分类。
+- **新增判定站点怎么办**：不要新写一份，直接调 `common.IsPassingStatus`；确需与 2xx 不同的例外（某协议规定非 200 即错）**先在本节写明理由**，再进豁免表。

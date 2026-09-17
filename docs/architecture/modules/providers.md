@@ -61,7 +61,8 @@ service/modelsync/config.go  # ProviderModelCatalog 类型 + GetProviderModelCat
 - **外围未完全 OCP（现状）**：仍可能出现 type 特判（如 auth 解析、structured 测试、`AllMetadata` preferred 顺序、chat 出站预处理仅部分 style）；新 type 需 grep 外围分支
 - OpenAI 兼容供应商优先嵌入 `openaiBase` 并设置 `endpointPath`；模板/TestBody 等同构常量可能重复出现在 `meta_bodies.go`
 - 黑名单影响虚拟模型候选池过滤（消费方在 virtualmodel/chat，不在本模块写选路）
+- **`Models()` 判定上游是否成功必须走 `common.IsPassingStatus`**（Stage 5，2026-09-17）：本模块两处 `Models()`（`openaiBase` / `Anthropic`）曾各自写严格 `== 200`，与诊断侧 2xx 口径分叉——回 201 的兼容网关拉不到模型列表只是显性症状，同口径在健康检查处会**自动停用关联**。providers 层禁止 import service 子包（依赖方向），故判定落在 `common`，机械执法见 `gate_upstream_status_test.go`、约定见 `framework-conventions.md §6`
 
 ---
 
-*本文档由 Project Architecture Documenter skill 生成，生成日期：2026-07-23；同日审查回写。*
+*本文档由 Project Architecture Documenter skill 生成，生成日期：2026-07-23；同日审查回写；2026-09-17 记录上游状态码通过口径收口（Stage 5）。*

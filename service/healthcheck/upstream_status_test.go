@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/qkf688/llmux/providers"
@@ -37,16 +38,18 @@ func TestRequestUpstream_PassesOn201(t *testing.T) {
 	}
 }
 
-// TestRequestUpstream_FailsOnNon2xx 通过侧的对照：口径放宽到 2xx 不等于放宽到全部，
-// 3xx/4xx/5xx 仍必须回 HealthCheckError 并带上游原文（停用决策与排障都靠它）。
-// 刻意不测 199：真实 HTTP 服务端回不出 1xx（会被当信息响应吞掉），区间下界由
+// TestRequestUpstream_FailsOnNonPassingStatus 通过侧的对照：口径带上 201 不等于放宽到
+// 整个 2xx——204（成功但无正文）、3xx、4xx、5xx 都必须继续判失败并回 HealthCheckError
+// （分组级排障与停用决策都靠它）。
+// 刻意不测 199：真实 HTTP 服务端回不出 1xx（会被当信息响应吞掉），区间外侧由
 // common.TestIsPassingStatus 的纯函数用例覆盖。
-func TestRequestUpstream_FailsOnNon2xx(t *testing.T) {
-	for _, status := range []int{http.StatusMultipleChoices, http.StatusUnauthorized, http.StatusInternalServerError} {
+func TestRequestUpstream_FailsOnNonPassingStatus(t *testing.T) {
+	const upstreamBody = `{"error":{"message":"nope"}}`
+	for _, status := range []int{http.StatusNoContent, http.StatusMultipleChoices, http.StatusUnauthorized, http.StatusInternalServerError} {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(status)
-			_, _ = w.Write([]byte(`{"error":{"message":"nope"}}`))
+			_, _ = w.Write([]byte(upstreamBody))
 		}))
 
 		client, err := providers.New(providers.TypeOpenAI, fmt.Sprintf(`{"base_url":%q,"api_key":"sk-x"}`, srv.URL), "")
@@ -62,10 +65,39 @@ func TestRequestUpstream_FailsOnNon2xx(t *testing.T) {
 			t.Fatalf("status %d 应判失败, got nil", status)
 		}
 		if !errors.As(err, &hcerr) {
-			t.Fatalf("status %d 应回 HealthCheckError（带状态码与原文）, got %T: %v", status, err, err)
+			t.Fatalf("status %d 应回 HealthCheckError, got %T: %v", status, err, err)
 		}
 		if hcerr.StatusCode != status {
 			t.Fatalf("HealthCheckError.StatusCode = %d, want %d", hcerr.StatusCode, status)
+		}
+	}
+}
+
+// TestRequestUpstream_FailureKeepsUpstreamBody 失败形状是本轮「只统一判据、不动失败契约」
+// 的那一半：HealthCheckError.Body 必须带上游原文，否则逐组失败原因（health_check_logs.error
+// 这个排查入口）会回归成光秃状态码。只取有正文的状态码——204/304 的正文被 net/http 吞掉。
+func TestRequestUpstream_FailureKeepsUpstreamBody(t *testing.T) {
+	for _, status := range []int{http.StatusUnauthorized, http.StatusInternalServerError} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(status)
+			_, _ = w.Write([]byte(`{"error":{"message":"nope"}}`))
+		}))
+
+		client, err := providers.New(providers.TypeOpenAI, fmt.Sprintf(`{"base_url":%q,"api_key":"sk-x"}`, srv.URL), "")
+		if err != nil {
+			srv.Close()
+			t.Fatalf("providers.New: %v", err)
+		}
+		err = requestUpstream(context.Background(), client, http.Header{}, "gpt-4.1", chooseTestBody(providers.TypeOpenAI))
+		srv.Close()
+
+		var hcerr *HealthCheckError
+		if !errors.As(err, &hcerr) {
+			t.Fatalf("status %d 应回 HealthCheckError, got %v", status, err)
+		}
+		if !strings.Contains(hcerr.Body, "nope") {
+			t.Fatalf("status %d 的 HealthCheckError.Body = %q, want 带上游原文", status, hcerr.Body)
 		}
 	}
 }

@@ -151,7 +151,7 @@ func runCompletionTestFlow(c *gin.Context, name string, buildBody func(providerT
 		Body:    testBody,
 	})
 	if !out.Passed {
-		// raw_output 口径：拿到上游响应且成功读完（含空 body、非 2xx）才带键；
+		// raw_output 口径：拿到上游响应且成功读完（含空 body、未通过判定）才带键；
 		// BuildReq/连接/读体失败无原文，不带键。
 		if out.Summary == credprobe.ProbeSummaryUpstreamError {
 			fail(out.ErrorType, out.Summary, out.Detail, string(out.Body))
@@ -191,7 +191,7 @@ func runStreamLeg(c *gin.Context, link *testLink, outcome *probeOutcome, fail fa
 	}
 
 	if !probe.Passed {
-		// raw_output 口径与非流式一致：探针交回了上游原文就带键；上游非 2xx 即使回了空体
+		// raw_output 口径与非流式一致：探针交回了上游原文就带键；上游未通过判定即使回了空体
 		// 也带键（空串），让「上游答了但答得空」与「压根没拿到响应」在回包里可区分。
 		if probe.RawOutput != "" || probe.Summary == credprobe.ProbeSummaryUpstreamError {
 			fail(probe.ErrorType, probe.Summary, probe.Detail, probe.RawOutput)

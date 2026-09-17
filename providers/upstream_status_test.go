@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -62,9 +63,11 @@ func TestModels_PassesOn201(t *testing.T) {
 	}
 }
 
-// TestModels_FailsOnNon2xx 对照侧：放宽到 2xx 不含 3xx/4xx/5xx，错误文本仍带状态码与原文。
-func TestModels_FailsOnNon2xx(t *testing.T) {
-	for _, status := range []int{http.StatusUnauthorized, http.StatusTooManyRequests, http.StatusInternalServerError} {
+// TestModels_FailsOnNonPassingStatus 通过集边界：只带上 201，不含 204/3xx/4xx/5xx。
+// 断言打在错误文本上（必须回显状态码）——放宽后「2xx 但不是清单」的可达面变宽，只回一个
+// `EOF` 会让模型同步日志查不出断在哪一段。
+func TestModels_FailsOnNonPassingStatus(t *testing.T) {
+	for _, status := range []int{http.StatusNoContent, http.StatusMultipleChoices, http.StatusUnauthorized, http.StatusInternalServerError} {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(status)
 			_, _ = w.Write([]byte(`{"error":{"message":"denied"}}`))
@@ -81,5 +84,31 @@ func TestModels_FailsOnNon2xx(t *testing.T) {
 		if err == nil {
 			t.Fatalf("status %d 应判失败, got nil", status)
 		}
+		if !strings.Contains(err.Error(), fmt.Sprintf("%d", status)) {
+			t.Fatalf("status %d 的错误须回显状态码, got %q", status, err.Error())
+		}
+	}
+}
+
+// TestModels_PassingStatusWithNonListBody 状态码通过但内容不是清单（被反代改写成登录页
+// 那一类）：判定不看内容（Stage 5 共识第 4 条，已登记残留待办），但解码错误必须带状态码。
+func TestModels_PassingStatusWithNonListBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`<html>login required</html>`))
+	}))
+	defer srv.Close()
+
+	p, err := New(TypeOpenAI, fmt.Sprintf(`{"base_url":%q,"api_key":"k"}`, srv.URL), "")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	_, err = p.Models(t.Context())
+	if err == nil {
+		t.Fatal("HTML 响应体应解码失败, got nil")
+	}
+	if !strings.Contains(err.Error(), "HTTP 200") {
+		t.Fatalf("解码错误应带上游状态码, got %q", err.Error())
 	}
 }

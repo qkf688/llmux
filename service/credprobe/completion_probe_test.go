@@ -65,8 +65,8 @@ func runProbe(t *testing.T, url string, timeout time.Duration) CompletionProbeRe
 	})
 }
 
-// TestRunCompletionProbe_PassedOn200And201 锁「任意 2xx = 通过」：兼容网关回 201
-// 不算失败（旧 testapi 严格 ==200 口径的刻意变更）。
+// TestRunCompletionProbe_PassedOn200And201 锁「通过集 = 200/201」：兼容网关回 201 不算
+// 失败（Stage 5 统一的动因），判据单源 common.IsPassingStatus。
 func TestRunCompletionProbe_PassedOn200And201(t *testing.T) {
 	for _, status := range []int{http.StatusOK, http.StatusCreated} {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -88,8 +88,9 @@ func TestRunCompletionProbe_PassedOn200And201(t *testing.T) {
 	}
 }
 
-// TestRunCompletionProbe_UpstreamErrorClassification 锁非 2xx 归类与统一细节：
+// TestRunCompletionProbe_UpstreamErrorClassification 锁未通过判定的归类与统一细节：
 // error_type 来自状态码映射，Detail 优先解析 error.message 且带状态码行。
+// 204 必须在表里——它曾是「任意 2xx 即通过」的漏网形态（成功但无正文，不该算答复）。
 func TestRunCompletionProbe_UpstreamErrorClassification(t *testing.T) {
 	cases := []struct {
 		status         int
@@ -97,6 +98,7 @@ func TestRunCompletionProbe_UpstreamErrorClassification(t *testing.T) {
 		wantErrorType  string
 		wantDetailPart string
 	}{
+		{http.StatusNoContent, ``, common.ErrorTypeUnknown, "HTTP 状态码: 204"},
 		{http.StatusUnauthorized, `{"error":{"message":"invalid api key"}}`, common.ErrorTypeAuth, "invalid api key\nHTTP 状态码: 401"},
 		{http.StatusTooManyRequests, `{"error":{"message":"rate limited"}}`, common.ErrorTypeValidation, "HTTP 状态码: 429"},
 		{http.StatusInternalServerError, `<html>gateway boom</html>`, common.ErrorTypeProvider, "gateway boom"},

@@ -11,7 +11,7 @@ import (
 )
 
 // 本文件是「一次真实最小 completion 探针」编排的单一来源（BuildReq → 发请求 →
-// Do 错误归类 → 读 body → 非 2xx 归类 → 组装失败细节）。曾有三份近似拷贝
+// Do 错误归类 → 读 body → 未通过判定归类 → 组装失败细节）。曾有三份近似拷贝
 // （testapi 两个 provider 测试 handler、pools #24-B 按凭据测试，外加 structured-output
 // 共四处），归类/失败细节口径开始分叉后收敛于此——下次加同类测试端点只调本函数。
 
@@ -63,8 +63,8 @@ type CompletionProbeResult struct {
 }
 
 // RunCompletionProbe 打一次真实最小 completion 并按统一口径归类结果。
-// 通过判定 = 任意 2xx，判据单源 common.IsPassingStatus（Stage 5：健康检查/诊断/真实
-// 链路共用同一条口径，部分兼容网关会回 201 而非严格 200）。
+// 通过判定 = 200/201，判据单源 common.IsPassingStatus（Stage 5：健康检查/诊断/真实链路
+// 共用同一条口径；带上 201 是因为部分兼容网关会回 201 而非严格 200）。
 func RunCompletionProbe(req CompletionProbeRequest) CompletionProbeResult {
 	if req.Ctx == nil {
 		req.Ctx = context.Background()

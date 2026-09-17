@@ -8,7 +8,7 @@ import (
 )
 
 // TestCredentialProbeBody 锁 #24-B 探针体经 providers 注册表（Metadata.ProbeBody）取且三协议形状正确：
-// 「任何 2xx=passed」的前提是 body 对上游合法——anthropic 缺 max_tokens、responses 用错字段会被上游
+// 「状态码通过判定（200/201）=passed」的前提是 body 对上游合法——anthropic 缺 max_tokens、responses 用错字段会被上游
 // 判 400，把好 key 误判成坏。model 不在此体内（由 BuildReq sjson 注入指定 test_model）。
 // 这是 anthropic/responses 探针体此前 e2e 零覆盖的回归网（e2e 假上游只走 openai chat/completions）。
 func TestCredentialProbeBody(t *testing.T) {

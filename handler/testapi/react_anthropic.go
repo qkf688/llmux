@@ -82,7 +82,8 @@ func runAnthropicReactTest(ctx context.Context, c *gin.Context, httpClient *http
 
 		parsed, err := anthropicsvc.ParseResponse(bodyBytes)
 		if err != nil {
-			return toolCities, finalText.String(), fmt.Errorf("解析 Anthropic 响应失败: %w", err)
+			// 带状态码：通过口径带上 201 后，「状态码通过但内容不是 Anthropic 响应」也会走到这里。
+			return toolCities, finalText.String(), fmt.Errorf("解析 Anthropic 响应失败 (HTTP %d): %w", res.StatusCode, err)
 		}
 		if parsed == nil || len(parsed.Choices) == 0 || parsed.Choices[0].Message == nil {
 			return toolCities, finalText.String(), errors.New("提供商响应为空")

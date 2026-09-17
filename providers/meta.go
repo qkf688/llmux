@@ -22,7 +22,7 @@ type Metadata struct {
 	VisionBody      []byte // OCP-7：图片识别能力测试体（带 64x64 纯红测试图 + 颜色提问，回答命中 red(词边界)/红色 即过，见 testapi/vision.go）
 	HealthCheckBody []byte // OCP-8：健康检查体（可与 TestBody 不同；未知 type 回退 openai）
 	// ProbeBody 是 #24-B「按凭据测试」的最小 completion 探针体（比 TestBody/HealthCheckBody
-	// 更小，只求 2xx 判 key 活性）。按 provider type 注册而非 handler 写协议 switch（OCP-7 同源）：
+	// 更小，只求状态码通过判定（见 common.IsPassingStatus）判 key 活性）。按 provider type 注册而非 handler 写协议 switch（OCP-7 同源）：
 	// 新供应商 type 只需在此登记，未注册则 #24-B 显式判失败而不谎测。model 由 BuildReq 注入，本字段不含 model。
 	ProbeBody []byte
 }

@@ -18,7 +18,7 @@ const providerTestTimeout = 60 * time.Second
 // ProviderTestHandler 关联级连通性测试（GET /api/test/:id，id = ModelWithProvider 主键）。
 //
 // 结果形状见 respond.go：链路解析失败按 400/404 或 passed=false 回包，测试本身
-// （含上游非 2xx）一律 code 200 + data.passed。
+// （含上游未通过判定）一律 code 200 + data.passed。
 //
 // 与三个能力测试共用 runCompletionTestFlow（此前自装一套编排，是同一份链路代码的第二副本）。
 // 唯一的形状差异是成功回包把上游原文放在 message 而非 raw_output——那是 /api/test/:id 的既有

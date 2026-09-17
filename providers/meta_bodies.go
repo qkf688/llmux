@@ -80,7 +80,7 @@ const (
 
 	// --- #24-B 按凭据测试最小 completion 探针体（不含 model，由 BuildReq sjson 注入指定 test_model）---
 	// 刻意压到极小（openai max_tokens:1、anthropic/responses 各带极小上限）：管理员点一次测一条 key，
-	// 花费须可忽略，且任何 2xx 即判 key 活性——与 TestBody/HealthCheckBody 的「故事补全」预算不同。
+	// 花费须可忽略，且状态码通过判定（见 common.IsPassingStatus）即判 key 活性——与 TestBody/HealthCheckBody 的「故事补全」预算不同。
 	probeBodyOpenAI = `{
         "max_tokens": 1,
         "messages": [

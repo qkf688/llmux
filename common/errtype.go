@@ -11,8 +11,9 @@ const (
 	ErrorTypeUnknown    = "unknown"
 )
 
-// ErrorTypeFromStatus 把上游 HTTP 状态码映射到诊断测试的 error_type。非 2xx 的
-// 「打到了上游、上游回了错误」结论都走这里，产出 auth / provider / validation / unknown。
+// ErrorTypeFromStatus 把上游 HTTP 状态码映射到诊断测试的 error_type。未通过判定
+// （口径见 IsPassingStatus）的「打到了上游、上游回了错误」结论都走这里，产出
+// auth / provider / validation / unknown。
 //
 // network / timeout 不在此产出——它们来自 http.Client.Do 的连接失败 / 上下文超时
 // （没有状态码可判），统一由 `service/credprobe.RunCompletionProbe` 在 Do 错误分支用

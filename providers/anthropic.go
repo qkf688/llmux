@@ -149,7 +149,7 @@ func (a *Anthropic) Models(ctx context.Context) ([]Model, error) {
 	}
 	defer res.Body.Close()
 
-	// 通过口径单源（Stage 5）：2xx 即成功，回 201 的兼容网关不再被判失败。
+	// 通过口径单源（Stage 5，common.IsPassingStatus：仅 200/201）：回 201 的兼容网关不再被判失败。
 	if !common.IsPassingStatus(res.StatusCode) {
 		// 读取响应体以获取详细错误信息（上限内，防超大错误页整块进内存）
 		bodyBytes, readErr := common.ReadCappedBody(res.Body)
@@ -160,7 +160,9 @@ func (a *Anthropic) Models(ctx context.Context) ([]Model, error) {
 	}
 	var anthropicModels AnthropicModelsResponse
 	if err := json.NewDecoder(res.Body).Decode(&anthropicModels); err != nil {
-		return nil, err
+		// 状态码留在错误里，理由同 openaiBase.Models（通过口径带上 201 后，「状态码通过
+		// 但内容不是清单」的可达面变宽，只回 EOF 查不出断在哪一段）。
+		return nil, fmt.Errorf("decode model list (HTTP %d): %w", res.StatusCode, err)
 	}
 
 	var modelList ModelList

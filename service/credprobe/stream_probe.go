@@ -25,7 +25,7 @@ import (
 // 此别名保住本包与 handler/testapi 折叠链的既有引用面。
 type SSEFrame = common.SSEFrame
 
-// ProbeSummaryStreamUnsupported 上游 2xx 但没按 SSE 回（含吃掉 stream 参数直接回 JSON 的
+// ProbeSummaryStreamUnsupported 上游状态码已判通过但没按 SSE 回（含吃掉 stream 参数直接回 JSON 的
 // 兼容网关）：是能力缺失而非网络故障，故 error_type 归 validation。
 // 这条文案同时是管理端 ReAct 测试 panic 登记项的根因诊断入口。
 const (
@@ -88,7 +88,7 @@ type StreamProbeResult struct {
 }
 
 // RunStreamProbe 打一次真实流式 completion 并按统一口径归类：注入 stream → BuildReq →
-// Do → 非 2xx 归类 → Content-Type 硬门 → 逐帧读取 → 耗时统计。
+// Do → 未通过判定归类 → Content-Type 硬门 → 逐帧读取 → 耗时统计。
 func RunStreamProbe(req StreamProbeRequest) (out StreamProbeResult) {
 	if req.Ctx == nil {
 		req.Ctx = context.Background()
@@ -155,8 +155,8 @@ func RunStreamProbe(req StreamProbeRequest) (out StreamProbeResult) {
 		}
 	}
 
-	// Content-Type 硬门放在 2xx 之后：非 2xx 无论什么形状都是「上游回了错误」，
-	// 归状态码更有诊断价值；只有 2xx 时才需要区分「回了内容但不是流」。
+	// Content-Type 硬门放在通过判定之后：未通过的状态码无论什么形状都是「上游回了错误」，
+	// 归状态码更有诊断价值；只有判定通过后才需要区分「回了内容但不是流」。
 	if !common.IsEventStreamContentType(res.Header.Get("Content-Type")) {
 		bodyBytes, bodyErr := common.ReadCappedBody(res.Body)
 		actualContentType := strings.TrimSpace(res.Header.Get("Content-Type"))

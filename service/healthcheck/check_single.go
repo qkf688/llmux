@@ -138,7 +138,7 @@ func (h *HealthChecker) doCheck(ctx context.Context, provider *models.Provider, 
 }
 
 // requestUpstream 发一次检测请求并判定状态码：未通过（口径见 common.IsPassingStatus，
-// 2xx 即通过）一律带原文回传（HealthCheckError）。
+// 仅 200/201）一律带原文回传（HealthCheckError）。
 func requestUpstream(ctx context.Context, client providers.Provider, headers http.Header, model string, body []byte) error {
 	req, err := client.BuildReq(ctx, headers, model, body)
 	if err != nil {

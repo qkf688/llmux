@@ -12,7 +12,7 @@ import (
 const upstreamDetailMaxBytes = 512
 
 // upstreamDiagnosticReadLimitBytes 探针 / 健康检查 / 连通测试端点读取上游响应体的字节上限（1 MiB）。
-// 这些路径读响应体只用于：非 2xx 时提取 ≤512B 的人读错误细节，或解析极小的 completion 探测/测试
+// 这些路径读响应体只用于：未通过判定（见 IsPassingStatus）时提取 ≤512B 的人读错误细节，或解析极小的 completion 探测/测试
 // 结果——通过与否只看状态码、判定不依赖响应全文，且输出被探针 prompt / strict-schema 天然约束到
 // 几十字节，合法响应远小于此值。上限只挡上游异常/被篡改时返回的超大响应整块进内存，不影响任何
 // 正常结论——避免「先无界全量读、再截到 512B」的纯浪费与大响应内存风险。
@@ -52,7 +52,7 @@ func ExtractUpstreamErrorDetail(bodyBytes []byte) string {
 	return truncateUpstreamDetail(detail)
 }
 
-// UpstreamErrorDetail 非 2xx 结论的完整细节：提取内容 + 状态码行。状态码必须出现在回显
+// UpstreamErrorDetail 未通过结论（见 IsPassingStatus）的完整细节：提取内容 + 状态码行。状态码必须出现在回显
 // 文本里（改造前它由 ErrorWithHttpStatus 的 code 承载，收敛进 data.error 后不能丢这个事实）。
 func UpstreamErrorDetail(statusCode int, bodyBytes []byte) string {
 	return ExtractUpstreamErrorDetail(bodyBytes) + "\nHTTP 状态码: " + strconv.Itoa(statusCode)

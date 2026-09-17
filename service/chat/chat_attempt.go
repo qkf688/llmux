@@ -139,8 +139,11 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		return singleProviderAttemptResult{CredentialFailure: true, RemoveWeight: true, RemovePriority: true}
 	}
 
-	// 通过口径单源（Stage 5）：2xx 即进入正常回写链路。2xx 但无响应体（如 204）会在
-	// 后续解析处报「解析失败」——与现状「200 但空体」同形，不是本次新增的盲区。
+	// 通过口径单源（Stage 5，common.IsPassingStatus）：仅 200/201 进正常回写。
+	// 刻意不含 204/206 这类「成功但无正文」——直通路径（客户端与上游协议形状相同）没有
+	// 任何解析步骤，判通过就等于把空 body 直接回给调用方并走成功副作用（加权、清零
+	// 失败计数、健康检查 autoEnable）。200/201 且正文为空的残余盲区属内容有效性范畴，
+	// Stage 5 前对 200 同样存在，见 framework-conventions §6 与已登记残留待办。
 	if !common.IsPassingStatus(res.StatusCode) {
 		return handleNonOKProviderResponse(input.Ctx, res, logID, logRawOptions, logSnapshot, input.ModelWithProvider, input.Provider, input.Start, input.Selection.Credential)
 	}

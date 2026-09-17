@@ -1,3 +1,4 @@
+import { rowsToHeaders } from "@/lib/header-rows";
 import type { FormValues } from "../form-schema";
 import { fromTriState } from "../utils/tri-state";
 
@@ -8,13 +9,9 @@ export const buildAssociationPayload = (
     providerModel?: string;
   }
 ) => {
-  const headers: Record<string, string> = {};
-  (values.customer_headers || []).forEach(({ key, value }) => {
-    const trimmedKey = key.trim();
-    if (trimmedKey) {
-      headers[trimmedKey] = value ?? "";
-    }
-  });
+  // 折叠语义与 api-keys 弹窗共用单源（@/lib/header-rows）；语法/撞名的最终判定
+  // 在后端写入闸 common/outboundheaders.go，两域同一口径（4a）。
+  const headers = rowsToHeaders(values.customer_headers || []);
 
   return {
     model_id: values.model_id,

@@ -1,8 +1,10 @@
-package apikeys
+package common
 
 import "testing"
 
 // 净化器直测（表驱动）：HTTP 契约测试走不到的字符边界在此钉死。
+// 原为 handler/apikeys/headers_guard_test.go，随净化器下沉 common 一并迁移
+// （apikeys 与 associations 两域的写入闸契约测试仍各自打在 HTTP 层）。
 func TestSanitizeOutboundHeaders(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -29,7 +31,7 @@ func TestSanitizeOutboundHeaders(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := sanitizeOutboundHeaders(tc.input)
+			got, err := SanitizeOutboundHeaders(tc.input)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("want error, got %v", got)

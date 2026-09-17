@@ -31,6 +31,7 @@ webui/src/
 ├── lib/animations/         # 动效 token 单一来源（EASING / NUMBER_ANIMATION_MS）
 ├── lib/api/                # core client + modules（auth/catalog/logs/system；auth 走全路径 import 不进 index 桶）
 ├── lib/clipboard.ts        # 剪贴板写入跨域单源（三级降级 + 普通/机密两个提示入口）
+├── lib/header-rows.ts      # 出站自定义头「行 ↔ Record」折叠与预设互斥单源（api-keys 与关联两弹窗共用，4a；语法权威在服务端 common/outboundheaders.go）
 ├── hooks/                  # 含 hooks/api 查询封装
 ├── stores/                 # Zustand（含 core/updater）
 └── test/

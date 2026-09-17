@@ -9,7 +9,7 @@
  * 适用渠道：Anthropic-Beta/Version 两行在**原生 anthropic 供应商**会被 setAnthropicBeta
  * 清除/被 provider 配置覆写（providers 权威层最高），预设主要对 openai 兼容中转生效。
  */
-import type { HeaderRow } from "../utils/header-fields";
+import type { HeaderRow } from "@/lib/header-rows";
 
 export const CODEX_HEADER_PRESET: HeaderRow[] = [
   { key: "Originator", value: "codex_cli_rs" },

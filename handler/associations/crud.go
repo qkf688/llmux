@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/httpresp"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/repository"
@@ -66,7 +67,15 @@ func CreateModelProvider(c *gin.Context) {
 		}
 	}
 
-	customerHeaders := req.CustomerHeaders
+	// 写入闸与 apikeys 同一份净化器（common 下沉，两域口径单源，4a）：
+	// 非法名/控制字符值/规范化撞名当场 400，杜绝脏值入库后出站非确定或
+	// Client.Do 失败误伤凭据冷却/权重。
+	cleanHeaders, err := common.SanitizeOutboundHeaders(req.CustomerHeaders)
+	if err != nil {
+		httpresp.BadRequest(c, "invalid headers: "+err.Error())
+		return
+	}
+	customerHeaders := cleanHeaders
 	if customerHeaders == nil {
 		customerHeaders = map[string]string{}
 	}
@@ -133,7 +142,12 @@ func UpdateModelProvider(c *gin.Context) {
 
 	// customer_headers 保持原样：nil 时 struct Updates 跳过该字段（部分更新语义，保留旧值）。
 	// 注意与 Create 路径不同：Create 需要空 map 兜底（新行无旧值可保留）。
-	customerHeaders := req.CustomerHeaders
+	// 过闸与 Create 同一份净化器；nil 经 Sanitize 仍为 nil，部分更新语义不受影响。
+	customerHeaders, err := common.SanitizeOutboundHeaders(req.CustomerHeaders)
+	if err != nil {
+		httpresp.BadRequest(c, "invalid headers: "+err.Error())
+		return
+	}
 
 	ctx := c.Request.Context()
 	if _, err := repos().ModelWithProvider.Get(ctx, uint(id)); err != nil {

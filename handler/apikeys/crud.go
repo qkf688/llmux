@@ -125,7 +125,7 @@ func CreateApiKey(c *gin.Context) {
 		httpresp.InternalErrorMessage(c, "failed to encrypt api key", err)
 		return
 	}
-	cleanHeaders, err := sanitizeOutboundHeaders(req.Headers)
+	cleanHeaders, err := common.SanitizeOutboundHeaders(req.Headers)
 	if err != nil {
 		httpresp.BadRequest(c, "invalid headers: "+err.Error())
 		return
@@ -200,7 +200,7 @@ func UpdateApiKey(c *gin.Context) {
 	}
 	if req.Headers != nil {
 		// 与 Create 同一写入闸（语法关 + 规范化 + 重名拒斥），两入口不留裸通道
-		cleanHeaders, err := sanitizeOutboundHeaders(*req.Headers)
+		cleanHeaders, err := common.SanitizeOutboundHeaders(*req.Headers)
 		if err != nil {
 			httpresp.BadRequest(c, "invalid headers: "+err.Error())
 			return

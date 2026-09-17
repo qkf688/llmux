@@ -30,8 +30,8 @@ import {
 import { copySecretWithToast } from "@/lib/clipboard";
 import type { ApiKeyItem } from "@/lib/api";
 import { ALL_HEADER_PRESETS, CODEX_HEADER_PRESET, CLAUDE_CODE_HEADER_PRESET } from "../../constants/header-presets";
-import type { HeaderRow } from "../../utils/header-fields";
-import { applyPresetRows, headersToRows, rowsToHeaders } from "../../utils/header-fields";
+import type { HeaderRow } from "@/lib/header-rows";
+import { applyPresetRows, headersToRows, rowsToHeaders } from "@/lib/header-rows";
 
 /** handler/apikeys 解密失败降级值（与 card-list / credentialcrypto.MaskStored 同口径） */
 const MASKED_FALLBACK = "****";

@@ -56,6 +56,10 @@ models.ModelWithProvider
 
 `handler/associations` 的 Create / Update / List 直接序列化 `models.ModelWithProvider`，对外键名为 **PascalCase**（实体多数字段无 json tag），前端按同名 interface 消费（`webui/src/lib/api/modules/catalog/model-providers.ts`）。三态字段（`ToolCall` / `StructuredOutput` / `Image` / `WithHeader` / `Status` / `CustomerHeaders` / `MaxTokens` / `SupportsThinking` / `ThinkingLevels`）的 nil 必须序列化成 JSON `null` 且键保留——键缺失会让前端把「继承」误判成 override 并回写错误值。该契约由 `crud_response_shape_test.go` 的 `modelWithProviderResponseKeys` 表在响应体 JSON 上断言（gjson `Exists()` + 类型），实体增删字段时同步加/删一行即可。
 
+### `customer_headers` 写入闸（4a，与 api-keys 同源）
+
+Create / Update 对 `req.CustomerHeaders` 走 `common.SanitizeOutboundHeaders`（`common/outboundheaders.go`），与 api-keys key 级头**同一份净化器**、两域口径禁止分叉：① 名规范化为 MIME Title-Case（存储/回显/发送一套样子）；② 值拒 CR/LF/NUL 等控制字符；③ 规范化后撞名整体拒绝（Go map 迭代序随机，「后者赢」对 map 输入不可确定，唯一确定语义是拒）。这是语法关不是头名黑名单——Cookie / Authorization 等合法名照放（凭据头的最终权威见 api-keys.md §5 与 providers.md）。拒绝经 `httpresp.BadRequest`（HTTP 200 + 信封 code=400，message 指明哪条头与原因），被拒不落库、不改旧值。存量脏行按开发阶段原则直接修数据，**禁止**为兼容写发送侧适配层。前端两弹窗折叠共用 `@/lib/header-rows`（`rowsToHeaders` / `headersToRows`），只校验到形状层（空名行跳过不打断输入），语法权威在服务端。契约测试：`customer_headers_guard_test.go`（HTTP 层断 400、不落库、规范化回显）。
+
 ## 5. 特殊约定
 
 - chat 与 healthcheck 将关联行视为选路与启停的数据源；本模块是配置写入口

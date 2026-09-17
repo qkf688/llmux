@@ -1,4 +1,4 @@
-package apikeys
+package common
 
 import (
 	"fmt"
@@ -6,16 +6,20 @@ import (
 	"strings"
 )
 
-// sanitizeOutboundHeaders 是 key 级出站头的写入闸（Create/PATCH 共用）：
+// SanitizeOutboundHeaders 是「可出站自定义头」的写入口净化闸，apikeys（key 级头）与
+// associations（关联级 customer_headers）两域共用（下沉依据 AGENTS 4.4：跨 2 域复用的
+// 纯逻辑必须进 common，两域永保同一口径）。Create/PATCH 写入点必须调用，不留裸通道。
+//
+// 规则：
 // ① 名必须是 RFC 7230 token 并规范化为 MIME Title-Case（与 Go client 出站 Set 的
 // 规范化同口径，存储/回显/发送三者不再两套样子）；② 规范化后撞名直接拒绝——
-// Go map 迭代序随机，裸 API 提交「x-app + X-App」时装配层 Set 顺序不确定，
+// Go map 迭代序随机，提交「x-app + X-App」时装配层 Set 顺序不确定，
 // 「后者赢」只在有序输入里成立，对 map 输入唯一确定的语义是拒绝；
 // ③ 值拒控制字符（对齐 net/http/httpguts 的出站判据）——非法值入库会让
 // Client.Do 以 invalid header field value 失败，落入网络失败分支误伤无关
 // 供应商的冷却/权重，管理员笔误的代价被放大成全局故障。
-// 这是语法关不是头名黑名单：Cookie/Authorization 等合法名照放（方案 §2 裁决）。
-func sanitizeOutboundHeaders(headers map[string]string) (map[string]string, error) {
+// 这是语法关不是头名黑名单：Cookie/Authorization 等合法名照放（多 api-key 方案 §2 裁决）。
+func SanitizeOutboundHeaders(headers map[string]string) (map[string]string, error) {
 	if headers == nil {
 		return nil, nil
 	}

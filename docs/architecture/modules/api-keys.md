@@ -41,7 +41,7 @@ webui/src/routes/api-keys/                      # 「API Keys」管理页（#5�
 | `repository.ApiKeyRepo` | 加解密不在 repo 层（存取已加密行，与 CredentialRepo 同边界）；空 Key/KeyHash 的 Create 显式拒绝（防占死唯一索引空槽）。 |
 | `common.NormalizeCallerKeyValue / GenerateCallerKeyValue` | 规则跨 handler/apikeys 与 service/auth（bootstrap default key）两域共用，故落 common；产物恒满足「带前缀且 ≥16」。 |
 | /v1 调用方鉴权（`middleware.AuthAPIKey`） | 按 `credentialcrypto.HashKey(明文)` SQL 点查 `api_keys.api_key_hash`（无内存索引）；放行注入 owner（`ContextKeyUser`）与 `CallerKey{ID,Name,Headers}` 快照（`ContextKeyCallerKey`，#4-3/#6 共用；Headers 浅拷贝自 `api_keys.headers` 明文 JSON 列直读，不经 cipher，定入 context 即定格）；401 分态「missing / Invalid API key / API key is disabled / owner not found」，仓储非 not-found 故障回 500；鉴权不解密、不依赖 `credentialcrypto.Default()` 装配态（hash 为纯 SHA-256 单源 `HashKey`）。 |
-| key 级出站头装配（#6） | `CallerKey.Headers` → `handler/v1.newReqMeta` → `models.ReqMeta.Headers`（整包透传，读方与签名零改动）→ `chatcore.BuildHeaders` **唯一装配点**按四层优先级链注入（入站白名单 < key 级 < 关联级；撞名关联级赢）。写入闸在 apikeys handler：名规范化为 MIME Title-Case、非法名/控制字符值 400、规范化后重名拒绝（Go map 迭代序随机，「后者赢」对 map 输入不可确定，见 `headers_guard.go`）；这是语法关不是头名黑名单。 |
+| key 级出站头装配（#6） | `CallerKey.Headers` → `handler/v1.newReqMeta` → `models.ReqMeta.Headers`（整包透传，读方与签名零改动）→ `chatcore.BuildHeaders` **唯一装配点**按四层优先级链注入（入站白名单 < key 级 < 关联级；撞名关联级赢）。写入闸在 `common.SanitizeOutboundHeaders`（`common/outboundheaders.go`，与 associations 关联级头两域同源，4a）：名规范化为 MIME Title-Case、非法名/控制字符值 400、规范化后重名拒绝（Go map 迭代序随机，「后者赢」对 map 输入不可确定）；这是语法关不是头名黑名单。 |
 | bootstrap 首启 | users 空时 admin + `default` key 同事务创建（防半套状态；不带 headers，切片 B 零改动）；key 明文仅 stderr 打印一次（不进 slog 收集器，同密码先例）。 |
 
 ## 5. 安全边界
@@ -50,5 +50,5 @@ webui/src/routes/api-keys/                      # 「API Keys」管理页（#5�
 - 启停/删除不打断已鉴权通过的在途请求（octopus 同款语义，方案 §2）。
 - **key 级头不参与诊断/连通测试**（#6 定案边界）：testapi/healthcheck 链路结构上不带调用 key 上下文，管理端「测试」按钮的结果**不能**证明 key 级头生效；验证靠真实流量 + 日志「密钥」列归因（弹窗文案已写明）。做预览端点会演化出第二套真相，方案 §6 已关。
 - **key 级头按 key 全量扇出**（审查 W2 补记）：headers 与供应商无关，注入该 key 能路由到的**每一个**上游（虚拟路径同理）——勿在 key 级头存放某供应商专用凭据/头值。`Authorization` 对 openai/bearer 式供应商被凭据覆写（死通道）；**anthropic 默认 `x-api-key` 认证分支不清理 Authorization**（providers/anthropic.go），会原样送出——「恒被覆写」不成立，措辞勿回退成绝对断言；x-api-key 分支补 `Del("Authorization")` 与否涉关联级存量行为，已登 find-issues 待裁。
-- `api_keys.headers` 是**明文** JSON 列（与 Key 列的 AES-GCM 密文不同构）：伪装客户端头族属展示配置不是凭据，鉴权 FindByHash 直读；管理员显式通道**名不设黑名单**但过语法关（规范化 + 非法名/CRLF 值 400，`headers_guard.go`，审查 W3——防误填打挂该 key 全量流量并误伤无关凭据冷却）。
+- `api_keys.headers` 是**明文** JSON 列（与 Key 列的 AES-GCM 密文不同构）：伪装客户端头族属展示配置不是凭据，鉴权 FindByHash 直读；管理员显式通道**名不设黑名单**但过语法关（规范化 + 非法名/CRLF 值 400，`common/outboundheaders.go`，与关联级头同源，4a——防误填打挂该 key 全量流量并误伤无关凭据冷却）。
 - PATCH 体显式 `"headers": null` 等价**键缺席=不改**（Go json 对 null 置 nil 指针，反直觉但成文）；想清空必须传 `{}`。

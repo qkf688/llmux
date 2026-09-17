@@ -1,8 +1,10 @@
 import { z } from "zod";
 
+// 头行只校验到形状层（与 api-keys 弹窗同口径，4a）：空名行由折叠转换跳过、
+// 不打断保存；语法/撞名判定权威在后端 common/outboundheaders.go，拒收时 400 文案回显。
 export const headerPairSchema = z.object({
-  key: z.string().min(1, { message: "请求头键不能为空" }),
-  value: z.string().default(""),
+  key: z.string(),
+  value: z.string(),
 });
 
 export const formSchema = z.object({

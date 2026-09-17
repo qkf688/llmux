@@ -1,9 +1,14 @@
 /**
- * headers 编辑区纯函数（无 React、无 IO，副作用留在弹窗）：
+ * 出站自定义头编辑区纯函数（无 React、无 IO，副作用留在弹窗）。
  * Record ↔ 行数组双向转换 + 预设互斥应用（按名覆盖合并）。
+ *
+ * 两个域共用（api-keys 弹窗与 model-providers 关联弹窗）：**折叠语义单源**——
+ * 空名行跳过、同名（大小写不敏感）后者赢且键名取后者，两弹窗不再各折各的。
  * HTTP 头名大小写不敏感（RFC 9110），三处判等统一 toLowerCase——
  * 与后端 chatcore.BuildHeaders 的 header.Set 规范化行为同口径。
- * 注：后端 apikeys 写入闸（headers_guard.go）是最终防线，此处去重只优化 UI 语义。
+ * 最终防线在后端写入闸 common/outboundheaders.go（SanitizeOutboundHeaders，
+ * 语法关 + 规范化 Title-Case + 撞名拒绝），此处折叠与去重只优化 UI 语义：
+ * 前端故意只校验到形状层（半截输入不打断保存），语法错误由服务端 400 回显。
  */
 
 export type HeaderRow = { key: string; value: string };

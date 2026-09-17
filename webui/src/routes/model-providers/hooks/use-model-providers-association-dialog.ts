@@ -1,5 +1,6 @@
 import type { UseFormReturn } from "react-hook-form";
 import type { ModelWithProvider, Settings } from "@/lib/api";
+import { headersToRows } from "@/lib/header-rows";
 import { toTriState } from "../utils/tri-state";
 import type { Updater } from "@/stores/core/updater";
 import type { FormValues } from "../form-schema";
@@ -28,10 +29,7 @@ export function useModelProvidersAssociationDialog({
   const openEditDialog = (association: ModelWithProvider) => {
     setEditingAssociation(association);
     setSelectedProviderModels([]);
-    const headerPairs = Object.entries(association.CustomerHeaders || {}).map(([key, value]) => ({
-      key,
-      value,
-    }));
+    const headerPairs = headersToRows(association.CustomerHeaders);
     form.reset({
       model_id: association.ModelID,
       provider_model: association.ProviderModel,

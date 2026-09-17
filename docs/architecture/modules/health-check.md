@@ -40,7 +40,7 @@ models.HealthCheckLog
 
 - 探针 body 来自 `providers.Metadata`，不在 healthcheck 硬编码各供应商协议细节
 - **打上游走诊断口径装配（#21）**：`doCheck` 经 `channel.Assemble` + `SelectPrimaryEndpoint`（协议 = `ProtocolOfType(Provider.Type)`）+ `GroupCandidates`（全部组、ID ASC，不按白名单过滤）+ `FirstUsableCredential`（组内首个可用）+ `NewClientFromSelection`，**任一分组通过即判健康**——本处失败的代价是自动禁用关联，「首个分组的 key 坏了」不等于关联不可用（生产路由本来会故障转移）；成功即短路不多花钱，失败请求不产生 token 费用。刻意不碰 `DefaultSelector()`：诊断流量要可复现，且一轮巡检不得推进生产轮询指针
-- **通过口径与全项目同源**（Stage 5，2026-09-17）：`requestUpstream` 判「上游是否答对」走 `common.IsPassingStatus`（2xx 即通过），不再自写 `== 200`。这条判定在本链路的代价不是报错而是**自动禁用关联**（`handleCheckResult` 累计到阈值即停用），旧口径把回 201 的兼容网关判死、线上静默少一条可用线路，且停用原因不入库。失败仍回 `HealthCheckError`（带状态码 + 上游原文）供分组级排障——**只统一判据，不统一失败形状**（诊断侧的 `error_type` 分类语义不引进本模块）
+- **通过口径与全项目同源**（Stage 5，2026-09-17）：`requestUpstream` 判「上游是否答对」走 `common.IsPassingStatus`（**通过集 = 200 与 201**），不再自写 `== 200`。这条判定在本链路的代价不是报错而是**自动禁用关联**（`handleCheckResult` 累计到阈值即停用），旧口径把回 201 的兼容网关判死、线上静默少一条可用线路，且停用原因不入库。失败仍回 `HealthCheckError`（带状态码 + 上游原文）供分组级排障——**只统一判据，不统一失败形状**（诊断侧的 `error_type` 分类语义不引进本模块）。本模块只看状态码、不看正文：回 200 但正文为空/非法仍判健康，属已登记的残留盲区（`framework-conventions.md §6` 边界①）
 - **逐组失败原因合并进 `health_check_logs.error`**（带分组名）：该字段是排查入口，只报「failed」等于丢掉线索
 - **Hook 解耦范围（现状）**：仅权重/优先级调整走 `AdjustmentHooks`；关联启停/失败计数仍在 healthcheck 结果路径内写库——不是「全部副作用都经 Hook」
 - 禁止 healthcheck 直接 import `service/adjustment` 或 `service/chat` 形成环；Hook 为包级注入（实现在 `service/adjustment` 的 `init`）

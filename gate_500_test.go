@@ -20,7 +20,7 @@ import (
 func TestGate500NoLeakPaths(t *testing.T) {
 	// 遍历（含空转哨兵）全部门共用，见 gate_sources_test.go——门扫不到文件就等于没执法，
 	// 这类缺陷必须只修一次。
-	files := gateSourceFiles(t, 100)
+	files := gateSourceFiles(t, 250)
 
 	// message 参数 = 第一个逗号后到下一个逗号前的片段；允许字面量与纯标识符（action、ie.Message）。
 	reStaticCall := regexp.MustCompile(`httpresp\.InternalErrorMessage\(\w+,\s*([^,)]*)`)

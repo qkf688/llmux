@@ -21,7 +21,7 @@ type Provider struct {
 	// WhereModelEndpointMatches，写法 `model_endpoint IS NULL OR model_endpoint = ?`，
 	// 禁止直接 `model_endpoint = ?`（会漏掉 NULL 行）。新增依赖此字段的查询请勿另起 inline 写法。
 	ModelFilterEnabled *bool   // 是否启用模型过滤（按规则过滤上游模型）
-	AuthType           *string // 认证方式：anthropic 默认 x-api-key、openai 系默认 bearer（4b auth_type 单源执法），可取 bearer / x-api-key
+	AuthType           *string // 认证方式列：**anthropic 专属展示副本**（运行时真值在 config.auth_type）；openai 系的认证方式在 config.openai_auth_type，不落本列（4b 拆键）
 	Blacklisted        *bool   `gorm:"default:false" json:"blacklisted"` // 是否拉黑（拉黑后不参与自动关联）
 	// Protocols 勾选的出站协议（设计定案第 2 节），取值见 consts.Protocol*。
 	// 存量 Provider 由启动迁移按 type 派生填充（见 migrate_channels.go），

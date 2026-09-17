@@ -25,7 +25,7 @@ type Anthropic struct {
 	Beta         string   `json:"beta"`
 	CustomModels []string `json:"custom_models"`
 	Proxy        string   `json:"proxy"`
-	AuthType     string   `json:"auth_type"` // 认证方式 x-api-key（默认）| bearer，providers/auth.go 唯一执法点（4b）
+	AuthType     string   `json:"auth_type"` // 认证方式 x-api-key（默认）| bearer，providers/auth.go 唯一执法点（4b）。本键归 anthropic 独占；openai 系用独立键 openai_auth_type（混合协议供应商按协议拆方言，审查 P0）
 }
 
 func init() {

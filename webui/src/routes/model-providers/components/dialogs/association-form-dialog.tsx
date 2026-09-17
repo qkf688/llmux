@@ -413,45 +413,42 @@ export function AssociationFormDialog({
                         </Button>
                       </div>
                       <div className="space-y-2">
-                        {headerFields.map((header, index) => {
-                          const errorMsg = form.formState.errors.customer_headers?.[index]?.key?.message;
-                          return (
-                            <div key={header.id} className="space-y-1">
-                              <div className="flex gap-2 items-center">
-                                <div className="flex-1">
-                                  <Input
-                                    placeholder="Header Key"
-                                    value={headerValues[index]?.key ?? ""}
-                                    onChange={(event) => {
-                                      const next = [...headerValues];
-                                      next[index] = { ...next[index], key: event.target.value };
-                                      field.onChange(next);
-                                    }}
-                                  />
-                                </div>
-                                <div className="flex-1">
-                                  <Input
-                                    placeholder="Header Value"
-                                    value={headerValues[index]?.value ?? ""}
-                                    onChange={(event) => {
-                                      const next = [...headerValues];
-                                      next[index] = { ...next[index], value: event.target.value };
-                                      field.onChange(next);
-                                    }}
-                                  />
-                                </div>
-                                <Button type="button" size="sm" variant="destructive" onClick={() => removeHeader(index)}>
-                                  删除
-                                </Button>
+                        {headerFields.map((header, index) => (
+                          <div key={header.id} className="space-y-1">
+                            <div className="flex gap-2 items-center">
+                              <div className="flex-1">
+                                <Input
+                                  placeholder="Header Key"
+                                  value={headerValues[index]?.key ?? ""}
+                                  onChange={(event) => {
+                                    const next = [...headerValues];
+                                    next[index] = { ...next[index], key: event.target.value };
+                                    field.onChange(next);
+                                  }}
+                                />
                               </div>
-                              {errorMsg && <p className="text-sm text-destructive">{errorMsg}</p>}
+                              <div className="flex-1">
+                                <Input
+                                  placeholder="Header Value"
+                                  value={headerValues[index]?.value ?? ""}
+                                  onChange={(event) => {
+                                    const next = [...headerValues];
+                                    next[index] = { ...next[index], value: event.target.value };
+                                    field.onChange(next);
+                                  }}
+                                />
+                              </div>
+                              <Button type="button" size="sm" variant="destructive" onClick={() => removeHeader(index)}>
+                                删除
+                              </Button>
                             </div>
-                          );
-                        })}
+                          </div>
+                        ))}
                         <p className="text-sm text-muted-foreground">{"优先级: 提供商配置 > 自定义请求头 > 透传请求头"}</p>
                         <p className="text-sm text-muted-foreground">
-                          头名/头值非法或只差大小写撞名会被保存拦截；凭据头（Authorization /
-                          x-api-key）归供应商认证配置专属，配了也不生效（被供应商凭据覆写或按其认证方式自动删除）。
+                          只差大小写的同名头按「后填者赢」合并为一条；头名/头值非法会被保存拦截。
+                          凭据头（Authorization / x-api-key）归供应商认证配置专属，配了也不生效
+                          （被供应商凭据覆写或按其认证方式自动删除）。
                         </p>
                       </div>
                     </FormItem>

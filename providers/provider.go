@@ -21,6 +21,10 @@ type Model struct {
 }
 
 type Provider interface {
+	// BuildReq 构造上游请求。约定（4b）：实现会以传入 header 为**基底就地修改**
+	// （覆写 Content-Type / anthropic-beta、按认证方式 Set 凭据头并 Del 对侧）——
+	// 调用方传出的 map 在 BuildReq 之后不得再复用（要复用先 Clone，参见
+	// credprobe.stream_probe / completion_probe 的姿势）。
 	BuildReq(ctx context.Context, header http.Header, model string, rawData []byte) (*http.Request, error)
 	Models(ctx context.Context) ([]Model, error)
 	GetProxy() string

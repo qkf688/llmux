@@ -23,6 +23,7 @@ export function applyProviderTemplateDefaults(
     version: parsed.version,
     beta: parsed.beta,
     auth_type: parsed.auth_type,
+    openai_auth_type: parsed.openai_auth_type,
   });
 
   for (const [name, value] of Object.entries(extras)) {

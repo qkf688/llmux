@@ -7,13 +7,13 @@ const (
 	configTemplateOpenAI = `{
 			"base_url": "https://api.openai.com/v1",
 			"api_key": "YOUR_API_KEY",
-			"auth_type": "bearer"
+			"openai_auth_type": "bearer"
 		}`
 
 	configTemplateOpenAIRes = `{
 			"base_url": "https://api.openai.com/v1",
 			"api_key": "YOUR_API_KEY",
-			"auth_type": "bearer"
+			"openai_auth_type": "bearer"
 		}`
 
 	configTemplateAnthropic = `{

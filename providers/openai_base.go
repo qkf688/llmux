@@ -22,7 +22,11 @@ type openaiBase struct {
 	Proxy        string   `json:"proxy"`
 	// AuthType 认证方式：bearer（默认，空值=现状）| x-api-key（Stage 4b，providers/auth.go
 	// 单源执法：只发选定方式，对侧凭据头在构造点删除，自定义头配不动）。
-	AuthType     string `json:"auth_type"`
+	// config 键独立为 openai_auth_type（审查 P0 裁决）：auth_type 键归 anthropic 独占——
+	// 混合协议供应商的同一份 config 会喂给两家 adapter，旧行里 auth_type=x-api-key 是
+	// anthropic 方言，若 openai 也读它就会在无人保存时把 openai 端点静默翻转成 x-api-key。
+	// 按协议拆键后各 adapter 只认自己的键，openai 系存量行永远回退 bearer。
+	AuthType     string `json:"openai_auth_type"`
 	endpointPath string // 注入差异点：chat/completions 或 responses
 }
 

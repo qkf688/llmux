@@ -96,7 +96,7 @@ describe("buildConfigFromForm - 协议驱动的 adapter 字段", () => {
     expect(config.auth_type).toBe("bearer");
   });
 
-  it("未勾选 anthropic：config 不含 anthropic 专有 version/beta（不泄漏），auth_type 按 openai 默认写入", () => {
+  it("未勾选 anthropic：config 不含 anthropic 的 auth_type/version/beta（4b 拆键互不串方言），openai 方言写 openai_auth_type", () => {
     const config = JSON.parse(
       buildConfigFromForm(
         formValues({
@@ -110,18 +110,18 @@ describe("buildConfigFromForm - 协议驱动的 adapter 字段", () => {
     );
     expect(config).not.toHaveProperty("version");
     expect(config).not.toHaveProperty("beta");
-    // 4b：openai 系同样收 auth_type（bearer 显式落 config）；
-    // version/beta 仍是 anthropic 专有。
-    expect(config.auth_type).toBe("bearer");
+    // auth_type 键归 anthropic 独占（存量混合行里的 x-api-key 不会翻转 openai 端点，P0 回归钉）
+    expect(config).not.toHaveProperty("auth_type");
+    expect(config.openai_auth_type).toBe("bearer");
   });
 
-  it("主类型 openai、auth_type 未显式选择：提交回退 openai 默认 bearer（不带上 anthropic 的 x-api-key）", () => {
+  it("主类型 openai、方言未显式选择：提交回退 openai 默认 bearer（不带上 anthropic 的 x-api-key）", () => {
     const config = JSON.parse(
       buildConfigFromForm(
         formValues({ type: "openai", protocols: ["openai"], auth_type: undefined })
       )
     );
-    expect(config.auth_type).toBe("bearer");
+    expect(config.openai_auth_type).toBe("bearer");
   });
 });
 
@@ -371,11 +371,12 @@ describe("detailToFormValues - 详情掩码回填（对齐号池 KeyMasked）", 
     ]);
   });
 
-  it("openai 型 config 缺 auth_type（存量行）：回填 bearer，而不是 anthropic 的 x-api-key（4b）", () => {
+  it("openai 型 config 缺方言键（存量行）：回填 openai_auth_type=bearer，anthropic 键保持空（4b 拆键）", () => {
     const values = detailToFormValues(
       detail({ Type: "openai", Protocols: ["openai"], Config: '{"base_url":"https://x"}' }),
     );
-    expect(values.auth_type).toBe("bearer");
+    expect(values.openai_auth_type).toBe("bearer");
+    expect(values.auth_type).toBe("");
   });
 
   it("anthropic 型 config 缺 auth_type：回填类型默认 x-api-key", () => {

@@ -39,7 +39,7 @@ handler/importexport/ / handler/database/
 # test
 handler/testapi/ / handler/testsupport/ / service/credprobe/（completion_probe.go 非流式探针 + stream_probe.go 流式探针）
 # shared
-httpresp/ / handler/httpx/ / common/ (dataurl, headerpassthrough, sseframe, maputil/, bgtask/) / consts/
+httpresp/ / handler/httpx/ / common/ (dataurl, headerpassthrough, sseframe, outboundheaders, maputil/, bgtask/) / consts/
 ```
 
 ## 4. 关键接口契约

@@ -27,7 +27,16 @@ func runOpenAIReactTest(ctx context.Context, c *gin.Context, httpClient *http.Cl
 			clientOptions = append(clientOptions, option.WithHeaderAdd(key, value))
 		}
 	}
-	clientOptions = append(clientOptions, option.WithAPIKey(apiKey))
+	// 凭据头单头保证（4b 契约）：openai-go SDK 的 WithAPIKey 恒发 Authorization: Bearer，
+	// 而 header 来自无限制显式通道 customer_headers——先删掉配置可能带入的凭据头，
+	// 再交给 SDK 写自己的，杜绝双凭据头并送（否则 ReAct 测试与真实转发的头形态分叉）。
+	// 已知限制：SDK 路径固定 bearer 方言，openai_auth_type=x-api-key 的供应商在此测不过
+	// （真实转发可用），登记 .local/find-issues/ 待补方言贯通。
+	clientOptions = append(clientOptions,
+		option.WithHeaderDel("Authorization"),
+		option.WithHeaderDel("x-api-key"),
+		option.WithAPIKey(apiKey),
+	)
 
 	client := openai.NewClient(clientOptions...)
 	agent := react.New(client, 20)

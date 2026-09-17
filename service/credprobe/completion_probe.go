@@ -76,7 +76,9 @@ func RunCompletionProbe(req CompletionProbeRequest) CompletionProbeResult {
 	probeCtx, cancel := context.WithTimeout(req.Ctx, req.Timeout)
 	defer cancel()
 
-	httpReq, err := req.Client.BuildReq(probeCtx, req.Headers, req.Model, req.Body)
+	// Clone：BuildReq 会在传入 map 上就地覆写/删除凭据头（4b 契约，见 providers.Provider），
+	// 调用方的 req.Headers 可能被跨凭据/跨组复用，不 Clone 会互相污染（同 stream_probe 姿势）。
+	httpReq, err := req.Client.BuildReq(probeCtx, req.Headers.Clone(), req.Model, req.Body)
 	if err != nil {
 		return CompletionProbeResult{
 			ErrorType: common.ErrorTypeNetwork,

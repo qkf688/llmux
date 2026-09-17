@@ -7,6 +7,7 @@ type ParsedProviderConfig = {
   beta?: string;
   version?: string;
   auth_type?: string;
+  openai_auth_type?: string;
   custom_models: string[];
 };
 
@@ -88,22 +89,25 @@ export function buildProviderPayload(values: ProviderFormValues, provider: Provi
   };
 }
 
-function parseConfigToAdapterParts(config: string): Pick<ParsedProviderConfig, "base_url" | "beta" | "version" | "auth_type" | "custom_models"> {
+function parseConfigToAdapterParts(
+  config: string,
+): Pick<ParsedProviderConfig, "base_url" | "beta" | "version" | "auth_type" | "openai_auth_type" | "custom_models"> {
   try {
     const parsed = JSON.parse(config);
     return {
       base_url: (parsed && typeof parsed === "object" ? parsed.base_url : "") || "",
       beta: parsed?.beta || "",
       version: parsed?.version || "",
-      // 空串=config 未写：auth_type 默认值随主类型不同（anthropic=x-api-key、
-      // openai 系=bearer，4b），此处不得写死任何一家的默认，交由带类型的调用方回填。
+      // 空串=config 未写：认证方言默认值随类型不同（anthropic=x-api-key、
+      // openai 系=bearer，4b 拆键），此处不得写死任何一家的默认，交由带类型的调用方回填。
       auth_type: parsed?.auth_type || "",
+      openai_auth_type: parsed?.openai_auth_type || "",
       custom_models: Array.isArray(parsed?.custom_models)
         ? parsed.custom_models.filter((item: unknown) => typeof item === "string" && item.trim() !== "")
         : [],
     };
   } catch {
-    return { base_url: "", beta: "", version: "", auth_type: "", custom_models: [] };
+    return { base_url: "", beta: "", version: "", auth_type: "", openai_auth_type: "", custom_models: [] };
   }
 }
 
@@ -119,18 +123,19 @@ export function parseConfigToForm(config: string): ParsedProviderConfig {
 /** 从详情 API 回填表单。端点/分组来自详情展开（不含 Config._schedule）。 */
 export function detailToFormValues(detail: ProviderDetail): ProviderFormValues {
   const parts = parseConfigToAdapterParts(detail.Config);
-  // config 缺 auth_type（openai 系存量行）时回退「当前激活字段定义」的类型默认，
-  // 不写死任何一家（4b：主类型优先的合并保证 openai→bearer、anthropic→x-api-key）。
-  const authDefault =
-    getActiveProviderExtras(detail.Type, detail.Protocols).find((f) => f.name === "auth_type")
-      ?.defaultValue ?? "";
+  // config 缺方言键（存量行）时回退「激活字段定义」的类型默认，不写死任何一家
+  // （4b 拆键：auth_type=anthropic、openai_auth_type=openai 系）。
+  const extras = getActiveProviderExtras(detail.Type, detail.Protocols);
+  const defaultFor = (name: "auth_type" | "openai_auth_type") =>
+    extras.find((f) => f.name === name)?.defaultValue ?? "";
   return {
     name: detail.Name,
     type: detail.Type,
     base_url: parts.base_url,
     beta: parts.beta || "",
     version: parts.version || "",
-    auth_type: parts.auth_type || authDefault,
+    auth_type: parts.auth_type || defaultFor("auth_type"),
+    openai_auth_type: parts.openai_auth_type || defaultFor("openai_auth_type"),
     console: detail.Console || "",
     custom_models: parts.custom_models.join("\n"),
     proxy: detail.Proxy || "",

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"testing"
 )
 
@@ -13,6 +14,23 @@ import (
 // 「两个凭据头并发送达上游」的场景清零（双头并送时生效的是哪个由上游实现定义，
 // 官方与各中转口径不一，网关只承诺确定行为）。
 // openai 式默认 bearer（空值=现状，存量配置零迁移）；anthropic 式默认 x-api-key。
+
+// assertAuthHeader 断言凭据头的「存在且唯一值」或「键完全不存在」。
+// 不用 Get()==""：键缺失与「键存在且值为空串」在 Get 上不可区分，而空值头是另一种
+// wire 形态（setAnthropicBeta 注释警告过的同类坑——把 Del 误写成 Set("") 必须能红）。
+func assertAuthHeader(t *testing.T, h http.Header, name, want string) {
+	t.Helper()
+	vals, ok := h[textproto.CanonicalMIMEHeaderKey(name)]
+	if want == "" {
+		if ok {
+			t.Fatalf("header %q present with %q, want key absent", name, vals)
+		}
+		return
+	}
+	if !ok || len(vals) != 1 || vals[0] != want {
+		t.Fatalf("header %q = %q, want exactly [%q]", name, vals, want)
+	}
+}
 
 func TestBuildReq_AuthHeaderSingleSource(t *testing.T) {
 	cases := []struct {
@@ -60,23 +78,40 @@ func TestBuildReq_AuthHeaderSingleSource(t *testing.T) {
 			wantAuth:     "Bearer k", wantXKey: "",
 		},
 		{
-			name:         "openai x-api-key：配置的 Authorization 被删",
+			name:         "openai x-api-key：配置的 Authorization 被删（方言键 openai_auth_type，与 anthropic 的 auth_type 分键防混合协议串方言）",
 			providerType: TypeOpenAI,
-			config:       `{"base_url":"https://x","api_key":"k","auth_type":"x-api-key"}`,
+			config:       `{"base_url":"https://x","api_key":"k","openai_auth_type":"x-api-key"}`,
 			preHeaders:   map[string]string{"Authorization": "Bearer smuggled"},
 			wantAuth:     "", wantXKey: "k",
 		},
 		{
 			name:         "openai 未知值回退 bearer",
 			providerType: TypeOpenAI,
-			config:       `{"base_url":"https://x","api_key":"k","auth_type":"garbage"}`,
+			config:       `{"base_url":"https://x","api_key":"k","openai_auth_type":"garbage"}`,
 			preHeaders:   nil,
 			wantAuth:     "Bearer k", wantXKey: "",
 		},
 		{
+			// P0 回归钉（审查裁决）：混合协议供应商的 config 单份喂两家 adapter，
+			// anthropic 方言键 auth_type 绝不能被 openai 读到——存量
+			// 「anthropic 主类型 + openai 协议」行的 auth_type=x-api-key 不得翻转 openai 端点。
+			name:         "openai 无视 anthropic 的 auth_type 键（按协议拆方言）",
+			providerType: TypeOpenAI,
+			config:       `{"base_url":"https://x","api_key":"k","auth_type":"x-api-key"}`,
+			preHeaders:   nil,
+			wantAuth:     "Bearer k", wantXKey: "",
+		},
+		{
+			name:         "anthropic 无视 openai 的 openai_auth_type 键",
+			providerType: TypeAnthropic,
+			config:       `{"base_url":"https://x","api_key":"k","version":"2023-06-01","openai_auth_type":"bearer"}`,
+			preHeaders:   nil,
+			wantAuth:     "", wantXKey: "k",
+		},
+		{
 			name:         "openai-res 同基类：x-api-key 方式",
 			providerType: TypeOpenAIRes,
-			config:       `{"base_url":"https://x","api_key":"k","auth_type":"x-api-key"}`,
+			config:       `{"base_url":"https://x","api_key":"k","openai_auth_type":"x-api-key"}`,
 			preHeaders:   map[string]string{"Authorization": "Bearer smuggled"},
 			wantAuth:     "", wantXKey: "k",
 		},
@@ -95,12 +130,8 @@ func TestBuildReq_AuthHeaderSingleSource(t *testing.T) {
 			if err != nil {
 				t.Fatalf("BuildReq: %v", err)
 			}
-			if got := req.Header.Get("Authorization"); got != tc.wantAuth {
-				t.Errorf("Authorization = %q, want %q", got, tc.wantAuth)
-			}
-			if got := req.Header.Get("x-api-key"); got != tc.wantXKey {
-				t.Errorf("x-api-key = %q, want %q", got, tc.wantXKey)
-			}
+			assertAuthHeader(t, req.Header, "Authorization", tc.wantAuth)
+			assertAuthHeader(t, req.Header, "x-api-key", tc.wantXKey)
 		})
 	}
 }
@@ -116,7 +147,7 @@ func TestModels_AuthHeaderSingleSource(t *testing.T) {
 		wantXKey     string
 	}{
 		{"openai 默认 bearer", TypeOpenAI, `{"base_url":%q,"api_key":"k"}`, "Bearer k", ""},
-		{"openai x-api-key", TypeOpenAI, `{"base_url":%q,"api_key":"k","auth_type":"x-api-key"}`, "", "k"},
+		{"openai x-api-key", TypeOpenAI, `{"base_url":%q,"api_key":"k","openai_auth_type":"x-api-key"}`, "", "k"},
 		{"anthropic 默认 x-api-key", TypeAnthropic, `{"base_url":%q,"api_key":"k","version":"2023-06-01"}`, "", "k"},
 		{"anthropic bearer", TypeAnthropic, `{"base_url":%q,"api_key":"k","version":"2023-06-01","auth_type":"bearer"}`, "Bearer k", ""},
 	}
@@ -137,12 +168,8 @@ func TestModels_AuthHeaderSingleSource(t *testing.T) {
 			if _, err := p.Models(t.Context()); err != nil {
 				t.Fatalf("Models: %v", err)
 			}
-			if auth := got.Get("Authorization"); auth != tc.wantAuth {
-				t.Errorf("upstream saw Authorization = %q, want %q", auth, tc.wantAuth)
-			}
-			if xk := got.Get("x-api-key"); xk != tc.wantXKey {
-				t.Errorf("upstream saw x-api-key = %q, want %q", xk, tc.wantXKey)
-			}
+			assertAuthHeader(t, got, "Authorization", tc.wantAuth)
+			assertAuthHeader(t, got, "x-api-key", tc.wantXKey)
 		})
 	}
 }

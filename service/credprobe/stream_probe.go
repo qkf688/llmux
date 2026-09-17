@@ -270,7 +270,7 @@ func truncateHeadTail(text string, headBytes, tailBytes int) string {
 	var b strings.Builder
 	b.Grow(len(head) + len(tail) + 96)
 	b.WriteString(head)
-	fmt.Fprintf(&b, "\n...[llmux truncated %d bytes of raw SSE middle section, head/tail preserved]...\n\n", dropped)
+	b.WriteString(common.SSETruncatedMarker(dropped))
 	b.WriteString(tail)
 	return b.String()
 }

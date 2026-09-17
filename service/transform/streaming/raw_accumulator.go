@@ -1,8 +1,9 @@
 package streaming
 
 import (
-	"fmt"
 	"strings"
+
+	"github.com/qkf688/llmux/common"
 )
 
 // rawSSEAccumulator 以「头段固定 + 尾段滚动」的方式累积语义等价的 SSE 事件序列，
@@ -76,7 +77,7 @@ func (a *rawSSEAccumulator) finalize() (string, int) {
 	var b strings.Builder
 	b.Grow(len(a.head) + len(tail) + 96)
 	b.Write(a.head)
-	fmt.Fprintf(&b, "\n...[llmux truncated %d bytes of raw SSE middle section, head/tail preserved]...\n\n", dropped)
+	b.WriteString(common.SSETruncatedMarker(dropped))
 	b.Write(tail)
 	return b.String(), dropped
 }

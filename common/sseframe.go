@@ -24,6 +24,14 @@ func IsEventStreamContentType(contentType string) bool {
 	return strings.Contains(strings.ToLower(contentType), SSEContentType)
 }
 
+// SSETruncatedMarker 生成「头尾保留、中段截断」标记文案（droppedBytes 为丢弃字节数）。
+// 流式日志累积器（transform/streaming）与探针回显（credprobe）曾在两处各写一份此文案：
+// 消费侧以「有无标记」区分「上游就这么短」与「被截断」，两侧字样必须逐字一致，
+// 故与分帧判据同归本文件单源（AGENTS 4.4 DRY）。
+func SSETruncatedMarker(droppedBytes int) string {
+	return fmt.Sprintf("\n...[llmux truncated %d bytes of raw SSE middle section, head/tail preserved]...\n\n", droppedBytes)
+}
+
 // SSEFrame 一个已分帧的 SSE 事件。Event 取自 event: 行（OpenAI Chat 通常为空，
 // Anthropic / OpenAI Responses 有值）；Data 是该事件内所有 data: 行按 SSE 规范以 \n 合并的载荷。
 //

@@ -71,7 +71,7 @@ func runAnthropicReactTest(ctx context.Context, c *gin.Context, httpClient *http
 		if readErr != nil {
 			return toolCities, finalText.String(), fmt.Errorf("读取响应失败: %w", readErr)
 		}
-		if res.StatusCode != http.StatusOK {
+		if !common.IsPassingStatus(res.StatusCode) {
 			return toolCities, finalText.String(), errors.New(BuildDetailedError(common.ErrorTypeFromStatus(res.StatusCode), "提供商返回错误", common.ExtractUpstreamErrorDetail(bodyBytes), map[string]string{
 				"provider":    link.ProviderName,
 				"model":       link.Model,

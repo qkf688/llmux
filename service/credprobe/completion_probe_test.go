@@ -79,6 +79,9 @@ func TestRunCompletionProbe_PassedOn200And201(t *testing.T) {
 		if !out.Passed {
 			t.Fatalf("status %d 应判通过; got %+v", status, out)
 		}
+		if out.StatusCode != status {
+			t.Fatalf("StatusCode = %d, want %d（判定放宽后仍须原样上报状态码）", out.StatusCode, status)
+		}
 		if string(out.Body) != `{"id":"cmpl-1"}` {
 			t.Fatalf("Body = %q, want 上游原文", out.Body)
 		}

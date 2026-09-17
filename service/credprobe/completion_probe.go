@@ -63,8 +63,8 @@ type CompletionProbeResult struct {
 }
 
 // RunCompletionProbe 打一次真实最小 completion 并按统一口径归类结果。
-// 通过判定 = 任意 2xx（部分兼容网关会回 201 而非严格 200，旧 testapi 的 ==200
-// 口径会把它误判成失败）。
+// 通过判定 = 任意 2xx，判据单源 common.IsPassingStatus（Stage 5：健康检查/诊断/真实
+// 链路共用同一条口径，部分兼容网关会回 201 而非严格 200）。
 func RunCompletionProbe(req CompletionProbeRequest) CompletionProbeResult {
 	if req.Ctx == nil {
 		req.Ctx = context.Background()
@@ -120,7 +120,7 @@ func RunCompletionProbe(req CompletionProbeRequest) CompletionProbeResult {
 		}
 	}
 
-	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+	if !common.IsPassingStatus(res.StatusCode) {
 		return CompletionProbeResult{
 			StatusCode: res.StatusCode,
 			ErrorType:  common.ErrorTypeFromStatus(res.StatusCode),

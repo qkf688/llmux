@@ -136,7 +136,7 @@ func RunStreamProbe(req StreamProbeRequest) (out StreamProbeResult) {
 	}
 	defer res.Body.Close()
 
-	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+	if !common.IsPassingStatus(res.StatusCode) {
 		bodyBytes, readErr := common.ReadCappedBody(res.Body)
 		if readErr != nil {
 			return StreamProbeResult{

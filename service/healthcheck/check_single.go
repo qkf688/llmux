@@ -137,7 +137,8 @@ func (h *HealthChecker) doCheck(ctx context.Context, provider *models.Provider, 
 	return fmt.Errorf("health check failed for provider %q: %s", provider.Name, strings.Join(failures, "; "))
 }
 
-// requestUpstream 发一次检测请求并判定状态码：非 200 一律带原文回传（HealthCheckError）。
+// requestUpstream 发一次检测请求并判定状态码：未通过（口径见 common.IsPassingStatus，
+// 2xx 即通过）一律带原文回传（HealthCheckError）。
 func requestUpstream(ctx context.Context, client providers.Provider, headers http.Header, model string, body []byte) error {
 	req, err := client.BuildReq(ctx, headers, model, body)
 	if err != nil {
@@ -151,7 +152,7 @@ func requestUpstream(ctx context.Context, client providers.Provider, headers htt
 	}
 	defer res.Body.Close()
 
-	if res.StatusCode != http.StatusOK {
+	if !common.IsPassingStatus(res.StatusCode) {
 		raw, _ := common.ReadCappedBody(res.Body)
 		return &HealthCheckError{StatusCode: res.StatusCode, Body: string(raw)}
 	}

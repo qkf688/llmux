@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"time"
 
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/adjustment"
@@ -139,7 +139,9 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		return singleProviderAttemptResult{CredentialFailure: true, RemoveWeight: true, RemovePriority: true}
 	}
 
-	if res.StatusCode != http.StatusOK {
+	// 通过口径单源（Stage 5）：2xx 即进入正常回写链路。2xx 但无响应体（如 204）会在
+	// 后续解析处报「解析失败」——与现状「200 但空体」同形，不是本次新增的盲区。
+	if !common.IsPassingStatus(res.StatusCode) {
 		return handleNonOKProviderResponse(input.Ctx, res, logID, logRawOptions, logSnapshot, input.ModelWithProvider, input.Provider, input.Start, input.Selection.Credential)
 	}
 

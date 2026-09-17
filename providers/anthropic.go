@@ -149,7 +149,8 @@ func (a *Anthropic) Models(ctx context.Context) ([]Model, error) {
 	}
 	defer res.Body.Close()
 
-	if res.StatusCode != http.StatusOK {
+	// 通过口径单源（Stage 5）：2xx 即成功，回 201 的兼容网关不再被判失败。
+	if !common.IsPassingStatus(res.StatusCode) {
 		// 读取响应体以获取详细错误信息（上限内，防超大错误页整块进内存）
 		bodyBytes, readErr := common.ReadCappedBody(res.Body)
 		if readErr != nil {

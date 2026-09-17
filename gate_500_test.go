@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -19,26 +18,9 @@ import (
 //     （`+`、`.Error()`、`fmt.`）——静态文案入口一旦被塞进 err 原文，
 //     Stage 3 的对外收口就从这一个参数漏掉。
 func TestGate500NoLeakPaths(t *testing.T) {
-	var files []string
-	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			name := d.Name()
-			if strings.HasPrefix(name, ".") || name == "webui" || name == "node_modules" || name == "db" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
-			files = append(files, path)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("遍历源文件失败: %v", err)
-	}
+	// 遍历（含空转哨兵）全部门共用，见 gate_sources_test.go——门扫不到文件就等于没执法，
+	// 这类缺陷必须只修一次。
+	files := gateSourceFiles(t, 100)
 
 	// message 参数 = 第一个逗号后到下一个逗号前的片段；允许字面量与纯标识符（action、ie.Message）。
 	reStaticCall := regexp.MustCompile(`httpresp\.InternalErrorMessage\(\w+,\s*([^,)]*)`)

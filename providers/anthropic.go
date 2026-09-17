@@ -25,7 +25,7 @@ type Anthropic struct {
 	Beta         string   `json:"beta"`
 	CustomModels []string `json:"custom_models"`
 	Proxy        string   `json:"proxy"`
-	AuthType     string   `json:"auth_type"` // x-api-key 或 bearer
+	AuthType     string   `json:"auth_type"` // 认证方式 x-api-key（默认）| bearer，providers/auth.go 唯一执法点（4b）
 }
 
 func init() {
@@ -66,13 +66,10 @@ func (a *Anthropic) BuildReq(ctx context.Context, header http.Header, model stri
 	}
 	req.Header.Set("content-type", "application/json")
 
-	// 根据 AuthType 设置认证头
-	if a.AuthType == "bearer" {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", a.APIKey))
-	} else {
-		// 默认使用 x-api-key（Anthropic 官方）
-		req.Header.Set("x-api-key", a.APIKey)
-	}
+	// 认证头以 auth_type 为唯一权威（providers/auth.go 单源执法）：x-api-key 方式删除
+	// 任何配进来的 Authorization，bearer 方式删除 x-api-key——两个凭据头永不并发送达
+	// 上游（Stage 4b；上游对双头的裁决是实现定义行为，网关不赌）。
+	applyAuthHeader(req.Header, a.AuthType, AuthTypeXAPIKey, a.APIKey)
 
 	req.Header.Set("anthropic-version", a.Version)
 	setAnthropicBeta(req.Header, a.Beta)
@@ -137,13 +134,9 @@ func (a *Anthropic) Models(ctx context.Context) ([]Model, error) {
 	}
 	req.Header.Set("content-type", "application/json")
 
-	// 根据 AuthType 设置认证头
-	if a.AuthType == "bearer" {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", a.APIKey))
-	} else {
-		// 默认使用 x-api-key（Anthropic 官方）
-		req.Header.Set("x-api-key", a.APIKey)
-	}
+	// 模型列表旁路同样走 auth_type 单源（与 BuildReq 一个执法点，防「对话用一种、
+	// 拉模型用另一种」的分裂）。
+	applyAuthHeader(req.Header, a.AuthType, AuthTypeXAPIKey, a.APIKey)
 
 	req.Header.Set("anthropic-version", a.Version)
 	setAnthropicBeta(req.Header, a.Beta)

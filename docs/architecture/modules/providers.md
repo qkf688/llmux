@@ -41,6 +41,7 @@ service/modelsync/config.go  # ProviderModelCatalog 类型 + GetProviderModelCat
 | 契约 | 职责 | 定义位置 | 实现方 |
 |------|------|----------|--------|
 | `Provider` | `BuildReq` / `Models` / `GetProxy` | `providers/provider.go` | OpenAI、OpenAIRes、Anthropic |
+| 认证方式单源（`auth_type`，4b） | `applyAuthHeader`（`providers/auth.go`）是**唯一**凭据头执法点：`bearer` 只发 `Authorization: Bearer <key>` 并删任何配进来的 `x-api-key`；`x-api-key` 反之；空值/未知值回退类型默认（anthropic=x-api-key、openai 系=bearer——**存量配置零迁移**）。写凭据头的一切位点（`BuildReq` 与 `Models` 旁路，含 GET /models）必须走该函数，**禁止**再手写 `Set("Authorization")`。理由：双凭据头并送时上游认哪个是实现定义行为（官方与各中转口径不一，本项目不假设任何一家），网关只承诺确定行为。数据源=config JSON 的 `auth_type` 键（provider 级共享；openai 主类型+anthropic 协议的混合供应商共用同一个值）；顶层 `Provider.AuthType` 列为 UI 副本，`resolveAuthType` 只收两枚举值。契约测试 `providers/auth_headers_test.go`（BuildReq 注入面 + httptest 断言上游恰好收到一个凭据头） | `providers/auth.go` | `openaiBase`、`Anthropic` |
 | `OpenAICompat` | 标记 OpenAI 兼容协议族并暴露 baseURL/apiKey | `providers/provider.go` | OpenAI、OpenAIRes |
 | `BetaFeatureCapable` | `HasBetaFeature(name)`：查询本供应商已启用的 beta 特性，供上层判断协议约束是否被 beta 豁免 | `providers/provider.go` | Anthropic（判据为配置的 `Beta` 字段） |
 | `Factory` + `Register`/`New` | 按 type 构造实现 | `providers/provider.go` | 各实现 `init` 注册 |

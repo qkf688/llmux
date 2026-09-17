@@ -296,8 +296,9 @@ export function ApiKeyFormDialog({
                   网关转发 /v1 请求时为该 key 注入下列头（伪装 Codex/Claude Code 客户端头族）。
                   不参与诊断/连通测试，验证靠真实流量与日志归因；撞同名时关联级自定义头优先。
                   注意：这些头会发往该 key 能路由到的**所有**上游（非按供应商隔离），
-                  勿在此存放某供应商专用凭据——Authorization 对 OpenAI/bearer 式供应商会被凭据覆写，
-                  但对 Anthropic 默认 x-api-key 供应商会原样送出。
+                  勿在此存放某供应商专用凭据——凭据头（Authorization / x-api-key）归系统专属：
+                  会被供应商凭据覆写或按其认证方式自动删除（Anthropic 与 OpenAI 式同规则，4b），
+                  配置无法越过。
                 </p>
                 {headerRows.fields.map((rowField, index) => (
                   <div key={rowField.id} className="flex items-center gap-2">

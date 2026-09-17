@@ -20,7 +20,10 @@ type openaiBase struct {
 	APIKey       string   `json:"api_key"`
 	CustomModels []string `json:"custom_models"`
 	Proxy        string   `json:"proxy"`
-	endpointPath string   // 注入差异点：chat/completions 或 responses
+	// AuthType 认证方式：bearer（默认，空值=现状）| x-api-key（Stage 4b，providers/auth.go
+	// 单源执法：只发选定方式，对侧凭据头在构造点删除，自定义头配不动）。
+	AuthType     string `json:"auth_type"`
+	endpointPath string // 注入差异点：chat/completions 或 responses
 }
 
 // OpenAICompatBaseURL / OpenAICompatAPIKey 实现 OpenAICompat 能力接口（OCP-9）。
@@ -40,7 +43,7 @@ func (o *openaiBase) BuildReq(ctx context.Context, header http.Header, model str
 		req.Header = header
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", o.APIKey))
+	applyAuthHeader(req.Header, o.AuthType, AuthTypeBearer, o.APIKey)
 
 	return req, nil
 }
@@ -54,7 +57,8 @@ func (o *openaiBase) Models(ctx context.Context) ([]Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", o.APIKey))
+	// 模型列表旁路同样走 auth_type 单源（与 BuildReq 同一执法点，Stage 4b）。
+	applyAuthHeader(req.Header, o.AuthType, AuthTypeBearer, o.APIKey)
 
 	// 使用带代理的客户端
 	client := GetClientWithProxy(30*time.Second, o.Proxy)

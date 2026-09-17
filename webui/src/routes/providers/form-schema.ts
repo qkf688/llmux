@@ -96,7 +96,10 @@ export const defaultProviderFormValues: ProviderFormValues = {
   base_url: "",
   beta: "",
   version: "",
-  auth_type: "x-api-key",
+  // 空 = 未显式选择：auth_type 是 provider 级共享键但默认值随类型不同
+  // （anthropic=x-api-key、openai 系=bearer，4b），写死任一默认会在切类型时把错误
+  // 默认悄悄提交；提交/渲染处按「当前激活字段定义的默认值」回退。
+  auth_type: "",
   console: "",
   custom_models: "",
   proxy: "",

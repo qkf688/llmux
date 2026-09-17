@@ -14,10 +14,18 @@ func parseUintParam(s string) (uint, error) {
 	return uint(v), nil
 }
 
-// resolveAuthType 仅 anthropic 且非空时返回指针；其它 type 或空字符串返回 nil（与现网 Create/Update 一致）。
+// resolveAuthType 认证方式入库判定（Stage 4b）：anthropic 与 openai 系都收
+// bearer / x-api-key 两枚举值；空值或未知值返回 nil（装配 provider 时回退各自
+// 类型默认：anthropic=x-api-key、openai 系=bearer）。其它 provider type 不识别
+// 该字段，一律 nil。
 func resolveAuthType(providerType, authType string) *string {
-	if providerType == providers.TypeAnthropic && authType != "" {
-		return &authType
+	if authType != providers.AuthTypeBearer && authType != providers.AuthTypeXAPIKey {
+		return nil
+	}
+	switch providerType {
+	case providers.TypeAnthropic, providers.TypeOpenAI, providers.TypeOpenAIRes:
+		v := authType
+		return &v
 	}
 	return nil
 }

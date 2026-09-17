@@ -124,15 +124,16 @@ export function ProviderFormDialog({
 
               {/* 顶层 API Key 已废除（S6）：凭据在分组内联 keys / 关联号池中维护 */}
 
-              {/* 主类型 / 已勾选协议激活的 adapter 额外字段（如 anthropic version/beta/auth_type）。
-                  协议端点按端点协议实例化 provider，只要勾选 anthropic 协议，这些字段就对
-                  anthropic 端点生效——即使主类型是 openai（config 字段为 provider 级共享）。 */}
+              {/* 主类型 / 已勾选协议激活的 adapter 额外字段（如 anthropic version/beta/auth_type、
+                  openai 系 auth_type）。协议端点按端点协议实例化 provider，只要勾选某协议，其
+                  字段就对端点生效——即使不是主类型（config 字段为 provider 级共享；同名冲突
+                  主类型定义优先，见 getActiveProviderExtras）。 */}
               {extraFields.length > 0 && (
                 <div className="space-y-3">
                   <div>
-                    <h3 className="text-sm font-semibold">Anthropic 协议配置</h3>
+                    <h3 className="text-sm font-semibold">协议适配配置</h3>
                     <p className="text-xs text-muted-foreground">
-                      作用于 Anthropic 协议端点（版本 / Beta / 认证方式）
+                      按主类型与已勾选协议生效（Anthropic：版本 / Beta / 认证方式；OpenAI 系：认证方式）
                     </p>
                   </div>
                   {extraFields.map((extra) => (
@@ -144,7 +145,10 @@ export function ProviderFormDialog({
                         <FormItem>
                           <FormLabel>{extra.label}</FormLabel>
                           {extra.kind === "select" ? (
-                            <Select onValueChange={field.onChange} value={field.value}>
+                            // 空值仅存于表单态：展示的默认值取「当前激活字段定义」（随主类型变化），
+                            // 提交时空值同样回退该默认（applyExtraFieldsToConfig / resolveTopLevelAuthType）——
+                            // 避免写死某一家默认在切类型时被悄悄提交（4b）。
+                            <Select onValueChange={field.onChange} value={field.value || extra.defaultValue}>
                               <FormControl>
                                 <SelectTrigger>
                                   <SelectValue placeholder="请选择" />

@@ -1,6 +1,6 @@
 import type { ProviderDetail, ProviderWritePayload } from "@/lib/api";
 import type { ProviderFormValues } from "../form-schema";
-import { applyExtraFieldsToConfig } from "../form-fields";
+import { applyExtraFieldsToConfig, getActiveProviderExtras } from "../form-fields";
 
 type ParsedProviderConfig = {
   base_url: string;
@@ -95,13 +95,15 @@ function parseConfigToAdapterParts(config: string): Pick<ParsedProviderConfig, "
       base_url: (parsed && typeof parsed === "object" ? parsed.base_url : "") || "",
       beta: parsed?.beta || "",
       version: parsed?.version || "",
-      auth_type: parsed?.auth_type || "x-api-key",
+      // 空串=config 未写：auth_type 默认值随主类型不同（anthropic=x-api-key、
+      // openai 系=bearer，4b），此处不得写死任何一家的默认，交由带类型的调用方回填。
+      auth_type: parsed?.auth_type || "",
       custom_models: Array.isArray(parsed?.custom_models)
         ? parsed.custom_models.filter((item: unknown) => typeof item === "string" && item.trim() !== "")
         : [],
     };
   } catch {
-    return { base_url: "", beta: "", version: "", auth_type: "x-api-key", custom_models: [] };
+    return { base_url: "", beta: "", version: "", auth_type: "", custom_models: [] };
   }
 }
 
@@ -117,13 +119,18 @@ export function parseConfigToForm(config: string): ParsedProviderConfig {
 /** 从详情 API 回填表单。端点/分组来自详情展开（不含 Config._schedule）。 */
 export function detailToFormValues(detail: ProviderDetail): ProviderFormValues {
   const parts = parseConfigToAdapterParts(detail.Config);
+  // config 缺 auth_type（openai 系存量行）时回退「当前激活字段定义」的类型默认，
+  // 不写死任何一家（4b：主类型优先的合并保证 openai→bearer、anthropic→x-api-key）。
+  const authDefault =
+    getActiveProviderExtras(detail.Type, detail.Protocols).find((f) => f.name === "auth_type")
+      ?.defaultValue ?? "";
   return {
     name: detail.Name,
     type: detail.Type,
     base_url: parts.base_url,
     beta: parts.beta || "",
     version: parts.version || "",
-    auth_type: parts.auth_type || "x-api-key",
+    auth_type: parts.auth_type || authDefault,
     console: detail.Console || "",
     custom_models: parts.custom_models.join("\n"),
     proxy: detail.Proxy || "",

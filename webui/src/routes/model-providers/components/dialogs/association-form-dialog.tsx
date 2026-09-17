@@ -449,6 +449,10 @@ export function AssociationFormDialog({
                           );
                         })}
                         <p className="text-sm text-muted-foreground">{"优先级: 提供商配置 > 自定义请求头 > 透传请求头"}</p>
+                        <p className="text-sm text-muted-foreground">
+                          头名/头值非法或只差大小写撞名会被保存拦截；凭据头（Authorization /
+                          x-api-key）归供应商认证配置专属，配了也不生效（被供应商凭据覆写或按其认证方式自动删除）。
+                        </p>
                       </div>
                     </FormItem>
                   );

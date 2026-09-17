@@ -20,7 +20,9 @@ import (
 // customHeaders 是关联级管理员显式通道：同样不设限且后写覆盖（撞名时关联级赢——
 // 渠道要求比客户端伪装更具体，方案 §3 定案）。
 // 第四层 providers BuildReq 随后以凭据为权威覆写鉴权/Content-Type，是本函数之外的
-// 最高优先级（Authorization 无论 key/关联级怎么配都会被凭据压回，方案 §2 死通道）。
+// 最高优先级。凭据头是死通道且**两家同规则**（4b 收口，单源执法 providers/auth.go）：
+// auth_type 选定哪种认证方式就只发哪种凭据头，对侧凭据头在构造点删除——
+// Authorization / x-api-key 无论 key 级/关联级怎么配都无法让双头并发送达上游。
 func BuildHeaders(source http.Header, withHeader bool, keyHeaders, customHeaders map[string]string, stream bool) http.Header {
 	header := http.Header{}
 	if withHeader {

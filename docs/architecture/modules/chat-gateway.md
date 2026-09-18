@@ -38,8 +38,8 @@ service/
 │   ├── chat_credential_stats.go # 凭据终身统计：attempt 成功/失败出口记 total_requests/total_errors/last_used_at，经 credwrite 队列异步落库（终身累计，与状态机正交）
 │   ├── chat_credential_probe.go # 惰性探活编排入口（#6-3）：组耗尽时调 service/credprobe，成功后刷新快照重试选路
 │   ├── chat_record*.go     # 日志后处理编排与 raw 清理
-│   ├── chat_provider_meta.go # 供应商元数据装配 + 模型-供应商查询
-│   ├── chat_log_storage.go # ChatLog 落库与保留
+│   ├── chat_provider_meta.go # 供应商元数据装配 + 模型-供应商查询 + 未选出供应商失败出口
+│   ├── chat_log_storage.go # ChatLog 落库、保留与「未选出供应商即失败」建行单源（savePreProviderFailureLog）
 │   └── preprocess/openai/  # OpenAI 预处理
 ├── credprobe/              # 凭据探针叶子包（#6-3）：/models 轻探 + ClaimLastProbeAt CAS + 条件恢复写；另为 completion 探针编排单一来源（RunCompletionProbe，testapi/pools 各测试端点共用超时归类与细节提取）；不掺选路/重试
 ├── credwrite/              # 凭据写异步队列叶子包（#6-4-2）：cooldown/auth-fail/touch-probe/recover/record-success/record-error 六 Kind 集中落库；单 worker 串行 + 有界 drop-oldest
@@ -66,7 +66,7 @@ balancer/                   # 加权随机纯算法
 | `Beforer` / `Processer` | 按 style 预处理请求 / 处理上游响应 | `service/chat`（门面 re-export） | style 注册实现 |
 | `BalanceChat` | 在候选供应商上执行带重试的转发；入参 `BalanceInput`、返回 `*BalanceResult` | `service/chat_facade.go` | `service/chat` |
 | `runProviderRetryLoop` | 在**单个候选池**上执行「选候选 → channel 三层选路（端点→分组→凭据）→ 尝试 → 淘汰」重试循环，产出 `retryLoopOutcome`（成功/穷尽/中止）；候选内嵌**组内凭据循环**（#13）：凭据级失败（429/5xx/鉴权/网络）写冷却或判停后刷新快照、`channel.RetryCredential` 锁组换 key 重试；`ErrNoCredentialAvailable` 时先惰性探活（#6-3）再决定是否组织级淘汰；`MaxRetry`/`ClientTimeout`/`Deadline` 的取值已全局化（见 settings 模块「请求参数」，per-model time_out/max_retry 已移除） | `service/chat/chat_retry_loop.go` | `service/chat`（包内，真实与虚拟路径共用） |
-| `ProvidersWithMetaBymodelsName` | 按模型名解析候选供应商元信息（含虚拟模型分支） | `service/chat` | `service/chat` |
+| `ProvidersWithMetaBymodelsName` | 按模型名解析候选供应商元信息（含虚拟模型分支）。**未选出供应商即失败**的四类出口（模型不存在 / 虚拟选模失败 / 虚拟跳过某真实模型 / 真实模型无启用供应商）经 `savePreProviderFailureLog` 建 ChatLog 行，失败原因与归因快照见 logs-metrics 模块；其中「真实模型无启用供应商」会区分严格能力匹配开关（开启时提示关联可能被能力需求筛掉） | `service/chat` | `service/chat` |
 | `chatcore.SelectByPriorityAndWeight` | 在关联列表上按优先级与权重选供应商 | `service/chatcore/` | `service/chatcore` |
 | `chatcore.BuildHeaders` | 生产转发（/v1 热路径）出站头构造，**唯一装配点**（禁止第二套拼装，方案 §2）。签名 `BuildHeaders(source, withHeader, keyHeaders, customHeaders, stream)`，**四层优先级链**（低→高，后写覆盖）：入站白名单透传 < key 级头 < 关联级 customer_headers < providers 权威覆写。① `with_header=true`＝白名单透传（判据 `common.PassthroughAllowedHeader` / `MergePassthroughHeaders`，与 testapi 同源）；② `stream=true` 置 `X-Accel-Buffering: no`；③ `keyHeaders` 来自 `middleware.CallerKey.Headers`（经 `ReqMeta.Headers` 整包透传，#6），显式通道不设头名黑名单（语法关＝apikeys/associations 两域写入闸共用 `common.SanitizeOutboundHeaders`）、与 `with_header` 正交；④ `customHeaders`（关联级）同名覆盖 key 级（渠道要求比客户端伪装更具体）；⑤ providers BuildReq 覆写 `Content-Type` 恒生效；**凭据头是死通道且两家同规则**（4b，唯一执法点 `providers/auth.go` `applyAuthHeader`）：供应商配置的认证方式（anthropic 键 `auth_type`、openai 系键 `openai_auth_type`——按协议拆方言，混合供应商互不翻转）选定后只发对应凭据头，对侧凭据头在构造点被删——`Authorization` 与 `x-api-key` 永不并发送达上游，key/关联级配置无法越过。契约测试：`TestBuildHeaders_FourLayerPriority`（单测钉三层）+ `chat` 包 `TestExecuteSingleProviderAttempt_KeyHeadersFourLayerPrecedence`（httptest 打真实上游收到的头，钉第四层） | `service/chatcore/headers.go` | `service/chat/chat_attempt.go`（真实与虚拟路径共用同一 attempt）|
 | `balancer.WeightedRandom` | 加权随机选取 | `balancer/balancer.go` | 泛型算法 |

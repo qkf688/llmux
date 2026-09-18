@@ -30,6 +30,7 @@ service/virtualmodel/
 ├── round_robin_selector.go # round_robin 薄包装 + round_robin.go（index 推进）
 ├── random_selector.go
 ├── candidate_pool.go / validation.go / stats.go
+├── select_ordered_invariant_test.go # 出口不变式：err==nil ⇒ 列表非空（chat 主路径取 [0] 的依据）
 repository/virtual_model.go
 ```
 
@@ -40,6 +41,7 @@ repository/virtual_model.go
 | `Selector` | 从候选真实模型中选择或排序 | `service/virtualmodel/selector.go` | priority / round_robin / random |
 | `RegisterSelector` / `GetSelector` | 策略注册与查找 | `service/virtualmodel/selector.go` | 各 selector `init` |
 | `Service.SelectRealModel(s)` | 业务入口：虚拟名 → 真实模型 | `service/virtualmodel/` | 同包 |
+| `SelectRealModelsOrdered` 出口不变式 | **`err == nil ⇒ 返回列表非空`**：空池三条路径（无启用映射 / 真实模型缺失 / 全被拉黑）都在 `loadCandidatePool` 报错，各策略只按 mapping 逐一构建。消费方 `chat` 主路径据此直接取 `[0]`（Stage 7 删掉了那里的 `len == 0` 分支）——新增 selector 或给 `select_ordered` 加跳过条件时须同步；有测试锁定（`select_ordered_invariant_test.go`） | `service/virtualmodel/candidate_pool.go` + `select_ordered.go` | 同包 |
 | `VirtualModel` / `VirtualModelMapping` | 配置实体 | `models/model.go` | GORM |
 
 ## 5. 特殊约定

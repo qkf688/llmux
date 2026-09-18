@@ -55,7 +55,7 @@ func balanceChatVirtual(ctx context.Context, in BalanceInput) (*BalanceResult, e
 		if len(modelWithProviders) == 0 {
 			slog.Warn("no providers for real model", "real_model", realModel.Name)
 			saveVirtualSkipLog(ctx, in.ReqMeta, pwm.VirtualModelName, realModel.Name, in.Style,
-				fmt.Sprintf("virtual model skip: no enabled providers for real model %q", realModel.Name))
+				"virtual model skip: "+noUsableProviderReason(ctx, realModel.Name))
 			continue
 		}
 
@@ -108,16 +108,10 @@ func balanceChatVirtual(ctx context.Context, in BalanceInput) (*BalanceResult, e
 // 故只有模型层面的信息可填。ReqMeta 整包传入（与 retryLoopInput 同风格）——
 // 归因快照随建行落库，散参会让下一个旁路建行点再次漏掉。
 func saveVirtualSkipLog(ctx context.Context, reqMeta models.ReqMeta, virtualModelName, realModelName, style, errMsg string) {
-	if _, err := SaveChatLog(ctx, models.ChatLog{
-		Name:          virtualModelName,
-		RealModelName: realModelName,
-		ProviderModel: realModelName,
-		Status:        "error",
-		Style:         style,
-		Error:         errMsg,
-		ApiKeyID:      reqMeta.ApiKeyID,
-		ApiKeyName:    reqMeta.ApiKeyName,
-	}); err != nil {
-		slog.Error("failed to save virtual model skip log", "real_model", realModelName, "error", err)
-	}
+	savePreProviderFailureLog(ctx, reqMeta, style, preProviderFailureLog{
+		RequestedModel: virtualModelName,
+		RealModelName:  realModelName,
+		ProviderModel:  realModelName,
+		Error:          errMsg,
+	})
 }

@@ -60,7 +60,7 @@ func TestBalanceChatVirtual_NoProvidersForRealModel_WritesSkipLog(t *testing.T) 
 	if logs[0].ProviderModel != realModel.Name {
 		t.Fatalf("ProviderModel = %q, want %q", logs[0].ProviderModel, realModel.Name)
 	}
-	if !strings.Contains(logs[0].Error, "no enabled providers") {
-		t.Fatalf("Error = %q, want contains %q", logs[0].Error, "no enabled providers")
+	if !strings.Contains(logs[0].Error, "no enabled provider") {
+		t.Fatalf("Error = %q, want contains %q", logs[0].Error, "no enabled provider")
 	}
 }

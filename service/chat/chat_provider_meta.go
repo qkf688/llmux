@@ -68,24 +68,17 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 
 		orderedModels, err := virtualmodel.Default().SelectRealModelsOrdered(ctx, virtualModel)
 		if err != nil {
-			if _, err := SaveChatLog(ctx, models.ChatLog{
-				Name: before.Model,
+			savePreProviderFailureLog(ctx, reqMeta, style, preProviderFailureLog{
+				RequestedModel: before.Model,
 				// RealModelName unknown: virtual selection failed before any real model was chosen.
-				Status:     "error",
-				Style:      style,
-				Error:      fmt.Sprintf("virtual model selection failed: %v", err),
-				ApiKeyID:   reqMeta.ApiKeyID,
-				ApiKeyName: reqMeta.ApiKeyName,
-			}); err != nil {
-				return nil, err
-			}
+				Error: fmt.Sprintf("virtual model selection failed: %v", err),
+			})
 			return nil, fmt.Errorf("failed to select real models from virtual model: %w", err)
 		}
 
-		if len(orderedModels) == 0 {
-			return nil, errors.New("no real models found for virtual model")
-		}
-
+		// 列表必非空，可直接取首元素：SelectRealModelsOrdered 的候选池在装配阶段
+		// 已保证至少一条可用映射（无启用映射 / 真实模型缺失 / 全被拉黑 均在此之前
+		// 报错），各策略再按 mapping 逐一构建，不存在中途变空的路径。
 		slog.Info("selected ordered real models from virtual model",
 			"virtual_model", virtualModel.Name,
 			"count", len(orderedModels),
@@ -119,17 +112,11 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 	model, err := repos().Model.GetByName(ctx, before.Model)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			if _, err := SaveChatLog(ctx, models.ChatLog{
-				Name:          before.Model,
-				RealModelName: before.Model,
-				Status:        "error",
-				Style:         style,
-				Error:         err.Error(),
-				ApiKeyID:      reqMeta.ApiKeyID,
-				ApiKeyName:    reqMeta.ApiKeyName,
-			}); err != nil {
-				return nil, err
-			}
+			savePreProviderFailureLog(ctx, reqMeta, style, preProviderFailureLog{
+				RequestedModel: before.Model,
+				RealModelName:  before.Model,
+				Error:          err.Error(),
+			})
 			return nil, errors.New("not found model " + before.Model)
 		}
 		return nil, err
@@ -141,6 +128,11 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 	}
 
 	if len(modelWithProviders) == 0 {
+		savePreProviderFailureLog(ctx, reqMeta, style, preProviderFailureLog{
+			RequestedModel: before.Model,
+			RealModelName:  model.Name,
+			Error:          noUsableProviderReason(ctx, before.Model),
+		})
 		return nil, errors.New("not provider for model " + before.Model)
 	}
 
@@ -176,6 +168,7 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 	}, nil
 }
 
+// queryEnabledModelProviders 按请求能力需求筛选该模型下已启用的关联。
 func queryEnabledModelProviders(ctx context.Context, modelID uint, before Before) ([]models.ModelWithProvider, error) {
 	var caps repository.ModelCapabilityFilter
 	if getStrictCapabilityMatch(ctx) {
@@ -187,6 +180,18 @@ func queryEnabledModelProviders(ctx context.Context, modelID uint, before Before
 	}
 
 	return repos().ModelWithProvider.ListEnabledByModelID(ctx, modelID, caps)
+}
+
+// noUsableProviderReason 说明「真实模型查不到可用供应商」的原因。
+//
+// 必须点明能力筛选：严格能力匹配开启时，「关联页显示已启用」与「本请求无可用供应商」
+// 可以同时成立——请求自带的工具调用 / 结构化输出 / 图片需求会把能力不满足的关联筛掉。
+// 不带这句提示时，该场景表现为「明明启用了却说没有供应商」，会被当成系统 bug 排查。
+func noUsableProviderReason(ctx context.Context, modelName string) string {
+	if getStrictCapabilityMatch(ctx) {
+		return fmt.Sprintf("no enabled provider for model %q (strict capability match is on: associations may be filtered out by tool_call / structured_output / image requirements)", modelName)
+	}
+	return fmt.Sprintf("no enabled provider for model %q", modelName)
 }
 
 func buildProviderMapByModelProviders(ctx context.Context, modelWithProviders []models.ModelWithProvider) (map[uint]models.Provider, error) {

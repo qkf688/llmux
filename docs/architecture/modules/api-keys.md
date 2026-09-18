@@ -5,7 +5,7 @@
 ## 1. 模块概述
 
 - **业务领域**：/v1 代理 API 的调用方 key 生命周期——创建（自定义值或系统生成）、列表（明文回显供复制）、重命名、启停、删除。
-- **切片进度**：`/v1` 鉴权已切到查 `api_keys.api_key_hash`（#4-2，2026-09-15），users 单 key 路径已全退；日志归因快照已落地（#4-3，2026-09-15：`chat_logs.api_key_id`/`api_key_name` 写入时快照，/v1 全部四个建行点打穿，日志页「密钥」列展示，见 [logs-metrics.md](logs-metrics.md) §5）；前端管理页已落地（#5，2026-09-16：`webui/src/routes/api-keys/` 独立页「API Keys」——octopus 式卡片列表（行内不渲染密钥值，明文仅经复制按钮进剪贴板；解密失败降级行的复制入口禁用）+ 编辑弹窗密钥区（默认掩码，点「显示明文」才上屏，关窗回落——IP+HTTP 剪贴板不可用时的手动复制兜底）/创建含 409 冲突特判/重命名/启停/硬删确认，API 层 `lib/api/modules/api-keys`，`createApiKey` 因 409 真实状态码弃用 `apiRequest` 走 `fetchWithAuth` 手动解包）；**key 级自定义出站头已落地（#6，2026-09-16，切片 B 完结）**：`api_keys.headers` 明文 JSON 列（伪装客户端头族是展示配置非凭据，鉴权直读不经 cipher），弹窗键值行编辑 + Codex/Claude Code 一键预设，转发时经唯一装配点 `chatcore.BuildHeaders` 按四层优先级链注入（见 §4 与方案 §3）。
+- **切片进度**：`/v1` 鉴权已切到查 `api_keys.api_key_hash`（#4-2，2026-09-15），users 单 key 路径已全退；日志归因快照已落地（#4-3，2026-09-15：`chat_logs.api_key_id`/`api_key_name` 写入时快照，/v1 全部建行点打穿——五处，Stage 7 补齐「真实模型无启用供应商」那一处，见 [logs-metrics.md](logs-metrics.md) §5）；前端管理页已落地（#5，2026-09-16：`webui/src/routes/api-keys/` 独立页「API Keys」——octopus 式卡片列表（行内不渲染密钥值，明文仅经复制按钮进剪贴板；解密失败降级行的复制入口禁用）+ 编辑弹窗密钥区（默认掩码，点「显示明文」才上屏，关窗回落——IP+HTTP 剪贴板不可用时的手动复制兜底）/创建含 409 冲突特判/重命名/启停/硬删确认，API 层 `lib/api/modules/api-keys`，`createApiKey` 因 409 真实状态码弃用 `apiRequest` 走 `fetchWithAuth` 手动解包）；**key 级自定义出站头已落地（#6，2026-09-16，切片 B 完结）**：`api_keys.headers` 明文 JSON 列（伪装客户端头族是展示配置非凭据，鉴权直读不经 cipher），弹窗键值行编辑 + Codex/Claude Code 一键预设，转发时经唯一装配点 `chatcore.BuildHeaders` 按四层优先级链注入（见 §4 与方案 §3）。
 
 ## 2. 职责与边界
 

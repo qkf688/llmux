@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
@@ -15,8 +17,9 @@ import (
 
 // 多 api-key 方案 §4 归因快照的落库契约：/v1 请求产生的每条 chat_logs 行携带
 // 调用 key 的**写入时**快照（api_key_id + api_key_name），key 改名/删除不回写历史行。
-// 四类建行点（尝试、虚拟跳过、虚拟选模失败、模型不存在）在此各钉一处；
-// handler→ReqMeta 的翻译在 handler/v1 侧测（newReqMeta），出口 DTO 在 handler/logs 侧测。
+// 五类建行点（尝试、虚拟跳过、虚拟选模失败、模型不存在、真实模型无启用供应商）
+// 在此各钉一处；handler→ReqMeta 的翻译在 handler/v1 侧测（newReqMeta），
+// 出口 DTO 在 handler/logs 侧测。
 
 func createAttributionFixtureProvider(t *testing.T, name string) (models.Provider, models.ModelWithProvider) {
 	t.Helper()
@@ -235,5 +238,188 @@ func TestProvidersWithMetaBymodelsName_VirtualSelectionFailed_LogCarriesCallerKe
 	}
 	if got.ApiKeyName != "vm-probe-key" {
 		t.Fatalf("ApiKeyName = %q, want %q", got.ApiKeyName, "vm-probe-key")
+	}
+}
+
+// 「真实模型存在、但一个启用供应商都没有」此前是审计盲区：请求失败却零行。
+// 本用例钉两件事：① 该失败必须建行且带调用 key 快照；② 失败原因要点明
+// 「严格能力匹配开启时关联可能被能力条件筛掉」——否则「关联页明明启用了」
+// 只能被当成系统 bug 排查。
+func TestProvidersWithMetaBymodelsName_NoEnabledProvider_WritesAttributedLog(t *testing.T) {
+	initChatRecordTestDB(t)
+
+	amin := models.Model{Name: "m-no-provider"}
+	if err := models.DB.Create(&amin).Error; err != nil {
+		t.Fatalf("create model: %v", err)
+	}
+
+	callerID := uint(17)
+	_, err := ProvidersWithMetaBymodelsName(context.Background(), "openai", Before{Model: amin.Name},
+		models.ReqMeta{ApiKeyID: &callerID, ApiKeyName: "cfg-probe-key"})
+	if err == nil {
+		t.Fatalf("expected error for model without enabled provider")
+	}
+
+	var got models.ChatLog
+	if err := models.DB.Where("name = ?", amin.Name).First(&got).Error; err != nil {
+		t.Fatalf("reload no-provider log: %v", err)
+	}
+	if got.Status != "error" {
+		t.Fatalf("Status = %q, want %q", got.Status, "error")
+	}
+	if got.RealModelName != amin.Name {
+		t.Fatalf("RealModelName = %q, want %q", got.RealModelName, amin.Name)
+	}
+	// ProviderName/ProviderModel 恒空 = 「未选到供应商」的可判别特征（列表页靠此辨认）。
+	if got.ProviderName != "" || got.ProviderModel != "" {
+		t.Fatalf("ProviderName/ProviderModel = %q/%q, want 空", got.ProviderName, got.ProviderModel)
+	}
+	if !strings.Contains(got.Error, "strict capability match is on") {
+		t.Fatalf("Error = %q, want 含严格能力匹配提示（默认开启）", got.Error)
+	}
+	if got.ApiKeyID == nil || *got.ApiKeyID != callerID {
+		t.Fatalf("ApiKeyID = %v, want %d（无供应商失败也必须可归因）", got.ApiKeyID, callerID)
+	}
+	if got.ApiKeyName != "cfg-probe-key" {
+		t.Fatalf("ApiKeyName = %q, want %q", got.ApiKeyName, "cfg-probe-key")
+	}
+}
+
+// 严格能力匹配关闭时不该出现那条提示：否则管理员会去查一个根本没参与的开关。
+func TestProvidersWithMetaBymodelsName_NoEnabledProvider_OmitsCapabilityHintWhenOff(t *testing.T) {
+	initChatRecordTestDB(t)
+
+	// setting_schema 已在建库时种入默认值（true），此处只改值——再 Insert 会撞唯一索引。
+	if err := models.DB.Model(&models.Setting{}).
+		Where("key = ?", models.SettingKeyStrictCapabilityMatch).
+		Update("value", "false").Error; err != nil {
+		t.Fatalf("disable strict capability match: %v", err)
+	}
+
+	amin := models.Model{Name: "m-no-provider-off"}
+	if err := models.DB.Create(&amin).Error; err != nil {
+		t.Fatalf("create model: %v", err)
+	}
+
+	if _, err := ProvidersWithMetaBymodelsName(context.Background(), "openai", Before{Model: amin.Name},
+		models.ReqMeta{}); err == nil {
+		t.Fatalf("expected error for model without enabled provider")
+	}
+
+	var got models.ChatLog
+	if err := models.DB.Where("name = ?", amin.Name).First(&got).Error; err != nil {
+		t.Fatalf("reload no-provider log: %v", err)
+	}
+	if strings.Contains(got.Error, "strict capability match") {
+		t.Fatalf("Error = %q, 关档时不得出现能力匹配提示", got.Error)
+	}
+}
+
+// 本出口是「日志与统计双双零记录」变「两处都有」的修复，故除了 chat_logs 行，
+// 还必须钉住仪表盘统计同步累加——只查日志行会让「统计漏记」这一半静默回归。
+func TestProvidersWithMetaBymodelsName_NoEnabledProvider_CountsRequestStats(t *testing.T) {
+	initChatRecordTestDB(t)
+
+	amin := models.Model{Name: "m-no-provider-stats"}
+	if err := models.DB.Create(&amin).Error; err != nil {
+		t.Fatalf("create model: %v", err)
+	}
+
+	if _, err := ProvidersWithMetaBymodelsName(context.Background(), "openai", Before{Model: amin.Name},
+		models.ReqMeta{}); err == nil {
+		t.Fatalf("expected error for model without enabled provider")
+	}
+
+	var daily models.StatsDaily
+	if err := models.DB.Where("date = ?", time.Now().Format("2006-01-02")).First(&daily).Error; err != nil {
+		t.Fatalf("reload stats daily: %v", err)
+	}
+	if daily.Reqs != 1 {
+		t.Fatalf("StatsDaily.Reqs = %d, want 1（失败请求同样计入请求数）", daily.Reqs)
+	}
+
+	var realTotal models.StatsRealModelTotal
+	if err := models.DB.Where("name = ?", amin.Name).First(&realTotal).Error; err != nil {
+		t.Fatalf("reload real model stats: %v", err)
+	}
+	if realTotal.Calls != 1 {
+		t.Fatalf("StatsRealModelTotal.Calls = %d, want 1（真实模型维度按 RealModelName 归集）", realTotal.Calls)
+	}
+}
+
+// 写日志失败必须保持调用方的原错误（旧实现会把「写日志失败」原样上抛，把
+// 「模型不存在」偷换成数据库错误）。做法：只删日志表——模型查询仍正常，
+// 走到建行那一步才失败。
+func TestProvidersWithMetaBymodelsName_LogWriteFailure_KeepsOriginalError(t *testing.T) {
+	initChatRecordTestDB(t)
+
+	amin := models.Model{Name: "m-log-write-fails"}
+	if err := models.DB.Create(&amin).Error; err != nil {
+		t.Fatalf("create model: %v", err)
+	}
+	if err := models.DB.Migrator().DropTable(&models.ChatLog{}); err != nil {
+		t.Fatalf("drop chat_logs: %v", err)
+	}
+
+	_, gotErr := ProvidersWithMetaBymodelsName(context.Background(), "openai", Before{Model: amin.Name},
+		models.ReqMeta{})
+	if gotErr == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(gotErr.Error(), "not provider for model") {
+		t.Fatalf("err = %q, want 保留「无启用供应商」原错误而非写库错误", gotErr)
+	}
+	if strings.Contains(gotErr.Error(), "no such table") {
+		t.Fatalf("err = %q, 不得把写库失败偷换成调用方看到的失败原因", gotErr)
+	}
+}
+
+// 严格能力匹配开启（默认）时，「关联存在但被能力需求筛掉」才是这条日志要解释的
+// 真实场景：只造零关联的 fixture 测不出筛选行为，故这里造一条 tool_call 能力不满足
+// 的已启用关联，请求带工具调用 —— 结果必须是「无可用供应商 + 带能力匹配提示」。
+func TestProvidersWithMetaBymodelsName_CapabilityFilteredProvider_HintedInLog(t *testing.T) {
+	initChatRecordTestDB(t)
+
+	enabled := true
+	providerRow := models.Provider{Name: "p-no-toolcall", Type: providers.TypeOpenAI}
+	if err := models.DB.Create(&providerRow).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+
+	amin := models.Model{Name: "m-cap-filtered"}
+	if err := models.DB.Create(&amin).Error; err != nil {
+		t.Fatalf("create model: %v", err)
+	}
+	noToolCall := false
+	if err := models.DB.Create(&models.ModelWithProvider{
+		ModelID:       amin.ID,
+		ProviderID:    providerRow.ID,
+		ProviderModel: "pm-cap",
+		Status:        &enabled,
+		ToolCall:      &noToolCall,
+	}).Error; err != nil {
+		t.Fatalf("create association: %v", err)
+	}
+
+	raw := []byte(`{"model":"` + amin.Name + `","messages":[{"role":"user","content":"hi"}],"tools":[{"type":"function","function":{"name":"f","parameters":{}}}]}`)
+	before, err := BeforerOpenAI(raw)
+	if err != nil {
+		t.Fatalf("parse before: %v", err)
+	}
+	if !before.toolCall {
+		t.Fatalf("fixture 未标记 toolCall，用例失去意义")
+	}
+
+	if _, err := ProvidersWithMetaBymodelsName(context.Background(), "openai", *before,
+		models.ReqMeta{}); err == nil {
+		t.Fatalf("expected error: 关联存在但工具调用能力不满足，应被筛掉")
+	}
+
+	var got models.ChatLog
+	if err := models.DB.Where("name = ?", amin.Name).First(&got).Error; err != nil {
+		t.Fatalf("reload log: %v", err)
+	}
+	if !strings.Contains(got.Error, "strict capability match is on") {
+		t.Fatalf("Error = %q, want 含能力匹配提示——这正是该提示要解释的场景", got.Error)
 	}
 }

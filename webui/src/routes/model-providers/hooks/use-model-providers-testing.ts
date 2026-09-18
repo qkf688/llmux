@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
-import { getAuthToken } from "@/stores/auth";
 import { isAbortError, toErrorMessage } from "@/lib/errors";
 import {
   testModelProvider,
@@ -9,6 +8,7 @@ import {
   testModelProviderVision,
   type ModelProviderTestResult,
 } from "@/lib/api";
+import { requireAuthTokenOrRedirect } from "@/lib/api/core/client";
 import type { Updater } from "@/stores/core/updater";
 import type { CapabilityTestKey, TestMode, TestType } from "../types";
 
@@ -200,9 +200,10 @@ export function useModelProvidersTesting({
       };
 
       try {
-        const token = getAuthToken();
+        // 长连接不经信封通道（fetchEventSource 自持连接），故只借统一入口的鉴权与
+        // 凭证失效处置（清会话 + 跳登录页），不自拼 Authorization。
+        const token = requireAuthTokenOrRedirect();
         if (!token) {
-          window.location.href = "/login";
           return;
         }
 

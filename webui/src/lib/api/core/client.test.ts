@@ -105,6 +105,12 @@ describe("apiRequest 成功路径", () => {
 
     await expect(apiRequest("/probe")).rejects.toThrow("请求失败：响应内容格式不对");
   });
+
+  it("2xx 但 body 是字面量 null 时同样给人话，不抛 TypeError 原文", async () => {
+    fetchMock.mockResolvedValue(response({ status: 200, body: null }));
+
+    await expect(apiRequest("/probe")).rejects.toThrow("请求失败：响应内容格式不对");
+  });
 });
 
 describe("apiRequest 失败路径", () => {
@@ -172,6 +178,24 @@ describe("apiRequest 失败路径", () => {
 
     const err = await catchError(apiRequest("/probe"));
     expect(err.message).toBe("服务器内部错误 [req=deadbeef0001]");
+  });
+
+  it("失败体是字面量 null（JSON 合法但不是对象）时走兜底，不抛 TypeError 原文", async () => {
+    fetchMock.mockResolvedValue(
+      response({ status: 500, headers: { "X-Request-Id": "aa11bb22cc33" }, body: null }),
+    );
+
+    const err = await catchError(apiRequest("/probe"));
+    expect(err.message).toBe("服务器内部错误 [req=aa11bb22cc33]");
+  });
+
+  it("信封文案字段不是字符串（数字）时当没有，走兜底", async () => {
+    fetchMock.mockResolvedValue(
+      response({ status: 409, body: { code: 409, message: 12345 } }),
+    );
+
+    const err = await catchError(apiRequest("/probe"));
+    expect(err.message).toBe("请求失败（错误码 409）");
   });
 
   it("校验类失败（400）不带报障编号——它是可直接改正的提示", async () => {

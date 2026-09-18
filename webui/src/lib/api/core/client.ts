@@ -69,12 +69,17 @@ function jsonHeaders(headers?: HeadersInit): HeadersInit {
 async function failureError(response: Response): Promise<Error> {
   let payload: EnvelopeFailure = {};
   try {
-    payload = (await response.json()) as EnvelopeFailure;
+    // JSON 合法但不是对象（字面量 null / 字符串 / 数字）也要退兜底：下面按对象取值，
+    // 否则会抛 TypeError 原文上屏，与「不透传内部错误原文」的约定冲突。
+    const parsed: unknown = await response.json();
+    if (parsed !== null && typeof parsed === "object") {
+      payload = parsed as EnvelopeFailure;
+    }
   } catch {
     // 见上：非 JSON 失败体走兜底文案
   }
 
-  const detail = payload.message?.trim() || payload.error?.trim() || "";
+  const detail = textOrEmpty(payload.message) || textOrEmpty(payload.error) || "";
   const rid = response.headers.get(REQUEST_ID_HEADER);
 
   if (response.status === 500) {
@@ -85,17 +90,26 @@ async function failureError(response: Response): Promise<Error> {
   return new Error(detail || `请求失败（错误码 ${response.status}）`);
 }
 
+/** 信封文案字段可能是任意 JSON 类型：只认字符串，其余（数字/对象/缺失）当没有。 */
+function textOrEmpty(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 /** 2xx → 校验信封 code 并取 data；body 非 JSON 时给固定人话（不透传 SyntaxError 原文）。 */
 async function unwrapEnvelope<T>(response: Response): Promise<T> {
   let payload: ApiResponseEnvelope<T>;
   try {
-    payload = (await response.json()) as ApiResponseEnvelope<T>;
+    const parsed: unknown = await response.json();
+    if (parsed === null || typeof parsed !== "object") {
+      throw new Error("not an envelope");
+    }
+    payload = parsed as ApiResponseEnvelope<T>;
   } catch {
     throw new Error("请求失败：响应内容格式不对");
   }
 
   if (payload.code !== 200) {
-    throw new Error(payload.message?.trim() || `请求失败（响应码 ${payload.code}）`);
+    throw new Error(textOrEmpty(payload.message) || `请求失败（响应码 ${payload.code}）`);
   }
 
   return payload.data;
@@ -169,4 +183,17 @@ export async function apiRequestFile(
   }
 
   return response;
+}
+
+/** SSE 流请求（当前仅 ReAct 测试端点 `/api/test/react/:id`）：`fetchEventSource` 自己
+ *  管连接与取消，拿不到 Response 也就无法走信封拆包——故它只借这里的鉴权与失效处置：
+ *  无凭证时清会话 + 跳登录页（与 `apiRequest` 的 401 处置一致；此前该调用点只跳转不
+ *  清会话，会让 store 与 localStorage 留着失效 token）。事件内容与错误呈现归调用方。
+ *  新增长连接端点若也要走这条通道，必须复用本函数而不是自拼 Authorization。 */
+export function requireAuthTokenOrRedirect(): string | null {
+  const token = getAuthToken();
+  if (!token) {
+    handleUnauthorized();
+  }
+  return token;
 }

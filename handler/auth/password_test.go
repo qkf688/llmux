@@ -36,16 +36,18 @@ func doChangePassword(t *testing.T, r *gin.Engine, body string) *httptest.Respon
 	return w
 }
 
-func bodyMessage(t *testing.T, w *httptest.ResponseRecorder) string {
+type envelope struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+func bodyEnvelope(t *testing.T, w *httptest.ResponseRecorder) envelope {
 	t.Helper()
-	var payload struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-	}
+	var payload envelope
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("响应体不是 JSON: %v (%s)", err, w.Body.String())
 	}
-	return payload.Message
+	return payload
 }
 
 // TestChangePassword_WrongOldPasswordIsRequestError 锁定「旧密码填错 ≠ 凭据失效」：
@@ -62,12 +64,18 @@ func TestChangePassword_WrongOldPasswordIsRequestError(t *testing.T) {
 	w := doChangePassword(t, r, `{"old_password":"wrong","new_password":"new-password-123"}`)
 
 	// 现实 HTTP 状态码必须是 200：前端全局惯例把真实 401 当登录过期。
-	// 分类放进信封 code（httpresp.BadRequest 的形状），正是「请求内容不对」。
 	if w.Code != http.StatusOK {
 		t.Fatalf("旧密码错误应回 HTTP 200 + 信封 code，实得 HTTP %d", w.Code)
 	}
-	if got := bodyMessage(t, w); got != "old password incorrect" {
-		t.Fatalf("message = %q", got)
+	got := bodyEnvelope(t, w)
+	// 信封 code 是前端实际读的那一位（`unwrapEnvelope` 只看 code）：只断 message
+	// 而不管 code，把分类改错成 401 语义（如改用 ErrorWithHttpStatus 回真实 401）
+	// 测试仍会绿。
+	if got.Code != http.StatusBadRequest {
+		t.Fatalf("信封 code = %d, want 400（«请求内容不对»而非«凭据失效»）", got.Code)
+	}
+	if got.Message != "old password incorrect" {
+		t.Fatalf("message = %q", got.Message)
 	}
 }
 
@@ -80,5 +88,8 @@ func TestChangePassword_Unauthenticated(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("未登录应回 401，实得 HTTP %d", w.Code)
+	}
+	if got := bodyEnvelope(t, w); got.Code != http.StatusUnauthorized {
+		t.Fatalf("信封 code = %d, want 401", got.Code)
 	}
 }

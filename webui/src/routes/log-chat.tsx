@@ -215,7 +215,10 @@ export default function LogChatPage() {
       } catch (fetchError) {
         let message = "获取会话日志失败";
         if (fetchError instanceof Error) {
-          if (fetchError.message.includes("chat io not found")) {
+          // 后端文案是 "ChatIO not found"（handler/logs/chat_io.go，大写 C、无空格分隔）；
+          // 此前按全小写子串比对从未命中，这条翻译一直没生效。改为大小写无关匹配，
+          // 对文案微调（如尾部加句号）也不至失效。后端改这句时需同步此处。
+          if (fetchError.message.toLowerCase().includes("chatio not found")) {
             message = "暂无会话记录，可能未开启 IO 记录";
           } else {
             message = fetchError.message;

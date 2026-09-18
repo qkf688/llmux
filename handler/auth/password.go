@@ -27,7 +27,10 @@ func ChangePassword(c *gin.Context) {
 	}
 
 	if err := authservice.VerifyPassword(user.PasswordHash, req.OldPassword); err != nil {
-		httpresp.Unauthorized(c, "old password incorrect")
+		// 旧密码填错属「改一下就能过」的请求问题，不是凭据失效：回 400 而非 401。
+		// 管理端的全局规则是「401 = 登录过期，清会话回登录页」——若这里回 401，
+		// 用户只是打错旧密码就会被踢下线，且刚写的错误提示随跳转一起消失。
+		httpresp.BadRequest(c, "old password incorrect")
 		return
 	}
 

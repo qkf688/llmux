@@ -5,7 +5,7 @@
 ## 1. 模块概述
 
 - **业务领域**：/v1 代理 API 的调用方 key 生命周期——创建（自定义值或系统生成）、列表（明文回显供复制）、重命名、启停、删除。
-- **切片进度**：`/v1` 鉴权已切到查 `api_keys.api_key_hash`（#4-2，2026-09-15），users 单 key 路径已全退；日志归因快照已落地（#4-3，2026-09-15：`chat_logs.api_key_id`/`api_key_name` 写入时快照，/v1 全部建行点打穿——五处，Stage 7 补齐「真实模型无启用供应商」那一处，见 [logs-metrics.md](logs-metrics.md) §5）；前端管理页已落地（#5，2026-09-16：`webui/src/routes/api-keys/` 独立页「API Keys」——octopus 式卡片列表（行内不渲染密钥值，明文仅经复制按钮进剪贴板；解密失败降级行的复制入口禁用）+ 编辑弹窗密钥区（默认掩码，点「显示明文」才上屏，关窗回落——IP+HTTP 剪贴板不可用时的手动复制兜底）/创建含 409 冲突特判/重命名/启停/硬删确认，API 层 `lib/api/modules/api-keys`，`createApiKey` 因 409 真实状态码弃用 `apiRequest` 走 `fetchWithAuth` 手动解包）；**key 级自定义出站头已落地（#6，2026-09-16，切片 B 完结）**：`api_keys.headers` 明文 JSON 列（伪装客户端头族是展示配置非凭据，鉴权直读不经 cipher），弹窗键值行编辑 + Codex/Claude Code 一键预设，转发时经唯一装配点 `chatcore.BuildHeaders` 按四层优先级链注入（见 §4 与方案 §3）。
+- **切片进度**：`/v1` 鉴权已切到查 `api_keys.api_key_hash`（#4-2，2026-09-15），users 单 key 路径已全退；日志归因快照已落地（#4-3，2026-09-15：`chat_logs.api_key_id`/`api_key_name` 写入时快照，/v1 全部建行点打穿——五处，Stage 7 补齐「真实模型无启用供应商」那一处，见 [logs-metrics.md](logs-metrics.md) §5）；前端管理页已落地（#5，2026-09-16：`webui/src/routes/api-keys/` 独立页「API Keys」——octopus 式卡片列表（行内不渲染密钥值，明文仅经复制按钮进剪贴板；解密失败降级行的复制入口禁用）+ 编辑弹窗密钥区（默认掩码，点「显示明文」才上屏，关窗回落——IP+HTTP 剪贴板不可用时的手动复制兜底）/创建含 409 冲突特判/重命名/启停/硬删确认，API 层 `lib/api/modules/api-keys`；**`createApiKey` 的 409 特判已由 Stage 8 收编**：统一拆包通道对真实非 2xx 也解析信封，`createApiKey` 回到普通 `apiRequest`，见 [webui.md](webui.md) §5 信封契约）；**key 级自定义出站头已落地（#6，2026-09-16，切片 B 完结）**：`api_keys.headers` 明文 JSON 列（伪装客户端头族是展示配置非凭据，鉴权直读不经 cipher），弹窗键值行编辑 + Codex/Claude Code 一键预设，转发时经唯一装配点 `chatcore.BuildHeaders` 按四层优先级链注入（见 §4 与方案 §3）。
 
 ## 2. 职责与边界
 
@@ -22,7 +22,7 @@ handler/apikeys/
 ├── routes.go                  # Register：POST/GET /api-keys, PATCH/DELETE /api-keys/:id
 ├── repos.go                   # repository.Default() 注入（同 pools/auth 模式）
 └── crud.go                    # 编解码 + 加解密 + 409/400 映射（DTO snake_case，见 §4）
-webui/src/lib/api/modules/api-keys/api-keys.ts  # 前端 API 层（#5）：ApiKeyItem 逐键对齐 DTO；createApiKey 走 fetchWithAuth 手动解包以消费真实 409 body
+webui/src/lib/api/modules/api-keys/api-keys.ts  # 前端 API 层（#5）：ApiKeyItem 逐键对齐 DTO；创建走普通 apiRequest（Stage 8 起非 2xx 同样解析信封）
 webui/src/hooks/api/use-api-keys.ts             # queryKey 工厂 + useApiKeys/useCreate/useUpdate/useDelete（invalidate 列表）
 webui/src/routes/api-keys/                      # 「API Keys」管理页（#5）：index + hooks/use-api-keys-page 编排 + sections（octopus 式卡片列表：行内不渲染密钥值、复制/编辑/启停/删除，解密失败降级行禁复制）+ dialogs（编辑：改名 + 掩码/显示明文/复制 + key 级 headers 编辑区，创建：名称 + 可选值 + headers；删除确认）+ route-config 挂导航
 ├── constants/header-presets.ts  # #6 Codex / Claude Code 出站头预设种子（头名抄 new-api 实战清单，值可改）
@@ -33,7 +33,7 @@ webui/src/routes/api-keys/                      # 「API Keys」管理页（#5�
 
 | 接口 | 契约 |
 |------|------|
-| `POST /api/api-keys` | 体 `{name, value?, headers?}`；`value` 省略=系统生成 `sk-llmux-`+32hex；缺前缀自动补 `sk-llmux-`、补后总长 <16 拒绝（信封 400）；hash 撞库→**真实 HTTP 409**（`httpresp.Conflict`，应用层不预查——方案 §5）；`headers`=key 级自定义出站头（可选，管理员显式通道不设黑名单，#6）。响应 `data` = apiKeyResponse，恒 `Cache-Control: no-store`。⚠️ 前端 `apiRequest` 对非 2xx 直接 throw 并**丢弃响应体**（`lib/api/core/client.ts`），故 #5 的 `createApiKey` 已按 HTTP 409 特判走 `fetchWithAuth` 手动解包消费 body（新调用点勿改回 `apiRequest`，有契约测试钉死）。 |
+| `POST /api/api-keys` | 体 `{name, value?, headers?}`；`value` 省略=系统生成 `sk-llmux-`+32hex；缺前缀自动补 `sk-llmux-`、补后总长 <16 拒绝（信封 400）；hash 撞库→**真实 HTTP 409**（`httpresp.Conflict`，应用层不预查——方案 §5）；`headers`=key 级自定义出站头（可选，管理员显式通道不设黑名单，#6）。响应 `data` = apiKeyResponse，恒 `Cache-Control: no-store`。⚠️ 真实非 2xx 的信封文案由前端统一拆包通道取出（Stage 8：`lib/api/core/client.ts`），409 与「HTTP 200 + 信封 code」两条失败面在页面层无差别，新调用点直接用 `apiRequest` 即可。 |
 | `GET /api/api-keys` | 全量列表（含 disabled）；`api_key` 为解密明文（管理端复制用），单行解密失败降级 `"****"` + slog.Warn（同 MaskStored 口径）；no-store。 |
 | `PATCH /api/api-keys/:id` | `{name?, enabled?, headers?}` 三态指针=部分更新（`headers`：JSON 键缺席=不改、对象含 `{}`=整体覆盖/清空——序列化收在 handler，GORM serializer:json 对 map-Updates 不生效）；不提供改值端点；rows=0→信封 404。 |
 | `DELETE /api/api-keys/:id` | **硬删**（Unscoped）：软删残留会永久挡死同值重建（uniqueIndex 不含 deleted_at）；在途流不受影响（鉴权只在入口执行一次）。 |

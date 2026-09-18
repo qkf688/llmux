@@ -27,10 +27,11 @@ const POOL_ID = 7;
 const MASKED = "sk-****ab12";
 const VIEW = "1|all|";
 
-// apiRequest 在 HTTP 非 2xx 时抛的是 "API request failed: <status> <statusText>"，**不解析响应体**
-// （lib/api/core/client.ts）——后端 raw 解密失败写的 "Failed to decrypt key" 到不了前端。
-// mock 必须用生产真实形状，否则断言的是一条永不出现的文案（假绿）。
-const RAW_HTTP_500 = new Error("API request failed: 500 Internal Server Error");
+// 后端 raw 解密失败写的是 "Failed to decrypt key"（httpresp.InternalErrorMessage → 真实 HTTP 500）。
+// Stage 8 起 apiRequest 会解析非 2xx 的响应体，故生产上这个 hook 拿到的是后端文案；
+// 本用例只关心 toast 是否照 `toErrorMessage` 呈现，用一个同形状的 Error 代表传输失败即可，
+// 文案本身由 client.test.ts 的失败矩阵覆盖。
+const RAW_HTTP_500 = new Error("Failed to decrypt key [req=aa11bb22cc33]");
 
 type RevealProps = { poolId: number | null; view: string };
 
@@ -136,7 +137,8 @@ describe("useCredentialKeyReveal 显示", () => {
 
     const message = String(vi.mocked(toast.error).mock.calls[0]?.[0]);
     expect(message).toContain("显示明文失败");
-    expect(message).toContain("500");
+    // 后端的具体原因须到达用户（Stage 8 前这里只剩状态码，故原断言写的是 "500"）
+    expect(message).toContain("Failed to decrypt key");
     expect(result.current.isRevealed(11)).toBe(false);
     expect(result.current.pendingAction(11)).toBeNull();
   });

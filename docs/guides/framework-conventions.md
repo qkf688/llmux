@@ -22,8 +22,8 @@
 - 服务端状态：TanStack Query；客户端状态：Zustand（`stores/core/updater` 统一更新模式）。
 - 表单：react-hook-form + zod；UI：Radix + Tailwind + CVA。
 - 路径别名：`@/` → `src/`；开发代理：`/api` → `http://localhost:7070`。
-- 页面**不得**绕过 `lib/api` 核心客户端自造鉴权 header 逻辑（除非扩展 client 本身）。
-- API 信封约定：`{ code, message, data }`，`code !== 200` 抛错；401 跳转 `/login`。
+- 页面**不得**绕过 `lib/api` 核心客户端自造鉴权 header 逻辑（除非扩展 client 本身）；**不得**自行解析响应体/信封（失败文案的唯一来源是 `client.ts`，见 `modules/webui.md` §5）。
+- API 信封约定：`{ code, message, data }`；「成不成功」需同时看真实 HTTP 状态码与信封 `code`；失败文案取信封 `message`（500 补响应头 `X-Request-Id` 报障编号）；401 = 登录过期 → 清会话 + 跳 `/login`（接口自身凭据无效者走 `apiRequestAnonymous` 并让后端改用非 401 分类）。
 - TypeScript 严格模式；**禁止**无注释的 `any`；确需放宽用 `unknown` 并在使用处收窄。
 - dialog 尺寸**只能**用 `DialogContent` / `AlertDialogContent` 的 `size` 预设（`components/ui/dialog.tsx` 的 CVA 是唯一数据源），页面侧**禁止**再写 `max-w-*` / `max-h-*` / `h-[...]` 等外框尺寸类；`padding` / `gap` / `rounded` 等非尺寸调节不在此列。组件**内部**变长区（列表、日志、表格列宽）的 `max-h-*` / `w-[...]` 是合法内部约束，保留。理由：29 处各写各的尺寸拼装曾导致全站尺寸漂移，收口到单档后调参成本从 N 处降到 1 处。可机械复核：`rg 'DialogContent (size|className)' webui/src` 里 className 不应含外框尺寸类。
 - dialog 的 Header 与 Footer 之间的内容**必须**包一层 `DialogBody`（全站唯一的滚动容器，自带 `min-h-0 flex-1 overflow-y-auto`）；**禁止**让 `DialogContent` 整框滚动或页面自己手写 `flex-1 overflow-y-auto`。固定高度档（`lg`/`xl`）不包 body 会让内容溢出外框，上限档（`sm`/`md`/`menu`/`sheet`）不包 body 则 `max-h` 只是一条没人执行的声明。「固定搜索栏 + 内部滚动列表」这类分区形态，`DialogBody` 套在**真正滚动的那一层**即可，不必是 `DialogContent` 的直接子级。`AlertDialogContent` 例外：它无 body 抽象、内容稳定，走整框滚动（理由见该文件注释）。
@@ -40,7 +40,7 @@
 读取上游响应或请求体的代码**禁止**无上限 `io.ReadAll(r.Body)`。合法入口白名单：
 
 - 诊断 / 探针 / 连通测试路径：`common.ReadCappedBody`（1 MiB 单源；上游未通过判定（见 `common.IsPassingStatus`）的错误体同口径）。
-- 入站请求体：`consts.MaxInboundBodyBytes`（20 MiB 硬上限，代码常量刻意不做成设置——可被调小的防线不是防线）+ `io.LimitReader(body, max+1)` 多探 1 字节拒绝；`/v1` 超限回真实 413（SDK 不自动重试），管理端按该端点信封惯例（前端对非 2xx 不解析 body）。
+- 入站请求体：`consts.MaxInboundBodyBytes`（20 MiB 硬上限，代码常量刻意不做成设置——可被调小的防线不是防线）+ `io.LimitReader(body, max+1)` 多探 1 字节拒绝；`/v1` 超限回真实 413（SDK 不自动重试），管理端按该端点既有信封惯例（HTTP 200 + 信封 code，与同域导出端点一致；前端两条通道都会解析）。
 - 上游非流式成功响应：`service/chat` 的 `limitUpstreamResponseBody` 在 attempt 内、响应头提交给客户端**之前**整读加限（设置项 `upstream_max_response_mib`，默认 32 MiB、下限 1 不可关闭），未超限回填为可重读内存字节。失败语义：超限=端点级异常 → 组织级转移**不冷却凭据**；读体错误（含 ctx 超时打断读体）与 `Client.Do` 失败**成对**归凭据级网络——超时分类只挂 Do 侧会让读体超时静默漏走（见全局 RULES「Go HTTP 超时」）。
 - 原始采集落库：四文本字段（`RequestBody`/`RawRequestBody`/`RawResponseBody`/`Error`）共用单字段上限（设置项 `raw_log_field_max_kib`，默认 256 KiB），截断一律 `common.TruncateUTF8`（rune 边界 + `…(truncated)` 标记，按字节劈半进 JSON 必出 U+FFFD 乱码尾）。采集读头不吞尾（MultiReader 回填），旁路不得成为下游截断点。
 - 流式 SSE 不整读、天然不在本防线内；帧级/累积侧信道截断策略另有约定（见 logs-metrics.md），提高上限需单独立项。

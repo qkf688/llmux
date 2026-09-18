@@ -16,7 +16,8 @@ import (
 func ImportConfig(c *gin.Context) {
 	// 入站硬上限复用 consts.MaxInboundBodyBytes（Stage 2：管理端也堵裸 ReadAll，
 	// 免得质量门约定里留一个注释豁免例外）。超限走 BadRequest 信封而非真实 413：
-	// 前端对非 2xx 不解析响应体，信封 code 才到得了用户。
+	// 管理端信封惯例是「HTTP 200 + 信封 code」，与同域导出端点及 /v1 的 413 各自
+	// 对齐既有形状（前端两条通道都会解析，改动原因与前端无关）。
 	body, err := io.ReadAll(io.LimitReader(c.Request.Body, consts.MaxInboundBodyBytes+1))
 	if err != nil {
 		slog.Error("读取请求体失败", "error", err)

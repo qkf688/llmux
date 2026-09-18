@@ -1,4 +1,4 @@
-import { fetchWithAuth } from "../../core/client";
+import { apiRequestFile, apiRequestForm } from "../../core/client";
 import { downloadBlob, extractFilenameFromContentDisposition } from "../../core/download";
 
 export type ExportType = "providers" | "models" | "associations" | "templates" | "settings";
@@ -32,13 +32,9 @@ export async function exportConfig(types: ExportType[]): Promise<void> {
   const params = new URLSearchParams();
   params.append("types", types.join(","));
 
-  const response = await fetchWithAuth(`/system/export-config?${params.toString()}`, {
+  const response = await apiRequestFile(`/system/export-config?${params.toString()}`, {
     method: "GET",
   });
-
-  if (!response.ok) {
-    throw new Error(`Export failed: ${response.status} ${response.statusText}`);
-  }
 
   const fallbackName = `llmux-config-${types.join("-")}-${new Date()
     .toISOString()
@@ -54,14 +50,9 @@ export async function exportConfig(types: ExportType[]): Promise<void> {
 }
 
 export async function exportDatabase(): Promise<void> {
-  const response = await fetchWithAuth("/system/export-database", {
+  const response = await apiRequestFile("/system/export-database", {
     method: "GET",
   });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: "导出数据库失败" }));
-    throw new Error(error.error || "导出数据库失败");
-  }
 
   const filename = extractFilenameFromContentDisposition(
     response.headers.get("Content-Disposition"),
@@ -78,20 +69,8 @@ export async function importConfig(options: ImportOptions): Promise<ImportConfig
   formData.append("mode", options.mode);
   formData.append("types", options.types.join(","));
 
-  const response = await fetchWithAuth("/system/import-config", {
+  return apiRequestForm<ImportConfigResponse>("/system/import-config", {
     method: "POST",
     body: formData,
   });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Import failed: ${errorText}`);
-  }
-
-  const payload = (await response.json()) as { code: number; message: string; data: ImportConfigResponse };
-  if (payload.code !== 200) {
-    throw new Error(`${payload.message}`);
-  }
-
-  return payload.data;
 }

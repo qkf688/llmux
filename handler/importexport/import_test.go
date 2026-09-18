@@ -12,9 +12,9 @@ import (
 )
 
 // Stage 2 资源防御：导入接口复用入站硬上限 consts.MaxInboundBodyBytes。超限走管理端
-// BadRequest 信封（HTTP 200 + 信封 code 400）而非真实 413——前端对非 2xx 不解析响应体，
-// 只有信封 message 到得了用户（见 Stage 8 已知缺口）。边界用例锁 off-by-one：恰好等于
-// 上限必须放行到解析段（JSON 解析失败 ≠ 体积超限）。
+// BadRequest 信封（HTTP 200 + 信封 code 400）而非真实 413——管理端信封惯例与同域导出
+// 端点一致（/v1 的 413 是另一套协议形状）。边界用例锁 off-by-one：恰好等于上限必须
+// 放行到解析段（JSON 解析失败 ≠ 体积超限）。
 func TestImportConfig_RequestBodySizeLimit(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()

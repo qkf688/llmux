@@ -1,4 +1,4 @@
-import { apiRequest, fetchWithAuth } from "../../core/client";
+import { apiRequest } from "../../core/client";
 
 /** 管理端 key 条目，逐键对齐后端 `handler/apikeys` 的 apiKeyResponse
  * （snake_case，AGENTS §5 契约纪律）；api_key 为解密明文（列表端点恒回显，
@@ -31,43 +31,20 @@ export async function listApiKeys(): Promise<ApiKeyItem[]> {
 }
 
 /**
- * 创建 key。不走 apiRequest：hash 撞库是**真实 HTTP 409**（httpresp.Conflict），
- * 而 apiRequest 对非 2xx 抛泛化 Error 并丢弃响应体——冲突原因只在 body 信封里，
- * 丢了用户就只能看到 "Conflict"。故此处经 fetchWithAuth 手动解包，一切失败
- * （409 / 信封 code≠200 / body 非 JSON）统一抛 Error(可展示文案)，UI 只消费 message。
+ * 创建 key。hash 撞库是**真实 HTTP 409**（httpresp.Conflict），冲突原因只在响应体信封里
+ * ——apiRequest 的非 2xx 分支同样解析信封取 message（Stage 8），故 409 文案与 HTTP 200 +
+ * 信封 code 两条失败面走同一条通道，本层无需特判。
  */
 export async function createApiKey(body: ApiKeyCreateInput): Promise<ApiKeyItem> {
-  const response = await fetchWithAuth("/api-keys", {
+  return apiRequest<ApiKeyItem>("/api-keys", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     // headers 未传时整个键缺席（展开 undefined 不产生键），后端才区分「不写列」
-    body: JSON.stringify({ name: body.name, value: body.value?.trim() || "", ...(body.headers ? { headers: body.headers } : {}) }),
+    body: JSON.stringify({
+      name: body.name,
+      value: body.value?.trim() || "",
+      ...(body.headers ? { headers: body.headers } : {}),
+    }),
   });
-
-  if (!response.ok) {
-    let message = `API request failed: ${response.status} ${response.statusText}`;
-    try {
-      const payload = (await response.json()) as { message?: string };
-      if (typeof payload.message === "string" && payload.message.trim()) {
-        message = payload.message;
-      }
-    } catch {
-      // body 非 JSON（网关/代理层错误页等）：保留泛化文案，不吞成 undefined
-    }
-    throw new Error(message);
-  }
-
-  let payload: { code: number; message: string; data: ApiKeyItem };
-  try {
-    payload = (await response.json()) as { code: number; message: string; data: ApiKeyItem };
-  } catch {
-    // 2xx 但 body 非 JSON（如代理注入 HTML）：SyntaxError 原文不可展示，统一泛化文案
-    throw new Error("API request failed: invalid success response body");
-  }
-  if (payload.code !== 200) {
-    throw new Error(payload.message || `API request failed: code ${payload.code}`);
-  }
-  return payload.data;
 }
 
 /** PATCH 部分更新（重命名/启停）。404 走 HTTP 200 + 信封（apiRequest 抛 message

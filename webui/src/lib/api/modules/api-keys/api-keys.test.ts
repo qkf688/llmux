@@ -6,11 +6,14 @@ import { listApiKeys, createApiKey, updateApiKey, deleteApiKey } from "./api-key
 // 不 mock——mock 越少，测出的越接近 client.ts 的真实行为。
 const fetchMock = vi.fn();
 
+/** 假响应必须带 headers：Stage 8 起失败文案的报障编号取自响应头、文件判据看
+ *  `Content-Disposition`，缺 headers 会连带影响判定的真实性。 */
 function jsonResponse(status: number, body: unknown) {
   return {
     ok: status >= 200 && status < 300,
     status,
     statusText: status === 200 ? "OK" : "Error",
+    headers: new Headers({ "Content-Type": "application/json" }),
     json: async () => body,
   };
 }
@@ -76,11 +79,12 @@ describe("createApiKey", () => {
     expect(created).toEqual(ROW_ACTIVE);
   });
 
-  it("真实 HTTP 409 时抛响应体信封的 message，而非 statusText（AC-4 核心：apiRequest 会丢 body）", async () => {
+  it("真实 HTTP 409 时抛响应体信封的 message，而非 statusText（Stage 8：非 2xx 也解析信封）", async () => {
     fetchMock.mockResolvedValue({
       ok: false,
       status: 409,
       statusText: "Conflict",
+      headers: new Headers({ "Content-Type": "application/json" }),
       json: async () => ({ code: 409, message: "api key value already exists" }),
     });
 
@@ -102,18 +106,19 @@ describe("createApiKey", () => {
     );
   });
 
-  it("2xx 但 body 非 JSON 时抛泛化可展示文案（不透传 SyntaxError 原文）", async () => {
+  it("2xx 但 body 非 JSON 时抛固定人话（不透传 SyntaxError 原文）", async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
       statusText: "OK",
+      headers: new Headers({ "Content-Type": "application/json" }),
       json: async () => {
         throw new Error("Unexpected token < in JSON");
       },
     });
 
     await expect(createApiKey({ name: "x" })).rejects.toThrow(
-      "API request failed: invalid success response body",
+      "请求失败：响应内容格式不对",
     );
   });
 

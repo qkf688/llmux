@@ -20,9 +20,10 @@ import { useCredentialTesting } from "./use-credential-testing";
 const POOL_ID = 7;
 const VIEW = "1|all|";
 
-// 传输错误（HTTP 非 2xx）apiRequest 抛的形状——**不解析响应体**（lib/api/core/client.ts）。
+// 传输错误（真实 HTTP 非 2xx）apiRequest 抛的形状：Stage 8 起文案取自响应体信封
+// （lib/api/core/client.ts），此处只代表「一次传输层失败」。
 // 失败的测试不是这个：它 HTTP 200，结论在 passed:false（见下方成功/失败用例）。
-const HTTP_500 = new Error("API request failed: 500 Internal Server Error");
+const HTTP_500 = new Error("服务器内部错误 [req=aa11bb22cc33]");
 
 type TestingProps = { poolId: number | null; view: string };
 

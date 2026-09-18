@@ -69,14 +69,17 @@ routes/<page>/
 | 契约 | 职责 | 定义位置 | 实现方 |
 |------|------|----------|--------|
 | `appRoutes` / `route-config` | 路由与侧栏配置 | `webui/src/routes/route-config.ts` | `App.tsx` / `layout.tsx` 消费 |
-| `fetchWithAuth` / `apiRequest` | 带鉴权信封请求 | `webui/src/lib/api/core/client.ts` | 各 api modules |
+| 统一拆包通道（`apiRequest` / `apiRequestAnonymous` / `apiRequestForm` / `apiRequestFile`） | `/api` 请求的唯一出口：取信封 `data`、把失败翻成可展示 Error、401 处置 | `webui/src/lib/api/core/client.ts` | 各 api modules |
 | API modules | 按域封装 REST | `webui/src/lib/api/modules/**` | 页面 hooks 调用 |
 | `Updater` / `Setter` | store 统一更新接口 | `webui/src/stores/core/updater.ts` | 各 store / hooks / 组件 props |
 
 ## 5. 特殊约定
 
 - 新增页面：新目录 + `route-config.ts` 追加一项；`App`/`layout` 自动派生
-- API 信封：`{ code, message, data }`，`code !== 200` 抛错；401 跳转 `/login`
+- **API 信封与失败文案（Stage 8 起，单一通道）**：响应恒 `{ code, message, data }`。一个请求「成不成功」看两个信号——真实 HTTP 状态码与信封 `code`；两者都由 `client.ts` 读取，**页面层不得自己解响应**（此前 `createApiKey`/`importConfig`/两处导出各写一份手写解包，已全部收编）。
+  - 失败一律抛 `Error(可展示文案)`：优先信封 `message`，其次 `error`，再退中文兜底（`请求失败（错误码 <status>）`）；2xx 但 body 非 JSON 时给固定人话，不透传解析报错原文。500 额外把响应头 `X-Request-Id` 的报障编号补进文案（信封已内嵌同号则不重复），其余失败不带编号。
+  - **401 处置**：`apiRequest` 收到 401 视为登录过期 → 清会话 + 跳 `/login` + 抛 `Unauthorized`。凭据本身无效的接口用 `apiRequestAnonymous`（当前仅登录：密码错的 401 要留在页面上显示，不能把刚写的提示刷掉）；判断「密码/旧密码填错」类**不给后端 401**（改密码已改判 400，见 `handler/auth/password.go`），故不需要前端接口名单。
+  - 文件下载走 `apiRequestFile`：成功路径必须设 `Content-Disposition`（判据），否则被当成失败信封；`apiRequestForm` 用于 FormData（不注入 `Content-Type`，保住 multipart 边界）。
 - 路径别名：`@` → `src/`
 - 修改前端后需重新 `pnpm run build`（或 `make webui`）才能进入 embed 二进制
 - **边界现状**：页面以 API 编排为主；仍可能复制服务端默认策略（如关联表单 `weight`/`priority` 硬编码后再被 settings 覆盖）——与「不实现业务规则」的目标尚有缺口

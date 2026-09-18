@@ -16,16 +16,16 @@ export interface ImportOptions {
 export interface ImportResult {
   imported: number;
   skipped: number;
-  errors?: string[];
 }
 
+/** 导入成功的颗粒度计数，逐键对齐后端 `importexport.ImportOutcome`。
+ *  `templates` 不在后端导入注册表内，恒为 0/0（页面按零值不渲染该项）。 */
 export interface ImportConfigResponse {
   providers: ImportResult;
   models: ImportResult;
   associations: ImportResult;
   templates: ImportResult;
   settings: ImportResult;
-  total_time: string;
 }
 
 export async function exportConfig(types: ExportType[]): Promise<void> {

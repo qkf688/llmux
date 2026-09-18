@@ -82,34 +82,70 @@ func clearTable(tx *gorm.DB, e importEntity) error {
 }
 
 // insertZeroRows 对每个 map 元素创建一条零值行（字段未映射，行为保真）。
-func insertZeroRows(tx *gorm.DB, e importEntity, rows []interface{}) error {
+// 返回 (落库行数, 跳过行数)：无法映射成 map 的元素计入跳过——此前它会静默丢失且不计入
+// 任何计数，表现为「导入成功但少了数据」；只清不写的实体（settings）全部计入跳过。
+func insertZeroRows(tx *gorm.DB, e importEntity, rows []interface{}) (int, int, error) {
 	if e.createZero == nil {
-		return nil
+		return 0, len(rows), nil
 	}
+	inserted := 0
+	skipped := 0
 	for _, item := range rows {
 		if _, ok := item.(map[string]interface{}); !ok {
+			skipped++
 			continue
 		}
 		if err := e.createZero(tx); err != nil {
-			return &ImportError{Message: e.insertFailMsg, Err: err}
+			return inserted, skipped, &ImportError{Message: e.insertFailMsg, Err: err}
 		}
+		inserted++
 	}
-	return nil
+	return inserted, skipped, nil
+}
+
+// ImportResult 单类实体的导入结果：按实际处理行数计数。
+// Rows 语义按 importEntity 分化：providers/models/model_providers 每条落一行（Imported），
+// settings 只清不写（Skipped），与 importer.go 的现网半残语义一致。
+type ImportResult struct {
+	Imported int `json:"imported"`
+	Skipped  int `json:"skipped"`
+}
+
+// ImportOutcome 导入成功的对外结果（API 层）。前端「导入成功！已导入: 提供商 N 条」依赖它。
+type ImportOutcome struct {
+	Providers    ImportResult `json:"providers"`
+	Models       ImportResult `json:"models"`
+	Associations ImportResult `json:"associations"`
+	Templates    ImportResult `json:"templates"`
+	Settings     ImportResult `json:"settings"`
 }
 
 // ImportConfigData 在同一事务 db 上按注册表导入；调用方负责 Begin/Commit/Rollback。
-func ImportConfigData(tx *gorm.DB, config map[string]interface{}) error {
+// 返回各实体的计数供 API 回显（templates 不在本注册表内，恒零值）。
+func ImportConfigData(tx *gorm.DB, config map[string]interface{}) (ImportOutcome, error) {
+	outcome := ImportOutcome{}
+	counts := map[string]*ImportResult{
+		"providers":       &outcome.Providers,
+		"models":          &outcome.Models,
+		"model_providers": &outcome.Associations,
+		"settings":        &outcome.Settings,
+	}
 	for _, e := range importEntities {
 		rows, ok := config[e.key].([]interface{})
 		if !ok {
 			continue
 		}
 		if err := clearTable(tx, e); err != nil {
-			return err
+			return outcome, err
 		}
-		if err := insertZeroRows(tx, e, rows); err != nil {
-			return err
+		inserted, skipped, err := insertZeroRows(tx, e, rows)
+		if err != nil {
+			return outcome, err
+		}
+		if counter, ok := counts[e.key]; ok {
+			counter.Imported = inserted
+			counter.Skipped = skipped
 		}
 	}
-	return nil
+	return outcome, nil
 }

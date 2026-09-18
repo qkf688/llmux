@@ -95,20 +95,21 @@ describe("exportDatabase", () => {
 });
 
 describe("importConfig", () => {
-  it("成功返回信封 data（ImportConfigResponse）", async () => {
+  it("成功返回信封 data 的颗粒度计数（与 handler/importexport 的 ImportOutcome 逐键对齐）", async () => {
     const result = {
       providers: { imported: 1, skipped: 0 },
       models: { imported: 2, skipped: 0 },
       associations: { imported: 3, skipped: 0 },
       templates: { imported: 0, skipped: 0 },
-      settings: { imported: 0, skipped: 0 },
-      total_time: "12ms",
+      settings: { imported: 0, skipped: 1 },
     };
     fetchMock.mockResolvedValue(response({ status: 200, body: { code: 200, message: "success", data: result } }));
 
     const data = await importConfig({ mode: "merge", types: ["providers"], file: new File(["{}"], "c.json") });
 
     expect(data).toEqual(result);
+    // 页面按 result.providers.imported 汇总展示：形状错位会让每次成功导入都弹「导入失败」
+    expect(data.providers.imported).toBe(1);
     const [, init] = fetchMock.mock.calls[0];
     expect(init.body).toBeInstanceOf(FormData);
     expect(init.headers).not.toHaveProperty("Content-Type");

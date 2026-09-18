@@ -45,7 +45,8 @@ func ImportConfig(c *gin.Context) {
 		}
 	}()
 
-	if err := ImportConfigData(tx, config); err != nil {
+	outcome, err := ImportConfigData(tx, config)
+	if err != nil {
 		tx.Rollback()
 		var ie *ImportError
 		if errors.As(err, &ie) {
@@ -64,5 +65,7 @@ func ImportConfig(c *gin.Context) {
 	}
 
 	slog.Info("配置导入成功")
-	httpresp.Success(c, gin.H{"message": "配置导入成功"})
+	// 回颗粒度计数：前端按类型汇总展示「已导入: 提供商 N 条」。
+	// templates 不在导入注册表内，恒零值（前端据零值不渲染该项）。
+	httpresp.Success(c, outcome)
 }

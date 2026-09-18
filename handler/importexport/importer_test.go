@@ -42,12 +42,19 @@ func TestImportConfigData_ClearsAndInsertsZeroProviders(t *testing.T) {
 	}
 
 	tx := db.Begin()
-	if err := ImportConfigData(tx, config); err != nil {
+	outcome, err := ImportConfigData(tx, config)
+	if err != nil {
 		tx.Rollback()
 		t.Fatalf("ImportConfigData: %v", err)
 	}
 	if err := tx.Commit().Error; err != nil {
 		t.Fatalf("commit: %v", err)
+	}
+
+	// 计数是 API 回显的唯一来源（前端「已导入: 提供商 N 条」）：可映射的每条落一行，
+	// 不可映射的元素计入 skipped 而不是静默消失（否则表现为「导入成功但少了数据」）。
+	if outcome.Providers.Imported != 2 || outcome.Providers.Skipped != 1 {
+		t.Fatalf("providers outcome = %+v, want imported=2 skipped=1", outcome.Providers)
 	}
 
 	var providers []models.Provider
@@ -81,11 +88,17 @@ func TestImportConfigData_SettingsOnlyClear(t *testing.T) {
 	}
 
 	tx := db.Begin()
-	if err := ImportConfigData(tx, config); err != nil {
+	outcome, err := ImportConfigData(tx, config)
+	if err != nil {
 		tx.Rollback()
 		t.Fatalf("ImportConfigData: %v", err)
 	}
 	_ = tx.Commit()
+
+	// settings 只清不写（半残语义）：全部计入 skipped，前端不会把它报成「已导入 N 条」
+	if outcome.Settings.Imported != 0 || outcome.Settings.Skipped != 1 {
+		t.Fatalf("settings outcome = %+v, want imported=0 skipped=1", outcome.Settings)
+	}
 
 	var n int64
 	db.Model(&models.Setting{}).Count(&n)
@@ -105,7 +118,7 @@ func TestImportConfigData_RollbackOnError(t *testing.T) {
 	// 更直接：providers 正常，但我们用已提交数据验证失败时调用方 rollback
 	tx := db.Begin()
 	// 先清并写入
-	if err := ImportConfigData(tx, map[string]interface{}{
+	if _, err := ImportConfigData(tx, map[string]interface{}{
 		"providers": []interface{}{map[string]interface{}{}},
 	}); err != nil {
 		tx.Rollback()

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   testProviderModel,
@@ -8,7 +8,8 @@ import {
 } from "@/lib/api";
 import type { Updater } from "@/stores/core/updater";
 import { copyTextWithToast } from "@/lib/clipboard";
-import { runConcurrentBatch } from "../utils/batch-test";
+import { isAbortError } from "@/lib/errors";
+import { runConcurrentBatch, type BatchItemOutcome } from "@/lib/concurrent-batch";
 import { DEFAULT_BATCH_TEST_PROGRESS, type BatchTestProgress, type ModelTestResult } from "../types";
 
 type UseProviderModelTestingInput = {
@@ -51,6 +52,18 @@ export function useProviderModelTesting({
   const [testAbortController, setTestAbortController] = useState<AbortController | null>(null);
   const [upstreamTestAbortController, setUpstreamTestAbortController] = useState<AbortController | null>(null);
 
+  // 切走页面（组件卸载）时中止在飞的批量：controller 用 ref 镜像一份，cleanup 才拿得到最新值
+  // （effect 依赖为空，闭包里的 state 会停在首次渲染的 null）。
+  const testControllerRef = useRef<AbortController | null>(null);
+  const upstreamControllerRef = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      testControllerRef.current?.abort();
+      upstreamControllerRef.current?.abort();
+    },
+    []
+  );
+
   const copyModelName = async (modelName: string) => {
     await copyTextWithToast(modelName, `已复制模型名称: ${modelName}`);
   };
@@ -73,15 +86,19 @@ export function useProviderModelTesting({
   const autoResults = (results: Record<string, ModelTestResult>) =>
     Object.entries(results).filter(([key]) => key.endsWith("::0"));
 
-  const handleTestAllModel = async (modelName: string, groupId?: number): Promise<boolean> => {
-    if (!allModelsProvider) return false;
+  const handleTestAllModel = async (
+    modelName: string,
+    groupId?: number,
+    signal?: AbortSignal
+  ): Promise<BatchItemOutcome> => {
+    if (!allModelsProvider) return "failed";
     const key = testResultKey(modelName, groupId);
     setAllModelsTestResults((prev) => ({
       ...prev,
       [key]: { loading: true, success: null },
     }));
     try {
-      const result = await testProviderModel(allModelsProvider.ID, modelName, groupId);
+      const result = await testProviderModel(allModelsProvider.ID, modelName, groupId, signal);
       const outcome = toTestOutcome(result);
       setAllModelsTestResults((prev) => {
         const next = { ...prev, [key]: { loading: false, ...outcome } };
@@ -91,14 +108,23 @@ export function useProviderModelTesting({
         }
         return next;
       });
-      return outcome.success;
+      return outcome.success ? "success" : "failed";
     } catch (err) {
+      // 中止不是失败：标 cancelled 且不进失败计数，否则「取消整批」会把每个在飞的项
+      // 都算成「这个模型不可用」。
+      if (isAbortError(err)) {
+        setAllModelsTestResults((prev) => ({
+          ...prev,
+          [key]: { loading: false, success: null, cancelled: true },
+        }));
+        return "cancelled";
+      }
       const message = err instanceof Error ? err.message : String(err);
       setAllModelsTestResults((prev) => ({
         ...prev,
         [key]: { loading: false, success: false, error: message },
       }));
-      return false;
+      return "failed";
     }
   };
 
@@ -152,40 +178,40 @@ export function useProviderModelTesting({
 
     const abortController = new AbortController();
     setTestAbortController(abortController);
+    testControllerRef.current = abortController;
 
     try {
       const summary = await runConcurrentBatch({
         items: models,
         signal: abortController.signal,
-        runItem: (model, signal) => {
-          if (signal.aborted) {
-            return Promise.resolve(false);
-          }
-          return handleTestAllModel(model);
-        },
+        // signal 一路透传到 fetch：只判 aborted 不传的话，在飞的那一项仍会跑完并计费。
+        runItem: (model, signal) => handleTestAllModel(model, undefined, signal),
         onQueueChange: (testing) => {
           setBatchTestProgress((prev) => ({
             ...prev,
             testing,
           }));
         },
-        onItemDone: ({ completed, successCount, failedCount, testing }) => {
+        onItemDone: ({ completed, successCount, failedCount, cancelledCount, testing }) => {
           setBatchTestProgress((prev) => ({
             ...prev,
             completed,
             success: successCount,
             failed: failedCount,
+            cancelled: cancelledCount,
             testing,
           }));
         },
       });
 
+      // 取消路径由 handleCancelBatchTest 即时 toast，这里不再重复；被取消的项数在进度条上可见。
       if (!summary.aborted) {
         toast.success(`批量测试完成：成功 ${summary.success} 个，失败 ${summary.failed} 个`, { duration: 5000 });
       }
     } finally {
       setBatchTesting(false);
       setTestAbortController(null);
+      testControllerRef.current = null;
     }
   };
 
@@ -213,15 +239,19 @@ export function useProviderModelTesting({
     }
   };
 
-  const handleTestUpstreamModel = async (modelName: string, groupId?: number): Promise<boolean> => {
-    if (!modelsOpenId) return false;
+  const handleTestUpstreamModel = async (
+    modelName: string,
+    groupId?: number,
+    signal?: AbortSignal
+  ): Promise<BatchItemOutcome> => {
+    if (!modelsOpenId) return "failed";
     const key = testResultKey(modelName, groupId);
     setUpstreamTestResults((prev) => ({
       ...prev,
       [key]: { loading: true, success: null },
     }));
     try {
-      const result = await testProviderModel(modelsOpenId, modelName, groupId);
+      const result = await testProviderModel(modelsOpenId, modelName, groupId, signal);
       const outcome = toTestOutcome(result);
       setUpstreamTestResults((prev) => {
         const next = { ...prev, [key]: { loading: false, ...outcome } };
@@ -231,14 +261,21 @@ export function useProviderModelTesting({
         }
         return next;
       });
-      return outcome.success;
+      return outcome.success ? "success" : "failed";
     } catch (err) {
+      if (isAbortError(err)) {
+        setUpstreamTestResults((prev) => ({
+          ...prev,
+          [key]: { loading: false, success: null, cancelled: true },
+        }));
+        return "cancelled";
+      }
       const message = err instanceof Error ? err.message : String(err);
       setUpstreamTestResults((prev) => ({
         ...prev,
         [key]: { loading: false, success: false, error: message },
       }));
-      return false;
+      return "failed";
     }
   };
 
@@ -256,29 +293,26 @@ export function useProviderModelTesting({
 
     const abortController = new AbortController();
     setUpstreamTestAbortController(abortController);
+    upstreamControllerRef.current = abortController;
 
     try {
       const summary = await runConcurrentBatch({
         items: models,
         signal: abortController.signal,
-        runItem: (model, signal) => {
-          if (signal.aborted) {
-            return Promise.resolve(false);
-          }
-          return handleTestUpstreamModel(model);
-        },
+        runItem: (model, signal) => handleTestUpstreamModel(model, undefined, signal),
         onQueueChange: (testing) => {
           setUpstreamBatchTestProgress((prev) => ({
             ...prev,
             testing,
           }));
         },
-        onItemDone: ({ completed, successCount, failedCount, testing }) => {
+        onItemDone: ({ completed, successCount, failedCount, cancelledCount, testing }) => {
           setUpstreamBatchTestProgress((prev) => ({
             ...prev,
             completed,
             success: successCount,
             failed: failedCount,
+            cancelled: cancelledCount,
             testing,
           }));
         },
@@ -290,6 +324,7 @@ export function useProviderModelTesting({
     } finally {
       setUpstreamBatchTesting(false);
       setUpstreamTestAbortController(null);
+      upstreamControllerRef.current = null;
     }
   };
 

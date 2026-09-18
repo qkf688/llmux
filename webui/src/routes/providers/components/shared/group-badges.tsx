@@ -24,22 +24,27 @@ export function GroupBadges({ groups, groupStatuses, onGroupClick, disabled }: G
       {groups.map((g) => {
         const status = groupStatuses?.[g.ID];
         const isLoading = status?.loading === true;
+        const isCancelled = status?.cancelled === true;
         const isSuccess = status?.success === true;
         const isFail = status?.success === false;
         const clickable = !!onGroupClick && !disabled;
 
         const cls = isLoading
           ? "bg-muted text-muted-foreground opacity-70"
-          : isSuccess
-            ? "bg-success-tint text-success"
-            : isFail
-              ? "bg-destructive-tint text-destructive"
-              : "bg-muted text-muted-foreground";
+          : isCancelled
+            ? "bg-muted text-muted-foreground"
+            : isSuccess
+              ? "bg-success-tint text-success"
+              : isFail
+                ? "bg-destructive-tint text-destructive"
+                : "bg-muted text-muted-foreground";
 
         const content = (
           <>
             {isLoading ? (
               <Spinner className="h-2.5 w-2.5 mr-0.5" />
+            ) : isCancelled ? (
+              <span className="mr-0.5" aria-hidden>—</span>
             ) : isSuccess ? (
               <span className="mr-0.5" aria-hidden>✓</span>
             ) : isFail ? (

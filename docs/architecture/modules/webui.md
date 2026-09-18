@@ -31,6 +31,7 @@ webui/src/
 ├── lib/animations/         # 动效 token 单一来源（EASING / NUMBER_ANIMATION_MS）
 ├── lib/api/                # core client + modules（auth/catalog/logs/system；auth 走全路径 import 不进 index 桶）
 ├── lib/clipboard.ts        # 剪贴板写入跨域单源（三级降级 + 普通/机密两个提示入口）
+├── lib/concurrent-batch.ts # 批量并发调度跨域单源（按项回 成功/失败/已取消 三态；providers 两套 + model-providers 一处批量共用）
 ├── lib/header-rows.ts      # 出站自定义头「行 ↔ Record」折叠与预设互斥单源（api-keys 与关联两弹窗共用，4a；语法权威在服务端 common/outboundheaders.go）
 ├── hooks/                  # 含 hooks/api 查询封装
 ├── stores/                 # Zustand（含 core/updater）
@@ -51,7 +52,8 @@ routes/<page>/
 各子目录职责：
 - `routes/`：按业务页拆分；`route-config.ts` 为 path/layout/nav 单一数据源
 - `lib/animations/`：动效 token 单一来源（缓动曲线/动画时长）；新增动效优先引用，禁止组件散落魔法缓动值
-- `lib/api/`：HTTP 客户端与领域 API 函数
+- `lib/api/`：HTTP 客户端与领域 API 函数。测试类 API（`testModelProvider*` / `testProviderModel`）接受**可选** `signal`，调用方从 `AbortController` 透传——取消要真正生效必须一路传到 `fetch`，只在前端把 loading 置否不会停止上游会话计费
+- `lib/concurrent-batch.ts`：批量并发调度**跨域单一来源**（providers 页两套批量 + model-providers 页批量）。`runItem` 回 `"success" | "failed" | "cancelled"` 三态并被单独计数。两条硬约束：① **调用方必须把 signal 透传到真正的请求上**——只判 `signal.aborted` 就返回会让「取消」停在调度层（不再派新项，但在飞的那项照跑完并计费）；② 中止异常用 `lib/errors.isAbortError` 判为 `"cancelled"`，与 `"failed"` 分开计——取消不证明供应商不可用，混进失败会污染「选择失败项」这类下游动作
 - `lib/clipboard.ts`：剪贴板写入**跨域单一来源**（providers 模型名、号池凭据 key、供应商内联 key 三处共用）。降级链 = 安全上下文走 Clipboard API → 非安全上下文（`http://<ip>:7070`）直接走同步 `execCommand`（保住点击手势有效期）→ 再失败弹手动复制 prompt，逐级回传 `method`；`copyTextDetailed` 是唯一的结构化入口（不依赖 toast，非 UI 场景复用它）。两个带提示的入口按内容敏感度二选一：普通文本用 `copyTextWithToast`（保留 prompt 兜底），**明文 key 等机密必须用 `copySecretWithToast`**（禁 prompt——`window.prompt` 的默认值参数会把机密整条弹上屏：模态、可被肩窥/录屏捕获、且不受前端任何生命周期守卫管辖）。成功提示只传掩码或行号：机密不得写进任何用户可见文案（toast / prompt / `title` / `aria-label`）。任何新的复制入口都必须走此处，禁止在页面里直接调 `navigator.clipboard`
 - `stores/`：客户端状态；`Updater` / `Setter` 统一更新模式
 - `components/ui/`：Radix + Tailwind 基础组件

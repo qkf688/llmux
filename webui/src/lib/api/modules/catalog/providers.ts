@@ -223,11 +223,13 @@ export async function getProviderModels(providerId: number): Promise<ProviderMod
 export async function testProviderModel(
   providerId: number,
   model: string,
-  groupId?: number
+  groupId?: number,
+  signal?: AbortSignal
 ): Promise<ProviderModelTestResult> {
   return apiRequest<ProviderModelTestResult>(`/providers/${providerId}/test`, {
     method: "POST",
     body: JSON.stringify(groupId ? { model, group_id: groupId } : { model }),
+    signal,
   });
 }
 

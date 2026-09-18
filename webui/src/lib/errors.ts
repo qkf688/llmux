@@ -37,3 +37,12 @@ export function toErrorMessage(error: unknown, fallback = "未知错误"): strin
   return fallback;
 }
 
+/** 请求取消（`fetch` 在中止信号触发时抛出的 `AbortError`）与真实失败必须分开：
+ *  中止的测试不是「这个供应商/模型不行」的证据，混进失败会污染结论与计数。
+ *  判据取 `name`，兼容 `DOMException` 与测试里手造的带 name 的 Error。 */
+export function isAbortError(error: unknown): boolean {
+  return (
+    typeof error === "object" && error !== null && (error as { name?: unknown }).name === "AbortError"
+  );
+}
+

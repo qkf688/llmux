@@ -20,11 +20,13 @@ export function ModelTestStatusButton({
 }: ModelTestStatusButtonProps) {
   const tooltip = result?.loading
     ? "测试中..."
-    : result?.success === true
-      ? "测试成功"
-      : result?.success === false
-        ? result.error || "测试失败"
-        : "测试模型可用性";
+    : result?.cancelled
+      ? "已取消"
+      : result?.success === true
+        ? "测试成功"
+        : result?.success === false
+          ? result.error || "测试失败"
+          : "测试模型可用性";
 
   return (
     <Tooltip>
@@ -38,6 +40,16 @@ export function ModelTestStatusButton({
         >
           {result?.loading ? (
             <Spinner className="h-3.5 w-3.5" />
+          ) : result?.cancelled ? (
+            <svg
+              className="h-3.5 w-3.5 text-muted-foreground"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" />
+            </svg>
           ) : result?.success === true ? (
             <svg
               className="h-3.5 w-3.5 text-success"

@@ -71,7 +71,7 @@ describe("useProviderModelTesting 测试结果判定", () => {
 
     const ok = await hook.result.current.handleTestUpstreamModel("m1");
 
-    expect(ok).toBe(true);
+    expect(ok).toBe("success");
     expect(lastEntry(setUpstreamTestResults, "m1::0")).toMatchObject({ loading: false, success: true });
   });
 
@@ -89,7 +89,7 @@ describe("useProviderModelTesting 测试结果判定", () => {
 
     const ok = await hook.result.current.handleTestUpstreamModel("m1");
 
-    expect(ok).toBe(false);
+    expect(ok).toBe("failed");
     expect(lastEntry(setUpstreamTestResults, "m1::0")).toMatchObject({
       loading: false,
       success: false,
@@ -103,7 +103,7 @@ describe("useProviderModelTesting 测试结果判定", () => {
 
     const ok = await hook.result.current.handleTestUpstreamModel("m1");
 
-    expect(ok).toBe(false);
+    expect(ok).toBe("failed");
     expect(lastEntry(setUpstreamTestResults, "m1::0").success).toBe(false);
   });
 
@@ -113,11 +113,25 @@ describe("useProviderModelTesting 测试结果判定", () => {
 
     const ok = await hook.result.current.handleTestAllModel("m1");
 
-    expect(ok).toBe(false);
+    expect(ok).toBe("failed");
     expect(lastEntry(setAllModelsTestResults, "m1::0")).toMatchObject({
       loading: false,
       success: false,
       error: "API request failed: 500",
+    });
+  });
+
+  it("取消（AbortError）→ 标 cancelled 且不算失败", async () => {
+    const { hook, lastEntry, setAllModelsTestResults } = renderTestingHook();
+    testProviderModelMock.mockRejectedValue(new DOMException("Aborted", "AbortError"));
+
+    const outcome = await hook.result.current.handleTestAllModel("m1", undefined, new AbortController().signal);
+
+    expect(outcome).toBe("cancelled");
+    expect(lastEntry(setAllModelsTestResults, "m1::0")).toMatchObject({
+      loading: false,
+      success: null,
+      cancelled: true,
     });
   });
 
@@ -127,8 +141,8 @@ describe("useProviderModelTesting 测试结果判定", () => {
 
     await hook.result.current.handleTestUpstreamModel("m1");
 
-    // groupId 未传时第三参为 undefined，API 层按 falsy 处理为自动口径
-    expect(testProviderModelMock).toHaveBeenCalledWith(7, "m1", undefined);
+    // groupId 未传时第三参为 undefined，API 层按 falsy 处理为自动口径；第四参是取消信号（单点调用不传）
+    expect(testProviderModelMock).toHaveBeenCalledWith(7, "m1", undefined, undefined);
   });
 
   // AC-1：点分组徽标只测该组
@@ -138,8 +152,8 @@ describe("useProviderModelTesting 测试结果判定", () => {
 
     const ok = await hook.result.current.handleTestUpstreamModel("m1", 5);
 
-    expect(ok).toBe(true);
-    expect(testProviderModelMock).toHaveBeenCalledWith(7, "m1", 5);
+    expect(ok).toBe("success");
+    expect(testProviderModelMock).toHaveBeenCalledWith(7, "m1", 5, undefined);
     expect(lastEntry(setUpstreamTestResults, "m1::5")).toMatchObject({ loading: false, success: true });
     // 锁组测试不写自动口径键
     expect(lastEntry(setUpstreamTestResults, "m1::0")).toBeUndefined();

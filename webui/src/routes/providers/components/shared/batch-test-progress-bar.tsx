@@ -17,8 +17,8 @@ export function BatchTestProgressBar({
         <div className="flex items-center justify-between text-xs text-info-foreground mb-1">
           <span>
             测试进度：{progress.completed}/{progress.total}
-            (成功: {progress.success}, 失败: {progress.failed}, 进行中:{" "}
-            {progress.testing})
+            (成功: {progress.success}, 失败: {progress.failed}, 已取消:{" "}
+            {progress.cancelled}, 进行中: {progress.testing})
           </span>
           <span>{Math.round(pct)}%</span>
         </div>

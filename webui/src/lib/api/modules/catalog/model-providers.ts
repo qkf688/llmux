@@ -182,31 +182,40 @@ export async function batchUpdateModelProvidersCapabilities(
 
 // 四个能力测试端点的模式参数：流式靠 ?stream=1 表达（同一 GET 承载两种模式，
 // 后端不新增路由）。非流式不带参数，请求与改造前逐字节一致。
+// signal 可选透传：取消要真正生效必须一路传到 fetch 层——只在前端把 loading 置否
+// 不会停止上游会话，流式一次 20~60 秒都在计费。
 const streamModeSuffix = (mode: TestMode) => (mode === "stream" ? "?stream=1" : "");
 
-export async function testModelProvider(id: number, mode: TestMode = "non_stream"): Promise<ModelProviderTestResult> {
-  return apiRequest<ModelProviderTestResult>(`/test/${id}${streamModeSuffix(mode)}`);
+export async function testModelProvider(
+  id: number,
+  mode: TestMode = "non_stream",
+  signal?: AbortSignal
+): Promise<ModelProviderTestResult> {
+  return apiRequest<ModelProviderTestResult>(`/test/${id}${streamModeSuffix(mode)}`, { signal });
 }
 
 export async function testModelProviderStructuredOutput(
   id: number,
-  mode: TestMode = "non_stream"
+  mode: TestMode = "non_stream",
+  signal?: AbortSignal
 ): Promise<ModelProviderTestResult> {
-  return apiRequest<ModelProviderTestResult>(`/test/structured-output/${id}${streamModeSuffix(mode)}`);
+  return apiRequest<ModelProviderTestResult>(`/test/structured-output/${id}${streamModeSuffix(mode)}`, { signal });
 }
 
 export async function testModelProviderThinking(
   id: number,
-  mode: TestMode = "non_stream"
+  mode: TestMode = "non_stream",
+  signal?: AbortSignal
 ): Promise<ModelProviderTestResult> {
-  return apiRequest<ModelProviderTestResult>(`/test/thinking/${id}${streamModeSuffix(mode)}`);
+  return apiRequest<ModelProviderTestResult>(`/test/thinking/${id}${streamModeSuffix(mode)}`, { signal });
 }
 
 export async function testModelProviderVision(
   id: number,
-  mode: TestMode = "non_stream"
+  mode: TestMode = "non_stream",
+  signal?: AbortSignal
 ): Promise<ModelProviderTestResult> {
-  return apiRequest<ModelProviderTestResult>(`/test/vision/${id}${streamModeSuffix(mode)}`);
+  return apiRequest<ModelProviderTestResult>(`/test/vision/${id}${streamModeSuffix(mode)}`, { signal });
 }
 
 export async function previewAutoAssociate(): Promise<AssociationPreview[]> {

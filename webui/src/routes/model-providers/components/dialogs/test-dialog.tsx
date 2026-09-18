@@ -40,6 +40,7 @@ type TestDialogProps = {
     messages: string;
     success: boolean | null;
     error: string | null;
+    cancelled?: boolean;
   };
   onClose: () => void;
   onExecute: () => void;
@@ -149,18 +150,29 @@ function StreamStatsSection({ result }: { result: ModelProviderTestResult }) {
 function CapabilityResultSection({
   loading,
   result,
+  cancelled,
   passedLabel,
   failedLabel,
   renderDetail,
 }: {
   loading: boolean;
   result: ModelProviderTestResult | null;
+  cancelled?: boolean;
   passedLabel: string;
   failedLabel: string;
   renderDetail?: (result: ModelProviderTestResult) => ReactNode;
 }) {
   if (loading) {
     return <LoadingState text="测试中..." />;
+  }
+  if (cancelled) {
+    // 已取消独立成态：不显示成「失败」（不证明供应商不行），也不显示成「未测」。
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-1 text-sm text-muted-foreground">
+        <span>已取消</span>
+        <span className="text-xs">本次测试被中止，未产出结论</span>
+      </div>
+    );
   }
   if (!result) {
     return <ResultPlaceholder />;
@@ -306,6 +318,7 @@ export function TestDialog({
               <CapabilityResultSection
                 loading={!!connectivityEntry?.loading}
                 result={connectivityEntry?.result ?? null}
+                cancelled={connectivityEntry?.cancelled}
                 passedLabel="连通性测试通过"
                 failedLabel="连通性测试失败"
               />
@@ -314,9 +327,16 @@ export function TestDialog({
             {testType === "react" &&
               (reactTestResult.loading ? (
                 <LoadingState text="测试中..." />
-              ) : reactTestResult.error || reactTestResult.success !== null || reactTestResult.messages ? (
+              ) : reactTestResult.cancelled ||
+                reactTestResult.error ||
+                reactTestResult.success !== null ||
+                reactTestResult.messages ? (
                 <div className="space-y-3">
-                  {reactTestResult.error ? (
+                  {reactTestResult.cancelled ? (
+                    <div className="rounded-md border bg-muted/40 p-2 text-xs text-muted-foreground">
+                      已取消：本次测试被中止，已保留中止前的日志
+                    </div>
+                  ) : reactTestResult.error ? (
                     <ExpandableError error={{ message: reactTestResult.error }} isSuccess={false} defaultExpanded />
                   ) : reactTestResult.success !== null ? (
                     <ExpandableError
@@ -339,6 +359,7 @@ export function TestDialog({
               <CapabilityResultSection
                 loading={!!structuredEntry?.loading}
                 result={structuredEntry?.result ?? null}
+                cancelled={structuredEntry?.cancelled}
                 passedLabel="结构化输出能力测试通过"
                 failedLabel="结构化输出能力测试失败"
                 renderDetail={(result) =>
@@ -353,6 +374,7 @@ export function TestDialog({
               <CapabilityResultSection
                 loading={!!thinkingEntry?.loading}
                 result={thinkingEntry?.result ?? null}
+                cancelled={thinkingEntry?.cancelled}
                 passedLabel="Thinking 能力测试通过"
                 failedLabel="Thinking 能力测试失败"
                 renderDetail={(result) =>
@@ -365,6 +387,7 @@ export function TestDialog({
               <CapabilityResultSection
                 loading={!!visionEntry?.loading}
                 result={visionEntry?.result ?? null}
+                cancelled={visionEntry?.cancelled}
                 passedLabel="图片识别能力测试通过"
                 failedLabel="图片识别能力测试失败"
                 renderDetail={(result) =>

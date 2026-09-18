@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   batchDeleteModelProviders,
@@ -7,6 +7,8 @@ import {
   testModelProvider,
   type ModelWithProvider,
 } from "@/lib/api";
+import { isAbortError } from "@/lib/errors";
+import { runConcurrentBatch, type BatchItemOutcome } from "@/lib/concurrent-batch";
 import type { Updater } from "@/stores/core/updater";
 import type { AssociationBatchTestResult, BatchTestProgress } from "../types";
 
@@ -53,6 +55,15 @@ export function useModelProvidersBatch({
   setAssociationTestResults,
 }: UseModelProvidersBatchInput) {
   const [testAbortController, setTestAbortController] = useState<AbortController | null>(null);
+
+  // 卸载（切走页面）时中止在飞的批量：ref 镜像一份，cleanup 才拿得到最新值（effect 无依赖）。
+  const testControllerRef = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      testControllerRef.current?.abort();
+    },
+    []
+  );
 
   const handleSelectAllAssociations = useCallback(
     (checked: boolean) => {
@@ -175,56 +186,37 @@ export function useModelProvidersBatch({
     ]
   );
 
-  const testSingleAssociationInBatch = useCallback(
-    async (
-      associationId: number,
-      testing: Set<number>,
-      signal: AbortSignal,
-      counters: { success: number; failed: number }
-    ) => {
-      if (signal.aborted) {
-        testing.delete(associationId);
-        return;
-      }
+  // 单项执行单元：结果落表 + 中止与失败分流（中止标 cancelled、不进失败计数）。
+  // 调度交给共享的 runConcurrentBatch，这里只负责「跑一项并回一个结果」。
+  const testSingleAssociation = useCallback(
+    async (associationId: number, signal: AbortSignal): Promise<BatchItemOutcome> => {
+      setAssociationTestResults((prev) => ({ ...prev, [associationId]: { loading: true, success: null } }));
 
       try {
-        setAssociationTestResults((prev) => ({ ...prev, [associationId]: { loading: true, success: null } }));
-
-        const result = await testModelProvider(associationId);
+        const result = await testModelProvider(associationId, "non_stream", signal);
         if (result?.error) {
           throw new Error(result.error);
         }
 
         setAssociationTestResults((prev) => ({ ...prev, [associationId]: { loading: false, success: true } }));
-
-        counters.success++;
-
-        setBatchTestProgress((prev) => ({
-          ...prev,
-          completed: prev.completed + 1,
-          success: counters.success,
-          testing: testing.size - 1,
-        }));
+        return "success";
       } catch (error) {
+        if (isAbortError(error)) {
+          setAssociationTestResults((prev) => ({
+            ...prev,
+            [associationId]: { loading: false, success: null, cancelled: true },
+          }));
+          return "cancelled";
+        }
         const message = error instanceof Error ? error.message : String(error);
         setAssociationTestResults((prev) => ({
           ...prev,
           [associationId]: { loading: false, success: false, error: message },
         }));
-
-        counters.failed++;
-
-        setBatchTestProgress((prev) => ({
-          ...prev,
-          completed: prev.completed + 1,
-          failed: counters.failed,
-          testing: testing.size - 1,
-        }));
-      } finally {
-        testing.delete(associationId);
+        return "failed";
       }
     },
-    [setAssociationTestResults, setBatchTestProgress]
+    [setAssociationTestResults]
   );
 
   const startBatchTest = useCallback(
@@ -235,43 +227,51 @@ export function useModelProvidersBatch({
       }
 
       setBatchTesting(true);
-      setBatchTestProgress({ total: associationIds.length, completed: 0, success: 0, failed: 0, testing: 0 });
+      setBatchTestProgress({
+        total: associationIds.length,
+        completed: 0,
+        success: 0,
+        failed: 0,
+        cancelled: 0,
+        testing: 0,
+      });
 
       const abortController = new AbortController();
       setTestAbortController(abortController);
-
-      const counters = { success: 0, failed: 0 };
-      const concurrency = 3;
-      const queue = [...associationIds];
-      const testing = new Set<number>();
-      const promises: Promise<void>[] = [];
+      testControllerRef.current = abortController;
 
       try {
-        while (queue.length > 0 && !abortController.signal.aborted) {
-          while (testing.size < concurrency && queue.length > 0) {
-            const id = queue.shift()!;
-            testing.add(id);
+        const summary = await runConcurrentBatch({
+          items: associationIds,
+          signal: abortController.signal,
+          // signal 透传到 fetch：只判 aborted 不传的话，在飞的那一项仍会跑完并计费。
+          runItem: (id, signal) => testSingleAssociation(id, signal),
+          onQueueChange: (testing) => {
+            setBatchTestProgress((prev) => ({ ...prev, testing }));
+          },
+          onItemDone: ({ completed, successCount, failedCount, cancelledCount, testing }) => {
+            setBatchTestProgress((prev) => ({
+              ...prev,
+              completed,
+              success: successCount,
+              failed: failedCount,
+              cancelled: cancelledCount,
+              testing,
+            }));
+          },
+        });
 
-            setBatchTestProgress((prev) => ({ ...prev, testing: testing.size }));
-
-            const testPromise = testSingleAssociationInBatch(id, testing, abortController.signal, counters);
-            promises.push(testPromise);
-          }
-
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-
-        await Promise.all(promises);
-
-        if (!abortController.signal.aborted) {
-          toast.success(`批量测试完成：成功 ${counters.success} 个，失败 ${counters.failed} 个`, { duration: 5000 });
+        // 取消路径由 handleCancelBatchTest 即时 toast，这里不再重复；被取消项数在进度卡上可见。
+        if (!summary.aborted) {
+          toast.success(`批量测试完成：成功 ${summary.success} 个，失败 ${summary.failed} 个`, { duration: 5000 });
         }
       } finally {
         setBatchTesting(false);
         setTestAbortController(null);
+        testControllerRef.current = null;
       }
     },
-    [setBatchTestProgress, setBatchTesting, testSingleAssociationInBatch]
+    [setBatchTestProgress, setBatchTesting, testSingleAssociation]
   );
 
   const handleBatchTestAll = useCallback(async () => {
@@ -325,7 +325,7 @@ export function useModelProvidersBatch({
   }, [associationTestResults, filteredModelProviders, setSelectedAssociationIds]);
 
   const clearBatchTestResults = useCallback(() => {
-    setBatchTestProgress({ total: 0, completed: 0, success: 0, failed: 0, testing: 0 });
+    setBatchTestProgress({ total: 0, completed: 0, success: 0, failed: 0, cancelled: 0, testing: 0 });
     setAssociationTestResults({});
     toast.info("已清除测试结果");
   }, [setAssociationTestResults, setBatchTestProgress]);

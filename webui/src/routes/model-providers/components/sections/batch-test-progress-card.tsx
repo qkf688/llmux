@@ -63,6 +63,9 @@ export function BatchTestProgressCard({
       <div className="flex gap-3 text-xs">
         <span className="text-success">成功: {batchTestProgress.success}</span>
         <span className="text-destructive">失败: {batchTestProgress.failed}</span>
+        {batchTestProgress.cancelled > 0 && (
+          <span className="text-muted-foreground">已取消: {batchTestProgress.cancelled}</span>
+        )}
       </div>
 
       {!batchTesting && hasResults && (

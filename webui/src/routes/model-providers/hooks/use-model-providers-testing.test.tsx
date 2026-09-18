@@ -6,6 +6,7 @@ import {
   testModelProviderStructuredOutput,
   testModelProviderThinking,
   testModelProviderVision,
+  type ModelProviderTestResult,
 } from "@/lib/api";
 
 import type { TestMode, TestType } from "../types";
@@ -54,7 +55,7 @@ describe("useModelProvidersTesting", () => {
       result.current.executeTestNow();
     });
 
-    expect(testModelProviderVision).toHaveBeenCalledWith(7, "non_stream");
+    expect(testModelProviderVision).toHaveBeenCalledWith(7, "non_stream", expect.any(AbortSignal));
     // 回归锁定：旧 if/else 链会把 vision 静默落进 structured_output 的 else 分支
     expect(testModelProviderStructuredOutput).not.toHaveBeenCalled();
     expect(testModelProviderThinking).not.toHaveBeenCalled();
@@ -86,7 +87,7 @@ describe("useModelProvidersTesting", () => {
       result.current.executeTestNow();
     });
 
-    expect(testModelProviderThinking).toHaveBeenCalledWith(7, "stream");
+    expect(testModelProviderThinking).toHaveBeenCalledWith(7, "stream", expect.any(AbortSignal));
   });
 
   it("同一关联的两种模式各占一格：切模式不覆盖上一模式的结论", async () => {
@@ -125,6 +126,66 @@ describe("useModelProvidersTesting", () => {
       result: { passed: false, error: "测试失败: boom" },
     });
     consoleError.mockRestore();
+  });
+
+  it("关弹窗中止在飞测试：loading 复位、标「已取消」，不写成失败", async () => {
+    // 模拟真实取消：api 在 signal 中止时抛 AbortError（fetch 的实际行为）。
+    vi.mocked(testModelProviderVision).mockImplementation(
+      (_id, _mode, signal) =>
+        new Promise<ModelProviderTestResult>((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+        }),
+    );
+
+    const { result } = renderTesting("vision");
+    act(() => {
+      result.current.executeTestNow();
+    });
+    expect(result.current.visionTestResults[capabilityTestKey(7, "non_stream")]?.loading).toBe(true);
+
+    await act(async () => {
+      result.current.dialogClose();
+    });
+
+    const entry = result.current.visionTestResults[capabilityTestKey(7, "non_stream")];
+    expect(entry.loading).toBe(false);
+    expect(entry.cancelled).toBe(true);
+    // 已取消不是失败：不产出结论，也不带失败文案。
+    expect(entry.result).toBeNull();
+  });
+
+  it("同格重复测试：旧请求的迟到结果不得覆写新结果", async () => {
+    let resolveOld: ((value: ModelProviderTestResult) => void) | undefined;
+    vi.mocked(testModelProviderVision)
+      .mockImplementationOnce(
+        () =>
+          new Promise<ModelProviderTestResult>((resolve) => {
+            resolveOld = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ passed: true, vision_text: "新结果" });
+
+    const { result } = renderTesting("vision");
+    act(() => {
+      result.current.executeTestNow();
+    });
+    // 第二次打同一格：按「同格取消」口径应先中止上一次
+    await act(async () => {
+      result.current.executeTestNow();
+    });
+    expect(result.current.visionTestResults[capabilityTestKey(7, "non_stream")]?.result).toEqual({
+      passed: true,
+      vision_text: "新结果",
+    });
+
+    // 旧请求迟到才 resolve：它已不代表该格，不得覆写新结论
+    await act(async () => {
+      resolveOld?.({ passed: false, vision_text: "旧结果" });
+    });
+    expect(result.current.visionTestResults[capabilityTestKey(7, "non_stream")]?.result).toEqual({
+      passed: true,
+      vision_text: "新结果",
+    });
   });
 
   it("未选中关联（selectedTestId=null）时执行不发起任何请求", async () => {

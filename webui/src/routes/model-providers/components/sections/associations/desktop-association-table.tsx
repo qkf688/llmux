@@ -200,6 +200,8 @@ export function DesktopAssociationTable({
                         </>
                       ) : currentResult.success === true ? (
                         <span className="text-xs text-success font-medium">✓ 成功</span>
+                      ) : currentResult.cancelled ? (
+                        <span className="text-xs text-muted-foreground font-medium">— 已取消</span>
                       ) : currentResult.success === false ? (
                         <span className="text-xs text-destructive font-medium" title={currentResult.error}>
                           ✗ 失败

@@ -26,6 +26,8 @@ export type BatchTestProgress = {
   completed: number;
   success: number;
   failed: number;
+  /** 被中止的项数。与 failed 分开计数，失败率不被取消污染。 */
+  cancelled: number;
   testing: number;
 };
 
@@ -33,6 +35,8 @@ export type AssociationBatchTestResult = {
   loading: boolean;
   success: boolean | null;
   error?: string;
+  /** 用户主动中止（批量取消 / 切页面）。与「失败」分开：中止不证明该关联不可用。 */
+  cancelled?: boolean;
 };
 
 export type ReactTestResultState = {
@@ -40,6 +44,8 @@ export type ReactTestResultState = {
   messages: string;
   success: boolean | null;
   error: string | null;
+  /** 关弹窗/切页面中止。已累积的半截日志保留，供下次打开对照。 */
+  cancelled?: boolean;
 };
 
 export type ModelProvidersPagePreferences = {

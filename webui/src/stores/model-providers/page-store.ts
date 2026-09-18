@@ -14,7 +14,7 @@ import type {
 } from "@/stores/model-providers/types";
 
 function getInitialBatchTestProgress(): BatchTestProgress {
-  return { total: 0, completed: 0, success: 0, failed: 0, testing: 0 };
+  return { total: 0, completed: 0, success: 0, failed: 0, cancelled: 0, testing: 0 };
 }
 
 function getInitialReactTestResult(): ReactTestResultState {

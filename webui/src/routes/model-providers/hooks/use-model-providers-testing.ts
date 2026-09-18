@@ -1,7 +1,7 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { getAuthToken } from "@/stores/auth";
-import { toErrorMessage } from "@/lib/errors";
+import { isAbortError, toErrorMessage } from "@/lib/errors";
 import {
   testModelProvider,
   testModelProviderStructuredOutput,
@@ -17,13 +17,23 @@ type ReactTestResult = {
   messages: string;
   success: boolean | null;
   error: string | null;
+  /** 关弹窗/切页面中止。已累积的半截日志保留，供下次打开对照。 */
+  cancelled?: boolean;
 };
 
-type CapabilityTestEntry = { loading: boolean; result: ModelProviderTestResult | null };
+// 结果格三态（进行中/通过/失败）之外多一个「已取消」：它既不是失败（不证明供应商不行）
+// 也不是未测（用户明确停过），所以在 entry 上单独标记，不复用空 result 表达。
+type CapabilityTestEntry = {
+  loading: boolean;
+  result: ModelProviderTestResult | null;
+  cancelled?: boolean;
+};
 
 export type CapabilityTestResults = Record<CapabilityTestKey, CapabilityTestEntry>;
 
 type Setter<T> = (value: Updater<T>) => void;
+
+type CapabilityTestApi = (id: number, mode: TestMode, signal?: AbortSignal) => Promise<ModelProviderTestResult>;
 
 type UseModelProvidersTestingInput = {
   setTestDialogOpen: (open: boolean) => void;
@@ -43,31 +53,66 @@ export function capabilityTestKey(id: number, mode: TestMode): CapabilityTestKey
   return `${id}:${mode}`;
 }
 
-// JSON 型能力测试执行单元：按「关联 + 模式」记 loading/结果 + 单次执行与异常兜底。
+// JSON 型能力测试执行单元：按「关联 + 模式」记 loading/结果 + 取消与异常兜底。
 // 此前 connectivity/structured/thinking/vision 各抄一份同款 try/catch（第 5 类测试就要抄第 5 份），
 // 收敛后新增测试类型只需多调一次本 hook（OCP）。api 传模块级函数引用，天然稳定。
-function useCapabilityTest(api: (id: number, mode: TestMode) => Promise<ModelProviderTestResult>) {
+function useCapabilityTest(api: CapabilityTestApi) {
   const [results, setResults] = useState<CapabilityTestResults>({});
+  // 按格持有在飞请求：同一格重复测试要先停掉上一次（否则旧结果会覆写新结果，
+  // 且流式那条上游会话仍跑满计费）。abortAll 供关弹窗/切页面一次清干净。
+  const controllersRef = useRef<Map<string, AbortController>>(new Map());
 
   const run = useCallback(
-    async (id: number, mode: TestMode): Promise<ModelProviderTestResult> => {
+    async (id: number, mode: TestMode): Promise<ModelProviderTestResult | null> => {
       const key = capabilityTestKey(id, mode);
+      controllersRef.current.get(key)?.abort();
+      const controller = new AbortController();
+      controllersRef.current.set(key, controller);
+      // 只有仍代表该格「当前请求」的那一次才允许写结果：被取消后该格可能已被新请求接管，
+      // 旧请求的迟到 resolve/异常不得覆写新结果。
+      const isCurrent = () => controllersRef.current.get(key) === controller;
+
       try {
         setResults((prev) => ({ ...prev, [key]: { loading: true, result: null } }));
-        const result = await api(id, mode);
-        setResults((prev) => ({ ...prev, [key]: { loading: false, result } }));
+        const result = await api(id, mode, controller.signal);
+        if (isCurrent()) {
+          setResults((prev) => ({ ...prev, [key]: { loading: false, result } }));
+        }
         return result;
       } catch (err) {
+        if (isAbortError(err)) {
+          if (isCurrent()) {
+            setResults((prev) => ({ ...prev, [key]: { loading: false, result: null, cancelled: true } }));
+          }
+          return null;
+        }
         const message = `测试失败: ${toErrorMessage(err)}`;
-        setResults((prev) => ({ ...prev, [key]: { loading: false, result: { passed: false, error: message } } }));
+        if (isCurrent()) {
+          setResults((prev) => ({
+            ...prev,
+            [key]: { loading: false, result: { passed: false, error: message } },
+          }));
+        }
         console.error(err);
         return { passed: false, error: message };
+      } finally {
+        if (isCurrent()) {
+          controllersRef.current.delete(key);
+        }
       }
     },
     [api]
   );
 
-  return { results, run };
+  const abortAll = useCallback(() => {
+    // 不 clear：各请求在 catch/finally 里自行判断「是否仍是该格当前请求」再清理。
+    // 提前 clear 会让它们判定为非当前请求，连「已取消」状态都不写了。
+    for (const controller of controllersRef.current.values()) {
+      controller.abort();
+    }
+  }, []);
+
+  return { results, run, abortAll };
 }
 
 export function useModelProvidersTesting({
@@ -85,15 +130,42 @@ export function useModelProvidersTesting({
   const thinkingTest = useCapabilityTest(testModelProviderThinking);
   const visionTest = useCapabilityTest(testModelProviderVision);
 
+  // abortAll 是 useCallback([]) 的稳定引用，解构出来做依赖，避免因 hook 返回对象每次新建而重建回调。
+  const { abortAll: abortConnectivity } = connectivityTest;
+  const { abortAll: abortStructured } = structuredTest;
+  const { abortAll: abortThinking } = thinkingTest;
+  const { abortAll: abortVision } = visionTest;
+
   const currentControllerRef = useRef<AbortController | null>(null);
 
+  // ReAct 走 fetchEventSource 自持一条流，与四类能力测试分开持有控制器（它是单一在飞，不按格）。
+  const abortAllCapabilityTests = useCallback(() => {
+    abortConnectivity();
+    abortStructured();
+    abortThinking();
+    abortVision();
+  }, [abortConnectivity, abortStructured, abortThinking, abortVision]);
+
+  const abortAllTests = useCallback(() => {
+    abortAllCapabilityTests();
+    currentControllerRef.current?.abort();
+    currentControllerRef.current = null;
+  }, [abortAllCapabilityTests]);
+
+  // 切走页面（组件卸载）时同样要停：否则能力测试/ReAct 会在后台继续跑满并计费。
+  useEffect(() => () => abortAllTests(), [abortAllTests]);
+
   const dialogClose = useCallback(() => {
+    // 关弹窗 = 用户不想看了：停掉所有在飞的测试，上游会话随之取消、不再计费。
+    abortAllTests();
     setTestDialogOpen(false);
-  }, [setTestDialogOpen]);
+  }, [abortAllTests, setTestDialogOpen]);
 
   const handleTest = useCallback(
     (id: number) => {
+      // 打开新弹窗即停掉上一次的 ReAct 流；能力测试按格管理，不需在这里清。
       currentControllerRef.current?.abort();
+      currentControllerRef.current = null;
       setSelectedTestId(id);
       setTestType("connectivity");
       // 打开弹窗回到默认模式：若沿用上一轮的「流式」，用户会以为点击立即出结果，
@@ -112,7 +184,21 @@ export function useModelProvidersTesting({
 
   const handleReactTest = useCallback(
     async (id: number) => {
-      setReactTestResult((prev) => ({ ...prev, messages: "", loading: true }));
+      // 同一时刻只允许一条 ReAct 流：新的先停掉旧的（否则旧流的事件会追加进新结果）。
+      currentControllerRef.current?.abort();
+
+      setReactTestResult((prev) => ({ ...prev, messages: "", loading: true, cancelled: false }));
+
+      const controller = new AbortController();
+      currentControllerRef.current = controller;
+
+      // 只有仍代表「当前这条流」的事件才允许写结果：关弹窗/卸载/新流接管之后，
+      // 旧流的迟到事件（含 abort 触发的那次 onerror）不得再改状态。
+      const applyIfCurrent = (updater: (prev: ReactTestResult) => ReactTestResult) => {
+        if (currentControllerRef.current !== controller) return;
+        setReactTestResult(updater);
+      };
+
       try {
         const token = getAuthToken();
         if (!token) {
@@ -120,15 +206,12 @@ export function useModelProvidersTesting({
           return;
         }
 
-        const controller = new AbortController();
-        currentControllerRef.current = controller;
-
         await fetchEventSource(`/api/test/react/${id}`, {
           method: "GET",
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
           onmessage(event) {
-            setReactTestResult((prev) => {
+            applyIfCurrent((prev) => {
               if (event.event === "start") {
                 return { ...prev, messages: prev.messages + `[开始测试] ${event.data}\n` };
               } else if (event.event === "toolcall") {
@@ -148,21 +231,35 @@ export function useModelProvidersTesting({
             });
           },
           onclose() {
-            setReactTestResult((prev) => ({ ...prev, loading: false }));
+            applyIfCurrent((prev) => ({ ...prev, loading: false }));
           },
           onerror(err) {
-            setReactTestResult((prev) => ({
-              ...prev,
-              loading: false,
-              error: err.message || "测试过程中发生错误",
-              success: false,
-            }));
+            // 取消不是失败：标 cancelled、保留已累积的半截日志，不设 error/success。
+            if (isAbortError(err)) {
+              applyIfCurrent((prev) => ({ ...prev, loading: false, cancelled: true }));
+            } else {
+              applyIfCurrent((prev) => ({
+                ...prev,
+                loading: false,
+                error: err.message || "测试过程中发生错误",
+                success: false,
+              }));
+            }
             throw err;
           },
         });
       } catch (err) {
+        // 取消路径已在 onerror 里写入 cancelled 状态（并做过当前性判断），这里不再覆盖。
+        if (isAbortError(err)) {
+          return;
+        }
         setReactTestResult((prev) => ({ ...prev, loading: false, error: "测试失败", success: false }));
         console.error(err);
+      } finally {
+        // 仅当这条流仍被认作当前流时才解绑，避免把已交接给新流的 ref 清空。
+        if (currentControllerRef.current === controller) {
+          currentControllerRef.current = null;
+        }
       }
     },
     [setReactTestResult]

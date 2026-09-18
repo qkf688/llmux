@@ -104,11 +104,13 @@ export function MobileAssociationList({
 
         const testBadge = currentResult?.loading
           ? { text: "测试中", className: "bg-muted text-muted-foreground" }
-          : currentResult?.success === true
-            ? { text: "成功", className: "bg-success-tint text-success-foreground" }
-            : currentResult?.success === false
-              ? { text: "失败", className: "bg-destructive-tint text-destructive-tint-foreground" }
-              : null;
+          : currentResult?.cancelled
+            ? { text: "已取消", className: "bg-muted text-muted-foreground" }
+            : currentResult?.success === true
+              ? { text: "成功", className: "bg-success-tint text-success-foreground" }
+              : currentResult?.success === false
+                ? { text: "失败", className: "bg-destructive-tint text-destructive-tint-foreground" }
+                : null;
 
         return (
           <div key={association.ID} className="py-1.5">

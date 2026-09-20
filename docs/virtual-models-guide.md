@@ -488,4 +488,4 @@ GET /api/virtual-models/:id/stats
 
 - 详细实现文档：`planning-simple/SUMMARY.md`
 - 技术发现：`planning-simple/findings.md`
-- 项目规范：`CLAUDE.md`
+- 项目规范：`AGENTS.md`（唯一入口；原 CLAUDE.md 已于 2026-09-20 删除，其内容过时且与 AGENTS.md 矛盾）

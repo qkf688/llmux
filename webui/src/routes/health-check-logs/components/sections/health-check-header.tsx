@@ -2,6 +2,7 @@ import { Activity, Eye, Play, RefreshCw, Trash2 } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type HealthCheckHeaderProps = {
   runningBackgroundCheck: boolean;
@@ -50,16 +51,22 @@ export function HealthCheckHeader({
             {clearingLogs ? "清空中..." : "清空检测日志"}
           </Button>
 
-          <Button
-            onClick={onRefresh}
-            variant="outline"
-            size="icon"
-            className="shrink-0"
-            aria-label="刷新列表"
-            title="刷新列表"
-          >
-            <RefreshCw className="size-4" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex shrink-0">
+                <Button
+                  onClick={onRefresh}
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  aria-label="刷新列表"
+                >
+                  <RefreshCw className="size-4" />
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>刷新列表</TooltipContent>
+          </Tooltip>
         </>
       }
     />

@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePoolOptions } from "../../hooks/use-pool-options";
 import { InlineKeysField } from "./inline-keys-field";
 import { PROTOCOL_LABEL, SUPPORTED_TYPE_OPTIONS, type ProviderFormGroup, type ProviderFormValues } from "../../form-schema";
@@ -115,27 +116,35 @@ export function SupportTypesField({ providerTemplates }: { providerTemplates: Pr
       />
 
       <div className="space-y-1.5">
-        <FormLabel title="勾选即生成对应协议端点，请求按入站协议匹配端点（同协议透传）">
-          支持协议
-        </FormLabel>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <FormLabel className="w-fit cursor-default">
+              支持协议
+            </FormLabel>
+          </TooltipTrigger>
+          <TooltipContent>勾选即生成对应协议端点，请求按入站协议匹配端点（同协议透传）</TooltipContent>
+        </Tooltip>
         <div className="space-y-1.5">
           {SUPPORTED_TYPE_OPTIONS.map((opt) => {
             const supported = protocols.includes(opt.protocol);
             const lastStanding = protocols.length === 1 && supported;
             return (
-              <label
-                key={opt.type}
-                title={lastStanding ? "至少保留一个支持协议" : undefined}
-                className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-border/60 px-3 py-2 text-sm transition-colors hover:bg-muted/50"
-              >
-                <Checkbox
-                  checked={supported}
-                  // 最后一个勾选禁取消：至少保留一个出站协议/端点（zod 数组 min(1) 兜底）
-                  disabled={lastStanding}
-                  onCheckedChange={(checked) => toggleType(opt.type, checked === true)}
-                />
-                <span>{opt.label}</span>
-              </label>
+              <Tooltip key={opt.type}>
+                <TooltipTrigger asChild>
+                  <label
+                    className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-border/60 px-3 py-2 text-sm transition-colors hover:bg-muted/50"
+                  >
+                    <Checkbox
+                      checked={supported}
+                      // 最后一个勾选禁取消：至少保留一个出站协议/端点（zod 数组 min(1) 兜底）
+                      disabled={lastStanding}
+                      onCheckedChange={(checked) => toggleType(opt.type, checked === true)}
+                    />
+                    <span>{opt.label}</span>
+                  </label>
+                </TooltipTrigger>
+                {lastStanding && <TooltipContent>至少保留一个支持协议</TooltipContent>}
+              </Tooltip>
             );
           })}
         </div>
@@ -286,18 +295,22 @@ function GroupCard({
             <FormItem className="w-28 space-y-1">
               <FormLabel>价格权重</FormLabel>
               <FormControl>
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={field.value}
-                  onChange={(e) => {
-                    const v = e.target.valueAsNumber;
-                    // 清空输入时 valueAsNumber 为 NaN，落成 0 避免 React 受控 value 报警
-                    field.onChange(Number.isNaN(v) ? 0 : v);
-                  }}
-                  title="价格导向权重：便宜的分组权重高 → 选中概率大"
-                />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={field.value}
+                      onChange={(e) => {
+                        const v = e.target.valueAsNumber;
+                        // 清空输入时 valueAsNumber 为 NaN，落成 0 避免 React 受控 value 报警
+                        field.onChange(Number.isNaN(v) ? 0 : v);
+                      }}
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent>价格导向权重：便宜的分组权重高 → 选中概率大</TooltipContent>
+                </Tooltip>
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -384,18 +397,24 @@ function GroupCard({
                     </SelectContent>
                   </Select>
                 </FormControl>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9 shrink-0 px-2.5 text-xs"
-                  disabled={!field.value}
-                  onClick={() => onViewPoolDetail?.(field.value)}
-                  title="查看号池详情（凭据列表 / 状态分布）"
-                >
-                  <Eye className="size-3.5" />
-                  查看详情
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 shrink-0 px-2.5 text-xs"
+                        disabled={!field.value}
+                        onClick={() => onViewPoolDetail?.(field.value)}
+                      >
+                        <Eye className="size-3.5" />
+                        查看详情
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>查看号池详情（凭据列表 / 状态分布）</TooltipContent>
+                </Tooltip>
               </div>
               <FormMessage />
             </FormItem>
@@ -430,19 +449,25 @@ export function GroupsSection({
       {fields.map((field, index) => (
         <div key={field.id} className="space-y-2">
           <GroupCard index={index} providerId={providerId} onViewPoolDetail={onViewPoolDetail} />
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-            // 至少保留一个分组：删到最后一个时禁用（zod 数组 min(1) 兜底）
-            disabled={fields.length <= 1}
-            title={fields.length <= 1 ? "至少保留一个凭据分组" : "删除该分组"}
-            onClick={() => remove(index)}
-          >
-            <Trash2 className="size-3.5" />
-            删除该分组
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                  // 至少保留一个分组：删到最后一个时禁用（zod 数组 min(1) 兜底）
+                  disabled={fields.length <= 1}
+                  onClick={() => remove(index)}
+                >
+                  <Trash2 className="size-3.5" />
+                  删除该分组
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{fields.length <= 1 ? "至少保留一个凭据分组" : "删除该分组"}</TooltipContent>
+          </Tooltip>
         </div>
       ))}
       <Button type="button" variant="outline" size="sm" onClick={() => append(defaultGroup())}>

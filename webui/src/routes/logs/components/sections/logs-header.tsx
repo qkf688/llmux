@@ -2,6 +2,7 @@ import { RefreshCw, ScrollText, Trash2 } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type LogsHeaderProps = {
   /** 日志总条数（全量，非当前页），用于页头副标题 */
@@ -47,17 +48,25 @@ export function LogsHeader({
             {clearingAll ? "清空中..." : "清空所有日志"}
           </Button>
 
-          <Button
-            variant="destructive"
-            size="sm"
-            className="shrink-0"
-            disabled={!canClearFiltered || clearingFiltered}
-            onClick={onOpenClearFiltered}
-            title={!canClearFiltered ? "请先设置筛选条件" : undefined}
-          >
-            <Trash2 className="size-4" />
-            {clearingFiltered ? "清空中..." : "清空筛选结果"}
-          </Button>
+          {/* 禁用态提示：Button disabled 时 pointer-events-none 收不到 hover，
+              span 承接事件后 tooltip 才能解释「为什么点不动」（先例 providers-desktop-table） */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex shrink-0">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={!canClearFiltered || clearingFiltered}
+                  onClick={onOpenClearFiltered}
+                >
+                  <Trash2 className="size-4" />
+                  {clearingFiltered ? "清空中..." : "清空筛选结果"}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {!canClearFiltered && <TooltipContent>请先设置筛选条件</TooltipContent>}
+          </Tooltip>
 
           {selectedCount > 0 && (
             <Button
@@ -72,16 +81,22 @@ export function LogsHeader({
             </Button>
           )}
 
-          <Button
-            onClick={onRefresh}
-            variant="outline"
-            size="icon"
-            className="shrink-0"
-            aria-label="刷新列表"
-            title="刷新列表"
-          >
-            <RefreshCw className="size-4" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex shrink-0">
+                <Button
+                  onClick={onRefresh}
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  aria-label="刷新列表"
+                >
+                  <RefreshCw className="size-4" />
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>刷新列表</TooltipContent>
+          </Tooltip>
         </>
       }
     />

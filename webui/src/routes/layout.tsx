@@ -1,6 +1,7 @@
 import { selectSidebarOpen, selectToggleSidebarOpen, useLayoutStore } from "@/stores/ui";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -125,16 +126,19 @@ export default function Layout() {
                 return (
                   <li key={item.to}>
                     <Link to={item.to}>
-                      <div
-                        className={`
-                          group flex items-center h-9 mx-1.5 rounded-md transition-colors relative whitespace-nowrap
-                          ${isActive
-                            ? "text-primary font-semibold"
-                            : "hover:bg-muted text-muted-foreground"
-                          }
-                        `}
-                        title={!sidebarOpen ? item.label : ""}
-                      >
+                      {/* 侧栏收起时图标态需要 label 提示：Radix tooltip 替代原生 title，
+                          展开时无 Content 不弹（Radix Root 不产生 DOM 节点，结构不变） */}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div
+                            className={`
+                              group flex items-center h-9 mx-1.5 rounded-md transition-colors relative whitespace-nowrap
+                              ${isActive
+                                ? "text-primary font-semibold"
+                                : "hover:bg-muted text-muted-foreground"
+                              }
+                            `}
+                          >
                         {/* layoutId 滑块：active 项条件渲染一个绝对定位背景层（主色 tint，非整块填充），
                             motion 自动在不同 li 间补间位移。与文字/图标分层，避免 motion 残留 transform 影响 hover */}
                         {isActive && (
@@ -177,7 +181,10 @@ export default function Layout() {
                         >
                           {item.label}
                         </span>
-                      </div>
+                          </div>
+                        </TooltipTrigger>
+                        {!sidebarOpen && <TooltipContent>{item.label}</TooltipContent>}
+                      </Tooltip>
                     </Link>
                   </li>
                 );

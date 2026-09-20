@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Table,
   TableBody,
@@ -113,15 +114,22 @@ export function TemplateEditorDialog({
                           </TableCell>
                           <TableCell className="py-2 text-right">
                             {canRemoveManual && (
-                              <Button
-                                variant="ghost"
-                                className="h-7 w-7 p-0"
-                                onClick={() => onDelete(item.name)}
-                                disabled={loading}
-                                title="删除手动模板项"
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex">
+                                    <Button
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0"
+                                      onClick={() => onDelete(item.name)}
+                                      disabled={loading}
+                                      aria-label="删除手动模板项"
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>删除手动模板项</TooltipContent>
+                              </Tooltip>
                             )}
                           </TableCell>
                         </TableRow>

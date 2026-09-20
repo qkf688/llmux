@@ -10,6 +10,7 @@ vi.mock("@/hooks/api", () => ({
 }));
 
 import { SupportTypesField, EndpointsSection } from "./provider-schedule-fields";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   defaultProviderFormValues,
   providerFormSchema,
@@ -38,11 +39,15 @@ function Harness() {
     defaultValues: { ...defaultProviderFormValues, type: "openai" },
   });
   return (
-    <FormProvider {...form}>
-      <SupportTypesField providerTemplates={[]} />
-      <EndpointsSection />
-      <Probe />
-    </FormProvider>
+    // 组件内 Radix Tooltip 依赖 Provider context（App 根已挂载，测试 Harness 需自备，
+    // 与 api-key-form-dialog.test.tsx 姿势一致）
+    <TooltipProvider>
+      <FormProvider {...form}>
+        <SupportTypesField providerTemplates={[]} />
+        <EndpointsSection />
+        <Probe />
+      </FormProvider>
+    </TooltipProvider>
   );
 }
 

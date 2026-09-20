@@ -3,6 +3,7 @@ import type { ModelWithProvider, Provider } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -100,16 +101,22 @@ export function DesktopAssociationTable({
             <TableHead>
               <div className="flex items-center gap-1">
                 状态
-                <Button
-                  onClick={onRefreshStatus}
-                  variant="ghost"
-                  size="icon"
-                  aria-label="刷新状态"
-                  title="刷新状态"
-                  className="rounded-full"
-                >
-                  <RefreshCw className="size-4" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex">
+                      <Button
+                        onClick={onRefreshStatus}
+                        variant="ghost"
+                        size="icon"
+                        aria-label="刷新状态"
+                        className="rounded-full"
+                      >
+                        <RefreshCw className="size-4" />
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>刷新状态</TooltipContent>
+                </Tooltip>
               </div>
             </TableHead>
             <TableHead>健康检测</TableHead>

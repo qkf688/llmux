@@ -3,6 +3,7 @@ package testapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -16,7 +17,18 @@ import (
 
 // runOpenAIReactTest 走 OpenAI 兼容能力接口跑 react 流程，SSE 逐块回写。
 // 返回工具调用命中的城市、最终文本与过程中的错误。
-func runOpenAIReactTest(ctx context.Context, c *gin.Context, httpClient *http.Client, header http.Header, link *testLink, compat providers.OpenAICompat, scenario reactScenario) ([]string, string, error) {
+//
+// recover 兜底：第三方库 nsxno/react 在上游对流式请求回非 SSE/空 choices 的响应体时，
+// 内部对空切片取下标 panic（agent.go）。属上游不符合流式约定触发的库缺陷、非本地逻辑
+// 错误，库不可控故在此兜底转为 checkError——走 handler 既有 SSE error 事件通道，
+// 管理端看到的是可读失败事件，而不是 panic 把已开始的流硬切断后「卡住后失败」。
+// 契约测试：TestTestReactHandler_NonSSEUpstreamEmitsErrorEvent。
+func runOpenAIReactTest(ctx context.Context, c *gin.Context, httpClient *http.Client, header http.Header, link *testLink, compat providers.OpenAICompat, scenario reactScenario) (cities []string, final string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			cities, final, err = nil, "", fmt.Errorf("react 流程异常中止（上游响应可能不符合 SSE 流式约定）: %v", r)
+		}
+	}()
 	baseURL, apiKey := compat.OpenAICompatBaseURL(), compat.OpenAICompatAPIKey()
 	clientOptions := []option.RequestOption{
 		option.WithBaseURL(baseURL),

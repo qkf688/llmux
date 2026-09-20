@@ -1,8 +1,16 @@
 package testapi
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/handler/testsupport"
 )
 
 func TestSelectScenarioIndex(t *testing.T) {
@@ -189,5 +197,51 @@ func TestWeatherFromArguments(t *testing.T) {
 	}
 	if !strings.Contains(res, "南京") || !strings.Contains(res, "℃") {
 		t.Fatalf("unexpected response: %s", res)
+	}
+}
+
+// TestTestReactHandler_NonSSEUpstreamEmitsErrorEvent 上游对流式请求回非 SSE 的 JSON 体
+// （choices 为空）时，第三方库 nsxno/react 内部对空切片取下标 panic（agent.go）。该 panic
+// 属上游不符合流式约定触发的库缺陷，非本地逻辑错误；runOpenAIReactTest 的 recover 兜底
+// 把它转成 checkError，管理端经 SSE error 事件看到可读失败，而不是流中途被硬切断后
+// 「卡住后失败」。本用例锁兜底契约：不 panic + 回 error 事件 + 不误报 success。
+func TestTestReactHandler_NonSSEUpstreamEmitsErrorEvent(t *testing.T) {
+	testsupport.InitTestDB(t)
+	cipher := setupTestAPICipher(t)
+
+	var hits atomic.Int64
+	// 与 completionHandlerByAuth 的关键差异：无论请求体是否 "stream":true，
+	// 一律回非 SSE 的 JSON（choices 空）——复现库内取下标 panic 的触发条件。
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		_, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"cmpl-1","object":"chat.completion","model":"m","choices":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	provider := seedProviderRow(t, "p-react-nonsse", "openai")
+	seedEndpointRow(t, provider.ID, "openai", srv.URL)
+	seedPoolGroup(t, cipher, provider.ID, "react 池组", "pool-react-nonsse", "sk-react-nonsse")
+	mwp := seedAssociation(t, provider.ID, 1, "gpt-4.1")
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/test/react/"+strconv.FormatUint(uint64(mwp.ID), 10), nil)
+	c.Params = gin.Params{{Key: "id", Value: strconv.FormatUint(uint64(mwp.ID), 10)}}
+
+	// 兜底缺失时库内 panic 从这里直穿上抛，测试进程挂 = 用例红（改前实测）。
+	TestReactHandler(c)
+
+	if hits.Load() == 0 {
+		t.Fatalf("未打到上游（装配阶段就失败）；SSE=%s", w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "event:error") {
+		t.Fatalf("SSE 未回 error 事件；body=%s", body)
+	}
+	if strings.Contains(body, "event:success") {
+		t.Fatalf("非 SSE 上游不应报 success；body=%s", body)
 	}
 }

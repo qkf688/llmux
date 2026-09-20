@@ -47,8 +47,29 @@ func assertTruncatedLineShape(t *testing.T, line string) {
 	if !strings.Contains(line, "| 200 |") {
 		t.Fatalf("status 段被截掉: %q", line)
 	}
+	if !strings.Contains(line, "ms") {
+		t.Fatalf("耗时段被截掉（AC-3 三个关联键恒存活）: %q", line)
+	}
 	if !strings.Contains(line, common.TruncatedSuffix) {
 		t.Fatalf("超限行缺截断标记: %q", line)
+	}
+}
+
+func TestFormatAccessLine_OverlongClientIPCapsWholeLine(t *testing.T) {
+	// 审查回批 W1：gin 默认信任全部代理且本项目未 SetTrustedProxies（Stage 20 议题），
+	// XFF 伪造的 ClientIP 无长度约束——path 段预算压不下时必须整行兜底，
+	// 体量上界是防线本体（rid/status 在载体字段病态时被切是定案取舍）。
+	p := accessLogTestParams("/probe", "abc123")
+	p.ClientIP = strings.Repeat("9", 8000)
+	line := formatAccessLine(p)
+	if len(line) > accessLogLineMaxBytes {
+		t.Fatalf("病态 ClientIP 下访问行 %d 字节 > 上限 %d（整行兜底缺失）", len(line), accessLogLineMaxBytes)
+	}
+	if strings.Count(line, "\n") != 1 || !strings.HasSuffix(line, "\n") {
+		t.Fatalf("兜底行必须保持「单行 + 尾换行」形态（否则下一条访问行会拼接进来）: %q", line)
+	}
+	if !strings.Contains(line, common.TruncatedSuffix) {
+		t.Fatalf("兜底行缺截断标记: %q", line)
 	}
 }
 

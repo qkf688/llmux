@@ -184,35 +184,62 @@ func (r *chatLogRepo) ClearRawFields(ctx context.Context, id uint) error {
 		}).Error
 }
 
+// sanitizeBatchSize 存量头快照清洗的游标分批大小（审查回批 W2）：清洗随每次启动执行，
+// 全量一次读入会让启动内存尖峰与延迟随日志量无界增长。
+const sanitizeBatchSize = 500
+
 func (r *chatLogRepo) SanitizeLegacyRequestHeaders(ctx context.Context) (int, error) {
-	// 只扫非空行：raw 字段在 errors-only 策略下本就会被清空，空行无明文可言。
-	var rows []models.ChatLog
-	if err := r.db.WithContext(ctx).Model(&models.ChatLog{}).
-		Select("id", "request_headers").
-		Where("request_headers IS NOT NULL AND request_headers <> ''").
-		Find(&rows).Error; err != nil {
-		return 0, fmt.Errorf("repository: 读取待清洗 chat_logs 请求头快照失败: %w", err)
+	updated := 0
+	lastID := uint(0)
+	for {
+		var rows []models.ChatLog
+		if err := r.db.WithContext(ctx).Model(&models.ChatLog{}).
+			Select("id", "request_headers").
+			Where("request_headers IS NOT NULL AND request_headers <> '' AND id > ?", lastID).
+			Order("id").
+			Limit(sanitizeBatchSize).
+			Find(&rows).Error; err != nil {
+			return updated, fmt.Errorf("repository: 读取待清洗 chat_logs 请求头快照失败（已清洗 %d 行）: %w", updated, err)
+		}
+		if len(rows) == 0 {
+			break
+		}
+		lastID = rows[len(rows)-1].ID
+		for _, row := range rows {
+			masked, err := common.MaskSensitiveLogHeadersJSON(row.RequestHeaders)
+			if err != nil {
+				// 坏 JSON 行跳过：清洗是数据卫生动作，不能因个别坏行让整个启动失败。
+				slog.Warn("chat_logs 请求头快照清洗跳过坏 JSON 行", "log_id", row.ID, "error", err)
+				continue
+			}
+			if masked == row.RequestHeaders {
+				continue // 幂等：已清洗/无敏感头的行零改写
+			}
+			// map 显式更新：GORM struct Updates 跳零值，且清洗只需改单列
+			// （ClearRawFields 同款姿势）。
+			if err := r.db.WithContext(ctx).Model(&models.ChatLog{}).
+				Where("id = ?", row.ID).
+				Update("request_headers", masked).Error; err != nil {
+				return updated, fmt.Errorf("repository: 清洗 chat_logs 请求头快照失败 (log_id=%d，已清洗 %d 行): %w", row.ID, updated, err)
+			}
+			updated++
+		}
+		if len(rows) < sanitizeBatchSize {
+			break
+		}
 	}
 
-	updated := 0
-	for _, row := range rows {
-		masked, err := common.MaskSensitiveLogHeadersJSON(row.RequestHeaders)
-		if err != nil {
-			// 坏 JSON 行跳过：清洗是数据卫生动作，不能因个别坏行让整个启动失败。
-			slog.Warn("chat_logs 请求头快照清洗跳过坏 JSON 行", "log_id", row.ID, "error", err)
-			continue
+	// 物理抹除（risk-review C1，实测支撑）：UPDATE 新值更短，被替换的明文字节驻留
+	// SQLite 页 freeblock/slack（secure_delete 默认关）——整库导出端点
+	// `GET /api/system/export-database` 以 c.File 原样下载物理文件，静态字节扫描
+	// 可恢复明文，「清洗消灭明文档案」只靠逻辑行掩码不成立。VACUUM 重建整个库文件、
+	// 只写活数据，一次消灭含历史启动在内的全部残留；只在本次实际改写过行时执行
+	// （幂等启动零代价）。否掉 PRAGMA secure_delete：连接级生效，且管不到此前清洗
+	// 已留下的历史残留页。
+	if updated > 0 {
+		if err := r.db.WithContext(ctx).Exec("VACUUM").Error; err != nil {
+			return updated, fmt.Errorf("repository: VACUUM 物理清除残留明文失败（逻辑行已掩码，物理字节可能仍可恢复）: %w", err)
 		}
-		if masked == row.RequestHeaders {
-			continue // 幂等：已清洗/无敏感头的行零改写
-		}
-		// map 显式更新：GORM struct Updates 跳零值，且清洗只需改单列
-		// （ClearRawFields 同款姿势）。
-		if err := r.db.WithContext(ctx).Model(&models.ChatLog{}).
-			Where("id = ?", row.ID).
-			Update("request_headers", masked).Error; err != nil {
-			return updated, fmt.Errorf("repository: 清洗 chat_logs 请求头快照失败 (log_id=%d): %w", row.ID, err)
-		}
-		updated++
 	}
 	return updated, nil
 }

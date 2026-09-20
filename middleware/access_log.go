@@ -3,6 +3,7 @@ package middleware
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -32,10 +33,9 @@ const accessLogLineMaxBytes = 4 << 10
 // formatAccessLine 组装访问行。Stage 16 单行上限采用「path 段预算」口径（方案 B）：
 // 超限时截断施加在 %q **之后**的 path 段，而非整行尾——病态长 URL 恰恰是最需要
 // 排障关联的请求，整行尾截会把 status/耗时/rid 这些关联键切掉；预算 = 整行上限 −
-// 其余字段实测长度 − 截断标记长度（TruncateUTF8 的标记追加在预算字节之外），
-// 整行恒 ≤ accessLogLineMaxBytes。先 %q 后截：控制字符的 \xNN 展开（最坏 4 倍）
-// 会让「先截后转义」的行重新超限。截断实现单源 common.TruncateUTF8（rune 边界
-// 回退 + 标记），此处只定预算与组装。
+// 其余字段实测长度 − 截断标记长度（TruncateUTF8 的标记追加在预算字节之外）。
+// 先 %q 后截：控制字符的 \xNN 展开（最坏 4 倍）会让「先截后转义」的行重新超限。
+// 截断实现单源 common.TruncateUTF8（rune 边界回退 + 标记），此处只定预算与组装。
 func formatAccessLine(p gin.LogFormatterParams) string {
 	quotedPath := strconv.Quote(p.Path) // 与原 %q 同源
 	line := assembleAccessLine(p, quotedPath)
@@ -43,10 +43,21 @@ func formatAccessLine(p gin.LogFormatterParams) string {
 		return line
 	}
 	budget := accessLogLineMaxBytes - (len(line) - len(quotedPath)) - len(common.TruncatedSuffix)
-	if budget < 1 {
-		budget = 1 // 防御分支：其余字段自身超限时至少保留标记可读性（现实不可达：rid 受白名单约束）
+	if budget >= 1 {
+		if capped := assembleAccessLine(p, common.TruncateUTF8(quotedPath, budget)); len(capped) <= accessLogLineMaxBytes {
+			return capped
+		}
 	}
-	return assembleAccessLine(p, common.TruncateUTF8(quotedPath, budget))
+	// 兜底（审查回批 W1）：path 段预算只能约束 path，其余字段（ClientIP/Method）无
+	// 长度约束——gin 默认信任全部代理且本项目未 SetTrustedProxies（Stage 20 议题），
+	// XFF 伪造的 ClientIP 可达任意长度，path 预算压不下整行。此时退化为整行尾部截断：
+	// 体量上界是防线本体，rid/status 只在载体字段本身已病态时被切（放弃关联键换上界，
+	// 比把无上限单行放进 stdout 可控）。截断预算同样扣标记长度，且保留尾部换行——
+	// TruncateUTF8 的标记追加在预算之外，不扣长度兜底自身又超限、切掉 \n 则下一条
+	// 访问行会拼接进来破坏「一行请求 = 一行日志」。
+	body := common.TruncateUTF8(strings.TrimSuffix(line, "\n"),
+		accessLogLineMaxBytes-len(common.TruncatedSuffix)-1)
+	return body + "\n"
 }
 
 func assembleAccessLine(p gin.LogFormatterParams, quotedPath string) string {

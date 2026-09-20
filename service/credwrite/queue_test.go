@@ -32,7 +32,12 @@ func TestQueue_DropOldestWhenFull(t *testing.T) {
 	})
 
 	q := NewQueue(2)
-	go q.runWorker()
+	// 必须走 startWorker（workerOnce + bgtask）而非手动 go runWorker：
+	// 手动 go 不消耗 workerOnce，flush 内的 startWorker 会再起第二个 worker，
+	// 双 worker 并发消费破坏 FIFO 哨兵的 happens-before——哨兵先于数据 job 的
+	// handler 被消费，flush 返回时计数不足（TestQueue_FlushDrainsJobs 偶发 flake 根因）。
+	// 生产路径恒单 worker（Start → startWorker），测试与之同语义。
+	q.startWorker()
 	t.Cleanup(q.requestStop)
 
 	// 先让 worker 拿走 1 条并阻塞，再精确填满容量 2，避免时序竞态。
@@ -83,7 +88,7 @@ func TestQueue_FlushDoesNotDropSentinel(t *testing.T) {
 	})
 
 	q := NewQueue(1)
-	go q.runWorker()
+	q.startWorker()
 	t.Cleanup(q.requestStop)
 
 	q.enqueueDropOldest(Job{Kind: KindCooldown, CredID: 1, Reason: "a"})
@@ -107,6 +112,9 @@ func TestQueue_FlushDoesNotDropSentinel(t *testing.T) {
 
 func TestQueue_FlushDrainsJobs(t *testing.T) {
 	ResetDroppedForTest()
+	// 防御式进入状态：flush 的完成语义依赖 syncMode=false（true 时直接返回 nil、
+	// 不等 worker 消费）；全局 syncMode 可能被前序测试改动，不依赖执行顺序。
+	EnableTestSyncMode(false)
 	var seen atomic.Int32
 	ReplaceHandlersForTest(Handlers{
 		Cooldown: func(ctx context.Context, credID uint, reason string) error {
@@ -117,7 +125,7 @@ func TestQueue_FlushDrainsJobs(t *testing.T) {
 	t.Cleanup(func() { ReplaceHandlersForTest(Handlers{}) })
 
 	q := NewQueue(8)
-	go q.runWorker()
+	q.startWorker()
 	t.Cleanup(q.requestStop)
 
 	q.enqueueDropOldest(Job{Kind: KindCooldown, CredID: 10, Reason: "http_429"})
@@ -145,7 +153,7 @@ func TestQueue_StopAfterFlush(t *testing.T) {
 	t.Cleanup(func() { ReplaceHandlersForTest(Handlers{}) })
 
 	q := NewQueue(4)
-	go q.runWorker()
+	q.startWorker()
 
 	q.enqueueDropOldest(Job{Kind: KindCooldown, CredID: 99, Reason: "http_429"})
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -208,7 +216,10 @@ func TestEnqueueTouchProbeAndRecover(t *testing.T) {
 	ReplaceHandlersForTest(Handlers{})
 	t.Cleanup(func() {
 		ReplaceHandlersForTest(Handlers{})
-		EnableTestSyncMode(true)
+		// 恢复进入态而非置 true：全局 syncMode 是包级共享状态，退出时留 true 会
+		// 让后续测试的 flush 短路返回（丢掉「等 worker 消费完」语义）——曾致
+		// TestQueue_FlushDrainsJobs 在 -count>1 时 processed=0 稳定失败。
+		EnableTestSyncMode(false)
 		ResetDroppedForTest()
 	})
 

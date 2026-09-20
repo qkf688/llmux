@@ -91,7 +91,15 @@ func seedProviderRow(t *testing.T, name, typ string) models.Provider {
 	t.Helper()
 	// Config 刻意指向不可达主机且不含 api_key：只有走「端点 URL + 凭据明文」才可能成功，
 	// 任何绕过选路的回归都会立刻炸而不是静默通过（同 providerapi 的种子姿势）。
-	provider := models.Provider{Name: name, Type: typ, Config: `{"base_url":"https://should-not-use.example"}`}
+	return seedProviderRowWithConfig(t, name, typ, `{"base_url":"https://should-not-use.example"}`)
+}
+
+// seedProviderRowWithConfig 允许测试指定 Provider.Config（如注入 openai_auth_type 方言键，
+// Stage 15 ReAct 诊断方言贯通用例）；其余场景一律走 seedProviderRow 默认配置，
+// 保持「Config 不承载可用凭据、不指向可达主机」的防绕过语义。
+func seedProviderRowWithConfig(t *testing.T, name, typ, config string) models.Provider {
+	t.Helper()
+	provider := models.Provider{Name: name, Type: typ, Config: config}
 	if err := models.DB.Create(&provider).Error; err != nil {
 		t.Fatalf("create provider: %v", err)
 	}
@@ -618,13 +626,7 @@ func TestTestReactHandler_UsesPoolCredential(t *testing.T) {
 	seedPoolGroup(t, cipher, provider.ID, "react 池组", "pool-react", "sk-react")
 	mwp := seedAssociation(t, provider.ID, 1, "gpt-4.1")
 
-	gin.SetMode(gin.TestMode)
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest("GET", "/api/test/react/"+strconv.FormatUint(uint64(mwp.ID), 10), nil)
-	c.Params = gin.Params{{Key: "id", Value: strconv.FormatUint(uint64(mwp.ID), 10)}}
-
-	TestReactHandler(c)
+	w := callReactTest(t, mwp.ID)
 
 	if hits.Load() == 0 {
 		t.Fatalf("react 测试未打到上游（装配阶段就失败）；SSE=%s", w.Body.String())

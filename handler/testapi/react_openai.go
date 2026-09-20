@@ -30,6 +30,11 @@ func runOpenAIReactTest(ctx context.Context, c *gin.Context, httpClient *http.Cl
 		}
 	}()
 	baseURL, apiKey := compat.OpenAICompatBaseURL(), compat.OpenAICompatAPIKey()
+	// 空密钥 = 配置错误而非供应商故障（Stage 15）：本地直接给出可执行结论，
+	// 不带空凭据头打上游挨 401——那是把配置问题伪装成上游故障。
+	if strings.TrimSpace(apiKey) == "" {
+		return nil, "", fmt.Errorf("供应商 %q 未配置 API Key：请先在该供应商的凭据分组或号池中配置密钥", link.ProviderName)
+	}
 	clientOptions := []option.RequestOption{
 		option.WithBaseURL(baseURL),
 		option.WithHTTPClient(httpClient),
@@ -39,16 +44,21 @@ func runOpenAIReactTest(ctx context.Context, c *gin.Context, httpClient *http.Cl
 			clientOptions = append(clientOptions, option.WithHeaderAdd(key, value))
 		}
 	}
-	// 凭据头单头保证（4b 契约）：openai-go SDK 的 WithAPIKey 恒发 Authorization: Bearer，
-	// 而 header 来自无限制显式通道 customer_headers——先删掉配置可能带入的凭据头，
-	// 再交给 SDK 写自己的，杜绝双凭据头并送（否则 ReAct 测试与真实转发的头形态分叉）。
-	// 已知限制：SDK 路径固定 bearer 方言，openai_auth_type=x-api-key 的供应商在此测不过
-	// （真实转发可用），登记 .local/find-issues/ 待补方言贯通。
+	// 凭据头单头保证（4b 契约，Stage 15 方言贯通）：自定义头通道 customer_headers 不限白名单、
+	// SDK 环境变量默认值（OPENAI_API_KEY，openai-go 默认选项先于用户选项应用）也可能注入
+	// Authorization——先 Del 两个凭据头键清掉全部带入，再搬运 OpenAICompatAuthHeaders 按
+	// 供应商方言（config 键 openai_auth_type）写好的凭据头。方言判断单源在
+	// providers.applyAuthHeader，本函数只搬运、不 switch 方言，诊断与真实转发永不分叉
+	// （修复前 SDK WithAPIKey 恒发 bearer，x-api-key 方言中转在此必假阴性——测坏≠能跑）。
 	clientOptions = append(clientOptions,
 		option.WithHeaderDel("Authorization"),
 		option.WithHeaderDel("x-api-key"),
-		option.WithAPIKey(apiKey),
 	)
+	for name, values := range compat.OpenAICompatAuthHeaders() {
+		for _, value := range values {
+			clientOptions = append(clientOptions, option.WithHeader(name, value))
+		}
+	}
 
 	client := openai.NewClient(clientOptions...)
 	agent := react.New(client, 20)

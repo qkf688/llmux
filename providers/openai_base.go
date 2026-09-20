@@ -30,9 +30,17 @@ type openaiBase struct {
 	endpointPath string // 注入差异点：chat/completions 或 responses
 }
 
-// OpenAICompatBaseURL / OpenAICompatAPIKey 实现 OpenAICompat 能力接口（OCP-9）。
+// OpenAICompatBaseURL / OpenAICompatAPIKey / OpenAICompatAuthHeaders 实现 OpenAICompat 能力接口（OCP-9）。
 func (o *openaiBase) OpenAICompatBaseURL() string { return o.BaseURL }
 func (o *openaiBase) OpenAICompatAPIKey() string  { return o.APIKey }
+
+// OpenAICompatAuthHeaders 走 applyAuthHeader 单源按方言写好凭据头（Stage 15）：
+// 诊断路径（ReAct 测试 SDK 直发）拿这里的头直接用，方言判断不外溢到 handler 层。
+func (o *openaiBase) OpenAICompatAuthHeaders() http.Header {
+	h := http.Header{}
+	applyAuthHeader(h, o.AuthType, AuthTypeBearer, o.APIKey)
+	return h
+}
 
 func (o *openaiBase) BuildReq(ctx context.Context, header http.Header, model string, rawBody []byte) (*http.Request, error) {
 	body, err := sjson.SetBytes(rawBody, "model", model)

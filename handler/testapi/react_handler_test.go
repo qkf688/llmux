@@ -13,6 +13,20 @@ import (
 	"github.com/qkf688/llmux/handler/testsupport"
 )
 
+// callReactTest 以 httptest 上下文调用 TestReactHandler（关联级 ReAct 诊断端点），
+// 供本包所有 react 用例复用，避免各用例自拼 gin 测试上下文。
+func callReactTest(t *testing.T, associationID uint) *httptest.ResponseRecorder {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	id := strconv.FormatUint(uint64(associationID), 10)
+	c.Request = httptest.NewRequest("GET", "/api/test/react/"+id, nil)
+	c.Params = gin.Params{{Key: "id", Value: id}}
+	TestReactHandler(c)
+	return w
+}
+
 func TestSelectScenarioIndex(t *testing.T) {
 	t.Run("stable default", func(t *testing.T) {
 		idx, err := selectScenarioIndex("model-123", "", 3)
@@ -225,14 +239,8 @@ func TestTestReactHandler_NonSSEUpstreamEmitsErrorEvent(t *testing.T) {
 	seedPoolGroup(t, cipher, provider.ID, "react 池组", "pool-react-nonsse", "sk-react-nonsse")
 	mwp := seedAssociation(t, provider.ID, 1, "gpt-4.1")
 
-	gin.SetMode(gin.TestMode)
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest("GET", "/api/test/react/"+strconv.FormatUint(uint64(mwp.ID), 10), nil)
-	c.Params = gin.Params{{Key: "id", Value: strconv.FormatUint(uint64(mwp.ID), 10)}}
-
 	// 兜底缺失时库内 panic 从这里直穿上抛，测试进程挂 = 用例红（改前实测）。
-	TestReactHandler(c)
+	w := callReactTest(t, mwp.ID)
 
 	if hits.Load() == 0 {
 		t.Fatalf("未打到上游（装配阶段就失败）；SSE=%s", w.Body.String())

@@ -173,3 +173,59 @@ func TestModels_AuthHeaderSingleSource(t *testing.T) {
 		})
 	}
 }
+
+// TestOpenAICompat_AuthHeadersSingleSource 锁 OpenAICompat 能力接口的凭据头契约（Stage 15）：
+// 不经 BuildReq 的诊断路径（ReAct 测试走 openai-go SDK 直发）拿凭据头必须经
+// OpenAICompatAuthHeaders，方言判断（openai_auth_type 单源 applyAuthHeader）只存在于
+// providers 一处——诊断测试侧禁止自己 switch 方言，否则「密钥怎么发」两处执法点漂移，
+// 就会复发「测试说坏、真实转发能跑」的假阴性。
+// 期望值与 TestBuildReq_AuthHeaderSingleSource 同口径（同一执法点的两种消费方式）。
+func TestOpenAICompat_AuthHeadersSingleSource(t *testing.T) {
+	cases := []struct {
+		name         string
+		providerType string
+		config       string
+		wantAuth     string // 期望 Authorization 值；"" = 键必须不存在
+		wantXKey     string // 期望 x-api-key 值；"" = 键必须不存在
+	}{
+		{
+			name:         "openai 默认 bearer",
+			providerType: TypeOpenAI,
+			config:       `{"base_url":"https://x","api_key":"k"}`,
+			wantAuth:     "Bearer k", wantXKey: "",
+		},
+		{
+			name:         "openai x-api-key 方言",
+			providerType: TypeOpenAI,
+			config:       `{"base_url":"https://x","api_key":"k","openai_auth_type":"x-api-key"}`,
+			wantAuth:     "", wantXKey: "k",
+		},
+		{
+			name:         "openai 未知值回退 bearer",
+			providerType: TypeOpenAI,
+			config:       `{"base_url":"https://x","api_key":"k","openai_auth_type":"garbage"}`,
+			wantAuth:     "Bearer k", wantXKey: "",
+		},
+		{
+			name:         "openai-res 同基类：x-api-key 方言",
+			providerType: TypeOpenAIRes,
+			config:       `{"base_url":"https://x","api_key":"k","openai_auth_type":"x-api-key"}`,
+			wantAuth:     "", wantXKey: "k",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := New(tc.providerType, tc.config, "")
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			compat, ok := p.(OpenAICompat)
+			if !ok {
+				t.Fatalf("%s 未实现 OpenAICompat", tc.providerType)
+			}
+			h := compat.OpenAICompatAuthHeaders()
+			assertAuthHeader(t, h, "Authorization", tc.wantAuth)
+			assertAuthHeader(t, h, "x-api-key", tc.wantXKey)
+		})
+	}
+}

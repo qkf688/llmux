@@ -36,6 +36,11 @@ type OpenAICompat interface {
 	Provider
 	OpenAICompatBaseURL() string
 	OpenAICompatAPIKey() string
+	// OpenAICompatAuthHeaders 返回按本供应商认证方言（config 键 openai_auth_type）写好的
+	// 凭据头（复用 applyAuthHeader 单源执法：选定方式 Set、对侧 Del、空值/未知值回退 bearer）。
+	// 供不经 BuildReq 的诊断路径（ReAct 测试走 openai-go SDK 直发）直接使用——方言判断
+	// 只存在 providers 一处，诊断与真实转发永不分叉；消费方只搬运头，禁止自行 switch 方言。
+	OpenAICompatAuthHeaders() http.Header
 }
 
 // BetaFeatureCapable 暴露「本供应商是否启用了某个 beta 特性」的查询能力。

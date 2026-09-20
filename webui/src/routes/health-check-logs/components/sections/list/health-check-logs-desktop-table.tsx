@@ -8,7 +8,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { HealthCheckLog } from "@/lib/api";
-import { formatDateTime, formatResponseTime, isHealthCheckSuccess } from "../../../utils/formatters";
+import { formatResponseTime, isHealthCheckSuccess } from "../../../utils/formatters";
+import { formatDateTime } from "@/lib/formatters";
 
 type HealthCheckLogsDesktopTableProps = {
   logs: HealthCheckLog[];

@@ -10,10 +10,6 @@ export function formatResponseTime(milliseconds: number): string {
   return `${(milliseconds / 1000).toFixed(2)} s`;
 }
 
-export function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString();
-}
-
 export function isHealthCheckSuccess(status: string): boolean {
   return status === "success";
 }

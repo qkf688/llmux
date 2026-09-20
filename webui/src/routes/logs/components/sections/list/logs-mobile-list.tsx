@@ -5,7 +5,8 @@ import { StaggerItem, StaggerList } from "@/components/ui/stagger-list";
 import type { ChatLog } from "@/lib/api";
 import { Trash2 } from "lucide-react";
 import { LogScheduleCell } from "../../shared";
-import { formatByteLength, formatDateTime, formatTime } from "../../../utils/formatters";
+import { formatByteLength, formatTime } from "../../../utils/formatters";
+import { formatDateTime } from "@/lib/formatters";
 
 type LogsMobileListProps = {
   logs: ChatLog[];

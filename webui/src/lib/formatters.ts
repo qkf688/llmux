@@ -47,8 +47,9 @@ export function formatTimeNs(nanoseconds?: number): string {
   return `${(nanoseconds / 1_000_000_000).toFixed(2)} s`;
 }
 
-/** ISO/RFC3339 时间串 → 本地可读格式（新页面统一用本函数；存量 routes/*
- *  各自的本地 formatDateTime 副本沉并另行登记，locale 不一致属存量债） */
+/** ISO/RFC3339 时间串 → 本地可读格式。全站管理端单源，locale 固定 zh-CN
+ *  （全站界面即中文），空值回 "-"。原 routes/logs、health-check-logs、
+ *  model-sync-logs 的本地副本已于 2026-09-20 沉并收编，勿在页面层再写本地版 */
 export function formatDateTime(value?: string): string {
   if (!value) return "-";
   return new Date(value).toLocaleString("zh-CN");

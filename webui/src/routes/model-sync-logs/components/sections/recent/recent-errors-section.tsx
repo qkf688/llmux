@@ -8,7 +8,7 @@ import type { ModelSyncLog, Provider } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { CheckSquare2, Trash2 } from "lucide-react";
 import { useMemo } from "react";
-import { formatSyncDate } from "../../../utils/formatters";
+import { formatDateTime } from "@/lib/formatters";
 
 type RecentErrorsSectionProps = {
   loading: boolean;
@@ -236,7 +236,7 @@ export function RecentErrorsSection({
                           </Button>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {formatSyncDate(item.lastLog.SyncedAt)}
+                          {formatDateTime(item.lastLog.SyncedAt)}
                         </TableCell>
                         <TableCell className="text-right font-mono">{item.count}</TableCell>
                         <TableCell className="text-right">
@@ -328,7 +328,7 @@ export function RecentErrorsSection({
                       </span>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {formatSyncDate(item.lastLog.SyncedAt)} · 次数 <span className="font-mono">{item.count}</span>
+                      {formatDateTime(item.lastLog.SyncedAt)} · 次数 <span className="font-mono">{item.count}</span>
                     </div>
                     <div
                       className="flex gap-1.5"

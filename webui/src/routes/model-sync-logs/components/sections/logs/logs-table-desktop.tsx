@@ -3,7 +3,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ModelSyncLog } from "@/lib/api";
 import { StatusBadge } from "../../shared/status-badge";
-import { formatSyncDate } from "../../../utils/formatters";
+import { formatDateTime } from "@/lib/formatters";
 
 type LogsTableDesktopProps = {
   logs: ModelSyncLog[];
@@ -47,7 +47,7 @@ export function LogsTableDesktop({
                 />
               </TableCell>
               <TableCell className="font-medium">{log.ProviderName}</TableCell>
-              <TableCell className="text-sm text-muted-foreground">{formatSyncDate(log.SyncedAt)}</TableCell>
+              <TableCell className="text-sm text-muted-foreground">{formatDateTime(log.SyncedAt)}</TableCell>
               <TableCell>
                 <StatusBadge status={log.Status} />
               </TableCell>

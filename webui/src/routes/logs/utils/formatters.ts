@@ -20,7 +20,5 @@ export const formatTokenValue = (value?: number) =>
 export const formatTpsValue = (value?: number) =>
   typeof value === "number" ? value.toFixed(2) : "-";
 
-export const formatDateTime = (value: string) => new Date(value).toLocaleString();
-
 export const formatByteLength = (value?: string) =>
   value ? `${value.length.toLocaleString()} 字节` : "-";

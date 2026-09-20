@@ -4,11 +4,11 @@ import { getLogDetail, type ChatLog } from "@/lib/api";
 import { toErrorMessage } from "@/lib/errors";
 import { splitLogSchedule } from "../../../utils/log-schedule";
 import {
-  formatDateTime,
   formatDurationValue,
   formatTokenValue,
   formatTpsValue,
 } from "../../../utils/formatters";
+import { formatDateTime } from "@/lib/formatters";
 import { DetailCard } from "./detail-card";
 import { RequestResponseSection } from "./request-response-section";
 import { MismatchedFieldsSection, UnclaimedFieldsSection } from "./unclaimed-fields-section";

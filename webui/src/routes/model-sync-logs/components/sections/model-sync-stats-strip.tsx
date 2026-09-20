@@ -1,6 +1,6 @@
 import { AlertTriangle, CheckCircle, Clock, Layers } from "lucide-react";
 import type { ModelSyncStats } from "@/lib/api";
-import { formatSyncDate } from "../../utils/formatters";
+import { formatDateTime } from "@/lib/formatters";
 
 type ModelSyncStatsStripProps = {
   stats: ModelSyncStats | null;
@@ -16,8 +16,8 @@ export function ModelSyncStatsStrip({ stats, loading }: ModelSyncStatsStripProps
         <div className="flex items-center gap-2">
           <Clock className="h-4 w-4 text-muted-foreground" />
           <span>
-            上次: {formatSyncDate(stats?.last_sync_at)}
-            {stats?.sync_enabled && stats?.next_sync_at && <> · 下次: {formatSyncDate(stats.next_sync_at)}</>}
+            上次: {formatDateTime(stats?.last_sync_at)}
+            {stats?.sync_enabled && stats?.next_sync_at && <> · 下次: {formatDateTime(stats.next_sync_at)}</>}
           </span>
           {stats?.sync_enabled ? (
             <span className="text-success">自动 {stats.sync_interval}h</span>

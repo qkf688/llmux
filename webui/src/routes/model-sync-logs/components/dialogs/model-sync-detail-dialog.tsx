@@ -3,7 +3,7 @@ import type { ModelSyncLog } from "@/lib/api";
 import { MinusCircle, XCircle } from "lucide-react";
 import { StatusBadge } from "../shared/status-badge";
 import { parseModelSyncError } from "../../utils/error-parser";
-import { formatSyncDate } from "../../utils/formatters";
+import { formatDateTime } from "@/lib/formatters";
 
 type ModelSyncDetailDialogProps = {
   log: ModelSyncLog | null;
@@ -17,7 +17,7 @@ export function ModelSyncDetailDialog({ log, onClose }: ModelSyncDetailDialogPro
         <DialogHeader>
           <DialogTitle>同步详情</DialogTitle>
           <DialogDescription>
-            {log?.ProviderName} - {log ? formatSyncDate(log.SyncedAt) : "-"}
+            {log?.ProviderName} - {log ? formatDateTime(log.SyncedAt) : "-"}
           </DialogDescription>
         </DialogHeader>
 

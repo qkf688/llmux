@@ -1,6 +1,7 @@
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { HealthCheckLog } from "@/lib/api";
-import { formatDateTime, formatResponseTime, isHealthCheckSuccess } from "../../utils/formatters";
+import { formatResponseTime, isHealthCheckSuccess } from "../../utils/formatters";
+import { formatDateTime } from "@/lib/formatters";
 import { DetailCard } from "../shared/detail-card";
 
 type HealthCheckLogDetailDialogProps = {

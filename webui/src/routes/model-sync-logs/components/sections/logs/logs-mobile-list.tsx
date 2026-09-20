@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { ModelSyncLog } from "@/lib/api";
 import { StatusBadge } from "../../shared/status-badge";
-import { formatSyncDate } from "../../../utils/formatters";
+import { formatDateTime } from "@/lib/formatters";
 
 type LogsMobileListProps = {
   logs: ModelSyncLog[];
@@ -33,7 +33,7 @@ export function LogsMobileList({
               />
               <div className="min-w-0 flex-1">
                 <h3 className="font-semibold text-sm truncate">{log.ProviderName}</h3>
-                <p className="text-[11px] text-muted-foreground">{formatSyncDate(log.SyncedAt)}</p>
+                <p className="text-[11px] text-muted-foreground">{formatDateTime(log.SyncedAt)}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">

@@ -2,7 +2,7 @@ import Loading from "@/components/loading";
 import { TableCard } from "@/components/table-card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { AddedModel } from "@/lib/api";
-import { formatSyncDate } from "../../../utils/formatters";
+import { formatDateTime } from "@/lib/formatters";
 
 type RecentModelsSectionProps = {
   loading: boolean;
@@ -25,7 +25,7 @@ export function RecentModelsSection({ loading, syncTime, models }: RecentModelsS
         <>
           <div className="p-3 border-b bg-muted/30">
             <p className="text-sm text-muted-foreground">
-              最近同步时间: {formatSyncDate(syncTime)} · 共新增 {models.length} 个模型
+              最近同步时间: {formatDateTime(syncTime)} · 共新增 {models.length} 个模型
             </p>
           </div>
           <div className="h-full overflow-auto">
@@ -44,7 +44,7 @@ export function RecentModelsSection({ loading, syncTime, models }: RecentModelsS
                       <TableCell className="font-mono text-sm">{model.model_name}</TableCell>
                       <TableCell>{model.provider_name}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {formatSyncDate(model.added_at)}
+                        {formatDateTime(model.added_at)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -56,7 +56,7 @@ export function RecentModelsSection({ loading, syncTime, models }: RecentModelsS
                 <div key={`${model.provider_name}-${model.model_name}-${index}`} className="py-3 space-y-1">
                   <div className="font-mono text-sm">{model.model_name}</div>
                   <div className="text-xs text-muted-foreground">
-                    {model.provider_name} · {formatSyncDate(model.added_at)}
+                    {model.provider_name} · {formatDateTime(model.added_at)}
                   </div>
                 </div>
               ))}

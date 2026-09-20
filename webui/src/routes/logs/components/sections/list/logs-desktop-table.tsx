@@ -16,7 +16,8 @@ import { cn } from "@/lib/utils";
 import type { ChatLog } from "@/lib/api";
 import { Trash2 } from "lucide-react";
 import { LogScheduleCell } from "../../shared";
-import { formatDateTime, formatTime } from "../../../utils/formatters";
+import { formatTime } from "../../../utils/formatters";
+import { formatDateTime } from "@/lib/formatters";
 
 type LogsDesktopTableProps = {
   logs: ChatLog[];

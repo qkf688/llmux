@@ -19,7 +19,11 @@ func captureRequestLogSnapshot(options models.RawLogOptions, requestHeader http.
 	}
 
 	if options.RequestHeaders {
-		requestHeadersJSON, err := json.Marshal(requestHeader)
+		// Stage 16：marshal 前先过敏感头剥除（判据单源 common.MaskSensitiveLogHeaders，
+		// deny-list 值掩码、键保留）。快照是 ReqMeta.Header 的下游——该引用与出站透传
+		// 共享，剥除函数克隆语义保证不污染真实出站头；全仓 RequestHeaders 只有本
+		// marshal 点一个写入源，此处接线即覆盖全部落库出口。
+		requestHeadersJSON, err := json.Marshal(common.MaskSensitiveLogHeaders(requestHeader))
 		if err != nil {
 			slog.Error("failed to marshal request headers", "error", err)
 			requestHeadersJSON = []byte("{}")

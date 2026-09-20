@@ -6,7 +6,7 @@
 ## 1. Go / Gin
 
 - 路由：`RegisterAll` 建 `/v1` 与 `/api`；`/v1` 挂 `middleware.AuthAPIKey(apiKeyRepo, userRepo)`，`/api` 登录路由免鉴权，其余挂 `middleware.AuthJWT(secret, repo)`。
-- 引擎装配（`main.go`，**不用** `gin.Default()`）：`RequestID()`（请求编号，Stage 3，见 §5）→ `AccessLog()`（等价原 gin Logger + rid，path 走 %q 防换行注入）→ `Recovery()`（Stage 3 自建，替代 `gin.Recovery`：panic 型 500 同走 httpresp 收口，见 §5）→ gzip。**禁止**把 `RequestID` 挪到鉴权/路由之后——401/404 也要有号可对。
+- 引擎装配（`main.go`，**不用** `gin.Default()`）：`RequestID()`（请求编号，Stage 3，见 §5）→ `AccessLog()`（等价原 gin Logger + rid，path 走 %q 防换行注入；整行 ≤4 KiB，超限截 `%q` **之后**的 path 段、status/耗时/rid 恒存活——Stage 16，见 §4）→ `Recovery()`（Stage 3 自建，替代 `gin.Recovery`：panic 型 500 同走 httpresp 收口，见 §5）→ gzip。**禁止**把 `RequestID` 挪到鉴权/路由之后——401/404 也要有号可对。
 - 子包注册函数只接收 `gin.IRoutes`（或项目既有签名），**不**在子包内 `Group` 出与全局不一致的鉴权边界。
 - 后台任务在 `main` 启动：`HealthChecker.Start`、`ModelSyncService.StartAutoSync`，两者的 ctx 均派生自 `signal.NotifyContext`（取消即退出信号）。
 - **禁止**用裸 `go f(context.Background())` 启动会写库的后台 goroutine；**必须**经 `common/bgtask` 的 `bgtask.Go` 登记，否则进程关闭时落库/权重衰减会被硬切。请求内且已用 `sync.WaitGroup` 等待完成的 goroutine 不在此列（由 `srv.Shutdown` 等在途请求覆盖）。
@@ -43,6 +43,7 @@
 - 入站请求体：`consts.MaxInboundBodyBytes`（20 MiB 硬上限，代码常量刻意不做成设置——可被调小的防线不是防线）+ `io.LimitReader(body, max+1)` 多探 1 字节拒绝；`/v1` 超限回真实 413（SDK 不自动重试），管理端按该端点既有信封惯例（HTTP 200 + 信封 code，与同域导出端点一致；前端两条通道都会解析）。
 - 上游非流式成功响应：`service/chat` 的 `limitUpstreamResponseBody` 在 attempt 内、响应头提交给客户端**之前**整读加限（设置项 `upstream_max_response_mib`，默认 32 MiB、下限 1 不可关闭），未超限回填为可重读内存字节。失败语义：超限=端点级异常 → 组织级转移**不冷却凭据**；读体错误（含 ctx 超时打断读体）与 `Client.Do` 失败**成对**归凭据级网络——超时分类只挂 Do 侧会让读体超时静默漏走（见全局 RULES「Go HTTP 超时」）。
 - 原始采集落库：四文本字段（`RequestBody`/`RawRequestBody`/`RawResponseBody`/`Error`）共用单字段上限（设置项 `raw_log_field_max_kib`，默认 256 KiB），截断一律 `common.TruncateUTF8`（rune 边界 + `…(truncated)` 标记，按字节劈半进 JSON 必出 U+FFFD 乱码尾）。采集读头不吞尾（MultiReader 回填），旁路不得成为下游截断点。
+- 访问日志单行（`middleware.formatAccessLine`）：上限 4 KiB（代码常量 `accessLogLineMaxBytes`，刻意不做设置——同上口径），超限截 `%q` **之后**的 path 段（先截后转义会被控制字符 `\xNN` 展开重新超限），status/耗时/rid 恒存活；截断一律 `common.TruncateUTF8`（Stage 16，2026-09-20）。机械复核：`middleware/access_log_test.go` 断整行字节数 ≤ 上限 + rune 边界回退 + 截断标记存在 + rid 存活。
 - 流式 SSE 不整读、天然不在本防线内；帧级/累积侧信道截断策略另有约定（见 logs-metrics.md），提高上限需单独立项。
 
 豁免**必须**在读取处注释说明「体积已被上游哪一道限定」——现存唯一豁免：`service/transform/transform_provider_response.go` 整读（已被 attempt 体积闸限定）。可机械复核：`rg 'io\.ReadAll' --type go -g '!*_test.go'` 的命中只允许是上述白名单入口或带豁免注释处。

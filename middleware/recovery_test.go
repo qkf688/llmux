@@ -6,36 +6,14 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/qkf688/llmux/consts"
 )
 
-// 回归（Stage 3 审查 P1-2）：gin 默认 formatter 用 %#v 打印 path 天然免疫换行注入；
-// 自定义 formatter 若裸 %s，百分号编码的 %0A 解码成真换行后可伪造整行访问记录。
-// 判据：任意 path 一行请求只许产出一行日志。
-func TestFormatAccessLine_SingleLineAgainstNewlineInjection(t *testing.T) {
-	injected := "/x\n[GIN] 2026/09/17 - 00:00:00 | 200 | 1ms | 1.2.3.4 | GET forged | rid=deadbeef"
-	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
-	req.Header.Set(consts.HeaderRequestID, "abc123")
-	line := formatAccessLine(gin.LogFormatterParams{
-		TimeStamp:  time.Now(),
-		StatusCode: 404,
-		Latency:    time.Millisecond,
-		ClientIP:   "127.0.0.1",
-		Method:     http.MethodGet,
-		Path:       injected,
-		Request:    req,
-	})
-	if strings.Count(line, "\n") != 1 {
-		t.Errorf("换行注入把访问行劈成多行:\n%q", line)
-	}
-	if !strings.Contains(line, "rid=abc123") {
-		t.Errorf("访问行缺 rid: %q", line)
-	}
-}
+// 访问行单行上限契约测试（Stage 16）在 access_log_test.go（含自本文件顺迁的
+// 换行注入回归用例）。
 
 func TestRecovery_PanicGetsGeneric500WithRidAndSlogTrace(t *testing.T) {
 	var logs strings.Builder

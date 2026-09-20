@@ -3,8 +3,11 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"strings"
 
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/models"
 	"gorm.io/gorm"
 )
@@ -59,6 +62,12 @@ type ChatLogRepo interface {
 	UpdateByID(ctx context.Context, id uint, update models.ChatLog) (int64, error)
 	// ClearRawFields 清空日志的 6 个 raw 请求/响应字段。
 	ClearRawFields(ctx context.Context, id uint) error
+	// SanitizeLegacyRequestHeaders 存量 chat_logs 请求头快照一次性脱敏（Stage 16，
+	// 启动装配调用）：把 request_headers JSON 中的明文敏感头值清洗为 ****
+	// （判据单源 common.MaskSensitiveLogHeadersJSON，键保留、只改值不删行）。
+	// 幂等：已清洗/无敏感头的行零改写，随每次启动重复执行安全；坏 JSON 行
+	// slog.Warn 跳过不上抛（启动不得被日志卫生问题阻断）。返回实际改写行数。
+	SanitizeLegacyRequestHeaders(ctx context.Context) (int, error)
 	// List 分页筛选列表。
 	List(ctx context.Context, opts ChatLogListOptions) (*ChatLogListResult, error)
 	// DistinctUserAgents 返回非空去重 user_agent。
@@ -173,6 +182,39 @@ func (r *chatLogRepo) ClearRawFields(ctx context.Context, id uint) error {
 			"response_body":     "",
 			"raw_response_body": "",
 		}).Error
+}
+
+func (r *chatLogRepo) SanitizeLegacyRequestHeaders(ctx context.Context) (int, error) {
+	// 只扫非空行：raw 字段在 errors-only 策略下本就会被清空，空行无明文可言。
+	var rows []models.ChatLog
+	if err := r.db.WithContext(ctx).Model(&models.ChatLog{}).
+		Select("id", "request_headers").
+		Where("request_headers IS NOT NULL AND request_headers <> ''").
+		Find(&rows).Error; err != nil {
+		return 0, fmt.Errorf("repository: 读取待清洗 chat_logs 请求头快照失败: %w", err)
+	}
+
+	updated := 0
+	for _, row := range rows {
+		masked, err := common.MaskSensitiveLogHeadersJSON(row.RequestHeaders)
+		if err != nil {
+			// 坏 JSON 行跳过：清洗是数据卫生动作，不能因个别坏行让整个启动失败。
+			slog.Warn("chat_logs 请求头快照清洗跳过坏 JSON 行", "log_id", row.ID, "error", err)
+			continue
+		}
+		if masked == row.RequestHeaders {
+			continue // 幂等：已清洗/无敏感头的行零改写
+		}
+		// map 显式更新：GORM struct Updates 跳零值，且清洗只需改单列
+		// （ClearRawFields 同款姿势）。
+		if err := r.db.WithContext(ctx).Model(&models.ChatLog{}).
+			Where("id = ?", row.ID).
+			Update("request_headers", masked).Error; err != nil {
+			return updated, fmt.Errorf("repository: 清洗 chat_logs 请求头快照失败 (log_id=%d): %w", row.ID, err)
+		}
+		updated++
+	}
+	return updated, nil
 }
 
 func (r *chatLogRepo) List(ctx context.Context, opts ChatLogListOptions) (*ChatLogListResult, error) {

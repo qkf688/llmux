@@ -94,6 +94,16 @@ func main() {
 	}
 	auth.LogBootstrap(boot, fromEnv)
 
+	// 存量 chat_logs 请求头快照一次性脱敏（Stage 16）：破坏性清洗只改值不删行、幂等，
+	// 只动 request_headers 非空的行；坏 JSON 行在 repo 内逐行 Warn 跳过。整体失败不
+	// 阻断启动（库已在 models.Init 验证，此处失败概率极低），但明文凭据残留是安全面，
+	// 必须 Error 级留痕——清洗的使命就是消灭存量明文。
+	if sanitized, err := repository.Default().ChatLog.SanitizeLegacyRequestHeaders(ctx); err != nil {
+		slog.Error("sanitize legacy chat log request headers", "error", err)
+	} else if sanitized > 0 {
+		slog.Info("legacy chat log request headers sanitized", "rows", sanitized)
+	}
+
 	startBackgroundServices(ctx)
 
 	// 组装顺序即请求路径顺序：编号最先（错误/访问/上游三处日志共用同一号），

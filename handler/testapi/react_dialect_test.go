@@ -24,6 +24,11 @@ func TestTestReactHandler_XAPIKeyDialectUsesXAPIKeyHeader(t *testing.T) {
 	testsupport.InitTestDB(t)
 	cipher := setupTestAPICipher(t)
 
+	// 锁定「SDK 环境变量默认 key 被选项顺序清掉」这一隐式依赖（code-review S3）：
+	// openai-go 默认选项先于用户选项应用，OPENAI_API_KEY 会注入 Authorization；
+	// 若 SDK 升级改了装配序，下方「Authorization 键必须不存在」断言即红。
+	t.Setenv("OPENAI_API_KEY", "env-leak-should-not-appear")
+
 	var hits atomic.Int64
 	var gotAuth, gotXKey atomic.Value
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

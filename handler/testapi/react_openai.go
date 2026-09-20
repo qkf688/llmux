@@ -103,7 +103,7 @@ func streamOpenAIReactEvents(c *gin.Context, seq iter.Seq2[*react.ContentRespons
 stream:
 	for content, err := range seq {
 		if err != nil {
-			checkError = err
+			checkError = fmt.Errorf("react 流式处理失败: %w", err)
 			break stream
 		}
 
@@ -119,7 +119,7 @@ stream:
 		case "toolcall":
 			data, err := marshal(content.ToolCall.Function)
 			if err != nil {
-				checkError = err
+				checkError = fmt.Errorf("react 帧数据序列化失败: %w", err)
 				break stream
 			}
 			res = data
@@ -129,7 +129,7 @@ stream:
 		case "toolres":
 			data, err := marshal(content.ToolRes)
 			if err != nil {
-				checkError = err
+				checkError = fmt.Errorf("react 帧数据序列化失败: %w", err)
 				break stream
 			}
 			res = data

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"iter"
 	"net/http"
 	"strings"
 
@@ -70,20 +71,40 @@ func runOpenAIReactTest(ctx context.Context, c *gin.Context, httpClient *http.Cl
 		}),
 	}
 
-	var checkError error
-	toolCities := make([]string, 0)
-	finalText := strings.Builder{}
-
-	for content, err := range agent.RunStream(ctx, openai.ChatCompletionNewParams{
+	return streamOpenAIReactEvents(c, agent.RunStream(ctx, openai.ChatCompletionNewParams{
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage(scenario.Question),
 		},
 		Tools: tools,
 		Model: link.Model,
-	}, GetWeather) {
+	}, GetWeather), marshalFrameJSON)
+}
+
+// frameMarshaler 帧数据序列化函数。生产用 marshalFrameJSON（json.Marshal 包装）；
+// 测试注入必败实现以锁定停流契约——react.ContentResponse 的字段是固定结构体，
+// json.Marshal 对它们现实不可失败，无法经输入构造失败场景，故走函数注入缝而非造输入。
+type frameMarshaler func(v any) (string, error)
+
+func marshalFrameJSON(v any) (string, error) {
+	data, err := json.Marshal(v)
+	return string(data), err
+}
+
+// streamOpenAIReactEvents 驱动 react 流式迭代：逐帧回写 SSE，收集工具调用城市与最终文本。
+// 停流契约（Stage 15）：任一帧失败（流迭代错误 / 帧数据序列化失败）后立即停止回写，
+// 失败帧自身与后续帧都不得再进 SSE——错误经返回值交给 handler 在流尾统一回 event:error，
+// 流内不插错误事件（修复前 toolcall/toolres 分支的 break 只跳出 switch，
+// 错误判定已产生、流却还在输出空帧与后续帧，排障时呈混合事件序列）。
+func streamOpenAIReactEvents(c *gin.Context, seq iter.Seq2[*react.ContentResponse, error], marshal frameMarshaler) (cities []string, final string, err error) {
+	toolCities := make([]string, 0)
+	finalText := strings.Builder{}
+	var checkError error
+
+stream:
+	for content, err := range seq {
 		if err != nil {
 			checkError = err
-			break
+			break stream
 		}
 
 		var res string
@@ -96,22 +117,22 @@ func runOpenAIReactTest(ctx context.Context, c *gin.Context, httpClient *http.Cl
 				}
 			}
 		case "toolcall":
-			data, err := json.Marshal(content.ToolCall.Function)
+			data, err := marshal(content.ToolCall.Function)
 			if err != nil {
 				checkError = err
-				break
+				break stream
 			}
-			res = string(data)
+			res = data
 
 			location := gjson.Get(content.ToolCall.Function.Arguments, "location").String()
 			toolCities = append(toolCities, normalizeCity(location))
 		case "toolres":
-			data, err := json.Marshal(content.ToolRes)
+			data, err := marshal(content.ToolRes)
 			if err != nil {
 				checkError = err
-				break
+				break stream
 			}
-			res = string(data)
+			res = data
 		}
 
 		c.SSEvent(content.Cate, res)

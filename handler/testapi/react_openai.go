@@ -31,10 +31,9 @@ func runOpenAIReactTest(ctx context.Context, c *gin.Context, httpClient *http.Cl
 		}
 	}()
 	baseURL, apiKey := compat.OpenAICompatBaseURL(), compat.OpenAICompatAPIKey()
-	// 空密钥 = 配置错误而非供应商故障（Stage 15）：本地直接给出可执行结论，
-	// 不带空凭据头打上游挨 401——那是把配置问题伪装成上游故障。
-	if strings.TrimSpace(apiKey) == "" {
-		return nil, "", fmt.Errorf("供应商 %q 未配置 API Key：请先在该供应商的凭据分组或号池中配置密钥", link.ProviderName)
+	// 空密钥本地守卫（Stage 15）：判据与文案单源在 emptyCredentialGuard（守卫理由见该函数注释）。
+	if err := emptyCredentialGuard(link.ProviderName, apiKey); err != nil {
+		return nil, "", err
 	}
 	clientOptions := []option.RequestOption{
 		option.WithBaseURL(baseURL),

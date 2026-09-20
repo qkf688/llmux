@@ -109,6 +109,10 @@ func (a *Anthropic) HasBetaFeature(name string) bool {
 	return false
 }
 
+// CredentialPlaintext 返回当前装配的凭据明文（实现 providers.CredentialCapable）。
+// 供诊断前置守卫判定「明文为空 = 配置错误」；调用方不得将其写入日志或响应。
+func (a *Anthropic) CredentialPlaintext() string { return a.APIKey }
+
 type AnthropicModelsResponse struct {
 	Data    []AnthropicModel `json:"data"`
 	FirstID string           `json:"first_id"`

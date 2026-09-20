@@ -25,6 +25,19 @@ func runAnthropicReactTest(ctx context.Context, c *gin.Context, httpClient *http
 		return nil, "", fmt.Errorf("invalid provider instance: nil")
 	}
 
+	// 空密钥本地守卫（Stage 15 契约补齐 anthropic，2026-09-20 插队修复 find-issues 缺口）：
+	// 凭据明文经 CredentialCapable 能力接口从装配好的客户端读取（OCP：不断言具体类型），
+	// 判据与文案单源在 emptyCredentialGuard。未实现该接口 = 无法校验凭据配置，宁失败不
+	// 放行——放行就退回「配置问题伪装成上游故障」；错误点名缺失接口，修复方式 = provider
+	// 实现 providers.CredentialCapable。
+	capable, ok := providerInstance.(providers.CredentialCapable)
+	if !ok {
+		return nil, "", fmt.Errorf("供应商 %q 的上游客户端未实现 providers.CredentialCapable，无法校验凭据配置，ReAct 诊断拒绝放行", link.ProviderName)
+	}
+	if err := emptyCredentialGuard(link.ProviderName, capable.CredentialPlaintext()); err != nil {
+		return nil, "", err
+	}
+
 	tools := []models.UnifiedTool{
 		{
 			Type: "function",

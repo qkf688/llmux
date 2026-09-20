@@ -53,6 +53,16 @@ type BetaFeatureCapable interface {
 	HasBetaFeature(name string) bool
 }
 
+// CredentialCapable 暴露「当前装配的凭据明文」读取能力（OCP：调用方断言本接口而非具体类型）。
+// 消费方限诊断前置守卫（testapi ReAct runner 的空密钥判定：明文为空 = 配置错误，
+// 本地失败、零上游请求）；明文禁止进日志与响应（掩码口径见 testapi buildLink：只
+// key_masked 进 slog）。目前 *Anthropic 实现；openai 系经 OpenAICompatAPIKey 读取，
+// 不需要重复实现本接口。
+type CredentialCapable interface {
+	Provider
+	CredentialPlaintext() string
+}
+
 func buildCustomModels(custom []string) []Model {
 	now := time.Now().Unix()
 	models := make([]Model, 0, len(custom))

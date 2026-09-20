@@ -15,7 +15,7 @@
 
 - **负责什么**：`Provider` 工厂与实现（OpenAI / OpenAIRes / Anthropic）；客户端缓存；Metadata（模板、TestBody/StructuredBody/ThinkingBody/VisionBody 诊断测试体、HealthCheckBody、ProbeBody=#24-B 最小 completion 探针体）；管理端供应商 CRUD、黑名单、上游模型列表展示、组织级模型目录聚合
 - **不负责什么**：模型-供应商关联行（`associations`）；协议互转（`protocol-transform`）；chat 选路与重试；虚拟模型策略
-- **对外暴露**：`providers.Provider`、`Register`/`New`、`RegisterMetadata`/`MetadataOf`/`AllMetadata`、`OpenAICompat`、`BetaFeatureCapable`；`handler/providerapi` REST（含 `/api/providers/model-catalog`）；`ProviderRepo`
+- **对外暴露**：`providers.Provider`、`Register`/`New`、`RegisterMetadata`/`MetadataOf`/`AllMetadata`、`OpenAICompat`、`BetaFeatureCapable`、`CredentialCapable`；`handler/providerapi` REST（含 `/api/providers/model-catalog`）；`ProviderRepo`
 - **依赖谁**：`models`、`consts`、少量 `common`；handler 侧 `repository`/`httpresp`/`service/modelsync`（model-catalog 聚合 + 上游模型列表选路，两者逻辑都不在 handler）
 
 ## 3. 内部结构
@@ -45,6 +45,7 @@ service/modelsync/config.go  # ProviderModelCatalog 类型 + GetProviderModelCat
 | 认证方式单源（4b，审查后按协议拆键） | `applyAuthHeader`（`providers/auth.go`）是**唯一**凭据头执法点：`bearer` 只发 `Authorization: Bearer <key>` 并删任何配进来的 `x-api-key`；`x-api-key` 反之；空值/未知值回退类型默认（anthropic=x-api-key、openai 系=bearer——**存量配置零迁移**）。写凭据头的一切位点（`BuildReq` 与 `Models` 旁路，含 GET /models）必须走该函数，**禁止**再手写 `Set("Authorization")`。**config 键按协议拆分**：anthropic 读 `auth_type`（存量键语义不变），openai 系读 `openai_auth_type`——一份 config 会喂给按端点协议派生的多家 adapter，共键会让存量混合行（anthropic 主类型+openai 协议，旧 UI 恒写 `auth_type:x-api-key`）在无人保存时静默翻转 openai 端点凭据头（审查 P0）。顶层 `Provider.AuthType` 列 = anthropic 专属展示副本（`resolveAuthType` 仅 anthropic 收两枚举值，openai 方言不落列）。**诊断路径方言贯通（Stage 15，2026-09-20）**：openai ReAct 诊断走 openai-go SDK 直发、不经 `BuildReq`，其凭据头经 `OpenAICompatAuthHeaders()` 搬运——同一 `applyAuthHeader` 单源按 `openai_auth_type` 写好头，诊断侧只搬运不 switch 方言，与真实转发永不分叉（修复前 SDK 固定 bearer，x-api-key 方言中转诊断必假阴性）。契约测试 `providers/auth_headers_test.go`（BuildReq 注入面 + httptest 上游侧断言「键缺失≠空值头」且至多一个凭据头 + 拆键互不读取回归钉 + `OpenAICompatAuthHeaders` 方言口径与 BuildReq 同源钉） | `providers/auth.go` | `openaiBase`、`Anthropic` |
 | `OpenAICompat` | 标记 OpenAI 兼容协议族并暴露 baseURL/apiKey/**按方言写好的凭据头**（`OpenAICompatAuthHeaders()`，Stage 15：诊断路径不自行判断方言） | `providers/provider.go` | OpenAI、OpenAIRes |
 | `BetaFeatureCapable` | `HasBetaFeature(name)`：查询本供应商已启用的 beta 特性，供上层判断协议约束是否被 beta 豁免 | `providers/provider.go` | Anthropic（判据为配置的 `Beta` 字段） |
+| `CredentialCapable` | `CredentialPlaintext()`：读取当前装配的凭据明文，供诊断前置守卫判定「明文为空 = 配置错误，本地失败、零上游请求」（2026-09-20 补齐 anthropic ReAct 路径）；明文**禁止**进日志与响应，调用方限 `testapi` ReAct runner 的空密钥守卫。openai 系经 `OpenAICompatAPIKey()` 读取，不重复实现本接口 | `providers/provider.go` | Anthropic |
 | `Factory` + `Register`/`New` | 按 type 构造实现 | `providers/provider.go` | 各实现 `init` 注册 |
 | `Metadata` | 配置模板与探测 body | `providers/meta.go` | `RegisterMetadata` |
 | `ProviderRepo` | 供应商持久化 | `repository/provider.go` | GORM 实现 |

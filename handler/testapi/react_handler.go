@@ -87,3 +87,15 @@ func TestReactHandler(c *gin.Context) {
 	c.SSEvent("success", fmt.Sprintf("成功通过测试, 耗时: %.2fs", time.Since(start).Seconds()))
 	c.Writer.Flush()
 }
+
+// emptyCredentialGuard ReAct 诊断空密钥本地守卫（Stage 15 契约，2026-09-20 补齐 anthropic）：
+// 凭据明文为空 = 配置错误而非供应商故障——诊断必须本地直接给出可执行结论，不带空凭据头
+// 打上游挨 401（那会把配置问题伪装成上游故障，管理员看到的是上游原文而非「该配 key 了」）。
+// 判据与文案单源：openai 系（compat.OpenAICompatAPIKey）与 anthropic（providers.
+// CredentialCapable 读明文）两条 runner 共用本函数；system-ops.md ReAct 契约句引用同一措辞。
+func emptyCredentialGuard(providerName, apiKey string) error {
+	if strings.TrimSpace(apiKey) == "" {
+		return fmt.Errorf("供应商 %q 未配置 API Key：请先在该供应商的凭据分组或号池中配置密钥", providerName)
+	}
+	return nil
+}

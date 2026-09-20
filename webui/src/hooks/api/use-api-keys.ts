@@ -5,7 +5,8 @@
  * 因此全部 key 明文必然进入 react-query 内存缓存（全站默认 staleTime 60s /
  * gcTime 5min；后端 no-store 只挡 HTTP/磁盘层）。这与号池「列表回掩码、明文
  * 只按需走 raw 端点、不进缓存」的模型不同——数据源形态决定，本域接受该破例。
- * 登出清缓存（queryClient.clear）属全站横切改进，已另行登记。
+ * 会话失效清缓存已收口（Stage 9）：`authStore.clearSession` 统一 `queryClient.clear()`，
+ * 登出 / 401 失效后缓存不再残留明文。
  */
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {

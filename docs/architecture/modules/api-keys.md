@@ -46,7 +46,7 @@ webui/src/routes/api-keys/                      # 「API Keys」管理页（#5�
 
 ## 5. 安全边界
 
-- 明文只出现在管理 API（JWT 保护 + no-store）、首启 stderr 与**管理端前端 react-query 内存缓存**（#5 起：列表端点恒回明文，前端必然缓存全量明文，默认 gcTime 5min；no-store 只挡 HTTP/磁盘层——方案 §2 复制模型的既定破例，与号池「列表回掩码+按需 raw」不同构）。登出清缓存属全站横切项（find-issues 2026-09-16 已登记）。
+- 明文只出现在管理 API（JWT 保护 + no-store）、首启 stderr 与**管理端前端 react-query 内存缓存**（#5 起：列表端点恒回明文，前端必然缓存全量明文，默认 gcTime 5min；no-store 只挡 HTTP/磁盘层——方案 §2 复制模型的既定破例，与号池「列表回掩码+按需 raw」不同构）。会话失效清缓存已收口（Stage 9，2026-09-20）：`authStore.clearSession` 统一 `queryClient.clear()`，登出 / 401 失效后缓存不再残留明文（入口 `webui/src/stores/auth/auth-store.ts`）。
 - 启停/删除不打断已鉴权通过的在途请求（octopus 同款语义，方案 §2）。
 - **key 级头不参与诊断/连通测试**（#6 定案边界）：testapi/healthcheck 链路结构上不带调用 key 上下文，管理端「测试」按钮的结果**不能**证明 key 级头生效；验证靠真实流量 + 日志「密钥」列归因（弹窗文案已写明）。做预览端点会演化出第二套真相，方案 §6 已关。
 - **key 级头按 key 全量扇出**（审查 W2 补记）：headers 与供应商无关，注入该 key 能路由到的**每一个**上游（虚拟路径同理）——勿在 key 级头存放某供应商专用头值。凭据头（`Authorization` / `x-api-key`）是 auth_type 唯一权威（4b，原「anthropic x-api-key 分支会原样送出 Authorization」的缺口已裁决关闭）：`providers/auth.go` 按供应商认证方式只发对应一个、并在构造点删除对侧，key 级配置无法把任一凭据头送上上游，双头并发已结构性清零。

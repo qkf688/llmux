@@ -38,6 +38,7 @@ const buildLog = ({
   total_tokens: 0,
   prompt_tokens_details: { cached_tokens: 0, audio_tokens: 0 },
   completion_tokens_details: { reasoning_tokens: 0, audio_tokens: 0 },
+  request_id: "",
   usage_source: "upstream",
   is_virtual_model: false,
   has_format_conversion: false,

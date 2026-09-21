@@ -16,17 +16,24 @@ import (
 // 不属于入参快照，故并列传入而非塞进结构体。
 // 与 stats.go（统计）各司其职；raw 清理（maybeClearRawOnSuccess）已合入本文件。
 func persistChatLog(ctx context.Context, in RecordLogInput, logUpdate models.ChatLog, output *models.OutputUnion, opts models.RawLogOptions) error {
+	// 写库不陪葬请求 ctx（Stage 17 收口延伸，审查回批）：RecordLog 生产调用方
+	//（handler/v1）传 Background 本就安全，此处派生是防线——未来任何调用方传
+	// 请求 ctx，终态回写与 ChatIO 写入都不会静默丢失；err 传播语义保持不变
+	//（与 updateChatLogByID 的「仅 slog 不返回」不同，本路径失败要中止后处理）。
+	writeCtx, cancel := chatLogDetachedCtx(ctx)
+	defer cancel()
+
 	if opts.ResponseBody {
 		applyResponseBodyToLog(&logUpdate, output)
 	}
 
-	if _, err := repos().ChatLog.UpdateByID(ctx, in.LogID, logUpdate); err != nil {
+	if _, err := repos().ChatLog.UpdateByID(writeCtx, in.LogID, logUpdate); err != nil {
 		slog.Error("failed to update log", "log_id", in.LogID, "error", err)
 		return err
 	}
 
 	if in.IOLog {
-		if err := createChatIO(ctx, in.LogID, in.Before.raw, output); err != nil {
+		if err := createChatIO(writeCtx, in.LogID, in.Before.raw, output); err != nil {
 			return err
 		}
 	}
@@ -81,12 +88,16 @@ func maybeClearRawOnSuccess(ctx context.Context, logID uint, errorsOnly bool, ra
 		return
 	}
 
-	status, err := repos().ChatLog.GetStatus(ctx, logID)
+	// 清理读写同属日志路径副作用，同样不陪葬请求 ctx（Stage 17 收口延伸）。
+	writeCtx, cancel := chatLogDetachedCtx(ctx)
+	defer cancel()
+
+	status, err := repos().ChatLog.GetStatus(writeCtx, logID)
 	if err != nil || status == "error" {
 		return
 	}
 
-	if err := repos().ChatLog.ClearRawFields(ctx, logID); err != nil {
+	if err := repos().ChatLog.ClearRawFields(writeCtx, logID); err != nil {
 		slog.Error("failed to clear raw request/response fields", "log_id", logID, "error", err)
 	}
 }

@@ -60,8 +60,9 @@ func TestSavePreProviderFailureLog_DeadCtxStillCreates(t *testing.T) {
 	}
 }
 
-// disable_all_logs 时建行返回 logID=0：updateChatLogByID 显式短路，不做空转写库、
-// 不 panic、不影响其他行。
+// disable_all_logs 时建行返回 logID=0：本用例锁「logID=0 的更新不误伤其他行」。
+// 短路分支本身是防御性实现细节（不短路时 GORM Where id=0 同样零行命中），
+// 不可由本用例区分——如实标注锁定口径，勿把「删掉短路仍绿」误读成测试坏了。
 func TestUpdateChatLogByID_LogIDZeroShortCircuits(t *testing.T) {
 	initChatRecordTestDB(t)
 

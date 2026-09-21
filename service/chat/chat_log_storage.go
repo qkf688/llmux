@@ -16,11 +16,28 @@ import (
 // 这些行静默丢失（停在建行占位的 success，审计与指标双双失真）。
 const chatLogWriteTimeout = 5 * time.Second
 
+// chatLogDetachedCtx 派生「日志路径」用 ctx（Stage 17 + 审查回批，派生表达式单源）：
+// WithoutCancel 保留 ctx 内值/trace 语义、只摘取消信号，独立短超时兜底挂死。
+// 消费方：SaveChatLog / updateChatLogByID / persistChatLog / maybeClearRawOnSuccess
+// 的写库与清理，以及失败分支的设置读取（withDetachedLogCtx）。
+func chatLogDetachedCtx(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), chatLogWriteTimeout)
+}
+
+// withDetachedLogCtx 在不陪葬请求 ctx 的派生上下文里同步执行 fn（审查回批 W2）：
+// 日志路径上的设置读取若挂死 ctx，GORM 读失败会静默退默认值——管理员配置的
+// 采集上限恰在失败场景失效，与写库侧收口口径分裂。fn 返回即 cancel，
+// 派生 ctx 不得逃逸出 fn（需要逃逸的场景直接用 chatLogDetachedCtx 自管 cancel）。
+func withDetachedLogCtx(ctx context.Context, fn func(ctx context.Context)) {
+	detached, cancel := chatLogDetachedCtx(ctx)
+	defer cancel()
+	fn(detached)
+}
+
 func SaveChatLog(ctx context.Context, log models.ChatLog) (uint, error) {
-	// Stage 17 收口：统计与建行的写库 ctx 从请求 ctx 派生但不随其取消
-	//（WithoutCancel 保留 ctx 内的设置/trace 值语义）——日志留痕是审计副作用，
+	// Stage 17 收口：统计与建行的写库 ctx 不随请求取消——日志留痕是审计副作用，
 	// 不陪葬在途请求的生死。
-	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), chatLogWriteTimeout)
+	writeCtx, cancel := chatLogDetachedCtx(ctx)
 	defer cancel()
 
 	// 统计应独立于日志存储：即使关闭日志记录，也要更新仪表盘统计。

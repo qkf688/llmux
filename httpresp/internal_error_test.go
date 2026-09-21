@@ -30,6 +30,8 @@ func captureSlog(t *testing.T) *bytes.Buffer {
 }
 
 // newCtx 构造带请求编号的 gin 上下文（模拟已过 RequestID 中间件）。
+// 注入值一律带来源前缀（Stage 17 生产形态：gw: 自生成 / in: 沿用）——httpresp 对
+// rid 不透明（拿到什么拼什么），fixture 与生产同形防后来者误读。
 func newCtx(rid string) (*gin.Context, *httptest.ResponseRecorder) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -47,7 +49,7 @@ const leakyErrText = `UNIQUE constraint failed: api_keys.key_hash`
 // ② 对内 slog.Error 一行，含原始错误、request_id、method、path。
 func TestInternalServerError_GenericResponseAndServerSideTrace(t *testing.T) {
 	logs := captureSlog(t)
-	c, w := newCtx("a1b2c3d4e5f6")
+	c, w := newCtx("gw:a1b2c3d4e5f6")
 
 	InternalServerError(c, errors.New(leakyErrText))
 
@@ -55,7 +57,7 @@ func TestInternalServerError_GenericResponseAndServerSideTrace(t *testing.T) {
 		t.Fatalf("HTTP 状态 = %d, want 500", w.Code)
 	}
 	body := w.Body.String()
-	want := "internal server error [req=a1b2c3d4e5f6]"
+	want := "internal server error [req=gw:a1b2c3d4e5f6]"
 	if got := gjson.Get(body, "message").String(); got != want {
 		t.Errorf("message = %q, want %q", got, want)
 	}
@@ -70,7 +72,7 @@ func TestInternalServerError_GenericResponseAndServerSideTrace(t *testing.T) {
 	}
 
 	line := logs.String()
-	for _, frag := range []string{leakyErrText, "request_id=a1b2c3d4e5f6", "method=POST", "path=/api/pools", "level=ERROR"} {
+	for _, frag := range []string{leakyErrText, "request_id=gw:a1b2c3d4e5f6", "method=POST", "path=/api/pools", "level=ERROR"} {
 		if !strings.Contains(line, frag) {
 			t.Errorf("日志行缺片段 %q，实际:\n%s", frag, line)
 		}
@@ -93,7 +95,7 @@ func TestInternalServerError_WithoutRequestID(t *testing.T) {
 // 与原始 err——同名分支多，message 是日志里区分「哪一处」的坐标）。
 func TestInternalErrorMessage_KeepsVettedMessageButLogs(t *testing.T) {
 	logs := captureSlog(t)
-	c, w := newCtx("f6e5d4c3b2a1")
+	c, w := newCtx("gw:f6e5d4c3b2a1")
 
 	InternalErrorMessage(c, "encryption not configured", errors.New("cipher is nil"))
 
@@ -104,7 +106,7 @@ func TestInternalErrorMessage_KeepsVettedMessageButLogs(t *testing.T) {
 		t.Errorf("HTTP 状态 = %d, want 500", w.Code)
 	}
 	line := logs.String()
-	for _, frag := range []string{"cipher is nil", "request_id=f6e5d4c3b2a1", `message="encryption not configured"`} {
+	for _, frag := range []string{"cipher is nil", "request_id=gw:f6e5d4c3b2a1", `message="encryption not configured"`} {
 		if !strings.Contains(line, frag) {
 			t.Errorf("日志行缺片段 %q，实际:\n%s", frag, line)
 		}
@@ -114,7 +116,7 @@ func TestInternalErrorMessage_KeepsVettedMessageButLogs(t *testing.T) {
 // 客户端断连/上传中断不是服务器故障：降 Warn，防止「建连即断」刷满 ERROR 告警通道。
 func TestInternalServerError_ClientDisconnectDowngradesToWarn(t *testing.T) {
 	logs := captureSlog(t)
-	c, w := newCtx("9f8e7d6c5b4a")
+	c, w := newCtx("gw:9f8e7d6c5b4a")
 
 	InternalServerError(c, fmt.Errorf("read body: %w", context.Canceled))
 
@@ -126,7 +128,7 @@ func TestInternalServerError_ClientDisconnectDowngradesToWarn(t *testing.T) {
 	if !strings.Contains(line, "level=WARN") {
 		t.Errorf("断连类错误应为 WARN，实际:\n%s", line)
 	}
-	if !strings.Contains(line, "request_id=9f8e7d6c5b4a") {
+	if !strings.Contains(line, "request_id=gw:9f8e7d6c5b4a") {
 		t.Errorf("降级不得丢掉留痕字段:\n%s", line)
 	}
 }
@@ -134,7 +136,7 @@ func TestInternalServerError_ClientDisconnectDowngradesToWarn(t *testing.T) {
 // 真故障必须保持 ERROR（降级判定不许吞掉正常告警）。
 func TestInternalServerError_RealFaultStaysError(t *testing.T) {
 	logs := captureSlog(t)
-	c, _ := newCtx("112233445566")
+	c, _ := newCtx("gw:112233445566")
 
 	InternalServerError(c, errors.New("db is locked"))
 
@@ -145,7 +147,7 @@ func TestInternalServerError_RealFaultStaysError(t *testing.T) {
 
 func TestInternalErrorMessage_NilErr(t *testing.T) {
 	logs := captureSlog(t)
-	c, w := newCtx("x1x2x3x4x5x6")
+	c, w := newCtx("gw:x1x2x3x4x5x6")
 
 	InternalErrorMessage(c, "failed to sign token", nil)
 
@@ -153,7 +155,7 @@ func TestInternalErrorMessage_NilErr(t *testing.T) {
 		t.Fatal("message 字段缺失")
 	}
 	line := logs.String()
-	if !strings.Contains(line, "request_id=x1x2x3x4x5x6") {
+	if !strings.Contains(line, "request_id=gw:x1x2x3x4x5x6") {
 		t.Errorf("日志行缺编号:\n%s", line)
 	}
 	if strings.Contains(line, "error=") {

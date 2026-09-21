@@ -44,18 +44,16 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 		log, output, err := in.Processer(ctx, in.Reader, in.Before.Stream, in.ReqStart, disablePerformanceTracking, disableTokenCounting)
 		if err != nil {
 			slog.Error("processer error", "log_id", in.LogID, "error", err)
-			if in.LogID != 0 {
-				if _, updateErr := repos().ChatLog.UpdateByID(ctx, in.LogID, models.ChatLog{
-					Status: "error",
-					Error:  fmt.Sprintf("processer error: %v", err),
-					// 与成功分支同语义的端到端耗时回填：错误日志同样要反映
-					// 「请求进入网关到失败判定」的真实时长，而非建行近零快照。
-					// struct Updates 跳过零值——毫秒级真实耗时实际不会为零，可安全写入。
-					ProxyTime: time.Since(in.ReqStart),
-				}); updateErr != nil {
-					slog.Error("failed to update log status on processer error", "log_id", in.LogID, "error", updateErr)
-				}
-			}
+			// 失败出口回写经单源收口（Stage 17 回批）：wrapper 内部派生不陪葬请求
+			// ctx 的写库 ctx 并短路 logID==0——RecordLog 无论被传什么 ctx，此行
+			// 都落库（此前直调靠调用方恰好传 Background 保平安，无防线）。
+			// ProxyTime 回填语义不变：错误日志同样反映「请求进入网关到失败判定」
+			// 的真实时长（struct Updates 跳零值，毫秒级真实耗时非零可安全写入）。
+			updateChatLogByID(ctx, in.LogID, models.ChatLog{
+				Status:    "error",
+				Error:     fmt.Sprintf("processer error: %v", err),
+				ProxyTime: time.Since(in.ReqStart),
+			}, "failed to update log status on processer error")
 
 			if statErr := chatstats.RecordProviderStats(ctx, in.ProviderName, false, 0, 0); statErr != nil {
 				slog.Warn("failed to record provider stats on processer error", "error", statErr)

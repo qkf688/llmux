@@ -105,9 +105,6 @@ func TestRequestID_RegeneratesInvalidInbound(t *testing.T) {
 	for _, in := range invalids {
 		w := doProbe(t, newRequestIDRouter(), in, true)
 		rid := w.Header().Get(consts.HeaderRequestID)
-		if rid == in && in != "" {
-			t.Errorf("非法入站编号 %q 被原样沿用", in)
-		}
 		if rid == "" || rid == in {
 			t.Errorf("非法入站编号 %q: 期望重生成, got %q", in, rid)
 		}

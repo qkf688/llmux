@@ -34,6 +34,8 @@ const makeLog = (p: Partial<ChatLog>): ChatLog => ({
   usage_source: "upstream",
   is_virtual_model: false,
   has_format_conversion: false,
+  // 后端键恒在：存量行/内部路径为空串 = 无编号（DTO 无 omitempty）
+  request_id: "",
   // 自带 raw 字段：needsLogDetail 判 false，组件不再拉详情（隔离 API 依赖）
   request_headers: "{}",
   request_body: "{}",
@@ -60,10 +62,12 @@ describe("LogDetailDialog 请求编号展示（Stage 17）", () => {
     expect(screen.getByText("gw:0b70b5bcda3e")).toBeTruthy();
   });
 
-  it("存量行无编号时显示占位，不崩溃", () => {
-    renderDialog(makeLog({ request_id: undefined }));
+  it("存量行无编号（空串）时显示占位，不崩溃", () => {
+    // 后端契约：键恒在，存量行值为空串——缺键不是生产形态
+    renderDialog(makeLog({ request_id: "" }));
     expect(screen.getByText("请求编号")).toBeTruthy();
     expect(screen.queryByText(/^gw:/)).toBeNull();
     expect(screen.queryByText(/^in:/)).toBeNull();
+    expect(screen.getAllByText("-").length).toBeGreaterThan(0);
   });
 });

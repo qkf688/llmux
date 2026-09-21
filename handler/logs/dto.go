@@ -14,7 +14,7 @@ import (
 // 独立于 models.ChatLog 定义，原因有二：
 //   - 持久化模型的字段改名不应波及对外 API（此前 ChatIO 直接裸序列化，
 //     改一个 Go 字段名就破坏了前端契约）；
-//   - 对外字段统一 snake_case（AGENTS.md 3.1），模型层保持 Go 命名。
+//   - 对外字段统一 snake_case（命名唯一来源 docs/architecture/conventions.md），模型层保持 Go 命名。
 //
 // 用结构体而非 map[string]any：编译器能保证字段不漏。历史上
 // completion_tokens_details 就是在 map 版本里漏写的，落库有值但 API 不返回。

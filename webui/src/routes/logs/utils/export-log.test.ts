@@ -35,6 +35,7 @@ const buildBaseLog = (): ChatLog => ({
   has_format_conversion: false,
   api_key_id: 5,
   api_key_name: "codex-key",
+  request_id: "in:trace-0921",
 });
 
 describe("buildChatLogExportPayload", () => {
@@ -46,6 +47,7 @@ describe("buildChatLogExportPayload", () => {
       model_name: "gpt-x",
       api_key_id: 5,
       api_key_name: "codex-key",
+      request_id: "in:trace-0921",
       performance: {
         proxy_time: 1000,
         first_chunk_time: 2000,

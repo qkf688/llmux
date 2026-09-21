@@ -27,6 +27,7 @@ const buildLog = (schedule: Partial<ChatLog>): ChatLog => ({
   prompt_tokens_details: { cached_tokens: 0, audio_tokens: 0 },
   completion_tokens_details: { reasoning_tokens: 0, audio_tokens: 0 },
   usage_source: "upstream",
+  request_id: "",
   is_virtual_model: false,
   has_format_conversion: false,
   ...schedule,

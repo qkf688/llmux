@@ -123,9 +123,9 @@ func updateChatLogByID(ctx context.Context, logID uint, update models.ChatLog, e
 		// disable_all_logs 时建行返回 0：不存在的行不做空转写库。
 		return
 	}
-	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), chatLogWriteTimeout)
+	writeCtx, cancel := chatLogDetachedCtx(ctx)
 	defer cancel()
 	if _, err := repos().ChatLog.UpdateByID(writeCtx, logID, update); err != nil {
-		slog.Error(errorMsg, "error", err)
+		slog.Error(errorMsg, "log_id", logID, "error", err)
 	}
 }

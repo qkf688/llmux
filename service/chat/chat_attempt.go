@@ -88,9 +88,15 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		return singleProviderAttemptResult{RemoveWeight: true}
 	}
 
-	logRawOptions := getLogRawRequestResponse(input.Ctx)
-	// Stage 2-D：单字段采集上限一处读取，喂给请求快照与响应采集两个采集点。
-	rawLogFieldLimit := getRawLogFieldMaxBytes(input.Ctx)
+	// 设置读取不陪葬请求 ctx（审查回批 W2）：死 ctx 下 GORM 读设置失败会静默
+	// 退默认值，管理员配置的采集上限/开关恰在失败场景失效——与写库侧收口同口径。
+	var logRawOptions models.RawLogOptions
+	var rawLogFieldLimit int
+	withDetachedLogCtx(input.Ctx, func(dctx context.Context) {
+		logRawOptions = getLogRawRequestResponse(dctx)
+		// Stage 2-D：单字段采集上限一处读取，喂给请求快照与响应采集两个采集点。
+		rawLogFieldLimit = getRawLogFieldMaxBytes(dctx)
+	})
 	logSnapshot := captureRequestLogSnapshot(logRawOptions, input.ReqMeta.Header, requestBody, input.Before.raw, rawLogFieldLimit)
 
 	req, err := input.ChatModel.BuildReq(reqCtx, header, input.ModelWithProvider.ProviderModel, requestBody)

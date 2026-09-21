@@ -15,7 +15,9 @@ type ApiResponseEnvelope<T> = {
 type EnvelopeFailure = { code?: number; message?: string; error?: string };
 
 /** 报障编号头：后端 RequestID 中间件恒回写，与 500 日志里的 request_id 同号
- *  （Stage 3）。管理员据此让运维在服务端日志精确定位这一次请求。 */
+ *  （Stage 3 定号 + Stage 17 来源标记：值自带 gw: 自生成 / in: 沿用前缀，
+ *  信封 [req=] 内嵌同值——「信封已内嵌同号则不重复」的判断对带前缀值同样成立）。
+ *  管理员据此让运维在服务端日志精确定位这一次请求。 */
 const REQUEST_ID_HEADER = "X-Request-Id";
 
 function buildAuthHeaders(headers: HeadersInit = {}): HeadersInit {

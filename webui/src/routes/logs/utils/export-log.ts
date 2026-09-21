@@ -31,6 +31,9 @@ export type ChatLogExportPayload = {
   target_format?: string | null;
   api_key_id?: number | null;
   api_key_name?: string | null;
+  /** 请求编号快照（Stage 17）：带来源前缀（gw:/in:），报障时与 500 文案 [req=]、
+   * 服务器日志 rid= 按同一号对账——导出物缺它则报障闭环断在最后一环 */
+  request_id?: string | null;
   error?: string | null;
   performance?: {
     proxy_time: number;
@@ -84,6 +87,7 @@ export function buildChatLogExportPayload(log: ChatLog, sections: ChatLogExportS
     payload.target_format = toNullableString(log.target_format);
     payload.api_key_id = log.api_key_id ?? null;
     payload.api_key_name = toNullableString(log.api_key_name);
+    payload.request_id = toNullableString(log.request_id);
   }
 
   if (sections.error) {

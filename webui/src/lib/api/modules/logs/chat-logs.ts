@@ -66,8 +66,8 @@ export interface ChatLog {
   /** 归因快照：写入时的 key 名（key 之后改名/删除，历史日志仍显当时名） */
   api_key_name?: string;
   /** 请求编号快照（Stage 17）：带来源前缀的 rid（gw: 网关自生成 / in: 沿用调用方）。
-   * 键恒在，存量行/内部路径为空串——勿把缺键当常态（同 api_key_id 口径） */
-  request_id?: string;
+   * 后端键恒在（DTO 无 omitempty）：存量行/内部路径为空串 = 无编号，不是缺键 */
+  request_id: string;
   status: string;
   style: string;
   user_agent: string;

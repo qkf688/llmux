@@ -33,7 +33,10 @@ func handleNonOKProviderResponse(
 	}
 
 	// Stage 2-B/D：错误体读侧 1 MiB 诊断单源封顶，落库文本再截到采集上限（四字段同源）。
-	fieldLimit := getRawLogFieldMaxBytes(ctx)
+	// 截断上限读在活 ctx 上（审查回批 W2）：本出口常在请求 ctx 已死时执行，
+	// 死 ctx 读设置会退默认值，管理员配置的采集上限在失败路径静默失效。
+	var fieldLimit int
+	withDetachedLogCtx(ctx, func(dctx context.Context) { fieldLimit = getRawLogFieldMaxBytes(dctx) })
 	rawBody := common.TruncateUTF8(string(byteBody), fieldLimit)
 
 	errorUpdate := models.ChatLog{

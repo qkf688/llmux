@@ -10,9 +10,21 @@ import (
 	"github.com/qkf688/llmux/service/chatstats"
 )
 
+// chatLogWriteTimeout chat_logs 全部写库点的独立写超时（Stage 17）：建行与
+// 失败出口回写统一经 context.WithoutCancel + 本超时派生 ctx——最需要留痕的
+// 失败（超时、客户端断连）恰恰发生在请求 ctx 已死的时刻，陪葬请求 ctx 会让
+// 这些行静默丢失（停在建行占位的 success，审计与指标双双失真）。
+const chatLogWriteTimeout = 5 * time.Second
+
 func SaveChatLog(ctx context.Context, log models.ChatLog) (uint, error) {
+	// Stage 17 收口：统计与建行的写库 ctx 从请求 ctx 派生但不随其取消
+	//（WithoutCancel 保留 ctx 内的设置/trace 值语义）——日志留痕是审计副作用，
+	// 不陪葬在途请求的生死。
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), chatLogWriteTimeout)
+	defer cancel()
+
 	// 统计应独立于日志存储：即使关闭日志记录，也要更新仪表盘统计。
-	if err := chatstats.RecordRequestStats(ctx, time.Now(), log.Name); err != nil {
+	if err := chatstats.RecordRequestStats(writeCtx, time.Now(), log.Name); err != nil {
 		slog.Warn("failed to record request stats", "error", err)
 	}
 	// 真实模型统计：优先用 RealModelName，异常路径回退到 Name。
@@ -20,16 +32,16 @@ func SaveChatLog(ctx context.Context, log models.ChatLog) (uint, error) {
 	if realModelName == "" {
 		realModelName = log.Name
 	}
-	if err := chatstats.RecordRealModelRequestStats(ctx, realModelName); err != nil {
+	if err := chatstats.RecordRealModelRequestStats(writeCtx, realModelName); err != nil {
 		slog.Warn("failed to record real model request stats", "error", err)
 	}
 
 	// 检查是否完全关闭日志记录
-	if getDisableAllLogs(ctx) {
+	if getDisableAllLogs(writeCtx) {
 		return 0, nil // 返回0表示不记录日志
 	}
 
-	if err := repos().ChatLog.Create(ctx, &log); err != nil {
+	if err := repos().ChatLog.Create(writeCtx, &log); err != nil {
 		return 0, err
 	}
 	// 异步执行日志清理，避免阻塞主流程；经 bgtask 登记以便进程关闭时排空。
@@ -70,6 +82,7 @@ func savePreProviderFailureLog(ctx context.Context, reqMeta models.ReqMeta, styl
 		Error:         f.Error,
 		ApiKeyID:      reqMeta.ApiKeyID,
 		ApiKeyName:    reqMeta.ApiKeyName,
+		RequestID:     reqMeta.RequestID,
 	}); err != nil {
 		// real_model 必须单独带上：RequestedModel 在虚拟路径是**虚拟模型名**，
 		// 只打它则写库失败时看不出是哪个真实模型被跳过（原 saveVirtualSkipLog 打的就是它）。

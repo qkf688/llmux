@@ -33,12 +33,13 @@ func runAttemptAgainstURL(t *testing.T, providerName, url string, client *http.C
 		t.Fatalf("new provider: %v", err)
 	}
 	return executeSingleProviderAttempt(singleProviderAttemptInput{
-		Ctx:               ctx,
-		Start:             time.Now(),
-		Style:             string(consts.StyleOpenAI),
-		Before:            Before{Model: "m1", raw: []byte(reqRaw)},
-		RealModelName:     "m1",
-		ReqMeta:           models.ReqMeta{Header: http.Header{}},
+		Ctx:           ctx,
+		Start:         time.Now(),
+		Style:         string(consts.StyleOpenAI),
+		Before:        Before{Model: "m1", raw: []byte(reqRaw)},
+		RealModelName: "m1",
+		// rid 快照（Stage 17）：测试常量值，断言建行点把 ReqMeta.RequestID 定格进日志行。
+		ReqMeta:           models.ReqMeta{Header: http.Header{}, RequestID: consts.RequestIDPrefixGenerated + "attempt-test"},
 		Provider:          providerRow,
 		ModelWithProvider: mwp,
 		Selection:         selectionForEndpoint(string(consts.ProtocolOpenAI)),
@@ -130,5 +131,19 @@ func TestLimitUpstreamResponseBody_ReadDeadlineIsNetworkClass(t *testing.T) {
 	}
 	if !result.CredentialFailure {
 		t.Fatalf("读体超时应与 Do 失败同归凭据级网络: %+v", result)
+	}
+
+	// Stage 17 回归（AC-6/AC-5）：超时场景最需要留痕——失败出口回写不得陪葬请求
+	// ctx，行终态必须是 error 且带错误原因（改前该行停在建行占位的 success，
+	// 日志页/指标把超时计为成功）；rid 快照须在建行时定格进日志行。
+	var row models.ChatLog
+	if err := models.DB.Where("provider_name = ?", "p-deadline").First(&row).Error; err != nil {
+		t.Fatalf("reload log: %v", err)
+	}
+	if row.Status != "error" || row.Error == "" {
+		t.Fatalf("超时行终态 = %q/%q, want error + 非空原因（回写不得陪葬请求 ctx）", row.Status, row.Error)
+	}
+	if row.RequestID != consts.RequestIDPrefixGenerated+"attempt-test" {
+		t.Fatalf("日志行 request_id = %q, want 建行时定格的 ReqMeta 快照", row.RequestID)
 	}
 }

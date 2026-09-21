@@ -28,6 +28,9 @@ func newReqMeta(c *gin.Context) models.ReqMeta {
 		RemoteIP:  c.ClientIP(),
 		UserAgent: c.Request.UserAgent(),
 	}
+	// rid 快照（Stage 17）：middleware.RequestID 保证非空且已带来源前缀；
+	// 裸 Context 单测直连时为空串，落库侧语义同「无编号」。
+	meta.RequestID = c.GetString(consts.ContextKeyRequestID)
 	if caller := middleware.CurrentCallerKey(c); caller != nil {
 		// 拷值不取 &caller.ID：快照定格进 ReqMeta，不与 gin context 内共享对象
 		// 绑同一块内存（#6 给 CallerKey 加字段后该不变量依然成立）。

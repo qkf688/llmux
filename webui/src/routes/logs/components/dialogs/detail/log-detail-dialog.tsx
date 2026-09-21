@@ -128,6 +128,9 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDet
                 <DetailCard label="远端 IP" value={detailLog.remote_ip || "-"} mono />
                 {/* 归因快照：显示写入时名称，key 之后改名/删除不回写历史行 */}
                 <DetailCard label="调用密钥" value={detailLog.api_key_name || "-"} />
+                {/* rid 快照（Stage 17）：带来源前缀（gw: 自生成 / in: 沿用），与 500 文案
+                    [req=]、服务器日志 rid= 同一编号；存量行空串显示占位 */}
+                <DetailCard label="请求编号" value={detailLog.request_id || "-"} mono />
                 <DetailCard label="记录 IO" value={detailLog.chat_io ? "是" : "否"} />
                 <DetailCard label="重试次数" value={detailLog.retry ?? 0} />
               </div>

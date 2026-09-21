@@ -111,8 +111,21 @@ func updateRequestAndResponseLog(
 	updateChatLogByID(ctx, logID, updateData, "failed to update log with request/response headers")
 }
 
+// updateChatLogByID 是 chat_logs 失败出口/回写落库的单源收口（Stage 17）：
+// 写库 ctx 经 context.WithoutCancel + chatLogWriteTimeout 派生——超时/断连
+// 场景请求 ctx 已死，陪葬会让「最需要留痕的失败」静默丢失（行停在建行占位的
+// success）。全部失败出口与成功路径 raw 回写都经此处，未来新增出口自动被
+// 覆盖（OCP）。写库失败仅 slog 留痕，不改调用方返回语义（请求本已注定失败，
+// 日志是副作用）。update 保持 struct Updates 姿势——零值跳过是调度明细/
+// 归因快照穿透不被覆盖的设计依赖，禁止改 map。
 func updateChatLogByID(ctx context.Context, logID uint, update models.ChatLog, errorMsg string) {
-	if _, err := repos().ChatLog.UpdateByID(ctx, logID, update); err != nil {
+	if logID == 0 {
+		// disable_all_logs 时建行返回 0：不存在的行不做空转写库。
+		return
+	}
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), chatLogWriteTimeout)
+	defer cancel()
+	if _, err := repos().ChatLog.UpdateByID(writeCtx, logID, update); err != nil {
 		slog.Error(errorMsg, "error", err)
 	}
 }

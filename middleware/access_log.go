@@ -68,6 +68,6 @@ func assembleAccessLine(p gin.LogFormatterParams, quotedPath string) string {
 		p.ClientIP,
 		p.Method,
 		quotedPath,
-		p.Request.Header.Get(consts.HeaderRequestID), // 已经过 RequestID 白名单校验，无需转义
+		p.Request.Header.Get(consts.HeaderRequestID), // 值由 RequestID 回写：gw:/in: 来源前缀（网关自产）+ 过白名单校验的内核，无转义风险（Stage 17）
 	)
 }

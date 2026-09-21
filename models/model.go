@@ -384,6 +384,12 @@ type ChatLog struct {
 	ApiKeyID   *uint
 	ApiKeyName string
 
+	// 请求编号快照（Stage 17）：建行时从 ReqMeta 定格带来源前缀的 rid
+	// （自生成 gw: / 沿用 in:，见 middleware.RequestID）；失败出口是 Update 非
+	// 建行，struct Updates 零值跳过保证快照不被空串覆盖。存量行为建行前旧口径，
+	// 空串 = 无编号，DTO 键恒在（同 ApiKeyID 的「键在值空」语义）。
+	RequestID string
+
 	// 原始请求和响应内容
 	RequestHeaders  string // 请求头JSON字符串
 	RequestBody     string // 请求体（转换后，发给上游的）
@@ -536,6 +542,10 @@ type ReqMeta struct {
 	// #6（key 级出站头）落地时在此加 Headers 字段，读方不动（OCP）。
 	ApiKeyID   *uint
 	ApiKeyName string
+	// RequestID 是带来源前缀的请求编号快照（Stage 17，ChatLog.RequestID 的传值
+	// 来源）：handler/v1 从 gin context（consts.ContextKeyRequestID）翻译至此，
+	// 值形如 gw:xxxx（网关自生成）/ in:xxxx（沿用调用方），见 middleware.RequestID。
+	RequestID string
 	// Headers 是 key 级自定义出站头快照（#6，方案 §2 切片 B）：整包透传至
 	// chat_attempt 的唯一装配点 chatcore.BuildHeaders，链上零读方改动。
 	Headers map[string]string

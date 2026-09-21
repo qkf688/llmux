@@ -61,6 +61,11 @@ type chatLogResponse struct {
 	ApiKeyID   *uint  `json:"api_key_id"`
 	ApiKeyName string `json:"api_key_name"`
 
+	// 请求编号快照（Stage 17）：建行时定格的带来源前缀 rid（gw: 自生成 / in: 沿用）。
+	// 非指针 string 无三态语义（middleware 保证生产路径恒非空），键恒在不用 omitempty；
+	// 存量行/内部路径为空串 = 无编号。
+	RequestID string `json:"request_id"`
+
 	IsVirtualModel      bool `json:"is_virtual_model"`
 	HasFormatConversion bool `json:"has_format_conversion"`
 	// 仅在 HasFormatConversion 为真时有值，此时两者必非空（见 enrichChatLogs 的判定）。
@@ -211,6 +216,7 @@ func buildChatLogResponse(log models.ChatLog, enrich chatLogEnrichResult, includ
 
 		ApiKeyID:   log.ApiKeyID,
 		ApiKeyName: log.ApiKeyName,
+		RequestID:  log.RequestID,
 
 		IsVirtualModel:      enrich.isVirtualModel,
 		HasFormatConversion: enrich.hasFormatConversion,

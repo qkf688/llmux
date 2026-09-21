@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -12,6 +13,9 @@ import (
 )
 
 func init() { gin.SetMode(gin.TestMode) }
+
+// generatedRIDPattern 自生成编号的口径：`gw:` 前缀 + 12 位小写 hex（Stage 17 来源标记）。
+var generatedRIDPattern = regexp.MustCompile(`^gw:[0-9a-f]{12}$`)
 
 // newRequestIDRouter 建一个只挂 RequestID 中间件 + 回显 context 编号的探针路由。
 func newRequestIDRouter() *gin.Engine {
@@ -42,28 +46,48 @@ func TestRequestID_GeneratesWhenAbsent(t *testing.T) {
 	if rid == "" {
 		t.Fatal("响应头必须带生成的请求编号")
 	}
-	if len(rid) != 12 {
-		t.Errorf("生成的编号长度 = %d, want 12 (%q)", len(rid), rid)
+	if !generatedRIDPattern.MatchString(rid) {
+		t.Errorf("生成的编号 = %q, want gw: 前缀 + 12 位 hex", rid)
 	}
 	if body := w.Body.String(); body != rid {
 		t.Errorf("context 中的编号 = %q, 与响应头 %q 不一致", body, rid)
 	}
 }
 
-// 调用方自带规矩的编号 → 沿用之（外部 trace 体系能直接对上服务端日志），
-// 且必须回显在响应头，用户报障时拿得到同一个号。
+// 调用方自带规矩的编号 → 沿用内核并打 in: 来源前缀（外部 trace 体系能对上服务端
+// 日志，且与网关自生成号在同一个字段里可区分来源——Stage 17 防串号），
+// 必须回显在响应头，用户报障时拿得到同一个号。
 func TestRequestID_ReusesValidInbound(t *testing.T) {
 	for _, in := range []string{
 		"req_abc123",
 		"0b70b5bc-da3e-4a2b-9f11-3c2d1e0f9a8b", // uuid 风格
-		strings.Repeat("a", 64),                // 长度上限恰好
+		strings.Repeat("a", 64),                // 内核长度上限恰好
+	} {
+		want := consts.RequestIDPrefixInbound + in
+		w := doProbe(t, newRequestIDRouter(), in, true)
+		if got := w.Header().Get(consts.HeaderRequestID); got != want {
+			t.Errorf("合法入站编号 %q: 响应头 = %q, want %q（沿用+in: 前缀）", in, got, want)
+		}
+		if body := w.Body.String(); body != want {
+			t.Errorf("合法入站编号 %q: context = %q, want %q", in, body, want)
+		}
+	}
+}
+
+// 入站值自带 gw:/in: 来源前缀 → 判非法重生成，绝不能叠出 in:gw:… 双前缀
+// （前缀是网关打的来源标记，外部不得自选；自选 gw: 号会污染自生成号空间）。
+func TestRequestID_PrefixedInboundRegenerated(t *testing.T) {
+	for _, in := range []string{
+		consts.RequestIDPrefixGenerated + "0b70b5bcda3e",
+		consts.RequestIDPrefixInbound + "req_abc123",
 	} {
 		w := doProbe(t, newRequestIDRouter(), in, true)
-		if got := w.Header().Get(consts.HeaderRequestID); got != in {
-			t.Errorf("合法入站编号 %q: 响应头 = %q, want 原样沿用", in, got)
+		rid := w.Header().Get(consts.HeaderRequestID)
+		if !generatedRIDPattern.MatchString(rid) {
+			t.Errorf("带前缀入站编号 %q: 期望重生成为 gw: 口径, got %q", in, rid)
 		}
-		if body := w.Body.String(); body != in {
-			t.Errorf("合法入站编号 %q: context = %q, want 原样沿用", in, body)
+		if strings.HasSuffix(rid, in) {
+			t.Errorf("带前缀入站编号 %q 被叠进生成值 %q（双前缀）", in, rid)
 		}
 	}
 }
@@ -87,8 +111,8 @@ func TestRequestID_RegeneratesInvalidInbound(t *testing.T) {
 		if rid == "" || rid == in {
 			t.Errorf("非法入站编号 %q: 期望重生成, got %q", in, rid)
 		}
-		if len(rid) != 12 {
-			t.Errorf("非法入站编号 %q: 重生成结果 %q 非 12 位", in, rid)
+		if !generatedRIDPattern.MatchString(rid) {
+			t.Errorf("非法入站编号 %q: 重生成结果 %q 非 gw: 口径", in, rid)
 		}
 	}
 }
@@ -119,8 +143,8 @@ func TestRequestID_NormalizesRequestHeader(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
 	r.ServeHTTP(httptest.NewRecorder(), req)
 
-	// 生成场景：请求头被回填
-	if seen == "" || len(seen) != 12 {
-		t.Errorf("中间件未回写入站请求头, got %q", seen)
+	// 生成场景：请求头被回填 gw: 口径编号
+	if !generatedRIDPattern.MatchString(seen) {
+		t.Errorf("中间件未回写入站请求头（want gw: 口径）, got %q", seen)
 	}
 }

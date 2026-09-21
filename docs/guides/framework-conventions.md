@@ -58,7 +58,7 @@ HTTP 500（本机自己坏，**含 panic**）**禁止**把内部 `err` 原文回
 
 **范围边界**：只收本机 500。① 4xx 原文（校验/绑定错误，管理端表单报错提示依赖它）不改；② `/v1` 上游状态码透传（`handler/v1/chat.go` 的 `errors.As(statusCoder)` 分支，转发的是供应商错误，属协议内容）不在本防线。
 
-**请求编号**：`middleware.RequestID()` 挂在所有路由最外层（`main.go` 于 gzip 之前），为每请求定一号——入站 `X-Request-Id` 格式规矩则沿用（对齐调用方自家 trace），否则生成 12 位 hex；编号写三处（context / 响应头 / 回写入站头，令 `middleware.AccessLog` 访问行与 `/v1` 上游请求透传都指向同一号）。上游**响应**自带的 `X-Request-Id` 在 `writeHeader` 改名 `X-Upstream-Request-Id` 回传——网关命名空间唯一，报障编号无双义。`middleware.Recovery` 替代 `gin.Recovery`：panic 栈经 slog 留痕（带 rid），未提交的响应走 `InternalServerError` 收口（客户端拿得到 `[req=]`），已提交半开流不追加 body。
+**请求编号**：`middleware.RequestID()` 挂在所有路由最外层（`main.go` 于 gzip 之前），为每请求定一号，编号**自带来源前缀**（Stage 17，防外部自选值与自生成号共桶串号）：网关自生成 = `gw:` + 12 位 hex；沿用入站 `X-Request-Id` = `in:` + 原值（内核校验 `^[A-Za-z0-9_\-]{1,64}$` 不变，对齐调用方自家 trace）；入站值已含 `gw:`/`in:` 前缀判非法重生成（前缀是网关标记，外部不得自选，防双前缀与自生成号空间污染）。**前缀进值本体**而非展示点拼接：httpresp 文案 `[req=]`、slog `request_id` 字段、访问行 `rid=`、日志页回显全部消费同一个带前缀值（值透传，展示点零拼接），契约测试 `middleware/request_id_consistency_test.go` 锁一致性。编号写三处（context / 响应头 / 回写入站头，令 `middleware.AccessLog` 访问行与 `/v1` 上游请求透传都指向同一号；上游供应商看到的 `X-Request-Id` 带前缀——保留外部 trace 关联只加标记，Stage 17 口径）。上游**响应**自带的 `X-Request-Id` 在 `writeHeader` 改名 `X-Upstream-Request-Id` 回传——网关命名空间唯一，报障编号无双义。`middleware.Recovery` 替代 `gin.Recovery`：panic 栈经 slog 留痕（带 rid），未提交的响应走 `InternalServerError` 收口（客户端拿得到 `[req=]`），已提交半开流不追加 body。
 
 执法：两条静态判据编进 `go test ./...`（`gate_500_test.go`，见上「禁止绕过」「message 禁拼接」）；人肉复核命令（与门同判据）：`rg -n 'httpresp\.InternalErrorMessage\([^,]+, [^,)]*(\+|\.Error\(\)|fmt\.)' --type go -g '!*_test.go'` 零命中。
 

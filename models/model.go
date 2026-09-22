@@ -647,6 +647,11 @@ const (
 	// 病态/被劫持上游的超大 body 在响应头提交给客户端之前即被拦截并故障转移。下限 1 MiB（不可关闭）。
 	SettingKeyUpstreamMaxResponseMiB = "upstream_max_response_mib"
 
+	// SettingKeyCacheAffinityEnabled 缓存亲和（粘性选路）开关：同一对话身份钉住同一
+	// 真实模型×关联×分组×凭据，提高供应商提示词缓存命中、降低输入成本。钉定失效无害
+	// 回退现状选择（编排见 service/chat/chat_affinity.go），故默认开。
+	SettingKeyCacheAffinityEnabled = "cache_affinity_enabled"
+
 	// 凭据健康相关设置
 	SettingKeyCredHealthCooldown429Sec    = "cred_health_cooldown_429_sec"    // 凭据 429 限流冷却窗口（秒）
 	SettingKeyCredHealthCooldownServerSec = "cred_health_cooldown_server_sec" // 凭据服务端错误冷却窗口（秒，5xx/超时/网络）

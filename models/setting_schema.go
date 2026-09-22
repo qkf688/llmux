@@ -73,6 +73,9 @@ func buildSettingSchemas() map[string]SettingSchema {
 		// 能力匹配
 		{Key: SettingKeyStrictCapabilityMatch, Field: "StrictCapabilityMatch", Type: SettingTypeBool, Default: true, Category: "capability"},
 
+		// 缓存亲和（粘性选路）：钉定失效无害回退现状选择，默认开（chat_affinity.go 编排）
+		{Key: SettingKeyCacheAffinityEnabled, Field: "CacheAffinityEnabled", Type: SettingTypeBool, Default: true, Category: "routing"},
+
 		// 权重调整
 		{Key: SettingKeyAutoWeightDecay, Field: "AutoWeightDecay", Type: SettingTypeBool, Default: false, Category: "weight"},
 		{Key: SettingKeyAutoWeightDecayDefault, Field: "AutoWeightDecayDefault", Type: SettingTypeInt, Default: 100, Category: "weight", Min: intPtr(1)},

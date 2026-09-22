@@ -17,7 +17,10 @@ type SystemConfigRequest struct {
 // SettingsResponse 与 UpdateSettingsRequest 字段完全一致，通过类型别名复用，
 // 新增设置项时只需在此处添加一次字段。
 type Settings struct {
-	StrictCapabilityMatch            bool                 `json:"strict_capability_match"`
+	StrictCapabilityMatch bool `json:"strict_capability_match"`
+	// CacheAffinityEnabled 缓存亲和（粘性选路）开关（默认开）：关闭 = 选路行为与
+	// 现状（加权随机+轮询）完全一致；语义见 models.SettingKeyCacheAffinityEnabled。
+	CacheAffinityEnabled             bool                 `json:"cache_affinity_enabled"`
 	AutoWeightDecay                  bool                 `json:"auto_weight_decay"`
 	AutoWeightDecayDefault           int                  `json:"auto_weight_decay_default"`
 	AutoWeightDecayStep              int                  `json:"auto_weight_decay_step"`

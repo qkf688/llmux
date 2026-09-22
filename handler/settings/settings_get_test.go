@@ -47,6 +47,10 @@ func TestDefaultSettingsResponse(t *testing.T) {
 	if response.RawLogFieldMaxKiB != 256 {
 		t.Fatalf("expected RawLogFieldMaxKiB default to be 256, got %d", response.RawLogFieldMaxKiB)
 	}
+	// 缓存亲和默认开启：粘性选路是纯优化（失效无害退化为现状选择），默认开让缓存省钱即刻生效。
+	if !response.CacheAffinityEnabled {
+		t.Fatalf("expected CacheAffinityEnabled default to be true")
+	}
 }
 
 func TestApplySettingToResponse(t *testing.T) {

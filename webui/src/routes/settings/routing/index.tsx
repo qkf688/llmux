@@ -1,4 +1,5 @@
 import { CapabilityMatchingCard } from "./components/sections/capability-matching-card";
+import { CacheAffinityCard } from "./components/sections/cache-affinity-card";
 import { CredentialCooldownCard } from "./components/sections/credential-cooldown-card";
 import { FormatConversionCard } from "./components/sections/format-conversion-card";
 import { ModelAssociationAutomationCard } from "./components/sections/model-association-automation-card";
@@ -28,6 +29,7 @@ export function RoutingSettings(props: RoutingSettingsProps) {
         localSettings={form.localSettings}
         updateLocalSettings={form.updateLocalSettings}
       />
+      <CacheAffinityCard localSettings={form.localSettings} updateLocalSettings={form.updateLocalSettings} />
       <ModelSyncCard localSettings={form.localSettings} updateLocalSettings={form.updateLocalSettings} />
       <TemplateFuzzyMatchCard
         localSettings={form.localSettings}

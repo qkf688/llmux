@@ -11,6 +11,7 @@ export interface RawLogOptions {
 
 export interface Settings {
   strict_capability_match: boolean;
+  cache_affinity_enabled: boolean;
   auto_weight_decay: boolean;
   auto_weight_decay_default: number;
   auto_weight_decay_step: number;

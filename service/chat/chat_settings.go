@@ -15,6 +15,13 @@ func getStrictCapabilityMatch(ctx context.Context) bool {
 	return settingsReader.Bool(ctx, models.SettingKeyStrictCapabilityMatch, true)
 }
 
+// getCacheAffinityEnabled 读取缓存亲和（粘性选路）开关。
+// 默认值与 setting schema 一致（true）：钉定失效无害退化为现状选择（chat_affinity.go），
+// 默认开让提示词缓存省钱即刻生效。
+func getCacheAffinityEnabled(ctx context.Context) bool {
+	return settingsReader.Bool(ctx, models.SettingKeyCacheAffinityEnabled, true)
+}
+
 // getLogRawRequestResponse 获取原始请求响应记录选项
 func getLogRawRequestResponse(ctx context.Context) models.RawLogOptions {
 	value := settingsReader.String(ctx, models.SettingKeyLogRawRequestResponse, "")

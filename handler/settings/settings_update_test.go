@@ -148,6 +148,58 @@ func TestUpdateSettingsFromRequest_CredHealthAuthFailThreshold_RoundTrip(t *test
 	}
 }
 
+// TestUpdateSettingsFromRequest_CacheAffinityEnabled_RoundTrip 覆盖 cache_affinity_enabled
+// 的 PUT 往返：写入非默认值 false 后，数据库读回、GET 响应与 JSON 键名三处一致——
+// bool false 不得被「零值=未设置」语义吞掉。
+func TestUpdateSettingsFromRequest_CacheAffinityEnabled_RoundTrip(t *testing.T) {
+	testsupport.InitTestDB(t)
+	ctx := context.Background()
+
+	req := &UpdateSettingsRequest{}
+	if err := models.ApplySettingDefaults(req); err != nil {
+		t.Fatalf("ApplySettingDefaults: %v", err)
+	}
+	req.CacheAffinityEnabled = false // 默认 true 的合法非默认值
+
+	if err := updateSettingsFromRequest(ctx, req); err != nil {
+		t.Fatalf("updateSettingsFromRequest: %v", err)
+	}
+
+	store := settingStore()
+	if got := store.GetBool(ctx, models.SettingKeyCacheAffinityEnabled); got {
+		t.Errorf("CacheAffinityEnabled = true, want false（false 不得被零值语义吞掉）")
+	}
+
+	// GET 响应与写库一致，形成往返闭环。
+	list, err := store.List(ctx)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	response, err := buildSettingsResponse(list)
+	if err != nil {
+		t.Fatalf("buildSettingsResponse: %v", err)
+	}
+	if response.CacheAffinityEnabled {
+		t.Errorf("GET CacheAffinityEnabled = true, want false")
+	}
+	// 序列化断层检查：json tag 写错/漏写时只断 Go 字段仍绿，必须落 JSON 键名断言。
+	b, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("json.Marshal(response): %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("json.Unmarshal: %v, body=%s", err, b)
+	}
+	v, ok := m["cache_affinity_enabled"]
+	if !ok {
+		t.Fatalf("GET JSON 缺键 cache_affinity_enabled，body=%s", b)
+	}
+	if vb, isBool := v.(bool); !isBool || vb {
+		t.Errorf("GET JSON cache_affinity_enabled = %v (%T), want false (bool)", v, v)
+	}
+}
+
 // TestUpdateSettingsFromRequest_CredHealthAuthFailThreshold_RejectsBelowMin 回归：
 // CredHealthAuthFailThreshold 的 schema Min=1，0 意味着「永不判停」，语义无意义。
 // 越界请求应整请求校验失败，且不留下任何部分写入。

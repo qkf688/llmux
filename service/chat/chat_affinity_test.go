@@ -6,6 +6,7 @@ import (
 
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/settings"
+	"github.com/qkf688/llmux/service/virtualmodel"
 )
 
 // TestBeforeAffinityKey_StableAcrossSerialization 锁 AC-7：对话身份键取语义值——
@@ -78,6 +79,68 @@ func TestBeforeAffinityKey_StableAcrossSerialization(t *testing.T) {
 	resB := mustBefore("openai-res", `{"model":"m","input":"yo"}`)
 	if resA.affinityKey == resB.affinityKey {
 		t.Fatal("字符串 input 内容不同必须键不同（否则不同对话互钉）")
+	}
+}
+
+// TestBeforeAffinityKey_GatewayPatchesDoNotDrift 锁 AC-7 的网关侧注入面：BeforerOpenAI 的
+// FillMissingToolCallIDs 会为缺 id 的 tool_calls 生成**随机** id——身份键必须取自网关注入
+// 前的请求语义，否则同一请求每次键不同、粘性永不命中且向粘性表灌垃圾键。
+func TestBeforeAffinityKey_GatewayPatchesDoNotDrift(t *testing.T) {
+	raw := `{"model":"m","messages":[{"role":"system","content":"sys"},{"role":"assistant","tool_calls":[{"function":{"name":"f","arguments":"{}"}}]}]}`
+
+	a, err := BeforerOpenAI([]byte(raw))
+	if err != nil {
+		t.Fatalf("BeforerOpenAI #1: %v", err)
+	}
+	b, err := BeforerOpenAI([]byte(raw))
+	if err != nil {
+		t.Fatalf("BeforerOpenAI #2: %v", err)
+	}
+	if a.affinityKey != b.affinityKey {
+		t.Fatalf("网关注入（随机 tool_call id）导致键漂移：%q vs %q", a.affinityKey, b.affinityKey)
+	}
+}
+
+// TestPreferRealModelsFirst 锁 AC-4 的前移语义（含 Ruling 决策）：钉定模型稳定前移、
+// 其余相对顺序不变、未钉/不在列表/已在首位原序返回。
+//
+// Ruling（2026-09-23 审查回批）：虚拟层前移**不做 mapping Priority 分档**（与候选层
+// 「粘性不越权优先级档」刻意不对称）——OrderedRealModel 列表是故障转移序列而非并行
+// 分摊策略，前移只改「先试哪个」、失败照常按原序转移，钉定只来自上一次真实成功。
+// 代价：管理员调高他人 mapping priority 后，活跃对话仍钉旧模型直到闲置过期（30min TTL）。
+// 本用例把「低 Priority 也前移」钉死，防行为被按候选层原则「顺手修正」。
+func TestPreferRealModelsFirst(t *testing.T) {
+	mk := func(id uint, priority int) virtualmodel.OrderedRealModel {
+		return virtualmodel.OrderedRealModel{Model: models.Model{ID: id}, Priority: priority}
+	}
+	// [1(P10), 2(P5), 3(P5)]：刻意含不同 Priority。
+	list := []virtualmodel.OrderedRealModel{mk(1, 10), mk(2, 5), mk(3, 5)}
+
+	// 钉定非首位 → 稳定前移，其余相对顺序不变（3 仍在 2 后）。
+	got := preferRealModelsFirst(list, 2)
+	if got[0].Model.ID != 2 || got[1].Model.ID != 1 || got[2].Model.ID != 3 {
+		t.Fatalf("前移结果 = %v, want [2 1 3]", []uint{got[0].Model.ID, got[1].Model.ID, got[2].Model.ID})
+	}
+
+	// Ruling：低 Priority 的钉定照样前移（虚拟层不做档约束）。
+	got = preferRealModelsFirst(list, 3)
+	if got[0].Model.ID != 3 || got[1].Model.ID != 1 || got[2].Model.ID != 2 {
+		t.Fatalf("低 Priority 钉定未前移 = %v, want [3 1 2]（Ruling：虚拟层不做档约束）", []uint{got[0].Model.ID, got[1].Model.ID, got[2].Model.ID})
+	}
+
+	// 钉定不在列表 / 未钉 / 已在首位 → 原序。
+	for name, pinned := range map[string]uint{"不在列表": 99, "未钉": 0, "已在首位": 1} {
+		got = preferRealModelsFirst(list, pinned)
+		for i, id := range []uint{1, 2, 3} {
+			if got[i].Model.ID != id {
+				t.Fatalf("%s: 顺序 = %v, want [1 2 3]（原序返回）", name, []uint{got[0].Model.ID, got[1].Model.ID, got[2].Model.ID})
+			}
+		}
+	}
+
+	// 原切片不被污染（返回副本时入参保持原序）。
+	if list[0].Model.ID != 1 {
+		t.Fatal("preferRealModelsFirst 污染了入参切片")
 	}
 }
 

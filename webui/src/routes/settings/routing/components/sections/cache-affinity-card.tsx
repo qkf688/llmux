@@ -17,8 +17,8 @@ export function CacheAffinityCard({ localSettings, updateLocalSettings }: Routin
               启用缓存亲和
             </Label>
             <p className="text-xs md:text-sm text-muted-foreground">
-              开启后，同一对话的请求会优先钉住上次成功的供应商、分组与密钥（供应商的提示词缓存按账号分槽，
-              命中可大幅降低输入成本）；钉住的密钥失效时自动转移，转移成功后改钉新密钥。
+              开启后，同一对话的请求会优先钉住上次成功的模型、供应商、分组与密钥（供应商的提示词缓存按账号分槽，
+              命中可大幅降低输入成本）；钉住的目标失效时自动转移，转移成功后改钉新目标。
               <br />
               关闭后，恢复按权重与轮询随机分配供应商密钥。
             </p>

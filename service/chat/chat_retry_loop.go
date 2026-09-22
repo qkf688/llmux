@@ -95,12 +95,12 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 	// 缓存亲和（粘性是选路偏好覆盖）：钉定目标只取一次，候选层传 preferID（优先级
 	// 档内钉定）、channel 层传 Prefer（分组/凭据）；未钉时全零值 = 现状选择。
 	// 本次尝试无论换 key 还是换供应商，成功后都按实际命中改钉（下方 result.Success）。
+	// Prefer 只对**钉定候选本身**生效（元组语义：分组/凭据偏好不脱离关联层独立生效，
+	// 防止跨候选误钉同名 ID）；候选经池过滤/淘汰后 preferID 不命中即自然失效。
 	sticky, hasSticky := stickyTargetFor(in.Ctx, in.Before)
 	preferMWP := uint(0)
-	prefer := channel.Prefer{}
 	if hasSticky {
 		preferMWP = sticky.ModelWithProviderID
-		prefer = channel.Prefer{GroupID: sticky.GroupID, CredentialID: sticky.CredentialID}
 	}
 
 	for retry := range in.MaxRetry {
@@ -128,6 +128,12 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 
 		provider := in.Pool.ProviderMap[modelWithProvider.ProviderID]
 
+		// 钉定偏好只随钉定候选走（元组语义，见上方 sticky 注释）。
+		iterPrefer := channel.Prefer{}
+		if hasSticky && *id == sticky.ModelWithProviderID {
+			iterPrefer = channel.Prefer{GroupID: sticky.GroupID, CredentialID: sticky.CredentialID}
+		}
+
 		// 选路：端点 → 分组 → 凭据（service/channel 三层）。任何一层失败只淘汰该候选
 		// （与 providers.New 失败同语义），池中其余候选仍应尝试；凭据级/组织级的
 		// 分层处置（组内换 key、冷却）在下面内层循环，此处不区分 sentinel。
@@ -141,7 +147,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 		}
 		// 进程级共享选路器：轮询状态（分组档内 / 凭据组内）跨请求推进；新建实例
 		// 会让指针恒从 0 起算、多凭据/多组退化为确定性首选（见 channel.Select 注释）。
-		selection, err := channel.DefaultSelector().Select(snapshot, clientWire, in.RealModelName, time.Now(), prefer)
+		selection, err := channel.DefaultSelector().Select(snapshot, clientWire, in.RealModelName, time.Now(), iterPrefer)
 		if err != nil {
 			// 凭据耗尽：惰性探活 temp_unsched（#6-3）。成功则刷新快照重选；
 			// 端点/分组不可用不探（非凭据层问题）。Select 在凭据失败时已带回
@@ -151,7 +157,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 				if probeRecoverInGroup(in.Ctx, provider, selection.Endpoint, snapshot.CredentialsByGroup[selection.Group.ID]) {
 					refreshed, refreshErr := channel.NewAssembler(repos()).Assemble(in.Ctx, provider)
 					if refreshErr == nil {
-						if sel2, selErr := channel.DefaultSelector().Select(refreshed, clientWire, in.RealModelName, time.Now(), prefer); selErr == nil {
+						if sel2, selErr := channel.DefaultSelector().Select(refreshed, clientWire, in.RealModelName, time.Now(), iterPrefer); selErr == nil {
 							selection = sel2
 							snapshot = refreshed
 							err = nil

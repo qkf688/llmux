@@ -130,6 +130,19 @@ func TestSelect_PreferInvalidFallsBack(t *testing.T) {
 			t.Fatalf("= group %d credential %d, want 1/11（全新 Selector 轮询首现）", res.Group.ID, res.Credential.ID)
 		}
 	})
+
+	t.Run("钉定组权重 0：整体回落常规选择", func(t *testing.T) {
+		snap := newPreferSnapshot(t)
+		snap.Groups[1].Weight = 0 // weight<=0 不参与（既有语义），粘性不得复活
+
+		res, err := (&Selector{}).Select(snap, consts.FormatOpenAIChat, "m", now, Prefer{GroupID: 2, CredentialID: 22})
+		if err != nil {
+			t.Fatalf("Select error: %v", err)
+		}
+		if res.Group.ID != 1 {
+			t.Fatalf("= group %d, want 1（权重 0 的钉定组不得被钉住）", res.Group.ID)
+		}
+	})
 }
 
 // TestSelect_PreferDoesNotAdvanceRR 锁 AC-3「钉定命中不推进轮询指针」：钉定流量

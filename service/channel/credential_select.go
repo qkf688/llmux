@@ -29,7 +29,7 @@ func SelectCredential(s *Selector, snapshot *Snapshot, groupID uint, now time.Ti
 // selectCredentialWithPrefer 带钉定偏好选凭据：钉定凭据须在可调度候选内（与
 // SelectCredential 同一套过滤），命中不推进组内轮询指针（同 selectGroupWithPrefer
 // 理由）；失效则回退常规轮询。
-func selectCredentialWithPrefer(s *Selector, snapshot *Snapshot, groupID uint, now time.Time, preferID uint) (models.Credential, error) {
+func selectCredentialWithPrefer(s *Selector, snapshot *Snapshot, groupID uint, preferID uint, now time.Time) (models.Credential, error) {
 	if preferID != 0 {
 		if usable, err := usableCredentials(snapshot, groupID, now); err == nil {
 			for _, c := range usable {

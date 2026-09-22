@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 
@@ -34,57 +35,77 @@ type capabilityDetector struct {
 	structuredOutputCheck func(data []byte) bool
 }
 
+// affinityPartCapBytes 键区材料的单段上限（字节）：超长段（多为 base64 图片等超大首条
+// 消息）只按头部字节参与——头部跨轮稳定不漂移，代价是超长段失去字段顺序免疫、
+// 「超长同头部对话」过合并（纯偏好的无害退化方向），换来每请求的规范化/哈希开销常数级。
+const affinityPartCapBytes = 8 << 10
+
 // affinityKeyFromRequest 提取「对话身份」语义值并派生缓存亲和键：
 //   - system 段：顶层 system（anthropic）+ 消息数组头部连续的 system/developer 项
-//     （openai 系的 system 前导）——规范形 JSON 数组，段边界显式；
-//   - 首条消息：头部 system 段之后的第一条消息（= 对话的首个用户回合，多轮只在尾部
-//     追加、它恒稳定）；字符串形 input 用其内容本身参与身份，否则所有单条 input 同键互钉。
+//     （openai 系的 system 前导），逐段独立参与；
+//   - 首条消息：system 段之后的第一条消息（不论 role——few-shot/预填对话取到的可能是
+//     assistant 消息，如实描述；其后多轮只在尾部追加，头部恒稳定）；字符串形 input
+//     无 role，取其内容本身参与身份，否则所有单条 input 同键互钉。
 //
-// 取规范化 JSON 语义值而非原始字节前缀：字段顺序、注入字段（stream_options）不改变
-// 语义值，键不随序列化形态漂移（AC-7）。只取头部不取整条消息列表：多轮逐轮追加，
-// 整表哈希会每轮都变。
+// 各段经 affinityPart 规范化/截断后交 balancer.AffinityKey。取语义值而非原始字节前缀：
+// 字段顺序、注入字段不改变语义值，键不随序列化形态漂移（AC-7）。
 func affinityKeyFromRequest(data []byte, cfg capabilityDetector) string {
 	msgs := gjson.GetBytes(data, cfg.messageArrayPath).Array()
 
-	var systemSegs []any
+	var systemSegs [][]byte
 	if s := gjson.GetBytes(data, "system"); s.Exists() {
-		systemSegs = append(systemSegs, json.RawMessage(canonicalJSON(s.Raw)))
+		systemSegs = append(systemSegs, affinityPart(s.Raw))
 	}
 	first := gjson.Result{}
 	for i, m := range msgs {
 		if role := m.Get("role").String(); role == "system" || role == "developer" {
-			systemSegs = append(systemSegs, json.RawMessage(canonicalJSON(m.Raw)))
+			systemSegs = append(systemSegs, affinityPart(m.Raw))
 			continue
 		}
 		first = msgs[i]
 		break
 	}
-	systemPart, err := json.Marshal(systemSegs)
-	if err != nil {
-		systemPart = nil
-	}
 	return balancer.AffinityKey(
 		gjson.GetBytes(data, "model").String(),
-		systemPart,
-		canonicalJSON(gjson.GetBytes(data, "tools").Raw),
-		canonicalJSON(first.Raw),
+		systemSegs,
+		affinityPart(gjson.GetBytes(data, "tools").Raw),
+		affinityPart(first.Raw),
 	)
 }
 
-// canonicalJSON 把 JSON 片段解析后重新序列化（encoding/json 对 map 键排序），消除对象内
-// 字段书写顺序的形态差异——对话身份键认「值」不认「字面顺序」（AC-7）。非法 JSON
-// 原样参与：gjson 提取本就宽容，畸形输入退化为按字面区分，无正确性影响。
-func canonicalJSON(raw string) []byte {
-	if raw == "" {
+// affinityPart 键区材料单段：截断到上限后做 JSON 规范化；非法 JSON 原样参与——键退化为
+// 按字面区分，**绝不静默丢段**（丢段会让只在该段不同的两个对话并键，与注释承诺相反）。
+// 先截断后规范化：超大段的解析/重序列化开销被钉在常数级；截断字面（头部前缀）跨轮
+// 稳定，同对话不因此漂移。
+func affinityPart(raw string) []byte {
+	b := []byte(raw)
+	if len(b) > affinityPartCapBytes {
+		b = b[:affinityPartCapBytes]
+	}
+	if c := canonicalJSON(b); c != nil {
+		return c
+	}
+	return b
+}
+
+// canonicalJSON JSON 规范化：解析后重新序列化（encoding/json 对 map 键排序），消除对象内
+// 字段书写顺序的形态差异——对话身份键认「值」不认「字面顺序」（AC-7）。数字走
+// json.Number 保真：不经 float64，>2^53 的整数不丢精度、不与相邻值并键（代价：1 与 1.0
+// 不再并键，属无害方向的少合并）。非法/不完整 JSON（如截断产物）返回 nil，由调用方
+// 决定按字面参与。
+func canonicalJSON(raw []byte) []byte {
+	if len(raw) == 0 {
 		return nil
 	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
 	var v any
-	if err := json.Unmarshal([]byte(raw), &v); err != nil {
-		return []byte(raw)
+	if err := dec.Decode(&v); err != nil {
+		return nil
 	}
 	b, err := json.Marshal(v)
 	if err != nil {
-		return []byte(raw)
+		return nil
 	}
 	return b
 }
@@ -128,6 +149,17 @@ func BeforerOpenAI(data []byte) (*Before, error) {
 	if model == "" {
 		return nil, errors.New("model is empty")
 	}
+	// 对话身份键取自**网关注入前**的请求语义：stream_options 注入与 FillMissingToolCallIDs
+	// 补写的随机 tool_call id 都不得进键——后者会让同一请求每次键不同、粘性永不命中。
+	cfg := capabilityDetector{
+		messageArrayPath: "messages",
+		imageTypeValue:   "image_url",
+		structuredOutputCheck: func(data []byte) bool {
+			return gjson.GetBytes(data, "response_format").Exists()
+		},
+	}
+	affinityKey := affinityKeyFromRequest(data, cfg)
+
 	stream := gjson.GetBytes(data, "stream").Bool()
 	if stream {
 		// 为processTee记录usage添加选项 PS:很多客户端只会开启stream 而不会开启include_usage
@@ -140,13 +172,6 @@ func BeforerOpenAI(data []byte) (*Before, error) {
 		data = newData
 	}
 
-	cfg := capabilityDetector{
-		messageArrayPath: "messages",
-		imageTypeValue:   "image_url",
-		structuredOutputCheck: func(data []byte) bool {
-			return gjson.GetBytes(data, "response_format").Exists()
-		},
-	}
 	_, _, toolCall, structuredOutput, image := detectCapabilities(data, cfg)
 
 	if err := preprocessopenai.ValidateToolCallFunctionNames(data); err != nil {
@@ -162,7 +187,7 @@ func BeforerOpenAI(data []byte) (*Before, error) {
 		structuredOutput: structuredOutput,
 		image:            image,
 		raw:              data,
-		affinityKey:      affinityKeyFromRequest(data, cfg),
+		affinityKey:      affinityKey,
 	}, nil
 }
 

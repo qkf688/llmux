@@ -46,6 +46,12 @@ func recordStickyTarget(ctx context.Context, before Before, target balancer.Targ
 // 在 chat 编排层做**本地副本**重排，不动 virtualmodel 包与策略状态——虚拟模型边界只做
 // 虚拟→真实解析，粘性偏好是编排层的覆盖（策略的 UpdateRoundRobinIndex 等语义不变）。
 // 未钉（pinnedModelID 为 0）或钉定模型不在映射内（映射被改/模型被删）→ 原切片返回。
+//
+// Ruling（2026-09-23 审查回批）：前移**不做 mapping Priority 分档**，与候选层
+// 「粘性不越权优先级档」（chatcore.SelectByPriorityAndWeight）刻意不对称——本列表是
+// 故障转移序列而非并行分摊策略，前移只改「先试哪个」、失败照常按原序转移，且钉定只
+// 来自上一次真实成功。代价：管理员调高他人 mapping priority 后，活跃对话仍钉旧模型
+// 直到闲置过期（粘性表 30min 空闲 TTL 收敛）；测试 TestPreferRealModelsFirst 锁定该语义。
 func preferRealModelsFirst(models []virtualmodel.OrderedRealModel, pinnedModelID uint) []virtualmodel.OrderedRealModel {
 	if pinnedModelID == 0 {
 		return models

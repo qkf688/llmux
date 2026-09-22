@@ -37,8 +37,7 @@ type SelectionResult struct {
 // Prefer 缓存亲和的钉定偏好目标（字段 0 = 该层不钉）：命中可用即直接选用，
 // 不推进轮询指针；失效则静默回退该层常规选择（粘性是偏好覆盖，不改变成败判定）。
 //
-// 刻意没有 EndpointID：端点按「入站 wire 命中或主协议」确定性选择（SelectEndpoint
-// 不做同协议多 URL），同一对话 wire 不变即天然稳定，钉了是冗余。
+// 「为什么没有端点」见 balancer.Target 注释（设计理由单源在彼处，勿双份维护）。
 type Prefer struct {
 	GroupID      uint
 	CredentialID uint

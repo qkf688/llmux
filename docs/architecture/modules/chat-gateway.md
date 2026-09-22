@@ -49,7 +49,7 @@ service/
 ├── chatstats/              # 请求/token/供应商统计写入（叶子）
 ├── adjustment/             # 权重/优先级调整 + AdjustmentHooks 注入（叶子）
 └── chatcore/               # 优先级+权重选择、Header 构造
-balancer/                   # 加权随机纯算法
+balancer/                   # balancer.go 加权随机纯算法；affinity*.go 会话粘性表（LRU+TTL，有状态进程级单例）与对话身份键派生
 ```
 
 各子目录职责：
@@ -60,7 +60,7 @@ balancer/                   # 加权随机纯算法
 - `service/chatstats/`：Stats* 累加（无 chat 类型依赖）
 - `service/adjustment/`：关联权重/优先级/连续失败；向 healthcheck 注入 hooks
 - `service/chatcore/`：供应商选择算法与请求头（`BuildHeaders` 为 /v1 出站头唯一装配点，四层优先级链：入站白名单透传 < key 级头 < 关联级 customer_headers < providers 权威覆写；透传判据下沉 `common/headerpassthrough.go`，与 testapi 同源；#6）
-- `balancer/`：无状态加权随机
+- `balancer/`：加权随机纯算法 + 会话粘性表（`Affinity`，LRU+TTL 有状态单例，与 rrstate 同为进程内选路状态；`AffinityKey` 对话身份键派生）
 
 ## 4. 关键接口契约
 

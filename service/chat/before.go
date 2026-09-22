@@ -1,8 +1,10 @@
 package chat
 
 import (
+	"encoding/json"
 	"errors"
 
+	"github.com/qkf688/llmux/balancer"
 	"github.com/qkf688/llmux/consts"
 	preprocessopenai "github.com/qkf688/llmux/service/chat/preprocess/openai"
 	"github.com/tidwall/gjson"
@@ -16,16 +18,75 @@ type Before struct {
 	structuredOutput bool
 	image            bool
 	raw              []byte
+	// affinityKey 对话身份键（缓存亲和）：由 Beforer 从请求语义值派生（见
+	// affinityKeyFromRequest），空 = 未识别对话身份（不粘）。
+	affinityKey string
 }
 
 type Beforer func(data []byte) (*Before, error)
 
 // capabilityDetector 配置各协议 Beforer 的差异点，供 detectCapabilities 使用。
 type capabilityDetector struct {
-	imageContentPath string // 查找 image 的数组路径："messages" 或 "input"
+	// messageArrayPath 消息数组路径："messages" 或 "input"（图片扫描与亲和键的首项提取共用）。
+	messageArrayPath string
 	imageTypeValue   string // image 内容项的 type 值："image_url", "input_image", "image"
 	// structuredOutputCheck 检测是否为 structured output；返回 true 表示是。
 	structuredOutputCheck func(data []byte) bool
+}
+
+// affinityKeyFromRequest 提取「对话身份」语义值并派生缓存亲和键：
+//   - system 段：顶层 system（anthropic）+ 消息数组头部连续的 system/developer 项
+//     （openai 系的 system 前导）——规范形 JSON 数组，段边界显式；
+//   - 首条消息：头部 system 段之后的第一条消息（= 对话的首个用户回合，多轮只在尾部
+//     追加、它恒稳定）；字符串形 input 用其内容本身参与身份，否则所有单条 input 同键互钉。
+//
+// 取规范化 JSON 语义值而非原始字节前缀：字段顺序、注入字段（stream_options）不改变
+// 语义值，键不随序列化形态漂移（AC-7）。只取头部不取整条消息列表：多轮逐轮追加，
+// 整表哈希会每轮都变。
+func affinityKeyFromRequest(data []byte, cfg capabilityDetector) string {
+	msgs := gjson.GetBytes(data, cfg.messageArrayPath).Array()
+
+	var systemSegs []any
+	if s := gjson.GetBytes(data, "system"); s.Exists() {
+		systemSegs = append(systemSegs, json.RawMessage(canonicalJSON(s.Raw)))
+	}
+	first := gjson.Result{}
+	for i, m := range msgs {
+		if role := m.Get("role").String(); role == "system" || role == "developer" {
+			systemSegs = append(systemSegs, json.RawMessage(canonicalJSON(m.Raw)))
+			continue
+		}
+		first = msgs[i]
+		break
+	}
+	systemPart, err := json.Marshal(systemSegs)
+	if err != nil {
+		systemPart = nil
+	}
+	return balancer.AffinityKey(
+		gjson.GetBytes(data, "model").String(),
+		systemPart,
+		canonicalJSON(gjson.GetBytes(data, "tools").Raw),
+		canonicalJSON(first.Raw),
+	)
+}
+
+// canonicalJSON 把 JSON 片段解析后重新序列化（encoding/json 对 map 键排序），消除对象内
+// 字段书写顺序的形态差异——对话身份键认「值」不认「字面顺序」（AC-7）。非法 JSON
+// 原样参与：gjson 提取本就宽容，畸形输入退化为按字面区分，无正确性影响。
+func canonicalJSON(raw string) []byte {
+	if raw == "" {
+		return nil
+	}
+	var v any
+	if err := json.Unmarshal([]byte(raw), &v); err != nil {
+		return []byte(raw)
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return []byte(raw)
+	}
+	return b
 }
 
 // detectCapabilities 提取三个 Beforer 共有的 model/stream/tool/image/structuredOutput 检测逻辑。
@@ -43,7 +104,7 @@ func detectCapabilities(data []byte, cfg capabilityDetector) (model string, stre
 		structuredOutput = cfg.structuredOutputCheck(data)
 	}
 
-	gjson.GetBytes(data, cfg.imageContentPath).ForEach(func(_, value gjson.Result) bool {
+	gjson.GetBytes(data, cfg.messageArrayPath).ForEach(func(_, value gjson.Result) bool {
 		if image {
 			return false
 		}
@@ -79,13 +140,14 @@ func BeforerOpenAI(data []byte) (*Before, error) {
 		data = newData
 	}
 
-	_, _, toolCall, structuredOutput, image := detectCapabilities(data, capabilityDetector{
-		imageContentPath: "messages",
+	cfg := capabilityDetector{
+		messageArrayPath: "messages",
 		imageTypeValue:   "image_url",
 		structuredOutputCheck: func(data []byte) bool {
 			return gjson.GetBytes(data, "response_format").Exists()
 		},
-	})
+	}
+	_, _, toolCall, structuredOutput, image := detectCapabilities(data, cfg)
 
 	if err := preprocessopenai.ValidateToolCallFunctionNames(data); err != nil {
 		return nil, err
@@ -100,6 +162,7 @@ func BeforerOpenAI(data []byte) (*Before, error) {
 		structuredOutput: structuredOutput,
 		image:            image,
 		raw:              data,
+		affinityKey:      affinityKeyFromRequest(data, cfg),
 	}, nil
 }
 
@@ -166,13 +229,14 @@ func BeforerOpenAIRes(data []byte) (*Before, error) {
 		data = patched
 	}
 
-	_, stream, toolCall, structuredOutput, image := detectCapabilities(data, capabilityDetector{
-		imageContentPath: "input",
+	cfg := capabilityDetector{
+		messageArrayPath: "input",
 		imageTypeValue:   "input_image",
 		structuredOutputCheck: func(data []byte) bool {
 			return gjson.GetBytes(data, "text.format.type").String() == "json_schema"
 		},
-	})
+	}
+	_, stream, toolCall, structuredOutput, image := detectCapabilities(data, cfg)
 	return &Before{
 		Model:            model,
 		Stream:           stream,
@@ -180,6 +244,7 @@ func BeforerOpenAIRes(data []byte) (*Before, error) {
 		structuredOutput: structuredOutput,
 		image:            image,
 		raw:              data,
+		affinityKey:      affinityKeyFromRequest(data, cfg),
 	}, nil
 }
 
@@ -189,11 +254,12 @@ func BeforerAnthropic(data []byte) (*Before, error) {
 		return nil, errors.New("model is empty")
 	}
 
-	_, stream, toolCall, _, image := detectCapabilities(data, capabilityDetector{
-		imageContentPath:      "messages",
+	cfg := capabilityDetector{
+		messageArrayPath:      "messages",
 		imageTypeValue:        "image",
 		structuredOutputCheck: nil, // Anthropic 的 structuredOutput 直接等于 toolCall
-	})
+	}
+	_, stream, toolCall, _, image := detectCapabilities(data, cfg)
 	return &Before{
 		Model:            model,
 		Stream:           stream,
@@ -201,6 +267,7 @@ func BeforerAnthropic(data []byte) (*Before, error) {
 		structuredOutput: toolCall,
 		image:            image,
 		raw:              data,
+		affinityKey:      affinityKeyFromRequest(data, cfg),
 	}, nil
 }
 

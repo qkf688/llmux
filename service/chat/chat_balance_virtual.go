@@ -28,7 +28,14 @@ func balanceChatVirtual(ctx context.Context, in BalanceInput) (*BalanceResult, e
 	// 全局超时错误在外层循环与内层重试循环共用同一实例，保证两处返回的语义一致。
 	deadlineErr := errors.New("virtual model global timeout")
 
-	for modelIndex, orderedModel := range pwm.OrderedRealModels {
+	// 钉定的真实模型排尝试首位（缓存亲和 AC-4）：本地副本重排，不动 virtualmodel
+	// 策略状态；未钉时顺序不变。故障转移语义不变——钉定模型穷尽后照常试其余模型。
+	ordered := pwm.OrderedRealModels
+	if sticky, ok := stickyTargetFor(ctx, in.Before); ok {
+		ordered = preferRealModelsFirst(ordered, sticky.ModelID)
+	}
+
+	for modelIndex, orderedModel := range ordered {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()

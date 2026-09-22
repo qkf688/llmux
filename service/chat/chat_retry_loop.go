@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/qkf688/llmux/balancer"
 	"github.com/qkf688/llmux/common/bgtask"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
@@ -91,6 +92,17 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 	// 循环不变量，提到循环外只算一次。
 	clientWire, _ := consts.WireFormatOfStyle(consts.Style(in.Style))
 
+	// 缓存亲和（粘性是选路偏好覆盖）：钉定目标只取一次，候选层传 preferID（优先级
+	// 档内钉定）、channel 层传 Prefer（分组/凭据）；未钉时全零值 = 现状选择。
+	// 本次尝试无论换 key 还是换供应商，成功后都按实际命中改钉（下方 result.Success）。
+	sticky, hasSticky := stickyTargetFor(in.Ctx, in.Before)
+	preferMWP := uint(0)
+	prefer := channel.Prefer{}
+	if hasSticky {
+		preferMWP = sticky.ModelWithProviderID
+		prefer = channel.Prefer{GroupID: sticky.GroupID, CredentialID: sticky.CredentialID}
+	}
+
 	for retry := range in.MaxRetry {
 		select {
 		case <-in.Ctx.Done():
@@ -100,7 +112,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 		default:
 		}
 
-		id, err := chatcore.SelectByPriorityAndWeight(in.Pool.WeightItems, in.Pool.PriorityItems)
+		id, err := chatcore.SelectByPriorityAndWeight(in.Pool.WeightItems, in.Pool.PriorityItems, preferMWP)
 		if err != nil {
 			// 选不出候选说明池已空，属正常穷尽而非系统错误：调用方据此决定
 			// 是整体失败还是换下一个真实模型。
@@ -129,7 +141,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 		}
 		// 进程级共享选路器：轮询状态（分组档内 / 凭据组内）跨请求推进；新建实例
 		// 会让指针恒从 0 起算、多凭据/多组退化为确定性首选（见 channel.Select 注释）。
-		selection, err := channel.DefaultSelector().Select(snapshot, clientWire, in.RealModelName, time.Now(), channel.Prefer{})
+		selection, err := channel.DefaultSelector().Select(snapshot, clientWire, in.RealModelName, time.Now(), prefer)
 		if err != nil {
 			// 凭据耗尽：惰性探活 temp_unsched（#6-3）。成功则刷新快照重选；
 			// 端点/分组不可用不探（非凭据层问题）。Select 在凭据失败时已带回
@@ -139,7 +151,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 				if probeRecoverInGroup(in.Ctx, provider, selection.Endpoint, snapshot.CredentialsByGroup[selection.Group.ID]) {
 					refreshed, refreshErr := channel.NewAssembler(repos()).Assemble(in.Ctx, provider)
 					if refreshErr == nil {
-						if sel2, selErr := channel.DefaultSelector().Select(refreshed, clientWire, in.RealModelName, time.Now(), channel.Prefer{}); selErr == nil {
+						if sel2, selErr := channel.DefaultSelector().Select(refreshed, clientWire, in.RealModelName, time.Now(), prefer); selErr == nil {
 							selection = sel2
 							snapshot = refreshed
 							err = nil
@@ -233,6 +245,20 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 				return retryLoopOutcome{Status: retryLoopAborted, Err: result.FatalErr}
 			}
 			if result.Success {
+				// 成功改钉：目标永远是「这一次真成了」的组合（含转移后的 key/供应商），
+				// 粘性不会把对话锁死在失败目标上（AC-2）。Model 可缺省（直构
+				// retryLoopInput 的调用方）：Target.ModelID 0 = 真实模型层不钉（Target
+				// 契约），其余层照钉。
+				modelID := uint(0)
+				if in.Model != nil {
+					modelID = in.Model.ID
+				}
+				recordStickyTarget(in.Ctx, in.Before, balancer.Target{
+					ModelID:             modelID,
+					ModelWithProviderID: modelWithProvider.ID,
+					GroupID:             selection.Group.ID,
+					CredentialID:        selection.Credential.ID,
+				})
 				return retryLoopOutcome{Status: retryLoopSucceeded, Result: &BalanceResult{
 					Response:     result.Response,
 					LogID:        result.LogID,

@@ -106,19 +106,7 @@ func main() {
 
 	startBackgroundServices(ctx)
 
-	// 组装顺序即请求路径顺序：编号最先（错误/访问/上游三处日志共用同一号），
-	// 访问日志读已回写的请求头，Recovery 替代 gin.Recovery——panic 型 500 同样
-	// 走 httpresp 收口出口并带 rid 进 slog（Stage 3）。
-	router := gin.New()
-	router.Use(middleware.RequestID())
-	router.Use(middleware.AccessLog())
-	router.Use(middleware.Recovery())
-
-	router.Use(gzip.Gzip(gzip.DefaultCompression, gzip.WithExcludedPaths([]string{"/v1/"})))
-
-	handler.RegisterAll(router, handler.Deps{JWTSecret: jwtSecret})
-
-	setwebui(router)
+	router := newRouter(handler.Deps{JWTSecret: jwtSecret})
 
 	srv := &http.Server{Addr: ":7070", Handler: router}
 	go func() {
@@ -134,6 +122,33 @@ func main() {
 
 	<-ctx.Done()
 	shutdown(srv, bgtask.Default(), models.Close, credwrite.Stop)
+}
+
+// newRouter 组装 HTTP 引擎。装配从 main 的内联代码里抽成函数（与 shutdown 的依赖
+// 注入同构）——只有可被测试还原的装配，其顺序才可能被锁定，此前这条顺序只有注释在保护。
+//
+// 中间件装配序即请求路径顺序，契约见 framework-conventions §1，由
+// TestGateRouterMiddlewareOrder（顺序）+ TestRouterAssembly_*（后果）双重锁定：
+//
+//	RequestID 最先 —— 401/404/panic 也要有号可对，错误/访问/上游三处日志共用同一号；
+//	AccessLog     —— 读 RequestID 回写的入站头快照，故必须在其后；
+//	Recovery      —— 替代 gin.Recovery：panic 型 500 同样走 httpresp 收口并带 rid（Stage 3）；
+//	gzip          —— 压缩排除 /v1/（SSE 流不压）。
+//
+// 全部 router.Use 必须先于 handler.RegisterAll：gin 为已注册路由快照 handler 链，
+// Use 写在 RegisterAll 之后对那些路由根本不生效（本函数的顺序即为约束本身）。
+func newRouter(deps handler.Deps) *gin.Engine {
+	router := gin.New()
+	router.Use(middleware.RequestID())
+	router.Use(middleware.AccessLog())
+	router.Use(middleware.Recovery())
+
+	router.Use(gzip.Gzip(gzip.DefaultCompression, gzip.WithExcludedPaths([]string{"/v1/"})))
+
+	handler.RegisterAll(router, deps)
+
+	setwebui(router)
+	return router
 }
 
 // 关闭各阶段的等待上限。

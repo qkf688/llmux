@@ -6,7 +6,7 @@
 ## 1. Go / Gin
 
 - 路由：`RegisterAll` 建 `/v1` 与 `/api`；`/v1` 挂 `middleware.AuthAPIKey(apiKeyRepo, userRepo)`，`/api` 登录路由免鉴权，其余挂 `middleware.AuthJWT(secret, repo)`。
-- 引擎装配（`main.go`，**不用** `gin.Default()`）：`RequestID()`（请求编号，Stage 3，见 §5）→ `AccessLog()`（等价原 gin Logger + rid，path 走 %q 防换行注入；整行 ≤4 KiB，超限截 `%q` **之后**的 path 段、status/耗时/rid 恒存活——Stage 16，见 §4）→ `Recovery()`（Stage 3 自建，替代 `gin.Recovery`：panic 型 500 同走 httpresp 收口，见 §5）→ gzip。**禁止**把 `RequestID` 挪到鉴权/路由之后——401/404 也要有号可对。
+- 引擎装配（`main.go` 的 `newRouter(deps)`，**不用** `gin.Default()`）：`RequestID()`（请求编号，Stage 3，见 §5）→ `AccessLog()`（等价原 gin Logger + rid，path 走 %q 防换行注入；整行 ≤4 KiB，超限截 `%q` **之后**的 path 段、status/耗时/rid 恒存活——Stage 16，见 §4）→ `Recovery()`（Stage 3 自建，替代 `gin.Recovery`：panic 型 500 同走 httpresp 收口，见 §5）→ gzip。**禁止**把 `RequestID` 挪到鉴权/路由之后——401/404 也要有号可对。装配序由两条测试锁定（Stage 18）：`main_router_assembly_test.go` 的 `TestGateRouterMiddlewareOrder`（四个 `router.Use` 的**次序** + 「全部 Use 先于 `handler.RegisterAll`」——gin 为已注册路由快照 handler 链，Use 写在 RegisterAll 之后对那些路由根本不生效）与 `TestRouterAssembly_RequestIDStamped`（**后果**：401/404/500 响应均带 `X-Request-Id`，访问行与 panic 留痕同号）。中间件增删或重排属装配契约变更，须同步这两处判据；行为断言测不出「先登记谁」（gin 访问行 formatter 在 `c.Next()` 之后才读请求头，后置的 RequestID 也已回写完毕），故次序必须由源码门锁。
 - 子包注册函数只接收 `gin.IRoutes`（或项目既有签名），**不**在子包内 `Group` 出与全局不一致的鉴权边界。
 - 后台任务在 `main` 启动：`HealthChecker.Start`、`ModelSyncService.StartAutoSync`，两者的 ctx 均派生自 `signal.NotifyContext`（取消即退出信号）。
 - **禁止**用裸 `go f(context.Background())` 启动会写库的后台 goroutine；**必须**经 `common/bgtask` 的 `bgtask.Go` 登记，否则进程关闭时落库/权重衰减会被硬切。请求内且已用 `sync.WaitGroup` 等待完成的 goroutine 不在此列（由 `srv.Shutdown` 等在途请求覆盖）。

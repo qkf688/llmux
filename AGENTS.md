@@ -165,7 +165,8 @@ make webui            # 生产构建供 Go embed：cd webui && pnpm install && p
 - [ ] 会写库的后台 goroutine 已走 `bgtask.Go` 登记，未用裸 `go f(context.Background())`
 - [ ] HTTP 响应走 `httpresp`；日志为 `slog`；错误带上下文返回
 - [ ] 体积闸：`rg 'io\.ReadAll' --type go -g '!*_test.go'` 命中仅为 framework-conventions §4 白名单入口或带豁免注释处（新增无界整读禁止；入站/上游/落库上限口径见该节）
-- [ ] 500 收口：`go test ./...` 内含 `gate_500_test.go` 机械门（禁绕过 httpresp 手搓 500、静态文案入口禁拼错误文本）；人肉复核 `rg -n 'httpresp\.InternalErrorMessage\([^,]+, [^,)]*(\+|\.Error\(\)|fmt\.)' --type go -g '!*_test.go'` 零命中（约定见 framework-conventions §5）
+- [ ] 500 收口：`go test ./...` 内含 `gate_500_test.go` 机械门（禁绕过 httpresp 手搓 500、静态文案入口禁拼错误文本）与 `gate_500_dual_log_test.go`（一次 500 只留一条 ERROR、业务细节走收口 `attrs`；禁同块双份留痕）；人肉复核 `rg -n 'httpresp\.InternalErrorMessage\([^,]+, [^,)]*(\+|\.Error\(\)|fmt\.)' --type go -g '!*_test.go'` 零命中（约定见 framework-conventions §5）
+- [ ] 引擎装配序：中间件增删/重排已同步 `main_router_assembly_test.go` 的顺序门与 framework-conventions §1（次序 + 全部 `router.Use` 先于 `handler.RegisterAll`）
 - [ ] 上游通过口径：判「上游算不算成功」只走 `common.IsPassingStatus`（通过集 200/201）；`go test ./...` 内含 `gate_upstream_status_test.go` 机械门（禁裸比较/switch-case/除 100/Status 前缀判通过，行级标记无理由或已失效即红，遍历带锚点哨兵）；新增判定站点须先写进 framework-conventions §6 再打标记（约定见该节）
 - [ ] 直返实体新增/改 json tag：前端 `lib/api` interface 与测试 mock 已同步；三态指针字段无 `omitempty`；有响应体 JSON 断言覆盖（`rg 'omitempty' models/model.go` 命中的字段须确认非三态）
 - [ ] `models.ModelWithProvider` 增删字段：`handler/associations/crud_response_shape_test.go` 的 `modelWithProviderResponseKeys` 表已同步加/删一行（该表是 `/api/model-providers` 响应键契约的单一数据源，覆盖 Create/Update/List 三路径的键存在性与 null 语义）

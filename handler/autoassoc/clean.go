@@ -2,7 +2,6 @@ package autoassoc
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/httpresp"
@@ -13,7 +12,6 @@ import (
 func PreviewCleanInvalid(c *gin.Context) {
 	previews, err := service.GetAutoAssocService().PreviewClean(c.Request.Context())
 	if err != nil {
-		slog.Error("auto-clean preview failed", "error", err)
 		httpresp.InternalErrorMessage(c, "failed to preview invalid associations", err)
 		return
 	}
@@ -25,7 +23,6 @@ func PreviewCleanInvalid(c *gin.Context) {
 func CleanInvalidAssociations(c *gin.Context) {
 	result, err := service.GetAutoAssocService().CleanInvalid(c.Request.Context())
 	if err != nil {
-		slog.Error("auto-clean failed", "error", err)
 		httpresp.InternalErrorMessage(c, "failed to clean invalid associations", err)
 		return
 	}

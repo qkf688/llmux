@@ -53,13 +53,11 @@ func ImportConfig(c *gin.Context) {
 			httpresp.InternalErrorMessage(c, ie.Message, ie.Err)
 			return
 		}
-		slog.Error("导入配置失败", "error", err)
 		httpresp.InternalErrorMessage(c, "导入配置失败", err)
 		return
 	}
 
 	if err := tx.Commit().Error; err != nil {
-		slog.Error("提交事务失败", "error", err)
 		httpresp.InternalErrorMessage(c, "提交事务失败", err)
 		return
 	}

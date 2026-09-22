@@ -2,7 +2,6 @@ package autoassoc
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/httpresp"
@@ -13,7 +12,6 @@ import (
 func PreviewAutoAssociate(c *gin.Context) {
 	previews, err := service.GetAutoAssocService().PreviewAssociate(c.Request.Context())
 	if err != nil {
-		slog.Error("auto-associate preview failed", "error", err)
 		httpresp.InternalErrorMessage(c, "failed to preview auto associations", err)
 		return
 	}
@@ -25,7 +23,6 @@ func PreviewAutoAssociate(c *gin.Context) {
 func AutoAssociateModels(c *gin.Context) {
 	result, err := service.GetAutoAssocService().AssociateAll(c.Request.Context())
 	if err != nil {
-		slog.Error("auto-associate failed", "error", err)
 		httpresp.InternalErrorMessage(c, "failed to auto associate models", err)
 		return
 	}

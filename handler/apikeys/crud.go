@@ -211,8 +211,7 @@ func UpdateApiKey(c *gin.Context) {
 		// map[string]string 恒可编码，err 分支纯防御（真触发说明 runtime 故障，非用户输入）。
 		encoded, err := json.Marshal(cleanHeaders)
 		if err != nil {
-			slog.Error("marshal api key headers failed (unreachable for map[string]string)", "api_key_id", id, "error", err)
-			httpresp.InternalErrorMessage(c, "failed to encode headers", err)
+			httpresp.InternalErrorMessage(c, "failed to encode headers", err, "api_key_id", id)
 			return
 		}
 		fields["headers"] = string(encoded)

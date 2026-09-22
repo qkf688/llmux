@@ -44,8 +44,14 @@ func TestRecovery_PanicGetsGeneric500WithRidAndSlogTrace(t *testing.T) {
 	if strings.Contains(body, "sk-super-secret") || strings.Contains(body, "goroutine") {
 		t.Errorf("panic 文本/栈泄进响应体: %s", body)
 	}
-	ls := logs.String()
-	if !strings.Contains(ls, "panic recovered") || !strings.Contains(ls, "stack=") {
+	ls := strings.TrimSpace(logs.String())
+	// 一次 panic 只产一条留痕（Stage 18 双份留痕收敛）：未提交路径改走 httpresp
+	// 收口出口、栈并进同一行 attrs。旧断言的「panic recovered」文案随之**有意废弃**——
+	// 该文案只剩「已提交半开流」分支在用（响应已回写无从补收口，只能自留一条）。
+	if n := strings.Count(ls, "\n"); n != 0 {
+		t.Errorf("一次 panic 写了 %d 条日志记录，want 1（双份留痕会让按 ERROR 行计数的告警把一次 panic 算成两次）:\n%s", n+1, ls)
+	}
+	if !strings.Contains(ls, "stack=") {
 		t.Errorf("panic 未经 slog 留栈:\n%s", ls)
 	}
 	if !strings.Contains(ls, "request_id="+rid) {

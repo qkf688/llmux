@@ -162,3 +162,62 @@ func TestInternalErrorMessage_NilErr(t *testing.T) {
 		t.Errorf("nil err 不应写出 error 字段:\n%s", line)
 	}
 }
+
+// logRecords 把 TextHandler 输出切成逐条记录（一条记录占一行）。
+func logRecords(s string) []string {
+	var out []string
+	for _, line := range strings.Split(strings.TrimSpace(s), "\n") {
+		if line != "" {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+// Stage 18 契约：一次 500 故障只产**一条**日志记录，业务上下文（credential_id 等）
+// 经 attrs 并进同一行。此前调用点常「先手写一行细节、收口再留一行错误」——同一次
+// 故障占两条 ERROR，按行计数的告警翻倍，且细节行得靠 rid 才能与错误行对上。
+// 本用例同时锁「留痕条数」与「细节与编号同处一行」，任何回到双份留痕的改法都红。
+func TestInternalErrorMessage_BusinessAttrsFoldIntoSingleRecord(t *testing.T) {
+	logs := captureSlog(t)
+	c, w := newCtx("gw:0a1b2c3d4e5f")
+
+	InternalErrorMessage(c, "Failed to decrypt key", errors.New("cipher: bad padding"),
+		"credential_id", uint(42), "group_id", uint(7))
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("HTTP 状态 = %d, want 500", w.Code)
+	}
+	records := logRecords(logs.String())
+	if len(records) != 1 {
+		t.Fatalf("一次 500 故障写了 %d 条日志记录，want 1（双份留痕会让按 ERROR 计数的告警翻倍）:\n%s", len(records), logs.String())
+	}
+	for _, frag := range []string{
+		"level=ERROR",
+		"request_id=gw:0a1b2c3d4e5f",
+		`message="Failed to decrypt key"`,
+		"credential_id=42",
+		"group_id=7",
+		"cipher: bad padding",
+	} {
+		if !strings.Contains(records[0], frag) {
+			t.Errorf("唯一记录缺片段 %q，实际:\n%s", frag, records[0])
+		}
+	}
+}
+
+// 同一口径对通用出口同样成立（Stage 18）。
+func TestInternalServerError_SingleRecordWithAttrs(t *testing.T) {
+	logs := captureSlog(t)
+	c, _ := newCtx("gw:998877665544")
+
+	InternalServerError(c, errors.New("boom"), "stack", "goroutine 1 [running]:")
+
+	records := logRecords(logs.String())
+	if len(records) != 1 {
+		t.Fatalf("一次 500 故障写了 %d 条日志记录，want 1:\n%s", len(records), logs.String())
+	}
+	if !strings.Contains(records[0], "stack=") {
+		t.Errorf("业务 attrs 未进同一行:\n%s", records[0])
+	}
+}

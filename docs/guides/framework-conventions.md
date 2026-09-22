@@ -50,17 +50,19 @@
 
 ## 5. HTTP 500 错误响应收口（Stage 3 质量门，2026-09-17）
 
-HTTP 500（本机自己坏，**含 panic**）**禁止**把内部 `err` 原文回给调用方（SQLite/gorm 报错含表名/列名/约束名）；原始错误只进服务端日志。**禁止**绕过 httpresp 手搓 500（`c.JSON(500,…)`、`http.Error`、直用 `StatusInternalServerError` 常量）。合法出口只有两个，两者都先 `slog`（带 `request_id`/`method`/`path`/原始 `error`）再回响应；静态出口的 `message` 也一并进日志（同名分支靠它定位是哪一处）：
+HTTP 500（本机自己坏，**含 panic**）**禁止**把内部 `err` 原文回给调用方（SQLite/gorm 报错含表名/列名/约束名）；原始错误只进服务端日志。**禁止**绕过 httpresp 手搓 500（`c.JSON(500,…)`、`http.Error`、直用 `StatusInternalServerError` 常量）。合法出口只有两个，两者都先 `slog`（带 `request_id`/`method`/`path`/原始 `error` 与调用方业务上下文 `attrs`）再回响应；静态出口的 `message` 也一并进日志（同名分支靠它定位是哪一处）：
 
-- `httpresp.InternalServerError(c, err error)`：对外恒发通用文案 `internal server error [req=<编号>]`（编号内嵌，SDK 用户报障时拿得走），原始 err 只进日志。拼接式旧写法（`"前缀: "+err.Error()`）拆到这里或下面的静态入口（前缀留下、err 进日志）。
-- `httpresp.InternalErrorMessage(c, message string, err error)`：仅用于**已审查、不含内部信息**的静态提示（如 `"encryption not configured"`）。`message` **必须**是字符串字面量或纯业务标识符（`action`、`ie.Message`——其取值须可追回常量），**禁止**拼接任何错误文本（`err.Error()`/`fmt.*`/`+`）；`err` 为仅服务端可见的原始错误，配置守卫类无 err 时传 `nil`。
+- `httpresp.InternalServerError(c, err error, attrs ...any)`：对外恒发通用文案 `internal server error [req=<编号>]`（编号内嵌，SDK 用户报障时拿得走），原始 err 只进日志。拼接式旧写法（`"前缀: "+err.Error()`）拆到这里或下面的静态入口（前缀留下、err 进日志）。
+- `httpresp.InternalErrorMessage(c, message string, err error, attrs ...any)`：仅用于**已审查、不含内部信息**的静态提示（如 `"encryption not configured"`）。`message` **必须**是字符串字面量或纯业务标识符（`action`、`ie.Message`——其取值须可追回常量），**禁止**拼接任何错误文本（`err.Error()`/`fmt.*`/`+`）；`err` 为仅服务端可见的原始错误，配置守卫类无 err 时传 `nil`。
+- `attrs`（Stage 18）：业务上下文（`credential_id` / `group_id` / `api_key_id` / `path` / `stack` 等）**必须**经这个变参并进**同一行**留痕；键值成对，**禁止**占用保留键 `request_id` / `method` / `path` / `message` / `error`。
 - **级别约定**：客户端断连类（`context.Canceled`/坏管道/连接重置）留痕降 `Warn`——不是服务器故障，防「建连即断」刷爆 ERROR 告警通道；其余一律 `Error`。
+- **ERROR 唯一入口（Stage 18）**：一次 500 级失败只允许留**一条** ERROR，且只能出自上面两个出口（每调用写一行）。**禁止**在调用点再写 `slog.Error/Warn` 给同一个错误重复留痕——历史上这种「手写一行业务细节 + 收口再留一行错误」的双份留痕，让按 ERROR 行计数的告警把一次故障算成两次，且两行还得靠 rid 才对得上；细节请走 `attrs`。`middleware.Recovery` 的 panic 同口径：未提交响应走收口出口、栈进 `attrs`；已提交（SSE 半开流）响应已回写无从补收口，才由 Recovery 自留该次 panic 的唯一一条 ERROR。**边界**（刻意不算违规）：① 4xx 客户端错误的手写留痕——`httpresp.BadRequest` 等不留痕，那行是该次失败的唯一记录；② 后台任务 / 启动装配的 `slog.Error`——无请求上下文，本就没有收口出口可走。
 
 **范围边界**：只收本机 500。① 4xx 原文（校验/绑定错误，管理端表单报错提示依赖它）不改；② `/v1` 上游状态码透传（`handler/v1/chat.go` 的 `errors.As(statusCoder)` 分支，转发的是供应商错误，属协议内容）不在本防线。
 
-**请求编号**：`middleware.RequestID()` 挂在所有路由最外层（`main.go` 于 gzip 之前），为每请求定一号，编号**自带来源前缀**（Stage 17，防外部自选值与自生成号共桶串号）：网关自生成 = `gw:` + 12 位 hex；沿用入站 `X-Request-Id` = `in:` + 原值（内核校验 `^[A-Za-z0-9_\-]{1,64}$` 不变，对齐调用方自家 trace）；入站值已含 `gw:`/`in:` 前缀判非法重生成（前缀是网关标记，外部不得自选，防双前缀与自生成号空间污染）。**前缀进值本体**而非展示点拼接：httpresp 文案 `[req=]`、slog `request_id` 字段、访问行 `rid=`、日志页回显全部消费同一个带前缀值（值透传，展示点零拼接），契约测试 `middleware/request_id_consistency_test.go` 锁一致性。编号写三处（context / 响应头 / 回写入站头，令 `middleware.AccessLog` 访问行与 `/v1` 上游请求透传都指向同一号；上游供应商看到的 `X-Request-Id` 带前缀——保留外部 trace 关联只加标记，Stage 17 口径）。上游**响应**自带的 `X-Request-Id` 在 `writeHeader` 改名 `X-Upstream-Request-Id` 回传——网关命名空间唯一，报障编号无双义。`middleware.Recovery` 替代 `gin.Recovery`：panic 栈经 slog 留痕（带 rid），未提交的响应走 `InternalServerError` 收口（客户端拿得到 `[req=]`），已提交半开流不追加 body。
+**请求编号**：`middleware.RequestID()` 挂在所有路由最外层（`main.go` 于 gzip 之前），为每请求定一号，编号**自带来源前缀**（Stage 17，防外部自选值与自生成号共桶串号）：网关自生成 = `gw:` + 12 位 hex；沿用入站 `X-Request-Id` = `in:` + 原值（内核校验 `^[A-Za-z0-9_\-]{1,64}$` 不变，对齐调用方自家 trace）；入站值已含 `gw:`/`in:` 前缀判非法重生成（前缀是网关标记，外部不得自选，防双前缀与自生成号空间污染）。**前缀进值本体**而非展示点拼接：httpresp 文案 `[req=]`、slog `request_id` 字段、访问行 `rid=`、日志页回显全部消费同一个带前缀值（值透传，展示点零拼接），契约测试 `middleware/request_id_consistency_test.go` 锁一致性。编号写三处（context / 响应头 / 回写入站头，令 `middleware.AccessLog` 访问行与 `/v1` 上游请求透传都指向同一号；上游供应商看到的 `X-Request-Id` 带前缀——保留外部 trace 关联只加标记，Stage 17 口径）。上游**响应**自带的 `X-Request-Id` 在 `writeHeader` 改名 `X-Upstream-Request-Id` 回传——网关命名空间唯一，报障编号无双义。`middleware.Recovery` 替代 `gin.Recovery`：panic 型 500 未提交的响应走 `InternalServerError` 收口（客户端拿得到 `[req=]`，栈进其 `attrs`——一次 panic 只产一条 ERROR，见上「ERROR 唯一入口」），已提交半开流不追加 body、由 Recovery 自留该次 panic 的唯一一条栈留痕（带 rid）。
 
-执法：两条静态判据编进 `go test ./...`（`gate_500_test.go`，见上「禁止绕过」「message 禁拼接」）；人肉复核命令（与门同判据）：`rg -n 'httpresp\.InternalErrorMessage\([^,]+, [^,)]*(\+|\.Error\(\)|fmt\.)' --type go -g '!*_test.go'` 零命中。
+执法：三条判据编进 `go test ./...`——`gate_500_test.go` 的「禁止绕过」「message 禁拼接」，加 `gate_500_dual_log_test.go` 的「ERROR 唯一入口」（AST 级：同一块内 `slog.Error/Warn` 与收口出口并存即红，附判据自测防漏判/误判）；人肉复核命令（与门同判据）：`rg -n 'httpresp\.InternalErrorMessage\([^,]+, [^,)]*(\+|\.Error\(\)|fmt\.)' --type go -g '!*_test.go'` 零命中。
 
 ## 6. 上游响应状态码通过口径（Stage 5 质量门，2026-09-17）
 

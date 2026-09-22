@@ -1,7 +1,6 @@
 package database
 
 import (
-	"log/slog"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -12,7 +11,6 @@ import (
 // VacuumDatabase 执行数据库真空操作。
 func VacuumDatabase(c *gin.Context) {
 	if err := models.DB.Exec("VACUUM").Error; err != nil {
-		slog.Error("执行数据库真空操作失败", "error", err)
 		httpresp.InternalErrorMessage(c, "执行数据库真空操作失败", err)
 		return
 	}

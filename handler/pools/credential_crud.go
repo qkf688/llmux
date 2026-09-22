@@ -3,7 +3,6 @@ package pools
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -178,8 +177,7 @@ func GetCredentialRaw(c *gin.Context) {
 	}
 	plain, err := cipher.Decrypt(cred.Key)
 	if err != nil {
-		slog.Warn("credential decrypt failed for raw view", "credential_id", cred.ID, "error", err)
-		httpresp.InternalErrorMessage(c, "Failed to decrypt key", err)
+		httpresp.InternalErrorMessage(c, "Failed to decrypt key", err, "credential_id", cred.ID)
 		return
 	}
 	httpresp.SuccessNoStore(c, CredentialRawData{Key: plain})

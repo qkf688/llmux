@@ -18,25 +18,21 @@ func ExportConfig(c *gin.Context) {
 	var settings []models.Setting
 
 	if err := models.DB.Find(&providers).Error; err != nil {
-		slog.Error("读取提供商数据失败", "error", err)
 		httpresp.InternalErrorMessage(c, "读取提供商数据失败", err)
 		return
 	}
 
 	if err := models.DB.Find(&modelsList).Error; err != nil {
-		slog.Error("读取模型数据失败", "error", err)
 		httpresp.InternalErrorMessage(c, "读取模型数据失败", err)
 		return
 	}
 
 	if err := models.DB.Find(&modelProviders).Error; err != nil {
-		slog.Error("读取模型-提供商关联数据失败", "error", err)
 		httpresp.InternalErrorMessage(c, "读取模型-提供商关联数据失败", err)
 		return
 	}
 
 	if err := models.DB.Find(&settings).Error; err != nil {
-		slog.Error("读取系统设置失败", "error", err)
 		httpresp.InternalErrorMessage(c, "读取系统设置失败", err)
 		return
 	}

@@ -74,10 +74,18 @@ func ErrorWithHttpStatus(c *gin.Context, httpStatus int, code int, message strin
 // 任何内部错误串（表名/列名/约束名），调用方仅凭编号即可让运维在日志中定位本次请求。
 // 编号源自 RequestID 中间件；缺席时（如单测直连）退化为不带后缀的恒定文案，形状稳定。
 //
-// 新代码禁止绕过本函数用 c.JSON(500, gin.H{...}) 手搓错误响应（AGENTS 5.x：响应走 httpresp）。
-func InternalServerError(c *gin.Context, err error) {
+// attrs 供调用方把业务上下文（credential_id / dbPath / stack 等）并进**同一行**留痕
+// （Stage 18）：一次 500 故障只产这一条 ERROR，业务细节与编号、原始错误同处一行。
+// 早先「调用点先手写一行细节、收口再留一行错误」的双份留痕已收敛——两行会让按
+// ERROR 行计数的告警翻倍，且细节行还得靠 rid 才能与错误行对上。键值必须成对；
+// 保留键 request_id / method / path / message / error 禁止占用。
+//
+// 新代码禁止绕过本函数用 c.JSON(500, gin.H{...}) 手搓错误响应（AGENTS 5.x：响应走 httpresp），
+// 也禁止在调用点另写 slog.Error/Warn 给同一个错误重复留痕（ERROR 唯一入口，
+// 见 framework-conventions §5）。
+func InternalServerError(c *gin.Context, err error, attrs ...any) {
 	rid := c.GetString(consts.ContextKeyRequestID)
-	logInternalError(c, rid, "", err)
+	logInternalError(c, rid, "", err, attrs...)
 	msg := "internal server error"
 	if rid != "" {
 		msg = "internal server error [req=" + rid + "]"
@@ -93,10 +101,11 @@ func InternalServerError(c *gin.Context, err error) {
 // "encryption not configured"）：对外原样返回该文案（不拼编号），对内仍留痕。
 //
 // message 参数必须是常量字面量、禁止拼接任何错误文本（一键自查见
-// docs/guides/framework-conventions.md 500 收口节）；err 为仅服务端可见的原始错误，可为 nil。
-func InternalErrorMessage(c *gin.Context, message string, err error) {
+// docs/guides/framework-conventions.md 500 收口节）；err 为仅服务端可见的原始错误，可为 nil；
+// attrs 与保留键约束同 InternalServerError。
+func InternalErrorMessage(c *gin.Context, message string, err error, attrs ...any) {
 	rid := c.GetString(consts.ContextKeyRequestID)
-	logInternalError(c, rid, message, err)
+	logInternalError(c, rid, message, err, attrs...)
 	c.JSON(http.StatusInternalServerError, Response{
 		Code:    500,
 		Error:   message,
@@ -105,29 +114,32 @@ func InternalErrorMessage(c *gin.Context, message string, err error) {
 }
 
 // logInternalError 统一 500 的服务端留痕：结构化记 request_id、method、path、
-// （静态出口的）message 与原始 err。err 为 nil 时不写 error 字段（避免
+// （静态出口的）message、调用方业务上下文 attrs 与原始 err——**每调用写一行**，
+// 这就是一次 500 故障的唯一一条 ERROR（Stage 18：此前调用点常另写一行，同一次
+// 故障因此占两条 ERROR，按行计数的告警翻倍）。err 为 nil 时不写 error 字段（避免
 // error="<nil>" 噪声）。message 为空（通用出口）则不写 message 字段。
 // 客户端断连/上传中断不是服务器故障，降 Warn——否则「建连即断」可把 ERROR
 // 通道刷满、按 ERROR 配的告警失灵（log flooding）。
-func logInternalError(c *gin.Context, rid string, message string, err error) {
-	attrs := []any{"request_id", rid}
+func logInternalError(c *gin.Context, rid string, message string, err error, attrs ...any) {
+	fields := []any{"request_id", rid}
 	if c.Request != nil {
-		attrs = append(attrs, "method", c.Request.Method)
+		fields = append(fields, "method", c.Request.Method)
 		if c.Request.URL != nil {
-			attrs = append(attrs, "path", c.Request.URL.Path)
+			fields = append(fields, "path", c.Request.URL.Path)
 		}
 	}
 	if message != "" {
-		attrs = append(attrs, "message", message)
+		fields = append(fields, "message", message)
 	}
+	fields = append(fields, attrs...)
 	if err != nil {
-		attrs = append(attrs, "error", err)
+		fields = append(fields, "error", err)
 	}
 	if isClientDisconnect(err) {
-		slog.Warn("internal server error", attrs...)
+		slog.Warn("internal server error", fields...)
 		return
 	}
-	slog.Error("internal server error", attrs...)
+	slog.Error("internal server error", fields...)
 }
 
 // isClientDisconnect 识别「对端先挂断」类错误（ctx 取消 / 坏管道 / 连接重置）：

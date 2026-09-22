@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"errors"
-	"log/slog"
 	"maps"
 	"net/http"
 	"strings"
@@ -77,7 +76,6 @@ func AuthAPIKey(apiKeyRepo repository.ApiKeyRepo, userRepo repository.UserRepo) 
 			} else {
 				// 基础设施故障不伪装成鉴权失败（否则 DB 坏了看起来像所有人 key 都错）；
 				// err 只进服务端日志不进响应（不外泄驱动细节，运维需能区分两故障点）
-				slog.Error("v1 auth: api key lookup failed", "error", err)
 				httpresp.InternalErrorMessage(c, "failed to verify api key", err)
 			}
 			c.Abort()
@@ -95,8 +93,7 @@ func AuthAPIKey(apiKeyRepo repository.ApiKeyRepo, userRepo repository.UserRepo) 
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				httpresp.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "api key owner not found")
 			} else {
-				slog.Error("v1 auth: owner lookup failed", "error", err, "api_key_id", callerKey.ID)
-				httpresp.InternalErrorMessage(c, "failed to resolve api key owner", err)
+				httpresp.InternalErrorMessage(c, "failed to resolve api key owner", err, "api_key_id", callerKey.ID)
 			}
 			c.Abort()
 			return

@@ -123,7 +123,7 @@ func TestSelect_FullChain(t *testing.T) {
 	}
 
 	c := &Selector{}
-	res, err := c.Select(snap, "openai", "gpt-4o", now())
+	res, err := c.Select(snap, "openai", "gpt-4o", now(), Prefer{})
 	if err != nil {
 		t.Fatalf("Select error: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestSelect_FallbackChain(t *testing.T) {
 		},
 	}
 
-	res, err := (&Selector{}).Select(snap, "openai-res", "gpt-4o", now())
+	res, err := (&Selector{}).Select(snap, "openai-res", "gpt-4o", now(), Prefer{})
 	if err != nil {
 		t.Fatalf("Select error: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestSelect_AllCooling(t *testing.T) {
 			7: {{KeyHash: "h", CooldownUntil: futureTime()}},
 		},
 	}
-	got, err := (&Selector{}).Select(snap, "openai", "m", now())
+	got, err := (&Selector{}).Select(snap, "openai", "m", now(), Prefer{})
 	if !errors.Is(err, ErrNoCredentialAvailable) {
 		t.Fatalf("err = %v, want %v", err, ErrNoCredentialAvailable)
 	}

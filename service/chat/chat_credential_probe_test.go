@@ -71,7 +71,7 @@ func TestProbeRecoverInGroup_RestoresAndSelectable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("assemble: %v", err)
 	}
-	selection, err := channel.DefaultSelector().Select(snapshot, consts.FormatOpenAIChat, "gpt-test", time.Now())
+	selection, err := channel.DefaultSelector().Select(snapshot, consts.FormatOpenAIChat, "gpt-test", time.Now(), channel.Prefer{})
 	if err == nil {
 		t.Fatal("Select succeeded before probe, want ErrNoCredentialAvailable")
 	}
@@ -93,7 +93,7 @@ func TestProbeRecoverInGroup_RestoresAndSelectable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("re-assemble: %v", err)
 	}
-	sel, err := channel.DefaultSelector().Select(refreshed, consts.FormatOpenAIChat, "gpt-test", time.Now())
+	sel, err := channel.DefaultSelector().Select(refreshed, consts.FormatOpenAIChat, "gpt-test", time.Now(), channel.Prefer{})
 	if err != nil {
 		t.Fatalf("Select after probe: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestProbeRecoverInGroup_LocksExhaustedGroup(t *testing.T) {
 	}
 
 	// 推进 RR 使首次 Select 命中 g1（同权重档内按装配 ID ASC：g1 先于 g2，指针 0 → g1）
-	selection, err := channel.DefaultSelector().Select(snapshot, consts.FormatOpenAIChat, "m", time.Now())
+	selection, err := channel.DefaultSelector().Select(snapshot, consts.FormatOpenAIChat, "m", time.Now(), channel.Prefer{})
 	if err == nil {
 		t.Fatal("expected Select to fail on exhausted g1, got success")
 	}

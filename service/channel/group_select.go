@@ -4,10 +4,42 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/qkf688/llmux/balancer"
 	"github.com/qkf688/llmux/models"
 )
+
+// selectGroupWithPrefer 带钉定偏好选分组：钉定组仍须过与 SelectGroup 完全相同的
+// 白名单/权重过滤（复用 groupWeightBuckets），且至少有一条可调度凭据——钉到「已无可
+// 调度凭据的死组」会把请求锁死在失败上，违背粘性「失效即静默回退」契约。命中钉定
+// 不推进档内轮询指针（钉定流量不得挪动常规流量的分摊位置）；失效则回退 SelectGroup。
+func selectGroupWithPrefer(s *Selector, snapshot *Snapshot, modelName string, preferID uint, now time.Time) (models.KeyGroup, error) {
+	if preferID != 0 {
+		if g, ok := preferredGroup(snapshot, modelName, preferID); ok && groupHasUsableCredential(snapshot, g.ID, now) {
+			return g, nil
+		}
+	}
+	return SelectGroup(s, snapshot, modelName)
+}
+
+// preferredGroup 在同套过滤产物（groupWeightBuckets）里找钉定组：不入桶 = 钉定失效。
+func preferredGroup(snapshot *Snapshot, modelName string, preferID uint) (models.KeyGroup, bool) {
+	for _, gs := range groupWeightBuckets(snapshot.Groups, snapshot.Provider.ID, modelName) {
+		for _, g := range gs {
+			if g.ID == preferID {
+				return g, true
+			}
+		}
+	}
+	return models.KeyGroup{}, false
+}
+
+// groupHasUsableCredential 钉定组是否还有可调度凭据（复用 SelectCredential 的过滤口径）。
+func groupHasUsableCredential(snapshot *Snapshot, groupID uint, now time.Time) bool {
+	_, err := usableCredentials(snapshot, groupID, now)
+	return err == nil
+}
 
 // SelectGroup 按模型白名单 + 价格权重选择分组（设计定案第 4 节第 1 级）：
 //

@@ -10,6 +10,10 @@ import (
 
 // Select 完成一次完整选路：端点 → 分组 → 凭据 → 动态 config。
 //
+// prefer 是缓存亲和的钉定偏好（零值 = 不钉、行为与历史完全一致）：分组/凭据两层
+// 命中可用即直选且不推进轮询指针，失效静默回退该层常规选择（Prefer 注释）；端点层
+// 无偏好——其选择对同一 wire 恒确定。
+//
 // 每层错误携带 sentinel（errors.Is 可判），调用方言（chat 链路 #12）按层处置：
 // 凭据层失败可组内换 key 重试 / 冷却（#13）；分组耗尽判定分组成败；
 // 端点层失败则供应商整体失败。组织级语义（ModelWithProvider.ConsecutiveFailures）
@@ -20,16 +24,16 @@ import (
 // 轮询状态（分组档内 / 凭据组内）存在 Selector 实例内：生产路径必须复用一个
 // 长寿实例（DefaultSelector），新建实例会让指针恒从 0 起算、多凭据/多组退化为
 // 确定性首选（credential_select / group_select 的轮询语义失效）。
-func (s *Selector) Select(snapshot *Snapshot, clientWire consts.WireFormat, modelName string, now time.Time) (SelectionResult, error) {
+func (s *Selector) Select(snapshot *Snapshot, clientWire consts.WireFormat, modelName string, now time.Time, prefer Prefer) (SelectionResult, error) {
 	ep, err := SelectEndpoint(snapshot, clientWire)
 	if err != nil {
 		return SelectionResult{}, err
 	}
-	g, err := SelectGroup(s, snapshot, modelName)
+	g, err := selectGroupWithPrefer(s, snapshot, modelName, prefer.GroupID, now)
 	if err != nil {
 		return SelectionResult{}, err
 	}
-	c, err := SelectCredential(s, snapshot, g.ID, now)
+	c, err := selectCredentialWithPrefer(s, snapshot, g.ID, now, prefer.CredentialID)
 	if err != nil {
 		// 凭据层失败：仍带回已选端点/分组。#6-3 探活必须锁定「刚耗尽」的那一组，
 		// 禁止调用方再跑 SelectGroup（选择即推进 RR，同权重组会切到另一组）。

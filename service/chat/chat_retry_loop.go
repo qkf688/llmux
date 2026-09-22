@@ -129,7 +129,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 		}
 		// 进程级共享选路器：轮询状态（分组档内 / 凭据组内）跨请求推进；新建实例
 		// 会让指针恒从 0 起算、多凭据/多组退化为确定性首选（见 channel.Select 注释）。
-		selection, err := channel.DefaultSelector().Select(snapshot, clientWire, in.RealModelName, time.Now())
+		selection, err := channel.DefaultSelector().Select(snapshot, clientWire, in.RealModelName, time.Now(), channel.Prefer{})
 		if err != nil {
 			// 凭据耗尽：惰性探活 temp_unsched（#6-3）。成功则刷新快照重选；
 			// 端点/分组不可用不探（非凭据层问题）。Select 在凭据失败时已带回
@@ -139,7 +139,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 				if probeRecoverInGroup(in.Ctx, provider, selection.Endpoint, snapshot.CredentialsByGroup[selection.Group.ID]) {
 					refreshed, refreshErr := channel.NewAssembler(repos()).Assemble(in.Ctx, provider)
 					if refreshErr == nil {
-						if sel2, selErr := channel.DefaultSelector().Select(refreshed, clientWire, in.RealModelName, time.Now()); selErr == nil {
+						if sel2, selErr := channel.DefaultSelector().Select(refreshed, clientWire, in.RealModelName, time.Now(), channel.Prefer{}); selErr == nil {
 							selection = sel2
 							snapshot = refreshed
 							err = nil

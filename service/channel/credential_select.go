@@ -26,6 +26,22 @@ func SelectCredential(s *Selector, snapshot *Snapshot, groupID uint, now time.Ti
 	return usable[idx], nil
 }
 
+// selectCredentialWithPrefer 带钉定偏好选凭据：钉定凭据须在可调度候选内（与
+// SelectCredential 同一套过滤），命中不推进组内轮询指针（同 selectGroupWithPrefer
+// 理由）；失效则回退常规轮询。
+func selectCredentialWithPrefer(s *Selector, snapshot *Snapshot, groupID uint, now time.Time, preferID uint) (models.Credential, error) {
+	if preferID != 0 {
+		if usable, err := usableCredentials(snapshot, groupID, now); err == nil {
+			for _, c := range usable {
+				if c.ID == preferID {
+					return c, nil
+				}
+			}
+		}
+	}
+	return SelectCredential(s, snapshot, groupID, now)
+}
+
 // FirstUsableCredential 取组内**首个**可用凭据（候选按 ID ASC，跳过 disabled/error/
 // temp_unsched 与冷却未到期者）——探活/同步/管理端诊断的确定性凭据口径。
 //

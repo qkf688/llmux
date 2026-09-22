@@ -18,7 +18,7 @@ import (
 // （2026-09-12）刚合并完三份探针编排，漂移立刻在新位置复发——「写在文档里靠自觉」挡不住。
 //
 // 判据边界（刻意不收的）：按**具体失败码**分类合法（401/403 归鉴权、429 归限流、5xx 归
-// 供应商，如 `chat_attempt_error.go` 的 429 降权、`common.ErrorTypeFromStatus`），那是
+// 供应商，如 `chat_attempt_error.go` 的 429 一票淘汰、`common.ErrorTypeFromStatus`），那是
 // 「失败之后怎么处置」的另一个决定，不在「算不算通过」这条线上。
 //
 // 放行方式只有行级标记：违规行行尾写 `//gate:upstream-status-allow <非空理由>`。

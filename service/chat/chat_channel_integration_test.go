@@ -642,7 +642,7 @@ func TestBalanceChat_SingleKeyGroup_429_OrganizationSemantics(t *testing.T) {
 	channel.ResetDefaultSelectorForTest()
 	t.Cleanup(channel.ResetDefaultSelectorForTest)
 
-	// 外层候选池只允许 1 轮：组耗尽的 ReduceWeight 中间态保留在池里可断言
+	// 外层候选池只允许 1 轮：锁住组耗尽那一刻的池状态（组耗尽即 Remove，无中间态）
 	if err := models.DB.Model(&models.Setting{}).
 		Where("key = ?", models.SettingKeyRequestMaxRetry).
 		Update("value", "1").Error; err != nil {

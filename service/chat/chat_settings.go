@@ -86,7 +86,7 @@ func getRequestTotalTimeout(ctx context.Context) int {
 }
 
 // getStreamFirstByteTimeout 获取流式响应头后首字节等待超时（秒），
-// 导出供 handler/v1 首字节看门狗使用。
+// 供本包提交门的首字节看门狗使用（chat_commit_gate / chat_stream_watchdog）。
 // 默认值与 setting schema 一致（15）。
 func getStreamFirstByteTimeout(ctx context.Context) int {
 	return settingsReader.Int(ctx, models.SettingKeyStreamFirstByteTimeout, 15, 1)

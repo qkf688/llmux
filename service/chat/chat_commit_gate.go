@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -88,8 +89,15 @@ func gateStreamCommitment(body io.ReadCloser, firstByteTimeout time.Duration) (i
 		return nil, fmt.Errorf("%w: first frame rejected: %w", errUpstreamContentInvalid, contentErr)
 	case errors.Is(scanErr, errStreamGateAccepted):
 		return capture.Replay(), nil
+	case isGateContentFault(scanErr):
+		// 预算超限（*SSEBudgetError）与畸形巨行（bufio.ErrTooLong）是「上游吐垃圾」的
+		// 主动止损/坏流判定，与错误帧同权归不可提交：组织级换下家、不冷却凭据。
+		// 归凭据级网络出口会让组内 key 逐条陪烧、重试循环反复撞回同一坏端点
+		//（垃圾洪水罚 key 的分类错位，2026-09-23 审查回批修正）。
+		capture.Close()
+		return nil, fmt.Errorf("%w: %w", errUpstreamContentInvalid, scanErr)
 	case scanErr != nil:
-		// 看门狗超时（errFirstByteWatchdog）与读错同归凭据级网络出口，原样上抛分类。
+		// 看门狗超时（errFirstByteWatchdog）与真读错同归凭据级网络出口，原样上抛分类。
 		capture.Close()
 		return nil, scanErr
 	default:
@@ -97,6 +105,14 @@ func gateStreamCommitment(body io.ReadCloser, firstByteTimeout time.Duration) (i
 		capture.Close()
 		return nil, fmt.Errorf("%w: no SSE frames in stream response", errUpstreamContentInvalid)
 	}
+}
+
+// isGateContentFault 判定扫描错误是否「上游内容坏」而非「传输失败」：预算超限是
+// 主动止损、单行超限是畸形流（下游分帧器同样 1 MiB 封顶，这种流整条链路都消费不动），
+// 都该按垃圾内容处置（组织级），与看门狗超时/读错（凭据级）区分。
+func isGateContentFault(err error) bool {
+	var budgetErr *common.SSEBudgetError
+	return errors.As(err, &budgetErr) || errors.Is(err, bufio.ErrTooLong)
 }
 
 // capturingReadCloser 包住上游 body，记录预读字节供 Replay 完整回放。仅提交门

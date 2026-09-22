@@ -63,6 +63,28 @@ func TestGateStreamCommitment_FirstByteTimeout_ReturnsWatchdogError(t *testing.T
 	}
 }
 
+// 预算超限（注释洪水撑爆预读预算）→ 按不可提交处置（组织级换下家、不冷却凭据）。
+// 垃圾洪水是端点/供应商级行为，归凭据级网络出口会让组内 key 逐条陪烧、
+// 重试循环反复撞回同一坏端点（审查回批 2026-09-23 修正分类）。
+func TestGateStreamCommitment_CommentFlood_RejectedAsContentInvalid(t *testing.T) {
+	flood := strings.Repeat(": "+strings.Repeat("x", 78)+"\n", 60_000) // ~4.7 MiB > 4 MiB 预算
+	src := io.NopCloser(strings.NewReader(flood))
+	_, err := gateStreamCommitment(src, time.Second)
+	if !errors.Is(err, errUpstreamContentInvalid) {
+		t.Fatalf("err = %v, want errUpstreamContentInvalid（预算超限=不可提交）", err)
+	}
+}
+
+// 畸形巨行（单行超 1 MiB）同归不可提交：上游吐的是坏流，不是凭据问题。
+func TestGateStreamCommitment_TooLongLine_RejectedAsContentInvalid(t *testing.T) {
+	bad := "data: " + strings.Repeat("x", 2<<20) + "\n\n"
+	src := io.NopCloser(strings.NewReader(bad))
+	_, err := gateStreamCommitment(src, time.Second)
+	if !errors.Is(err, errUpstreamContentInvalid) {
+		t.Fatalf("err = %v, want errUpstreamContentInvalid（单行超限）", err)
+	}
+}
+
 // 预读字节回放不重不漏：扫描器预读进缓冲的字节也必须完整出现在重放体头部。
 func TestCapturingReadCloser_ReplayNoGapNoDuplicate(t *testing.T) {
 	raw := bytes.Repeat([]byte("x"), 100_000)

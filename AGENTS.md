@@ -108,7 +108,7 @@ make webui            # 生产构建供 Go embed：cd webui && pnpm install && p
 ### 4.2 OCP / 扩展
 
 - **禁止**为新增供应商 type 修改 `providers.New` 分发 switch；**必须** `Register` + `RegisterMetadata`（通常在 `init`）。新 type 落地后**必须** grep 外围 type 分支并消除或显式收录。
-- **禁止**假设「注册表 = 只改一个文件」。新协议 style **必须**按最小改动集多点注册（chat Beforer/Processer + transform adapter/流路由 + `register_v1` + `consts.Style*`）。
+- **禁止**假设「注册表 = 只改一个文件」。新协议 style **必须**按最小改动集多点注册（chat Beforer/Processer + transform adapter/流路由 + `register_v1` + `consts.Style*` + `handler/v1/stream_error.go` 断流错误事件形状）。
 - 新虚拟模型策略：**必须** `RegisterSelector`；若算法不在现有 `selectBy*`，**必须**改 Service 并同步前端策略白名单。
 - 新设置项：**必须**写入 `models/setting_schema.go` + handler DTO + 前端 settings 类型/表单；键名**必须**用 `SettingKey*`，**禁止**魔法字符串。
 - 新管理 API 域：**必须**新 `handler/<domain>/` + 修改 `RegisterAll` 挂接；**禁止**写进 `main.go`。
@@ -137,7 +137,7 @@ make webui            # 生产构建供 Go embed：cd webui && pnpm install && p
 
 - 错误处理：返回带上下文的 `fmt.Errorf("...: %w", err)`（或等价包装），**禁止**静默吞错。日志用标准库 `log/slog` 结构化键值，**禁止**引入第二套日志门面。
 - HTTP 响应统一走 `httpresp`（`Success` / `BadRequest` / `NotFound` / `InternalServerError` 等），**禁止**各 handler 自造不一致信封。**HTTP 500 收口**：`InternalServerError(c, err)` 对外只发 `internal server error [req=<编号>]`（编号含来源前缀 `gw:`/`in:`，Stage 17，见 framework-conventions §5「请求编号」）、原始 err 进 `slog`；已审查静态文案走 `InternalErrorMessage(c, message, err)`（`message` 禁拼错误文本）。**禁止**把内部 err 原文回客户端。详见 `framework-conventions.md §5`。
-- **上游响应「算不算成功」只有一处判据**：`common.IsPassingStatus(statusCode)`，**通过集 = 200 与 201**。① 带上 201 是因为回 201 的兼容网关被严格 `==200` 判死会让健康检查**自动停用关联**（原因不入库，后台只见「已停用」）；② **不放宽到整个 2xx** 是因为 204/206 这类「成功但无正文」在直通链路上没有任何解析步骤会失败，判通过等于把空 body 回给调用方并给坏供应商**加权重、清零失败计数**。禁止任何包对上游状态码做判通过的裸比较（`res.StatusCode != http.StatusOK` 这类）；按具体失败码分类处置（401 归鉴权 / 429 降权 / 5xx 归供应商）不在本条限制内。机械门 `gate_upstream_status_test.go`（含 switch/case、除 100、Status 前缀、跨行写法；放行只认行级标记），约定见 `framework-conventions.md §6`。
+- **上游响应「算不算成功」只有一处判据**：`common.IsPassingStatus(statusCode)`，**通过集 = 200 与 201**。① 带上 201 是因为回 201 的兼容网关被严格 `==200` 判死会让健康检查**自动停用关联**（原因不入库，后台只见「已停用」）；② **不放宽到整个 2xx** 是因为 204/206 这类「成功但无正文」在直通链路上没有任何解析步骤会失败，判通过等于把空 body 回给调用方并给坏供应商**加权重、清零失败计数**。禁止任何包对上游状态码做判通过的裸比较（`res.StatusCode != http.StatusOK` 这类）；按具体失败码分类处置（401 归鉴权 / 429 一票淘汰 / 5xx 归供应商）不在本条限制内。机械门 `gate_upstream_status_test.go`（含 switch/case、除 100、Status 前缀、跨行写法；放行只认行级标记），约定见 `framework-conventions.md §6`。
 - 注册表重复注册：必须 **panic**（与现有 `Register*` 行为一致），测试用 `TestRegister*_DuplicatePanics` 类用例覆盖。
 - **直返实体的 JSON 形状必须两侧同源。** 被 handler 直接序列化返回的 GORM 实体（`models.Model` / `ModelWithProvider` / `Provider` / `VirtualModel` / 日志类）对外**以 PascalCase 为主**（多数字段无 json tag，走 Go 字段名），少数存量字段带 snake_case tag（限于 `models.Model` 上的 `auto_associate` / `supports_thinking` / `thinking_levels`，前端按 snake_case 消费）——形状是混合的，**不要假设整体统一**。**注意**：`ModelWithProvider` 的同名能力字段 `SupportsThinking` / `ThinkingLevels` 反而是 **PascalCase**（`ThinkingLevels` 显式 `json:"ThinkingLevels"`），即同一 thinking 语义在两个实体上键名风格**相反**，跨实体新增/复制字段时**尤其**要逐一核对。新增/修改字段**必须**先确认前端 `lib/api` 的 interface 实际读哪个键名并保证两侧一致；**禁止**只改一侧。
 - **三态指针字段禁止 `omitempty`。** `*bool` / `*[]string` 等三态字段的 nil 是「继承 / 未设置」的**有效语义**，必须序列化成 JSON `null`。`omitempty` 会把键整个省略，前端无法区分「继承」与「键不存在」，会把继承误判成 override 并在保存时回写错误值——`ModelWithProvider.ThinkingLevels` 曾因此把「继承」静默改写成「显式不约束」，使 `ClampReasoningEffort` 的白名单钳制失效。
@@ -154,7 +154,7 @@ make webui            # 生产构建供 Go embed：cd webui && pnpm install && p
 - [ ] 若改前端：`cd webui && pnpm lint` 与 `pnpm run build`（`tsc -b && vite build`）均通过；需嵌入二进制则 `make webui`
 - [ ] 新增/修改公共注册：无重复注册；相关 `TestRegister*_DuplicatePanics` 或等价测试仍通过
 - [ ] 新供应商 type：已 `Register`+`RegisterMetadata`，且 `rg` 外围 type 分支已处理
-- [ ] 新协议 style：chat 注册 + transform 适配 + `register_v1` + `consts.Style*` 四处（及流式路由若需要）均已改
+- [ ] 新协议 style：chat 注册 + transform 适配 + `register_v1` + `consts.Style*` + `handler/v1/stream_error.go` 错误事件形状五处（及流式路由若需要）均已改
 - [ ] 新设置项：`setting_schema.go` + handler DTO + 前端类型/表单三处同步；无新魔法字符串键
 - [ ] 新管理 API 域：只通过 `RegisterAll` 挂接，`main.go` 无新业务路由
 - [ ] 新管理页面：`route-config.ts` 已追加；API 在 `lib/api/modules`

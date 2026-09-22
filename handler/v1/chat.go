@@ -178,9 +178,13 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 	pr, pw := io.Pipe()
 	tee := io.TeeReader(res.Body, pw)
 
-	// 使用 WaitGroup 等待日志处理完成，防止pipe过早关闭导致数据丢失
+	// 使用 WaitGroup 等待日志处理完成，防止pipe过早关闭导致数据丢失。
+	// 等待用 defer：断流错误路径 return 前同样必须等——RecordLog 要写 updateChatLogByID，
+	// 早退会让它脱出「Shutdown 等在途请求」的覆盖，被关闭序的 models.Close() 硬切，
+	// 失败留痕丢在建行占位上（审查回批 2026-09-23）。
 	var wg sync.WaitGroup
 	wg.Add(1)
+	defer wg.Wait()
 
 	// 异步处理输出并记录 tokens
 	go func() {
@@ -209,9 +213,6 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 
 	// 关闭写入端，让读取端知道数据已发送完
 	pw.Close()
-
-	// 等待日志处理完成，确保所有数据都被正确记录
-	wg.Wait()
 }
 
 func writeHeader(c *gin.Context, ctx context.Context, stream bool, header http.Header) {

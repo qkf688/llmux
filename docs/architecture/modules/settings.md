@@ -52,9 +52,9 @@ models.Setting
 - **请求参数相关设置（全局超时/重试，2026-08 替代原 per-model time_out/max_retry）**：
   - `SettingKeyRequestHeaderTimeout`：int，Default=`30`，Min=1。单次尝试等上游响应头的窗口（`providers` 的 `ResponseHeaderTimeout`）。
   - `SettingKeyRequestTotalTimeout`：int，Default=`90`，Min=1。整个请求的预算上限（真实路径=重试循环 Deadline；虚拟路径=跨真实模型共享 globalTimer）。
-  - `SettingKeyStreamFirstByteTimeout`：int，Default=`15`，Min=1。流式响应头后首字节等待窗口，驱动 `handler/v1` 的首字节看门狗。
+  - `SettingKeyStreamFirstByteTimeout`：int，Default=`15`，Min=1。流式响应头后首字节等待窗口，驱动 `service/chat` 提交门的首字节看门狗。
   - `SettingKeyRequestMaxRetry`：int，Default=`3`，Min=1。单候选池尝试次数。
-  - 消费方：`service/chat` 的 `getRequestHeaderTimeout / getRequestTotalTimeout / GetStreamFirstByteTimeout / getRequestMaxRetry`（`chat_settings.go`）经 `settingsReader` 读取；`handler/v1` 经 `service` facade 读首字节等待。响应头超时与总超时**解耦**：等头超时不再拖垮后续候选窗口（`chat_balance.go` / `chat_balance_virtual.go`）。
+  - 消费方：`service/chat` 的 `getRequestHeaderTimeout / getRequestTotalTimeout / getStreamFirstByteTimeout / getRequestMaxRetry`（`chat_settings.go`）经 `settingsReader` 读取；首字节等待的消费方是本包提交门（`chat_commit_gate.go`，2026-09-22 起看门狗迁入 `service/chat`，`handler/v1` 不再读取）。响应头超时与总超时**解耦**：等头超时不再拖垮后续候选窗口（`chat_balance.go` / `chat_balance_virtual.go`）。
 - **资源防御相关设置（Stage 2，2026-09-17）**：
   - `SettingKeyUpstreamMaxResponseMiB`：int，Default=`32`，Min=`1`。上游单条**非流式**响应体上限（MiB，不可关闭）；消费方 `service/chat` 的 `getUpstreamMaxResponseBytes` → `limitUpstreamResponseBody`（`upstream_body_limit.go`）在 attempt 内整读加限，超限判供应商异常→组织级转移（不冷却凭据）。入站侧不走配置：硬上限 `consts.MaxInboundBodyBytes`（20 MiB）+ 错误体 1 MiB 诊断单源（`common.ReadCappedBody`），防线刻意不可被运营调小。
   - `SettingKeyRawLogFieldMaxKiB`：int，Default=`256`，Min=`16`。原始采集落库文本的单字段上限（KiB），一个设置项盖 `RequestBody`/`RawRequestBody`/`RawResponseBody`/`Error` 四字段；消费方 `getRawLogFieldMaxBytes`（`chat_settings.go`）→ 采集点统一 `common.TruncateUTF8`（rune 边界+标记）。

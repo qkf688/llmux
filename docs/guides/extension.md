@@ -20,8 +20,9 @@
 2. `service/chat`：实现并 `RegisterBeforer` / `RegisterProcesser`。
 3. `service/transform`：`RegisterAdapter`；若涉及 SSE，注册 `RegisterRealtimeRoute`。
 4. `handler/register_v1`（及 v1 handler）挂路由。
-5. 统一模型字段不足时扩展 `models/unified/`（一处定义，转换器共用）。
-6. 补 golden/单元测试；`go test ./service/transform/... ./service/chat/...`。
+5. `handler/v1/stream_error.go` 的 `writeStreamErrorEvent`：补该 style 的协议内断流错误事件形状（漏改会静默落 default 分支——客户端拿不到错误信号且无机械门会红）。
+6. 统一模型字段不足时扩展 `models/unified/`（一处定义，转换器共用）。
+7. 补 golden/单元测试；`go test ./service/transform/... ./service/chat/... ./handler/v1/...`。
 
 ### 1.3 新增虚拟模型策略
 

@@ -3,6 +3,7 @@ package v1
 import (
 	"errors"
 	"io"
+	"log/slog"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -20,9 +21,11 @@ func TestWriteStreamErrorEvent_ErrorEventShapes(t *testing.T) {
 		wantBody string
 	}{
 		{
-			name:  "anthropic 出站 event:error + overloaded_error",
+			name:  "anthropic 出站 event:error + api_error",
 			style: "anthropic",
-			wantBody: "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\"," +
+			// 断流不是过载：overloaded_error 会让 Anthropic SDK 判为可重试并整请求重放，
+			// 语义误导（审查回批 2026-09-23 修正）。
+			wantBody: "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"api_error\"," +
 				"\"message\":\"" + streamInterruptMessage + "\"}}\n\n",
 		},
 		{
@@ -135,6 +138,31 @@ func TestWriteResponseBody_NonStreamInterrupt_DoesNotAppendEnvelope(t *testing.T
 	}
 	if strings.Contains(body, "internal server error") || strings.Contains(body, `{"code"`) {
 		t.Fatalf("非流式中断被追加了信封: %q", body)
+	}
+}
+
+// 非流式中断不在 handler 自留痕：唯一一条留痕归口日志管道（RecordLog 收口），
+// handler 再自记即双份（Stage 18 口径），按行计数的告警会把一次故障算成两次。
+func TestWriteResponseBody_NonStreamInterrupt_NoSelfLog(t *testing.T) {
+	var logs strings.Builder
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	src := &chunkThenErrReader{chunk: []byte(`{"id":"x"`), err: errors.New("boom")}
+	err := writeResponseBody(c, string(consts.StyleOpenAI), false, src)
+	if err == nil {
+		t.Fatal("writeResponseBody err = nil, want 中断错误上抛")
+	}
+	if !strings.Contains(err.Error(), "write response body failed") {
+		t.Fatalf("err = %v, want 包含 write response body failed 上下文（供日志管道唯一留痕）", err)
+	}
+	if got := strings.TrimSpace(logs.String()); got != "" {
+		t.Fatalf("handler 自留了日志（want 0 条，唯一留痕归口日志管道）:\n%s", got)
 	}
 }
 

@@ -2,9 +2,11 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"time"
 
 	"github.com/qkf688/llmux/models"
@@ -43,7 +45,8 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 
 		log, output, err := in.Processer(ctx, in.Reader, in.Before.Stream, in.ReqStart, disablePerformanceTracking, disableTokenCounting)
 		if err != nil {
-			slog.Error("processer error", "log_id", in.LogID, "error", err)
+			// 失败留痕归口外层收口恰一条（Stage 18 口径）：此处禁自记——内层+外层双份
+			// 会把一次故障算成两次；细节经错误链进外层留痕、并落 chat_logs Error 字段。
 			// 失败出口回写经单源收口（Stage 17 回批）：wrapper 内部派生不陪葬请求
 			// ctx 的写库 ctx 并短路 logID==0——RecordLog 无论被传什么 ctx，此行
 			// 都落库（此前直调靠调用方恰好传 Background 保平安，无防线）。
@@ -58,7 +61,7 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 			if statErr := chatstats.RecordProviderStats(ctx, in.ProviderName, false, 0, 0); statErr != nil {
 				slog.Warn("failed to record provider stats on processer error", "error", statErr)
 			}
-			return err
+			return fmt.Errorf("processer error: %w", err)
 		}
 
 		logUpdate := *log
@@ -112,8 +115,29 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 		return nil
 	}
 	if err := recordFunc(); err != nil {
-		slog.Error("record log error", "log_id", in.LogID, "error", err)
+		// 本次后处理失败的唯一一条留痕（Stage 18 口径）：内层不自记，细节在错误链
+		// 与 chat_logs 的 Error 字段。客户端断连类降 Warn（framework-conventions §5
+		// 级别约定）：断连不是服务器故障，按 ERROR 计数的告警会被「建连即断」刷爆。
+		if isClientDisconnectErr(err) {
+			slog.Warn("record log error", "log_id", in.LogID, "error", err)
+		} else {
+			slog.Error("record log error", "log_id", in.LogID, "error", err)
+		}
 	}
+}
+
+// isClientDisconnectErr 判定客户端断连类失败（坏管道 / 连接重置 / 请求取消）。
+// 只认 errors.Is/As 语义匹配：*net.Error 覆盖 Windows WSAECONNRESET 等平台差异，
+// 不做错误文本匹配。
+func isClientDisconnectErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, io.ErrClosedPipe) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr)
 }
 
 // resolveUsageSource 决定最终写入的 usage 并打上来源标记。

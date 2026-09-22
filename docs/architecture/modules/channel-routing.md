@@ -12,7 +12,7 @@
 
 ## 2. 职责与边界
 
-- **对外暴露**：`Selector.Select(snapshot, clientWire, modelName, now) → SelectionResult`（S3-2 chat 链路接入点）；`Selector.RetryCredential(snapshot, groupID, endpoint, now) → SelectionResult`（S3-3 组内故障转移：锁组/端点重选凭据）；`Assembler.Assemble(ctx, provider) → Snapshot`（装配输入）；**探活/诊断口径**（#20 起为同步、管理端浏览、credprobe、健康检测（#21）、testapi 连通测试（#19）共用）：`SelectPrimaryEndpoint` + `GroupCandidates` / `GroupCandidatesForModel` + `NewClientForGroup` / `ProbeGroup`（内含 `FirstUsableCredential` + `NewClientFromSelection`，→ 可直接打上游的客户端：`Models()` 或 `BuildReq` + `Do`）。**#24 按凭据测试是个例外**：只借 `SelectPrimaryEndpoint` 定位端点，凭据装配直取 `NewClientFromSelection`（喂指定那一条 key），**不经** `ProbeGroup`/`FirstUsableCredential`——后二者的「组内首个可用」语义会把坏 key 误判成同组另一把好 key 的健康，逐 key 探测必须绕开它们
+- **对外暴露**：`Selector.Select(snapshot, clientWire, modelName, now, prefer) → SelectionResult`（S3-2 chat 链路接入点；`prefer` 为缓存亲和钉定偏好，零值 = 不钉、行为与历史一致）；`Selector.RetryCredential(snapshot, groupID, endpoint, now) → SelectionResult`（S3-3 组内故障转移：锁组/端点重选凭据）；`Assembler.Assemble(ctx, provider) → Snapshot`（装配输入）；**探活/诊断口径**（#20 起为同步、管理端浏览、credprobe、健康检测（#21）、testapi 连通测试（#19）共用）：`SelectPrimaryEndpoint` + `GroupCandidates` / `GroupCandidatesForModel` + `NewClientForGroup` / `ProbeGroup`（内含 `FirstUsableCredential` + `NewClientFromSelection`，→ 可直接打上游的客户端：`Models()` 或 `BuildReq` + `Do`）。**#24 按凭据测试是个例外**：只借 `SelectPrimaryEndpoint` 定位端点，凭据装配直取 `NewClientFromSelection`（喂指定那一条 key），**不经** `ProbeGroup`/`FirstUsableCredential`——后二者的「组内首个可用」语义会把坏 key 误判成同组另一把好 key 的健康，逐 key 探测必须绕开它们
 - **依赖谁**：`repository.*`（构造注入 `*repository.Repositories`，不取包级默认）；`models` 四表实体；`consts.Protocol*`/`WireFormatOfProtocol`/`TypeOfProtocol`；`common/credentialcrypto.Default()`（main 装配注入）；`providers`（仅 `NewClientFromSelection` 用 `providers.New` 造客户端）
 - **不负责什么**：发上游请求与协议字段转换（调用方各自决定打什么端点、超时多少）；透传判定与转换链路编排（chat 链路消费 SelectionResult 后自判）；凭据状态机写入（CooldownUntil 只读不写，S4 接管）；请求日志落库（#13 消费命中信息）
 - **依赖方向**：`service/channel` → `providers` 是合法下沉方向（`service` → `providers`），且 channel 只**装配**客户端（选路产物 → `providers.New`），不发起调用——调用与超时留在 credprobe/modelsync/handler 侧
@@ -21,12 +21,14 @@
 
 ```
 service/channel/
-  types.go                # Snapshot（装配产出）/ SelectionResult（命中+动态 config）/ 三层 sentinel errors
+  types.go                # Snapshot（装配产出）/ SelectionResult（命中+动态 config）/ Prefer（缓存亲和钉定偏好）/ 三层 sentinel errors
   assemble.go             # Assembler: repository → Snapshot（凭据经 ListByGroups 按分组/号池收敛，三路数据 ID ASC 稳定）
   selector.go             # Select / RetryCredential 编排门面（三层 + 解密 + config 尾部复用）+ DefaultSelector 单例
+                          # selectCredentialWithPrefer：钉定凭据须在可调度候选内、命中不推进轮询；失效回退 SelectCredential
   endpoint_select.go      # SelectEndpoint：入站 wire ∈ enabled 端点协议 → 透传路径；否则主协议端点（转换路径）
                           # SelectPrimaryEndpoint：诊断口径——主协议启用端点取 ID 最小，不碰轮询状态
   group_select.go         # SelectGroup：白名单过滤（空=不限）→ weight 聚合档 → 档间加权随机 → 档内轮询
+                          # selectGroupWithPrefer：钉定组须过同套桶过滤 + 至少一条可调度凭据、命中不推进轮询；失效回退 SelectGroup
                           # GroupCandidates：诊断遍历候选（全部组、ID ASC，不过滤白名单/weight）
                           # GroupCandidatesForModel：连通测试候选（只按白名单过滤、ID ASC，不看 weight、不推进轮询）
   credential_select.go    # SelectCredential：active + 非冷却（CooldownUntil 读判定）→ 组内轮询（选择即推进）
@@ -37,7 +39,7 @@ service/channel/
                           # ProbeGroup：同上但回传链路标识（组 / 凭据 ID / 掩码 key / 实际出站 URL），掩码由包内同一份明文算出（testapi #19 与 #24 用）
                           # DropCustomModels：剥 custom_models，使 Models() 真打上游
   rrstate.go              # Selector: 轮询指针容器（sync.Mutex + map，分组档/凭据组两维）
-                          # 测试：endpoint_group_select_test.go / credential_select_test.go /
+                          # 测试：endpoint_group_select_test.go / credential_select_test.go / select_prefer_test.go /
                           #       config_build_test.go / assemble_test.go / rrstate_test.go / probe_test.go
 consts/protocol.go        # Protocol* 常量 + ProtocolOfType（type→protocol）+ TypeOfProtocol / WireFormatOfProtocol（反向映射）
 ```
@@ -47,7 +49,7 @@ consts/protocol.go        # Protocol* 常量 + ProtocolOfType（type→protocol�
 | 契约 | 职责 | 定义位置 | 实现方 |
 |------|------|----------|--------|
 | `Assembler.Assemble(ctx, provider) → *Snapshot` | 一次拉取端点/分组/凭据归并成快照；端点/分组/凭据统一按 ID ASC 排序（轮询取模基线）；凭据按本供应商分组与号池的 ID 集合收敛（`CredentialRepo.ListByGroups`），内联与号池两侧归入同一分组 | `service/channel/assemble.go` | `repository.Endpoint/KeyGroup/Credential` |
-| `Selector.Select(snapshot, clientWire, modelName, now) → SelectionResult` | 三层编排：端点 → 分组 → 凭据 → 解密 → config；每层错误携带 sentinel | `service/channel/selector.go` | 同包三层函数 |
+| `Selector.Select(snapshot, clientWire, modelName, now, prefer) → SelectionResult` | 三层编排：端点 → 分组 → 凭据 → 解密 → config；每层错误携带 sentinel。`prefer`（缓存亲和，2026-09-23）是**偏好覆盖**：分组/凭据两层命中可用即直选且不推进轮询指针，失效静默逐层回退常规选择，不改成败判定；端点层无偏好（对同一 wire 恒确定，见 §5） | `service/channel/selector.go` | 同包三层函数 |
 | `Selector.RetryCredential(snapshot, groupID, endpoint, now) → SelectionResult` | 组内重选凭据（#13 故障转移）：锁**原分组/原端点**重选下一条可用凭据（冷却中的被剔除、轮询指针推进）；返回新的 `SelectionResult`（含按新凭据重建的 `Config`/`UpstreamURL`）；组内无可用 → `ErrNoCredentialAvailable` 上抛，由 chat 链路做组织级淘汰（设计定案「分组失败 → 供应商整体失败」，本层不换组） | `service/channel/selector.go` | 复用 `SelectCredential` + `DecryptCredentialKey` + `BuildConfig`（与 `Select` 同 tail） |
 | `SelectEndpoint` | 同协议 wire 匹配选端点（透传）；无匹配回落主协议端点（`ProtocolOfType(Provider.Type)`，转换路径）；disabled 与未知协议端点不参与；无可用 → `ErrEndpointUnavailable` | `service/channel/endpoint_select.go` | 同文件 |
 | `SelectGroup` | 白名单过滤（空=不限）→ 按 weight 聚合档 → `balancer.WeightedRandom` 档间随机 → 档内轮询；weight<=0 不参与；无命中 → `ErrNoGroupMatches` | `service/channel/group_select.go` | `balancer.WeightedRandom`（复用） |
@@ -72,9 +74,10 @@ consts/protocol.go        # Protocol* 常量 + ProtocolOfType（type→protocol�
 - **两套口径不可混用（#20 立）**：**生产选路**＝`Select` / `RetryCredential`（入站 wire 匹配 + 白名单 + 加权随机 + 轮询推进，必须复用 `DefaultSelector()` 才谈得上压力分摊）；**探活/诊断**＝`SelectPrimaryEndpoint` + `GroupCandidates`（同步/浏览/健康检测）或 `GroupCandidatesForModel`（连通测试）+ `FirstUsableCredential` + `NewClientFromSelection`（确定性、无状态、不碰 `DefaultSelector()`）。把诊断流量接进生产口径的代价已被论证：管理端批量测试（前端并发 3）会把生产轮询指针按点击次数推进，一次点击静默重排真实流量的 key 分配；且上游目录里的模型名通常不在分组白名单，走 `SelectGroup` 会直接 `ErrNoGroupMatches`，把完全可用的 key 测成失败。诊断口径内部分组候选再分两档，判据是「白名单此刻是不是可信输入」：拉目录/健康检测不能被尚未同步的白名单挡在门外，而连通测试要给的是「生产走得到吗」这个结论
 - **档间加权 = 单组权重而非档总权重**：同权重组由轮询打散为等概率，档权重只表达「某权重档的选中概率」，防止多组低权把单个高权组挤出随机池
 - **组内候选顺序稳定性**：装配按凭据 ID ASC 排序，repository List 不保证顺序；轮询取模的正确性依赖该不变式
+- **缓存亲和偏好（`Prefer`，2026-09-23）**：`Prefer{GroupID, CredentialID}` 是 chat 层传入的钉定偏好（来源 `balancer` 粘性表，编排单源 `service/chat/chat_affinity.go`）——命中可用即直选且**不推进轮询指针**（钉定流量不得挪动常规流量的分摊位置），失效静默回退该层常规选择。刻意**不含 EndpointID**：端点按「入站 wire 命中或主协议」确定性选择（设计定案不做同协议多 URL），同一对话 wire 不变即天然稳定。钉定组还须**至少一条可调度凭据**（死组不钉，防请求锁死在失败组上）；`RetryCredential` 不接 prefer（钉定凭据刚失败/冷却，锁组重选语义不变）
 - **快照语义**：单供应商数据；`CredentialsByGroup` 组键恒存在（含空切片），选择路径统一收口 `ErrNoCredentialAvailable`
 - 契约测试分布在同目录 `*_test.go`：白名单/加权分布/轮询互斥并发（`rrstate_test.go` 锁指针精确语义）/冷却到期恢复/config 被 `providers.New` 反序列化/诊断口径确定性（`FirstUsableCredential` 不推进轮询指针、`NewClientFromSelection` 的凭据注入与 `custom_models` 剥离、`GroupCandidatesForModel` 只按白名单过滤且限本供应商，见 `probe_test.go` 与 `endpoint_group_select_test.go`）
 
 ---
 
-*本文档随 provider-channels S3-1 落地（2026-08-31）首次建立；S3-2 接入 chat 链路后更新「对外暴露」与 interactions.md；#20（2026-09-09）抽出探活/诊断共享装配后补「两套口径」约定与 `probe.go` 契约。*
+*本文档随 provider-channels S3-1 落地（2026-08-31）首次建立；S3-2 接入 chat 链路后更新「对外暴露」与 interactions.md；#20（2026-09-09）抽出探活/诊断共享装配后补「两套口径」约定与 `probe.go` 契约；2026-09-23 缓存亲和 `Prefer` 偏好落地（分组/凭据两层，不钉端点）。*

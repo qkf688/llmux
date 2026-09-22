@@ -58,6 +58,8 @@ models.Setting
 - **资源防御相关设置（Stage 2，2026-09-17）**：
   - `SettingKeyUpstreamMaxResponseMiB`：int，Default=`32`，Min=`1`。上游单条**非流式**响应体上限（MiB，不可关闭）；消费方 `service/chat` 的 `getUpstreamMaxResponseBytes` → `limitUpstreamResponseBody`（`upstream_body_limit.go`）在 attempt 内整读加限，超限判供应商异常→组织级转移（不冷却凭据）。入站侧不走配置：硬上限 `consts.MaxInboundBodyBytes`（20 MiB）+ 错误体 1 MiB 诊断单源（`common.ReadCappedBody`），防线刻意不可被运营调小。
   - `SettingKeyRawLogFieldMaxKiB`：int，Default=`256`，Min=`16`。原始采集落库文本的单字段上限（KiB），一个设置项盖 `RequestBody`/`RawRequestBody`/`RawResponseBody`/`Error` 四字段；消费方 `getRawLogFieldMaxBytes`（`chat_settings.go`）→ 采集点统一 `common.TruncateUTF8`（rune 边界+标记）。
+- **缓存亲和相关设置（2026-09-23）**：
+  - `SettingKeyCacheAffinityEnabled`：bool，Default=`true`。缓存亲和（粘性选路）总开关：同一对话钉住同一真实模型×关联×分组×凭据，提高供应商提示词缓存命中；关闭 = 选路行为与现状（加权随机+轮询）完全一致。消费方 `service/chat` 的 `getCacheAffinityEnabled`（`chat_settings.go`）→ 编排单源 `chat_affinity.go`（钉定读取与成功改钉的唯一入口）。
 - **凭据健康相关设置（S4 #6-1/#6-2/#6-3：可配冷却窗口 + 按失败类型分窗 + 鉴权失败判停阈值 + 惰性探活间隔）**：
   - `SettingKeyCredHealthCooldown429Sec`：int，Default=`60`，Min=1。凭据 429 限流冷却窗口（秒）。
   - `SettingKeyCredHealthCooldownServerSec`：int，Default=`60`，Min=1。凭据服务端错误冷却窗口（秒，5xx/超时/网络）。

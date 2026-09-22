@@ -117,22 +117,10 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 
 	res, err := input.Client.Do(req)
 	if err != nil {
-		errorUpdate := models.ChatLog{
-			Status: "error",
-			Error:  err.Error(),
-			// 回填端到端耗时：上游请求已发出，建行快照不含任何上游耗时。
-			ProxyTime: time.Since(input.Start),
-		}
-		if logRawOptions.RequestHeaders {
-			errorUpdate.RequestHeaders = string(logSnapshot.RequestHeadersJSON)
-		}
-		if logRawOptions.RequestBody {
-			errorUpdate.RequestBody = logSnapshot.RequestBodyStr
-		}
-		if logRawOptions.RawRequestBody {
-			errorUpdate.RawRequestBody = logSnapshot.RawRequestBodyStr
-		}
-		updateChatLogByID(input.Ctx, logID, errorUpdate, "failed to update log status")
+		// 回填端到端耗时：上游请求已发出，建行快照不含任何上游耗时。
+		updateChatLogByID(input.Ctx, logID,
+			buildAttemptFailureUpdate(err, time.Since(input.Start), logRawOptions, logSnapshot, nil, ""),
+			"failed to update log status")
 		// 组织级 adjustment 不再在此累计：网络/超时是凭据级失败（#13），由 retry loop
 		// 组耗尽时统一补 ConsecutiveFailures/衰减（设计定案第 5 节「层内耗尽才累计
 		// 组织级」）。chatstats 统计保留现状（凭据级失败也是该供应商请求失败）。
@@ -157,14 +145,28 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 
 	// Stage 2-C 资源防御：非流式上游响应整读体积闸（超限=组织级转移不冷却 key；
 	// 读体错误=与 Do 分支同归凭据级网络）。SSE 直通本闸（见 limitUpstreamResponseBody）。
-	switch guardErr := limitUpstreamResponseBody(input.Ctx, res); {
+	materializedBody, materialized, guardErr := limitUpstreamResponseBody(input.Ctx, res)
+	switch {
 	case guardErr == nil:
-		// 正常：Body 已回填为可重读内存字节，下游采集/转换/直通照常消费。
+		// 正常：非流式 Body 已回填为可重读内存字节，下游采集/转换/直通照常消费。
 	case errors.Is(guardErr, errUpstreamBodyOverflow):
 		return handleUpstreamBodyOverflow(input, res, logID, logRawOptions, logSnapshot, guardErr)
 	default:
 		return handleUpstreamBodyReadError(input, res, logID, logRawOptions, logSnapshot, guardErr)
 	}
+
+	// 提交门（commit-before-write）：写给客户端之前先验「内容可提交」（流式首帧 /
+	// 非流式 JSON 载荷）。失败在此回到重试循环换下家——HTTP 头写出后就再也换不了，
+	// 这是唯一的失败回收窗口。流式 body 顺带换成可重放体，下游无感知。
+	gatedRes, gateErr := gateUpstreamCommitment(input, res, materializedBody, materialized)
+	if gateErr != nil {
+		if errors.Is(gateErr, errUpstreamContentInvalid) {
+			return handleUpstreamContentInvalid(input, res, logID, logRawOptions, logSnapshot, gateErr)
+		}
+		// 看门狗超时 / 预读读错：与读体失败同归凭据级网络（冷却 + 组内换 key）。
+		return handleUpstreamBodyReadError(input, res, logID, logRawOptions, logSnapshot, gateErr)
+	}
+	res = gatedRes
 
 	rawResponseBodyStr := captureRawResponseBody(input.Ctx, logRawOptions, res)
 
@@ -188,28 +190,10 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		tm := transform.NewTransformerManager(clientFormat, upstreamFormat)
 		convertedRes, err := tm.ProcessResponse(res, sideChannel)
 		if err != nil {
-			errorUpdate := models.ChatLog{
-				Status: "error",
-				Error:  fmt.Sprintf("transform response error: %v", err),
-				// 同 Client.Do 失败分支：错误日志回填真实端到端耗时。
-				ProxyTime: time.Since(input.Start),
-			}
-			if logRawOptions.ResponseHeaders {
-				errorUpdate.ResponseHeaders = string(responseHeadersJSON(res.Header))
-			}
-			if logRawOptions.RequestHeaders {
-				errorUpdate.RequestHeaders = string(logSnapshot.RequestHeadersJSON)
-			}
-			if logRawOptions.RequestBody {
-				errorUpdate.RequestBody = logSnapshot.RequestBodyStr
-			}
-			if logRawOptions.RawRequestBody {
-				errorUpdate.RawRequestBody = logSnapshot.RawRequestBodyStr
-			}
-			if logRawOptions.RawResponseBody && rawResponseBodyStr != "" {
-				errorUpdate.RawResponseBody = rawResponseBodyStr
-			}
-			updateChatLogByID(input.Ctx, logID, errorUpdate, "failed to update log status")
+			// 同 Client.Do 失败分支：错误日志回填真实端到端耗时。
+			updateChatLogByID(input.Ctx, logID,
+				buildAttemptFailureUpdate(fmt.Errorf("transform response error: %v", err), time.Since(input.Start), logRawOptions, logSnapshot, res, rawResponseBodyStr),
+				"failed to update log status")
 			applyProviderFailureAdjustments(input.Ctx, input.ModelWithProvider.ID, input.Provider.Name, input.ModelWithProvider.ProviderModel)
 			if err := chatstats.RecordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
 				slog.Warn("failed to record provider stats", "provider", input.Provider.Name, "error", err)

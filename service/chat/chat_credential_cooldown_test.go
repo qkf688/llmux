@@ -213,8 +213,10 @@ func TestExecuteSingleProviderAttempt_NonOK429_WritesCredentialCooldown(t *testi
 	if !result.CredentialFailure {
 		t.Fatalf("CredentialFailure = false, want true（429 是凭据级失败）")
 	}
-	if !result.ReduceWeight {
-		t.Fatalf("ReduceWeight = false, want true（单 key 阶段组织级标记保留现状语义）")
+	// 429 一票淘汰（2026-09-22 有意废弃旧「ReduceWeight 留池降权」语义）：
+	// 限流候选本次请求内不再回头，防重试循环随机撞回刚限流的供应商。
+	if !result.RemoveWeight || !result.RemovePriority {
+		t.Fatalf("RemoveWeight=%v RemovePriority=%v, want 双 true（429 一票淘汰）", result.RemoveWeight, result.RemovePriority)
 	}
 
 	var got models.Credential

@@ -26,20 +26,6 @@ func selectionForEndpoint(protocol string) channel.SelectionResult {
 	}
 }
 
-func TestApplyProviderSelectionResult_ReduceWeight(t *testing.T) {
-	weightItems := map[uint]int{1: 9}
-	priorityItems := map[uint]int{1: 7}
-
-	applyProviderSelectionResult(weightItems, priorityItems, 1, singleProviderAttemptResult{ReduceWeight: true})
-
-	if weightItems[1] != 6 {
-		t.Fatalf("expected weight reduced to 6, got %d", weightItems[1])
-	}
-	if priorityItems[1] != 7 {
-		t.Fatalf("expected priority unchanged, got %d", priorityItems[1])
-	}
-}
-
 func TestApplyProviderSelectionResult_RemoveWeightAndPriority(t *testing.T) {
 	weightItems := map[uint]int{1: 9}
 	priorityItems := map[uint]int{1: 7}
@@ -573,14 +559,17 @@ func TestExecuteSingleProviderAttempt_DoError_BackfillsProxyTime(t *testing.T) {
 
 // TestExecuteSingleProviderAttempt_TransformResponseError_BackfillsProxyTime：
 // 协议转换失败（transform response err 分支）时错误日志同样回填 ProxyTime。
-// 构造：style=openai × 上游 type=anthropic（wire format 不同 → 强制转换）+
-// 上游 sleep 300ms 后返回 200 + 非 JSON body → ProcessResponse 解析必失败。
+// 构造：style=anthropic × 上游 type=openai（wire format 不同 → 强制转换）+
+// 上游 sleep 300ms 后返回 200 + 合法 JSON 对象但 OpenAI 响应形状非法
+// （usage 字段类型错，typed DTO 解析必失败）→ ProcessResponse 解析必失败。
+// 夹具取「过提交门但转换解析必败」：提交门（2026-09-22）会先拦下非 JSON 坏体
+// （`not-json` 类夹具现归内容门出口），要触达转换分支必须用合法 JSON 对象。
 // 该出口的回填与建行之间隔着真实上游耗时，删除回填后落库值跌回建行近零快照、
 // 断言变红——与 Do err / 非 200 用例同构，真正锁定回填行为。
 func TestExecuteSingleProviderAttempt_TransformResponseError_BackfillsProxyTime(t *testing.T) {
 	initChatRecordTestDB(t)
 
-	providerRow := models.Provider{Name: "p1", Type: providers.TypeAnthropic}
+	providerRow := models.Provider{Name: "p1", Type: providers.TypeOpenAI}
 	if err := models.DB.Create(&providerRow).Error; err != nil {
 		t.Fatalf("create provider: %v", err)
 	}
@@ -593,11 +582,11 @@ func TestExecuteSingleProviderAttempt_TransformResponseError_BackfillsProxyTime(
 		time.Sleep(300 * time.Millisecond)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`not-json`))
+		_, _ = w.Write([]byte(`{"usage":"boom"}`))
 	}))
 	defer srv.Close()
 
-	chatModel, err := providers.New(providers.TypeAnthropic, fmt.Sprintf(`{"base_url":%q,"api_key":"k","version":"2023-06-01","auth_type":"x-api-key"}`, srv.URL), "")
+	chatModel, err := providers.New(providers.TypeOpenAI, fmt.Sprintf(`{"base_url":%q,"api_key":"k"}`, srv.URL), "")
 	if err != nil {
 		t.Fatalf("new provider: %v", err)
 	}
@@ -605,13 +594,13 @@ func TestExecuteSingleProviderAttempt_TransformResponseError_BackfillsProxyTime(
 	executeSingleProviderAttempt(singleProviderAttemptInput{
 		Ctx:               context.Background(),
 		Start:             time.Now(),
-		Style:             string(consts.StyleOpenAI),
-		Before:            Before{Model: "m1", Stream: false, raw: []byte(`{"model":"m1","messages":[{"role":"user","content":"hi"}]}`)},
+		Style:             string(consts.StyleAnthropic),
+		Before:            Before{Model: "m1", Stream: false, raw: []byte(`{"model":"m1","max_tokens":64,"messages":[{"role":"user","content":"hi"}]}`)},
 		RealModelName:     "m1",
 		ReqMeta:           models.ReqMeta{Header: http.Header{}},
 		Provider:          providerRow,
 		ModelWithProvider: mwp,
-		Selection:         selectionForEndpoint(string(consts.ProtocolAnthropic)),
+		Selection:         selectionForEndpoint(string(consts.ProtocolOpenAI)),
 		ChatModel:         chatModel,
 		Client:            srv.Client(),
 	}, make(chan models.ChatLog))

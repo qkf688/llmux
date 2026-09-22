@@ -90,12 +90,13 @@ func handleNonOKProviderResponse(
 		}
 	}
 
-	if res.StatusCode == http.StatusTooManyRequests {
-		return singleProviderAttemptResult{CredentialFailure: true, ReduceWeight: true}
-	}
 	if classifyCredentialFailure(res.StatusCode) {
-		// 5xx / 401 / 403：凭据级失败，组织级淘汰标记保留（现状语义），
+		// 5xx / 401 / 403 / 429：凭据级失败，组织级淘汰标记保留（现状语义），
 		// 组内耗尽才真正消费（retry loop 淘汰候选时同现状）。
+		// 429 一票淘汰（2026-09-22 有意废弃旧「ReduceWeight 留池降权」语义）：
+		// 限流候选本次请求内不再回头，防重试循环随机撞回刚限流的供应商——与
+		// 「失败即换下一家」语义对齐；组内换 key 仍优先（CredentialFailure 标记），
+		// 同组未限流 key 不受影响。
 		return singleProviderAttemptResult{CredentialFailure: true, RemoveWeight: true, RemovePriority: true}
 	}
 	// 其余 4xx（请求体被拒等）：请求本身的问题，换 key 无意义——组织级失败，不标凭据级。
@@ -108,11 +109,35 @@ func applyProviderFailureAdjustments(ctx context.Context, modelProviderID uint, 
 	adjustment.ApplyPriorityDecayByModelProviderID(ctx, modelProviderID, providerName, providerModel)
 }
 
-func applyProviderSelectionResult(weightItems, priorityItems map[uint]int, id uint, result singleProviderAttemptResult) {
-	if result.ReduceWeight {
-		weightItems[id] -= weightItems[id] / 3
-		return
+// buildAttemptFailureUpdate 组装「尝试失败」日志更新（Status=error + 原因 + 终值耗时 +
+// 可选采集字段）。全部失败出口共用此处的字段选择逻辑（DRY：此前 Client.Do 错误 /
+// 转换失败 / 读体超限 / 读体失败 / 提交门拒绝五处各写一份近似块，改一处漏四处）。
+// res 为 nil 时跳过响应头采集；rawResponseBodyStr 非空且开启采集时落 RawResponseBody。
+func buildAttemptFailureUpdate(cause error, proxyTime time.Duration, logRawOptions models.RawLogOptions, logSnapshot requestLogSnapshot, res *http.Response, rawResponseBodyStr string) models.ChatLog {
+	errorUpdate := models.ChatLog{
+		Status:    "error",
+		Error:     cause.Error(),
+		ProxyTime: proxyTime,
 	}
+	if res != nil && logRawOptions.ResponseHeaders {
+		errorUpdate.ResponseHeaders = string(responseHeadersJSON(res.Header))
+	}
+	if logRawOptions.RequestHeaders {
+		errorUpdate.RequestHeaders = string(logSnapshot.RequestHeadersJSON)
+	}
+	if logRawOptions.RequestBody {
+		errorUpdate.RequestBody = logSnapshot.RequestBodyStr
+	}
+	if logRawOptions.RawRequestBody {
+		errorUpdate.RawRequestBody = logSnapshot.RawRequestBodyStr
+	}
+	if logRawOptions.RawResponseBody && rawResponseBodyStr != "" {
+		errorUpdate.RawResponseBody = rawResponseBodyStr
+	}
+	return errorUpdate
+}
+
+func applyProviderSelectionResult(weightItems, priorityItems map[uint]int, id uint, result singleProviderAttemptResult) {
 	if result.RemoveWeight {
 		delete(weightItems, id)
 	}

@@ -85,10 +85,10 @@ func getRequestTotalTimeout(ctx context.Context) int {
 	return settingsReader.Int(ctx, models.SettingKeyRequestTotalTimeout, 90, 1)
 }
 
-// GetStreamFirstByteTimeout 获取流式响应头后首字节等待超时（秒），
+// getStreamFirstByteTimeout 获取流式响应头后首字节等待超时（秒），
 // 导出供 handler/v1 首字节看门狗使用。
 // 默认值与 setting schema 一致（15）。
-func GetStreamFirstByteTimeout(ctx context.Context) int {
+func getStreamFirstByteTimeout(ctx context.Context) int {
 	return settingsReader.Int(ctx, models.SettingKeyStreamFirstByteTimeout, 15, 1)
 }
 

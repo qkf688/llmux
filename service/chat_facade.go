@@ -54,5 +54,3 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 }
 
 func GetStripResponseHeaders(ctx context.Context) bool { return chat.GetStripResponseHeaders(ctx) }
-
-func GetStreamFirstByteTimeout(ctx context.Context) int { return chat.GetStreamFirstByteTimeout(ctx) }

@@ -630,10 +630,11 @@ func TestBalanceChat_CredentialsExhausted_OrganizationFailure(t *testing.T) {
 	}
 }
 
-// 单 key 组（存量迁移形态）回归等价（AC-6）：429 组耗尽 → 组织级失败按
-// **ReduceWeight**（权重减 1/3 而非移除）淘汰，ConsecutiveFailures=1 + 冷却写库。
-// 断言窗口：max_retry=1 锁住「组耗尽那一刻」的池状态——若用默认 3，下一轮 retry
-// 会因组内无可用凭据（唯一 key 已冷却）把候选彻底删掉，观察不到 ReduceWeight 语义。
+// 单 key 组（存量迁移形态）回归等价（AC-6）：429 组耗尽 → 候选**一票淘汰**
+// （RemoveWeight+RemovePriority），ConsecutiveFailures=1 + 冷却写库。
+// 2026-09-22 有意废弃旧「ReduceWeight 留池降权」语义：留池会让重试循环随机撞回刚
+// 限流的供应商，与「失败即换下一家」语义冲突（组内换 key 仍优先，同组未限流 key
+// 不受影响）。断言窗口：max_retry=1 锁住「组耗尽那一刻」的池状态。
 // 顺带锁「冷却避免同请求重复轰击 429 上游」：改造前单 key 429 会每轮 retry 再打一次。
 func TestBalanceChat_SingleKeyGroup_429_OrganizationSemantics(t *testing.T) {
 	initChatRecordTestDB(t)
@@ -703,14 +704,12 @@ func TestBalanceChat_SingleKeyGroup_429_OrganizationSemantics(t *testing.T) {
 		t.Fatalf("upstream hits = %d, want 1（冷却避免同请求重复轰击 429 上游）", hits.Load())
 	}
 
-	// 429 → ReduceWeight（减 1/3）而非 Remove：候选留池、权重降为 7（10-10/3）
-	//——与改造前 handleNonOKProviderResponse 的 429 分支语义一致
-	weight, ok := pool.WeightItems[mwp.ID]
-	if !ok {
-		t.Fatalf("WeightItems[%d] removed, want 7（429 语义是 ReduceWeight 而非移除）", mwp.ID)
+	// 429 一票淘汰：候选移出池（与 5xx 同语义），组内换 key 耗尽后不再回头
+	if _, ok := pool.WeightItems[mwp.ID]; ok {
+		t.Fatalf("WeightItems[%d] still present, want removed（429 一票淘汰）", mwp.ID)
 	}
-	if weight != 7 {
-		t.Fatalf("WeightItems[%d] = %d, want 7（10 - 10/3）", mwp.ID, weight)
+	if _, ok := pool.PriorityItems[mwp.ID]; ok {
+		t.Fatalf("PriorityItems[%d] still present, want removed（429 一票淘汰）", mwp.ID)
 	}
 
 	var mwpReload models.ModelWithProvider
@@ -730,7 +729,7 @@ func TestBalanceChat_SingleKeyGroup_429_OrganizationSemantics(t *testing.T) {
 	}
 }
 
-// 5xx 全组耗尽 → Remove 组织级语义（与 429 的 ReduceWeight 区分，AC-2 另一半）：
+// 5xx 全组耗尽 → Remove 组织级语义（与 429 一票淘汰同形）：
 // 候选从池中移除（RemoveWeight+RemovePriority）+ ConsecutiveFailures=1 +
 // key 冷却 reason=http_500。5xx 是服务端持续故障信号，不留池（与现状 5xx 分支一致）。
 func TestBalanceChat_ServerErrors_RemoveOrganizationSemantics(t *testing.T) {
@@ -788,7 +787,7 @@ func TestBalanceChat_ServerErrors_RemoveOrganizationSemantics(t *testing.T) {
 		t.Fatal("BalanceChat err = nil, want 失败")
 	}
 
-	// 5xx → Remove（候选彻底移出池），与 429 的 ReduceWeight（留池降权）语义区分
+	// 5xx → Remove（候选彻底移出池）
 	if _, ok := pool.WeightItems[mwp.ID]; ok {
 		t.Fatalf("WeightItems[%d] still present, want removed（5xx 语义是 RemoveWeight）", mwp.ID)
 	}

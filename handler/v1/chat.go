@@ -175,18 +175,8 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 	res := balanced.Response
 	defer res.Body.Close()
 
-	// 首字节看门狗：仅流式路径。包在 tee 之前覆盖直通与转换两条链路；
-	// 计时起点 = 首次 Read（io.Copy 在 writeHeader 之后才启动）。
-	// 超时触发后 io.Copy 返回哨兵错误，错误分支据此写协议 error 事件。
-	src := res.Body
-	var watchdog *firstByteWatchdogReader
-	if before.Stream {
-		watchdog = newFirstByteWatchdogReader(src, time.Duration(service.GetStreamFirstByteTimeout(ctx))*time.Second)
-		src = watchdog
-	}
-
 	pr, pw := io.Pipe()
-	tee := io.TeeReader(src, pw)
+	tee := io.TeeReader(res.Body, pw)
 
 	// 使用 WaitGroup 等待日志处理完成，防止pipe过早关闭导致数据丢失
 	var wg sync.WaitGroup
@@ -208,16 +198,12 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 	}()
 
 	writeHeader(c, ctx, before.Stream, res.Header)
-	if _, err := io.Copy(c.Writer, tee); err != nil {
-		if watchdog != nil && watchdog.TimedOut() {
-			// 响应头已提交（200/SSE）：不能走 InternalServerError（JSON 会污染
-			// SSE 流），写协议 error 事件收尾；pw.CloseWithError 让日志侧
-			// processer 走错误分支（Status:error + ProxyTime 回填）。
-			writeStreamErrorEvent(c, style)
-		} else {
-			httpresp.InternalServerError(c, err)
-		}
-		pw.CloseWithError(err)
+	// 响应头已提交后任何失败都不能再走 httpresp 收口（JSON 会污染已开始的流），
+	// 收尾口径统一在 writeResponseBody：流式写协议内 error 事件，非流式静默截断。
+	// 「头后无数据」类失败已在 service 提交门（commit-before-write）被拦下换下家，
+	// 走到这里的中断都是提交后的残余窗口（上游断流/写客户端失败）。
+	if copyErr := writeResponseBody(c, style, before.Stream, tee); copyErr != nil {
+		pw.CloseWithError(copyErr)
 		return
 	}
 

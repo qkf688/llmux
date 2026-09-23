@@ -68,7 +68,7 @@ make webui            # 生产构建供 Go embed：cd webui && pnpm install && p
 # Windows：.\run.bat（构建+启动，可 --no-build）/ .\dev.bat|.\dev.ps1（前后端分离）/ .\build.bat
 ```
 
-> 环境变量：`JWT_SECRET`（管理后台 JWT 签名密钥，必填）、`ADMIN_PASSWORD`（首启动 admin 密码，未设则随机生成并打印日志）、`GIN_MODE`、`TZ`。支持 `.env` 文件加载（启动时自动读取项目根 `.env`，不存在则跳过；`.env` 已在 `.gitignore`，模板见 `.env.example`）。
+> 环境变量：`JWT_SECRET`（管理后台 JWT 签名密钥，必填）、`ADMIN_PASSWORD`（首启动 admin 密码，未设则随机生成并打印日志）、`CREDENTIAL_ENCRYPTION_KEY`（凭据加密密钥，32 字节 hex，未设则首启生成并落盘 `./db/credential.key`）、`TRUSTED_PROXIES`（可信代理网段，逗号分隔 IP/CIDR；只有网段内代理的 `X-Forwarded-For` 会被采信为访问日志 ClientIP，未设/空 = 全关（直连默认安全），反代部署须填反代网段，非法值启动即失败）、`GIN_MODE`、`TZ`。支持 `.env` 文件加载（启动时自动读取项目根 `.env`，不存在则跳过；`.env` 已在 `.gitignore`，模板见 `.env.example`）。
 
 ## 3. 任务导航
 

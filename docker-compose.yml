@@ -15,3 +15,6 @@ services:
       - JWT_SECRET=<YOUR_JWT_SECRET>
       - ADMIN_PASSWORD=<YOUR_ADMIN_PASSWORD>
       - TZ=Asia/Shanghai
+      # 可信代理网段（逗号分隔 IP/CIDR）：反代部署填反代网段，X-Forwarded-For 才会被
+      # 采信为访问日志 ClientIP；直连部署留空（= 全关，伪造 XFF 不进日志）。非法值启动即失败。
+      - TRUSTED_PROXIES=

@@ -107,7 +107,10 @@ func TestRouterAssembly_RequestIDStamped(t *testing.T) {
 	// gin.DefaultWriter 在 AccessLog() 创建时被捕获，必须先接管再装配引擎。
 	access := captureAccessLogTo(t)
 
-	r := newRouter(handler.Deps{JWTSecret: "assembly-test-secret"})
+	r, err := newRouter(handler.Deps{JWTSecret: "assembly-test-secret"}, parseTrustedProxies(""))
+	if err != nil {
+		t.Fatalf("newRouter: %v", err)
+	}
 	// panic 探针必须在 newRouter **之后**注册：gin 为路由快照 handler链，
 	// 后注册才带得上刚装配的全局中间件链（也就是真正走 Recovery）。
 	r.GET("/__assembly/panic", func(*gin.Context) { panic("assembly test panic") })

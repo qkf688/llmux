@@ -56,9 +56,9 @@ func assertTruncatedLineShape(t *testing.T, line string) {
 }
 
 func TestFormatAccessLine_OverlongClientIPCapsWholeLine(t *testing.T) {
-	// 审查回批 W1：gin 默认信任全部代理且本项目未 SetTrustedProxies（Stage 20 议题），
-	// XFF 伪造的 ClientIP 无长度约束——path 段预算压不下时必须整行兜底，
-	// 体量上界是防线本体（rid/status 在载体字段病态时被切是定案取舍）。
+	// 审查回批 W1：ClientIP/Method 无长度约束——XFF 伪造面已由 Stage 20 信任边界收窄
+	// （SetTrustedProxies 显式网段），本兜底保留病态远端地址等残余面，path 段预算
+	// 压不下时必须整行兜底；体量上界是防线本体（rid/status 病态时被切是定案取舍）。
 	p := accessLogTestParams("/probe", "abc123")
 	p.ClientIP = strings.Repeat("9", 8000)
 	line := formatAccessLine(p)

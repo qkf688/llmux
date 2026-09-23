@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -104,9 +105,15 @@ func main() {
 		slog.Info("legacy chat log request headers sanitized", "rows", sanitized)
 	}
 
-	startBackgroundServices(ctx)
+	// 引擎装配先于后台服务启动：信任边界（TRUSTED_PROXIES）配置错误要 fail fast，
+	// 此时还没有可能在写库的后台任务，可安全 os.Exit；挪到之后则必须走 cancel 关闭路径。
+	router, err := newRouter(handler.Deps{JWTSecret: jwtSecret}, parseTrustedProxies(os.Getenv("TRUSTED_PROXIES")))
+	if err != nil {
+		slog.Error("assemble router", "error", err)
+		os.Exit(1)
+	}
 
-	router := newRouter(handler.Deps{JWTSecret: jwtSecret})
+	startBackgroundServices(ctx)
 
 	srv := &http.Server{Addr: ":7070", Handler: router}
 	go func() {
@@ -137,8 +144,21 @@ func main() {
 //
 // 全部 router.Use 必须先于 handler.RegisterAll：gin 为已注册路由快照 handler 链，
 // Use 写在 RegisterAll 之后对那些路由根本不生效（本函数的顺序即为约束本身）。
-func newRouter(deps handler.Deps) *gin.Engine {
+//
+// trustedProxies 是引擎信任边界（TRUSTED_PROXIES 解析结果，见 parseTrustedProxies）：
+// 只有这些网段内代理的 X-Forwarded-For 会被采信为 ClientIP，非法值在此 fail fast
+// 返回错误（信任边界配置错误不得静默回退）。本项目口径是「未配置 = 全关」，由调用方
+// 经 parseTrustedProxies 显式传非 nil 空切片表达（nil 与空切片在 gin v1.10 同为全关）。
+func newRouter(deps handler.Deps, trustedProxies []string) (*gin.Engine, error) {
 	router := gin.New()
+
+	// 信任边界装配在中间件之前：ClientIP 的判定口径对全链一致。显式调用即覆盖
+	// gin 默认的 0.0.0.0/0 + ::/0（信任全部——只有从不调用 SetTrustedProxies 才
+	// 放行伪造 XFF）；nil 与空切片同为全关（gin v1.10：prepareTrustedCIDRs 对 nil
+	// 返回空集、isTrustedProxy 对空集判 false）。
+	if err := router.SetTrustedProxies(trustedProxies); err != nil {
+		return nil, fmt.Errorf("set trusted proxies %v: %w", trustedProxies, err)
+	}
 	router.Use(middleware.RequestID())
 	router.Use(middleware.AccessLog())
 	router.Use(middleware.Recovery())
@@ -148,7 +168,7 @@ func newRouter(deps handler.Deps) *gin.Engine {
 	handler.RegisterAll(router, deps)
 
 	setwebui(router)
-	return router
+	return router, nil
 }
 
 // 关闭各阶段的等待上限。

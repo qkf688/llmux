@@ -49,8 +49,9 @@ func formatAccessLine(p gin.LogFormatterParams) string {
 		}
 	}
 	// 兜底（审查回批 W1）：path 段预算只能约束 path，其余字段（ClientIP/Method）无
-	// 长度约束——gin 默认信任全部代理且本项目未 SetTrustedProxies（Stage 20 议题），
-	// XFF 伪造的 ClientIP 可达任意长度，path 预算压不下整行。此时退化为整行尾部截断：
+	// 长度约束。XFF 伪造面已由 Stage 20 信任边界收窄（SetTrustedProxies 显式网段，
+	// 未设 = 全关，伪造 XFF 不再进 ClientIP），此处兜底保留作纵深防御：病态远端地址
+	// 等残余面仍会让 path 预算压不下整行，此时退化为整行尾部截断：
 	// 体量上界是防线本体，rid/status 只在载体字段本身已病态时被切（放弃关联键换上界，
 	// 比把无上限单行放进 stdout 可控）。截断预算同样扣标记长度，且保留尾部换行——
 	// TruncateUTF8 的标记追加在预算之外，不扣长度兜底自身又超限、切掉 \n 则下一条

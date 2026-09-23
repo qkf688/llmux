@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/qkf688/llmux/common"
 	"github.com/tidwall/sjson"
@@ -73,7 +72,7 @@ func (o *openaiBase) Models(ctx context.Context) ([]Model, error) {
 	applyAuthHeader(req.Header, o.AuthType, AuthTypeBearer, o.APIKey)
 
 	// 使用带代理的客户端
-	client := GetClientWithProxy(30*time.Second, o.Proxy)
+	client := GetClientWithProxy(common.DiagnosticResponseHeaderTimeout, o.Proxy)
 	res, err := client.Do(req)
 	if err != nil {
 		return nil, err

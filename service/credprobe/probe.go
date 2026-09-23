@@ -6,14 +6,11 @@ import (
 	"sort"
 	"time"
 
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/channel"
 	"github.com/qkf688/llmux/service/credwrite"
 )
-
-// DefaultTimeout 探活上游 /models 的默认超时（短于普通聊天客户端超时，
-// 避免组耗尽自愈把整请求拖死）。
-const DefaultTimeout = 5 * time.Second
 
 // Request 一次惰性探活输入：组内凭据候选 + 选中端点 + 频控间隔。
 // Interval/Now 由调用方注入（chat 读设置项、可测时钟）。
@@ -24,7 +21,7 @@ type Request struct {
 	Credentials []models.Credential
 	Interval    time.Duration
 	Now         time.Time
-	// Timeout 探活 HTTP 超时；0 则用 DefaultTimeout。
+	// Timeout 探活 HTTP 超时；0 则用 common.DiagnosticModelsProbeTimeout（诊断时间预算单源，Stage 19）。
 	Timeout time.Duration
 }
 
@@ -52,7 +49,7 @@ func TryRecover(req Request) Outcome {
 	}
 	timeout := req.Timeout
 	if timeout <= 0 {
-		timeout = DefaultTimeout
+		timeout = common.DiagnosticModelsProbeTimeout
 	}
 
 	cand := pickProbeCandidate(req.Credentials, req.Now, req.Interval)

@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/common"
@@ -21,10 +20,10 @@ import (
 	"gorm.io/gorm"
 )
 
-// completion 探针超时：真实补全含上游生成 + 排队，比 /models 轻探（credprobe 的 5s 口径）宽。
-// ctx deadline 早于 transport 超时（+ credprobe.CompletionTransportBuffer）的机制在
+// completion 探针超时见 common.DiagnosticCredentialProbeTimeout（诊断时间预算单源，Stage 19）：
+// 真实补全含上游生成 + 排队，比 /models 轻探（common.DiagnosticModelsProbeTimeout）宽。
+// ctx deadline 早于 transport 超时（+ common.DiagnosticTransportBuffer）的机制在
 // credprobe.RunCompletionProbe 内统一实现：慢上游稳定归 timeout 而非误归 network。
-const credProbeTimeout = 15 * time.Second
 
 // errPoolNoReferencingGroup 号池未被任何分组引用：无法从「池 → 分组 → 供应商 → 端点」
 // 这条链定位上游，用 sentinel 与真正的内部错误区分（前者是一次失败的测试结论 →
@@ -110,7 +109,7 @@ func TestCredential(c *gin.Context) {
 	out := credprobe.RunCompletionProbe(credprobe.CompletionProbeRequest{
 		Ctx:     ctx,
 		Client:  client,
-		Timeout: credProbeTimeout,
+		Timeout: common.DiagnosticCredentialProbeTimeout,
 		Model:   testModel,
 		Body:    probeBody,
 	})

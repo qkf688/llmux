@@ -59,7 +59,7 @@ const (
 type StreamProbeRequest struct {
 	Ctx     context.Context
 	Client  providers.Provider
-	Timeout time.Duration // 同 RunCompletionProbe：ctx deadline 口径，≤0 兜底 DefaultCompletionTimeout
+	Timeout time.Duration // 同 RunCompletionProbe：ctx deadline 口径，≤0 兜底 common.DiagnosticCompletionTimeout
 	Headers http.Header
 	Model   string
 	Body    []byte
@@ -94,7 +94,7 @@ func RunStreamProbe(req StreamProbeRequest) (out StreamProbeResult) {
 		req.Ctx = context.Background()
 	}
 	if req.Timeout <= 0 {
-		req.Timeout = DefaultCompletionTimeout
+		req.Timeout = common.DiagnosticCompletionTimeout
 	}
 
 	start := time.Now()
@@ -129,7 +129,7 @@ func RunStreamProbe(req StreamProbeRequest) (out StreamProbeResult) {
 		return StreamProbeResult{ErrorType: common.ErrorTypeNetwork, Summary: ProbeSummaryBuildRequest, Detail: err.Error()}
 	}
 
-	httpClient := providers.GetClientWithProxy(req.Timeout+CompletionTransportBuffer, req.Client.GetProxy())
+	httpClient := providers.GetClientWithProxy(req.Timeout+common.DiagnosticTransportBuffer, req.Client.GetProxy())
 	res, err := httpClient.Do(httpReq)
 	if err != nil {
 		return StreamProbeResult{ErrorType: classifyStreamDoError(err), Summary: ProbeSummaryConnect, Detail: err.Error()}

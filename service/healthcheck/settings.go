@@ -13,7 +13,7 @@ func (h *HealthChecker) isEnabled(ctx context.Context) bool {
 
 func (h *HealthChecker) getInterval(ctx context.Context) time.Duration {
 	minutes := getSettingInt(ctx, models.SettingKeyHealthCheckInterval, 60, 1)
-	return time.Duration(minutes) * time.Minute
+	return time.Duration(minutes) * time.Minute //gate:diag-timeout-allow settings 分钟值换算，非诊断超时参数
 }
 
 func (h *HealthChecker) getFailureThreshold(ctx context.Context) int {
@@ -41,7 +41,7 @@ func GetHealthCheckSettings(ctx context.Context) (enabled bool, interval int, fa
 	checker := GetHealthChecker()
 
 	enabled = checker.isEnabled(ctx)
-	interval = int(checker.getInterval(ctx) / time.Minute)
+	interval = int(checker.getInterval(ctx) / time.Minute) //gate:diag-timeout-allow Duration→分钟单位换算，非诊断超时参数
 	failureThreshold = checker.getFailureThreshold(ctx)
 	failureDisableEnabled = checker.getFailureDisableEnabled(ctx)
 	autoEnable = checker.getAutoEnable(ctx)

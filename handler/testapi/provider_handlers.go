@@ -3,7 +3,6 @@ package testapi
 import (
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/common"
@@ -11,9 +10,9 @@ import (
 	"github.com/qkf688/llmux/service/credprobe"
 )
 
-// providerTestTimeout 诊断 completion 探针的上游超时。ctx deadline 早于 transport 的
-// 超时分级机制（network vs timeout）在 credprobe.RunCompletionProbe 内统一实现。
-const providerTestTimeout = 60 * time.Second
+// 诊断 completion 探针的上游超时见 common.DiagnosticConnectivityTestTimeout（诊断时间预算
+// 单源，Stage 19）。ctx deadline 早于 transport 的超时分级机制（network vs timeout）在
+// credprobe.RunCompletionProbe 内统一实现。
 
 // ProviderTestHandler 关联级连通性测试（GET /api/test/:id，id = ModelWithProvider 主键）。
 //
@@ -77,7 +76,7 @@ func ProviderModelTestHandler(c *gin.Context) {
 	out := credprobe.RunCompletionProbe(credprobe.CompletionProbeRequest{
 		Ctx:     ctx,
 		Client:  link.Client,
-		Timeout: providerTestTimeout,
+		Timeout: common.DiagnosticConnectivityTestTimeout,
 		Headers: header,
 		Model:   link.Model,
 		Body:    testBody,

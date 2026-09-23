@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/httpresp"
 	"github.com/qkf688/llmux/providers"
 )
@@ -40,7 +41,7 @@ func TestReactHandler(c *gin.Context) {
 
 	providerInstance := link.Client
 	proxyURL := providerInstance.GetProxy()
-	httpClient := providers.GetClientWithProxy(time.Second*60, proxyURL)
+	httpClient := providers.GetClientWithProxy(common.DiagnosticReactHeaderTimeout, proxyURL)
 
 	header := BuildTestHeaders(c.Request.Header, link.WithHeader, link.CustomerHeaders)
 

@@ -145,7 +145,7 @@ func runCompletionTestFlow(c *gin.Context, name string, buildBody func(providerT
 	out := credprobe.RunCompletionProbe(credprobe.CompletionProbeRequest{
 		Ctx:     ctx,
 		Client:  link.Client,
-		Timeout: providerTestTimeout,
+		Timeout: common.DiagnosticConnectivityTestTimeout,
 		Headers: header,
 		Model:   link.Model,
 		Body:    testBody,
@@ -174,7 +174,7 @@ func runStreamLeg(c *gin.Context, link *testLink, outcome *probeOutcome, fail fa
 	probe := credprobe.RunStreamProbe(credprobe.StreamProbeRequest{
 		Ctx:     c.Request.Context(),
 		Client:  link.Client,
-		Timeout: providerTestTimeout,
+		Timeout: common.DiagnosticConnectivityTestTimeout,
 		Headers: header,
 		Model:   link.Model,
 		Body:    testBody,

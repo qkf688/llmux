@@ -23,8 +23,8 @@ var cache = &clientCache{
 }
 
 var dialer = &net.Dialer{
-	Timeout:   30 * time.Second,
-	KeepAlive: 30 * time.Second,
+	Timeout:   30 * time.Second, //gate:diag-timeout-allow Transport 连接池调优，生产/诊断共用，非诊断请求超时参数
+	KeepAlive: 30 * time.Second, //gate:diag-timeout-allow Transport 连接池调优，生产/诊断共用，非诊断请求超时参数
 }
 
 func normalizeProxy(proxyURL string) (string, func(*http.Request) (*url.URL, error)) {
@@ -60,9 +60,9 @@ func getClient(responseHeaderTimeout time.Duration, proxyKey string, proxy func(
 		DialContext:           dialer.DialContext,
 		ForceAttemptHTTP2:     false, // 禁用强制HTTP/2，让系统自动协商，避免HTTP/2超时问题
 		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
+		IdleConnTimeout:       90 * time.Second, //gate:diag-timeout-allow Transport 连接池调优，生产/诊断共用，非诊断请求超时参数
+		TLSHandshakeTimeout:   10 * time.Second, //gate:diag-timeout-allow Transport 连接池调优，生产/诊断共用，非诊断请求超时参数
+		ExpectContinueTimeout: 1 * time.Second,  //gate:diag-timeout-allow Transport 连接池调优，生产/诊断共用，非诊断请求超时参数
 		ResponseHeaderTimeout: responseHeaderTimeout,
 		DisableKeepAlives:     false, // 保持连接复用以提高性能
 		MaxIdleConnsPerHost:   10,    // 限制每个主机的空闲连接数

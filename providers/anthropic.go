@@ -146,7 +146,7 @@ func (a *Anthropic) Models(ctx context.Context) ([]Model, error) {
 	setAnthropicBeta(req.Header, a.Beta)
 
 	// 使用带代理的客户端
-	client := GetClientWithProxy(30*time.Second, a.Proxy)
+	client := GetClientWithProxy(common.DiagnosticResponseHeaderTimeout, a.Proxy)
 	res, err := client.Do(req)
 	if err != nil {
 		return nil, err

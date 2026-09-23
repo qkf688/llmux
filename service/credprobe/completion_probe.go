@@ -15,16 +15,6 @@ import (
 // （testapi 两个 provider 测试 handler、pools #24-B 按凭据测试，外加 structured-output
 // 共四处），归类/失败细节口径开始分叉后收敛于此——下次加同类测试端点只调本函数。
 
-// CompletionTransportBuffer transport（响应头）超时相对 ctx deadline 的余量：刻意让
-// ctx deadline **早于** transport 超时，使「慢上游」稳定命中 context.DeadlineExceeded →
-// 归类 timeout，而非 transport 的 "awaiting response headers"（非 DeadlineExceeded）被误归 network。
-const CompletionTransportBuffer = time.Second
-
-// DefaultCompletionTimeout Timeout 未传（≤0）时的兜底。调用方**必须**按业务显式传值
-// （pools 15s / testapi 60s），这里只挡「零值 → deadline 立即过期 → 探针恒判 timeout」
-// 这类误用（同包 TryRecover 对 Timeout 有同款先例）。
-const DefaultCompletionTimeout = 30 * time.Second
-
 // 探针失败阶段的用户可见文案（单一来源）：各端点信封形状可以不同，但同一失败阶段
 // 不再各写一份措辞。
 const (
@@ -39,10 +29,10 @@ const (
 type CompletionProbeRequest struct {
 	Ctx    context.Context
 	Client providers.Provider
-	// Timeout ctx deadline 口径（transport = Timeout+CompletionTransportBuffer）。
+	// Timeout ctx deadline 口径（transport = Timeout+common.DiagnosticTransportBuffer）。
 	// 应为常量口径：providers.GetClientWithProxy 的缓存键含 timeout 值，传动态值
 	// （如按设置项现算）会让每个不同值都新建一份带独立连接池的 Transport。
-	// ≤0 时兜底 DefaultCompletionTimeout。
+	// ≤0 时兜底 common.DiagnosticCompletionTimeout。
 	Timeout time.Duration
 	Headers http.Header
 	Model   string
@@ -70,7 +60,7 @@ func RunCompletionProbe(req CompletionProbeRequest) CompletionProbeResult {
 		req.Ctx = context.Background()
 	}
 	if req.Timeout <= 0 {
-		req.Timeout = DefaultCompletionTimeout
+		req.Timeout = common.DiagnosticCompletionTimeout
 	}
 
 	probeCtx, cancel := context.WithTimeout(req.Ctx, req.Timeout)
@@ -87,7 +77,7 @@ func RunCompletionProbe(req CompletionProbeRequest) CompletionProbeResult {
 		}
 	}
 
-	httpClient := providers.GetClientWithProxy(req.Timeout+CompletionTransportBuffer, req.Client.GetProxy())
+	httpClient := providers.GetClientWithProxy(req.Timeout+common.DiagnosticTransportBuffer, req.Client.GetProxy())
 	res, err := httpClient.Do(httpReq)
 	if err != nil {
 		// Do 失败没有状态码：区分超时与其他网络错误。

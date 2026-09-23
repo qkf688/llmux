@@ -124,7 +124,7 @@ func TestUpstreamErrorDetailCarriesStatusCode(t *testing.T) {
 // 小于上限/空 reader 原样读出。这几档正是截断与 EOF 交互最易被后续改动（误写 limit±1、换原语）
 // 回归的点，用表驱动钉死长度与原样性。
 func TestReadCappedBody(t *testing.T) {
-	limit := upstreamDiagnosticReadLimitBytes
+	limit := UpstreamDiagnosticReadLimitBytes
 	small := []byte(`{"id":"cmpl-1"}`)
 	tests := []struct {
 		name    string

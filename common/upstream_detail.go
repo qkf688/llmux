@@ -11,18 +11,19 @@ import (
 // 不截断会灌进管理端 JSON（testapi 旧实现无上限，pools 旧实现有——收敛取保守口径）。
 const upstreamDetailMaxBytes = 512
 
-// upstreamDiagnosticReadLimitBytes 探针 / 健康检查 / 连通测试端点读取上游响应体的字节上限（1 MiB）。
-// 这些路径读响应体只用于：未通过判定（见 IsPassingStatus）时提取 ≤512B 的人读错误细节，或解析极小的 completion 探测/测试
-// 结果——通过与否只看状态码、判定不依赖响应全文，且输出被探针 prompt / strict-schema 天然约束到
-// 几十字节，合法响应远小于此值。上限只挡上游异常/被篡改时返回的超大响应整块进内存，不影响任何
-// 正常结论——避免「先无界全量读、再截到 512B」的纯浪费与大响应内存风险。
-const upstreamDiagnosticReadLimitBytes = 1 << 20
+// UpstreamDiagnosticReadLimitBytes 探针 / 健康检查 / 连通测试端点读取上游响应体的字节上限（1 MiB）。
+// 这些路径读响应体只用于：未通过判定（见 IsPassingStatus）时提取 ≤512B 的人读错误细节，或解析极小的
+// completion 探测/测试结果——探测 prompt / strict-schema 天然把合法响应约束到几十 KiB 内，远小于此值。
+// Stage 19 起健康检查的成功分支也按本上限读体做内容形状判定（判据在 transform.ValidateResponseShape，
+// 超限判「形状不可验」而非判健康）：上限只挡上游异常/被篡改时返回的超大响应整块进内存；
+// LimitReader 语义区分不了「被截断」与「恰好等长」，调用方按 len(读取值) == 本值**视为**截断。
+const UpstreamDiagnosticReadLimitBytes = 1 << 20
 
 // ReadCappedBody 按字节上限读取响应体，是所有诊断/探针/测试路径读取上游 Body 的单一入口。
 // 超过上限的部分被丢弃（LimitReader 语义），读取超时/网络错误仍原样向上返回，与调用方的
 // ErrorTypeTimeout 归类逻辑兼容。
 func ReadCappedBody(r io.Reader) ([]byte, error) {
-	return io.ReadAll(io.LimitReader(r, upstreamDiagnosticReadLimitBytes))
+	return io.ReadAll(io.LimitReader(r, UpstreamDiagnosticReadLimitBytes))
 }
 
 // upstreamUnwrapMaxDepth 错误信封递归剥套的层数上限：网关会把上游 provider 的原始错误体

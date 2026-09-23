@@ -14,6 +14,7 @@ import (
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/providers"
 	"github.com/qkf688/llmux/service/channel"
+	"github.com/qkf688/llmux/service/transform"
 )
 
 func (h *HealthChecker) checkOne(ctx context.Context, mp *models.ModelWithProvider) {
@@ -115,7 +116,7 @@ func (h *HealthChecker) doCheck(ctx context.Context, provider *models.Provider, 
 		return fmt.Errorf("provider %q has no key groups", provider.Name)
 	}
 
-	testBody := chooseTestBody(provider.Type)
+	testBody, format := chooseTestProbe(provider.Type)
 	now := time.Now()
 
 	// 逐组失败原因都留下：health_check_logs.error 是排查入口，只报「失败」等于丢掉线索。
@@ -127,7 +128,7 @@ func (h *HealthChecker) doCheck(ctx context.Context, provider *models.Provider, 
 			continue
 		}
 		// headers 每次重建：BuildReq 会就地写认证头，跨组复用同一 map 会互相污染。
-		if err := requestUpstream(ctx, client, buildRequestHeaders(mp), mp.ProviderModel, testBody); err != nil {
+		if err := requestUpstream(ctx, client, buildRequestHeaders(mp), mp.ProviderModel, testBody, format); err != nil {
 			failures = append(failures, fmt.Sprintf("group %q: %s", group.Name, err))
 			continue
 		}
@@ -137,15 +138,25 @@ func (h *HealthChecker) doCheck(ctx context.Context, provider *models.Provider, 
 	return fmt.Errorf("health check failed for provider %q: %s", provider.Name, strings.Join(failures, "; "))
 }
 
-// requestUpstream 发一次检测请求并判定状态码：未通过（口径见 common.IsPassingStatus，
-// 仅 200/201）一律带原文回传（HealthCheckError）。
-func requestUpstream(ctx context.Context, client providers.Provider, headers http.Header, model string, body []byte) error {
-	req, err := client.BuildReq(ctx, headers, model, body)
+// requestUpstream 发一次检测请求并判定：状态码未通过（口径见 common.IsPassingStatus，
+// 仅 200/201）一律带原文回传（HealthCheckError）；状态码通过后再过内容形状门
+// （Stage 19，判据单源 transform.ValidateResponseShape，含读体上限）——「200 + 非法内容」
+// 不再判健康，否则健康检查绿、真实聊天每条报错，坏线路留在轮询里。
+//
+// 整读响应体做形状判定需要两道预算（Stage 19 审查回批）：① 时间——client 整体超时恒 0、
+// 调用方 ctx 无 deadline，上游滴流不止会让整轮巡检卡死，故派生 common.DiagnosticCompletionTimeout
+// 的整体 ctx（与 completion/stream 探针同口径）；② 读体——走 common.ReadCappedBody 单源上限，
+// 读错误**不许**当空回复（那会把断连的上游判成健康），显式判失败。
+func requestUpstream(ctx context.Context, client providers.Provider, headers http.Header, model string, body []byte, format consts.WireFormat) error {
+	probeCtx, cancel := context.WithTimeout(ctx, common.DiagnosticCompletionTimeout)
+	defer cancel()
+
+	req, err := client.BuildReq(probeCtx, headers, model, body)
 	if err != nil {
 		return err
 	}
 
-	httpClient := providers.GetClientWithProxy(30*time.Second, client.GetProxy())
+	httpClient := providers.GetClientWithProxy(common.DiagnosticResponseHeaderTimeout, client.GetProxy())
 	res, err := httpClient.Do(req)
 	if err != nil {
 		return err
@@ -157,6 +168,13 @@ func requestUpstream(ctx context.Context, client providers.Provider, headers htt
 		return &HealthCheckError{StatusCode: res.StatusCode, Body: string(raw)}
 	}
 
+	raw, readErr := common.ReadCappedBody(res.Body)
+	if readErr != nil {
+		return fmt.Errorf("upstream response read failed (HTTP %d): %w", res.StatusCode, readErr)
+	}
+	if err := transform.ValidateResponseShape(format, raw); err != nil {
+		return fmt.Errorf("upstream response shape invalid (HTTP %d): %w", res.StatusCode, err)
+	}
 	return nil
 }
 
@@ -206,6 +224,17 @@ func chooseTestBody(providerType string) []byte {
 		return m.HealthCheckBody
 	}
 	return nil
+}
+
+// chooseTestProbe 给出健康检查的请求体与「响应形状判定口径」。两者必须同源自同一个
+// provider type 的元数据：发 A 形状的请求却按 B 形状判响应，会让内容形状门变随机误判源。
+// 未知 type 的请求体已回退 OpenAI（chooseTestBody），响应形状同口径回退 FormatOpenAIChat。
+func chooseTestProbe(providerType string) ([]byte, consts.WireFormat) {
+	format, ok := providers.WireFormatOf(providerType)
+	if !ok {
+		format = consts.FormatOpenAIChat
+	}
+	return chooseTestBody(providerType), format
 }
 
 func buildRequestHeaders(mp *models.ModelWithProvider) http.Header {

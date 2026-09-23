@@ -117,8 +117,6 @@ func CreateProvider(c *gin.Context) {
 		modelFilterEnabled = *req.ModelFilterEnabled
 	}
 
-	authType := resolveAuthType(req.Type, req.AuthType)
-
 	var createdID uint
 	err = repos().RunInTx(ctx, func(txRepos *repository.Repositories) error {
 		provider := models.Provider{
@@ -129,7 +127,6 @@ func CreateProvider(c *gin.Context) {
 			Proxy:              req.Proxy,
 			ModelEndpoint:      &modelEndpoint,
 			ModelFilterEnabled: &modelFilterEnabled,
-			AuthType:           authType,
 			Protocols:          req.Protocols,
 		}
 		if err := txRepos.Provider.Create(ctx, &provider); err != nil {
@@ -211,8 +208,6 @@ func UpdateProvider(c *gin.Context) {
 	}
 	req.Config = sanitized
 
-	authType := resolveAuthType(req.Type, req.AuthType)
-
 	err = repos().RunInTx(ctx, func(txRepos *repository.Repositories) error {
 		if childrenProvided {
 			// 全量路径走 UpdateFields(map)：空串/NULL 是合法的「显式清空」语义，
@@ -227,7 +222,6 @@ func UpdateProvider(c *gin.Context) {
 				"config":    req.Config,
 				"console":   req.Console,
 				"proxy":     req.Proxy,
-				"auth_type": authType, // *string：nil 写 NULL（切回默认认证是合法清空）
 				"protocols": string(protoJSON),
 			}
 			// name/type 是必填身份字段：空串视为客户端缺省，保留现值
@@ -271,7 +265,6 @@ func UpdateProvider(c *gin.Context) {
 			ModelEndpoint:      req.ModelEndpoint,
 			ModelFilterEnabled: req.ModelFilterEnabled,
 			Blacklisted:        req.Blacklisted,
-			AuthType:           authType,
 		}
 		if configProvided {
 			updates.Config = req.Config

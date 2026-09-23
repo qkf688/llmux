@@ -146,7 +146,7 @@ export function ProviderFormDialog({
                           <FormLabel>{extra.label}</FormLabel>
                           {extra.kind === "select" ? (
                             // 空值仅存于表单态：展示的默认值取「当前激活字段定义」（随主类型变化），
-                            // 提交时空值同样回退该默认（applyExtraFieldsToConfig / resolveTopLevelAuthType）——
+                            // 提交时空值同样回退该默认（applyExtraFieldsToConfig 单源写 config）——
                             // 避免写死某一家默认在切类型时被悄悄提交（4b）。
                             <Select onValueChange={field.onChange} value={field.value || extra.defaultValue}>
                               <FormControl>

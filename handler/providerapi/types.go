@@ -48,7 +48,6 @@ type ProviderRequest struct {
 	ModelEndpoint      *bool            `json:"model_endpoint"`
 	ModelFilterEnabled *bool            `json:"model_filter_enabled"`
 	Blacklisted        *bool            `json:"blacklisted"` // 是否拉黑（拉黑后跳过自动关联/一键关联）
-	AuthType           string           `json:"auth_type"`   // 认证方式 bearer / x-api-key，仅 anthropic 顶层列（展示副本）；openai 系方言在 config.openai_auth_type（4b 拆键）
 	Protocols          []string         `json:"protocols"`
 	Endpoints          *[]EndpointInput `json:"endpoints"`
 	Groups             *[]GroupInput    `json:"groups"`

@@ -9,6 +9,7 @@ import (
 	"github.com/qkf688/llmux/common/credentialcrypto"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/providers"
 	"github.com/qkf688/llmux/repository"
 )
 
@@ -368,6 +369,8 @@ func syncGroups(ctx context.Context, repos *repository.Repositories, providerID 
 
 // loadProviderDetail 组装详情响应（inline keys 以服务端掩码项返回，明文仅受控端点拉取）。
 func loadProviderDetail(ctx context.Context, repos *repository.Repositories, provider models.Provider) (*ProviderDetail, error) {
+	// 顶层 AuthType 出库即派生（Stage 20）：响应直返实体，派生字段必须先于序列化填充。
+	providers.FillDerivedAuthType(&provider)
 	endpoints, err := repos.Endpoint.ListByProvider(ctx, provider.ID)
 	if err != nil {
 		return nil, fmt.Errorf("list endpoints: %w", err)
@@ -447,6 +450,7 @@ func buildProviderListItems(ctx context.Context, repos *repository.Repositories,
 
 	items := make([]ProviderListItem, 0, len(list))
 	for _, p := range list {
+		providers.FillDerivedAuthType(&p)
 		items = append(items, ProviderListItem{
 			Provider:      p,
 			EndpointCount: epCounts[p.ID],

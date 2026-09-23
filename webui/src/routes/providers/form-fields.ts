@@ -11,8 +11,6 @@ export type ProviderExtraField = {
   placeholder?: string;
   /** 写入 config 时的默认值（表单空时使用） */
   defaultValue?: string;
-  /** 是否写入 API 顶层 auth_type（仅 auth_type） */
-  submitAsTopLevel?: boolean;
 };
 
 /**
@@ -26,7 +24,7 @@ export type ProviderExtraField = {
  */
 
 /** openai / openai-res 共用的认证方式字段（同一 config 键、同一枚举，4b；
- *  方言真值只在 config，不写顶层 auth_type 列——该列是 anthropic 的展示副本）。 */
+ *  认证方式真值只在 config——Stage 20 起顶层 AuthType 是后端派生的只读展示值，前端不写）。 */
 const openaiAuthTypeField: ProviderExtraField = {
   name: "openai_auth_type",
   label: "认证方式（OpenAI 系）",
@@ -61,7 +59,6 @@ export const providerTypeExtras: Record<string, ProviderExtraField[]> = {
       label: "认证方式",
       kind: "select",
       defaultValue: "x-api-key",
-      submitAsTopLevel: true,
       options: [
         { value: "x-api-key", label: "x-api-key（Anthropic 官方）" },
         { value: "bearer", label: "Authorization: Bearer（兼容第三方）" },
@@ -142,16 +139,4 @@ export function getExtraFieldDefaultsFromParsed(
         : field.defaultValue) ?? "";
   }
   return result;
-}
-
-/** 提交时是否需要顶层 auth_type（空值回退到激活字段定义的类型默认，4b） */
-export function resolveTopLevelAuthType(
-  type: string,
-  values: ProviderFormValues,
-): string | undefined {
-  const field = getProviderExtraFields(type).find((f) => f.submitAsTopLevel && f.name === "auth_type");
-  if (!field) return undefined;
-  const raw = values.auth_type;
-  if (typeof raw === "string" && raw.trim() !== "") return raw;
-  return field.defaultValue ?? "";
 }

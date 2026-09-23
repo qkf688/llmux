@@ -20,9 +20,14 @@ type Provider struct {
 	// 语义上 NULL 视为 true（启用）。全仓所有查询必须经 repository.WhereModelEndpointEnabled /
 	// WhereModelEndpointMatches，写法 `model_endpoint IS NULL OR model_endpoint = ?`，
 	// 禁止直接 `model_endpoint = ?`（会漏掉 NULL 行）。新增依赖此字段的查询请勿另起 inline 写法。
-	ModelFilterEnabled *bool   // 是否启用模型过滤（按规则过滤上游模型）
-	AuthType           *string // 认证方式列：**anthropic 专属展示副本**（运行时真值在 config.auth_type）；openai 系的认证方式在 config.openai_auth_type，不落本列（4b 拆键）
-	Blacklisted        *bool   `gorm:"default:false" json:"blacklisted"` // 是否拉黑（拉黑后不参与自动关联）
+	ModelFilterEnabled *bool // 是否启用模型过滤（按规则过滤上游模型）
+	// AuthType 认证方式展示值：**由 Config 派生、不落库**（gorm:"-"，Stage 20 消灭双写）。
+	// 运行时与展示的真值同源——config 的 auth_type（anthropic）/ openai_auth_type（openai 系），
+	// 派生规则单源 providers.DeriveConfigAuthType，由读侧（详情/列表/导出）出库后填充。
+	// 此前是 anthropic 专属列副本且与 config 双写无一致性约束，PUT 顶层 auth_type 可造出
+	// 「列显 bearer、实际发 x-api-key」的漂移；现写侧入口已删，读侧恒为 config 真值。
+	AuthType    *string `gorm:"-"`
+	Blacklisted *bool   `gorm:"default:false" json:"blacklisted"` // 是否拉黑（拉黑后不参与自动关联）
 	// Protocols 勾选的出站协议（设计定案第 2 节），取值见 consts.Protocol*。
 	// 存量 Provider 由启动迁移按 type 派生填充（见 migrate_channels.go），
 	// 新建 Provider 由前端勾选写入（S6）；nil = 未设置。

@@ -1,7 +1,10 @@
 package providers
 
 import (
+	"encoding/json"
 	"net/http"
+
+	"github.com/qkf688/llmux/models"
 )
 
 // 认证方式配置值词表跨 provider 共用。Stage 4b 裁决：认证方式是凭据头的唯一权威——
@@ -36,4 +39,37 @@ func applyAuthHeader(h http.Header, authType, defaultAuth, apiKey string) {
 	}
 	h.Del("x-api-key")
 	h.Set("Authorization", "Bearer "+apiKey)
+}
+
+// DeriveConfigAuthType 从 config JSON 派生认证方式**展示值**（Stage 20 派生化）：
+// 按**主类型**方言键派生——anthropic 读 auth_type、其余（openai 系）读 openai_auth_type，
+// 与各 adapter 反序列化字段同键（anthropic.go / openai_base.go，见上拆键动因）。
+// ⚠️ 混合协议行（如 type=openai 且勾 anthropic 端点）的对侧端点读的是另一个键，
+// 顶层展示槽只表达主类型方言，不承诺覆盖对侧端点的实际出站头（顶层只有一种可表达）。
+// 值原样返回、不做值域过滤：垃圾值原样暴露比静默回默认更利于发现配置错误
+// （出站仍由 applyAuthHeader 兜底回类型默认）。键缺失/空/坏 JSON = nil（未设置）。
+// 顶层 models.Provider.AuthType 即由本函数派生（gorm:"-" 不落库，消灭双写）。
+func DeriveConfigAuthType(providerType, configJSON string) *string {
+	var probe struct {
+		AuthType       string `json:"auth_type"`
+		OpenAIAuthType string `json:"openai_auth_type"`
+	}
+	if err := json.Unmarshal([]byte(configJSON), &probe); err != nil {
+		return nil
+	}
+	v := probe.OpenAIAuthType
+	if providerType == TypeAnthropic {
+		v = probe.AuthType
+	}
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+// FillDerivedAuthType 填充 models.Provider 的派生展示字段（Stage 20）：AuthType 不落库
+// （gorm:"-"），真值单源在 config。读侧出库后统一调用（详情/列表/导出共用同一填充
+// 动作，避免各域自写赋值行漂移；providers→models 是合法依赖方向）。
+func FillDerivedAuthType(p *models.Provider) {
+	p.AuthType = DeriveConfigAuthType(p.Type, p.Config)
 }

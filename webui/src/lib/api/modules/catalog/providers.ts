@@ -138,7 +138,6 @@ export interface ProviderWritePayload {
   model_endpoint?: boolean;
   model_filter_enabled?: boolean;
   blacklisted?: boolean;
-  auth_type?: string;
   protocols?: string[];
   endpoints?: ProviderEndpointInput[];
   groups?: ProviderGroupInput[];

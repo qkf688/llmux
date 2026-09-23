@@ -44,6 +44,7 @@ func migrate(ctx context.Context) {
 	purgeLegacyUpstreamModels(ctx, DB)
 	purgeSoftDeleted(ctx, &VirtualModelMapping{}, &ModelTemplateItem{}, &VirtualModel{}, &Setting{})
 	cleanupSoftDeletedModels(ctx)
+	dropLegacyProviderAuthType(DB)
 	// 兼容性考虑
 	if _, err := gorm.G[ModelWithProvider](DB).Where("status IS NULL").Update(ctx, "status", true); err != nil {
 		panic(err)
@@ -142,5 +143,19 @@ func cleanupSoftDeletedModels(ctx context.Context) {
 
 	if err := DB.Migrator().DropColumn(&Model{}, "deleted_at"); err != nil {
 		panic(err)
+	}
+}
+
+// dropLegacyProviderAuthType 删除 Provider.AuthType 展示副本遗留列（Stage 20 派生化）。
+func dropLegacyProviderAuthType(db *gorm.DB) {
+	// 判据必须用表名字符串而非 &Provider{}：gorm:"-" 字段不在 schema，
+	// HasColumn(struct) 对它恒 false，会跳过真实存在的遗留列。
+	// 删除走 raw SQL：glebarez/sqlite 的 Migrator.DropColumn 依赖 struct schema
+	// 重建表，字符串 dest 直接 nil panic、gorm:"-" 列也认不出字段。
+	if !db.Migrator().HasColumn("providers", "auth_type") {
+		return
+	}
+	if err := db.Exec("ALTER TABLE providers DROP COLUMN auth_type").Error; err != nil {
+		panic(fmt.Errorf("drop legacy providers.auth_type column: %w", err))
 	}
 }

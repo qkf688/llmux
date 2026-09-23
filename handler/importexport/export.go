@@ -8,18 +8,24 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/httpresp"
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/providers"
 )
 
 // ExportConfig 导出系统配置为 JSON。
 func ExportConfig(c *gin.Context) {
-	var providers []models.Provider
+	var providerList []models.Provider
 	var modelsList []models.Model
 	var modelProviders []models.ModelWithProvider
 	var settings []models.Setting
 
-	if err := models.DB.Find(&providers).Error; err != nil {
+	if err := models.DB.Find(&providerList).Error; err != nil {
 		httpresp.InternalErrorMessage(c, "读取提供商数据失败", err)
 		return
+	}
+
+	// 顶层 AuthType 出库即派生（Stage 20）：导出物与详情/列表同口径，config 才是真源。
+	for i := range providerList {
+		providers.FillDerivedAuthType(&providerList[i])
 	}
 
 	if err := models.DB.Find(&modelsList).Error; err != nil {
@@ -38,7 +44,7 @@ func ExportConfig(c *gin.Context) {
 	}
 
 	config := map[string]interface{}{
-		"providers":       providers,
+		"providers":       providerList,
 		"models":          modelsList,
 		"model_providers": modelProviders,
 		"settings":        settings,

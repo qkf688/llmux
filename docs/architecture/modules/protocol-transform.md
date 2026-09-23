@@ -25,6 +25,7 @@ service/
 ├── transform_facade.go
 ├── transform/              # 转换引擎与适配器
 │   ├── adapters_register.go
+│   ├── shape.go            # 检测类内容形状门判据（Stage 19）
 │   ├── openai/ | anthropic/ | responses/ | streaming/ | shared/
 ├── anthropic/              # Anthropic 编解码细节
 └── responses/              # Responses API 编解码细节
@@ -55,6 +56,7 @@ models/
 | `UnknownRequestKeys(style, rawBody)` + `ErrClaimedKeysUnsupported` | 按**入站** style 分派到对应认领键集合再求差，是上述原语对外的唯一可消费入口；未注册的 style 返回 `ErrClaimedKeysUnsupported` 而非空集合 | `service/transform/unknown_request_keys.go` | 同文件（`claimedRequestKeysByStyle` 注册 openai / openai-res / anthropic） |
 | `MismatchedTopLevelKeys(raw, dto)` | 「被 DTO 认领、但值类型不匹配被 `shared.Optional*` 容器静默丢弃」的顶层键计算原语；`dto` 只作类型样板（内部另建零值承接解码，纯函数、可并发），反射探测容器的 `Set` 位为 false 判定丢弃，`json.RawMessage`/`RawArray` 无三态刻意不覆盖 | `service/transform/shared/mismatched_keys.go` | 同文件 |
 | `MismatchedRequestKeys(style, rawBody)` + `ErrMismatchedKeysUnsupported` | 按**入站** style 分派到类型不匹配检测，独立于认领检测的第二注册表；只注册 openai / anthropic，openai-res 刻意缺席（`ResponsesRequest` 用裸类型，类型不匹配整条请求解析失败、无静默丢弃可暴露） | `service/transform/unknown_request_keys.go` | 同文件（`mismatchedRequestKeysByStyle` 注册 openai / anthropic） |
+| `ValidateResponseShape(format, body)` | 「检测类内容形状门」判据单源（Stage 19）：达 1 MiB 读体上限判「形状不可验」/ 空回复判过 / 非空体须过 `common.JSONContentError`（与 chat 提交门同一份错误形状判断）/ 须被所测 wire format 的 `ParseResponse` 解析出响应对象。消费方是健康检查（判「关联能不能服务聊天」）；探针刻意不用（它们只判 key 活性） | `service/transform/shape.go` | 同文件（复用注册表适配器 + `common` 判据，零新解析） |
 
 ## 5. 特殊约定
 

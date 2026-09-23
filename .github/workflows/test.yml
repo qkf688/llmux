@@ -1,0 +1,99 @@
+name: test
+
+# 质量门：push / PR 触发跑 go fmt/vet/test + 前端 lint/test/build，机械门不再只靠本机自觉。
+#
+# 与发版流程的分工与边界（改之前先读，别把这道门当成发版门）：
+# - cicd.yml（打 v*.*.* tag 推 Docker 镜像）与 releaser.yml（打 tag 发 Release 二进制）**都不等本门结果**，
+#   当前 tag 发版路径零检查：推 tag 可以把一个本门还红着的 commit 直接发成镜像/Release。
+#   要「没过门就不发版」得另外接 workflow_run 或复用 job，尚未做。
+# - 本门的工具链（node 24.12.0 / pnpm 10.26.1 / go.mod 的 1.25.0）与出货链不完全一致：
+#   Dockerfile 是 node:20 + 不钉版 pnpm + golang:latest，releaser.yml 是 node:20 + pnpm 10 + GO 1.25.x。
+#   即「CI 绿」只对本门这条工具链负责。版本单源化（packageManager / engines / .nvmrc 六处收敛）是独立问题。
+#
+# 触发面：push 全分支 + PR + 手动。同分支开着 PR 时 push 与 pull_request 两个事件各跑一遍
+# （刻意取舍：保证纯 push 直推的分支也被门住，而不是只在开 PR 时才拦）。嫌吵可收敛成
+# push: branches: [main] + pull_request。
+#
+# ⚠️ handler/pools 有个已知偶发 flaky（观测中）：本 job 设成 required check 之前必须先消掉它，
+# 否则 push/PR 双跑会让同一 SHA 上出现两个同名 check `test`，required 按名字取值时随机卡合并。
+# flaky 复现时按观测文档口径用 `-race -count=50` 定位，不许跳过用例或改期望值。
+on:
+  workflow_dispatch:
+  push:
+    branches: ['**']
+  pull_request:
+
+# 本 job 只读代码、跑测试，不需要写权限；默认 token 权限可能是 read/write，
+# 而 pnpm install 会执行依赖的生命周期脚本——最小权限收窄到读。
+permissions:
+  contents: read
+
+# 快速连推时只保留最新一轮，旧轮作废取消，免得排队堆积、旧红绿留在检查页误导。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # 有测试死等锁/网络时不挂 6 小时等平台杀，20 分钟足够（干净 checkout 全序列约 7 分钟）。
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # 工具链钉精确版本（与开发机一致），保证同一 commit 今天绿明天也绿；
+      # 升版本只改下面两行的版本号——注意 Dockerfile / releaser.yml 另有自己的版本源，本文件管不到它们。
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.12.0
+          cache: pnpm
+          cache-dependency-path: webui/pnpm-lock.yaml
+
+      - name: Install webui dependencies
+        working-directory: webui
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint webui
+        working-directory: webui
+        run: pnpm lint
+
+      - name: Test webui
+        working-directory: webui
+        run: pnpm test
+
+      # 必须排在下面三步 go 检查之前：main.go:239/242 有 //go:embed webui/dist（含 webui/dist/index.html），
+      # 而 dist 不入库——干净 checkout 下没有 dist 时包 main 编译不过（实测报错
+      # `main.go:239:12: pattern webui/dist: no matching files found`），而 gate_*.go 机械门都在包 main，
+      # 少了这步等于整套门根本没跑起来。顺带把 tsc -b 的类型检查一并门住。
+      - name: Build webui (feeds //go:embed webui/dist)
+        working-directory: webui
+        run: pnpm run build
+
+      # 与本地 make check 的三件套对齐，但用「判」不用「改」：make check 里的 go fmt 是就地改写文件，
+      # 在 CI 上等于把格式问题洗绿。只列 git 跟踪的文件，免得 gofmt 走进 node_modules。
+      - name: go fmt check
+        run: |
+          unformatted="$(gofmt -l $(git ls-files '*.go'))"
+          if [ -n "$unformatted" ]; then
+            echo "以下文件未过 gofmt："
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./... -count=1

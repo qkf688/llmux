@@ -1,11 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useTheme } from "@/components/theme-provider";
 import { selectSetSession, useAuthStore } from "@/stores/auth";
-import { consumeLoginExpiryNotice } from "@/stores/auth/login-expiry-notice";
+import {
+  LOGIN_EXPIRY_NOTICE_TEXT,
+  consumeLoginExpiryNotice,
+  hasLoginExpiryNotice,
+} from "@/stores/auth/login-expiry-notice";
 import { login as loginApi } from "@/lib/api/modules/auth/auth";
 
 /* 主题切换图标 */
@@ -50,9 +54,14 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  // 一次性过期提示（401 掉线跳转写入）：挂载时取走即清除，只展示一次；
-  // 与「密码错误」的 error 分区——密码错走登录接口自身的错误文案，不进这条通道
-  const [expiryNotice] = useState(() => consumeLoginExpiryNotice());
+  // 一次性过期提示（401 掉线跳转写入）：渲染期只做非破坏性读取（渲染要保持纯净，
+  // 被中断重建的渲染丢不了提示），挂载后统一清除 = 只展示一次；文案渲染侧取常量，
+  // 结构性保证不携带内部错误文本。与「密码错误」的 error 分区——密码错走登录接口
+  // 自身的错误文案，不进这条通道。
+  const [showExpiryNotice] = useState(hasLoginExpiryNotice);
+  useEffect(() => {
+    consumeLoginExpiryNotice();
+  }, []);
   const navigate = useNavigate();
   const setSession = useAuthStore(selectSetSession);
   const { theme, setTheme } = useTheme();
@@ -102,12 +111,12 @@ export default function LoginPage() {
           <h1 className="text-2xl font-semibold tracking-tight text-foreground mb-1.5">登录</h1>
             <p className="text-sm text-muted-foreground mb-6">输入管理员密码以访问系统</p>
 
-            {expiryNotice && (
+            {showExpiryNotice && (
               <p
                 className="text-[13px] text-foreground border border-border bg-card rounded-md px-3 py-2 mb-4"
                 role="status"
               >
-                {expiryNotice}
+                {LOGIN_EXPIRY_NOTICE_TEXT}
               </p>
             )}
 

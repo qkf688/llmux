@@ -1,5 +1,5 @@
 import { authStore, getAuthToken } from "@/stores/auth";
-import { setLoginExpiryNoticeOnce } from "@/stores/auth/login-expiry-notice";
+import { markLoginExpiredOnce } from "@/stores/auth/login-expiry-notice";
 
 export const API_BASE = "/api";
 
@@ -29,15 +29,22 @@ function buildAuthHeaders(headers: HeadersInit = {}): HeadersInit {
   };
 }
 
-/** 401 / 无凭证的单一失效出口：写一次性过期提示 → 清会话 → 跳登录页。
+/** 跳登录页的单一 owner（未登录直入与 401 失效共用）：清会话 + 整页跳转，不写过期提示。 */
+export function redirectToLogin(): void {
+  authStore.getState().clearSession();
+  window.location.href = "/login";
+}
+
+/** 401 失效出口：标记过期（兼作去重）→ 清会话 → 跳登录页。
  *
- *  提示键兼作去重标记：并发多请求同时撞 401 时只有首个调用方触发整套处置
- *  （已设标记不再跳/不再写），其余只抛错终止调用方，避免重复跳转/重复写提示。
+ *  同一去重窗口内并发多请求撞 401，只有首个调用方触发整套处置（已设标记不再跳/不再写），
+ *  其余只抛错终止调用方；窗口时长、写失败兜底与处置被打断的残余边界见
+ *  `stores/auth/login-expiry-notice.ts` 模块注释。未登录直入（发起时本就无凭据）**不走
+ *  本出口**：那是「未登录」不是「登录过期」，调用点直接 `redirectToLogin` 静默跳转。
  *  清会话复用 authStore.clearSession（401/登出单一 owner），此处不另造清理逻辑。 */
 function handleUnauthorized(): never {
-  if (setLoginExpiryNoticeOnce()) {
-    authStore.getState().clearSession();
-    window.location.href = "/login";
+  if (markLoginExpiredOnce()) {
+    redirectToLogin();
   }
   throw new Error("Unauthorized");
 }
@@ -196,14 +203,17 @@ export async function apiRequestFile(
 }
 
 /** SSE 流请求（当前仅 ReAct 测试端点 `/api/test/react/:id`）：`fetchEventSource` 自己
- *  管连接与取消，拿不到 Response 也就无法走信封拆包——故它只借这里的鉴权与失效处置：
- *  无凭证时清会话 + 跳登录页（与 `apiRequest` 的 401 处置一致；此前该调用点只跳转不
- *  清会话，会让 store 与 localStorage 留着失效 token）。事件内容与错误呈现归调用方。
- *  新增长连接端点若也要走这条通道，必须复用本函数而不是自拼 Authorization。 */
+ *  管连接与取消，拿不到 Response 也就无法走信封拆包——故它只借这里的鉴权头与「无凭证
+ *  直入」处置：发起时无凭证则清会话 + 跳登录页（未登录场景，不写过期提示）。覆盖面仅限
+ *  「发起时无凭证」——连接建立后收到的 401 走 `fetchEventSource` 的 onerror，不经此出口
+ *  （缺口已登记 find-issues，勿把这里当「SSE 的 401 也收口了」的依据）。
+ *  事件内容与错误呈现归调用方。新增长连接端点若也要走这条通道，必须复用本函数而不是
+ *  自拼 Authorization。 */
 export function requireAuthTokenOrRedirect(): string | null {
   const token = getAuthToken();
   if (!token) {
-    handleUnauthorized();
+    redirectToLogin();
+    throw new Error("Unauthorized");
   }
   return token;
 }

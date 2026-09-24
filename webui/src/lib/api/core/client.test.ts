@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { authStore } from "@/stores/auth";
+import { queryClient } from "@/lib/query-client";
 import {
   LOGIN_EXPIRY_NOTICE_STORAGE_KEY,
-  LOGIN_EXPIRY_NOTICE_TEXT,
   consumeLoginExpiryNotice,
+  hasLoginExpiryNotice,
 } from "@/stores/auth/login-expiry-notice";
 import {
   apiRequest,
@@ -64,6 +65,7 @@ beforeEach(() => {
   // 一次性过期提示是「读后即焚」的会话级标记：不清会跨用例残留，
   // 让「已设标记不再跳」的去重判据误判成上个用例写过的旧标记
   sessionStorage.clear();
+  consumeLoginExpiryNotice();
 
   // jsdom 的 location.href 赋值会触发「navigation not implemented」告警，也无法断言；
   // 换成可写对象，让「跳登录页」这一副作用可被检查。
@@ -241,49 +243,80 @@ describe("401 处置", () => {
     await expect(apiRequestAnonymous("/auth/login")).rejects.toThrow("invalid password");
     expect(locationAssignments).toEqual([]);
     // 密码错不是登录过期：不写过期提示，否则登录页会把「密码错误」和「登录已过期」同时上屏
-    expect(consumeLoginExpiryNotice()).toBeNull();
+    expect(hasLoginExpiryNotice()).toBe(false);
     const [, init] = fetchMock.mock.calls[0];
     expect(init.headers).not.toHaveProperty("Authorization");
   });
 
-  it("401 写入一次性过期提示：文案是静态常量，不携带响应体内部错误文本", async () => {
+  it("401 标记过期提示：标记值只含时间戳，响应体内部错误文本无从进入提示通道", async () => {
     fetchMock.mockResolvedValue(
       response({ status: 401, body: { code: 401, message: "Invalid or expired token" } }),
     );
 
     await expect(apiRequest("/probe")).rejects.toThrow("Unauthorized");
-    // 精确等值：响应体里的 "Invalid or expired token" 不得混进提示
-    expect(consumeLoginExpiryNotice()).toBe(LOGIN_EXPIRY_NOTICE_TEXT);
+    expect(hasLoginExpiryNotice()).toBe(true);
+    // 结构性锁定「不携带内部错误文本」：存储值是纯时间戳，不含任何响应体内容
+    expect(sessionStorage.getItem(LOGIN_EXPIRY_NOTICE_STORAGE_KEY)).toMatch(/^\d+$/);
+    expect(sessionStorage.getItem(LOGIN_EXPIRY_NOTICE_STORAGE_KEY)).not.toContain(
+      "Invalid or expired token",
+    );
   });
 
-  it("并发多请求撞 401 只触发一次失效处置（已设标记不再跳/不再写）", async () => {
+  it("并发多请求撞 401（混合三种通道）只触发一次失效处置（已设标记不再跳/不再写）", async () => {
     fetchMock.mockResolvedValue(
       response({ status: 401, body: { code: 401, message: "Invalid or expired token" } }),
     );
     const setItemSpy = vi.spyOn(Storage.prototype, "setItem");
+    const clearSpy = vi.spyOn(queryClient, "clear");
 
     const results = await Promise.allSettled([
-      apiRequest("/probe-a"),
-      apiRequest("/probe-b"),
-      apiRequest("/probe-c"),
+      apiRequest("/probe-json"),
+      apiRequestForm("/probe-form", { method: "POST", body: new FormData() }),
+      apiRequestFile("/probe-file"),
     ]);
 
-    // 三个调用方都拿到拒绝（各自抛 Unauthorized 终止），但跳转与提示只触发一次
+    // 三个调用方都拿到拒绝（各自抛 Unauthorized 终止），但跳转、提示写入、清会话各只一次
     expect(results.map((r) => r.status)).toEqual(["rejected", "rejected", "rejected"]);
     expect(locationAssignments).toEqual(["/login"]);
     const noticeWrites = setItemSpy.mock.calls.filter(
       ([key]) => key === LOGIN_EXPIRY_NOTICE_STORAGE_KEY,
     );
     expect(noticeWrites).toHaveLength(1);
-    expect(authStore.getState().token).toBeNull();
+    expect(clearSpy).toHaveBeenCalledTimes(1);
     setItemSpy.mockRestore();
+    clearSpy.mockRestore();
   });
 
-  it("无凭证直接进入受保护页（requireAuthTokenOrRedirect）同样写提示并跳登录页", () => {
+  it("apiRequestForm 收到 401：同走失效出口（标记提示 + 清会话 + 跳登录页）", async () => {
+    fetchMock.mockResolvedValue(
+      response({ status: 401, body: { code: 401, message: "Invalid or expired token" } }),
+    );
+
+    await expect(
+      apiRequestForm("/system/import-config", { method: "POST", body: new FormData() }),
+    ).rejects.toThrow("Unauthorized");
+    expect(hasLoginExpiryNotice()).toBe(true);
+    expect(authStore.getState().token).toBeNull();
+    expect(locationAssignments).toEqual(["/login"]);
+  });
+
+  it("apiRequestFile 收到 401：同走失效出口（标记提示 + 清会话 + 跳登录页）", async () => {
+    fetchMock.mockResolvedValue(
+      response({ status: 401, body: { code: 401, message: "Invalid or expired token" } }),
+    );
+
+    await expect(apiRequestFile("/system/export-config")).rejects.toThrow("Unauthorized");
+    expect(hasLoginExpiryNotice()).toBe(true);
+    expect(authStore.getState().token).toBeNull();
+    expect(locationAssignments).toEqual(["/login"]);
+  });
+
+  it("无凭证直入受保护页（requireAuthTokenOrRedirect）：清会话 + 跳登录页，不写过期提示（未登录 ≠ 登录过期）", () => {
     authStore.setState({ token: null, user: null });
 
     expect(() => requireAuthTokenOrRedirect()).toThrow("Unauthorized");
-    expect(consumeLoginExpiryNotice()).toBe(LOGIN_EXPIRY_NOTICE_TEXT);
+    expect(hasLoginExpiryNotice()).toBe(false);
+    expect(authStore.getState().token).toBeNull();
     expect(locationAssignments).toEqual(["/login"]);
   });
 });

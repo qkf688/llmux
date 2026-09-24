@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { StrictMode } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ThemeProvider } from "@/components/theme-provider";
 import { login as loginApi } from "@/lib/api/modules/auth/auth";
 import {
   LOGIN_EXPIRY_NOTICE_STORAGE_KEY,
-  LOGIN_EXPIRY_NOTICE_TEXT,
-  setLoginExpiryNoticeOnce,
+  consumeLoginExpiryNotice,
+  hasLoginExpiryNotice,
+  markLoginExpiredOnce,
 } from "@/stores/auth/login-expiry-notice";
 import LoginPage from "./login";
 
@@ -15,18 +17,22 @@ vi.mock("@/lib/api/modules/auth/auth", () => ({
   changePassword: vi.fn(),
 }));
 
+// StrictMode 对齐 main.tsx 的真实挂载形态：双渲染/双 effect 下提示仍须只展示一次且不丢失
 function renderPage() {
   return render(
-    <ThemeProvider>
-      <MemoryRouter initialEntries={["/login"]}>
-        <LoginPage />
-      </MemoryRouter>
-    </ThemeProvider>,
+    <StrictMode>
+      <ThemeProvider>
+        <MemoryRouter initialEntries={["/login"]}>
+          <LoginPage />
+        </MemoryRouter>
+      </ThemeProvider>
+    </StrictMode>,
   );
 }
 
 beforeEach(() => {
   sessionStorage.clear();
+  consumeLoginExpiryNotice();
   vi.mocked(loginApi).mockReset();
   // jsdom 没有 matchMedia，ThemeProvider 解析系统主题时会调用：给个最小实现
   vi.stubGlobal(
@@ -44,20 +50,21 @@ afterEach(() => {
 });
 
 describe("登录过期一次性提示", () => {
-  it("401 跳转后展示提示，读后即焚且只展示一次（文案精确等值，不携带内部错误文本）", () => {
-    setLoginExpiryNoticeOnce();
+  it("401 跳转后展示提示，读后即焚且只展示一次（文案钉死字面量，不携带内部错误文本）", () => {
+    markLoginExpiredOnce();
 
     const { unmount } = renderPage();
 
-    // 展示的文案精确等于静态常量——断言文本本体而非子串，任何内部错误文本混入都会判红
-    expect(screen.getByRole("status").textContent).toBe(LOGIN_EXPIRY_NOTICE_TEXT);
-    // 读后清除：存储里不再残留
+    // 文案精确等于字面量（非子串、也非对着实现常量比较）：任何动态文本混入都会判红
+    expect(screen.getByRole("status").textContent).toBe("登录已过期，请重新登录");
+    // 读后清除：存储与内存标记都不再残留
     expect(sessionStorage.getItem(LOGIN_EXPIRY_NOTICE_STORAGE_KEY)).toBeNull();
+    expect(hasLoginExpiryNotice()).toBe(false);
 
     // 只展示一次：整页刷新后重新挂载登录页不再出现
     unmount();
     renderPage();
-    expect(screen.queryByText(LOGIN_EXPIRY_NOTICE_TEXT)).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("登录密码错误：展示错误文案，不走过期提示通道", async () => {
@@ -68,8 +75,8 @@ describe("登录过期一次性提示", () => {
     fireEvent.click(screen.getByRole("button", { name: "登录" }));
 
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("密码错误"));
-    expect(screen.queryByText(LOGIN_EXPIRY_NOTICE_TEXT)).toBeNull();
-    expect(sessionStorage.getItem(LOGIN_EXPIRY_NOTICE_STORAGE_KEY)).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(hasLoginExpiryNotice()).toBe(false);
   });
 
   it("没有过期提示时不渲染提示区（正常打开登录页不显示多余文案）", () => {

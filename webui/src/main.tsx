@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { selectIsAuthenticated, useAuthStore } from "@/stores/auth";
+import { redirectToLogin } from "@/lib/api/core/client";
 
 // Redirect to login if not authenticated (except for login page)
 const ProtectedApp = () => {
@@ -17,7 +18,9 @@ const ProtectedApp = () => {
 
   // Redirect to login if not authenticated
   if (!isAuthenticated) {
-    window.location.href = '/login';
+    // 跳登录页走失效处置的单一 owner（清会话 + 跳转）：此处是「未登录直入」，
+    // 不写过期提示；禁止再手写 window.location.href = '/login' 另开第二处跳转 owner
+    redirectToLogin();
     return null;
   }
 

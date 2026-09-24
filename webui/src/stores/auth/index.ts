@@ -10,9 +10,3 @@ export {
 } from "@/stores/auth/selectors";
 export { AUTH_TOKEN_STORAGE_KEY, readAuthToken, writeAuthToken, clearAuthToken } from "@/stores/auth/token-storage";
 export { AUTH_USER_STORAGE_KEY, readAuthUser, writeAuthUser, clearAuthUser } from "@/stores/auth/user-storage";
-export {
-  LOGIN_EXPIRY_NOTICE_STORAGE_KEY,
-  LOGIN_EXPIRY_NOTICE_TEXT,
-  setLoginExpiryNoticeOnce,
-  consumeLoginExpiryNotice,
-} from "@/stores/auth/login-expiry-notice";

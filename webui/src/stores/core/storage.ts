@@ -8,6 +8,15 @@ export function getBrowserLocalStorage(): StorageLike | null {
   }
 }
 
+/** 会话级存储（跨整页刷新存活、关标签页即清）：一次性提示等「本轮会话有效」的状态用它。 */
+export function getBrowserSessionStorage(): StorageLike | null {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
 export function readStorageString(key: string, storage: StorageLike | null = getBrowserLocalStorage()): string | null {
   try {
     return storage?.getItem(key) ?? null;

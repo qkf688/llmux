@@ -1,4 +1,5 @@
 import { authStore, getAuthToken } from "@/stores/auth";
+import { setLoginExpiryNoticeOnce } from "@/stores/auth/login-expiry-notice";
 
 export const API_BASE = "/api";
 
@@ -28,9 +29,16 @@ function buildAuthHeaders(headers: HeadersInit = {}): HeadersInit {
   };
 }
 
+/** 401 / 无凭证的单一失效出口：写一次性过期提示 → 清会话 → 跳登录页。
+ *
+ *  提示键兼作去重标记：并发多请求同时撞 401 时只有首个调用方触发整套处置
+ *  （已设标记不再跳/不再写），其余只抛错终止调用方，避免重复跳转/重复写提示。
+ *  清会话复用 authStore.clearSession（401/登出单一 owner），此处不另造清理逻辑。 */
 function handleUnauthorized(): never {
-  authStore.getState().clearSession();
-  window.location.href = "/login";
+  if (setLoginExpiryNoticeOnce()) {
+    authStore.getState().clearSession();
+    window.location.href = "/login";
+  }
   throw new Error("Unauthorized");
 }
 

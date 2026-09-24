@@ -55,7 +55,7 @@ routes/<page>/
 - `lib/api/`：HTTP 客户端与领域 API 函数。测试类 API（`testModelProvider*` / `testProviderModel`）接受**可选** `signal`，调用方从 `AbortController` 透传——取消要真正生效必须一路传到 `fetch`，只在前端把 loading 置否不会停止上游会话计费
 - `lib/concurrent-batch.ts`：批量并发调度**跨域单一来源**（providers 页两套批量 + model-providers 页批量）。`runItem` 回 `"success" | "failed" | "cancelled"` 三态并被单独计数。两条硬约束：① **调用方必须把 signal 透传到真正的请求上**——只判 `signal.aborted` 就返回会让「取消」停在调度层（不再派新项，但在飞的那项照跑完并计费）；② 中止异常用 `lib/errors.isAbortError` 判为 `"cancelled"`，与 `"failed"` 分开计——取消不证明供应商不可用，混进失败会污染「选择失败项」这类下游动作
 - `lib/clipboard.ts`：剪贴板写入**跨域单一来源**（providers 模型名、号池凭据 key、供应商内联 key 三处共用）。降级链 = 安全上下文走 Clipboard API → 非安全上下文（`http://<ip>:7070`）直接走同步 `execCommand`（保住点击手势有效期）→ 再失败弹手动复制 prompt，逐级回传 `method`；`copyTextDetailed` 是唯一的结构化入口（不依赖 toast，非 UI 场景复用它）。两个带提示的入口按内容敏感度二选一：普通文本用 `copyTextWithToast`（保留 prompt 兜底），**明文 key 等机密必须用 `copySecretWithToast`**（禁 prompt——`window.prompt` 的默认值参数会把机密整条弹上屏：模态、可被肩窥/录屏捕获、且不受前端任何生命周期守卫管辖）。成功提示只传掩码或行号：机密不得写进任何用户可见文案（toast / prompt / `title` / `aria-label`）。任何新的复制入口都必须走此处，禁止在页面里直接调 `navigator.clipboard`
-- `stores/`：客户端状态；`Updater` / `Setter` 统一更新模式
+- `stores/`：客户端状态；`Updater` / `Setter` 统一更新模式。`stores/auth/login-expiry-notice.ts` 是「登录已过期」一次性提示的**载体单一来源**（sessionStorage 单键兼任提示内容与去重标记：`setLoginExpiryNoticeOnce` 仅首次写入并返回是否本次触发、`consumeLoginExpiryNotice` 读后即焚），登录页挂载时取走展示，其余处禁止直读写该键
 - `components/ui/`：Radix + Tailwind 基础组件
 - `components/ui/dialog.tsx`：全站 dialog 尺寸配方单一数据源（`dialogContentVariants` 六档 `sm`/`md`/`lg`/`xl`/`menu`/`sheet`，宽度一律带 `sm:` 前缀；`lg`/`xl` 固定高度、其余只给 `max-h` 上限——按「内容量在弹窗生命周期内是否会变」分而非按档位一刀切）+ `DialogBody`（Header/Footer 之间唯一的滚动容器）。29 处 `DialogContent` 全部只声明 `size`，页面侧无尺寸类；`alert-dialog.tsx` 的 `AlertDialogContent` 同为确认框单一数据源（固定 `sm:max-w-lg` + `max-h-[85dvh]`，无 body 抽象、整框滚动）
 - `components/page-header.tsx`：全站页头单一数据源（图标 + 标题/副标题 + 右侧动作，卡片外壳 `rounded-xl border bg-card shadow-sm`，标题统一 `h2 text-xl`）；各页页头**必须**复用，禁止再手写裸标题
@@ -79,7 +79,7 @@ routes/<page>/
 - **API 信封与失败文案（Stage 8 起，单一通道）**：响应信封为 `{ code, message, data }`——`data`/`error` 带 `omitempty`，**失败信封不含 `data` 键**、`error` 键仅 500 有（前端按可选读，勿假设键恒在）。一个请求「成不成功」看两个信号——真实 HTTP 状态码与信封 `code`；两者都由 `client.ts` 读取，**页面层不得自己解响应**（此前 `createApiKey`/`importConfig`/两处导出各写一份手写解包，已全部收编）。
   - `client.ts` 是 `/api` **信封型**请求的唯一出口（例外：`/api/test/react/:id` 是 SSE，由 `fetchEventSource` 消费，不经信封）。
   - 失败一律抛 `Error(可展示文案)`：优先信封 `message`，其次 `error`，再退中文兜底（真实非 2xx 为 `请求失败（错误码 <status>）`，2xx 但信封 `code≠200` 为 `请求失败（响应码 <code>）`）；body 解析不出对象（非 JSON / 字面量 `null`）时给固定人话，不透传 `SyntaxError`/`TypeError` 原文。500 额外把响应头 `X-Request-Id` 的报障编号补进文案（信封已内嵌同号则不重复），其余失败不带编号。
-  - **401 处置**：`apiRequest` 收到 401 视为登录过期 → 清会话 + 跳 `/login` + 抛 `Unauthorized`。凭据本身无效的接口用 `apiRequestAnonymous`（当前仅登录：密码错的 401 要留在页面上显示，不能把刚写的提示刷掉）；判断「密码/旧密码填错」类**不给后端 401**（改密码已改判 400，见 `handler/auth/password.go`），故不需要前端接口名单。
+  - **401 处置**：`apiRequest` 收到 401 视为登录过期 → 清会话 + 跳 `/login` + 抛 `Unauthorized`。凭据本身无效的接口用 `apiRequestAnonymous`（当前仅登录：密码错的 401 要留在页面上显示，不能把刚写的提示刷掉）；判断「密码/旧密码填错」类**不给后端 401**（改密码已改判 400，见 `handler/auth/password.go`），故不需要前端接口名单。**失效处置单一出口** `handleUnauthorized`（Stage 22）：写一次性过期提示（`stores/auth/login-expiry-notice.ts`，文案是静态常量，不携带内部错误文本）→ `authStore.clearSession`（401/登出单一 owner，不另造清理逻辑）→ 跳 `/login`；并发多请求同时撞 401 时只有首个调用方触发整套处置（已设标记不再跳/不再写），其余只抛 `Unauthorized` 终止调用方；登录页挂载时取走提示展示一次并清除（读后即焚）。无凭证直入受保护页（`requireAuthTokenOrRedirect`）同走此出口。
   - 文件下载走 `apiRequestFile`：成功路径必须设 `Content-Disposition`（判据），否则被当成失败信封；`apiRequestForm` 用于 FormData（不注入 `Content-Type`，保住 multipart 边界）。
 - 路径别名：`@` → `src/`
 - 修改前端后需重新 `pnpm run build`（或 `make webui`）才能进入 embed 二进制

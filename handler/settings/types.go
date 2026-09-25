@@ -40,7 +40,9 @@ type Settings struct {
 	LogRawRequestResponse            models.RawLogOptions `json:"log_raw_request_response"`
 	LogRawRequestResponseErrorsOnly  bool                 `json:"log_raw_request_response_errors_only"`
 	// RawLogFieldMaxKiB 原始采集四字段（请求体/原始请求体/原始响应体/Error）的单字段文本上限（KiB，Stage 2-D；默认 256、下限 16）
-	RawLogFieldMaxKiB         int  `json:"raw_log_field_max_kib"`
+	RawLogFieldMaxKiB int `json:"raw_log_field_max_kib"`
+	// ResponseLogMaxKiB 回复类日志（ResponseBody/流式 ChatIO 累积）的单条上限（KiB，Stage 23；默认 2048、下限 16、硬顶 16384）
+	ResponseLogMaxKiB         int  `json:"response_log_max_kib"`
 	DisableAllLogs            bool `json:"disable_all_logs"`
 	CountHealthCheckAsSuccess bool `json:"count_health_check_as_success"`
 	CountHealthCheckAsFailure bool `json:"count_health_check_as_failure"`

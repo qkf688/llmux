@@ -48,6 +48,14 @@ func getRawLogFieldMaxBytes(ctx context.Context) int {
 	return settingsReader.Int(ctx, models.SettingKeyRawLogFieldMaxKiB, 256, 16) << 10
 }
 
+// getResponseLogMaxBytes 回复类日志（ResponseBody/流式 ChatIO 累积）的单条上限
+// （设置单位 KiB，默认 2048、下限 16、硬顶 16384，Stage 23）。与 getRawLogFieldMaxBytes
+// 的差异：这是「看全文」口径——采集开关本就只在调试时打开，故默认给足原文体量，
+// 超限存头尾两段而非纯尾切；两上限管的对象不同（采集四字段 vs 回复整条），不合并。
+func getResponseLogMaxBytes(ctx context.Context) int {
+	return settingsReader.Int(ctx, models.SettingKeyResponseLogMaxKiB, 2048, 16) << 10
+}
+
 // getDisableAllLogs 获取是否完全关闭日志记录
 func getDisableAllLogs(ctx context.Context) bool {
 	return settingsReader.Bool(ctx, models.SettingKeyDisableAllLogs, false)

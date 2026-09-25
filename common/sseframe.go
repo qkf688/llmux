@@ -25,11 +25,11 @@ func IsEventStreamContentType(contentType string) bool {
 }
 
 // SSETruncatedMarker 生成「头尾保留、中段截断」标记文案（droppedBytes 为丢弃字节数）。
-// 流式日志累积器（transform/streaming）与探针回显（credprobe）曾在两处各写一份此文案：
-// 消费侧以「有无标记」区分「上游就这么短」与「被截断」，两侧字样必须逐字一致，
-// 故与分帧判据同归本文件单源（AGENTS 4.4 DRY）。
+// Stage 23 起全项目截断标记统一单源 common.TruncateHeadTail：本函数保留独立换行
+// 包裹的流式形态（标记独占行，与 SSE 文本的事件边界对齐），文案委托统一单源——
+// 消费侧以「有无标记」区分「上游就这么短」与「被截断」，字样必须逐字一致（AGENTS 4.4 DRY）。
 func SSETruncatedMarker(droppedBytes int) string {
-	return fmt.Sprintf("\n...[llmux truncated %d bytes of raw SSE middle section, head/tail preserved]...\n\n", droppedBytes)
+	return "\n" + TruncateHeadTail(0, 0, droppedBytes) + "\n\n"
 }
 
 // SSEFrame 一个已分帧的 SSE 事件。Event 取自 event: 行（OpenAI Chat 通常为空，

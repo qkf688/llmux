@@ -3,7 +3,9 @@ package chat
 import (
 	"context"
 	"log/slog"
+	"strings"
 
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/models"
 )
 
@@ -24,7 +26,7 @@ func persistChatLog(ctx context.Context, in RecordLogInput, logUpdate models.Cha
 	defer cancel()
 
 	if opts.ResponseBody {
-		applyResponseBodyToLog(&logUpdate, output)
+		applyResponseBodyToLog(writeCtx, &logUpdate, output)
 	}
 
 	if _, err := repos().ChatLog.UpdateByID(writeCtx, in.LogID, logUpdate); err != nil {
@@ -33,23 +35,66 @@ func persistChatLog(ctx context.Context, in RecordLogInput, logUpdate models.Cha
 	}
 
 	if in.IOLog {
-		if err := createChatIO(writeCtx, in.LogID, in.Before.raw, output); err != nil {
+		if err := createChatIO(writeCtx, in.LogID, in.Before.raw, capOutputUnion(writeCtx, output)); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+// capOutputUnion ChatIO 落库前的体积保险闸（Stage 23）：processer 侧已由
+// outputBudgetAccumulator 收口，这里是防线——未来调用方直接传大数组（绕过
+// processer）时 ChatIO 不会被重新撑开。非流式 OfString 与流式数组同一预算。
+func capOutputUnion(ctx context.Context, output *models.OutputUnion) *models.OutputUnion {
+	if output == nil {
+		return nil
+	}
+	limit := getResponseLogMaxBytes(ctx)
+
+	total := len(output.OfString)
+	if total == 0 {
+		for _, c := range output.OfStringArray {
+			total += len(c)
+		}
+	}
+	if total <= limit {
+		return output
+	}
+
+	half := (limit - responseLogMarkerReserve) / 2
+	capped := models.OutputUnion{}
+	var body string
+	if output.OfString != "" {
+		body = output.OfString
+	} else {
+		var b strings.Builder
+		for _, chunk := range output.OfStringArray {
+			b.WriteString(chunk)
+			b.WriteByte('\n')
+		}
+		body = b.String()
+	}
+	out := common.TruncateHeadTailUTF8(body, half, (limit-responseLogMarkerReserve)-half)
+	if output.OfString != "" {
+		capped.OfString = out
+	} else {
+		capped.OfStringArray = []string{out}
+	}
+	return &capped
+}
+
 // applyResponseBodyToLog 将 processer 产出的输出联合体拼装为字符串，填入 log.ResponseBody。
 // 非流式：OfString 即完整响应体；流式：OfStringArray 按 chunk 顺序拼接（每个 chunk 占一行）。
 // 开启 ResponseBody 记录时始终赋值（含空串），与拆分前闭包语义一致。
-func applyResponseBodyToLog(log *models.ChatLog, output *models.OutputUnion) {
+// Stage 23：落库文本受 getResponseLogMaxBytes 上限约束（流式/非流式同一把刀），
+// 超限存「头段 + 统一标记 + 尾段」（common.TruncateHeadTailUTF8 单源）。
+func applyResponseBodyToLog(ctx context.Context, log *models.ChatLog, output *models.OutputUnion) {
 	if output == nil {
 		log.ResponseBody = ""
 		return
 	}
 	if output.OfString != "" {
-		log.ResponseBody = output.OfString
+		log.ResponseBody = truncateResponseBody(ctx, output.OfString)
 		return
 	}
 	if len(output.OfStringArray) > 0 {
@@ -57,10 +102,27 @@ func applyResponseBodyToLog(log *models.ChatLog, output *models.OutputUnion) {
 		for _, chunk := range output.OfStringArray {
 			body += chunk + "\n"
 		}
-		log.ResponseBody = body
+		log.ResponseBody = truncateResponseBody(ctx, body)
 		return
 	}
 	log.ResponseBody = ""
+}
+
+// responseLogMarkerReserve 头尾标记的最大字节预算：基准文案 101 字节（0 值），
+// 四个数值最多 5 位（16384 上限内至多 5 位数）各 +4 字节，取 120 留余量。
+// 两侧保留字节数的预算 = limit − 本值；即使数值位数到顶，总长仍 ≤ limit。
+const responseLogMarkerReserve = 120
+
+// truncateResponseBody 回复日志单条上限的单一收口：超限头尾保留（收尾事件/结尾
+// 错误信息对排障与头部同等关键，纯尾切会丢掉它们）。标记字节计入预算之内——
+// 「上限」对库体积的承诺是硬的，总长必须 ≤ limit。
+func truncateResponseBody(ctx context.Context, body string) string {
+	limit := getResponseLogMaxBytes(ctx)
+	if len(body) <= limit {
+		return body
+	}
+	budget := limit - responseLogMarkerReserve
+	return common.TruncateHeadTailUTF8(body, budget/2, budget-budget/2)
 }
 
 // createChatIO 写入一条 ChatIO 记录（原始输入 + 转换后输出联合体）。

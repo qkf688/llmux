@@ -375,7 +375,7 @@ func TestRunStreamProbe_RawOutputTruncatedFramesLossless(t *testing.T) {
 	if len(out.RawOutput) >= len(body) {
 		t.Fatalf("RawOutput 未被截断（%d vs %d），截断预算失效", len(out.RawOutput), len(body))
 	}
-	if !strings.Contains(out.RawOutput, "llmux truncated") {
+	if !strings.Contains(out.RawOutput, "内容过长已截断") {
 		t.Fatalf("RawOutput 缺截断标记: %q", out.RawOutput)
 	}
 	// 尾段必须保住：[DONE] 在末尾，头截式截断会丢掉最有诊断价值的收尾。

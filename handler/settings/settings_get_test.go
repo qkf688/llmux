@@ -47,6 +47,10 @@ func TestDefaultSettingsResponse(t *testing.T) {
 	if response.RawLogFieldMaxKiB != 256 {
 		t.Fatalf("expected RawLogFieldMaxKiB default to be 256, got %d", response.RawLogFieldMaxKiB)
 	}
+	// Stage 23：回复日志单条上限默认 2 MiB（「看全文」口径，调试开关场景）。
+	if response.ResponseLogMaxKiB != 2048 {
+		t.Fatalf("expected ResponseLogMaxKiB default to be 2048, got %d", response.ResponseLogMaxKiB)
+	}
 	// 缓存亲和默认开启：粘性选路是纯优化（失效无害退化为现状选择），默认开让缓存省钱即刻生效。
 	if !response.CacheAffinityEnabled {
 		t.Fatalf("expected CacheAffinityEnabled default to be true")

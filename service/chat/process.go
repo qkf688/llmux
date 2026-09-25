@@ -78,10 +78,15 @@ func createProcesser(cfg processerConfig) Processer {
 
 		chunkCount := 0
 
+		// Stage 23：流式累积预算闸——OfStringArray 无上限累积会把内存与 ChatIO
+		// 落库体积双双撑爆（长流 × 并发），超限产出头/标记/尾三 chunk。
+		// 预算在 detached ctx 读（与 rawLogFieldLimit 同口径，防死 ctx 退默认值）。
+		var outputAcc *outputBudgetAccumulator
 		if stream {
-			output.OfStringArray = make([]string, 0, DefaultChunkArrayCapacity)
+			withDetachedLogCtx(ctx, func(dctx context.Context) {
+				outputAcc = newOutputBudgetAccumulator(getResponseLogMaxBytes(dctx))
+			})
 		}
-
 		if !stream {
 			scanner := bufio.NewScanner(pr)
 			scanner.Buffer(make([]byte, 0, InitScannerBufferSize), MaxScannerBufferSize)
@@ -129,7 +134,7 @@ func createProcesser(cfg processerConfig) Processer {
 					}
 
 					if chunk != "" {
-						output.OfStringArray = append(output.OfStringArray, chunk)
+						outputAcc.write(chunk)
 					}
 
 					if !disableTokenCounting && usageStr == "" && cfg.streamUsageExtract != nil {
@@ -140,6 +145,11 @@ func createProcesser(cfg processerConfig) Processer {
 			if scanErr != nil && !errors.Is(scanErr, streamDone) {
 				return nil, nil, scanErr
 			}
+		}
+
+		if outputAcc != nil {
+			chunks, _ := outputAcc.flush()
+			output.OfStringArray = chunks
 		}
 
 		var usage models.Usage

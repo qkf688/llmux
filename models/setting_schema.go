@@ -103,6 +103,9 @@ func buildSettingSchemas() map[string]SettingSchema {
 		{Key: SettingKeyLogRawRequestResponseErrorsOnly, Field: "LogRawRequestResponseErrorsOnly", Type: SettingTypeBool, Default: false, Category: "log"},
 		// Stage 2-D：四字段共用一个截断上限（KiB），headers 字段天然小、不纳入。
 		{Key: SettingKeyRawLogFieldMaxKiB, Field: "RawLogFieldMaxKiB", Type: SettingTypeInt, Default: 256, Category: "log", Min: intPtr(16)},
+		// Stage 23：回复日志单条上限（KiB）——「看全文」口径，默认 2MB，硬顶 16MB
+		// 防误填天文数字（与 upstream_max_response_mib 的 32MiB 内存量级对齐）。
+		{Key: SettingKeyResponseLogMaxKiB, Field: "ResponseLogMaxKiB", Type: SettingTypeInt, Default: 2048, Category: "log", Min: intPtr(16), Max: intPtr(16384)},
 		{Key: SettingKeyDisableAllLogs, Field: "DisableAllLogs", Type: SettingTypeBool, Default: false, Category: "log"},
 
 		// 健康检查

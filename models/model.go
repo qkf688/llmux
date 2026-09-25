@@ -600,7 +600,12 @@ const (
 	// 一个设置项统一盖 RequestBody/RawRequestBody/RawResponseBody/Error 四字段，
 	// 挡原始日志把 SQLite 撑大（体积闸管内存瞬时峰值，本上限管库，抓手不同）。
 	SettingKeyRawLogFieldMaxKiB = "raw_log_field_max_kib" // 原始采集字段单字段文本上限（KiB）
-	SettingKeyDisableAllLogs    = "disable_all_logs"      // 是否完全关闭所有日志记录
+	// SettingKeyResponseLogMaxKiB 回复类日志的单条上限（KiB，Stage 23）：盖非流式
+	// ResponseBody 与流式 ChatIO 累积两路（此前游离于 raw_log_field_max_kib 之外，
+	// 单条可达 MiB×并发流数）。这是「看全文」口径——默认 2MB 基本等于完整原文，
+	// 超限存头尾两段；与「采样排障」的四字段采集上限是两个抓手，故独立设键。
+	SettingKeyResponseLogMaxKiB = "response_log_max_kib"
+	SettingKeyDisableAllLogs    = "disable_all_logs" // 是否完全关闭所有日志记录
 
 	// 模型健康检测相关设置
 	SettingKeyHealthCheckEnabled               = "health_check_enabled"                 // 健康检测总开关

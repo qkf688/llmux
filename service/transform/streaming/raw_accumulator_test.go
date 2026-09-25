@@ -123,7 +123,7 @@ func TestRawAccumulator_TruncatesMiddleKeepingHeadAndTail(t *testing.T) {
 		t.Error("accumulator lost trailing usage event")
 	}
 	// 中间被丢弃时必须留下可识别的截断标记，避免与「上游就这么短」混淆。
-	if !strings.Contains(got, "truncated") {
+	if !strings.Contains(got, "内容过长已截断") {
 		t.Errorf("accumulator missing truncation marker: tail=%q", got[max(0, len(got)-200):])
 	}
 	// 总长度受头尾预算约束（标记本身占少量额外字节）。
@@ -149,7 +149,7 @@ func TestRawAccumulator_NoMarkerWhenWithinBudget(t *testing.T) {
 	defer out.Body.Close()
 	io.Copy(io.Discard, out.Body)
 
-	if got := sc.RawBody(); strings.Contains(got, "truncated") {
+	if got := sc.RawBody(); strings.Contains(got, "内容过长已截断") {
 		t.Errorf("unexpected truncation marker for small stream: %q", got)
 	}
 }
@@ -169,7 +169,7 @@ func TestRawSSEAccumulator_NoTruncationWithinHead(t *testing.T) {
 	if want := "data: a\n\ndata: b\n\n"; body != want {
 		t.Errorf("body = %q, want %q", body, want)
 	}
-	if strings.Contains(body, "truncated") {
+	if strings.Contains(body, "内容过长已截断") {
 		t.Error("unexpected truncation marker")
 	}
 }
@@ -197,7 +197,7 @@ func TestRawSSEAccumulator_HeadSealedWithoutDrop(t *testing.T) {
 	if want := rawAccumulatorHeadSize + 1024; len(body) != want {
 		t.Errorf("len(body) = %d, want %d", len(body), want)
 	}
-	if strings.Contains(body, "truncated") {
+	if strings.Contains(body, "内容过长已截断") {
 		t.Error("unexpected truncation marker when nothing was dropped")
 	}
 }
@@ -221,7 +221,7 @@ func TestRawSSEAccumulator_DroppedByteCountIsExact(t *testing.T) {
 	if dropped != wantDropped {
 		t.Errorf("dropped = %d, want %d", dropped, wantDropped)
 	}
-	if !strings.Contains(body, "truncated") {
+	if !strings.Contains(body, "内容过长已截断") {
 		t.Error("missing truncation marker")
 	}
 	// 头尾各占满预算，多出的只有标记本身。
@@ -250,7 +250,7 @@ func TestRawSSEAccumulator_SingleChunkLargerThanHead(t *testing.T) {
 	if want := size - rawAccumulatorTailSize; dropped != want {
 		t.Errorf("dropped = %d, want %d", dropped, want)
 	}
-	if !strings.Contains(body, "truncated") {
+	if !strings.Contains(body, "内容过长已截断") {
 		t.Error("missing truncation marker")
 	}
 }

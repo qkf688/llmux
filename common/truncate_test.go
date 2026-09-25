@@ -7,45 +7,83 @@ import (
 )
 
 func TestTruncateUTF8(t *testing.T) {
-	cases := []struct {
-		name     string
-		in       string
-		max      int
-		wantSame bool
-		wantLen  int // 截断后（不含标记）的正文字节数
+	tests := []struct {
+		name string
+		in   string
+		max  int
+		want string
 	}{
-		{"短于上限原样", "hello", 10, true, 0},
-		{"恰好等于上限原样", "hello", 5, true, 0},
-		{"ASCII 超限", strings.Repeat("a", 20), 10, false, 10},
-		{"上限劈在多字节中间须回退 rune 边界", strings.Repeat("字", 10), 4, false, 3},
-		{"上限 0 只剩标记", "abc", 0, false, 0},
+		{name: "within limit unchanged", in: "hello", max: 10, want: "hello"},
+		{name: "exact limit unchanged", in: "hello", max: 5, want: "hello"},
+		{name: "ascii cut appends suffix", in: "hello world", max: 5, want: "hello" + TruncatedSuffix},
+		{name: "multibyte no rune split", in: "你好世界", max: 8, want: "你好" + TruncatedSuffix}, // 3 字节/字，8B 处回退到 6B
+		{name: "zero limit suffix only", in: "abc", max: 0, want: TruncatedSuffix},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := TruncateUTF8(tc.in, tc.max)
-			if tc.wantSame {
-				if got != tc.in {
-					t.Fatalf("未超限必须原样, got %q", got)
-				}
-				return
-			}
-			if !strings.HasSuffix(got, TruncatedSuffix) {
-				t.Fatalf("超限必须带截断标记, got %q", got)
-			}
-			body := strings.TrimSuffix(got, TruncatedSuffix)
-			if len(body) != tc.wantLen {
-				t.Fatalf("正文字节数 = %d, want %d", len(body), tc.wantLen)
-			}
-			// 核心防线：正文必须停在 rune 边界——劈半的字节进 JSON 会变 U+FFFD 乱码尾。
-			if !utf8.ValidString(body) {
-				t.Fatalf("截断正文非合法 UTF-8: %q", body)
-			}
-			if strings.ContainsRune(body, utf8.RuneError) {
-				t.Fatalf("截断正文含 U+FFFD: %q", body)
-			}
-			if !strings.HasPrefix(tc.in, body) {
-				t.Fatalf("截断结果不是原文前缀")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := TruncateUTF8(tt.in, tt.max); got != tt.want {
+				t.Fatalf("TruncateUTF8(%q, %d) = %q, want %q", tt.in, tt.max, got, tt.want)
 			}
 		})
 	}
+}
+
+func TestTruncateHeadTailUTF8(t *testing.T) {
+	t.Run("within limit unchanged", func(t *testing.T) {
+		s := "hello"
+		if got := TruncateHeadTailUTF8(s, 10, 10); got != s {
+			t.Fatalf("got %q, want %q", got, s)
+		}
+	})
+
+	t.Run("exact sum unchanged", func(t *testing.T) {
+		s := "abcdef"
+		if got := TruncateHeadTailUTF8(s, 3, 3); got != s {
+			t.Fatalf("got %q, want %q", got, s)
+		}
+	})
+
+	t.Run("ascii head tail with marker", func(t *testing.T) {
+		s := strings.Repeat("a", 100)
+		got := TruncateHeadTailUTF8(s, 10, 10)
+		if !strings.HasPrefix(got, strings.Repeat("a", 10)) {
+			t.Fatalf("head not preserved: %q", got[:30])
+		}
+		if !strings.HasSuffix(got, strings.Repeat("a", 10)) {
+			t.Fatalf("tail not preserved: %q", got[len(got)-30:])
+		}
+		if !strings.Contains(got, "内容过长已截断") || !strings.Contains(got, "省略 80 字节") {
+			t.Fatalf("marker missing or wrong: %q", got)
+		}
+	})
+
+	t.Run("multibyte rune boundaries intact", func(t *testing.T) {
+		s := strings.Repeat("你", 100) // 3 bytes each
+		got := TruncateHeadTailUTF8(s, 10, 10)
+		if !utf8.ValidString(got) {
+			t.Fatalf("invalid utf8: %q", got)
+		}
+		// 10B 处回退到 9B（3 个完整字）
+		if !strings.HasPrefix(got, strings.Repeat("你", 3)) {
+			t.Fatalf("head wrong: %q", got[:20])
+		}
+		if !strings.HasSuffix(got, strings.Repeat("你", 3)) {
+			t.Fatalf("tail wrong: %q", got[len(got)-20:])
+		}
+	})
+
+	t.Run("zero head keeps tail only", func(t *testing.T) {
+		s := strings.Repeat("b", 50)
+		got := TruncateHeadTailUTF8(s, 0, 10)
+		if strings.TrimSuffix(got, s[len(s)-10:]) != TruncateHeadTail(0, 10, 40) {
+			t.Fatalf("tail-only shape wrong: %q", got)
+		}
+	})
+
+	t.Run("head tail sum over length unchanged", func(t *testing.T) {
+		s := "short"
+		if got := TruncateHeadTailUTF8(s, 10, 10); got != s {
+			t.Fatalf("got %q, want %q", got, s)
+		}
+	})
 }

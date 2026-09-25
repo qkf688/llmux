@@ -233,3 +233,45 @@ func TestUpdateSettingsFromRequest_CredHealthAuthFailThreshold_RejectsBelowMin(t
 		t.Errorf("LogRetentionCount = %d, want default 100 (validation failure must not leave partial writes)", got)
 	}
 }
+
+// TestUpdateSettingsFromRequest_ResponseLogMaxKiB_RejectsOutOfRange 回归（Stage 23）：
+// 回复日志上限 schema Min=16/Max=16384，越界（0 或天文数字）应整请求校验失败
+// （directClientError → 400），且不留下任何部分写入。
+func TestUpdateSettingsFromRequest_ResponseLogMaxKiB_RejectsOutOfRange(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value int
+	}{
+		{"below min", 0},
+		{"above max", 999999},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testsupport.InitTestDB(t)
+			ctx := context.Background()
+
+			req := &UpdateSettingsRequest{}
+			if err := models.ApplySettingDefaults(req); err != nil {
+				t.Fatalf("ApplySettingDefaults: %v", err)
+			}
+			req.ResponseLogMaxKiB = tc.value
+			req.LogRetentionCount = 42 // 合法哨兵：若部分写入会被读回
+
+			err := updateSettingsFromRequest(ctx, req)
+			if err == nil {
+				t.Fatalf("expected validation error for ResponseLogMaxKiB=%d, got nil", tc.value)
+			}
+			var clientErr directClientError
+			if !errors.As(err, &clientErr) {
+				t.Fatalf("err = %v, want directClientError（越界是客户端校验错，应 400）", err)
+			}
+
+			store := settingStore()
+			if got := store.GetInt(ctx, models.SettingKeyResponseLogMaxKiB); got != 2048 {
+				t.Errorf("ResponseLogMaxKiB = %d, want default 2048 (out-of-range must not be written)", got)
+			}
+			if got := store.GetInt(ctx, models.SettingKeyLogRetentionCount); got != 100 {
+				t.Errorf("LogRetentionCount = %d, want default 100 (validation failure must not leave partial writes)", got)
+			}
+		})
+	}
+}

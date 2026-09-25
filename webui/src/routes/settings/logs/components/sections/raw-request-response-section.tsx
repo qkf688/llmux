@@ -174,6 +174,34 @@ export function RawRequestResponseSection({ localSettings, updateLocalSettings }
             <span className="text-xs text-muted-foreground">KiB</span>
           </div>
         </div>
+
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <Label htmlFor="log-response-max-kib" className="text-xs md:text-sm font-medium">
+              回复日志单条上限
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              响应体与流式输出记录的单条上限（KiB，最小 16、最大 16384）；超出部分保留开头与结尾两段并留标记，中间内容省略。
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Input
+              id="log-response-max-kib"
+              type="number"
+              min={16}
+              max={16384}
+              className="w-24 text-right"
+              value={localSettings ? Number(localSettings.response_log_max_kib) : ""}
+              onChange={(event) => {
+                const value = Number(event.target.value);
+                if (!Number.isNaN(value)) {
+                  updateLocalSettings({ response_log_max_kib: value });
+                }
+              }}
+            />
+            <span className="text-xs text-muted-foreground">KiB</span>
+          </div>
+        </div>
       </div>
     </div>
   );

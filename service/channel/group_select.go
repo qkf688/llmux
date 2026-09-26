@@ -14,18 +14,20 @@ import (
 // 白名单/权重过滤（复用 groupWeightBuckets），且至少有一条可调度凭据——钉到「已无可
 // 调度凭据的死组」会把请求锁死在失败上，违背粘性「失效即静默回退」契约。命中钉定
 // 不推进档内轮询指针（钉定流量不得挪动常规流量的分摊位置）；失效则回退 SelectGroup。
-func selectGroupWithPrefer(s *Selector, snapshot *Snapshot, modelName string, preferID uint, now time.Time) (models.KeyGroup, error) {
+//
+// upstreamModel 是**上游模型名**（白名单命名空间，见 groupMatchesModel）。
+func selectGroupWithPrefer(s *Selector, snapshot *Snapshot, upstreamModel string, preferID uint, now time.Time) (models.KeyGroup, error) {
 	if preferID != 0 {
-		if g, ok := preferredGroup(snapshot, modelName, preferID); ok && groupHasUsableCredential(snapshot, g.ID, now) {
+		if g, ok := preferredGroup(snapshot, upstreamModel, preferID); ok && groupHasUsableCredential(snapshot, g.ID, now) {
 			return g, nil
 		}
 	}
-	return SelectGroup(s, snapshot, modelName)
+	return SelectGroup(s, snapshot, upstreamModel)
 }
 
 // preferredGroup 在同套过滤产物（groupWeightBuckets）里找钉定组：不入桶 = 钉定失效。
-func preferredGroup(snapshot *Snapshot, modelName string, preferID uint) (models.KeyGroup, bool) {
-	for _, gs := range groupWeightBuckets(snapshot.Groups, snapshot.Provider.ID, modelName) {
+func preferredGroup(snapshot *Snapshot, upstreamModel string, preferID uint) (models.KeyGroup, bool) {
+	for _, gs := range groupWeightBuckets(snapshot.Groups, snapshot.Provider.ID, upstreamModel) {
 		for _, g := range gs {
 			if g.ID == preferID {
 				return g, true
@@ -53,12 +55,13 @@ func groupHasUsableCredential(snapshot *Snapshot, groupID uint, now time.Time) b
 // weight <= 0 的分组不参与：0 是前端新增分组空输入的落值，「未配置」不该
 // 以「配了 0 权重」的身份静默进入随机池。
 //
+// upstreamModel 是**上游模型名**（白名单命名空间，见 groupMatchesModel）。
 // 无分组通过过滤 → ErrNoGroupMatches，由上层（#13 故障转移）判定分组成败。
-func SelectGroup(s *Selector, snapshot *Snapshot, modelName string) (models.KeyGroup, error) {
-	buckets := groupWeightBuckets(snapshot.Groups, snapshot.Provider.ID, modelName)
+func SelectGroup(s *Selector, snapshot *Snapshot, upstreamModel string) (models.KeyGroup, error) {
+	buckets := groupWeightBuckets(snapshot.Groups, snapshot.Provider.ID, upstreamModel)
 	if len(buckets) == 0 {
 		return models.KeyGroup{}, fmt.Errorf(
-			"%w: provider %d model %q (%d groups)", ErrNoGroupMatches, snapshot.Provider.ID, modelName, len(snapshot.Groups))
+			"%w: provider %d upstream model %q (%d groups)", ErrNoGroupMatches, snapshot.Provider.ID, upstreamModel, len(snapshot.Groups))
 	}
 
 	weightItems := make(map[int]int, len(buckets))
@@ -78,7 +81,7 @@ func SelectGroup(s *Selector, snapshot *Snapshot, modelName string) (models.KeyG
 // groupWeightBuckets 白名单过滤 + 按 weight 聚成权重档（map[weight][]KeyGroup，
 // 档内保持入参顺序）。组顺序稳定是档内轮询取模正确的前提（同一键的候选顺序
 // 不应随请求变化，否则轮询会跳跃）。
-func groupWeightBuckets(groups []models.KeyGroup, providerID uint, modelName string) map[int][]models.KeyGroup {
+func groupWeightBuckets(groups []models.KeyGroup, providerID uint, upstreamModel string) map[int][]models.KeyGroup {
 	out := make(map[int][]models.KeyGroup)
 	for _, g := range groups {
 		if g.ProviderID != providerID {
@@ -87,7 +90,7 @@ func groupWeightBuckets(groups []models.KeyGroup, providerID uint, modelName str
 		if g.Weight <= 0 {
 			continue
 		}
-		if !groupMatchesModel(g, modelName) {
+		if !groupMatchesModel(g, upstreamModel) {
 			continue
 		}
 		out[g.Weight] = append(out[g.Weight], g)
@@ -95,13 +98,25 @@ func groupWeightBuckets(groups []models.KeyGroup, providerID uint, modelName str
 	return out
 }
 
-// groupMatchesModel 分组白名单判定：白名单空 = 不限（设计定案「空 = 未同步/不限制」）。
-func groupMatchesModel(g models.KeyGroup, modelName string) bool {
+// groupMatchesModel 分组白名单判定（白名单空 = 不限，设计定案「空 = 未同步/不限制」）。
+//
+// 命名空间是**上游模型名**（供应商侧的 model 标识，即 ModelWithProvider.ProviderModel），
+// 与写侧同源：modelsync 拉 /models 后把上游模型 ID 原样填进 KeyGroup.Models，autoassoc
+// 的组织级目录按「白名单并集 ∪ custom_models」并要求关联的上游名 ∈ 目录，testapi 诊断
+// 也传 ProviderModel。传网关侧模型名（Model.Name / 请求里的 model）会让重命名关联
+// （ProviderModel ≠ Model.Name）在名单非空后恒不可选——两套名字必须只留一套。
+func groupMatchesModel(g models.KeyGroup, upstreamModel string) bool {
 	if strings.TrimSpace(g.Models) == "" {
 		return true
 	}
 	for _, m := range strings.Split(g.Models, ",") {
-		if strings.TrimSpace(m) == modelName {
+		m = strings.TrimSpace(m)
+		if m == "" {
+			// 空条目不算成员（与走同一 CSV 格式的 modelsync.splitModelsCSV 一致）：放行它会让
+			// 「关联漏填上游名 + 手改白名单留了尾逗号」两处错误相抵，一路走到上游才炸。
+			continue
+		}
+		if m == upstreamModel {
 			return true
 		}
 	}
@@ -126,7 +141,7 @@ func GroupCandidates(snapshot *Snapshot) []models.KeyGroup {
 	return out
 }
 
-// GroupCandidatesForModel 按分组白名单过滤出「可服务 modelName」的候选组，按 ID ASC，
+// GroupCandidatesForModel 按分组白名单过滤出「可服务 upstreamModel」的候选组，按 ID ASC，
 // **不看 weight、不推进任何轮询状态**——管理端连通性测试（testapi）的确定性口径。
 //
 // 三条分组口径回答的是不同问题，刻意分道（合并任意两条都会让另一条语义失真）：
@@ -139,13 +154,15 @@ func GroupCandidates(snapshot *Snapshot) []models.KeyGroup {
 // 与 SelectGroup 不同处只看白名单，不排除 weight<=0 的组：权重决定流量分摊而非可用性，
 // 把 weight=0 判成「不可用」会让管理员看到「无候选组」而该组 key 其实完好。
 // 白名单空 = 不限（与 groupMatchesModel 同一语义）。
-func GroupCandidatesForModel(snapshot *Snapshot, modelName string) []models.KeyGroup {
+// upstreamModel 是上游模型名——调用方传 ModelWithProvider.ProviderModel（testapi 即如此），
+// 与生产选路口径单源；传网关名会让「测出通过」与「生产走不到」重新分叉。
+func GroupCandidatesForModel(snapshot *Snapshot, upstreamModel string) []models.KeyGroup {
 	out := make([]models.KeyGroup, 0, len(snapshot.Groups))
 	for _, g := range snapshot.Groups {
 		if g.ProviderID != snapshot.Provider.ID {
 			continue
 		}
-		if !groupMatchesModel(g, modelName) {
+		if !groupMatchesModel(g, upstreamModel) {
 			continue
 		}
 		out = append(out, g)

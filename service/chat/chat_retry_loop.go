@@ -128,6 +128,14 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 
 		provider := in.Pool.ProviderMap[modelWithProvider.ProviderID]
 
+		// 分组白名单的命名空间 = **上游模型名**（modelWithProvider.ProviderModel），与写侧同源：
+		// modelsync 按上游 /models 返回的模型 ID 填 KeyGroup.Models，autoassoc 目录校验、
+		// testapi 诊断（GroupCandidatesForModel(mp.ProviderModel)）也都用上游名。传网关侧
+		// in.RealModelName 会让重命名关联（ProviderModel ≠ Model.Name）在名单非空后恒
+		// no group matches（历史缺口，2026-09-26 收口）。下面两处 Select 共用本变量——
+		// 只改一处会让探活重选分支退回旧口径（有用例分别锁住两处）。
+		upstreamModel := modelWithProvider.ProviderModel
+
 		// 钉定偏好只随钉定候选走（元组语义，见上方 sticky 注释）。
 		iterPrefer := channel.Prefer{}
 		if hasSticky && *id == sticky.ModelWithProviderID {
@@ -147,7 +155,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 		}
 		// 进程级共享选路器：轮询状态（分组档内 / 凭据组内）跨请求推进；新建实例
 		// 会让指针恒从 0 起算、多凭据/多组退化为确定性首选（见 channel.Select 注释）。
-		selection, err := channel.DefaultSelector().Select(snapshot, clientWire, in.RealModelName, time.Now(), iterPrefer)
+		selection, err := channel.DefaultSelector().Select(snapshot, clientWire, upstreamModel, time.Now(), iterPrefer)
 		if err != nil {
 			// 凭据耗尽：惰性探活 temp_unsched（#6-3）。成功则刷新快照重选；
 			// 端点/分组不可用不探（非凭据层问题）。Select 在凭据失败时已带回
@@ -157,7 +165,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 				if probeRecoverInGroup(in.Ctx, provider, selection.Endpoint, snapshot.CredentialsByGroup[selection.Group.ID]) {
 					refreshed, refreshErr := channel.NewAssembler(repos()).Assemble(in.Ctx, provider)
 					if refreshErr == nil {
-						if sel2, selErr := channel.DefaultSelector().Select(refreshed, clientWire, in.RealModelName, time.Now(), iterPrefer); selErr == nil {
+						if sel2, selErr := channel.DefaultSelector().Select(refreshed, clientWire, upstreamModel, time.Now(), iterPrefer); selErr == nil {
 							selection = sel2
 							snapshot = refreshed
 							err = nil

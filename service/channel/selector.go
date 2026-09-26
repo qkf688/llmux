@@ -19,17 +19,21 @@ import (
 // 端点层失败则供应商整体失败。组织级语义（ModelWithProvider.ConsecutiveFailures）
 // 不在这里触碰——本模块只选路，不判成败。
 //
+// upstreamModel 是**上游模型名**（供应商侧的 model 标识，即 ModelWithProvider.ProviderModel）：
+// 分组白名单（KeyGroup.Models）与分组级诊断（GroupCandidatesForModel）都在这个命名空间里
+// （见 groupMatchesModel）；传网关侧模型名会让重命名关联的名单过滤恒落空。
+//
 // now 由调用方注入：冷却判定与测试的时钟注入点（生产传 time.Now()）。
 //
 // 轮询状态（分组档内 / 凭据组内）存在 Selector 实例内：生产路径必须复用一个
 // 长寿实例（DefaultSelector），新建实例会让指针恒从 0 起算、多凭据/多组退化为
 // 确定性首选（credential_select / group_select 的轮询语义失效）。
-func (s *Selector) Select(snapshot *Snapshot, clientWire consts.WireFormat, modelName string, now time.Time, prefer Prefer) (SelectionResult, error) {
+func (s *Selector) Select(snapshot *Snapshot, clientWire consts.WireFormat, upstreamModel string, now time.Time, prefer Prefer) (SelectionResult, error) {
 	ep, err := SelectEndpoint(snapshot, clientWire)
 	if err != nil {
 		return SelectionResult{}, err
 	}
-	g, err := selectGroupWithPrefer(s, snapshot, modelName, prefer.GroupID, now)
+	g, err := selectGroupWithPrefer(s, snapshot, upstreamModel, prefer.GroupID, now)
 	if err != nil {
 		return SelectionResult{}, err
 	}

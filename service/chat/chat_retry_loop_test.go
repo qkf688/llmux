@@ -350,6 +350,104 @@ func TestRunProviderRetryLoop_CredentialsExhausted_ProbeRecoverInGroup(t *testin
 	// 结局中断言 1——那里没有成功出口重置，真实可观测。
 }
 
+// 外层 Select 的凭据耗尽探活重选（retry loop 的第二处 Select）同样按**上游模型名**过滤
+// 白名单：组内唯一凭据 temp_unsched → 首轮 Select 报 ErrNoCredentialAvailable（带回
+// Group）→ 惰性探活恢复 → 刷新快照重选。关联上游名 pm1、网关模型名 m、白名单写 pm1：
+// 第二处若退回 `in.RealModelName`，重选会 ErrNoGroupMatches → 候选淘汰 → 整体失败。
+// 与内层 RetryCredential 探活用例分道——那条路径锁组重选、不过白名单，锁不到这一处。
+func TestRunProviderRetryLoop_OuterSelectProbeReselect_WhitelistMatchesUpstreamModel(t *testing.T) {
+	initChatRecordTestDB(t)
+	cipher := setupChatChannelCipher(t)
+	channel.ResetDefaultSelectorForTest()
+	t.Cleanup(channel.ResetDefaultSelectorForTest)
+	SetSettingsReader(credCooldownSettingsReader{
+		Cooldown429Sec: 60, CooldownServerSec: 60, AuthFailThreshold: 1, ProbeIntervalSec: 60,
+	})
+	t.Cleanup(func() { SetSettingsReader(nil) })
+
+	var mu sync.Mutex
+	var chatAuths, probeAuths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			// 探活路径：GET {base}/models —— 唯一候选恢复成功
+			mu.Lock()
+			probeAuths = append(probeAuths, auth)
+			mu.Unlock()
+			_, _ = w.Write([]byte(`{"object":"list","data":[]}`))
+			return
+		}
+		mu.Lock()
+		chatAuths = append(chatAuths, auth)
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(chatSuccessBody))
+	}))
+	defer srv.Close()
+
+	provider := models.Provider{Name: "outer-probe", Type: providers.TypeOpenAI, Config: fmt.Sprintf(`{"base_url":%q}`, srv.URL)}
+	if err := models.DB.Create(&provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	ep := models.Endpoint{ProviderID: provider.ID, Protocol: string(consts.ProtocolOpenAI), Enabled: true}
+	if err := models.DB.Create(&ep).Error; err != nil {
+		t.Fatalf("create endpoint: %v", err)
+	}
+	// 白名单 = 上游模型名 pm1；请求模型名是 m（刻意不同，锁命名空间）。
+	grp := models.KeyGroup{ProviderID: provider.ID, Name: "g1", Weight: 1, Models: "pm1"}
+	if err := models.DB.Create(&grp).Error; err != nil {
+		t.Fatalf("create key group: %v", err)
+	}
+	// 唯一凭据已判停：首轮 Select 直接「无可调度凭据」（不经过任何上游调用）→ 探活重选分支。
+	key := models.Credential{
+		GroupID: &grp.ID, Key: mustEncrypt(t, cipher, "sk-outer"), KeyHash: cipher.Hash("sk-outer"),
+		Status: models.CredentialStatusTempUnsched, CooldownReason: "auth_fail", FailCount: 3,
+	}
+	if err := models.DB.Create(&key).Error; err != nil {
+		t.Fatalf("create credential: %v", err)
+	}
+	mwp := models.ModelWithProvider{ProviderID: provider.ID, ProviderModel: "pm1"}
+	if err := models.DB.Create(&mwp).Error; err != nil {
+		t.Fatalf("create association: %v", err)
+	}
+
+	outcome := runProviderRetryLoop(retryLoopInput{
+		Ctx:           context.Background(),
+		Start:         time.Now(),
+		Style:         string(consts.StyleOpenAI),
+		Before:        Before{Model: "m", Stream: false, raw: []byte(`{"model":"m","messages":[{"role":"user","content":"hi"}]}`)},
+		RealModelName: "m",
+		Pool: CandidatePool{
+			ProviderMap: map[uint]models.Provider{
+				provider.ID: provider,
+			},
+			ModelWithProviderMap: map[uint]models.ModelWithProvider{
+				mwp.ID: mwp,
+			},
+			WeightItems:   map[uint]int{mwp.ID: 10},
+			PriorityItems: map[uint]int{mwp.ID: 1},
+		},
+		MaxRetry:      5,
+		ClientTimeout: 2 * time.Second,
+		Deadline:      make(chan time.Time),
+		DeadlineErr:   errors.New("unused"),
+	})
+
+	if outcome.Status != retryLoopSucceeded {
+		t.Fatalf("status = %d, want %d; err = %v（探活后的第二处 Select 必须按上游模型名过白名单）", outcome.Status, retryLoopSucceeded, outcome.Err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(chatAuths) != 1 || chatAuths[0] != "Bearer sk-outer" {
+		t.Fatalf("chat auth sequence = %v, want [Bearer sk-outer]（探活恢复后由重选发起唯一一次尝试）", chatAuths)
+	}
+	if len(probeAuths) != 1 {
+		t.Fatalf("probe auths = %v, want 1 次（只发生一次耗尽）", probeAuths)
+	}
+}
+
 // TestRunProviderRetryLoop_CredentialsExhausted_ProbeFailsOrganizationFailure 锁 #12
 // 内层耗尽的**负半边**（与上面的正向用例对照）：组内首条 active key 401 判停后，锁组
 // RetryCredential 落入全 temp_unsched 组 → 惰性探活 key2 但上游 /models 返回 500 →

@@ -181,6 +181,26 @@ func TestSelectGroup_WhitelistSpacing(t *testing.T) {
 	}
 }
 
+// groupMatchesModel 的空条目口径：白名单里的空条目（"cheap-model,,"）不是成员——与走
+// 同一 CSV 格式的 modelsync.splitModelsCSV（丢弃空条目）一致。放行空条目会让「关联漏填
+// 上游名」与「手改白名单留了尾逗号」两处错误相抵：判定通过、一路走到上游才炸，报错点
+// 远离真因。
+func TestSelectGroup_EmptyEntryNotAMember(t *testing.T) {
+	snap := newTestSnapshot()
+	snap.Groups = []models.KeyGroup{
+		{ProviderID: 1, Name: "含空条目", Weight: 1, Models: "cheap-model,,"},
+	}
+
+	// 上游名命中非空条目 → 可选
+	if g, err := SelectGroup(&Selector{}, snap, "cheap-model"); err != nil || g.Name != "含空条目" {
+		t.Fatalf("SelectGroup(cheap-model) = %q, err = %v, want 含空条目", g.Name, err)
+	}
+	// 上游名为空 → 不得与空条目相等而放行
+	if _, err := SelectGroup(&Selector{}, snap, ""); !errors.Is(err, ErrNoGroupMatches) {
+		t.Fatalf("err = %v, want %v（空条目不算成员，空上游名不可选）", err, ErrNoGroupMatches)
+	}
+}
+
 // TestSelectGroup_SameWeightRoundRobin 锁 AC-3 同权重分组间轮询：
 // 三个 weight=1 分组连续选 3 次各命中一次（轮询不重复不跳过）。
 func TestSelectGroup_SameWeightRoundRobin(t *testing.T) {

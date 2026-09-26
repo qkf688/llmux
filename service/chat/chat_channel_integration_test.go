@@ -179,9 +179,10 @@ func TestBalanceChat_KeyGroupWhitelist_CredentialPlainKeyAndURLOverride(t *testi
 		t.Fatalf("create endpoint: %v", err)
 	}
 
-	// g1 白名单 [m1]（命中）、g2 白名单 [m2]（不命中）——白名单过滤决定分组，
-	// 不使用「命中分组读 Authorization」之外的随机性。
-	g1 := models.KeyGroup{ProviderID: provider.ID, Name: "g1", Weight: 10, Models: "m1"}
+	// 白名单命名空间是**上游模型名**（本用例关联 ProviderModel=pm1）：g1 白名单 [pm1]
+	// （命中）、g2 白名单 [m2]（不命中）——白名单过滤决定分组，不使用「命中分组读
+	// Authorization」之外的随机性。
+	g1 := models.KeyGroup{ProviderID: provider.ID, Name: "g1", Weight: 10, Models: "pm1"}
 	g2 := models.KeyGroup{ProviderID: provider.ID, Name: "g2", Weight: 1, Models: "m2"}
 	for _, g := range []*models.KeyGroup{&g1, &g2} {
 		if err := models.DB.Create(g).Error; err != nil {
@@ -238,6 +239,105 @@ func TestBalanceChat_KeyGroupWhitelist_CredentialPlainKeyAndURLOverride(t *testi
 		t.Fatalf("Authorization = %q, want %q（命中分组的凭据明文 key 作为鉴权）", auths[0], "Bearer sk-group1-key")
 	}
 	// URL 覆盖：请求到达 srv（端点 URL）而非 base_url 的 never 地址——端点 URL 覆盖继承链。
+}
+
+// 重命名关联（ProviderModel ≠ Model.Name）的分组白名单按**上游模型名**比对：
+// 网关模型 m1、关联上游名 pm1、白名单写 pm1 的组必须命中；同表内白名单写网关名 m1
+// 的组必须落选——两套命名空间不可互换。历史断层：白名单由同步按上游模型 ID 填充
+// （`service/modelsync`），选路若按网关名比对，重命名关联在生产恒 ErrNoGroupMatches
+// → 候选淘汰 → 重试耗尽 → /v1 回 500，而管理端连通测试（走 ProviderModel）报通过。
+func TestBalanceChat_RenamedAssociation_WhitelistMatchesUpstreamModel(t *testing.T) {
+	initChatRecordTestDB(t)
+	cipher := setupChatChannelCipher(t)
+
+	var mu sync.Mutex
+	var auths, bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		auths = append(auths, r.Header.Get("Authorization"))
+		bodies = append(bodies, string(body))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(chatSuccessBody))
+	}))
+	defer srv.Close()
+
+	model := models.Model{Name: "m1"}
+	if err := models.DB.Create(&model).Error; err != nil {
+		t.Fatalf("create model: %v", err)
+	}
+	provider := models.Provider{Name: "renamed-p", Type: providers.TypeOpenAI, Config: fmt.Sprintf(`{"base_url":%q}`, srv.URL)}
+	if err := models.DB.Create(&provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	ep := models.Endpoint{ProviderID: provider.ID, Protocol: string(consts.ProtocolOpenAI), Enabled: true}
+	if err := models.DB.Create(&ep).Error; err != nil {
+		t.Fatalf("create endpoint: %v", err)
+	}
+
+	// 两组同权重：过滤后各只剩一组，命中哪组由命名空间唯一决定（无加权随机余地）。
+	// gUpstream 白名单 = 上游模型名（同步写侧口径，应命中）；gGateway 白名单 = 网关
+	// 模型名（旧口径，必须落选——它一旦命中即说明比对又退回网关命名空间）。
+	gUpstream := models.KeyGroup{ProviderID: provider.ID, Name: "g-upstream", Weight: 10, Models: "pm1"}
+	gGateway := models.KeyGroup{ProviderID: provider.ID, Name: "g-gateway", Weight: 10, Models: "m1"}
+	for _, g := range []*models.KeyGroup{&gUpstream, &gGateway} {
+		if err := models.DB.Create(g).Error; err != nil {
+			t.Fatalf("create key group: %v", err)
+		}
+	}
+	for _, gc := range []struct {
+		g     models.KeyGroup
+		plain string
+	}{
+		{gUpstream, "sk-upstream-ns-key"},
+		{gGateway, "sk-gateway-ns-key"},
+	} {
+		cred := models.Credential{GroupID: &gc.g.ID, Key: mustEncrypt(t, cipher, gc.plain), KeyHash: cipher.Hash(gc.plain)}
+		if err := models.DB.Create(&cred).Error; err != nil {
+			t.Fatalf("create credential for %s: %v", gc.plain, err)
+		}
+	}
+
+	mwp := models.ModelWithProvider{ModelID: model.ID, ProviderID: provider.ID, ProviderModel: "pm1", Weight: 10, Priority: 1}
+	if err := models.DB.Create(&mwp).Error; err != nil {
+		t.Fatalf("create association: %v", err)
+	}
+
+	pool, err := buildCandidatePool(context.Background(), []models.ModelWithProvider{mwp})
+	if err != nil {
+		t.Fatalf("build candidate pool: %v", err)
+	}
+	result, err := BalanceChat(context.Background(), BalanceInput{
+		Start:  time.Now(),
+		Style:  string(consts.StyleOpenAI),
+		Before: Before{Model: "m1", Stream: false, raw: []byte(`{"model":"m1","messages":[{"role":"user","content":"hi"}]}`)},
+		ProvidersWithMeta: ProvidersWithMeta{
+			CandidatePool: pool,
+			Model:         &models.Model{Name: "m1"},
+		},
+		ReqMeta: models.ReqMeta{Header: http.Header{}},
+	})
+	if err != nil {
+		t.Fatalf("BalanceChat err = %v（重命名关联在白名单非空分组下必须可服务）", err)
+	}
+	if result.ProviderName != "renamed-p" {
+		t.Fatalf("ProviderName = %q, want renamed-p", result.ProviderName)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(auths) != 1 {
+		t.Fatalf("upstream hits = %d, want 1", len(auths))
+	}
+	if auths[0] != "Bearer sk-upstream-ns-key" {
+		t.Fatalf("Authorization = %q, want %q（白名单须按上游模型名比对：命中 g-upstream 而非 g-gateway）", auths[0], "Bearer sk-upstream-ns-key")
+	}
+	// 出站 body 的 model 是上游模型名：与白名单同源（都取关联的 ProviderModel）。
+	if !strings.Contains(bodies[0], `"model":"pm1"`) {
+		t.Fatalf("upstream body = %q, want model=pm1（关联重命名须落到上游请求）", bodies[0])
+	}
 }
 
 // 组内多凭据轮询推进（跨请求进程级状态）：同一供应商同一分组连续两次请求必须

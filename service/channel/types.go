@@ -48,7 +48,7 @@ type Prefer struct {
 var (
 	// ErrEndpointUnavailable 无可用端点：无 enabled 端点，或转换路径的主协议端点缺失/停用。
 	ErrEndpointUnavailable = errors.New("channel: no selectable endpoint")
-	// ErrNoGroupMatches 没有分组通过白名单过滤（含全部 weight<=0 不参与）。
+	// ErrNoGroupMatches 没有分组通过白名单过滤（白名单口径 = 上游模型名，见 groupMatchesModel；含全部 weight<=0 不参与）。
 	ErrNoGroupMatches = errors.New("channel: no group matches")
 	// ErrNoCredentialAvailable 选中分组下没有可用凭据（全部 disabled/error/冷却中）。
 	ErrNoCredentialAvailable = errors.New("channel: no credential available")

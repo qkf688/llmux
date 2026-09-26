@@ -1,6 +1,7 @@
 package importexport
 
 import (
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -8,8 +9,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/consts"
+	"github.com/qkf688/llmux/middleware"
 	"github.com/qkf688/llmux/models"
 	"github.com/tidwall/gjson"
+	"gorm.io/gorm"
 )
 
 // Stage 2 资源防御：导入接口复用入站硬上限 consts.MaxInboundBodyBytes。超限走管理端
@@ -40,6 +43,97 @@ func TestImportConfig_RequestBodySizeLimit(t *testing.T) {
 	}
 	if !strings.Contains(msg, "解析") {
 		t.Fatalf("恰等于上限应已放行到解析段, got %q", msg)
+	}
+}
+
+// TestImportConfig_PanicBubblesToRecovery 锁「导入路径 panic 必须可见」（Stage 25）。
+// 历史缺陷：defer recover 只回滚不重抛不留痕——panic 被吞成空响应，事务回滚后 handler
+// 继续往下走、对外像成功（outcome 零值），服务端零留痕。修后事务改 Transaction 闭包
+// （panic 时回滚并上抛，GORM 框架契约），由 middleware.Recovery 收口为 500 + [req=]
+// 编号、栈进日志。panic 注入：测试库注册 GORM Create 前置回调 panic（确定性注入点）；
+// 中间件挂 RequestID + Recovery 对齐真实装配序。
+func TestImportConfig_PanicBubblesToRecovery(t *testing.T) {
+	var logs strings.Builder
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	db := newImportTestDB(t)
+	if err := db.Callback().Create().Before("gorm:create").Register("test:panic", func(tx *gorm.DB) {
+		panic("boom: injected via test callback")
+	}); err != nil {
+		t.Fatalf("register panic callback: %v", err)
+	}
+	oldDB := models.DB
+	models.DB = db
+	t.Cleanup(func() { models.DB = oldDB })
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(middleware.RequestID())
+	r.Use(middleware.Recovery())
+	r.POST("/import", ImportConfig)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/import",
+		strings.NewReader(`{"providers":[{"name":"a"}]}`)))
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("panic 应上抛为 500, got %d, body=%s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	rid := w.Header().Get(consts.HeaderRequestID)
+	if rid == "" || !strings.Contains(body, "[req="+rid+"]") {
+		t.Errorf("panic 型 500 响应缺编号文案（rid=%q）: %s", rid, body)
+	}
+	line := strings.TrimSpace(logs.String())
+	if !strings.Contains(line, "level=ERROR") || !strings.Contains(line, "stack") {
+		t.Errorf("panic 留痕缺 ERROR 级或栈: %s", line)
+	}
+}
+
+// TestImportConfig_PanicRollsBackAllWrites 配套锁回滚：panic 发生在 providers 段
+// 已清表之后（clear 已删除预置行、首个 Create 即 panic）→ Transaction 闭包回滚，
+// 预置数据必须原样存活——半残写入不落库。
+func TestImportConfig_PanicRollsBackAllWrites(t *testing.T) {
+	db := newImportTestDB(t)
+	if err := db.Create(&models.Provider{Name: "keep", Type: "openai"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	// 注册回调后注册的 panic 只打一次（首个 Create 即触发），无需计数控制。
+	if err := db.Callback().Create().Before("gorm:create").Register("test:panic", func(tx *gorm.DB) {
+		panic("boom: injected via test callback")
+	}); err != nil {
+		t.Fatalf("register panic callback: %v", err)
+	}
+	oldDB := models.DB
+	models.DB = db
+	t.Cleanup(func() { models.DB = oldDB })
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(middleware.RequestID())
+	r.Use(middleware.Recovery())
+	r.POST("/import", ImportConfig)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/import",
+		strings.NewReader(`{"providers":[{"name":"new"},{"name":"new2"}]}`)))
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("panic 应上抛为 500, got %d, body=%s", w.Code, w.Body.String())
+	}
+	var n int64
+	db.Model(&models.Provider{}).Count(&n)
+	if n != 1 {
+		t.Fatalf("panic 后 providers 行数 = %d, want 1（事务回滚、清表不生效）", n)
+	}
+	var p models.Provider
+	if err := db.First(&p).Error; err != nil {
+		t.Fatal(err)
+	}
+	if p.Name != "keep" {
+		t.Fatalf("存活行 = %q, want keep（原数据未被半残导入覆盖）", p.Name)
 	}
 }
 

@@ -3,7 +3,6 @@ package chat
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -81,7 +80,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 			return singleProviderAttemptResult{FatalErr: bodyErr}
 		}
 		logEntry.ProxyTime = time.Since(input.Start) // 写通道前回填，终值随 Create 落库
-		retryLog <- logEntry.WithError(fmt.Errorf("transform request error: %v", bodyErr))
+		retryLog <- logEntry.WithError(wrapTransformError("request", bodyErr))
 		settleRequestBuildFailureDecay(input)
 		if err := chatstats.RecordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
 			slog.Warn("failed to record provider stats", "provider", input.Provider.Name, "error", err)
@@ -200,7 +199,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		if err != nil {
 			// 同 Client.Do 失败分支：错误日志回填真实端到端耗时。
 			updateChatLogByID(input.Ctx, logID,
-				buildAttemptFailureUpdate(fmt.Errorf("transform response error: %v", err), time.Since(input.Start), logRawOptions, logSnapshot, res, rawResponseBodyStr),
+				buildAttemptFailureUpdate(wrapTransformError("response", err), time.Since(input.Start), logRawOptions, logSnapshot, res, rawResponseBodyStr),
 				"failed to update log status")
 			settlement := beginFailureSettlement(input.Ctx)
 			defer settlement.Close()

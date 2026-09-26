@@ -77,7 +77,26 @@ func handleNonOKProviderResponse(
 	// 组织级 adjustment 只在「非凭据级失败」时在 attempt 内累计（#13）：凭据级失败
 	// （限流/鉴权/5xx）组内消化，由 retry loop 组耗尽时统一补 ConsecutiveFailures/
 	// 衰减（设计定案第 5 节「层内耗尽才累计组织级」）。chatstats 统计保留现状。
-	if !classifyCredentialFailure(res.StatusCode) {
+	//
+	// 凭据级失败（限流/鉴权/5xx）的凭据侧处置（#13 组内故障转移 + #6-2 分类型）：
+	// 鉴权失败（401/403）走判停——连败计数 + 达阈值 temp_unsched（不写冷却）；
+	// 其余（429/5xx）写最小冷却，窗口内选路跳过该凭据并允许同组换 key。
+	// 组织级淘汰标记保留，单 key 组（存量迁移形态）组耗尽后行为与现状完全等价。
+	// 凭据级返回标记与 429 一票淘汰（2026-09-22 有意废弃旧「ReduceWeight 留池降权」
+	// 语义）：限流候选本次请求内不再回头，防重试循环随机撞回刚限流的供应商——与
+	// 「失败即换下一家」语义对齐；组内换 key 仍优先（CredentialFailure 标记），
+	// 同组未限流 key 不受影响。组织级淘汰标记组内耗尽才真正消费。
+	//
+	// （Stage 25 合并：两个紧挨的同条件 classifyCredentialFailure 分支合为一处，
+	// 改一处漏一处的维护陷阱消除，行为等价。）
+	if classifyCredentialFailure(res.StatusCode) {
+		recordCredentialStatsError(settlement.Ctx, cred)
+		if classifyAuthFailure(res.StatusCode) {
+			applyCredentialAuthFailure(settlement.Ctx, cred)
+		} else {
+			applyCredentialCooldown(settlement.Ctx, cred, cooldownReasonForStatus(res.StatusCode))
+		}
+	} else {
 		applyProviderFailureAdjustments(settlement.Ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
 	}
 	if err := chatstats.RecordProviderStats(context.Background(), provider.Name, false, 0, 0); err != nil {
@@ -85,27 +104,7 @@ func handleNonOKProviderResponse(
 	}
 	res.Body.Close()
 
-	// 凭据级失败（限流/鉴权/5xx）的凭据侧处置（#13 组内故障转移 + #6-2 分类型）：
-	// 鉴权失败（401/403）走判停——连败计数 + 达阈值 temp_unsched（不写冷却）；
-	// 其余（429/5xx）写最小冷却，窗口内选路跳过该凭据并允许同组换 key。
-	// 组织级淘汰标记保留，单 key 组（存量迁移形态）组耗尽后行为与现状完全等价。
 	if classifyCredentialFailure(res.StatusCode) {
-		// 终身统计：凭据级失败域（401/403/429/5xx）一处收口，与下方状态机处置正交。
-		recordCredentialStatsError(settlement.Ctx, cred)
-		if classifyAuthFailure(res.StatusCode) {
-			applyCredentialAuthFailure(settlement.Ctx, cred)
-		} else {
-			applyCredentialCooldown(settlement.Ctx, cred, cooldownReasonForStatus(res.StatusCode))
-		}
-	}
-
-	if classifyCredentialFailure(res.StatusCode) {
-		// 5xx / 401 / 403 / 429：凭据级失败，组织级淘汰标记保留（现状语义），
-		// 组内耗尽才真正消费（retry loop 淘汰候选时同现状）。
-		// 429 一票淘汰（2026-09-22 有意废弃旧「ReduceWeight 留池降权」语义）：
-		// 限流候选本次请求内不再回头，防重试循环随机撞回刚限流的供应商——与
-		// 「失败即换下一家」语义对齐；组内换 key 仍优先（CredentialFailure 标记），
-		// 同组未限流 key 不受影响。
 		return singleProviderAttemptResult{CredentialFailure: true, RemoveWeight: true, RemovePriority: true}
 	}
 	// 其余 4xx（请求体被拒等）：请求本身的问题，换 key 无意义——组织级失败，不标凭据级。
@@ -116,6 +115,15 @@ func applyProviderFailureAdjustments(ctx context.Context, modelProviderID uint, 
 	adjustment.IncrementConsecutiveFailures(ctx, modelProviderID, providerName, providerModel)
 	adjustment.ApplyWeightDecayByModelProviderID(ctx, modelProviderID, providerName, providerModel)
 	adjustment.ApplyPriorityDecayByModelProviderID(ctx, modelProviderID, providerName, providerModel)
+}
+
+// wrapTransformError 是 transform 失败出口的错误包装单源（request/response 两处共用，
+// Stage 25）：必须用 %w 保住错误链——转换失败常因「请求取消打断上游读」，
+// isClientDisconnectErr / httpresp.isClientDisconnect 只认 errors.Is/As 语义匹配，
+// 断链包装会让断连降 Warn 的级别判定在该路径静默失效。契约测试
+// chat_attempt_transform_wrap_test.go 锁 unwrap 与文案形状。
+func wrapTransformError(stage string, err error) error {
+	return fmt.Errorf("transform %s error: %w", stage, err)
 }
 
 // buildAttemptFailureUpdate 组装「尝试失败」日志更新（Status=error + 原因 + 终值耗时 +

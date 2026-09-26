@@ -32,7 +32,7 @@ service/
 │   ├── process.go          # 响应/SSE 处理
 │   ├── chat_balance*.go    # 选路入口与虚拟模型故障转移（真实/虚拟两条路径的编排）
 │   ├── chat_retry_loop.go  # 单候选池上的重试循环（两条 balance 路径共用；候选级选路经 channel，组内凭据故障转移在候选内层循环）
-│   ├── chat_attempt*.go    # 单次上游尝试（types/request/log/error 按职责拆分）
+│   ├── chat_attempt*.go    # 单次上游尝试（types/request/log/error 按职责拆分；transform 失败包装单源 wrapTransformError 用 %w 保错误链，Stage 25——断链包装会让断连降 Warn 的级别判定在转换失败路径静默失效）
 │   ├── chat_settlement.go  # 失败/成功「结算」上下文单源（Stage 24，2026-09-26）：beginFailureSettlement 一次给出「这次失败该不该结算」+ 不陪葬请求 ctx 的写库 ctx（独立预算 settlementWriteTimeout；判据只认请求 ctx 的取消信号 = 调用方撤走，取消与已过 deadline 并存按超时算；上游请求构建期衰减同走此处）；成功侧 successWriteCtx 同理不陪葬
 │   ├── chat_commit_gate.go # 提交门（commit-before-write，2026-09-22）：响应写给客户端**之前**验「内容可提交」——流式预读第一非空帧（预读字节 Replay 回放，逐字节等于原流）/ 非流式 JSON 载荷；失败回重试循环换下家（内容失败=组织级淘汰不冷却 key，看门狗超时/预读读错=凭据级网络），客户端零字节
 │   ├── chat_stream_watchdog.go # 首字节看门狗（原 handler/v1/first_byte_watchdog.go，随提交门迁入本包）：上游响应头后无字节即超时中止，给提交门预读限时；触发归凭据级网络出口（冷却 + 组内换 key）

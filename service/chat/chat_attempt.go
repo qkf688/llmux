@@ -121,6 +121,12 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		updateChatLogByID(input.Ctx, logID,
 			buildAttemptFailureUpdate(err, time.Since(input.Start), logRawOptions, logSnapshot, nil, ""),
 			"failed to update log status")
+		settlement := beginFailureSettlement(input.Ctx)
+		defer settlement.Close()
+		if !settlement.Active {
+			// 调用方已放弃（客户端断连）：本次失败不是上游/凭据的故障，不冷却、不计失败。
+			return requestAbandonedResult(input.Ctx)
+		}
 		// 组织级 adjustment 不再在此累计：网络/超时是凭据级失败（#13），由 retry loop
 		// 组耗尽时统一补 ConsecutiveFailures/衰减（设计定案第 5 节「层内耗尽才累计
 		// 组织级」）。chatstats 统计保留现状（凭据级失败也是该供应商请求失败）。
@@ -129,8 +135,8 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		}
 		// 网络/超时属凭据级失败：写冷却，组内换 key 可能救回（#13）。
 		// 组织级淘汰标记仍返回（现状语义不变，组耗尽才消费）。
-		applyCredentialCooldown(input.Ctx, input.Selection.Credential, cooldownReasonNetwork)
-		recordCredentialStatsError(input.Ctx, input.Selection.Credential)
+		applyCredentialCooldown(settlement.Ctx, input.Selection.Credential, cooldownReasonNetwork)
+		recordCredentialStatsError(settlement.Ctx, input.Selection.Credential)
 		return singleProviderAttemptResult{CredentialFailure: true, RemoveWeight: true, RemovePriority: true}
 	}
 
@@ -194,7 +200,14 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 			updateChatLogByID(input.Ctx, logID,
 				buildAttemptFailureUpdate(fmt.Errorf("transform response error: %v", err), time.Since(input.Start), logRawOptions, logSnapshot, res, rawResponseBodyStr),
 				"failed to update log status")
-			applyProviderFailureAdjustments(input.Ctx, input.ModelWithProvider.ID, input.Provider.Name, input.ModelWithProvider.ProviderModel)
+			settlement := beginFailureSettlement(input.Ctx)
+			defer settlement.Close()
+			if !settlement.Active {
+				// 调用方已放弃：转换失败常常正是它的连带后果（请求取消打断上游读），不结算。
+				res.Body.Close()
+				return requestAbandonedResult(input.Ctx)
+			}
+			applyProviderFailureAdjustments(settlement.Ctx, input.ModelWithProvider.ID, input.Provider.Name, input.ModelWithProvider.ProviderModel)
 			if err := chatstats.RecordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
 				slog.Warn("failed to record provider stats", "provider", input.Provider.Name, "error", err)
 			}
@@ -208,12 +221,16 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 
 	updateRequestAndResponseLog(input.Ctx, logID, logRawOptions, logSnapshot, res.Header, rawResponseBodyStr)
 
-	adjustment.ResetConsecutiveFailures(input.Ctx, input.ModelWithProvider.ID)
-	adjustment.ApplySuccessAdjustments(input.Ctx, input.ModelWithProvider.ID)
+	// 成功结算：上游已经成功是既成事实，成功记账与失败计数清零不因调用方恰在此刻断开
+	// 而作废（Stage 24 成功侧：与失败侧相反，这里不需要判断谁造成的）。
+	successCtx, cancelSuccess := successWriteCtx(input.Ctx)
+	defer cancelSuccess()
+	adjustment.ResetConsecutiveFailures(successCtx, input.ModelWithProvider.ID)
+	adjustment.ApplySuccessAdjustments(successCtx, input.ModelWithProvider.ID)
 	// 成功重置鉴权失败计数（#6-2）：FailCount>0 才写，常态成功请求零凭据写。
-	resetCredentialAuthFailCount(input.Ctx, input.Selection.Credential)
+	resetCredentialAuthFailCount(successCtx, input.Selection.Credential)
 	// 终身统计与状态机正交：每成功尝试必记（经 credwrite 异步，不占请求路径）。
-	recordCredentialStatsSuccess(input.Ctx, input.Selection.Credential)
+	recordCredentialStatsSuccess(successCtx, input.Selection.Credential)
 	return singleProviderAttemptResult{
 		Response:    res,
 		LogID:       logID,

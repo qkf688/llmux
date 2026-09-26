@@ -65,11 +65,20 @@ func handleNonOKProviderResponse(
 	}
 
 	updateChatLogByID(ctx, logID, errorUpdate, "failed to update log status")
+
+	settlement := beginFailureSettlement(ctx)
+	defer settlement.Close()
+	if !settlement.Active {
+		// 调用方已放弃（客户端断连）：不是上游/凭据的故障，冷却/判停/统计/衰减一律不写。
+		res.Body.Close()
+		return requestAbandonedResult(ctx)
+	}
+
 	// 组织级 adjustment 只在「非凭据级失败」时在 attempt 内累计（#13）：凭据级失败
 	// （限流/鉴权/5xx）组内消化，由 retry loop 组耗尽时统一补 ConsecutiveFailures/
 	// 衰减（设计定案第 5 节「层内耗尽才累计组织级」）。chatstats 统计保留现状。
 	if !classifyCredentialFailure(res.StatusCode) {
-		applyProviderFailureAdjustments(ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
+		applyProviderFailureAdjustments(settlement.Ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
 	}
 	if err := chatstats.RecordProviderStats(context.Background(), provider.Name, false, 0, 0); err != nil {
 		slog.Warn("failed to record provider stats", "provider", provider.Name, "error", err)
@@ -82,11 +91,11 @@ func handleNonOKProviderResponse(
 	// 组织级淘汰标记保留，单 key 组（存量迁移形态）组耗尽后行为与现状完全等价。
 	if classifyCredentialFailure(res.StatusCode) {
 		// 终身统计：凭据级失败域（401/403/429/5xx）一处收口，与下方状态机处置正交。
-		recordCredentialStatsError(ctx, cred)
+		recordCredentialStatsError(settlement.Ctx, cred)
 		if classifyAuthFailure(res.StatusCode) {
-			applyCredentialAuthFailure(ctx, cred)
+			applyCredentialAuthFailure(settlement.Ctx, cred)
 		} else {
-			applyCredentialCooldown(ctx, cred, cooldownReasonForStatus(res.StatusCode))
+			applyCredentialCooldown(settlement.Ctx, cred, cooldownReasonForStatus(res.StatusCode))
 		}
 	}
 

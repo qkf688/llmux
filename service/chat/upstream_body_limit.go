@@ -62,7 +62,13 @@ func handleUpstreamBodyOverflow(input singleProviderAttemptInput, res *http.Resp
 	updateChatLogByID(input.Ctx, logID,
 		buildAttemptFailureUpdate(cause, time.Since(input.Start), logRawOptions, logSnapshot, res, ""),
 		"failed to update log status")
-	applyProviderFailureAdjustments(input.Ctx, input.ModelWithProvider.ID, input.Provider.Name, input.ModelWithProvider.ProviderModel)
+	settlement := beginFailureSettlement(input.Ctx)
+	defer settlement.Close()
+	if !settlement.Active {
+		// 调用方已放弃：不是端点/凭据的故障，不淘汰不衰减不冷却。
+		return requestAbandonedResult(input.Ctx)
+	}
+	applyProviderFailureAdjustments(settlement.Ctx, input.ModelWithProvider.ID, input.Provider.Name, input.ModelWithProvider.ProviderModel)
 	if err := chatstats.RecordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
 		slog.Warn("failed to record provider stats", "provider", input.Provider.Name, "error", err)
 	}
@@ -79,13 +85,19 @@ func handleUpstreamBodyReadError(input singleProviderAttemptInput, res *http.Res
 	updateChatLogByID(input.Ctx, logID,
 		buildAttemptFailureUpdate(cause, time.Since(input.Start), logRawOptions, logSnapshot, res, ""),
 		"failed to update log status")
+	settlement := beginFailureSettlement(input.Ctx)
+	defer settlement.Close()
+	if !settlement.Active {
+		// 调用方已放弃（客户端断连打断读体 / 提交门预读）：不是 key 的错，不冷却不计数。
+		return requestAbandonedResult(input.Ctx)
+	}
 	if err := chatstats.RecordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
 		slog.Warn("failed to record provider stats", "provider", input.Provider.Name, "error", err)
 	}
 	// 组织级 adjustment 不在 attempt 内累计（同 Do 分支）：读体失败按凭据级网络处理，
 	// 组耗尽由 retry loop 统一补。
-	applyCredentialCooldown(input.Ctx, input.Selection.Credential, cooldownReasonNetwork)
-	recordCredentialStatsError(input.Ctx, input.Selection.Credential)
+	applyCredentialCooldown(settlement.Ctx, input.Selection.Credential, cooldownReasonNetwork)
+	recordCredentialStatsError(settlement.Ctx, input.Selection.Credential)
 	return singleProviderAttemptResult{CredentialFailure: true, RemoveWeight: true, RemovePriority: true}
 }
 

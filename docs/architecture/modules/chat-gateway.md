@@ -33,6 +33,7 @@ service/
 │   ├── chat_balance*.go    # 选路入口与虚拟模型故障转移（真实/虚拟两条路径的编排）
 │   ├── chat_retry_loop.go  # 单候选池上的重试循环（两条 balance 路径共用；候选级选路经 channel，组内凭据故障转移在候选内层循环）
 │   ├── chat_attempt*.go    # 单次上游尝试（types/request/log/error 按职责拆分）
+│   ├── chat_settlement.go  # 失败/成功「结算」上下文单源（Stage 24，2026-09-26）：beginFailureSettlement 一次给出「这次失败该不该结算」+ 不陪葬请求 ctx 的写库 ctx（判据只认请求 ctx 的取消信号 = 调用方撤走；超时仍照常结算）；成功侧 successWriteCtx 同理不陪葬
 │   ├── chat_commit_gate.go # 提交门（commit-before-write，2026-09-22）：响应写给客户端**之前**验「内容可提交」——流式预读第一非空帧（预读字节 Replay 回放，逐字节等于原流）/ 非流式 JSON 载荷；失败回重试循环换下家（内容失败=组织级淘汰不冷却 key，看门狗超时/预读读错=凭据级网络），客户端零字节
 │   ├── chat_stream_watchdog.go # 首字节看门狗（原 handler/v1/first_byte_watchdog.go，随提交门迁入本包）：上游响应头后无字节即超时中止，给提交门预读限时；触发归凭据级网络出口（冷却 + 组内换 key）
 │   ├── upstream_body_limit.go # 上游非流式响应体体积闸（Stage 2-C）：attempt 内头提交前整读加限（limit+1 探测）回填；超限=组织级转移不冷却 key，读体错误与 Do 分支成对归凭据级网络
@@ -80,6 +81,7 @@ balancer/                   # balancer.go 加权随机纯算法；affinity*.go �
 
 ## 5. 特殊约定
 
+- **请求收尾两类动作与「结算」口径（Stage 24，2026-09-26）**：请求路径收尾分**留痕**（chat_logs 行，`chatLogDetachedCtx` 派生，Stage 17）与**结算**（调度状态写库——权重/优先级衰减、连续失败、凭据冷却、凭据失败计数与判停）。结算是「上游/凭据真实发生了什么」的账，既与请求生死解耦，也与调用方行为解耦：① **调用方撤走**（客户端断连 → 请求 ctx 收到取消信号）时本次失败不是上游/凭据的故障——全部失败出口（Do 失败 / 非通过状态 / 读体超限 / 读体失败 / 提交门拒绝，含响应转换失败与组耗尽处的组织级结算）一律不结算，只保留失败留痕并**立即中止**本次请求（不再换 key、不再换候选，换了也没人收）；② 其余失败（含**本服务自己等到超时**——deadline）照常结算，且结算写库走 `beginFailureSettlement` 派生的不陪葬 ctx（超时场景请求 ctx 已死，直接用它会让降权/冷却静默丢失——恰在最需要保护的故障期失效）；③ 成功侧相反：上游确实成功了，`ResetConsecutiveFailures`/`ApplySuccessAdjustments`/鉴权失败计数清零/成功统计走 `successWriteCtx`，不因调用方恰在收尾瞬间撤走而作废。判据与派生单源 `chat_settlement.go`（判据只认 ctx 取消信号，不按错误文本/平台错误码猜——上游自己掉线是真实上游故障）；**新增失败出口必须经 `beginFailureSettlement`**，禁止自行判断或直接拿请求 ctx 写结算
 - **扩展点分布（现状）**：style 注册 `Beforer`/`Processer` + `register_v1` 路由 + transform 适配/流路由 + `consts`；业务路由不在 `main.go`
 - **数据访问**：统一经 `repos()`（`service/chat/repos.go` → `repository.Default()`），**禁止**直连 `models.DB`/`gorm.G`；旁路包 `chatstats` 同样经 `repos().Stats`（`repository.StatsRepo`）
 - **职责拆分（现状）**：选路/重试/协议/日志落库编排仍在 `service/chat`；Stats 在 `chatstats`；权重调整在 `adjustment`。改统计策略与改选路策略不再同文件碰撞；日志 IO 存储仍可后续下沉

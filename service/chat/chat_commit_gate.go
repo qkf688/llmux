@@ -162,7 +162,14 @@ func handleUpstreamContentInvalid(input singleProviderAttemptInput, res *http.Re
 	updateChatLogByID(input.Ctx, logID,
 		buildAttemptFailureUpdate(cause, proxyTime, logRawOptions, logSnapshot, res, ""),
 		"failed to update log status")
-	applyProviderFailureAdjustments(input.Ctx, input.ModelWithProvider.ID, input.Provider.Name, input.ModelWithProvider.ProviderModel)
+	settlement := beginFailureSettlement(input.Ctx)
+	defer settlement.Close()
+	if !settlement.Active {
+		// 调用方已放弃：不淘汰、不衰减、不冷却——垃圾内容是端点行为，但这次请求不是它失败的。
+		res.Body.Close()
+		return requestAbandonedResult(input.Ctx)
+	}
+	applyProviderFailureAdjustments(settlement.Ctx, input.ModelWithProvider.ID, input.Provider.Name, input.ModelWithProvider.ProviderModel)
 	if err := chatstats.RecordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
 		slog.Warn("failed to record provider stats", "provider", input.Provider.Name, "error", err)
 	}

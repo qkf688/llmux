@@ -333,7 +333,13 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 
 		if orgFailure != nil {
 			applyProviderSelectionResult(in.Pool.WeightItems, in.Pool.PriorityItems, *id, *orgFailure)
-			applyProviderFailureAdjustments(in.Ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
+			// 组内耗尽才消费的组织级结算同样走结算口径（Stage 24）：调用方已放弃时
+			// 本次失败不是候选的故障，不结算；超时场景则改走不陪葬请求 ctx 的写库。
+			settlement := beginFailureSettlement(in.Ctx)
+			if settlement.Active {
+				applyProviderFailureAdjustments(settlement.Ctx, modelWithProvider.ID, provider.Name, modelWithProvider.ProviderModel)
+			}
+			settlement.Close()
 		}
 	}
 

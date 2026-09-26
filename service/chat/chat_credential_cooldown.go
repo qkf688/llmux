@@ -63,6 +63,9 @@ func cooldownWindowForReason(ctx context.Context, reason string) time.Duration {
 // 窗口 = 按失败类型分窗读设置项（见 cooldownWindowForReason），非固定常量；
 // 行为经逐请求读库即时生效，修改设置项无需重载。
 // 落库经 credwrite 有界队列异步执行（#6-4-1），请求路径不等待 DB。
+// 调用方须先经 beginFailureSettlement 判定本次失败该不该结算（Stage 24）：调用方放弃的
+// 请求不是 key 的故障——本函数与 applyCredentialAuthFailure/recordCredentialStatsError
+// 同属「凭据结算写」，不由函数内部自行判断，判据单源在 chat_settlement.go。
 func applyCredentialCooldown(ctx context.Context, cred models.Credential, reason string) {
 	if cred.ID == 0 {
 		// Selection 里凭据为空（测试直调 attempt 的构造形态），无行可冷却。

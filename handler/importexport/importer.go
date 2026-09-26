@@ -120,8 +120,9 @@ type ImportOutcome struct {
 	Settings     ImportResult `json:"settings"`
 }
 
-// ImportConfigData 在同一事务 db 上按注册表导入；调用方负责 Begin/Commit/Rollback。
-// 返回各实体的计数供 API 回显（templates 不在本注册表内，恒零值）。
+// ImportConfigData 在同一事务 db 上按注册表导入；事务边界由调用方收口（import.go 走
+// GORM Transaction 闭包：error 回滚、panic 回滚后上抛 Recovery）。返回各实体的计数供
+// API 回显（templates 不在本注册表内，恒零值）。
 func ImportConfigData(tx *gorm.DB, config map[string]interface{}) (ImportOutcome, error) {
 	outcome := ImportOutcome{}
 	counts := map[string]*ImportResult{

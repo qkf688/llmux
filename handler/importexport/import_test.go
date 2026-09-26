@@ -90,6 +90,11 @@ func TestImportConfig_PanicBubblesToRecovery(t *testing.T) {
 	if !strings.Contains(line, "level=ERROR") || !strings.Contains(line, "stack") {
 		t.Errorf("panic 留痕缺 ERROR 级或栈: %s", line)
 	}
+	// 一次 panic 只产一条 ERROR（Stage 18 口径）：Recovery 未提交分支走收口出口，
+	// 不应有第二行留痕（本路径恰好一行，与 middleware/recovery_test.go 计数锁同纪律）。
+	if got := strings.Count(logs.String(), "level=ERROR"); got != 1 {
+		t.Errorf("panic 留痕 ERROR 行数 = %d, want 1", got)
+	}
 }
 
 // TestImportConfig_PanicRollsBackAllWrites 配套锁回滚：panic 发生在 providers 段

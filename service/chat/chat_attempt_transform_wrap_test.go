@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -82,9 +83,7 @@ func TestExecuteSingleProviderAttempt_TransformResponseError_ErrorTextPrefix(t *
 	if got.Status != "error" {
 		t.Fatalf("Status = %q, want error", got.Status)
 	}
-	if !hasPrefix(got.Error, "transform response error: ") {
+	if !strings.HasPrefix(got.Error, "transform response error: ") {
 		t.Fatalf("Error = %q, want 前缀 transform response error:（包装单源被绕开）", got.Error[:min(64, len(got.Error))])
 	}
 }
-
-func hasPrefix(s, p string) bool { return len(s) >= len(p) && s[:len(p)] == p }

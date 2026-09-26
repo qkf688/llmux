@@ -23,6 +23,13 @@ import (
 //   - 后台任务 / 启动装配的 slog.Error 不调 httpresp，天然不在判据面（约定边界，见 §5）；
 //   - 500 收口出口（InternalServerError*）不在本门判据面——那是 ERROR 的合法唯一入口，
 //     由 gate_500_dual_log_test.go 管。
+//
+// 刻意边界（与 dual_log 门同类的固有局限，防误以为全量执法）：只认「同一块内的直接
+// pkg.Func 调用」——handler 把 4xx 响应委托给同包 helper（helper 内部 slog.Error +
+// BadRequest）即绕过本门；触发集只含**确定 4xx** 的具名出口（BadRequest/Unauthorized/
+// NotFound/Forbidden/Conflict），httpresp.Error / ErrorWithHttpStatus 可承载任意状态码
+// （/v1 上游透传 5xx 属合法 ERROR 留痕场景，见 framework-conventions §5 范围边界②），
+// 刻意不进触发集。
 func TestGate4xxClientErrorNotErrorLevel(t *testing.T) {
 	files := gateSourceFiles(t, 250)
 
@@ -40,7 +47,7 @@ func TestGate4xxClientErrorNotErrorLevel(t *testing.T) {
 	}
 }
 
-// fourxxErrorLog4xxSites 找出「同一个块里 slog.Error 与 4xx 响应出口并存」的违规点。
+// fourxxErrorLogSites 找出「同一个块里 slog.Error 与 4xx 响应出口并存」的违规点。
 func fourxxErrorLogSites(t *testing.T, path string, src []byte) []string {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -64,7 +71,7 @@ func fourxxErrorLogSites(t *testing.T, path string, src []byte) []string {
 						slogErrPos = call.pos
 					}
 				case "httpresp.BadRequest", "httpresp.Unauthorized", "httpresp.NotFound",
-					"httpresp.Forbidden", "httpresp.Conflict", "httpresp.Error", "httpresp.ErrorWithHttpStatus":
+					"httpresp.Forbidden", "httpresp.Conflict":
 					if !respPos.IsValid() {
 						respPos = call.pos
 					}
@@ -100,9 +107,9 @@ func TestGate4xxClientErrorJudgment(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "漏判风险-ErrorWithHttpStatus 手搓 4xx",
-			src:  "package p\n\nfunc f() {\n\tif err != nil {\n\t\tslog.Error(\"x\", \"error\", err)\n\t\thttpresp.ErrorWithHttpStatus(c, 400, 400, \"x\")\n\t}\n}\n",
-			want: true,
+			name: "误判风险-ErrorWithHttpStatus 承载非 4xx（/v1 上游透传 5xx 合法 ERROR，刻意不进触发集）",
+			src:  "package p\n\nfunc f() {\n\tif err != nil {\n\t\tslog.Error(\"x\", \"error\", err)\n\t\thttpresp.ErrorWithHttpStatus(c, 502, 502, \"x\")\n\t}\n}\n",
+			want: false,
 		},
 		{
 			name: "误判风险-Warn 级留痕 + 4xx（正确形态）",

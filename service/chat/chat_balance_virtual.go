@@ -108,7 +108,7 @@ func balanceChatVirtual(ctx context.Context, in BalanceInput) (*BalanceResult, e
 		slog.Warn("all providers exhausted for real model, trying next", "real_model", realModel.Name)
 	}
 
-	return nil, errors.New("all real models exhausted for virtual model")
+	return nil, newRetryExhaustedError("all real models exhausted for virtual model")
 }
 
 // saveVirtualSkipLog 记录「某个真实模型被整体跳过」的日志：此时尚未选出供应商，

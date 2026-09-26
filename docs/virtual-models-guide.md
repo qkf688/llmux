@@ -352,7 +352,7 @@ GET /api/virtual-models/:id/stats
 
 ### 问题 1：虚拟模型请求失败
 
-**症状**：客户端请求虚拟模型时返回 404 或错误
+**症状**：客户端请求虚拟模型时返回 HTTP 404（模型不存在 / 无启用映射 / 无可用提供商）或错误
 
 **排查步骤**：
 1. 检查虚拟模型是否启用
@@ -363,9 +363,9 @@ GET /api/virtual-models/:id/stats
 
 ### 问题 2：所有真实模型都失败
 
-**症状**：虚拟模型请求返回 "all real models exhausted for virtual model"
+**症状**：虚拟模型请求返回 HTTP 502，错误信息为 "all providers failed for this request (all real models exhausted for virtual model)"
 
-**原因**：所有真实模型的所有提供商都失败了
+**原因**：所有真实模型的所有提供商都失败了（网关已把每个真实模型各自的重试机会用完）
 
 **排查步骤**：
 1. 查看日志，确认每个真实模型的失败原因

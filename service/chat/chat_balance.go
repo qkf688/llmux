@@ -79,6 +79,6 @@ func BalanceChat(ctx context.Context, in BalanceInput) (*BalanceResult, error) {
 	case retryLoopAborted:
 		return nil, outcome.Err
 	default:
-		return nil, errors.New("maximum retry attempts reached")
+		return nil, newRetryExhaustedError("maximum retry attempts reached")
 	}
 }

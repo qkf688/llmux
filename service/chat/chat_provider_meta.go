@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sort"
 
 	"github.com/qkf688/llmux/models"
@@ -111,15 +112,17 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 	// 不是虚拟模型，按原有逻辑处理真实模型
 	model, err := repos().Model.GetByName(ctx, before.Model)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			savePreProviderFailureLog(ctx, reqMeta, style, preProviderFailureLog{
-				RequestedModel: before.Model,
-				RealModelName:  before.Model,
-				Error:          err.Error(),
-			})
-			return nil, errors.New("not found model " + before.Model)
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
 		}
-		return nil, err
+		// 404 而非 500：模型不存在是配置态失败，重试不可能变好（对齐 OpenAI
+		// 「model not found」口径，客户端不重试）；模型名是调用方自有输入，可拼进文案。
+		savePreProviderFailureLog(ctx, reqMeta, style, preProviderFailureLog{
+			RequestedModel: before.Model,
+			RealModelName:  before.Model,
+			Error:          err.Error(),
+		})
+		return nil, newClientRequestError(http.StatusNotFound, "not found model "+before.Model)
 	}
 
 	modelWithProviders, err := queryEnabledModelProviders(ctx, model.ID, before)
@@ -128,12 +131,15 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 	}
 
 	if len(modelWithProviders) == 0 {
+		reason := noUsableProviderReason(ctx, before.Model)
 		savePreProviderFailureLog(ctx, reqMeta, style, preProviderFailureLog{
 			RequestedModel: before.Model,
 			RealModelName:  model.Name,
-			Error:          noUsableProviderReason(ctx, before.Model),
+			Error:          reason,
 		})
-		return nil, errors.New("not provider for model " + before.Model)
+		// 404 而非 500：无启用关联（没关联/全停用/能力筛光）同为配置态失败，
+		// 重试不可能变好；文案复用落库原因，带能力筛选提示与模型名。
+		return nil, newClientRequestError(http.StatusNotFound, reason)
 	}
 
 	// 不再按 style 过滤供应商，因为现在支持格式转换

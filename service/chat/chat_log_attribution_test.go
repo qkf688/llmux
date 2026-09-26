@@ -366,7 +366,9 @@ func TestProvidersWithMetaBymodelsName_LogWriteFailure_KeepsOriginalError(t *tes
 	if gotErr == nil {
 		t.Fatalf("expected error")
 	}
-	if !strings.Contains(gotErr.Error(), "not provider for model") {
+	// 文案随 404 收口改为 noUsableProviderReason 原文（no enabled provider...），
+	// 断言跟着对齐：锁「保留配置态原因」而非具体措辞。
+	if !strings.Contains(gotErr.Error(), "no enabled provider for model") {
 		t.Fatalf("err = %q, want 保留「无启用供应商」原错误而非写库错误", gotErr)
 	}
 	if strings.Contains(gotErr.Error(), "no such table") {

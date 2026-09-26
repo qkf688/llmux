@@ -11,8 +11,8 @@ import (
 
 // TestRecordRetryLogDrainedOnShutdown 验证优雅关闭能排空重试日志：
 // runProviderRetryLoop 把 RecordRetryLog 登记到 bgtask，进程关闭时 Shutdown 必须等它
-// 把通道剩余元素落库。若退回裸 `go RecordRetryLog(...)`，Shutdown 不等待，落库与
-// 权重衰减会被进程退出硬切。
+// 把通道剩余元素落库。若退回裸 `go RecordRetryLog(...)`，Shutdown 不等待，落库会被进程
+// 退出硬切。（Stage 24 起该 goroutine 只做留痕，权重/优先级衰减在产出侧结算。）
 func TestRecordRetryLogDrainedOnShutdown(t *testing.T) {
 	initChatRecordTestDB(t)
 
@@ -21,7 +21,7 @@ func TestRecordRetryLogDrainedOnShutdown(t *testing.T) {
 	t.Cleanup(func() { bgtask.SetDefault(bgtask.NewManager()) })
 
 	retryLog := make(chan models.ChatLog, 1)
-	bgtask.Go(func(ctx context.Context) { RecordRetryLog(ctx, retryLog, nil) })
+	bgtask.Go(func(ctx context.Context) { RecordRetryLog(ctx, retryLog) })
 
 	retryLog <- models.ChatLog{Name: "m", ProviderName: "p", Status: "error", Error: "boom"}
 	// 与 runProviderRetryLoop 的 defer close 对齐：关闭通道让 range 取完剩余元素后退出。

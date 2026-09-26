@@ -2,7 +2,9 @@ package chat
 
 import (
 	"context"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -144,6 +146,33 @@ func assertNoCredentialSettlement(t *testing.T, credentialID uint) {
 	}
 }
 
+// Stage 24 AC-1 出口之四（非通过状态，最常见的一个）：直接调出口本身以钉死「是这条路径
+// 被放弃判据拦下」——上游 500 + 调用方撤走 → 不冷却、不记失败、不推进判停，并立即中止。
+func TestHandleNonOKProviderResponse_CallerAbandonedNoSettlement(t *testing.T) {
+	_, makeInput := newStatsFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+	input := makeInput("abandon-500")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // 调用方已撤走
+	input.Ctx = ctx
+
+	res := &http.Response{
+		StatusCode: http.StatusInternalServerError,
+		Header:     http.Header{},
+		Body:       io.NopCloser(strings.NewReader(`{"error":"boom"}`)),
+	}
+	result := handleNonOKProviderResponse(ctx, res, 0, models.RawLogOptions{}, requestLogSnapshot{},
+		input.ModelWithProvider, input.Provider, input.Start, input.Selection.Credential)
+
+	if result.FatalErr == nil {
+		t.Fatal("调用方放弃后应中止本次请求（FatalErr 非空），不再换 key")
+	}
+	if result.CredentialFailure {
+		t.Fatalf("调用方放弃不是凭据级失败: %+v", result)
+	}
+	assertNoCredentialSettlement(t, input.Selection.Credential.ID)
+}
+
 // runAttemptUntilCallerAbandons 跑一次 attempt，等上游 handler 开始处理后让调用方撤走
 // （ctx 取消），返回 attempt 结果。
 // 上游 handler 用 started 通知「已收到请求」、用 release 放行收尾：服务端**不能**靠
@@ -152,7 +181,9 @@ func assertNoCredentialSettlement(t *testing.T, credentialID uint) {
 func runAttemptUntilCallerAbandons(t *testing.T, input singleProviderAttemptInput, cancel context.CancelFunc, started, release chan struct{}) singleProviderAttemptResult {
 	t.Helper()
 	resultCh := make(chan singleProviderAttemptResult, 1)
-	go func() { resultCh <- executeSingleProviderAttempt(input, make(chan models.ChatLog)) }()
+	// 带缓冲的 retryLog：本组用例的出口都不投递日志，留出容量避免未来复用此 helper
+	// 测「上游请求构建期」出口时被无缓冲通道卡死。
+	go func() { resultCh <- executeSingleProviderAttempt(input, make(chan models.ChatLog, 8)) }()
 
 	select {
 	case <-started:
@@ -256,9 +287,51 @@ func TestExecuteSingleProviderAttempt_CallerDisconnectDuringStreamGate_NoCredent
 	assertNoCredentialSettlement(t, input.Selection.Credential.ID)
 }
 
+// Stage 24 AC-1 上游请求构建期出口：衰减只在调用方未撤走时发生（活的请求 ctx）。
+// 该路径原由 RecordRetryLog 在 bgtask ctx 上无条件衰减（绕过结算判据），现已移回产出侧。
+func TestSettleRequestBuildFailureDecay_LiveCtxDecays(t *testing.T) {
+	_, makeInput := newStatsFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	enableAutoWeightDecay(t)
+
+	input := makeInput("settle-build-live")
+	seedWeight(t, input.ModelWithProvider.ID, 10)
+
+	settleRequestBuildFailureDecay(input)
+
+	after := reloadModelWithProvider(t, input.ModelWithProvider.ID)
+	if after.Weight != 9 {
+		t.Fatalf("Weight = %d, want 9（请求构建期失败仍照旧衰减）", after.Weight)
+	}
+	if after.ConsecutiveFailures != 0 {
+		t.Fatalf("ConsecutiveFailures = %d, want 0（该路径只衰减、不累计连续失败，语义不变）", after.ConsecutiveFailures)
+	}
+}
+
+// Stage 24 AC-1 上游请求构建期出口（调用方已撤走）：一笔不记。
+func TestSettleRequestBuildFailureDecay_CallerAbandonedNoDecay(t *testing.T) {
+	_, makeInput := newStatsFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	enableAutoWeightDecay(t)
+
+	input := makeInput("settle-build-abandoned")
+	seedWeight(t, input.ModelWithProvider.ID, 10)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	input.Ctx = ctx
+
+	settleRequestBuildFailureDecay(input)
+
+	after := reloadModelWithProvider(t, input.ModelWithProvider.ID)
+	if after.Weight != 10 {
+		t.Fatalf("Weight = %d, want 10（调用方撤走不得衰减）", after.Weight)
+	}
+}
+
 // Stage 24 AC-4 成功侧机制锁：上游已经成功是既成事实，成功结算（计数清零/记账）不因
-// 调用方恰在此刻撤走而作废。锁「结算 ctx 与请求生死解耦」这条缝本身（不是红测——
-// 该窗口在集成层造不出来：成功路径只在上游真返回成功时到达）。
+// 调用方恰在此刻撤走而作废。锁「结算 ctx 与请求生死解耦」这条缝本身——它也是回归红测：
+// 若把 successWriteCtx 改回直接返回入参 ctx，清零会因死 ctx 写库失败而当场变红。
+// 之所以说「机制锁」：成功路径只在上游真返回成功时到达，集成层造不出「成功那一刻调用方
+// 撤走」的确定性场景，故只能直接锁这条缝。
 func TestSuccessWriteCtx_SettlesAfterRequestCtxDead(t *testing.T) {
 	initChatRecordTestDB(t)
 

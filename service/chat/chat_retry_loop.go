@@ -80,13 +80,13 @@ type retryLoopOutcome struct {
 // 关闭。调用方无需（也不应）手动 close——虚拟路径此前在 5 个返回分支各写一次
 // close，漏一处即泄漏 RecordRetryLog goroutine。
 //
-// RecordRetryLog 经 bgtask 登记：其 ctx 不随请求取消（写库/权重衰减必须跑完，见
-// bgtask 包注释），且进程关闭时会等它把通道剩余元素排空落库。
+// RecordRetryLog 经 bgtask 登记：其 ctx 不随请求取消（留痕必须跑完，见 bgtask 包注释），
+// 且进程关闭时会等它把通道剩余元素排空落库。结算（权重/优先级衰减）不在该 goroutine
+// 内做——它已移回产出侧经 beginFailureSettlement 判定（Stage 24）。
 func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 	retryLog := make(chan models.ChatLog, in.MaxRetry)
 	defer close(retryLog)
-	modelWithProviderMap := in.Pool.ModelWithProviderMap
-	bgtask.Go(func(ctx context.Context) { RecordRetryLog(ctx, retryLog, modelWithProviderMap) })
+	bgtask.Go(func(ctx context.Context) { RecordRetryLog(ctx, retryLog) })
 
 	// style 已由 handler 层固定路由校验，必可解析（与 attempt 内同容忍度）。
 	// 循环不变量，提到循环外只算一次。

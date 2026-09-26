@@ -82,6 +82,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		}
 		logEntry.ProxyTime = time.Since(input.Start) // 写通道前回填，终值随 Create 落库
 		retryLog <- logEntry.WithError(fmt.Errorf("transform request error: %v", bodyErr))
+		settleRequestBuildFailureDecay(input)
 		if err := chatstats.RecordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
 			slog.Warn("failed to record provider stats", "provider", input.Provider.Name, "error", err)
 		}
@@ -103,6 +104,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 	if err != nil {
 		logEntry.ProxyTime = time.Since(input.Start) // 写通道前回填，终值随 Create 落库
 		retryLog <- logEntry.WithError(err)
+		settleRequestBuildFailureDecay(input)
 		if err := chatstats.RecordProviderStats(context.Background(), input.Provider.Name, false, 0, 0); err != nil {
 			slog.Warn("failed to record provider stats", "provider", input.Provider.Name, "error", err)
 		}

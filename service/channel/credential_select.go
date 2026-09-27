@@ -17,29 +17,32 @@ import (
 // now 由调用方注入（可测）：冷却判定用「CooldownUntil > now 即冷却中」，
 // 到期自动恢复、不占状态位（设计定案第 5 节，S4 完整状态机前的最小冷却语义）。
 func SelectCredential(s *Selector, snapshot *Snapshot, groupID uint, now time.Time) (models.Credential, error) {
-	usable, err := usableCredentials(snapshot, groupID, now)
-	if err != nil {
-		return models.Credential{}, err
-	}
-
-	idx, _ := s.nextCredentialInRR(snapshot.Provider.ID, groupID, len(usable))
-	return usable[idx], nil
+	return selectCredentialWithPrefer(s, snapshot, groupID, 0, now, nil)
 }
 
 // selectCredentialWithPrefer 带钉定偏好选凭据：钉定凭据须在可调度候选内（与
 // SelectCredential 同一套过滤），命中不推进组内轮询指针（同 selectGroupWithPrefer
-// 理由）；失效则回退常规轮询。
-func selectCredentialWithPrefer(s *Selector, snapshot *Snapshot, groupID uint, preferID uint, now time.Time) (models.Credential, error) {
+// 理由）；失效则回退常规轮询。precomputed 是分组层已算好的可调度候选（钉定命中
+// 路径向下传，防同组重复过滤，Stage 30），nil 时在这里算一次——过滤判据单源
+// usableCredentials 不变，miss 回退不再重算第二遍。
+func selectCredentialWithPrefer(s *Selector, snapshot *Snapshot, groupID uint, preferID uint, now time.Time, precomputed []models.Credential) (models.Credential, error) {
+	usable := precomputed
+	if usable == nil {
+		var err error
+		usable, err = usableCredentials(snapshot, groupID, now)
+		if err != nil {
+			return models.Credential{}, err
+		}
+	}
 	if preferID != 0 {
-		if usable, err := usableCredentials(snapshot, groupID, now); err == nil {
-			for _, c := range usable {
-				if c.ID == preferID {
-					return c, nil
-				}
+		for _, c := range usable {
+			if c.ID == preferID {
+				return c, nil
 			}
 		}
 	}
-	return SelectCredential(s, snapshot, groupID, now)
+	idx, _ := s.nextCredentialInRR(snapshot.Provider.ID, groupID, len(usable))
+	return usable[idx], nil
 }
 
 // FirstUsableCredential 取组内**首个**可用凭据（候选按 ID ASC，跳过 disabled/error/

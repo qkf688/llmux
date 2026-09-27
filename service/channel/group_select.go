@@ -15,14 +15,22 @@ import (
 // 调度凭据的死组」会把请求锁死在失败上，违背粘性「失效即静默回退」契约。命中钉定
 // 不推进档内轮询指针（钉定流量不得挪动常规流量的分摊位置）；失效则回退 SelectGroup。
 //
+// 命中钉定时把本组可调度候选集**一次算出带回**（判据单源 usableCredentials），
+// 交 selectCredentialWithPrefer 直接用——原实现钉定守卫扫一遍、选凭据再扫一遍、
+// miss 回退还第三遍，同请求同组的候选过滤重复算（Stage 30 收口）。未命中/失效
+// 返回 nil，由凭据层自行计算；每请求的过滤恰好算一次。
+//
 // upstreamModel 是**上游模型名**（白名单命名空间，见 groupMatchesModel）。
-func selectGroupWithPrefer(s *Selector, snapshot *Snapshot, upstreamModel string, preferID uint, now time.Time) (models.KeyGroup, error) {
+func selectGroupWithPrefer(s *Selector, snapshot *Snapshot, upstreamModel string, preferID uint, now time.Time) (models.KeyGroup, []models.Credential, error) {
 	if preferID != 0 {
-		if g, ok := preferredGroup(snapshot, upstreamModel, preferID); ok && groupHasUsableCredential(snapshot, g.ID, now) {
-			return g, nil
+		if g, ok := preferredGroup(snapshot, upstreamModel, preferID); ok {
+			if usable, err := usableCredentials(snapshot, g.ID, now); err == nil {
+				return g, usable, nil
+			}
 		}
 	}
-	return SelectGroup(s, snapshot, upstreamModel)
+	g, err := SelectGroup(s, snapshot, upstreamModel)
+	return g, nil, err
 }
 
 // preferredGroup 在同套过滤产物（groupWeightBuckets）里找钉定组：不入桶 = 钉定失效。
@@ -35,12 +43,6 @@ func preferredGroup(snapshot *Snapshot, upstreamModel string, preferID uint) (mo
 		}
 	}
 	return models.KeyGroup{}, false
-}
-
-// groupHasUsableCredential 钉定组是否还有可调度凭据（复用 SelectCredential 的过滤口径）。
-func groupHasUsableCredential(snapshot *Snapshot, groupID uint, now time.Time) bool {
-	_, err := usableCredentials(snapshot, groupID, now)
-	return err == nil
 }
 
 // SelectGroup 按模型白名单 + 价格权重选择分组（设计定案第 4 节第 1 级）：

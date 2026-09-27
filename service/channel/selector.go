@@ -33,11 +33,11 @@ func (s *Selector) Select(snapshot *Snapshot, clientWire consts.WireFormat, upst
 	if err != nil {
 		return SelectionResult{}, err
 	}
-	g, err := selectGroupWithPrefer(s, snapshot, upstreamModel, prefer.GroupID, now)
+	g, precomputedUsable, err := selectGroupWithPrefer(s, snapshot, upstreamModel, prefer.GroupID, now)
 	if err != nil {
 		return SelectionResult{}, err
 	}
-	c, err := selectCredentialWithPrefer(s, snapshot, g.ID, prefer.CredentialID, now)
+	c, err := selectCredentialWithPrefer(s, snapshot, g.ID, prefer.CredentialID, now, precomputedUsable)
 	if err != nil {
 		// 凭据层失败：仍带回已选端点/分组。#6-3 探活必须锁定「刚耗尽」的那一组，
 		// 禁止调用方再跑 SelectGroup（选择即推进 RR，同权重组会切到另一组）。

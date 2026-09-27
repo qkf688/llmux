@@ -24,11 +24,11 @@ service/channel/
   types.go                # Snapshot（装配产出）/ SelectionResult（命中+动态 config）/ Prefer（缓存亲和钉定偏好）/ 三层 sentinel errors
   assemble.go             # Assembler: repository → Snapshot（凭据经 ListByGroups 按分组/号池收敛，三路数据 ID ASC 稳定）
   selector.go             # Select / RetryCredential 编排门面（三层 + 解密 + config 尾部复用）+ DefaultSelector 单例
-                          # selectCredentialWithPrefer：钉定凭据须在可调度候选内、命中不推进轮询；失效回退 SelectCredential
+                          # selectCredentialWithPrefer：钉定凭据须在可调度候选内、命中不推进轮询；失效回退常规轮询（可调度集由分组层一次算出向下传，miss 不重算）
   endpoint_select.go      # SelectEndpoint：入站 wire ∈ enabled 端点协议 → 透传路径；否则主协议端点（转换路径）
                           # SelectPrimaryEndpoint：诊断口径——主协议启用端点取 ID 最小，不碰轮询状态
   group_select.go         # SelectGroup：白名单过滤（空=不限）→ weight 聚合档 → 档间加权随机 → 档内轮询
-                          # selectGroupWithPrefer：钉定组须过同套桶过滤 + 至少一条可调度凭据、命中不推进轮询；失效回退 SelectGroup
+                          # selectGroupWithPrefer：钉定组须过同套桶过滤 + 至少一条可调度凭据、命中不推进轮询（可调度集一次算出带回交凭据层）；失效回退 SelectGroup
                           # GroupCandidates：诊断遍历候选（全部组、ID ASC，不过滤白名单/weight）
                           # GroupCandidatesForModel：连通测试候选（只按白名单过滤、ID ASC，不看 weight、不推进轮询）
   credential_select.go    # SelectCredential：active + 非冷却（CooldownUntil 读判定）→ 组内轮询（选择即推进）

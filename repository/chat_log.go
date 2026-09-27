@@ -62,12 +62,15 @@ type ChatLogRepo interface {
 	UpdateByID(ctx context.Context, id uint, update models.ChatLog) (int64, error)
 	// ClearRawFields 清空日志的 6 个 raw 请求/响应字段。
 	ClearRawFields(ctx context.Context, id uint) error
-	// SanitizeLegacyRequestHeaders 存量 chat_logs 请求头快照一次性脱敏（Stage 16，
-	// 启动装配调用）：把 request_headers JSON 中的明文敏感头值清洗为 ****
-	// （判据单源 common.MaskSensitiveLogHeadersJSON，键保留、只改值不删行）。
-	// 幂等：已清洗/无敏感头的行零改写，随每次启动重复执行安全；坏 JSON 行
-	// slog.Warn 跳过不上抛（启动不得被日志卫生问题阻断）。返回实际改写行数。
-	SanitizeLegacyRequestHeaders(ctx context.Context) (int, error)
+	// SanitizeLegacyLogSnapshots 存量 chat_logs 头快照一次性脱敏（Stage 16 立项，
+	// Stage 26 扩展为两列统一入口，启动装配调用）：把 request_headers / response_headers
+	// JSON 中的明文敏感头值清洗为 ****（键保留、只改值不删行）。extraKeys 为现存
+	// 配置的自配头名全集（关联级 customer_headers + key 级自定义头键名并集，可空），
+	// 动态并入请求列掩码判据——已删配置的历史头名洗不到（文档化局限）。幂等：
+	// 已清洗/无敏感头的行零改写，随每次启动重复执行安全；坏 JSON 行 slog.Warn 跳过
+	// 不上抛（启动不得被日志卫生问题阻断）。返回实际改写行数（行级去重：同一行两列
+	// 都命中只算 1）。
+	SanitizeLegacyLogSnapshots(ctx context.Context, extraKeys []string) (int, error)
 	// List 分页筛选列表。
 	List(ctx context.Context, opts ChatLogListOptions) (*ChatLogListResult, error)
 	// DistinctUserAgents 返回非空去重 user_agent。
@@ -188,39 +191,49 @@ func (r *chatLogRepo) ClearRawFields(ctx context.Context, id uint) error {
 // 全量一次读入会让启动内存尖峰与延迟随日志量无界增长。
 const sanitizeBatchSize = 500
 
-func (r *chatLogRepo) SanitizeLegacyRequestHeaders(ctx context.Context) (int, error) {
+// sanitizeLegacyColumn 单列游标清洗：把 masked(原文)→(掩码后, 是否有坏 JSON 行) 的
+// 判定委托给 maskFn，返回 (改写行数, 错误)。request/response 两列共用本骨架
+// （Stage 16 审查回批 W2：游标分批防启动内存尖峰；坏行跳过不阻断启动）。
+func sanitizeLegacyColumn(ctx context.Context, db *gorm.DB, column string, maskFn func(string) (string, error)) (int, error) {
 	updated := 0
 	lastID := uint(0)
 	for {
 		var rows []models.ChatLog
-		if err := r.db.WithContext(ctx).Model(&models.ChatLog{}).
-			Select("id", "request_headers").
-			Where("request_headers IS NOT NULL AND request_headers <> '' AND id > ?", lastID).
+		if err := db.WithContext(ctx).Model(&models.ChatLog{}).
+			Select("id", column).
+			Where(column+" IS NOT NULL AND "+column+" <> '' AND id > ?", lastID).
 			Order("id").
 			Limit(sanitizeBatchSize).
 			Find(&rows).Error; err != nil {
-			return updated, fmt.Errorf("repository: 读取待清洗 chat_logs 请求头快照失败（已清洗 %d 行）: %w", updated, err)
+			return updated, fmt.Errorf("repository: 读取待清洗 chat_logs %s 快照失败（已清洗 %d 行）: %w", column, updated, err)
 		}
 		if len(rows) == 0 {
 			break
 		}
 		lastID = rows[len(rows)-1].ID
 		for _, row := range rows {
-			masked, err := common.MaskSensitiveLogHeadersJSON(row.RequestHeaders)
+			var raw string
+			switch column {
+			case "request_headers":
+				raw = row.RequestHeaders
+			case "response_headers":
+				raw = row.ResponseHeaders
+			}
+			masked, err := maskFn(raw)
 			if err != nil {
 				// 坏 JSON 行跳过：清洗是数据卫生动作，不能因个别坏行让整个启动失败。
-				slog.Warn("chat_logs 请求头快照清洗跳过坏 JSON 行", "log_id", row.ID, "error", err)
+				slog.Warn("chat_logs 头快照清洗跳过坏 JSON 行", "column", column, "log_id", row.ID, "error", err)
 				continue
 			}
-			if masked == row.RequestHeaders {
+			if masked == raw {
 				continue // 幂等：已清洗/无敏感头的行零改写
 			}
 			// map 显式更新：GORM struct Updates 跳零值，且清洗只需改单列
 			// （ClearRawFields 同款姿势）。
-			if err := r.db.WithContext(ctx).Model(&models.ChatLog{}).
+			if err := db.WithContext(ctx).Model(&models.ChatLog{}).
 				Where("id = ?", row.ID).
-				Update("request_headers", masked).Error; err != nil {
-				return updated, fmt.Errorf("repository: 清洗 chat_logs 请求头快照失败 (log_id=%d，已清洗 %d 行): %w", row.ID, updated, err)
+				Update(column, masked).Error; err != nil {
+				return updated, fmt.Errorf("repository: 清洗 chat_logs %s 快照失败 (log_id=%d，已清洗 %d 行): %w", column, row.ID, updated, err)
 			}
 			updated++
 		}
@@ -228,17 +241,85 @@ func (r *chatLogRepo) SanitizeLegacyRequestHeaders(ctx context.Context) (int, er
 			break
 		}
 	}
+	return updated, nil
+}
 
-	// 物理抹除（risk-review C1，实测支撑）：UPDATE 新值更短，被替换的明文字节驻留
-	// SQLite 页 freeblock/slack（secure_delete 默认关）——整库导出端点
+func (r *chatLogRepo) SanitizeLegacyLogSnapshots(ctx context.Context, extraKeys []string) (int, error) {
+	// 两列同游标推进：行级去重（同一行两列都命中只算 1 行改写）用改写行 ID 集合。
+	changedRows := map[uint]struct{}{}
+	for _, col := range []struct {
+		name   string
+		maskFn func(string) (string, error)
+	}{
+		{"request_headers", func(raw string) (string, error) { return common.MaskHeadersWithDenyListJSON(raw, extraKeys) }},
+		{"response_headers", func(raw string) (string, error) { return common.MaskHeadersWithDenyListJSON(raw, nil) }},
+	} {
+		updated, err := sanitizeColumnTracking(ctx, r.db, col.name, col.maskFn, changedRows)
+		if err != nil {
+			return len(changedRows), err
+		}
+		_ = updated
+	}
+
+	// 物理抹除（Stage 16 risk-review C1，实测支撑）：UPDATE 新值更短，被替换的明文
+	// 字节驻留 SQLite 页 freeblock/slack（secure_delete 默认关）——整库导出端点
 	// `GET /api/system/export-database` 以 c.File 原样下载物理文件，静态字节扫描
 	// 可恢复明文，「清洗消灭明文档案」只靠逻辑行掩码不成立。VACUUM 重建整个库文件、
 	// 只写活数据，一次消灭含历史启动在内的全部残留；只在本次实际改写过行时执行
-	// （幂等启动零代价）。否掉 PRAGMA secure_delete：连接级生效，且管不到此前清洗
-	// 已留下的历史残留页。
-	if updated > 0 {
+	// （幂等启动零代价）。
+	if len(changedRows) > 0 {
 		if err := r.db.WithContext(ctx).Exec("VACUUM").Error; err != nil {
-			return updated, fmt.Errorf("repository: VACUUM 物理清除残留明文失败（逻辑行已掩码，物理字节可能仍可恢复）: %w", err)
+			return len(changedRows), fmt.Errorf("repository: VACUUM 物理清除残留明文失败（逻辑行已掩码，物理字节可能仍可恢复）: %w", err)
+		}
+	}
+	return len(changedRows), nil
+}
+
+// sanitizeColumnTracking sanitizeLegacyColumn 的行号记账变体：改写行记入 changedRows
+// 供两列合并去重。结构同上（游标分批 + 幂等 + 坏行跳过）。
+func sanitizeColumnTracking(ctx context.Context, db *gorm.DB, column string, maskFn func(string) (string, error), changedRows map[uint]struct{}) (int, error) {
+	updated := 0
+	lastID := uint(0)
+	for {
+		var rows []models.ChatLog
+		if err := db.WithContext(ctx).Model(&models.ChatLog{}).
+			Select("id", column).
+			Where(column+" IS NOT NULL AND "+column+" <> '' AND id > ?", lastID).
+			Order("id").
+			Limit(sanitizeBatchSize).
+			Find(&rows).Error; err != nil {
+			return updated, fmt.Errorf("repository: 读取待清洗 chat_logs %s 快照失败（已清洗 %d 行）: %w", column, updated, err)
+		}
+		if len(rows) == 0 {
+			break
+		}
+		lastID = rows[len(rows)-1].ID
+		for _, row := range rows {
+			var raw string
+			switch column {
+			case "request_headers":
+				raw = row.RequestHeaders
+			case "response_headers":
+				raw = row.ResponseHeaders
+			}
+			masked, err := maskFn(raw)
+			if err != nil {
+				slog.Warn("chat_logs 头快照清洗跳过坏 JSON 行", "column", column, "log_id", row.ID, "error", err)
+				continue
+			}
+			if masked == raw {
+				continue
+			}
+			if err := db.WithContext(ctx).Model(&models.ChatLog{}).
+				Where("id = ?", row.ID).
+				Update(column, masked).Error; err != nil {
+				return updated, fmt.Errorf("repository: 清洗 chat_logs %s 快照失败 (log_id=%d，已清洗 %d 行): %w", column, row.ID, updated, err)
+			}
+			changedRows[row.ID] = struct{}{}
+			updated++
+		}
+		if len(rows) < sanitizeBatchSize {
+			break
 		}
 	}
 	return updated, nil

@@ -41,7 +41,7 @@ func TestChatLogRepo_SanitizeLegacyRequestHeaders(t *testing.T) {
 		}
 	}
 
-	updated, err := repo.SanitizeLegacyRequestHeaders(ctx)
+	updated, err := repo.SanitizeLegacyLogSnapshots(ctx, nil)
 	if err != nil {
 		t.Fatalf("SanitizeLegacyRequestHeaders: %v（坏 JSON 行必须跳过而非上抛）", err)
 	}
@@ -78,7 +78,7 @@ func TestChatLogRepo_SanitizeLegacyRequestHeaders(t *testing.T) {
 	}
 
 	// 幂等：二次执行零改写（清洗随每次启动执行，重复跑不得再动库）。
-	updatedAgain, err := repo.SanitizeLegacyRequestHeaders(ctx)
+	updatedAgain, err := repo.SanitizeLegacyLogSnapshots(ctx, nil)
 	if err != nil {
 		t.Fatalf("二次清洗: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestChatLogRepo_SanitizeLegacyRequestHeaders_PhysicalBytesErased(t *testing
 		t.Fatalf("seed: %v", err)
 	}
 
-	updated, err := repo.SanitizeLegacyRequestHeaders(ctx)
+	updated, err := repo.SanitizeLegacyLogSnapshots(ctx, nil)
 	if err != nil {
 		t.Fatalf("sanitize: %v", err)
 	}

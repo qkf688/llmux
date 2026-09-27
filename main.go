@@ -95,14 +95,17 @@ func main() {
 	}
 	auth.LogBootstrap(boot, fromEnv)
 
-	// 存量 chat_logs 请求头快照一次性脱敏（Stage 16）：破坏性清洗只改值不删行、幂等，
-	// 只动 request_headers 非空的行；坏 JSON 行在 repo 内逐行 Warn 跳过。整体失败不
+	// 存量 chat_logs 头快照一次性脱敏（Stage 16 立项，Stage 26 扩两列）：破坏性清洗
+	// 只改值不删行、幂等，只动 request_headers / response_headers 非空的行；坏 JSON 行
+	// 在 repo 内逐行 Warn 跳过。extraKeys = 现存配置自配头名全集（关联级 customer_headers
+	// + key 级自定义头键名并集）——已删配置的历史头名洗不到（文档化局限）。整体失败不
 	// 阻断启动（库已在 models.Init 验证，此处失败概率极低），但明文凭据残留是安全面，
 	// 必须 Error 级留痕——清洗的使命就是消灭存量明文。
-	if sanitized, err := repository.Default().ChatLog.SanitizeLegacyRequestHeaders(ctx); err != nil {
-		slog.Error("sanitize legacy chat log request headers", "error", err)
+	extraHeaderKeys := collectConfiguredHeaderKeys(ctx)
+	if sanitized, err := repository.Default().ChatLog.SanitizeLegacyLogSnapshots(ctx, extraHeaderKeys); err != nil {
+		slog.Error("sanitize legacy chat log header snapshots", "error", err)
 	} else if sanitized > 0 {
-		slog.Info("legacy chat log request headers sanitized", "rows", sanitized)
+		slog.Info("legacy chat log header snapshots sanitized", "rows", sanitized)
 	}
 
 	// 引擎装配先于后台服务启动：信任边界（TRUSTED_PROXIES）配置错误要 fail fast，
@@ -234,6 +237,41 @@ func startBackgroundServices(ctx context.Context) {
 
 	syncService := service.NewModelSyncService(models.DB, nil)
 	syncService.StartAutoSync(ctx)
+}
+
+// collectConfiguredHeaderKeys 现存配置自配头名全集（Stage 26）：关联级 customer_headers
+// 与 key 级自定义头的键名并集，供存量请求头快照清洗动态并入掩码判据。读库失败返回
+// nil（清洗按纯固定名单执行并 slog.Warn——头名收集失败不得阻断启动，局限与空集
+// 同形，注明即可）。
+func collectConfiguredHeaderKeys(ctx context.Context) []string {
+	repos := repository.Default()
+	seen := map[string]struct{}{}
+	var keys []string
+	add := func(m map[string]string) {
+		for k := range m {
+			if _, ok := seen[k]; !ok {
+				seen[k] = struct{}{}
+				keys = append(keys, k)
+			}
+		}
+	}
+	assocs, err := repos.ModelWithProvider.ListAll(ctx)
+	if err != nil {
+		slog.Warn("collect configured header keys: list associations", "error", err)
+		return nil
+	}
+	for _, a := range assocs {
+		add(a.CustomerHeaders)
+	}
+	apiKeys, err := repos.ApiKey.List(ctx)
+	if err != nil {
+		slog.Warn("collect configured header keys: list api keys", "error", err)
+		return nil
+	}
+	for _, k := range apiKeys {
+		add(k.Headers)
+	}
+	return keys
 }
 
 //go:embed webui/dist

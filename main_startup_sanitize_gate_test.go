@@ -18,10 +18,10 @@ func TestGateStartupSanitizeRunsBeforeBackgroundServices(t *testing.T) {
 		t.Fatalf("读取 main.go: %v", err)
 	}
 	content := string(src)
-	sanitize := strings.Index(content, "SanitizeLegacyRequestHeaders")
+	sanitize := strings.Index(content, "SanitizeLegacyLogSnapshots")
 	background := strings.Index(content, "startBackgroundServices(ctx)")
 	if sanitize < 0 {
-		t.Fatal("main.go 未找到 SanitizeLegacyRequestHeaders 调用（清洗被删除：存量明文头快照不再被脱敏）")
+		t.Fatal("main.go 未找到 SanitizeLegacyLogSnapshots 调用（清洗被删除：存量明文头快照不再被脱敏）")
 	}
 	if background < 0 {
 		t.Fatal("main.go 未找到 startBackgroundServices(ctx) 调用（装配结构已变，本门判据需同步更新）")

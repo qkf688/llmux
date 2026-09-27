@@ -46,3 +46,6 @@ ui-home-light.png
 # 简历素材：git log 导出与拆分（项目建议写.md 引用其检索 commit 原文），派生产物不提交
 commits-full.txt
 commits-parts/
+
+# 构建产物目录（bin/llmio.exe 等编译产物不入库）
+bin/

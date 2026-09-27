@@ -34,12 +34,7 @@ type Provider struct {
 	Protocols []string `gorm:"serializer:json"`
 }
 
-type AnthropicConfig struct {
-	BaseUrl string `json:"base_url"`
-	ApiKey  string `json:"api_key"`
-	Version string `json:"version"`
-}
-
+// Model 模型目录主表：真实模型行（IsUpstream）与自定义模型行共用。
 type Model struct {
 	ID            uint `gorm:"primarykey"`
 	CreatedAt     time.Time

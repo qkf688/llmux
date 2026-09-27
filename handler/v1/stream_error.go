@@ -26,7 +26,7 @@ const streamInterruptMessage = "upstream stream interrupted before completion"
 func writeResponseBody(c *gin.Context, style string, stream bool, src io.Reader) error {
 	if _, err := io.Copy(c.Writer, src); err != nil {
 		if stream {
-			if emitErr := writeStreamErrorEvent(c, style, streamInterruptMessage); emitErr != nil {
+			if emitErr := writeStreamErrorEvent(c, style); emitErr != nil {
 				// 错误事件构造/写出失败不静默：并入返回错误，交日志管道唯一留痕。
 				err = errors.Join(err, emitErr)
 			}
@@ -39,13 +39,17 @@ func writeResponseBody(c *gin.Context, style string, stream bool, src io.Reader)
 // writeStreamErrorEvent 在响应头（200/SSE）已提交后向客户端写出该协议形状的
 // SSE error 事件收尾。此时状态码已无法改写，httpresp.InternalServerError 的 JSON
 // 会不带 SSE 前缀原样污染已提交的流（客户端的 SSE 解析器会把它当垃圾数据），
-// 协议内错误事件才能被识别为失败。message 必须是静态文案（禁拼内部错误文本）。
+// 协议内错误事件才能被识别为失败。
+//
+// 文案恒为 streamInterruptMessage 常量，且函数**不收 message 参数**——结构性保证
+// 「客户端错误文本不携带内部错误信息」（拼接错误文本直出客户端无从发生，同 Stage 22
+// 渲染侧取静态常量的口径）；将来需要第二种文案时加审查过的静态常量，不开放任意串。
 //
 // 形状配方按 style 注册（service.GetStreamErrorWriter，Stage 30 W5 收口：原先这里是
 // 手写 switch、新 style 漏补分支会静默退化为只断流；现注册面有完备性机械锁）。
 // 未知 style / 未登记配方：无协议可依，仅断流不写字节。帧内 JSON 转义由配方侧
 // typed marshal 兜底；构造失败原样上抛（并入 writeResponseBody 的返回错误）。
-func writeStreamErrorEvent(c *gin.Context, style string, message string) error {
+func writeStreamErrorEvent(c *gin.Context, style string) error {
 	writer, err := service.GetStreamErrorWriter(style)
 	if err != nil {
 		// 未知 style / 未登记配方：无协议可依，仅断流不写字节。留一条 Warn 作运行期
@@ -54,7 +58,7 @@ func writeStreamErrorEvent(c *gin.Context, style string, message string) error {
 		c.Writer.Flush()
 		return nil
 	}
-	frame, err := writer(message)
+	frame, err := writer(streamInterruptMessage)
 	if err != nil {
 		c.Writer.Flush()
 		return fmt.Errorf("build stream error event: %w", err)

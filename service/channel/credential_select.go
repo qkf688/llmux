@@ -27,7 +27,7 @@ func SelectCredential(s *Selector, snapshot *Snapshot, groupID uint, now time.Ti
 // usableCredentials 不变，miss 回退不再重算第二遍。
 func selectCredentialWithPrefer(s *Selector, snapshot *Snapshot, groupID uint, preferID uint, now time.Time, precomputed []models.Credential) (models.Credential, error) {
 	usable := precomputed
-	if usable == nil {
+	if len(usable) == 0 {
 		var err error
 		usable, err = usableCredentials(snapshot, groupID, now)
 		if err != nil {

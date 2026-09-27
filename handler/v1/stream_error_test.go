@@ -48,7 +48,7 @@ func TestWriteStreamErrorEvent_ErrorEventShapes(t *testing.T) {
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
 
-			if err := writeStreamErrorEvent(c, tc.style, streamInterruptMessage); err != nil {
+			if err := writeStreamErrorEvent(c, tc.style); err != nil {
 				t.Fatalf("writeStreamErrorEvent err = %v", err)
 			}
 
@@ -65,7 +65,7 @@ func TestWriteStreamErrorEvent_UnknownStyleBreaksStream(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 
-	if err := writeStreamErrorEvent(c, "gemini", streamInterruptMessage); err != nil {
+	if err := writeStreamErrorEvent(c, "gemini"); err != nil {
 		t.Fatalf("writeStreamErrorEvent err = %v, want 未知 style 不是错误（只断流）", err)
 	}
 

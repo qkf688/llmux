@@ -35,6 +35,16 @@ export function redirectToLogin(): void {
   window.location.href = "/login";
 }
 
+/** 401 失效出口抛出的错误类型。message 恒为 `Unauthorized`（既有断言依赖此文案）。
+ *  存在的理由：自持连接通道（SSE）的失败呈现归调用方，需要一个结构化判据区分
+ *  「登录过期终止」与「真失败」——用 message 文案比对应当避免（文案一改判据就漂）。 */
+export class UnauthorizedError extends Error {
+  constructor() {
+    super("Unauthorized");
+    this.name = "UnauthorizedError";
+  }
+}
+
 /** 401 失效出口：标记过期（兼作去重）→ 清会话 → 跳登录页。
  *
  *  同一去重窗口内并发多请求撞 401，只有首个调用方触发整套处置（已设标记不再跳/不再写），
@@ -42,11 +52,11 @@ export function redirectToLogin(): void {
  *  `stores/auth/login-expiry-notice.ts` 模块注释。未登录直入（发起时本就无凭据）**不走
  *  本出口**：那是「未登录」不是「登录过期」，调用点直接 `redirectToLogin` 静默跳转。
  *  清会话复用 authStore.clearSession（401/登出单一 owner），此处不另造清理逻辑。 */
-function handleUnauthorized(): never {
+export function handleUnauthorized(): never {
   if (markLoginExpiredOnce()) {
     redirectToLogin();
   }
-  throw new Error("Unauthorized");
+  throw new UnauthorizedError();
 }
 
 /**
@@ -204,16 +214,33 @@ export async function apiRequestFile(
 
 /** SSE 流请求（当前仅 ReAct 测试端点 `/api/test/react/:id`）：`fetchEventSource` 自己
  *  管连接与取消，拿不到 Response 也就无法走信封拆包——故它只借这里的鉴权头与「无凭证
- *  直入」处置：发起时无凭证则清会话 + 跳登录页（未登录场景，不写过期提示）。覆盖面仅限
- *  「发起时无凭证」——连接建立后收到的 401 走 `fetchEventSource` 的 onerror，不经此出口
- *  （缺口已登记 find-issues，勿把这里当「SSE 的 401 也收口了」的依据）。
- *  事件内容与错误呈现归调用方。新增长连接端点若也要走这条通道，必须复用本函数而不是
- *  自拼 Authorization。 */
-export function requireAuthTokenOrRedirect(): string | null {
+ *  直入」处置：发起时无凭证则清会话 + 跳登录页（未登录场景，不写过期提示）。
+ *  连接建立时收到的 401（发起时有 token、到达时已失效）由 `fetchHandlingUnauthorized`
+ *  经同一失效出口处置。事件内容与错误呈现归调用方。新增长连接端点若也要走这条通道，
+ *  必须复用本函数（鉴权）+ `fetchHandlingUnauthorized`（401 处置）而不是自拼 Authorization。 */
+export function requireAuthTokenOrRedirect(): string {
   const token = getAuthToken();
   if (!token) {
     redirectToLogin();
-    throw new Error("Unauthorized");
+    throw new UnauthorizedError();
   }
   return token;
+}
+
+/** 自持连接通道的 fetch 替身（`fetchEventSource` 的 `fetch` 选项）：响应 401 走统一
+ *  失效出口（`handleUnauthorized`），与信封通道同一 owner，调用点不得另造处置。
+ *  鉴权头仍由调用方经 `requireAuthTokenOrRedirect` 拿 token 后携带（流的 headers 属流配置）。
+ *  SSE 的 HTTP 状态只存在于连接建立的那次响应（流内事件不是 HTTP 响应），故判响应层
+ *  即覆盖「发起后 token 才失效」的窗口；调用方另需把 `UnauthorizedError` 当非失败终止
+ *  收场，不得写成「测试失败」。 */
+export function fetchHandlingUnauthorized(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response> {
+  return fetch(input, init).then((response) => {
+    if (response.status === 401) {
+      handleUnauthorized();
+    }
+    return response;
+  });
 }

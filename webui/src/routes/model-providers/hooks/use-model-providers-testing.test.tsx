@@ -1,5 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fetchEventSource } from "@microsoft/fetch-event-source";
 
 import {
   testModelProvider,
@@ -8,6 +9,10 @@ import {
   testModelProviderVision,
   type ModelProviderTestResult,
 } from "@/lib/api";
+import { authStore } from "@/stores/auth";
+import { consumeLoginExpiryNotice, hasLoginExpiryNotice } from "@/stores/auth/login-expiry-notice";
+import type { Updater } from "@/stores/core/updater";
+import type { ReactTestResultState } from "@/stores/model-providers/types";
 
 import type { TestMode, TestType } from "../types";
 import { capabilityTestKey, useModelProvidersTesting } from "./use-model-providers-testing";
@@ -19,6 +24,18 @@ vi.mock("@/lib/api", async (importOriginal) => ({
   testModelProviderStructuredOutput: vi.fn(),
   testModelProviderThinking: vi.fn(),
   testModelProviderVision: vi.fn(),
+}));
+
+// fetchEventSource 是被测 hook 的流传输边界（自持长连接，不经信封通道）。
+// mock 不是随手桩：实现复刻真实库（lib/esm/fetch.js）的关键语义——默认 onopen 校验
+// 响应 content-type 必须是 event-stream；错误进 onerror，而 onerror 的契约是双向的：
+// **抛出才终止**整条连接（Promise reject），正常返回则把返回值当重试间隔**重连**。
+// 故 mock 把「onerror 未抛出」判为终止契约被破坏直接失败——否则删掉调用点的终止
+// throw 用例仍全绿，锁不住「必须终止」这半边（变异检验实锤过：真实库里那等于
+// 拿同一过期 token 每秒重连死循环）。刻意未模拟的语义（写在这里防误导后来者）：
+// 重连重试、abort（真实库 abort 是 dispose+resolve，不进 onerror/catch）、last-event-id。
+vi.mock("@microsoft/fetch-event-source", () => ({
+  fetchEventSource: vi.fn(),
 }));
 
 const setTestMode = vi.fn();
@@ -215,5 +232,130 @@ describe("useModelProvidersTesting", () => {
     });
 
     expect(setTestMode).toHaveBeenCalledWith("non_stream");
+  });
+});
+
+describe("SSE 流 401 处置", () => {
+  const fetchMock = vi.fn();
+  let locationAssignments: string[];
+
+  /** 401 拒绝的通行形状：JSON 错误页而非 event-stream（默认 onopen 会因此抛错）。 */
+  function unauthorizedResponse() {
+    return {
+      ok: false,
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json" }),
+    } as unknown as Response;
+  }
+
+  /** 真实库默认 onopen：content-type 必须是 event-stream，否则抛错进 onerror。 */
+  const defaultOnOpen = async (response: Response) => {
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.startsWith("text/event-stream")) {
+      throw new Error(`Expected content-type to be text/event-stream, Actual: ${contentType}`);
+    }
+  };
+
+  /** setReactTestResult 的有状态替身：vi.fn() 只留调用记录，读不出面板终态。 */
+  function createReactTestResultSetter() {
+    let state: ReactTestResultState = { loading: false, messages: "", success: null, error: null };
+    return {
+      setReactTestResult: (next: Updater<ReactTestResultState>) => {
+        state = typeof next === "function" ? next(state) : next;
+      },
+      getState: () => state,
+    };
+  }
+
+  function renderReactTest(setReactTestResult: (next: Updater<ReactTestResultState>) => void) {
+    return renderHook(() =>
+      useModelProvidersTesting({
+        setTestDialogOpen: vi.fn(),
+        setSelectedTestId: vi.fn(),
+        setTestType: vi.fn(),
+        setTestMode: vi.fn(),
+        setReactTestResult,
+        selectedTestId: 7,
+        testType: "react",
+        testMode: "non_stream",
+      }),
+    );
+  }
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+    authStore.setState({ token: "test-jwt", user: { id: 1, username: "admin", role: "admin" } });
+    // 一次性过期提示是「读后即焚」的会话级标记：不清会跨用例残留，
+    // 让「已设标记不再跳」的去重判据误判成上个用例写过的旧标记。
+    sessionStorage.clear();
+    consumeLoginExpiryNotice();
+
+    // jsdom 的 location.href 赋值只告警不可断言：换成可写对象捕获跳转（同 client.test.ts）。
+    locationAssignments = [];
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        get href() {
+          return locationAssignments.at(-1) ?? "";
+        },
+        set href(value: string) {
+          locationAssignments.push(value);
+        },
+      },
+    });
+
+    vi.mocked(fetchEventSource).mockImplementation(async (input, options) => {
+      const doFetch = options.fetch ?? globalThis.fetch;
+      try {
+        const response = await doFetch(input, {
+          method: options.method,
+          headers: options.headers,
+          signal: options.signal,
+        });
+        await (options.onopen ?? defaultOnOpen)(response);
+      } catch (err) {
+        // 真实库：onerror 抛出才终止整条连接（reject）；正常返回即重连。mock 不模拟
+        // 重连，把「未抛出」直接判失败——终止契约的另一半必须有测试锁（见顶部注释）。
+        options.onerror?.(err);
+        throw new Error("mock: onerror 未抛出终止——真实库会以返回值为间隔重连，终止契约被破坏");
+      }
+      options.onclose?.();
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    authStore.setState({ token: null, user: null });
+    vi.mocked(fetchEventSource).mockReset();
+  });
+
+  it("SSE 流中途 401：走统一失效处置（清会话、跳登录页、写过期提示标记）", async () => {
+    fetchMock.mockResolvedValue(unauthorizedResponse());
+    const { setReactTestResult } = createReactTestResultSetter();
+    const { result } = renderReactTest(setReactTestResult);
+
+    await act(async () => {
+      result.current.executeTestNow();
+    });
+
+    expect(authStore.getState().token).toBeNull();
+    expect(locationAssignments).toEqual(["/login"]);
+    expect(hasLoginExpiryNotice()).toBe(true);
+  });
+
+  it("SSE 流 401 不以「测试失败」掩盖掉线：面板不写失败结论", async () => {
+    fetchMock.mockResolvedValue(unauthorizedResponse());
+    const { setReactTestResult, getState } = createReactTestResultSetter();
+    const { result } = renderReactTest(setReactTestResult);
+
+    await act(async () => {
+      result.current.executeTestNow();
+    });
+
+    const state = getState();
+    expect(state.error).toBeNull();
+    expect(state.success).toBeNull();
+    expect(state.loading).toBe(false);
   });
 });

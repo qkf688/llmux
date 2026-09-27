@@ -8,18 +8,10 @@ import {
   testModelProviderVision,
   type ModelProviderTestResult,
 } from "@/lib/api";
-import { requireAuthTokenOrRedirect } from "@/lib/api/core/client";
-import type { Updater } from "@/stores/core/updater";
+import { requireAuthTokenOrRedirect, fetchHandlingUnauthorized, UnauthorizedError } from "@/lib/api/core/client";
+import type { Setter } from "@/stores/core/updater";
+import type { ReactTestResultState } from "@/stores/model-providers/types";
 import type { CapabilityTestKey, TestMode, TestType } from "../types";
-
-type ReactTestResult = {
-  loading: boolean;
-  messages: string;
-  success: boolean | null;
-  error: string | null;
-  /** 关弹窗/切页面中止。已累积的半截日志保留，供下次打开对照。 */
-  cancelled?: boolean;
-};
 
 // 结果格三态（进行中/通过/失败）之外多一个「已取消」：它既不是失败（不证明供应商不行）
 // 也不是未测（用户明确停过），所以在 entry 上单独标记，不复用空 result 表达。
@@ -31,8 +23,6 @@ type CapabilityTestEntry = {
 
 export type CapabilityTestResults = Record<CapabilityTestKey, CapabilityTestEntry>;
 
-type Setter<T> = (value: Updater<T>) => void;
-
 type CapabilityTestApi = (id: number, mode: TestMode, signal?: AbortSignal) => Promise<ModelProviderTestResult>;
 
 type UseModelProvidersTestingInput = {
@@ -40,7 +30,7 @@ type UseModelProvidersTestingInput = {
   setSelectedTestId: (id: number) => void;
   setTestType: (value: TestType) => void;
   setTestMode: (value: TestMode) => void;
-  setReactTestResult: Setter<ReactTestResult>;
+  setReactTestResult: Setter<ReactTestResultState>;
 
   selectedTestId: number | null;
   testType: TestType;
@@ -194,23 +184,24 @@ export function useModelProvidersTesting({
 
       // 只有仍代表「当前这条流」的事件才允许写结果：关弹窗/卸载/新流接管之后，
       // 旧流的迟到事件（含 abort 触发的那次 onerror）不得再改状态。
-      const applyIfCurrent = (updater: (prev: ReactTestResult) => ReactTestResult) => {
+      const applyIfCurrent = (updater: (prev: ReactTestResultState) => ReactTestResultState) => {
         if (currentControllerRef.current !== controller) return;
         setReactTestResult(updater);
       };
 
       try {
         // 长连接不经信封通道（fetchEventSource 自持连接），故只借统一入口的鉴权与
-        // 凭证失效处置（清会话 + 跳登录页），不自拼 Authorization。
+        // 凭证失效处置（清会话 + 跳登录页），不自拼 Authorization。无凭证时它直抛
+        // UnauthorizedError（走下面 catch 的过期收场）。
         const token = requireAuthTokenOrRedirect();
-        if (!token) {
-          return;
-        }
 
         await fetchEventSource(`/api/test/react/${id}`, {
           method: "GET",
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
+          // 连接建立时的 401（token 中途失效）经统一失效出口处置（标记/清会话/跳登录页），
+          // 与信封通道同一 owner；自拼 fetch 或在回调里另造 401 处置都是旁路。
+          fetch: fetchHandlingUnauthorized,
           onmessage(event) {
             applyIfCurrent((prev) => {
               if (event.event === "start") {
@@ -238,6 +229,10 @@ export function useModelProvidersTesting({
             // 取消不是失败：标 cancelled、保留已累积的半截日志，不设 error/success。
             if (isAbortError(err)) {
               applyIfCurrent((prev) => ({ ...prev, loading: false, cancelled: true }));
+            } else if (err instanceof UnauthorizedError) {
+              // 登录过期不是失败：失效出口已处置（标记/清会话/跳转），面板只收场不写结论，
+              // 不以「测试失败」掩盖掉线。
+              applyIfCurrent((prev) => ({ ...prev, loading: false }));
             } else {
               applyIfCurrent((prev) => ({
                 ...prev,
@@ -250,11 +245,20 @@ export function useModelProvidersTesting({
           },
         });
       } catch (err) {
-        // 取消路径已在 onerror 里写入 cancelled 状态（并做过当前性判断），这里不再覆盖。
+        // 过期不是「测试失败」：失效出口已处置（标记/清会话/跳转），不写失败结论掩盖掉线。
+        // 收场复位按当前性做：过期错误可能不经 onerror——发起测试瞬间无凭证时
+        // requireAuthTokenOrRedirect 直抛到这里，loading 已置起，必须复位。
+        if (err instanceof UnauthorizedError) {
+          applyIfCurrent((prev) => ({ ...prev, loading: false }));
+          return;
+        }
+        // 取消的防御性分支。注意真实库的取消主路径是 dispose + resolve（不进 catch、
+        // 也不进 onerror），面板的「已取消」收场缺口见 .local/find-issues/ 内登记条目。
         if (isAbortError(err)) {
           return;
         }
-        setReactTestResult((prev) => ({ ...prev, loading: false, error: "测试失败", success: false }));
+        // 失败结论按当前性写：旧流的迟到失败不得覆写已接管的新流（同 applyIfCurrent 口径）。
+        applyIfCurrent((prev) => ({ ...prev, loading: false, error: "测试失败", success: false }));
         console.error(err);
       } finally {
         // 仅当这条流仍被认作当前流时才解绑，避免把已交接给新流的 ref 清空。

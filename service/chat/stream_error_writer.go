@@ -15,8 +15,8 @@ import (
 // 契约：
 //   - message 必须是静态文案（禁拼内部错误文本，framework-conventions §5）；
 //   - 帧内 JSON 由 typed 结构体 + json.Marshal 兜底转义，禁止字符串拼接造 JSON；
-//   - 注册完备性有机械锁（registry_test.go：凡注册了 Beforer 的 style 必须有本配方，
-//     漏登记测试即红），不再依赖人记得补 switch 分支。
+//   - 注册完备性有机械锁（stream_error_writer_test.go：凡注册了 Beforer 的 style 必须
+//     有本配方，漏登记测试即红），不再依赖人记得补 switch 分支。
 type StreamErrorWriter func(message string) ([]byte, error)
 
 // 断流错误帧的三种形状（客户端 SDK 能否识别失败的关键契约，字节形状由

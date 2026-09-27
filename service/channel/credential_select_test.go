@@ -301,3 +301,46 @@ func TestFirstUsableCredential_Errors(t *testing.T) {
 		t.Fatalf("err = %v, want ErrNoCredentialAvailable + 全不可用文案", err)
 	}
 }
+
+// TestSelectCredentialWithPrefer_ConsumesPrecomputed 锁「可调度集一次算出向下传」的
+// 真实消费（2026-09-28 审查回批：省算主张要有机械锁，防 miss 路径悄悄改回重算）：
+// precomputed 与快照内候选故意不一致——实现若重算（走 usableCredentials），选中的会是
+// 快照里的 h-snapshot；只有真正消费 precomputed 才会拿到 h-precomputed。
+func TestSelectCredentialWithPrefer_ConsumesPrecomputed(t *testing.T) {
+	now := time.Now()
+	snap := &Snapshot{
+		Provider: models.Provider{Type: "openai"},
+		CredentialsByGroup: map[uint][]models.Credential{
+			1: {{KeyHash: "h-snapshot"}},
+		},
+	}
+	pc := models.Credential{KeyHash: "h-precomputed"}
+	pc.ID = 77
+	precomputed := []models.Credential{pc}
+
+	s := &Selector{}
+	// 钉定命中：直接取 precomputed 内那条。
+	c, err := selectCredentialWithPrefer(s, snap, 1, 77, now, precomputed)
+	if err != nil {
+		t.Fatalf("钉定命中: %v", err)
+	}
+	if c.KeyHash != "h-precomputed" {
+		t.Fatalf("钉定命中 %s, want h-precomputed（precomputed 必须被消费）", c.KeyHash)
+	}
+	// 钉定 miss：回退常规轮询也必须从 precomputed 里选，不重算快照。
+	c, err = selectCredentialWithPrefer(s, snap, 1, 999, now, precomputed)
+	if err != nil {
+		t.Fatalf("钉定 miss: %v", err)
+	}
+	if c.KeyHash != "h-precomputed" {
+		t.Fatalf("钉定 miss %s, want h-precomputed（重算会拿到 h-snapshot，暴露未消费 precomputed）", c.KeyHash)
+	}
+	// precomputed 为 nil（非钉定路径）照旧算一次：快照候选生效。
+	c, err = selectCredentialWithPrefer(s, snap, 1, 0, now, nil)
+	if err != nil {
+		t.Fatalf("nil precomputed: %v", err)
+	}
+	if c.KeyHash != "h-snapshot" {
+		t.Fatalf("nil precomputed %s, want h-snapshot（应走 usableCredentials 计算）", c.KeyHash)
+	}
+}

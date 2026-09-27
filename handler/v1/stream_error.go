@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/service"
@@ -47,6 +48,9 @@ func writeResponseBody(c *gin.Context, style string, stream bool, src io.Reader)
 func writeStreamErrorEvent(c *gin.Context, style string, message string) error {
 	writer, err := service.GetStreamErrorWriter(style)
 	if err != nil {
+		// 未知 style / 未登记配方：无协议可依，仅断流不写字节。留一条 Warn 作运行期
+		// 唯一信号（客户端收不到错误事件本身无声无息；注册完备锁只覆盖已登记 style）。
+		slog.Warn("no stream error writer registered, breaking stream without error event", "style", style)
 		c.Writer.Flush()
 		return nil
 	}

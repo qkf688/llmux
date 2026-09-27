@@ -26,7 +26,7 @@ handler/v1/                 # /v1 入口与 chatHandler；stream_error.go = 提�
 service/
 ├── chat_facade.go          # 根包门面 re-export
 ├── chat/                   # 编排核心
-│   ├── registry.go         # Beforer/Processer/StreamErrorWriter 注册表（完备性机械锁：注册 Beforer 的 style 必须有 StreamErrorWriter，registry_test）
+│   ├── registry.go         # Beforer/Processer/StreamErrorWriter 注册表（完备性机械锁：注册 Beforer 的 style 必须有 StreamErrorWriter，stream_error_writer_test）
 │   ├── stream_error_writer.go # 断流错误事件形状配方（Stage 30 W5 收进注册面）：按 style 生成协议内 SSE error 事件整帧字节，typed marshal 兜底转义，字节契约由 stream_error_writer_test 逐字锁定
 │   ├── before.go           # 请求前处理（含对话身份键派生：canonicalJSON 规范化语义值，抗序列化漂移）
 │   ├── chat_affinity.go    # 缓存亲和编排单源（2026-09-23）：开关判定、钉定读取（stickyTargetFor）、成功改钉（recordStickyTarget）、虚拟路径真实模型稳定前移（preferRealModelsFirst）

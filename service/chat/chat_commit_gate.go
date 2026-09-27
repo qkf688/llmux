@@ -87,9 +87,12 @@ func gateStreamCommitment(body io.ReadCloser, firstByteTimeout time.Duration) (i
 			return errStreamGateAccepted
 		})
 
+	// 失败出口统一走 watched.Close()（= disarm 计时器 + 关 capture/底层 body）：
+	// 直接 capture.Close() 碰不到 timer，预读失败（首帧未到）时定时器会悬到超时
+	// 再 abort 一次底层 Close（2026-09-28 审查回批：disarm 修复必须落在真实调用链）。
 	switch {
 	case contentErr != nil:
-		capture.Close()
+		watched.Close()
 		return nil, fmt.Errorf("%w: first frame rejected: %w", errUpstreamContentInvalid, contentErr)
 	case errors.Is(scanErr, errStreamGateAccepted):
 		return capture.Replay(), nil
@@ -98,15 +101,15 @@ func gateStreamCommitment(body io.ReadCloser, firstByteTimeout time.Duration) (i
 		// 主动止损/坏流判定，与错误帧同权归不可提交：组织级换下家、不冷却凭据。
 		// 归凭据级网络出口会让组内 key 逐条陪烧、重试循环反复撞回同一坏端点
 		//（垃圾洪水罚 key 的分类错位，2026-09-23 审查回批修正）。
-		capture.Close()
+		watched.Close()
 		return nil, fmt.Errorf("%w: %w", errUpstreamContentInvalid, scanErr)
 	case scanErr != nil:
 		// 看门狗超时（errFirstByteWatchdog）与真读错同归凭据级网络出口，原样上抛分类。
-		capture.Close()
+		watched.Close()
 		return nil, scanErr
 	default:
 		// 正常读完却零帧：200 + 非 SSE（JSON 错误体 / HTML / 空体）——不可提交。
-		capture.Close()
+		watched.Close()
 		return nil, fmt.Errorf("%w: no SSE frames in stream response", errUpstreamContentInvalid)
 	}
 }

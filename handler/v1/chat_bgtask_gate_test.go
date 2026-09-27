@@ -49,10 +49,32 @@ func TestGateHandlerBgtaskRegistration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read chat.go: %v", err)
 	}
-	if !strings.Contains(string(src), "bgtask.Go(") {
+	fset := token.NewFileSet()
+	f, parseErr := parser.ParseFile(fset, "chat.go", src, 0)
+	if parseErr != nil {
+		t.Fatalf("parse chat.go: %v", parseErr)
+	}
+	// AST 级判据（注释里的字样不算数）：bgtask.Go 调用存在、sync.WaitGroup 不在。
+	var hasBgtaskGo, hasWaitGroup bool
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch v := n.(type) {
+		case *ast.SelectorExpr:
+			if pkg, ok := v.X.(*ast.Ident); ok && pkg.Name == "sync" && v.Sel.Name == "WaitGroup" {
+				hasWaitGroup = true
+			}
+		case *ast.CallExpr:
+			if sel, ok := v.Fun.(*ast.SelectorExpr); ok {
+				if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "bgtask" && sel.Sel.Name == "Go" {
+					hasBgtaskGo = true
+				}
+			}
+		}
+		return true
+	})
+	if !hasBgtaskGo {
 		t.Error("chat.go 的 RecordLog 后处理未走 bgtask.Go 登记（关机排空覆盖不到在写记录）")
 	}
-	if strings.Contains(string(src), "sync.WaitGroup") {
+	if hasWaitGroup {
 		t.Error("chat.go 仍带 WaitGroup 丝线：关机等待职责已移交 bgtask 排空，双轨并存会两套等待互相等")
 	}
 }

@@ -118,3 +118,20 @@ func TestFirstByteWatchdog_CloseDisarmsTimer(t *testing.T) {
 		t.Fatalf("底层 Close 次数 = %d, want 1（失败出口必须 disarm 计时器）", got)
 	}
 }
+
+// TestGateStreamCommitment_FailureExitDisarmsWatchdog 真实调用链回归（2026-09-28 审查回批）：
+// 提交门预读失败出口必须走 watched.Close()（disarm + 关底层）——只关 capture 碰不到
+// timer，上面的单测直调 wd.Close() 锁不住生产路径。改前实测红：旧出口 capture.Close()，
+// 超时后 abort 二次 Close（计数=2）。
+func TestGateStreamCommitment_FailureExitDisarmsWatchdog(t *testing.T) {
+	src := &failReadCloser{}
+	if _, err := gateStreamCommitment(src, 50*time.Millisecond); err == nil {
+		t.Fatal("gateStreamCommitment err = nil, want 预读失败上抛")
+	}
+
+	time.Sleep(150 * time.Millisecond) // 越过窗口：timer 若未 disarm，abort 已二次 Close
+
+	if got := src.closes.Load(); got != 1 {
+		t.Fatalf("底层 Close 次数 = %d, want 1（失败出口必须经 watched.Close disarm 计时器）", got)
+	}
+}

@@ -43,16 +43,22 @@ func newFirstByteWatchdogReader(src io.ReadCloser, timeout time.Duration) *first
 
 func (r *firstByteWatchdogReader) Read(p []byte) (int, error) {
 	r.startOnce.Do(func() {
-		r.timer = time.AfterFunc(r.timeout, r.abort)
+		t := time.AfterFunc(r.timeout, r.abort)
+		r.mu.Lock()
+		r.timer = t
+		r.mu.Unlock()
 	})
 
 	n, err := r.src.Read(p)
 	if n > 0 {
 		r.firstOnce.Do(func() {
+			// 首帧到达：置位 + disarm，与 abort 共用 mu 串行化。
 			r.mu.Lock()
 			r.firstByte = true
+			if r.timer != nil {
+				r.timer.Stop()
+			}
 			r.mu.Unlock()
-			r.timer.Stop()
 		})
 	}
 
@@ -67,13 +73,16 @@ func (r *firstByteWatchdogReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// Close 关闭底层 body 并 disarm 计时器：提交门预读失败出口（gateStreamCommitment
+// 各失败分支的 watched.Close）都经由本方法收尾，timer 不 Stop 会悬挂到超时再 abort
+// 一次底层 Close（双 Close 靠 http body 的「重复 Close 安全」隐式兜着），且整个超时
+// 窗口内挂着一个会对已放弃的响应误伤的定时器。timer 字段读写全在 mu 下。
 func (r *firstByteWatchdogReader) Close() error {
-	// 失败出口（提交门预读失败各分支的 capture.Close）同样要 disarm 计时器：
-	// 不 Stop 则 timer 悬挂到超时再 abort 一次底层 Close（双 Close 靠 http body 的
-	// 「重复 Close 安全」隐式兜着），且整个超时窗口内挂着一个会对已放弃的响应误伤的定时器。
+	r.mu.Lock()
 	if r.timer != nil {
 		r.timer.Stop()
 	}
+	r.mu.Unlock()
 	return r.src.Close()
 }
 

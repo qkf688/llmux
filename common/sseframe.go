@@ -86,9 +86,11 @@ func (e *SSEBudgetError) Error() string {
 	}
 }
 
-// defaultSSEMaxLineBytes 是 cfg.MaxLineBytes 未设时的行上限。三个现存调用方都显式
-// 传值，此默认只兜新调用方忘设的场合（宁可得罪畸形上游，不可无界缓冲）。
-const defaultSSEMaxLineBytes = 1 << 20
+// SSEDefaultMaxLineBytes 是 SSE 单行上限的唯一默认值：ScanSSEFrames 在 cfg.MaxLineBytes
+// 未设时兜底用它，提交门（service/chat）等调用方也直接引用本值同源取数（改这里=全线同改，
+// 禁在调用侧再抄一份字面量）。其余调用方按各自场景显式传值，此默认兼兜新调用方忘设的场合
+// （宁可得罪畸形上游，不可无界缓冲）。
+const SSEDefaultMaxLineBytes = 1 << 20
 
 // ScanSSEFrames 按 SSE 规范从 src 分帧读取，每交付一帧调用一次 onFrame（携带当时
 // 的统计快照，供调用方记日志）。无副作用、不解析 JSON：纯分帧。
@@ -106,7 +108,7 @@ const defaultSSEMaxLineBytes = 1 << 20
 func ScanSSEFrames(src io.Reader, cfg SSEScanConfig, onFrame func(SSEFrame, SSEScanStats) error) (SSEScanStats, error) {
 	maxLineBytes := cfg.MaxLineBytes
 	if maxLineBytes <= 0 {
-		maxLineBytes = defaultSSEMaxLineBytes
+		maxLineBytes = SSEDefaultMaxLineBytes
 	}
 	scanner := bufio.NewScanner(src)
 	// 初缓冲 64KB：合法探针/转发帧远小于此，避免逐行扩容；上限由 maxLineBytes 封死。

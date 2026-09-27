@@ -27,12 +27,11 @@ import (
 //     「验证首事件后才 Commit」语义）。第二帧起的错误属已提交后语义，不再重试，
 //     由 handler 的协议内 error 事件收口。
 //   - 非流式：已物化 body 必须是合法 JSON 对象且非错误载荷（直通路径此前没有任何
-//     解析步骤，200 + HTML/错误对象会原样漏给客户端）。转换路径的解析失败另有
-//     既有出口，此处判据同源、双保险不冲突。
+//     解析步骤，200 + HTML/错误对象会原样漏给客户端）。上游对非流式请求回 SSE
+//     （给错格式）同判不可提交、换下家——转换路径的解析失败另有既有出口，此处
+//     判据同源、双保险不冲突。
 
 const (
-	// streamGateMaxLineBytes 单行上限：与 common 分帧默认同值，防畸形行无界缓冲。
-	streamGateMaxLineBytes = 1 << 20
 	// streamGateMaxTotalBytes 预读预算：首帧迟迟不来的大段前言按不可提交处置
 	// （无预算时恶意上游可发无限注释行拖住预读）。
 	streamGateMaxTotalBytes = 4 << 20
@@ -47,22 +46,27 @@ var errUpstreamContentInvalid = errors.New("upstream content not committable")
 
 // gateUpstreamCommitment 对本次尝试的上游响应做提交门验证，返回可提交的 res
 // （流式 body 已换为可重放流）。失败时返回的错误按 errUpstreamContentInvalid 分类。
-// materialized 由 limitUpstreamResponseBody 给出（流式响应体未物化为 false）：
-// 非流式仅在 body 已物化时校验——上游对非流式请求回 SSE 的残余盲区沿用现状
-// （无法廉价整验，见 framework-conventions §6 已知边界）。
-func gateUpstreamCommitment(input singleProviderAttemptInput, res *http.Response, materializedBody []byte, materialized bool) (*http.Response, error) {
-	if input.Before.Stream {
-		gated, err := gateStreamCommitment(res.Body, time.Duration(getStreamFirstByteTimeout(input.Ctx))*time.Second)
+// body 是 limitUpstreamResponseBody 已物化的字节（event-stream 响应为 nil，判据单源
+// 是 Content-Type）：
+//   - 流式请求：预读首帧判可提交（event-stream 之外的响应体也会被判零帧不可提交）；
+//   - 非流式请求：上游回 event-stream 是「给错格式」——调用方期待一份完整 JSON，SSE
+//     原样递过去必然解析失败，且直通链路没有任何解析步骤会失败，按内容不可提交处置
+//     （组织级换下家，2026-09-28 收口，原残余盲区见 framework-conventions §6）；
+//     其余响应体必须是合法 JSON 对象且非错误载荷。
+func gateUpstreamCommitment(ctx context.Context, stream bool, res *http.Response, body []byte) (*http.Response, error) {
+	if stream {
+		gated, err := gateStreamCommitment(res.Body, time.Duration(getStreamFirstByteTimeout(ctx))*time.Second)
 		if err != nil {
 			return nil, err
 		}
 		res.Body = gated
 		return res, nil
 	}
-	if materialized {
-		if err := common.JSONContentError(materializedBody); err != nil {
-			return nil, fmt.Errorf("%w: %w", errUpstreamContentInvalid, err)
-		}
+	if common.IsEventStreamContentType(res.Header.Get("Content-Type")) {
+		return nil, fmt.Errorf("%w: event-stream response to non-stream request", errUpstreamContentInvalid)
+	}
+	if err := common.JSONContentError(body); err != nil {
+		return nil, fmt.Errorf("%w: %w", errUpstreamContentInvalid, err)
 	}
 	return res, nil
 }
@@ -75,7 +79,7 @@ func gateStreamCommitment(body io.ReadCloser, firstByteTimeout time.Duration) (i
 
 	var contentErr error
 	_, scanErr := common.ScanSSEFrames(watched,
-		common.SSEScanConfig{MaxLineBytes: streamGateMaxLineBytes, MaxTotalBytes: streamGateMaxTotalBytes},
+		common.SSEScanConfig{MaxLineBytes: common.SSEDefaultMaxLineBytes, MaxTotalBytes: streamGateMaxTotalBytes},
 		func(frame common.SSEFrame, _ common.SSEScanStats) error {
 			contentErr = common.SSEFrameContentError(frame)
 			// 首帧即定论：可提交则放行，不可提交也只需这一帧的证据（「第一非空事件」

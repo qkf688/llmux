@@ -214,3 +214,52 @@ func TestBalanceChat_NonStream_PassthroughInvalidContent_FailsOver(t *testing.T)
 		})
 	}
 }
+
+// AC-4：非流式请求但上游回 SSE（Content-Type event-stream）→ 不再原样漏给期待 JSON
+// 的客户端（原残余盲区），判「内容不可提交」换下家。改前实测红：现状 body 未物化
+// 跳过提交门校验，SSE 字节原样回给客户端。
+func TestBalanceChat_NonStream_UpstreamEventStream_FailsOver(t *testing.T) {
+	initChatRecordTestDB(t)
+	cipher := setupChatChannelCipher(t)
+	channel.ResetDefaultSelectorForTest()
+	t.Cleanup(channel.ResetDefaultSelectorForTest)
+
+	const goodBody = `{"id":"chatcmpl-1","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"ok"}}]}`
+	const badSSE = "data: {\"id\":\"chatcmpl-x\",\"choices\":[{\"delta\":{\"content\":\"leak\"}}]}\n\ndata: [DONE]\n\n"
+
+	var badHits, goodHits atomic.Int32
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		badHits.Add(1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(badSSE))
+	}))
+	t.Cleanup(bad.Close)
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		goodHits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(goodBody))
+	}))
+	t.Cleanup(good.Close)
+
+	model := models.Model{Name: "gate-m4"}
+	if err := models.DB.Create(&model).Error; err != nil {
+		t.Fatalf("create model: %v", err)
+	}
+	badMwp := setupGateFailoverProvider(t, cipher, model.ID, "sse", bad.URL, 2)
+	goodMwp := setupGateFailoverProvider(t, cipher, model.ID, "good", good.URL, 1)
+
+	got, err := runBalanceOverPool(t, false, "gate-m4",
+		[]byte(`{"model":"gate-m4","messages":[{"role":"user","content":"hi"}]}`),
+		[]models.ModelWithProvider{badMwp, goodMwp})
+	if err != nil {
+		t.Fatalf("BalanceChat err = %v, want 换下家成功", err)
+	}
+	if string(got) != goodBody {
+		t.Fatalf("client body = %q, want 好候选 JSON 原样: %q", got, goodBody)
+	}
+	if badHits.Load() != 1 || goodHits.Load() != 1 {
+		t.Fatalf("hits bad=%d good=%d, want 各 1", badHits.Load(), goodHits.Load())
+	}
+}

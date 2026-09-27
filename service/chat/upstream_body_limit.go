@@ -24,8 +24,10 @@ var errUpstreamBodyOverflow = errors.New("upstream response body exceeds configu
 // limitUpstreamResponseBody 在响应头提交给客户端**之前**、于 attempt 内对非流式上游
 // Body 做整读体积闸：读到 limit+1 字节即判定超限（多探 1 字节区分「恰好等于」与「更大」），
 // 未超限则回填为可重复读的内存字节，下游（采集/转换/直通 io.Copy）照常消费。
-// 返回已物化字节与 materialized 标记：提交门（chat_commit_gate.go）据此对非流式
-// 载荷做内容校验，避免二次整读（32 MiB 上限内无必要 copy）。
+// 返回已物化字节供提交门（chat_commit_gate.go）做内容校验，避免二次整读（32 MiB
+// 上限内无必要 copy）。event-stream 响应不整读，body 原样留给流式路径、返回 (nil, nil)
+// ——「未物化」的判据单源是 Content-Type（common.IsEventStreamContentType），提交门
+// 按它自行分流，本函数不再返回 materialized 标记（err≠nil 时 body 恒 nil，无死信息格）。
 //
 // 为什么闸在 attempt 而不是 transform 整读处：直通路径（客户端与上游同协议）根本不进
 // transform_provider_response.go 的整读，闸放 attempt 一处即覆盖直通+转换两条链路（OCP：
@@ -38,22 +40,22 @@ var errUpstreamBodyOverflow = errors.New("upstream response body exceeds configu
 //   - 读错误（含 ctx 超时打断读）→ 与 Client.Do 失败分支同归**凭据级网络**（#13）。
 //     超时分类必须成对（Do 分支 + 读体分支），只挂 Do 侧则读体超时静默漏走网络类
 //     ——RULES「Go HTTP 超时」条目，io.ReadAll(res.Body) 会被 ctx deadline 打断。
-func limitUpstreamResponseBody(ctx context.Context, res *http.Response) (body []byte, materialized bool, err error) {
+func limitUpstreamResponseBody(ctx context.Context, res *http.Response) (body []byte, err error) {
 	if common.IsEventStreamContentType(res.Header.Get("Content-Type")) {
-		return nil, false, nil
+		return nil, nil
 	}
 	limit := getUpstreamMaxResponseBytes(ctx)
 	body, err = io.ReadAll(io.LimitReader(res.Body, limit+1))
 	// 整读后连接已耗尽回池，Close 错误（http 响应体正常路径恒为 nil）无处置价值，忽略。
 	_ = res.Body.Close()
 	if err != nil {
-		return nil, true, fmt.Errorf("read upstream response body: %w", err)
+		return nil, fmt.Errorf("read upstream response body: %w", err)
 	}
 	if int64(len(body)) > limit {
-		return nil, true, fmt.Errorf("%w: got at least %d bytes, limit %d bytes", errUpstreamBodyOverflow, len(body), limit)
+		return nil, fmt.Errorf("%w: got at least %d bytes, limit %d bytes", errUpstreamBodyOverflow, len(body), limit)
 	}
 	res.Body = io.NopCloser(bytes.NewReader(body))
-	return body, true, nil
+	return body, nil
 }
 
 // handleUpstreamBodyOverflow 超限出口：组织级失败（换下一家、不冷却 key），

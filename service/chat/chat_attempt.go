@@ -151,8 +151,9 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 	}
 
 	// Stage 2-C 资源防御：非流式上游响应整读体积闸（超限=组织级转移不冷却 key；
-	// 读体错误=与 Do 分支同归凭据级网络）。SSE 直通本闸（见 limitUpstreamResponseBody）。
-	materializedBody, materialized, guardErr := limitUpstreamResponseBody(input.Ctx, res)
+	// 读体错误=与 Do 分支同归凭据级网络）。SSE 不整读（body 留给流式路径，见
+	// limitUpstreamResponseBody）。
+	materializedBody, guardErr := limitUpstreamResponseBody(input.Ctx, res)
 	switch {
 	case guardErr == nil:
 		// 正常：非流式 Body 已回填为可重读内存字节，下游采集/转换/直通照常消费。
@@ -163,9 +164,10 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 	}
 
 	// 提交门（commit-before-write）：写给客户端之前先验「内容可提交」（流式首帧 /
-	// 非流式 JSON 载荷）。失败在此回到重试循环换下家——HTTP 头写出后就再也换不了，
-	// 这是唯一的失败回收窗口。流式 body 顺带换成可重放体，下游无感知。
-	gatedRes, gateErr := gateUpstreamCommitment(input, res, materializedBody, materialized)
+	// 非流式 JSON 载荷；非流式收到 event-stream 判给错格式换下家）。失败在此回到
+	// 重试循环换下家——HTTP 头写出后就再也换不了，这是唯一的失败回收窗口。
+	// 流式 body 顺带换成可重放体，下游无感知。
+	gatedRes, gateErr := gateUpstreamCommitment(input.Ctx, input.Before.Stream, res, materializedBody)
 	if gateErr != nil {
 		if errors.Is(gateErr, errUpstreamContentInvalid) {
 			return handleUpstreamContentInvalid(input, res, logID, logRawOptions, logSnapshot, gateErr)

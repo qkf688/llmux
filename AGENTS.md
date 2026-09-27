@@ -81,7 +81,7 @@ make webui            # 生产构建供 Go embed：cd webui && pnpm install && p
 | 改供应商内部选路（端点匹配 / 分组 / 凭据轮询+冷却） | `service/channel/`（`selector.go` `assemble.go` 及其余）、`consts/protocol.go`、`repository/`（endpoint / key_group / credential） | [modules/channel-routing.md](docs/architecture/modules/channel-routing.md) |
 | 改号池 / 凭据管理（CRUD / 批量导入 / 启停 / 引用守卫） | `handler/pools/`（`crud.go` `credentials.go` `credential_batch.go` 等）、`repository/`（pool / credential / endpoint / key_group）、`models/channel.go`（四表）、前端 `webui/src/routes/number-pools/` + `components/number-pools/` | [modules/pools.md](docs/architecture/modules/pools.md) |
 | 改调用方 API Key（多 key / 密文+hash 存储 / 管理 CRUD / /v1 鉴权数据源） | `handler/apikeys/`、`repository/api_key.go`、`models/api_key.go`、`common/apikeyvalue.go`（值规则单源）、`middleware/auth.go` + `callerkey.go`（鉴权判定与 CallerKey 快照）、前端 `webui/src/routes/api-keys/`（#5 已落地） | [modules/api-keys.md](docs/architecture/modules/api-keys.md) |
-| 新增 / 修改客户端协议 style（OpenAI / Anthropic / Responses） | `service/chat/registry.go` + `before.go` / `process.go`、`service/transform/`（adapter + streaming）、`handler/register_v1.go`、`consts/consts.go`、`models/unified/` | [modules/protocol-transform.md](docs/architecture/modules/protocol-transform.md)、[modules/chat-gateway.md](docs/architecture/modules/chat-gateway.md) |
+| 新增 / 修改客户端协议 style（OpenAI / Anthropic / Responses） | `service/chat/registry.go` + `before.go` / `process.go` / `stream_error_writer.go`、`service/transform/`（adapter + streaming）、`handler/register_v1.go`、`consts/consts.go`、`models/unified/` | [modules/protocol-transform.md](docs/architecture/modules/protocol-transform.md)、[modules/chat-gateway.md](docs/architecture/modules/chat-gateway.md) |
 | 新增 / 修改上游供应商 type | `providers/`（实现 + `init` 中 `Register`/`RegisterMetadata`）、`handler/providerapi/`、grep 外围 type 分支（providerapi / testapi / chat 预处理） | [modules/providers.md](docs/architecture/modules/providers.md) |
 | 改虚拟模型策略 / 映射 / 第一层 LB | `service/virtualmodel/`（`selector.go`、`*_selector.go`、`service.go`）、`handler/virtualmodels/`、`repository/virtual_model.go`、前端 `webui/src/routes/virtual-models/` | [modules/virtual-models.md](docs/architecture/modules/virtual-models.md)、[docs/virtual-models-guide.md](docs/virtual-models-guide.md) |
 | 改模型-供应商关联 / 自动关联 / 能力标志 | `service/autoassoc/`、`service/autoassoc_facade.go`、`handler/autoassoc/`（HTTP 薄层）、`handler/associations/`、`repository/model_with_provider.go`、`service/model_template.go` | [modules/associations.md](docs/architecture/modules/associations.md) |
@@ -108,7 +108,7 @@ make webui            # 生产构建供 Go embed：cd webui && pnpm install && p
 ### 4.2 OCP / 扩展
 
 - **禁止**为新增供应商 type 修改 `providers.New` 分发 switch；**必须** `Register` + `RegisterMetadata`（通常在 `init`）。新 type 落地后**必须** grep 外围 type 分支并消除或显式收录。
-- **禁止**假设「注册表 = 只改一个文件」。新协议 style **必须**按最小改动集多点注册（chat Beforer/Processer + transform adapter/流路由 + `register_v1` + `consts.Style*` + `handler/v1/stream_error.go` 断流错误事件形状）。
+- **禁止**假设「注册表 = 只改一个文件」。新协议 style **必须**按最小改动集多点注册（chat Beforer/Processer/StreamErrorWriter + transform adapter/流路由 + `register_v1` + `consts.Style*`）。
 - 新虚拟模型策略：**必须** `RegisterSelector`；若算法不在现有 `selectBy*`，**必须**改 Service 并同步前端策略白名单。
 - 新设置项：**必须**写入 `models/setting_schema.go` + handler DTO + 前端 settings 类型/表单；键名**必须**用 `SettingKey*`，**禁止**魔法字符串。
 - 新管理 API 域：**必须**新 `handler/<domain>/` + 修改 `RegisterAll` 挂接；**禁止**写进 `main.go`。
@@ -154,7 +154,7 @@ make webui            # 生产构建供 Go embed：cd webui && pnpm install && p
 - [ ] 若改前端：`cd webui && pnpm lint` 与 `pnpm run build`（`tsc -b && vite build`）均通过；需嵌入二进制则 `make webui`
 - [ ] 新增/修改公共注册：无重复注册；相关 `TestRegister*_DuplicatePanics` 或等价测试仍通过
 - [ ] 新供应商 type：已 `Register`+`RegisterMetadata`，且 `rg` 外围 type 分支已处理
-- [ ] 新协议 style：chat 注册 + transform 适配 + `register_v1` + `consts.Style*` + `handler/v1/stream_error.go` 错误事件形状五处（及流式路由若需要）均已改
+- [ ] 新协议 style：chat 注册（Beforer/Processer/StreamErrorWriter）+ transform 适配 + `register_v1` + `consts.Style*` 四处（及流式路由若需要）均已改
 - [ ] 新设置项：`setting_schema.go` + handler DTO + 前端类型/表单三处同步；无新魔法字符串键
 - [ ] 新管理 API 域：只通过 `RegisterAll` 挂接，`main.go` 无新业务路由
 - [ ] 新管理页面：`route-config.ts` 已追加；API 在 `lib/api/modules`

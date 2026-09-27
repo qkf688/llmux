@@ -46,7 +46,7 @@ chat / credprobe → credwrite.SetHandlers → 凭据落库回调（Cooldown/Aut
 
 ```
 providers.Register + RegisterMetadata          # 工厂层 OCP；外围或有 type 分支
-chat.RegisterBeforer / RegisterProcesser       # 须配合 v1 路由与 transform
+chat.RegisterBeforer / RegisterProcesser / RegisterStreamErrorWriter       # 须配合 v1 路由与 transform
 transform.RegisterAdapter (+ streaming.RegisterRealtimeRoute)
 virtualmodel.RegisterSelector                  # 分发 OCP；算法可能仍在 Service
 handler 子包 Register* → 修改 handler.RegisterAll 挂接

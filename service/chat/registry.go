@@ -5,20 +5,22 @@ import (
 	"sync"
 )
 
-// Registry 按 style 注册 Beforer 与 Processer。
-// 新增协议端点时，只需调用 RegisterBeforer / RegisterProcesser 并添加路由即可。
-// 所有方法并发安全（sync.RWMutex 保护）；init 期注册无竞争，运行期注册亦线程安全，但重复注册仍按规范 panic。
+// Registry 按 style 注册 Beforer、Processer 与 StreamErrorWriter。
+// 新增协议端点时，只需调用 RegisterBeforer / RegisterProcesser / RegisterStreamErrorWriter
+// 并添加路由即可。所有方法并发安全（sync.RWMutex 保护）；init 期注册无竞争，运行期注册亦线程安全，但重复注册仍按规范 panic。
 type Registry struct {
-	mu         sync.RWMutex
-	beforeers  map[string]Beforer
-	processers map[string]Processer
+	mu                 sync.RWMutex
+	beforeers          map[string]Beforer
+	processers         map[string]Processer
+	streamErrorWriters map[string]StreamErrorWriter
 }
 
 // NewRegistry 创建一个新的 Registry。
 func NewRegistry() *Registry {
 	return &Registry{
-		beforeers:  make(map[string]Beforer),
-		processers: make(map[string]Processer),
+		beforeers:          make(map[string]Beforer),
+		processers:         make(map[string]Processer),
+		streamErrorWriters: make(map[string]StreamErrorWriter),
 	}
 }
 
@@ -42,6 +44,27 @@ func (r *Registry) RegisterProcesser(style string, p Processer) {
 		panic(fmt.Sprintf("processer for style %q already registered", style))
 	}
 	r.processers[style] = p
+}
+
+// RegisterStreamErrorWriter 注册一个指定 style 的断流错误事件生成器。
+// 重复注册同一 style 会 panic。
+func (r *Registry) RegisterStreamErrorWriter(style string, w StreamErrorWriter) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.streamErrorWriters[style]; exists {
+		panic(fmt.Sprintf("stream error writer for style %q already registered", style))
+	}
+	r.streamErrorWriters[style] = w
+}
+
+// GetStreamErrorWriter 获取指定 style 的 StreamErrorWriter。
+func (r *Registry) GetStreamErrorWriter(style string) (StreamErrorWriter, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if w, ok := r.streamErrorWriters[style]; ok {
+		return w, nil
+	}
+	return nil, fmt.Errorf("no stream error writer registered for style %q", style)
 }
 
 // GetBeforer 获取指定 style 的 Beforer。
@@ -76,6 +99,16 @@ func RegisterBeforer(style string, b Beforer) {
 // RegisterProcesser 在默认注册表中注册 Processer。
 func RegisterProcesser(style string, p Processer) {
 	defaultRegistry.RegisterProcesser(style, p)
+}
+
+// RegisterStreamErrorWriter 在默认注册表中注册 StreamErrorWriter。
+func RegisterStreamErrorWriter(style string, w StreamErrorWriter) {
+	defaultRegistry.RegisterStreamErrorWriter(style, w)
+}
+
+// GetStreamErrorWriter 从默认注册表获取 StreamErrorWriter。
+func GetStreamErrorWriter(style string) (StreamErrorWriter, error) {
+	return defaultRegistry.GetStreamErrorWriter(style)
 }
 
 // GetBeforer 从默认注册表获取 Beforer。

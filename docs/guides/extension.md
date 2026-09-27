@@ -17,10 +17,10 @@
 ### 1.2 新增客户端协议 style
 
 1. 在 `consts` 增加 `Style*` 常量。
-2. `service/chat`：实现并 `RegisterBeforer` / `RegisterProcesser`。
+2. `service/chat`：实现并 `RegisterBeforer` / `RegisterProcesser` / `RegisterStreamErrorWriter`（断流错误事件形状配方，见 `stream_error_writer.go`——三种内置形状的字节契约与转义口径都在那里）。
 3. `service/transform`：`RegisterAdapter`；若涉及 SSE，注册 `RegisterRealtimeRoute`。
 4. `handler/register_v1`（及 v1 handler）挂路由。
-5. `handler/v1/stream_error.go` 的 `writeStreamErrorEvent`：补该 style 的协议内断流错误事件形状（漏改会静默落 default 分支——客户端拿不到错误信号且无机械门会红）。
+5. 断流错误事件无需改 handler（`writeStreamErrorEvent` 按 style 查注册表分发）；配方漏登记由 `TestRegistry_StreamErrorWriterCoversAllStyles` 机械锁定即红，不靠人记。
 6. 统一模型字段不足时扩展 `models/unified/`（一处定义，转换器共用）。
 7. 补 golden/单元测试；`go test ./service/transform/... ./service/chat/... ./handler/v1/...`。
 

@@ -22,13 +22,13 @@ LLMux 是多供应商 LLM API 网关/代理：对外提供 OpenAI / Anthropic �
 
 - **OCP 落地点**（注册表可用，但多数扩展仍有「中心文件」要改）：
   - 新供应商类型 = `providers` 实现 + `Register` / `RegisterMetadata`（`init`），**工厂分发无需改**；外围仍可能有 type 特判（见 providers 模块）
-  - 新协议 style = **多点注册**：`Beforer`/`Processer` + `FormatAdapter` +（流式）`RegisterRealtimeRoute` + `handler/register_v1` 路由 + `consts.Style*`，不是只改两处
+  - 新协议 style = **多点注册**：`Beforer`/`Processer`/`StreamErrorWriter` + `FormatAdapter` +（流式）`RegisterRealtimeRoute` + `handler/register_v1` 路由 + `consts.Style*`，不是只改两处
   - 新虚拟模型策略 = `virtualmodel.RegisterSelector`（分发不改）；**算法现状多在 `Service.selectBy*`**，前端策略枚举仍硬编码
   - 新设置项 = `setting_schema.go` + **handler DTO** + **前端 Settings 类型/表单**（schema 驱动读写分发，但契约未单点生成）
   - 新管理端页面 = `webui/src/routes/` + `route-config.ts` 追加一项
   - 新管理 API 域 = 新 `handler/*` 子包 + **修改** `handler.RegisterAll` 挂接（禁止写进 `main.go`）
 - **DIP 落地点**：
-  - `providers.Provider` / `OpenAICompat`、`virtualmodel.Selector`、`transform.FormatAdapter`、`chat.Beforer`/`Processer` 为真实抽象
+  - `providers.Provider` / `OpenAICompat`、`virtualmodel.Selector`、`transform.FormatAdapter`、`chat.Beforer`/`Processer`/`StreamErrorWriter` 为真实抽象
   - `repository.*Repo` 接口存在；**管理端 CRUD 与 chat/chatstats/metrics/healthcheck/adjustment/modelsync/modelapi 主路径已走仓储**；settings、v1、virtualmodel 等仍有 `models.DB` 直连（渐进落地）
   - 跨域副作用：`healthcheck.AdjustmentHooks`、`modelsync.ActionHooks`（调用方定义契约；实现为包级注入，非构造 DI）
   - 默认仓储绑定：`main` → `repository.SetDefault`；`service` 根包门面是 **兼容 re-export**，非第二套业务实现

@@ -34,6 +34,12 @@ func ProcesserAnthropic(ctx context.Context, pr io.Reader, stream bool, start ti
 
 func GetProcesser(style string) (Processer, error) { return chat.GetProcesser(style) }
 
+type StreamErrorWriter = chat.StreamErrorWriter
+
+func GetStreamErrorWriter(style string) (StreamErrorWriter, error) {
+	return chat.GetStreamErrorWriter(style)
+}
+
 type ProvidersWithMeta = chat.ProvidersWithMeta
 
 func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Before, reqMeta models.ReqMeta) (*ProvidersWithMeta, error) {

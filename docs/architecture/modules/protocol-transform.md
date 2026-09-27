@@ -85,7 +85,7 @@ models/
 
 - **纯错误响应三协议各出自己的信封，守卫同口径**：`Error != nil && len(Choices) == 0` 时提前 return，openai / openai-res 出 `{"error":{message,type,code,param,request_id}}`，anthropic 出官方形状 `{"type":"error","error":{type,message},"request_id":...}`（`service/anthropic/response_outbound.go` 的 `formatErrorEnvelope`）。Anthropic 侧按官方契约裁剪：inner error 只保证 `type` / `message`，故统一模型的 `Code` / `Param` **刻意丢弃**（写出是非标准扩展键，拼进 `message` 又污染那段官方声明「可能变动、不可 pattern-match」的人类可读文案）；`request_id` 是**顶层**键且仅非空才写（空串会被读成「拿到了可用于联系支持的 ID」）；`error.type` 经 `mapAnthropicErrorType` 钳到官方 9 值枚举，未知/空值兜底 `api_error`——上游给的可能是 OpenAI 的 `rate_limit_exceeded` 这类本协议未定义值，原样透传等于给客户端一个无法分支的字符串。**刻意不按 HTTP 状态码反推 type**：`ResponseError.StatusCode` 在生产路径从不赋值（未通过 `common.IsPassingStatus` 的上游在 `chat_attempt` 就转重试，走不到出站格式化），按它推是凭空造数据。守卫的已知缺陷（`Error` 与 `Choices` 并存时错误被静默丢弃）三协议共有，未改。契约由 `TestFormatResponse_ErrorEnvelope*` + `format_response/error_only/anthropic.json` golden 锁住
 
-- **扩展点分布（现状）**：新外部格式通常同时涉及 `RegisterAdapter`、流式 `RegisterRealtimeRoute`（若涉及 SSE）、chat 侧 `Beforer`/`Processer`、`register_v1` 路由与 `consts.Style*`；Realtime 矩阵当前未覆盖全部协议组合，部分路径走 pivot/遗留逻辑
+- **扩展点分布（现状）**：新外部格式通常同时涉及 `RegisterAdapter`、流式 `RegisterRealtimeRoute`（若涉及 SSE）、chat 侧 `Beforer`/`Processer`/`StreamErrorWriter`、`register_v1` 路由与 `consts.Style*`；Realtime 矩阵当前未覆盖全部协议组合，部分路径走 pivot/遗留逻辑
 - **Responses `function_call_output.output` 多模态**：`ResponsesItem.Output` 为 `interface{}`——纯文本 tool result 输出 `string`（老上游兼容），含图片块输出 `input_text`/`input_image` 数组（OpenAI Responses 协议规范）。编解码 helper 在 `service/responses/tool_content_codec.go`，入站解析复用 `parsePartsToUnifiedContent`（纯文本→string、含图片→块数组，与 Anthropic 路径行为一致）
 - 专题细节可参考历史图示（本地 `local/架构文档/格式转换架构图.md`，未入库）
 

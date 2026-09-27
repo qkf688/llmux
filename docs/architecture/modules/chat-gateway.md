@@ -22,11 +22,12 @@
 ## 3. 内部结构
 
 ```
-handler/v1/                 # /v1 入口与 chatHandler；stream_error.go = 提交后断流收口（writeResponseBody / writeStreamErrorEvent：流式写协议内 error 事件、非流式静默截断，禁拼 JSON 信封）
+handler/v1/                 # /v1 入口与 chatHandler；stream_error.go = 提交后断流收口（writeResponseBody / writeStreamErrorEvent：流式写协议内 error 事件（形状配方按 style 注册于 service/chat 的 stream_error_writer.go，handler 查表搬运）、非流式静默截断，禁拼 JSON 信封）
 service/
 ├── chat_facade.go          # 根包门面 re-export
 ├── chat/                   # 编排核心
-│   ├── registry.go         # Beforer/Processer 注册表
+│   ├── registry.go         # Beforer/Processer/StreamErrorWriter 注册表（完备性机械锁：注册 Beforer 的 style 必须有 StreamErrorWriter，registry_test）
+│   ├── stream_error_writer.go # 断流错误事件形状配方（Stage 30 W5 收进注册面）：按 style 生成协议内 SSE error 事件整帧字节，typed marshal 兜底转义，字节契约由 stream_error_writer_test 逐字锁定
 │   ├── before.go           # 请求前处理（含对话身份键派生：canonicalJSON 规范化语义值，抗序列化漂移）
 │   ├── chat_affinity.go    # 缓存亲和编排单源（2026-09-23）：开关判定、钉定读取（stickyTargetFor）、成功改钉（recordStickyTarget）、虚拟路径真实模型稳定前移（preferRealModelsFirst）
 │   ├── process.go          # 响应/SSE 处理
@@ -67,7 +68,7 @@ balancer/                   # balancer.go 加权随机纯算法；affinity*.go �
 
 | 契约 | 职责 | 定义位置 | 实现方 |
 |------|------|----------|--------|
-| `Beforer` / `Processer` | 按 style 预处理请求 / 处理上游响应 | `service/chat`（门面 re-export） | style 注册实现 |
+| `Beforer` / `Processer` / `StreamErrorWriter` | 按 style 预处理请求 / 处理上游响应 / 生成断流错误事件帧（Stage 30 W5 起注册面统一，handler 查表搬运） | `service/chat`（门面 re-export） | style 注册实现；注册了 Beforer 的 style 必须有 StreamErrorWriter（机械锁） |
 | 提交门（commit-before-write） | 响应写给客户端之前验「内容可提交」：流式预读第一非空帧（判据 `common.SSEFrameContentError`，预读字节 Replay 回放逐字节等于原流）/ 非流式 JSON 载荷（`common.JSONContentError`；非流式收到 event-stream 判给错格式换下家）；失败回重试循环换下家、客户端零字节；首帧之后的错误属提交后语义，由 handler 断流收口 | `common/ssecontent.go`（错误形状判据单源） | `service/chat/chat_commit_gate.go`（attempt 内，先于任何客户端字节） |
 | `BalanceChat` | 在候选供应商上执行带重试的转发；入参 `BalanceInput`、返回 `*BalanceResult` | `service/chat_facade.go` | `service/chat` |
 | `runProviderRetryLoop` | 在**单个候选池**上执行「选候选 → channel 三层选路（端点→分组→凭据）→ 尝试 → 淘汰」重试循环，产出 `retryLoopOutcome`（成功/穷尽/中止）；候选内嵌**组内凭据循环**（#13）：凭据级失败（429/5xx/鉴权/网络）写冷却或判停后刷新快照、`channel.RetryCredential` 锁组换 key 重试；`ErrNoCredentialAvailable` 时先惰性探活（#6-3）再决定是否组织级淘汰；`MaxRetry`/`ClientTimeout`/`Deadline` 的取值已全局化（见 settings 模块「请求参数」，per-model time_out/max_retry 已移除） | `service/chat/chat_retry_loop.go` | `service/chat`（包内，真实与虚拟路径共用） |
@@ -83,7 +84,7 @@ balancer/                   # balancer.go 加权随机纯算法；affinity*.go �
 
 - **失败状态码分类口径（2026-09-27）**：`/v1` 代理链路的失败按「重试能不能变好」分两类回给客户端——① **配置态失败走 404**：该模型凑不出任何可用路由（模型不存在 / 无启用关联 / 全停用 / 严格能力匹配筛光 / 白名单对不上），对齐 OpenAI「model not found」口径，客户端不重试（重试不可能变好）；文案含调用方请求的模型名（调用方自有输入，非内部信息）与配置侧提示，落库错误文本同源（`noUsableProviderReason`）。② **重试穷尽走 502 Bad Gateway**：候选全部失败（真实路径 MaxRetry/池耗尽；虚拟路径全部真实模型穷尽），语义是「上游全挂」而非「网关自身故障」——与真 500（网关 bug）区分，客户端对 502 与 500 重试行为一致，监控侧可分类。两类的实现单源在 `client_request_error.go`（`newNoRouteForModelError` / `newRetryExhaustedError`），经既有 `clientRequestError` 机制在 `handler/v1/chat.go` 的 `errors.As(StatusCode)` 分支按自带状态码透传；**未选出供应商即失败**的落库留痕不变（仍经 `savePreProviderFailureLog`）。边界（刻意不动）：客户端请求非法的 400 类透传、「重试总时限到」的 `retry time out` / `virtual model global timeout` 维持现状；流式已开流后的 SSE error 事件形状不含状态码（响应头已提交，改不了）。回归测试 `chat_failure_status_test.go` 三条（模型不存在 404 / 无启用供应商 404 / 重试穷尽 502）
 - **请求收尾两类动作与「结算」口径（Stage 24，2026-09-26）**：请求路径收尾分**留痕**（chat_logs 行，`chatLogDetachedCtx` 派生，Stage 17）与**结算**（调度状态写库——权重/优先级衰减、连续失败、凭据冷却、凭据失败计数与判停）。结算是「上游/凭据真实发生了什么」的账，既与请求生死解耦，也与调用方行为解耦：① **调用方撤走**（客户端/反代关闭连接 → 请求 ctx 收到取消信号）时本次失败无法归因于上游/凭据——触达调度状态写库的失败出口（Do 失败 / 非通过状态 / 读体超限 / 读体失败 / 提交门拒绝 / 响应转换失败 / 组内凭据耗尽处的组织级结算 / 上游请求构建期的衰减）一律不结算，只保留失败留痕并**立即中止**本次请求（不再换 key、不再换候选，换了也没人收）；② 其余失败照常结算，且结算写库走 `beginFailureSettlement` 派生的不陪葬 ctx（`WithoutCancel` + **独立预算 `settlementWriteTimeout`=15s**，不与日志写共用——结算是多语句顺序写，预算过紧会留下半截结算）；③ 成功侧相反：上游确实成功了，`ResetConsecutiveFailures`/`ApplySuccessAdjustments`/鉴权失败计数清零/成功统计走 `successWriteCtx`，不因调用方恰在收尾瞬间撤走而作废。判据与派生单源 `chat_settlement.go`：判据只认 ctx 取消信号（不按错误文本/平台错误码猜——上游自己掉线是真实上游故障），取消与已过 deadline 并存时按超时算；本链路请求 ctx 实际只有「活 / 取消」两态（等头超时由 `http.Client` 报错而请求 ctx 仍活，照常结算；网关总超时走重试循环的 Deadline 通道，既有语义不结算）。**新增会写调度状态的失败出口必须经 `beginFailureSettlement`**，禁止自行判断或直接拿请求 ctx 写结算
-- **扩展点分布（现状）**：style 注册 `Beforer`/`Processer` + `register_v1` 路由 + transform 适配/流路由 + `consts`；业务路由不在 `main.go`
+- **扩展点分布（现状）**：style 注册 `Beforer`/`Processer`/`StreamErrorWriter` + `register_v1` 路由 + transform 适配/流路由 + `consts`；业务路由不在 `main.go`
 - **数据访问**：统一经 `repos()`（`service/chat/repos.go` → `repository.Default()`），**禁止**直连 `models.DB`/`gorm.G`；旁路包 `chatstats` 同样经 `repos().Stats`（`repository.StatsRepo`）
 - **职责拆分（现状）**：选路/重试/协议/日志落库编排仍在 `service/chat`；Stats 在 `chatstats`；权重调整在 `adjustment`。改统计策略与改选路策略不再同文件碰撞；日志 IO 存储仍可后续下沉
 - 虚拟模型路径：先由 `virtualmodel` 产出有序真实模型，再在真实模型层做 provider 级选路（两层 LB）。两条路径的差异只体现在**候选池如何构建**与**穷尽后如何处置**（真实路径整体失败；虚拟路径换下一个真实模型），provider 级重试循环本身由 `runProviderRetryLoop` 单点承载，不再各写一份

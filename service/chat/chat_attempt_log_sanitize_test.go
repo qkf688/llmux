@@ -24,7 +24,7 @@ func TestCaptureRequestLogSnapshot_MasksSensitiveHeaders(t *testing.T) {
 		"Proxy-Authorization": {"Basic zzz"},
 		"X-Custom":            {"keep"},
 	}
-	snapshot := captureRequestLogSnapshot(models.RawLogOptions{RequestHeaders: true}, header, nil, nil, 4096)
+	snapshot := captureRequestLogSnapshot(models.RawLogOptions{RequestHeaders: true}, header, nil, nil, 4096, nil)
 
 	raw := string(snapshot.RequestHeadersJSON)
 	for _, secret := range []string{"sk-secret", "session=abc", "sk-gw", "zzz"} {
@@ -54,7 +54,7 @@ func TestCaptureRequestLogSnapshot_MasksSensitiveHeaders(t *testing.T) {
 func TestCaptureRequestLogSnapshot_HeadersOffWritesNothing(t *testing.T) {
 	// 回归：开关关闭时行为零变化（快照零值，落库出口不写 RequestHeaders）。
 	header := http.Header{"Authorization": {"Bearer sk-secret"}}
-	snapshot := captureRequestLogSnapshot(models.RawLogOptions{}, header, nil, nil, 4096)
+	snapshot := captureRequestLogSnapshot(models.RawLogOptions{}, header, nil, nil, 4096, nil)
 	if len(snapshot.RequestHeadersJSON) != 0 {
 		t.Fatalf("开关关闭时不应采集头快照, got %s", snapshot.RequestHeadersJSON)
 	}

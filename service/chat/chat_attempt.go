@@ -97,7 +97,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		// Stage 2-D：单字段采集上限一处读取，喂给请求快照与响应采集两个采集点。
 		rawLogFieldLimit = getRawLogFieldMaxBytes(dctx)
 	})
-	logSnapshot := captureRequestLogSnapshot(logRawOptions, input.ReqMeta.Header, requestBody, input.Before.raw, rawLogFieldLimit)
+	logSnapshot := captureRequestLogSnapshot(logRawOptions, input.ReqMeta.Header, requestBody, input.Before.raw, rawLogFieldLimit, customCredentialHeaderKeys(input))
 
 	req, err := input.ChatModel.BuildReq(reqCtx, header, input.ModelWithProvider.ProviderModel, requestBody)
 	if err != nil {

@@ -102,9 +102,11 @@ func handleUpstreamBodyReadError(input singleProviderAttemptInput, res *http.Res
 }
 
 // responseHeadersJSON 响应头采集的序列化单一实现（RawLogOptions.ResponseHeaders 各失败出口
-// 共用；marshal 失败退化为空对象——采集是尽力而为的旁路，不能因它改写失败语义）。
+// 与成功路径回写共用；marshal 失败退化为空对象——采集是尽力而为的旁路，不能因它改写失败语义）。
+// Stage 26：落库前过敏感头掩码（判据单源 common.MaskSensitiveLogHeaders，与请求侧同名单，
+// Set-Cookie 已入名单）——响应头不再明文落库。
 func responseHeadersJSON(h http.Header) []byte {
-	b, err := json.Marshal(h)
+	b, err := json.Marshal(common.MaskSensitiveLogHeaders(h))
 	if err != nil {
 		slog.Error("failed to marshal response headers", "error", err)
 		return []byte("{}")

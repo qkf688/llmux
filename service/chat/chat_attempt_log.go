@@ -12,18 +12,21 @@ import (
 	"github.com/qkf688/llmux/models"
 )
 
-func captureRequestLogSnapshot(options models.RawLogOptions, requestHeader http.Header, requestBody []byte, rawRequestBody []byte, fieldLimit int) requestLogSnapshot {
+func captureRequestLogSnapshot(options models.RawLogOptions, requestHeader http.Header, requestBody []byte, rawRequestBody []byte, fieldLimit int, customHeaderKeys []string) requestLogSnapshot {
 	snapshot := requestLogSnapshot{}
 	if !options.RequestHeaders && !options.RequestBody && !options.RawRequestBody {
 		return snapshot
 	}
 
 	if options.RequestHeaders {
-		// Stage 16：marshal 前先过敏感头剥除（判据单源 common.MaskSensitiveLogHeaders，
-		// deny-list 值掩码、键保留）。快照是 ReqMeta.Header 的下游——该引用与出站透传
-		// 共享，剥除函数克隆语义保证不污染真实出站头；全仓 RequestHeaders 只有本
-		// marshal 点一个写入源，此处接线即覆盖全部落库出口。
-		requestHeadersJSON, err := json.Marshal(common.MaskSensitiveLogHeaders(requestHeader))
+		// Stage 16：marshal 前先过敏感头剥除（判据单源 common，deny-list 值掩码、
+		// 键保留）。快照是 ReqMeta.Header 的下游——该引用与出站透传共享，剥除函数
+		// 克隆语义保证不污染真实出站头；全仓 RequestHeaders 只有本 marshal 点一个
+		// 写入源，此处接线即覆盖全部落库出口。
+		// Stage 26：固定名单之外，动态并入本次请求实际配置的自配头名（关联级
+		// customer_headers / key 级自定义头的键名并集，调用侧传键名集合、不复制判据）
+		// ——自配凭据头不再因键名不在固定名单而明文落库。
+		requestHeadersJSON, err := json.Marshal(common.MaskHeadersWithDenyList(requestHeader, customHeaderKeys))
 		if err != nil {
 			slog.Error("failed to marshal request headers", "error", err)
 			requestHeadersJSON = []byte("{}")
@@ -72,6 +75,20 @@ func captureRawResponseBody(ctx context.Context, options models.RawLogOptions, r
 	return common.TruncateUTF8(string(head), limit)
 }
 
+// customCredentialHeaderKeys 提取本次请求实际配置的自配头名并集（关联级
+// customer_headers + key 级自定义头，均为管理员显式配置；常含中转渠道凭据头），
+// 供请求头快照动态并入掩码判据（Stage 26 盲区收口）。只取键名不取值。
+func customCredentialHeaderKeys(input singleProviderAttemptInput) []string {
+	var keys []string
+	for key := range input.ModelWithProvider.CustomerHeaders {
+		keys = append(keys, key)
+	}
+	for key := range input.ReqMeta.Headers {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
 func updateRequestAndResponseLog(
 	ctx context.Context,
 	logID uint,
@@ -87,12 +104,9 @@ func updateRequestAndResponseLog(
 	updateData := models.ChatLog{}
 
 	if logRawOptions.ResponseHeaders {
-		responseHeadersJSON, err := json.Marshal(responseHeader)
-		if err != nil {
-			slog.Error("failed to marshal response headers", "error", err)
-			responseHeadersJSON = []byte("{}")
-		}
-		updateData.ResponseHeaders = string(responseHeadersJSON)
+		// Stage 26：统一走 responseHeadersJSON（内含敏感头掩码）——此前此处自拼
+		// json.Marshal 绕过单点，成功路径响应头明文落库。
+		updateData.ResponseHeaders = string(responseHeadersJSON(responseHeader))
 	}
 
 	if logRawOptions.RequestHeaders {

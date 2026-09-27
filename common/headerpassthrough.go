@@ -74,6 +74,32 @@ var sensitiveLogHeaders = map[string]struct{}{
 	"Cookie":              {},
 	"X-Api-Key":           {},
 	"Proxy-Authorization": {},
+	// 响应侧会话材料：上游回的 Set-Cookie 与请求侧 Cookie 同类（Stage 26 补）。
+	"Set-Cookie": {},
+}
+
+// MaskHeadersWithDenyList 与 MaskSensitiveLogHeaders 同判据的动态键变体：extraKeys
+// （自配头名，如关联级 customer_headers / key 级自定义头的键名集合）动态并入 deny-list。
+// 供请求头快照按「本次请求实际配置的凭据头名」掩码与存量清洗按「现存配置头名全集」
+// 掩码共用（判据单源，禁止调用侧复制名单）。extraKeys 允许非 canonical 大小写，内部规范化。
+func MaskHeadersWithDenyList(h http.Header, extraKeys []string) http.Header {
+	out := h.Clone()
+	if out == nil {
+		out = http.Header{}
+	}
+	sensitive := make(map[string]struct{}, len(sensitiveLogHeaders)+len(extraKeys))
+	for key := range sensitiveLogHeaders {
+		sensitive[key] = struct{}{}
+	}
+	for _, key := range extraKeys {
+		sensitive[textproto.CanonicalMIMEHeaderKey(key)] = struct{}{}
+	}
+	for key := range out {
+		if _, ok := sensitive[textproto.CanonicalMIMEHeaderKey(key)]; ok {
+			out[key] = []string{SensitiveHeaderMask}
+		}
+	}
+	return out
 }
 
 // MaskSensitiveLogHeaders 返回入站头的日志快照安全副本：敏感键值整值掩码、其余原样。
@@ -95,6 +121,13 @@ func MaskSensitiveLogHeaders(h http.Header) http.Header {
 // unmarshal → 掩码 → marshal。坏 JSON 返回带上下文错误（调用方按行跳过并 slog.Warn，
 // 不得阻断启动）；空输入原样返回（清洗侧只对非空行调用，此处兜底）。
 func MaskSensitiveLogHeadersJSON(raw string) (string, error) {
+	return MaskHeadersWithDenyListJSON(raw, nil)
+}
+
+// MaskHeadersWithDenyListJSON MaskHeadersWithDenyList 的 JSON 变体（存量清洗入口，
+// Stage 26）：extraKeys 动态并入 deny-list（现存配置的自配头名全集）。错误与空输入
+// 语义与 MaskSensitiveLogHeadersJSON 一致。
+func MaskHeadersWithDenyListJSON(raw string, extraKeys []string) (string, error) {
 	if strings.TrimSpace(raw) == "" {
 		return raw, nil
 	}
@@ -102,7 +135,7 @@ func MaskSensitiveLogHeadersJSON(raw string) (string, error) {
 	if err := json.Unmarshal([]byte(raw), &header); err != nil {
 		return "", fmt.Errorf("common: 解析请求头快照 JSON 失败: %w", err)
 	}
-	masked, err := json.Marshal(MaskSensitiveLogHeaders(header))
+	masked, err := json.Marshal(MaskHeadersWithDenyList(header, extraKeys))
 	if err != nil {
 		return "", fmt.Errorf("common: 序列化掩码后请求头快照失败: %w", err)
 	}

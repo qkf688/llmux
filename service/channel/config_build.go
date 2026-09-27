@@ -50,6 +50,10 @@ func BuildConfig(provider models.Provider, endpoint models.Endpoint, plainKey st
 
 // DecryptCredentialKey 解密凭据明文 key。cipher 未初始化（main 装配缺失）→ 明确
 // 报错：与「明文落库路径禁止」同一原则——无解密能力就显式失败，不做降级。
+// 解密成功但明文为空（含全空白）→ 同样报错（Stage 27）：空明文 = 配置缺失而非可用
+// key，放行会带着空凭据头打上游挨 401，把配置问题伪装成上游鉴权失败；判据放在解密
+// 后单点，Select/RetryCredential/ProbeGroup/NewClientFromSelection 四条装配路径自动
+// 同享（诊断 + 生产聊天 + 健康检查全域不再选到空凭据）。
 // 供选路（Select/RetryCredential）与探活（credprobe）共用，禁止调用方各自解密。
 func DecryptCredentialKey(c models.Credential) (string, error) {
 	cipher := credentialcrypto.Default()
@@ -59,6 +63,9 @@ func DecryptCredentialKey(c models.Credential) (string, error) {
 	plain, err := cipher.Decrypt(c.Key)
 	if err != nil {
 		return "", fmt.Errorf("channel: decrypt credential %d: %w", c.ID, err)
+	}
+	if strings.TrimSpace(plain) == "" {
+		return "", fmt.Errorf("channel: credential %d decrypts to empty key: %w (credential not configured)", c.ID, ErrCredentialNotConfigured)
 	}
 	return plain, nil
 }

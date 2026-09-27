@@ -63,6 +63,7 @@ service/modelsync/config.go  # ProviderModelCatalog 类型 + GetProviderModelCat
 - OpenAI 兼容供应商优先嵌入 `openaiBase` 并设置 `endpointPath`；模板/TestBody 等同构常量可能重复出现在 `meta_bodies.go`
 - 黑名单影响虚拟模型候选池过滤（消费方在 virtualmodel/chat，不在本模块写选路）
 - **`Models()` 判定上游是否成功必须走 `common.IsPassingStatus`**（Stage 5，2026-09-17）：本模块两处 `Models()`（`openaiBase` / `Anthropic`）曾各自写严格 `== 200`，与诊断侧 2xx 口径分叉——回 201 的兼容网关拉不到模型列表只是显性症状，同口径在健康检查处会**自动停用关联**。providers 层禁止 import service 子包（依赖方向），故判定落在 `common`，机械执法见 `gate_upstream_status_test.go`、约定见 `framework-conventions.md §6`
+- **`Models()` 成功路径读体上限（Stage 27，2026-09-27）**：两处 `Models()` 解码前经 `common.ReadModelsListBody`（上限 `common.ModelsListReadLimitBytes` 10 MiB，量级依据：每模型 ~100-200B、聚合商数百模型 ≈ 100 KiB，10 MiB 为数百倍余量；刻意区别于诊断探针的 1 MiB——清单体量天然大一个数量级）——此前无上限整读，上游异常/被篡改时可被灌进任意体量；达上限视为截断按解码失败处置（错误文本含 `read cap` 与状态码）
 
 ---
 

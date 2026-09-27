@@ -26,6 +26,21 @@ func ReadCappedBody(r io.Reader) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(r, UpstreamDiagnosticReadLimitBytes))
 }
 
+// ModelsListReadLimitBytes Models() 拉取上游模型清单的读体上限（Stage 27，此前成功路径
+// 无上限整读）：定档 10 MiB 的量级依据——模型清单是上游响应里最小的对象之一，每模型
+// ~100-200B（id/object/created/owned_by 四键），现实供应商从几个到几千个模型（openrouter
+// 级聚合商数百个 ≈ 100 KiB 量级），10 MiB 容纳数百倍余量；超限只可能是上游异常/被篡改
+// （劫持页、垃圾洪水），按解码失败处置。刻意不同于诊断读体的 1 MiB（UpstreamDiagnosticReadLimitBytes）：
+// 那是「短补全探针」的上限，模型清单体量天然大一个数量级，沿用 1 MiB 是拍脑袋不是定档。
+const ModelsListReadLimitBytes = 10 << 20
+
+// ReadModelsListBody 按清单上限读取模型清单响应体：providers 两个 Models()（成功路径
+// 解码前）专用。返回的读取值达上限 = 视为截断（LimitReader 语义区分不了「恰好等长」），
+// 调用方按解码失败处置。
+func ReadModelsListBody(r io.Reader) ([]byte, error) {
+	return io.ReadAll(io.LimitReader(r, ModelsListReadLimitBytes))
+}
+
 // upstreamUnwrapMaxDepth 错误信封递归剥套的层数上限：网关会把上游 provider 的原始错误体
 // JSON 编码成字符串再嵌进自己的 message（opencode go 即此形状），实际观测 2~3 层封顶，
 // 该上限只挡病态自嵌套，不构成对真实层数的约束。

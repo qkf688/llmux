@@ -40,6 +40,7 @@
 读取上游响应或请求体的代码**禁止**无上限 `io.ReadAll(r.Body)`。合法入口白名单：
 
 - 诊断 / 探针 / 连通测试路径：`common.ReadCappedBody`（1 MiB 单源；上游未通过判定（见 `common.IsPassingStatus`）的错误体同口径）。
+- `Models()` 模型清单读取（Stage 27，2026-09-27）：`common.ReadModelsListBody`（`common.ModelsListReadLimitBytes` 10 MiB 单源），providers 两处 `Models()` 成功路径解码前必经；定档量级依据（每模型 ~100-200B、聚合商数百模型 ≈ 100 KiB）写在 common 注释；达上限视为截断按解码失败处置（错误文本含 `read cap` 与状态码）。刻意区别于诊断探针的 1 MiB——清单体量天然大一个数量级，沿用 1 MiB 是拍脑袋不是定档。
 - 入站请求体：`consts.MaxInboundBodyBytes`（20 MiB 硬上限，代码常量刻意不做成设置——可被调小的防线不是防线）+ `io.LimitReader(body, max+1)` 多探 1 字节拒绝；`/v1` 超限回真实 413（SDK 不自动重试），管理端按该端点既有信封惯例（HTTP 200 + 信封 code，与同域导出端点一致；前端两条通道都会解析）。
 - 上游非流式成功响应：`service/chat` 的 `limitUpstreamResponseBody` 在 attempt 内、响应头提交给客户端**之前**整读加限（设置项 `upstream_max_response_mib`，默认 32 MiB、下限 1 不可关闭），未超限回填为可重读内存字节。失败语义：超限=端点级异常 → 组织级转移**不冷却凭据**；读体错误（含 ctx 超时打断读体）与 `Client.Do` 失败**成对**归凭据级网络——超时分类只挂 Do 侧会让读体超时静默漏走（见全局 RULES「Go HTTP 超时」）。
 - 原始采集落库：四文本字段（`RequestBody`/`RawRequestBody`/`RawResponseBody`/`Error`）共用单字段上限（设置项 `raw_log_field_max_kib`，默认 256 KiB），截断一律 `common.TruncateUTF8`（rune 边界 + `…(truncated)` 标记，按字节劈半进 JSON 必出 U+FFFD 乱码尾）。采集读头不吞尾（MultiReader 回填），旁路不得成为下游截断点。

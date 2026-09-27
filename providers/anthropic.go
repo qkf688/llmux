@@ -163,7 +163,16 @@ func (a *Anthropic) Models(ctx context.Context) ([]Model, error) {
 		return nil, fmt.Errorf("status code: %d, response: %s", res.StatusCode, string(bodyBytes))
 	}
 	var anthropicModels AnthropicModelsResponse
-	if err := json.NewDecoder(res.Body).Decode(&anthropicModels); err != nil {
+	// 读体上限（Stage 27）：成功路径此前无上限整读，与 openaiBase.Models 同一口径——
+	// 上限内整读再解码，达上限视为截断按解码失败处置。
+	listBody, err := common.ReadModelsListBody(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read model list (HTTP %d): %w", res.StatusCode, err)
+	}
+	if len(listBody) >= common.ModelsListReadLimitBytes {
+		return nil, fmt.Errorf("decode model list (HTTP %d): response reaches the %d-byte read cap (truncated or oversized)", res.StatusCode, common.ModelsListReadLimitBytes)
+	}
+	if err := json.Unmarshal(listBody, &anthropicModels); err != nil {
 		// 状态码留在错误里，理由同 openaiBase.Models（通过口径带上 201 后，「状态码通过
 		// 但内容不是清单」的可达面变宽，只回 EOF 查不出断在哪一段）。
 		return nil, fmt.Errorf("decode model list (HTTP %d): %w", res.StatusCode, err)

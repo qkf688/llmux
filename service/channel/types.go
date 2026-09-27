@@ -52,4 +52,8 @@ var (
 	ErrNoGroupMatches = errors.New("channel: no group matches")
 	// ErrNoCredentialAvailable 选中分组下没有可用凭据（全部 disabled/error/冷却中）。
 	ErrNoCredentialAvailable = errors.New("channel: no credential available")
+	// ErrCredentialNotConfigured 凭据解密成功但明文为空（Stage 27）：配置缺失而非可用
+	// key。包装在 ErrNoCredentialAvailable 系语义下（调用方 errors.Is 判「无可用凭据」
+	// 时同时命中两者）——选路/诊断对二者的处置完全一致：本地失败、不打上游。
+	ErrCredentialNotConfigured = errors.New("channel: credential not configured")
 )

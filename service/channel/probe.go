@@ -2,6 +2,7 @@ package channel
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -82,6 +83,11 @@ func ProbeGroup(snapshot *Snapshot, group models.KeyGroup, endpoint models.Endpo
 	}
 	plainKey, err := DecryptCredentialKey(cred)
 	if err != nil {
+		// 空明文（解密成功但 key 为空）= 配置缺失，归凭据层失败可跳组（Stage 27）；
+		// 其余解密失败（密文损坏）保持全局性失败直接上抛——换下一个组必然同样失败。
+		if errors.Is(err, ErrCredentialNotConfigured) {
+			return GroupProbe{}, fmt.Errorf("%w: 分组 %q 的凭据未配置 API Key（明文为空）", ErrNoCredentialAvailable, group.Name)
+		}
 		return GroupProbe{}, err
 	}
 	client, upstreamURL, err := newClientFromPlainKey(snapshot.Provider, endpoint, plainKey)

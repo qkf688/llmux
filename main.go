@@ -108,6 +108,16 @@ func main() {
 		slog.Info("legacy chat log header snapshots sanitized", "rows", sanitized)
 	}
 
+	// 存量空明文凭据一次性清洗（Stage 27）：删行而非停用——解密为空的凭据已无法通过
+	// 选路（DecryptCredentialKey 空明文守卫），留着只会在后台显示 active 误导管理员。
+	// 同样必须在 startBackgroundServices 之前（无凭据并发写者）；失败不阻断启动但 Error
+	// 留痕（清洗使命是消灭配置误导面）。
+	if deleted, err := repository.Default().Credential.DeleteLegacyEmptyKeyCredentials(ctx); err != nil {
+		slog.Error("sanitize legacy empty-plain credentials", "error", err)
+	} else if deleted > 0 {
+		slog.Info("legacy empty-plain credentials deleted", "rows", deleted)
+	}
+
 	// 引擎装配先于后台服务启动：信任边界（TRUSTED_PROXIES）配置错误要 fail fast，
 	// 此时还没有可能在写库的后台任务，可安全 os.Exit；挪到之后则必须走 cancel 关闭路径。
 	router, err := newRouter(handler.Deps{JWTSecret: jwtSecret}, parseTrustedProxies(os.Getenv("TRUSTED_PROXIES")))

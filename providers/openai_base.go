@@ -90,7 +90,16 @@ func (o *openaiBase) Models(ctx context.Context) ([]Model, error) {
 	}
 
 	var modelList ModelList
-	if err := json.NewDecoder(res.Body).Decode(&modelList); err != nil {
+	// 读体上限（Stage 27）：成功路径此前无上限整读，上游异常/被篡改时可被灌进任意体量。
+	// 上限内整读再解码；达上限视为截断，按解码失败处置（与读错误同出口）。
+	listBody, err := common.ReadModelsListBody(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read model list (HTTP %d): %w", res.StatusCode, err)
+	}
+	if len(listBody) >= common.ModelsListReadLimitBytes {
+		return nil, fmt.Errorf("decode model list (HTTP %d): response reaches the %d-byte read cap (truncated or oversized)", res.StatusCode, common.ModelsListReadLimitBytes)
+	}
+	if err := json.Unmarshal(listBody, &modelList); err != nil {
 		// 状态码必须留在错误里：通过口径带上 201 后，「状态码通过但内容不是模型列表」
 		// 的可达面变宽，只回 `EOF` 会让模型同步日志查不出是哪一段失败。
 		return nil, fmt.Errorf("decode model list (HTTP %d): %w", res.StatusCode, err)

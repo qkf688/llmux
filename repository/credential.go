@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/qkf688/llmux/common/credentialcrypto"
 	"github.com/qkf688/llmux/models"
 	"gorm.io/gorm"
 )
@@ -63,6 +64,11 @@ type CredentialRepo interface {
 	// 供批量导入一次查询完成池内查重（防逐条 N+1）。KeyHash 非 unique，去重是
 	// 应用层语义；跨池同 key 复用合法，不在此处做全局拦截。
 	ExistingHashes(ctx context.Context, poolID uint, hashes []string) (map[string]bool, error)
+	// DeleteLegacyEmptyKeyCredentials 存量清洗（Stage 27）：软删「解密成功但明文为空
+	// （含全空白）」的凭据行，返回删除行数。判据复用 channel 同款解密语义（cipher nil
+	// 或行解密失败 = 不可判定，跳过不删——清洗只删可判定为空的行，损坏行留给人工）。
+	// 幂等（已删行不再命中）；游标分批防启动内存尖峰（同 chat_logs 清洗骨架）。
+	DeleteLegacyEmptyKeyCredentials(ctx context.Context) (int, error)
 }
 
 // CredentialFilter 用于凭据 List 查询的筛选条件。
@@ -287,4 +293,55 @@ func (r *credentialRepo) ExistingHashes(ctx context.Context, poolID uint, hashes
 		existing[h] = true
 	}
 	return existing, nil
+}
+
+// sanitizeEmptyKeyBatchSize 存量空明文凭据清洗的游标分批大小（同 chat_logs 清洗骨架：
+// 清洗随每次启动执行，全量一次读入会让启动内存随凭据量无界增长）。
+const sanitizeEmptyKeyBatchSize = 500
+
+func (r *credentialRepo) DeleteLegacyEmptyKeyCredentials(ctx context.Context) (int, error) {
+	deleted := 0
+	lastID := uint(0)
+	for {
+		var rows []models.Credential
+		if err := r.db.WithContext(ctx).Model(&models.Credential{}).
+			Select("id", "key").
+			Where("id > ?", lastID).
+			Order("id").
+			Limit(sanitizeEmptyKeyBatchSize).
+			Find(&rows).Error; err != nil {
+			return deleted, err
+		}
+		if len(rows) == 0 {
+			break
+		}
+		var emptyIDs []uint
+		for _, row := range rows {
+			cipher := credentialcrypto.Default()
+			if cipher == nil {
+				// cipher 未初始化 = 不可判定，整体跳过不删（防御 nil panic）。
+				continue
+			}
+			plain, err := cipher.Decrypt(row.Key)
+			if err != nil {
+				// 解密失败 = 不可判定（非密文/损坏行），跳过不删——清洗只删可判定为空。
+				continue
+			}
+			if strings.TrimSpace(plain) == "" {
+				emptyIDs = append(emptyIDs, row.ID)
+			}
+		}
+		if len(emptyIDs) > 0 {
+			result := r.db.WithContext(ctx).Where("id IN ?", emptyIDs).Delete(&models.Credential{})
+			if result.Error != nil {
+				return deleted, result.Error
+			}
+			deleted += int(result.RowsAffected)
+		}
+		lastID = rows[len(rows)-1].ID
+		if len(rows) < sanitizeEmptyKeyBatchSize {
+			break
+		}
+	}
+	return deleted, nil
 }

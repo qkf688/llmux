@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -110,5 +111,36 @@ func TestModels_PassingStatusWithNonListBody(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "HTTP 200") {
 		t.Fatalf("解码错误应带上游状态码, got %q", err.Error())
+	}
+}
+
+// TestModels_OversizedListBodyRejected 锁 Stage 27 读体上限（此前成功路径无上限整读，
+// 上游异常/被篡改时可被灌进任意体量）：200 + 超过 common.ModelsListReadLimitBytes 的
+// 清单体必须按解码失败处置，而不是整块读进内存再解析。
+func TestModels_OversizedListBodyRejected(t *testing.T) {
+	var hits atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		// 写一块合法 JSON 前缀 + 巨量填充，体量超 10 MiB 上限。
+		_, _ = w.Write([]byte(`{"data":[{"id":"m1",`))
+		padding := strings.Repeat("0", 1<<20)
+		for i := 0; i < 12; i++ {
+			_, _ = w.Write([]byte(padding))
+		}
+	}))
+	defer srv.Close()
+
+	p, err := New(TypeOpenAI, fmt.Sprintf(`{"base_url":%q,"api_key":"k"}`, srv.URL), "")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	_, err = p.Models(t.Context())
+	if err == nil {
+		t.Fatal("超限清单体应判失败, got nil")
+	}
+	if !strings.Contains(err.Error(), "read cap") {
+		t.Fatalf("err = %v, want 含 read cap（超限语义，而非普通解码错误）", err)
 	}
 }

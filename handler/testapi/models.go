@@ -199,6 +199,19 @@ func buildLink(snapshot *channel.Snapshot, model string, candidates []models.Key
 
 	// 措辞分单组/多组两档：单候选组＝显式锁定分组（前端按组徽标点测）或只有一个组，
 	// 直接说「该分组无可用凭据」才是可执行的结论；多组时把逐组原因留下供排查。
+	// 空明文（channel.ErrCredentialNotConfigured，ProbeGroup 转 ErrNoCredentialAvailable）
+	// 优先透出「未配置 API Key」——处置与停用/冷却一致但管理动作不同（该去配 key）。
+	emptyKey := false
+	for _, reason := range skipped {
+		if strings.Contains(reason, "未配置 API Key") {
+			emptyKey = true
+			break
+		}
+	}
+	if emptyKey {
+		return nil, fmt.Errorf("%w: %s（未配置 API Key：请先在该供应商的凭据分组或号池中配置密钥）",
+			channel.ErrNoCredentialAvailable, strings.Join(skipped, "; "))
+	}
 	if len(candidates) == 1 {
 		return nil, fmt.Errorf("%w: 分组 %q 无可用凭据（已停用或冷却中）", channel.ErrNoCredentialAvailable, candidates[0].Name)
 	}

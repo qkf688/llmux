@@ -137,6 +137,29 @@ func TestPlainCredentialKey_NoCipher(t *testing.T) {
 	}
 }
 
+// TestDecryptCredentialKey_EmptyPlaintextRejected 锁 Stage 27 空凭据守卫（2026-09-27
+// 复现实验后改定的根因落点）：「空字符串的合法密文」（Encrypt("") 解回来 = 空串）与
+// 解出全空白（仅空白字符）的明文必须显式报错——此前空明文会顺利过解密、装配成功，
+// 带着空钥匙打上游挨 401，把配置问题伪装成上游鉴权失败（诊断/生产聊天/健康检查全域）。
+// 改前实测：本用例红（DecryptCredentialKey 返回空串无错误）。
+func TestDecryptCredentialKey_EmptyPlaintextRejected(t *testing.T) {
+	c := setupCipherForChannel(t)
+
+	for _, plain := range []string{"", "   ", "\t\n"} {
+		enc, err := c.Encrypt(plain)
+		if err != nil {
+			t.Fatalf("Encrypt(%q): %v", plain, err)
+		}
+		got, err := DecryptCredentialKey(models.Credential{Model: gorm.Model{ID: 7}, Key: enc})
+		if err == nil {
+			t.Fatalf("DecryptCredentialKey(空明文 %q) succeeded with %q, want error", plain, got)
+		}
+		if !strings.Contains(err.Error(), "empty") {
+			t.Fatalf("err = %v, want 含 empty（空明文语义）", err)
+		}
+	}
+}
+
 // TestPlainCredentialKey_BadCiphertext 锁 AC-5「解密失败报错」：
 // 密文被篡改（GCM 认证失败）或非 hex 形态都不得产出明文或静默吞错，
 // 必须返回带上下文（凭据 ID）的错误。

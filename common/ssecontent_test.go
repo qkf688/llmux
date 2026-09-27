@@ -45,6 +45,9 @@ func TestJSONContentError(t *testing.T) {
 		{"type:error 对象", `{"type":"error","error":{"message":"busy"}}`, true},
 		{"数组非对象", `[1,2,3]`, true},
 		{"error:null 对象", `{"id":"x","error":null}`, false},
+		{"error 值前异常空白 null", `{"id":"x","error":  null}`, false},
+		{"type 值前异常空白 error", `{"type":  "error","error":{"message":"busy"}}`, true},
+		{"裸 null 非对象", `null`, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

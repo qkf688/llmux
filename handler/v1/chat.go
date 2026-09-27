@@ -5,11 +5,11 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/common"
+	"github.com/qkf688/llmux/common/bgtask"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/httpresp"
 	"github.com/qkf688/llmux/middleware"
@@ -178,18 +178,13 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 	pr, pw := io.Pipe()
 	tee := io.TeeReader(res.Body, pw)
 
-	// 使用 WaitGroup 等待日志处理完成，防止pipe过早关闭导致数据丢失。
-	// 等待用 defer：断流错误路径 return 前同样必须等——RecordLog 要写 updateChatLogByID，
-	// 早退会让它脱出「Shutdown 等在途请求」的覆盖，被关闭序的 models.Close() 硬切，
-	// 失败留痕丢在建行占位上（审查回批 2026-09-23）。
-	var wg sync.WaitGroup
-	wg.Add(1)
-	defer wg.Wait()
-
-	// 异步处理输出并记录 tokens
-	go func() {
-		defer wg.Done()
-		service.RecordLog(context.Background(), service.RecordLogInput{
+	// 后处理与记录 tokens 走 bgtask 登记（Stage 30，AGENTS §6：会写库的后台 goroutine
+	// 必须进登记本，禁裸 go）：关机时由 bgtask.Shutdown 排空（先于关库，main shutdown
+	// 四步序），「关机时正在写的请求记录不丢」的职责单属登记本——原 WaitGroup 丝线
+	// （handler 自等 + Shutdown 等在途请求的两层接力）随之退场，双轨并存会两套等待互相等。
+	// 断流错误路径 return 后同理由排空覆盖：失败留痕（updateChatLogByID）写完才关库。
+	bgtask.Go(func(taskCtx context.Context) {
+		service.RecordLog(taskCtx, service.RecordLogInput{
 			ReqStart:     startReq,
 			Reader:       pr,
 			Processer:    postProcessor,
@@ -199,7 +194,7 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 			ProviderName: balanced.ProviderName,
 			SideChannel:  balanced.SideChannel,
 		})
-	}()
+	})
 
 	writeHeader(c, ctx, before.Stream, res.Header)
 	// 响应头已提交后任何失败都不能再走 httpresp 收口（JSON 会污染已开始的流），

@@ -84,7 +84,7 @@ httpresp/ / handler/httpx/ / common/ (dataurl, headerpassthrough, sseframe, outb
 - **优雅关闭序**（`main.shutdown`）：`srv.Shutdown`（停收新请求 + 等在途，**必须带 timeout**——SSE 回写无 deadline）→ `credwrite.Stop`（Flush 凭据写队列 + 停收，10s 超时，**必须**在此处、`bgtask.Shutdown` 之前）→ `bgtask.Default().Shutdown`（排空后台写库 goroutine）→ `models.Close()`；顺序不可颠倒，排空前关库会让在途写库任务撞上「DB 已关闭」。注意 ticker 服务的停止由信号 ctx 取消驱动，与「等在途请求」**并行**发生，不在上述四步之内；排空在两者之后
 - 关闭的**唯一入口**是取消 `main` 的可取消 ctx：信号与 `ListenAndServe` 启动失败共用此路径，**禁止**在任何分支用 `os.Exit` 旁路 `shutdown`（会硬切已登记的后台写库任务）
 - 容器/编排部署**必须**把宽限期设到大于关闭预算（`serverShutdownTimeout` + 2×`bgtaskDrainTimeout`，当前 30s+10s+10s）：compose `stop_grace_period`、k8s `terminationGracePeriodSeconds`；否则进程在排空完成前被 SIGKILL，优雅关闭形同虚设
-- **禁止**用裸 `go f(context.Background())` 起会写库的后台 goroutine；**必须**经 `bgtask.Go` 登记。请求内且已用 `sync.WaitGroup` 等待完成的 goroutine 例外（由 `srv.Shutdown` 覆盖）
+- **禁止**用裸 `go f(context.Background())` 起会写库的后台 goroutine；**必须**经 `bgtask.Go` 登记。原「请求内 WaitGroup 自等」例外已随 Stage 30（2026-09-28）RecordLog 迁入登记本退场，handler 层零裸 go 由机械门 `handler/v1/chat_bgtask_gate_test.go` 锁定
 - 连通测试**一次解析一次请求**：`buildLink` 跨候选组只补「本组无可用凭据」，上游返回失败**不**跨组重试——测试体是真实计费的 completion（`providers/meta_bodies.go`）且前端批量并发 3，放大成 N 倍花费不可接受；react 是 SSE 多轮，重跑会重复推事件。代价已知：组内只验首个可用凭据，排在后面的坏 key 由 credprobe / 号池详情按凭据测试覆盖
 - **流式模式只在管理端单次点击下使用**：整条流要读完才能折叠判定，thinking 类可达数十秒，故超时沿用 60s 常量；**禁止**把它接进 `healthcheck` 或按凭据批量测试（探针耗时放大一个量级、探测语义也要重新定义）。上游失控狂吐由 `streamProbeMaxTotalBytes` 预算兜底，不靠调小超时（调小会把正常慢渠道误判成 timeout）
 - 前端静态：`//go:embed webui/dist`，`NoRoute` 对非 `/api` `/v1` 的 GET 回 `index.html`

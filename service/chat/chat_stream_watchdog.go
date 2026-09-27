@@ -68,12 +68,19 @@ func (r *firstByteWatchdogReader) Read(p []byte) (int, error) {
 }
 
 func (r *firstByteWatchdogReader) Close() error {
+	// 失败出口（提交门预读失败各分支的 capture.Close）同样要 disarm 计时器：
+	// 不 Stop 则 timer 悬挂到超时再 abort 一次底层 Close（双 Close 靠 http body 的
+	// 「重复 Close 安全」隐式兜着），且整个超时窗口内挂着一个会对已放弃的响应误伤的定时器。
+	if r.timer != nil {
+		r.timer.Stop()
+	}
 	return r.src.Close()
 }
 
 // abort 由 AfterFunc 在超时后调用：标记并关闭底层 body。
-// 与 Read 的首帧到达存在竞态，用 r.mu 串行化——首帧先到则放弃中止
-// （窗口边界恰好同时到达时优先保数据）。
+// 与 Read 的首帧到达存在竞态，用 r.mu 串行化——首帧已置位则放弃中止。竞态窗口里
+// Read 已带回 n>0 但 firstOnce 尚未拿锁时 abort 先拿锁，已读字节会被丢弃：
+// 方向安全（宁失败不提交），不承诺「窗口边界同时到达时保数据」。
 func (r *firstByteWatchdogReader) abort() {
 	r.mu.Lock()
 	if r.firstByte {

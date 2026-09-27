@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -82,5 +83,38 @@ func TestFirstByteWatchdog_TimeoutAbortsRead(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Read 未在窗口超时后返回，看门狗未中止阻塞读")
+	}
+}
+
+// failReadCloser Read 恒失败的 ReadCloser（模拟预读失败路径：首帧从未到达）。
+type failReadCloser struct {
+	closes atomic.Int32
+}
+
+func (f *failReadCloser) Read([]byte) (int, error) { return 0, errors.New("read boom") }
+
+func (f *failReadCloser) Close() error {
+	f.closes.Add(1)
+	return nil
+}
+
+// TestFirstByteWatchdog_CloseDisarmsTimer 预读失败出口（首帧前 Close）必须 disarm 计时器：
+// 不 Stop 则 timer 悬挂到超时后 abort 二次 Close 底层（双 Close 只靠 http body「重复
+// Close 安全」隐式兜着），超时窗口内还挂着会对已放弃响应误伤的定时器。改前实测红：
+// 旧 Close 不触碰 timer，窗口过后 abort 会再 Close 一次（计数=2）。
+func TestFirstByteWatchdog_CloseDisarmsTimer(t *testing.T) {
+	src := &failReadCloser{}
+	wd := newFirstByteWatchdogReader(src, 50*time.Millisecond)
+
+	// 首次 Read 启动计时并以读错误返回（预读失败形态），随后走失败出口的 Close。
+	_, _ = wd.Read(make([]byte, 1))
+	if err := wd.Close(); err != nil {
+		t.Fatalf("Close err = %v", err)
+	}
+
+	time.Sleep(150 * time.Millisecond) // 越过窗口：timer 若未 disarm，abort 已二次 Close
+
+	if got := src.closes.Load(); got != 1 {
+		t.Fatalf("底层 Close 次数 = %d, want 1（失败出口必须 disarm 计时器）", got)
 	}
 }

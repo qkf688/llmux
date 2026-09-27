@@ -2,7 +2,6 @@ package testapi
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"iter"
 	"net/http"
@@ -79,15 +78,8 @@ func runOpenAIReactTest(ctx context.Context, c *gin.Context, httpClient *http.Cl
 	}, GetWeather), marshalFrameJSON)
 }
 
-// frameMarshaler 帧数据序列化函数。生产用 marshalFrameJSON（json.Marshal 包装）；
-// 测试注入必败实现以锁定停流契约——react.ContentResponse 的字段是固定结构体，
-// json.Marshal 对它们现实不可失败，无法经输入构造失败场景，故走函数注入缝而非造输入。
-type frameMarshaler func(v any) (string, error)
-
-func marshalFrameJSON(v any) (string, error) {
-	data, err := json.Marshal(v)
-	return string(data), err
-}
+// frameMarshaler / marshalFrameJSON / marshalReactFrame 见 react_frame.go（两条 runner
+// 共用的帧序列化注入缝与停流口径单源，Stage 30）。
 
 // streamOpenAIReactEvents 驱动 react 流式迭代：逐帧回写 SSE，收集工具调用城市与最终文本。
 // 停流契约（Stage 15）：任一帧失败（流迭代错误 / 帧数据序列化失败）后立即停止回写，
@@ -116,9 +108,9 @@ stream:
 				}
 			}
 		case "toolcall":
-			data, err := marshal(content.ToolCall.Function)
+			data, err := marshalReactFrame(marshal, content.ToolCall.Function)
 			if err != nil {
-				checkError = fmt.Errorf("react 帧数据序列化失败: %w", err)
+				checkError = err
 				break stream
 			}
 			res = data
@@ -126,9 +118,9 @@ stream:
 			location := gjson.Get(content.ToolCall.Function.Arguments, "location").String()
 			toolCities = append(toolCities, normalizeCity(location))
 		case "toolres":
-			data, err := marshal(content.ToolRes)
+			data, err := marshalReactFrame(marshal, content.ToolRes)
 			if err != nil {
-				checkError = fmt.Errorf("react 帧数据序列化失败: %w", err)
+				checkError = err
 				break stream
 			}
 			res = data

@@ -10,6 +10,7 @@ import (
 	"github.com/atopos31/nsxno/react"
 	"github.com/gin-gonic/gin"
 	"github.com/openai/openai-go/v2"
+	"github.com/qkf688/llmux/models"
 )
 
 // Stage 15 停流契约：ReAct 流循环中任一帧失败（此处为帧数据序列化失败）后，
@@ -117,5 +118,57 @@ func TestStreamOpenAIReactEvents_StopsAfterStreamError(t *testing.T) {
 	}
 	if body := w.Body.String(); strings.Contains(body, "AFTER-ERROR") {
 		t.Fatalf("流错误后仍回写了后续帧；body=%s", body)
+	}
+}
+
+// Stage 30 停流契约（anthropic 侧与 openai 同一份口径，共用 react_frame.go 注入缝）：
+// 任一帧序列化失败后立即停帧回写——失败帧自身与后续帧都不得进 SSE，错误回传，
+// 由 handler 流尾统一发 event:error。修复前两处 json.Marshal 的错误被 `_` 吞掉、
+// 空帧照发、后续调用继续（本用例改前实测红）。
+func TestEmitAnthropicToolFrames_StopsAfterFrameMarshalFailure(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/test/react/1", nil)
+
+	marshalErr := errors.New("injected marshal failure")
+	invocations := 0
+	flakyMarshal := func(v any) (string, error) {
+		invocations++
+		if invocations > 2 {
+			// 第 3 次起必败：第 1 个调用的 toolcall/toolres 成功，第 2 个调用的 toolcall 是停流点。
+			return "", marshalErr
+		}
+		return marshalFrameJSON(v)
+	}
+
+	toolCalls := []models.UnifiedToolCall{
+		{ID: "call-1", Function: models.UnifiedToolCallFunction{Name: "get_weather", Arguments: `{"location":"北京"}`}},
+		{ID: "call-2", Function: models.UnifiedToolCallFunction{Name: "get_weather", Arguments: `{"location":"上海"}`}},
+	}
+
+	messages, cities, err := emitAnthropicToolFrames(c, flakyMarshal, toolCalls)
+
+	if err == nil || !errors.Is(err, marshalErr) {
+		t.Fatalf("err = %v, want 包含注入的序列化错误（置错停流）", err)
+	}
+	if !strings.Contains(err.Error(), "react 帧数据序列化失败") {
+		t.Fatalf("err = %v, want 带帧序列化失败上下文", err)
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "call-2") {
+		t.Fatalf("失败帧自身不得回写；body=%s", body)
+	}
+	if n := strings.Count(body, "event:toolcall"); n != 1 {
+		t.Fatalf("toolcall 帧数 = %d, want 1（失败后不得再回写）；body=%s", n, body)
+	}
+	if n := strings.Count(body, "event:toolres"); n != 1 {
+		t.Fatalf("toolres 帧数 = %d, want 1（失败后不得再回写）；body=%s", n, body)
+	}
+	if len(cities) != 1 {
+		t.Fatalf("cities = %v, want 仅失败前完成的 1 城（失败帧不得计入）", cities)
+	}
+	if len(messages) != 1 || messages[0].ToolCallID != "call-1" {
+		t.Fatalf("messages = %+v, want 仅 call-1 的 tool 消息（失败帧不得计入）", messages)
 	}
 }

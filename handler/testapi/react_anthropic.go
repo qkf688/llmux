@@ -2,7 +2,6 @@ package testapi
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -119,35 +118,59 @@ func runAnthropicReactTest(ctx context.Context, c *gin.Context, httpClient *http
 			break
 		}
 
-		for _, call := range assistant.ToolCalls {
-			toolCallData, _ := json.Marshal(map[string]any{
-				"name":      call.Function.Name,
-				"arguments": call.Function.Arguments,
-			})
-			c.SSEvent("toolcall", string(toolCallData))
-			c.Writer.Flush()
-
-			if call.Function.Name != "get_weather" {
-				return toolCities, finalText.String(), fmt.Errorf("invalid tool call name: %s", call.Function.Name)
-			}
-
-			city, toolRes := weatherFromArguments(call.Function.Arguments)
-			toolCities = append(toolCities, city)
-
-			toolResData, _ := json.Marshal(map[string]any{
-				"tool_use_id": call.ID,
-				"content":     toolRes,
-			})
-			c.SSEvent("toolres", string(toolResData))
-			c.Writer.Flush()
-
-			messages = append(messages, models.UnifiedMessage{
-				Role:       "tool",
-				ToolCallID: call.ID,
-				Content:    toolRes,
-			})
+		stepMessages, stepCities, toolErr := emitAnthropicToolFrames(c, marshalFrameJSON, assistant.ToolCalls)
+		toolCities = append(toolCities, stepCities...)
+		messages = append(messages, stepMessages...)
+		if toolErr != nil {
+			return toolCities, finalText.String(), toolErr
 		}
 	}
 
 	return toolCities, finalText.String(), nil
+}
+
+// emitAnthropicToolFrames 回写一步内全部工具帧（toolcall / toolres）并产出 tool 消息与城市。
+// 停流契约与 openai 侧同一份口径（react_frame.go 的 marshalReactFrame）：任一帧序列化
+// 失败立即停帧回写（失败帧自身与后续帧都不进 SSE）并返回错误，交 handler 流尾统一回
+// event:error——禁止吞错续帧（修复前两处 json.Marshal 的错误被 `_` 吞掉、空帧照发）。
+// 非法工具名同为失败出口；toolcall 帧在名字校验**之前**回写（面板要看到尝试了什么调用，
+// 再判失败），失败前已完成的产出（城市/tool 消息）保留返回。
+func emitAnthropicToolFrames(c *gin.Context, marshal frameMarshaler, calls []models.UnifiedToolCall) ([]models.UnifiedMessage, []string, error) {
+	toolMessages := make([]models.UnifiedMessage, 0, len(calls))
+	toolCities := make([]string, 0, len(calls))
+	for _, call := range calls {
+		toolCallData, err := marshalReactFrame(marshal, map[string]any{
+			"name":      call.Function.Name,
+			"arguments": call.Function.Arguments,
+		})
+		if err != nil {
+			return toolMessages, toolCities, err
+		}
+		c.SSEvent("toolcall", toolCallData)
+		c.Writer.Flush()
+
+		if call.Function.Name != "get_weather" {
+			return toolMessages, toolCities, fmt.Errorf("invalid tool call name: %s", call.Function.Name)
+		}
+
+		city, toolRes := weatherFromArguments(call.Function.Arguments)
+		toolCities = append(toolCities, city)
+
+		toolResData, err := marshalReactFrame(marshal, map[string]any{
+			"tool_use_id": call.ID,
+			"content":     toolRes,
+		})
+		if err != nil {
+			return toolMessages, toolCities, err
+		}
+		c.SSEvent("toolres", toolResData)
+		c.Writer.Flush()
+
+		toolMessages = append(toolMessages, models.UnifiedMessage{
+			Role:       "tool",
+			ToolCallID: call.ID,
+			Content:    toolRes,
+		})
+	}
+	return toolMessages, toolCities, nil
 }

@@ -2,13 +2,33 @@ package settings
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/handler/testsupport"
 	"github.com/qkf688/llmux/models"
+	"github.com/tidwall/gjson"
 )
+
+// getSettingsViaHandler 以 httptest 打真实 GetSettings handler，返回响应体 JSON。
+// 契约断言必须打在 HTTP 响应体上（AGENTS §5）：绕过 handler 直调
+// buildSettingsResponse 或 json.Marshal(response) 都测不出 handler 出线
+// （信封层/组装）的键名与 omitempty 断层。
+func getSettingsViaHandler(t *testing.T) string {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/settings", nil)
+	GetSettings(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GetSettings status=%d body=%s", w.Code, w.Body.String())
+	}
+	return w.Body.String()
+}
 
 // TestUpdateSettingsFromRequest_PersistsValues 回归：settingStore 曾是包级变量
 // `settings.NewStore(models.DB)`，在 models.Init 之前求值，永久持有 nil *gorm.DB，
@@ -119,32 +139,16 @@ func TestUpdateSettingsFromRequest_CredHealthAuthFailThreshold_RoundTrip(t *test
 		t.Errorf("CredHealthAuthFailThreshold = %d, want 5", got)
 	}
 
-	// GET 响应与写库一致，形成往返闭环。
-	list, err := store.List(ctx)
-	if err != nil {
-		t.Fatalf("List: %v", err)
+	// GET 响应体与写库一致，形成往返闭环。契约断言打在真实 HTTP 响应体上（AGENTS §5）：
+	// gjson Exists() 区分「键缺失」与「键在值为 0」——键缺失正是 tag 写错/漏写、
+	// omitempty 吞键这类断层的可见形态。
+	body := getSettingsViaHandler(t)
+	v := gjson.Get(body, "data.cred_health_auth_fail_threshold")
+	if !v.Exists() {
+		t.Fatalf("GET 响应体缺键 data.cred_health_auth_fail_threshold，body=%s", body)
 	}
-	response, err := buildSettingsResponse(list)
-	if err != nil {
-		t.Fatalf("buildSettingsResponse: %v", err)
-	}
-	if response.CredHealthAuthFailThreshold != 5 {
-		t.Errorf("GET CredHealthAuthFailThreshold = %d, want 5", response.CredHealthAuthFailThreshold)
-	}
-	// 序列化断层检查：真实 GET 响应键名来自 json tag，只断言 Go 字段会绕过序列化层
-	//（tag 写错/漏写时测试仍绿）——补一次 JSON 键名与值断言闭合「往返」。
-	b, err := json.Marshal(response)
-	if err != nil {
-		t.Fatalf("json.Marshal(response): %v", err)
-	}
-	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		t.Fatalf("json.Unmarshal: %v, body=%s", err, b)
-	}
-	if v, ok := m["cred_health_auth_fail_threshold"]; !ok {
-		t.Errorf("GET JSON 缺键 cred_health_auth_fail_threshold，body=%s", b)
-	} else if v.(float64) != 5 {
-		t.Errorf("GET JSON cred_health_auth_fail_threshold = %v, want 5", v)
+	if v.Int() != 5 {
+		t.Errorf("GET 响应体 data.cred_health_auth_fail_threshold = %d, want 5，body=%s", v.Int(), body)
 	}
 }
 
@@ -170,33 +174,16 @@ func TestUpdateSettingsFromRequest_CacheAffinityEnabled_RoundTrip(t *testing.T) 
 		t.Errorf("CacheAffinityEnabled = true, want false（false 不得被零值语义吞掉）")
 	}
 
-	// GET 响应与写库一致，形成往返闭环。
-	list, err := store.List(ctx)
-	if err != nil {
-		t.Fatalf("List: %v", err)
+	// GET 响应体与写库一致，形成往返闭环。契约断言打在真实 HTTP 响应体上（AGENTS §5）：
+	// gjson Exists() 区分「键缺失」与「键在值为 false」——false 不得被零值语义吞掉，
+	// 键缺失正是 omitempty 吞键类断层的可见形态，故断 Type 必须是字面 false。
+	body := getSettingsViaHandler(t)
+	v := gjson.Get(body, "data.cache_affinity_enabled")
+	if !v.Exists() {
+		t.Fatalf("GET 响应体缺键 data.cache_affinity_enabled，body=%s", body)
 	}
-	response, err := buildSettingsResponse(list)
-	if err != nil {
-		t.Fatalf("buildSettingsResponse: %v", err)
-	}
-	if response.CacheAffinityEnabled {
-		t.Errorf("GET CacheAffinityEnabled = true, want false")
-	}
-	// 序列化断层检查：json tag 写错/漏写时只断 Go 字段仍绿，必须落 JSON 键名断言。
-	b, err := json.Marshal(response)
-	if err != nil {
-		t.Fatalf("json.Marshal(response): %v", err)
-	}
-	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		t.Fatalf("json.Unmarshal: %v, body=%s", err, b)
-	}
-	v, ok := m["cache_affinity_enabled"]
-	if !ok {
-		t.Fatalf("GET JSON 缺键 cache_affinity_enabled，body=%s", b)
-	}
-	if vb, isBool := v.(bool); !isBool || vb {
-		t.Errorf("GET JSON cache_affinity_enabled = %v (%T), want false (bool)", v, v)
+	if v.Type != gjson.False {
+		t.Errorf("GET 响应体 data.cache_affinity_enabled = %s (type=%s), want 字面 false，body=%s", v.Raw, v.Type, body)
 	}
 }
 

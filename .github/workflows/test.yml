@@ -97,3 +97,48 @@ jobs:
 
       - name: go test
         run: go test ./... -count=1
+
+  # 独立 race job（Stage 29）：数据竞争只在 -race 构建下现形，本地 Windows 工具链
+  # 缺 cgo 时 -race 直接加载失败（0xc0000139），Linux CI 是跑真竞态检测的天然场所。
+  # 与主 job 分开的理由：CGO race 构建比常规测试慢数倍，混进主 job 会拖长每次 push
+  # 的反馈——主 job 保持无 race 快速反馈，本 job 专抓竞态，两者可并行跑。
+  # 步骤序列与主 job 的 go 侧同序：必须先 build webui 喂 //go:embed webui/dist，
+  # 否则干净 checkout 下包 main 编译不过（gate_*.go 机械门都在包 main，详见主 job 注释）。
+  # ⚠️ handler/pools 已知 flaky 在本 job 下偶发红 = 定位机会，按 Stage 13 观测文档口径
+  # 用 `-race -count=50` 定位，不 skip 用例、不改期望值。
+  # 版本号与主 job 同步改（pnpm / node 两处 job 各一份）。
+  race:
+    runs-on: ubuntu-latest
+    # CGO race + 全量测试比主 job 慢，预算放宽到 30 分钟。
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.12.0
+          cache: pnpm
+          cache-dependency-path: webui/pnpm-lock.yaml
+
+      - name: Install webui dependencies
+        working-directory: webui
+        run: pnpm install --frozen-lockfile
+
+      - name: Build webui (feeds //go:embed webui/dist)
+        working-directory: webui
+        run: pnpm run build
+
+      - name: go test -race
+        run: go test -race ./... -count=1

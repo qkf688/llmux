@@ -125,13 +125,31 @@ func truncateResponseBody(ctx context.Context, body string) string {
 	return common.TruncateHeadTailUTF8(body, budget/2, budget-budget/2)
 }
 
+// chatIOMarkerReserve ChatIO.Input 头尾标记字节预算（与 responseLogMarkerReserve
+// 同构同值）：总长 ≤ limit 的硬承诺要求标记计入预算。
+const chatIOMarkerReserve = responseLogMarkerReserve
+
+// truncateChatIOInput ChatIO.Input 请求侧原文的单条上限收口（Stage 26）：请求侧
+// 与回复侧同是「调试看原文」语义，但按采样排障口径取单字段采集预算
+// raw_log_field_max_kib（不开新设置项，grilling 拍板）；超限头尾保留 +
+// 统一标记（common.TruncateHeadTailUTF8 单源）。入站侧已有 consts.MaxInboundBodyBytes
+// 硬顶（20 MiB），本闸防的是「顶格大请求整份落库」。
+func truncateChatIOInput(ctx context.Context, input string) string {
+	limit := getRawLogFieldMaxBytes(ctx)
+	if len(input) <= limit {
+		return input
+	}
+	budget := limit - chatIOMarkerReserve
+	return common.TruncateHeadTailUTF8(input, budget/2, budget-budget/2)
+}
+
 // createChatIO 写入一条 ChatIO 记录（原始输入 + 转换后输出联合体）。
 func createChatIO(ctx context.Context, logID uint, input []byte, output *models.OutputUnion) error {
 	if output == nil {
 		output = &models.OutputUnion{}
 	}
 	if err := repos().ChatIO.Create(ctx, &models.ChatIO{
-		Input:       string(input),
+		Input:       truncateChatIOInput(ctx, string(input)),
 		LogID:       logID,
 		OutputUnion: *output,
 	}); err != nil {

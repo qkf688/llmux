@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/consts"
 )
 
@@ -125,7 +126,9 @@ func logInternalError(c *gin.Context, rid string, message string, err error, att
 	if c.Request != nil {
 		fields = append(fields, "method", c.Request.Method)
 		if c.Request.URL != nil {
-			fields = append(fields, "path", c.Request.URL.Path)
+			// Stage 26：path 过单源上限（common.SlogPathMaxBytes）——病态长 URL
+			// 不再撑爆 500 留痕行（与访问行 4 KiB 截断同族同值）。
+			fields = append(fields, "path", common.TruncateUTF8(c.Request.URL.Path, common.SlogPathMaxBytes))
 		}
 	}
 	if message != "" {

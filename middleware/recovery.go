@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/httpresp"
 )
@@ -46,7 +47,9 @@ func Recovery() gin.HandlerFunc {
 			if c.Request != nil {
 				attrs = append(attrs, "method", c.Request.Method)
 				if c.Request.URL != nil {
-					attrs = append(attrs, "path", c.Request.URL.Path)
+					// Stage 26：path 过单源上限（common.SlogPathMaxBytes），与
+					// httpresp 留痕行同口径——panic 行同样不吃病态长 URL。
+					attrs = append(attrs, "path", common.TruncateUTF8(c.Request.URL.Path, common.SlogPathMaxBytes))
 				}
 			}
 			slog.Error("panic recovered", append(attrs, "panic", fmt.Sprint(r), "stack", string(debug.Stack()))...)

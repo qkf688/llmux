@@ -1,7 +1,7 @@
 /**
  * 供应商表单「协议与调度」分区（S0 原型）：
  * 主类型（○ 单选）× 支持类型勾选（= 出站协议）/ 协议端点区（跟随勾选，URL 继承/覆盖）/
- * 凭据分组区（价格权重 + 白名单 + 凭据来源二选一；关联号池可就地打开号池详情弹窗）。
+ * 凭据分组区（价格权重 + 凭据来源二选一；关联号池可就地打开号池详情弹窗）。
  * 依赖 ProviderFormDialog 的 <Form> context（useFormContext）。
  * 正式实现（S6）时这些字段改为独立 DTO 提交，本组件结构保留。
  */
@@ -252,10 +252,10 @@ export function EndpointsSection() {
 }
 
 function defaultGroup(): ProviderFormGroup {
-  return { name: "", weight: 1, models: "", source: "inline", inlineKeys: [], poolId: "" };
+  return { name: "", weight: 1, source: "inline", inlineKeys: [], poolId: "" };
 }
 
-/** 单个分组卡片：名称/价格权重/模型白名单/凭据来源二选一；关联号池时可查看池详情 */
+/** 单个分组卡片：名称/价格权重/凭据来源二选一；关联号池时可查看池详情 */
 function GroupCard({
   index,
   providerId,
@@ -317,20 +317,6 @@ function GroupCard({
           )}
         />
       </div>
-
-      <FormField
-        control={control}
-        name={`groups.${index}.models`}
-        render={({ field }) => (
-          <FormItem className="space-y-1">
-            <FormLabel>模型白名单</FormLabel>
-            <FormControl>
-              <Input {...field} placeholder="gpt-4o, gpt-4o-mini（逗号分隔，留空 = 不限）" />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
 
       <FormField
         control={control}
@@ -443,7 +429,7 @@ export function GroupsSection({
       <div>
         <FormLabel>凭据分组</FormLabel>
         <p className="text-xs text-muted-foreground">
-          请求按分组白名单过滤 + 价格权重加权随机；分组内凭据轮询 + 冷却剔除
+          请求按模型可用性（分组白名单由同步维护）+ 价格权重加权随机；分组内凭据轮询 + 冷却剔除
         </p>
       </div>
       {fields.map((field, index) => (

@@ -36,7 +36,7 @@ func structuredCreateBody(name string, inlineKey string) string {
 		"proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"models":"","source":"inline","inline_keys":[{"id":0,"key":"` + inlineKey + `"}]}]
+		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[{"id":0,"key":"` + inlineKey + `"}]}]
 	}`
 }
 
@@ -139,7 +139,7 @@ func TestStructured_UpdatePoolToInlineClearsPoolID(t *testing.T) {
 		"proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"池组","weight":2,"models":"","source":"pool","pool_id":` + strconv.FormatUint(uint64(pool.ID), 10) + `}]
+		"groups":[{"name":"池组","weight":2,"source":"pool","pool_id":` + strconv.FormatUint(uint64(pool.ID), 10) + `}]
 	}`
 	created := createProviderViaHandler(t, createBody)
 	id := uint(gjson.Get(created, "data.ID").Uint())
@@ -155,7 +155,7 @@ func TestStructured_UpdatePoolToInlineClearsPoolID(t *testing.T) {
 		"proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":false}],
-		"groups":[{"name":"内联组","weight":1,"models":"","source":"inline","inline_keys":[{"id":0,"key":"sk-inline-BBBB2222"}]}]
+		"groups":[{"name":"内联组","weight":1,"source":"inline","inline_keys":[{"id":0,"key":"sk-inline-BBBB2222"}]}]
 	}`
 	updated := updateProviderViaHandler(t, id, updateBody)
 	code := gjson.Get(updated, "code")
@@ -247,7 +247,7 @@ func TestStructured_CreateZeroValuesPersistCorrectly(t *testing.T) {
 		"proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":false}],
-		"groups":[{"name":"零价组","weight":0,"models":"","source":"inline","inline_keys":[{"id":0,"key":"sk-zeroval-FFFF6666"}]}]
+		"groups":[{"name":"零价组","weight":0,"source":"inline","inline_keys":[{"id":0,"key":"sk-zeroval-FFFF6666"}]}]
 	}`
 	created := createProviderViaHandler(t, body)
 	id := uint(gjson.Get(created, "data.ID").Uint())
@@ -412,7 +412,7 @@ func TestStructured_UpdateFullClearsProxyAndConsole(t *testing.T) {
 		"proxy":"http://127.0.0.1:7890",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"models":"","source":"inline","inline_keys":[{"id":0,"key":"sk-clear-BBBB2222"}]}]
+		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[{"id":0,"key":"sk-clear-BBBB2222"}]}]
 	}`
 	created := createProviderViaHandler(t, createBody)
 	id := uint(gjson.Get(created, "data.ID").Uint())
@@ -429,7 +429,7 @@ func TestStructured_UpdateFullClearsProxyAndConsole(t *testing.T) {
 		"proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"models":"","source":"inline","inline_keys":[{"id":0,"key":"sk-clear-BBBB2222"}]}]
+		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[{"id":0,"key":"sk-clear-BBBB2222"}]}]
 	}`
 	updated := updateProviderViaHandler(t, id, updateBody)
 	if code := gjson.Get(updated, "code").Int(); code != 200 {
@@ -477,7 +477,7 @@ func TestStructured_UpdateRejectsHalfChildren(t *testing.T) {
 				"name":"p-half",
 				"type":"openai",
 				"protocols":["openai"],
-				"groups":[{"name":"默认组","weight":1,"models":"","source":"inline","inline_keys":[{"id":0,"key":"sk-half-CCCC3333"}]}]
+				"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[{"id":0,"key":"sk-half-CCCC3333"}]}]
 			}`,
 			wantMsg: "协议端点",
 		},
@@ -556,6 +556,177 @@ func TestStructured_GroupRawRevealsPlaintext(t *testing.T) {
 	}
 }
 
+// TestStructured_GroupSync_PreservesWhitelistAndIdentity 锁「白名单唯一写入方 = 模型同步」：
+// 供应商全量保存（组带 id）不得触碰同步写入的 KeyGroup.Models，且分组就地更新、ID 稳定
+// （禁止删光重建——重建会把同步白名单冲成空（空=不限）并让组 ID 漂移）。
+// 组 id=0 = 新建（白名单空 = 未同步/不限）；未提交的组删除。
+func TestStructured_GroupSync_PreservesWhitelistAndIdentity(t *testing.T) {
+	testsupport.InitTestDB(t)
+	setupProviderCrypto(t)
+
+	created := createProviderViaHandler(t, structuredCreateBody("p-whitelist", "sk-a-AAAA1111"))
+	providerID := uint(gjson.Get(created, "data.ID").Uint())
+	if providerID == 0 {
+		t.Fatalf("missing ID: %s", created)
+	}
+
+	ctx := t.Context()
+	repo := repository.Default()
+	groups, err := repo.KeyGroup.ListByProvider(ctx, providerID)
+	if err != nil || len(groups) != 1 {
+		t.Fatalf("groups=%+v err=%v", groups, err)
+	}
+	gid := groups[0].ID
+	// 模拟模型同步写入的白名单（上游模型名命名空间）
+	if _, err := repo.KeyGroup.UpdateFields(ctx, gid, map[string]any{"models": "up-a,up-b"}); err != nil {
+		t.Fatalf("seed whitelist: %v", err)
+	}
+	creds, err := repo.Credential.ListByGroups(ctx, []uint{gid}, nil)
+	if err != nil || len(creds) != 1 {
+		t.Fatalf("creds=%+v err=%v", creds, err)
+	}
+
+	updated := updateProviderViaHandler(t, providerID, `{
+		"name":"p-whitelist",
+		"type":"openai",
+		"config":"{\"base_url\":\"https://api.example.com\"}",
+		"console":"","proxy":"",
+		"protocols":["openai"],
+		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
+		"groups":[{"id":`+strconv.FormatUint(uint64(gid), 10)+`,"name":"改名组","weight":3,"source":"inline","inline_keys":[
+			{"id":`+strconv.FormatUint(uint64(creds[0].ID), 10)+`,"key":""}
+		]}]
+	}`)
+	if code := gjson.Get(updated, "code").Int(); code != 200 {
+		t.Fatalf("update code=%d body=%s", code, updated)
+	}
+
+	after, err := repo.KeyGroup.ListByProvider(ctx, providerID)
+	if err != nil || len(after) != 1 {
+		t.Fatalf("groups after=%+v err=%v", after, err)
+	}
+	if after[0].ID != gid {
+		t.Fatalf("group ID = %d, want %d（分组必须就地更新，不得删光重建）", after[0].ID, gid)
+	}
+	if after[0].Models != "up-a,up-b" {
+		t.Fatalf("Models = %q, want %q（保存供应商不得清掉同步白名单）", after[0].Models, "up-a,up-b")
+	}
+	if after[0].Name != "改名组" || after[0].Weight != 3 {
+		t.Fatalf("name/weight = %q/%d, want 改名组/3", after[0].Name, after[0].Weight)
+	}
+}
+
+// TestStructured_GroupSync_NewGroupWithoutID 锁「组 id=0/缺失 = 新建」：新建组白名单为空
+// （= 未同步/不限），既有组按 id 就地更新——两种形态可混排在同一次保存里。
+func TestStructured_GroupSync_NewGroupWithoutID(t *testing.T) {
+	testsupport.InitTestDB(t)
+	setupProviderCrypto(t)
+
+	created := createProviderViaHandler(t, structuredCreateBody("p-mixed", "sk-a-AAAA1111"))
+	providerID := uint(gjson.Get(created, "data.ID").Uint())
+	ctx := t.Context()
+	repo := repository.Default()
+	groups, err := repo.KeyGroup.ListByProvider(ctx, providerID)
+	if err != nil || len(groups) != 1 {
+		t.Fatalf("groups=%+v err=%v", groups, err)
+	}
+	gid := groups[0].ID
+	if _, err := repo.KeyGroup.UpdateFields(ctx, gid, map[string]any{"models": "up-a"}); err != nil {
+		t.Fatalf("seed whitelist: %v", err)
+	}
+	creds, err := repo.Credential.ListByGroups(ctx, []uint{gid}, nil)
+	if err != nil || len(creds) != 1 {
+		t.Fatalf("creds=%+v err=%v", creds, err)
+	}
+
+	updated := updateProviderViaHandler(t, providerID, `{
+		"name":"p-mixed",
+		"type":"openai",
+		"config":"{\"base_url\":\"https://api.example.com\"}",
+		"console":"","proxy":"",
+		"protocols":["openai"],
+		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
+		"groups":[
+			{"id":`+strconv.FormatUint(uint64(gid), 10)+`,"name":"既有组","weight":1,"source":"inline","inline_keys":[
+				{"id":`+strconv.FormatUint(uint64(creds[0].ID), 10)+`,"key":""}
+			]},
+			{"name":"新组","weight":2,"source":"inline","inline_keys":[{"id":0,"key":"sk-new-BBBB2222"}]}
+		]
+	}`)
+	if code := gjson.Get(updated, "code").Int(); code != 200 {
+		t.Fatalf("update code=%d body=%s", code, updated)
+	}
+
+	after, err := repo.KeyGroup.ListByProvider(ctx, providerID)
+	if err != nil || len(after) != 2 {
+		t.Fatalf("groups after=%+v err=%v", after, err)
+	}
+	byName := map[string]models.KeyGroup{}
+	for _, g := range after {
+		byName[g.Name] = g
+	}
+	old, ok := byName["既有组"]
+	if !ok {
+		t.Fatalf("既有组 missing: %+v", after)
+	}
+	if old.ID != gid || old.Models != "up-a" {
+		t.Fatalf("既有组 ID/Models = %d/%q, want %d/up-a（就地更新且白名单不动）", old.ID, old.Models, gid)
+	}
+	fresh, ok := byName["新组"]
+	if !ok {
+		t.Fatalf("新组 missing: %+v", after)
+	}
+	if fresh.ID == gid {
+		t.Fatalf("新组 ID = %d, 不应复用既有组 ID", fresh.ID)
+	}
+	if fresh.Models != "" {
+		t.Fatalf("新组 Models = %q, want 空（未同步 = 不限）", fresh.Models)
+	}
+}
+
+// TestStructured_GroupSync_RejectsUnknownOrDuplicateGroupID 锁写入闸：组 id 引用
+// 不存在（含跨供应商）或重复出现 → 400（errValidation），不静默当新建吞掉。
+func TestStructured_GroupSync_RejectsUnknownOrDuplicateGroupID(t *testing.T) {
+	testsupport.InitTestDB(t)
+	setupProviderCrypto(t)
+
+	created := createProviderViaHandler(t, structuredCreateBody("p-idcheck", "sk-a-AAAA1111"))
+	providerID := uint(gjson.Get(created, "data.ID").Uint())
+	ctx := t.Context()
+	groups, err := repository.Default().KeyGroup.ListByProvider(ctx, providerID)
+	if err != nil || len(groups) != 1 {
+		t.Fatalf("groups=%+v err=%v", groups, err)
+	}
+	gid := groups[0].ID
+	gidStr := strconv.FormatUint(uint64(gid), 10)
+
+	for name, groupJSON := range map[string]string{
+		"unknown id":   `{"id":999999,"name":"g","weight":1,"source":"inline","inline_keys":[{"id":0,"key":"sk-x-CCCC3333"}]}`,
+		"duplicate id": `{"id":` + gidStr + `,"name":"g1","weight":1,"source":"inline","inline_keys":[{"id":0,"key":"sk-x-CCCC3333"}]},{"id":` + gidStr + `,"name":"g2","weight":1,"source":"inline","inline_keys":[{"id":0,"key":"sk-y-DDDD4444"}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Params = gin.Params{{Key: "id", Value: gidStr}}
+			body := `{
+				"name":"p-idcheck","type":"openai",
+				"config":"{\"base_url\":\"https://api.example.com\"}",
+				"console":"","proxy":"",
+				"protocols":["openai"],
+				"endpoints":[{"protocol":"openai","url":"","enabled":true}],
+				"groups":[` + groupJSON + `]
+			}`
+			c.Request = httptest.NewRequest("PUT", "/providers/"+gidStr, strings.NewReader(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			UpdateProvider(c)
+			// httpresp 约定：错误也走 HTTP 200，业务码在响应体 code 字段
+			if code := gjson.Get(w.Body.String(), "code").Int(); code != 400 {
+				t.Fatalf("code = %d, want 400, body=%s", code, w.Body.String())
+			}
+		})
+	}
+}
+
 // TestStructured_UpdateByIDKeepsAndReplaces 锁定写路径 id 语义（掩码回填的保存形态）：
 // 按 id 保留（key 空）/ 替换（key 非空且 hash 变）/ 新增（id=0）/ 未提交 = 删除。
 // 明文永不出响应，含明文 key 的请求体不因事务失败等路径泄漏。
@@ -570,7 +741,7 @@ func TestStructured_UpdateByIDKeepsAndReplaces(t *testing.T) {
 		"console":"","proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"models":"","source":"inline","inline_keys":[
+		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[
 			{"id":0,"key":"sk-keep-AAAA1111"},
 			{"id":0,"key":"sk-drop-BBBB2222"}
 		]}]
@@ -601,7 +772,7 @@ func TestStructured_UpdateByIDKeepsAndReplaces(t *testing.T) {
 		"console":"","proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"models":"","source":"inline","inline_keys":[
+		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[
 			{"id":`+strconv.FormatUint(uint64(keepID), 10)+`,"key":""},
 			{"id":0,"key":"sk-add-CCCC3333"}
 		]}]
@@ -646,7 +817,7 @@ func TestStructured_UpdateByIDKeepsAndReplaces(t *testing.T) {
 		"console":"","proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"models":"","source":"inline","inline_keys":[
+		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[
 			{"id":`+strconv.FormatUint(uint64(keepID), 10)+`,"key":"sk-replaced-DDDD4444"},
 			{"id":0,"key":"sk-add-CCCC3333"}
 		]}]
@@ -693,7 +864,7 @@ func TestStructured_UpdateReferencesMissingCredential_400(t *testing.T) {
 		"console":"","proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"models":"","source":"inline","inline_keys":[
+		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[
 			{"id":999999,"key":""}
 		]}]
 	}`)
@@ -720,7 +891,7 @@ func TestStructured_GroupRaw_PoolGroupAndCrossProvider(t *testing.T) {
 		"console":"","proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"池组","weight":1,"models":"","source":"pool","pool_id":`+strconv.FormatUint(uint64(pool.ID), 10)+`}]
+		"groups":[{"name":"池组","weight":1,"source":"pool","pool_id":`+strconv.FormatUint(uint64(pool.ID), 10)+`}]
 	}`)
 	id := uint(gjson.Get(created, "data.ID").Uint())
 	poolGroupID := uint(gjson.Get(created, "data.Groups.0.ID").Uint())
@@ -789,7 +960,7 @@ func TestStructured_GroupRaw_DecryptFailure_500(t *testing.T) {
 		"console":"","proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"models":"","source":"inline","inline_keys":[
+		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[
 			{"id":0,"key":"sk-rawfail-AAAA1111"},
 			{"id":0,"key":"sk-rawfail-BBBB2222"}
 		]}]
@@ -855,7 +1026,7 @@ func TestStructured_RejectsDuplicateReferenceID_400(t *testing.T) {
 		"console":"","proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"models":"","source":"inline","inline_keys":[
+		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[
 			{"id":`+credID+`,"key":""},
 			{"id":`+credID+`,"key":""}
 		]}]
@@ -885,7 +1056,7 @@ func TestStructured_RejectsDuplicatePlaintext_400(t *testing.T) {
 		"console":"","proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"models":"","source":"inline","inline_keys":[
+		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[
 			{"id":0,"key":"sk-dupplain-AAAA1111"},
 			{"id":0,"key":" sk-dupplain-AAAA1111 "}
 		]}]

@@ -70,11 +70,12 @@ export interface ProviderInlineKeyInput {
   key: string;
 }
 
-/** 凭据分组写入体（后端 GroupInput；凭据来源二选一：inline_keys / pool_id） */
+/** 凭据分组写入体（后端 GroupInput；凭据来源二选一：inline_keys / pool_id）。
+ *  id>0 = 就地更新既有分组（模型白名单是同步专属数据，不在写入体里）；id 缺省/0 = 新建。 */
 export interface ProviderGroupInput {
+  id?: number;
   name: string;
   weight: number;
-  models: string;
   source: "inline" | "pool";
   inline_keys: ProviderInlineKeyInput[];
   pool_id: number | null;

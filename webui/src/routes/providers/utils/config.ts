@@ -58,17 +58,17 @@ export function buildProviderPayload(values: ProviderFormValues, provider: Provi
   const groups = (values.groups ?? []).map((g) =>
     g.source === "pool"
       ? {
+          id: g.groupId ?? 0,
           name: g.name,
           weight: g.weight,
-          models: g.models,
           source: "pool" as const,
           inline_keys: [],
           pool_id: g.poolId ? Number(g.poolId) : null,
         }
       : {
+          id: g.groupId ?? 0,
           name: g.name,
           weight: g.weight,
-          models: g.models,
           source: "inline" as const,
           // 行 → InlineKeyInput：空文本行一律剔除——新增占位行忽略、清空已显示行视为删除该凭据
           // （旧明文数组语义的等价物）；掩码行按 id 保留（key 空串，掩码文本永不上行）；
@@ -145,14 +145,13 @@ export function detailToFormValues(detail: ProviderDetail): ProviderFormValues {
     endpoints: (detail.Endpoints ?? []).map((e) => ({ protocol: e.Protocol, url: e.URL, enabled: e.Enabled })),
     groups: (detail.Groups ?? []).map((g) => {
       if (g.Source === "pool") {
-        return { name: g.Name, weight: g.Weight, models: g.Models, source: "pool" as const, inlineKeys: [], poolId: g.PoolID != null ? String(g.PoolID) : "" };
+        return { name: g.Name, weight: g.Weight, source: "pool" as const, inlineKeys: [], groupId: g.ID, poolId: g.PoolID != null ? String(g.PoolID) : "" };
       }
       // 掩码回填：每条掩码行携带既有凭据 ID（「显示」拉明文的引用、未拉取时按 id 保留保存）。
       // 掩码行 key 恒为服务端掩码文本——明文永不出常规响应，前端不再自行拼装。
       return {
         name: g.Name,
         weight: g.Weight,
-        models: g.Models,
         source: "inline" as const,
         inlineKeys: (g.InlineKeys ?? []).map((k) => ({ id: k.ID, key: k.KeyMasked, masked: true })),
         groupId: g.ID,

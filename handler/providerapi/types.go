@@ -24,10 +24,13 @@ type InlineKeyInput struct {
 }
 
 // GroupInput 凭据分组写入体（凭据来源二选一：inline / pool）。
+// ID = 既有分组就地更新（0/缺失 = 新建）；模型白名单**不在**写入体里——KeyGroup.Models
+// 是模型同步的专属数据（唯一写入方 modelsync），供应商表单保存不得触碰（清掉它 = 同步
+// 快照丢失，且组织级目录缩水会连累自动关联清理误删关联）。
 type GroupInput struct {
+	ID         uint             `json:"id"`
 	Name       string           `json:"name"`
 	Weight     int              `json:"weight"`
-	Models     string           `json:"models"`
 	Source     string           `json:"source"` // "inline" | "pool"
 	InlineKeys []InlineKeyInput `json:"inline_keys"`
 	PoolID     *uint            `json:"pool_id"`

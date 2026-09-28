@@ -33,7 +33,7 @@ func authDeriveBody(name, providerType string, config map[string]any) string {
 		"proxy":"",
 		"protocols":["` + providerType + `"],
 		"endpoints":[{"protocol":"` + providerType + `","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"models":"","source":"inline","inline_keys":[{"id":0,"key":"sk-test-ABCD1234"}]}]
+		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[{"id":0,"key":"sk-test-ABCD1234"}]}]
 	}`
 }
 

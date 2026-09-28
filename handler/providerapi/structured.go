@@ -207,6 +207,14 @@ func syncEndpoints(ctx context.Context, repos *repository.Repositories, provider
 	return nil
 }
 
+// syncGroups 在事务内同步凭据分组与内联凭据。
+//
+// 分组是**就地更新**而非删光重建：组 ID 稳定（引用它的凭据迁移、管理端弹窗定位、
+// 请求上下文里的钉定偏好都不因保存而失效），且 KeyGroup.Models（模型同步专属数据）
+// 不在写入体里——重建会把同步白名单冲成空（空 = 不限）并让组织级目录缩水、连累
+// 自动关联清理误删关联（白名单唯一写入方 = modelsync）。
+// 组 id=0/缺失 = 新建（白名单空 = 未同步/不限）；既有 id 必须属于本 provider 且
+// 不得重复（防跨供应商引用与同组双写，语义与 inline_keys 的 id 引用一致）。
 func syncGroups(ctx context.Context, repos *repository.Repositories, providerID uint, inputs []GroupInput) error {
 	cipher := credentialcrypto.Default()
 	if cipher == nil {
@@ -223,8 +231,10 @@ func syncGroups(ctx context.Context, repos *repository.Repositories, providerID 
 	if err != nil {
 		return fmt.Errorf("list groups: %w", err)
 	}
+	existingByID := make(map[uint]models.KeyGroup, len(existing))
 	groupIDs := make([]uint, 0, len(existing))
 	for _, g := range existing {
+		existingByID[g.ID] = g
 		groupIDs = append(groupIDs, g.ID)
 	}
 
@@ -249,32 +259,60 @@ func syncGroups(ctx context.Context, repos *repository.Repositories, providerID 
 	}
 	usedCred := make(map[uint]struct{}, len(oldCreds))
 
-	for _, g := range existing {
-		if _, err := repos.KeyGroup.Delete(ctx, g.ID); err != nil {
-			return fmt.Errorf("delete group %d: %w", g.ID, err)
+	// 先校验全部组 id 引用（未知/重复 → 400），再落任何写——半程失败不得留下部分更新。
+	seenGroup := make(map[uint]struct{}, len(inputs))
+	for i, in := range inputs {
+		if in.ID == 0 {
+			continue
+		}
+		if _, dup := seenGroup[in.ID]; dup {
+			return fmt.Errorf("groups[%d] duplicates group id %d: %w", i, in.ID, errValidation)
+		}
+		seenGroup[in.ID] = struct{}{}
+		if _, ok := existingByID[in.ID]; !ok {
+			return fmt.Errorf("groups[%d] references group %d not found: %w", i, in.ID, errValidation)
 		}
 	}
 
+	keptGroup := make(map[uint]struct{}, len(inputs))
 	for i, in := range inputs {
 		group := &models.KeyGroup{
 			ProviderID: providerID,
 			Name:       strings.TrimSpace(in.Name),
 			Weight:     in.Weight,
-			Models:     in.Models,
 		}
 		if in.Source == groupSourcePool {
 			group.PoolID = in.PoolID
 		}
-		if err := repos.KeyGroup.Create(ctx, group); err != nil {
-			return fmt.Errorf("create group[%d]: %w", i, err)
-		}
-		// KeyGroup.Weight 带 gorm:"default:1"：GORM Create(struct) 跳过零值 0，
-		// 走 DB default 落成 1——用 UpdateFields 显式写 weight（map 绕零值）。
-		if in.Weight == 0 {
-			if _, err := repos.KeyGroup.UpdateFields(ctx, group.ID, map[string]any{"weight": 0}); err != nil {
-				return fmt.Errorf("persist group[%d] weight 0: %w", i, err)
+		if in.ID != 0 {
+			// 就地更新：只写表单拥有的字段（name/weight/pool），Models 永不触碰。
+			// map 更新绕开 GORM 零值跳过：weight=0 / pool_id=nil 都是显式意图。
+			fields := map[string]any{
+				"name":    group.Name,
+				"weight":  in.Weight,
+				"pool_id": nil,
+			}
+			if in.Source == groupSourcePool {
+				fields["pool_id"] = *in.PoolID
+			}
+			if _, err := repos.KeyGroup.UpdateFields(ctx, in.ID, fields); err != nil {
+				return fmt.Errorf("update group[%d] %d: %w", i, in.ID, err)
+			}
+			group.ID = in.ID
+			group.Models = existingByID[in.ID].Models
+		} else {
+			if err := repos.KeyGroup.Create(ctx, group); err != nil {
+				return fmt.Errorf("create group[%d]: %w", i, err)
+			}
+			// KeyGroup.Weight 带 gorm:"default:1"：GORM Create(struct) 跳过零值 0，
+			// 走 DB default 落成 1——用 UpdateFields 显式写 weight（map 绕零值）。
+			if in.Weight == 0 {
+				if _, err := repos.KeyGroup.UpdateFields(ctx, group.ID, map[string]any{"weight": 0}); err != nil {
+					return fmt.Errorf("persist group[%d] weight 0: %w", i, err)
+				}
 			}
 		}
+		keptGroup[group.ID] = struct{}{}
 
 		if in.Source == groupSourcePool {
 			continue
@@ -353,6 +391,16 @@ func syncGroups(ctx context.Context, repos *repository.Repositories, providerID 
 				return fmt.Errorf("create credential: %w", err)
 			}
 			usedCred[cred.ID] = struct{}{}
+		}
+	}
+
+	// 未提交的既有组删除（其凭据在下方按未使用清理）。
+	for id := range existingByID {
+		if _, ok := keptGroup[id]; ok {
+			continue
+		}
+		if _, err := repos.KeyGroup.Delete(ctx, id); err != nil {
+			return fmt.Errorf("delete group %d: %w", id, err)
 		}
 	}
 

@@ -28,7 +28,7 @@ vi.mock("sonner", () => ({
 import { CredentialKeyCell } from "./credential-key-cell";
 import { useCredentialKeyReveal } from "./use-credential-key-reveal";
 
-const POOL_ID = 7;
+
 const MASKED = "sk-****ab12";
 const PLAIN = "sk-plaintext-value-ab12";
 const REVEAL_LABEL = `显示 key ${MASKED} 的明文`;
@@ -44,7 +44,7 @@ function createDeferred<T>() {
 }
 
 function Harness() {
-  const reveal = useCredentialKeyReveal({ poolId: POOL_ID, view: "1|all|" });
+  const reveal = useCredentialKeyReveal({ active: true, view: "1|all|" });
   return <CredentialKeyCell credId={11} keyMasked={MASKED} reveal={reveal} />;
 }
 

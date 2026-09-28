@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { formatCredentialLastUsed } from "./credential-status";
+import { formatCredentialLastUsed } from "@/components/credentials/credential-status";
 import { CredentialStats } from "./credential-stats-cell";
 import { render, screen } from "@testing-library/react";
 

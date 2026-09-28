@@ -82,7 +82,7 @@ LLMux 是多供应商 LLM API 网关/代理：对外提供 OpenAI / Anthropic �
 ### 请求主路径（文字）
 
 1. **代理路径**：`POST /v1/chat/completions|responses|messages` → `handler/v1` → `service` 门面 → `service/chat`（可选虚拟模型解析）→ `channel` 三层选路（端点→分组→凭据，见 [modules/channel-routing.md](modules/channel-routing.md)）→ `transform` → `providers.BuildReq` → 上游 → 流式/非流式回写 + `ChatLog`/`Stats`
-2. **管理路径**：`/api/*` + `middleware.Auth` → 各 `handler/*` 子包（含 `handler/pools` 号池/凭据/端点/分组管理域）→ `repository` 和/或 `service` → `models`/SQLite
+2. **管理路径**：`/api/*` + `middleware.Auth` → 各 `handler/*` 子包（含 `handler/pools` 号池容器与 `handler/credentials` 凭据资源两个管理域）→ `repository` 和/或 `service` → `models`/SQLite
 3. **后台任务**：`main` 启动 `HealthChecker`、`ModelSyncService.StartAutoSync` 与 `credwrite.Start`（凭据写队列 worker）；ticker 服务（健康检查/模型同步）ctx 派生自 `signal.NotifyContext`，队列 worker 退出由 `Stop` 的 requestStop 驱动（与 healthcheck 同构）；请求路径里 fire-and-forget 的写库任务经 `common/bgtask` 登记
 4. **优雅关闭**：SIGINT/SIGTERM → 信号 ctx 取消（ticker 服务的停止与「等在途请求」**并行**收敛，不在下述步骤之内）→ `srv.Shutdown`（等在途请求）→ `credwrite.Stop`（Flush 凭据写队列 + 停收）→ `bgtask.Default().Shutdown`（排空后台写库）→ `models.Close()`，逐步限时。`ListenAndServe` 启动失败取消同一 ctx，走同一条关闭序
 
@@ -102,7 +102,8 @@ LLMux 是多供应商 LLM API 网关/代理：对外提供 OpenAI / Anthropic �
 | `models-catalog` | 真实模型目录与模板 | [modules/models-catalog.md](modules/models-catalog.md) |
 | `associations` | 模型-供应商关联与自动关联 | [modules/associations.md](modules/associations.md) |
 | `virtual-models` | 虚拟模型与策略选路 | [modules/virtual-models.md](modules/virtual-models.md) |
-| `pools` | 供应商号池 / 凭据 / 协议端点 / 分组 | [modules/pools.md](modules/pools.md) |
+| `pools` | 供应商号池（凭据容器）/ 批量导入 / 按凭据测试 | [modules/pools.md](modules/pools.md) |
+| `credentials` | 凭据第一等资源（状态 / 备注 / 明文 / 按归属过滤的列表） | [modules/credentials.md](modules/credentials.md) |
 | `api-keys` | 调用方 API Key（多 key / 密文+hash 存储 / 管理 CRUD） | [modules/api-keys.md](modules/api-keys.md) |
 | `channel-routing` | 供应商内部三层选路（端点匹配 / 分组加权 / 凭据轮询+冷却） | [modules/channel-routing.md](modules/channel-routing.md) |
 | `health-check` | 健康探测与关联启停 | [modules/health-check.md](modules/health-check.md) |

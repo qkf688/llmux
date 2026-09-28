@@ -47,7 +47,7 @@
 | 类别 | 约定 | 示例 |
 |------|------|------|
 | 代理 API | `/v1/*`，需调用方 API key 鉴权（`api_keys` 表多 key，`Authorization: Bearer <key>` 或 `x-api-key: <key>`） | `/v1/chat/completions`, `/v1/messages`, `/v1/responses` |
-| 管理 API | `/api/*`，需 JWT 鉴权（`Authorization: Bearer <JWT>`）。错误信封现状：`BadRequest`/`NotFound` 走 HTTP 200+code；`Unauthorized`/`Forbidden`/`InternalServerError`/`Conflict`(409) 与 `ErrorWithHttpStatus` 设真实 HTTP 状态码——新调用方需同时看 HTTP 码与信封 code。管理端前端的读取统一在 `webui/src/lib/api/core/client.ts`（失败文案与 401 处置见 `modules/webui.md` §5） | `/api/providers`, `/api/settings` |
+| 管理 API | `/api/*`，需 JWT 鉴权（`Authorization: Bearer <JWT>`）。错误信封现状：`BadRequest`/`NotFound` 走 HTTP 200+code；`Unauthorized`/`Forbidden`/`InternalServerError`/`Conflict`(409) 与 `ErrorWithHttpStatus` 设真实 HTTP 状态码——新调用方需同时看 HTTP 码与信封 code。管理端前端的读取统一在 `webui/src/lib/api/core/client.ts`（失败文案与 401 处置见 `modules/webui.md` §5） | `/api/providers`, `/api/settings`, `/api/credentials` |
 | 管理 API - auth | `/api/auth/*`，登录路由免鉴权，其余需 JWT | `/api/auth/login`, `/api/auth/me`, `/api/auth/password` |
 | 前端 SPA | 浏览器 path，由 `route-config.ts` 定义 | `/models`, `/virtual-models` |
 | 静态资源 | `/assets` + SPA fallback | embed `webui/dist` |

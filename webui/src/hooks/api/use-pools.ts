@@ -4,7 +4,7 @@ import {
   createPool,
   updatePool,
   deletePool,
-  getPoolCredentials,
+  listCredentials,
   createCredential,
   updateCredential,
   deleteCredential,
@@ -35,7 +35,8 @@ export function usePools(filters?: { name?: string }) {
 export function usePoolCredentials(poolId: number | null, params: CredentialListParams = {}) {
   return useQuery({
     queryKey: poolKeys.credentials(poolId ?? 0, params),
-    queryFn: () => getPoolCredentials(poolId!, params),
+    // 凭据是第一等资源：归属经 pool_id 过滤参数表达（见 lib/api/modules/catalog/credentials）。
+    queryFn: () => listCredentials({ pool_id: poolId!, ...params }),
     enabled: poolId != null,
   });
 }
@@ -87,8 +88,8 @@ export function useCreateCredential() {
       data,
     }: {
       poolId: number;
-      data: Parameters<typeof createCredential>[1];
-    }) => createCredential(poolId, data),
+      data: { key: string; note?: string };
+    }) => createCredential({ pool_id: poolId, ...data }),
     onSuccess: (_data, vars) => invalidatePoolCredentials(qc, vars.poolId),
   });
 }
@@ -97,14 +98,13 @@ export function useUpdateCredential() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
-      poolId,
       credId,
       data,
     }: {
       poolId: number;
       credId: number;
-      data: Parameters<typeof updateCredential>[2];
-    }) => updateCredential(poolId, credId, data),
+      data: { note?: string | null; status?: string };
+    }) => updateCredential(credId, data),
     onSuccess: (_data, vars) => invalidatePoolCredentials(qc, vars.poolId),
   });
 }
@@ -112,8 +112,7 @@ export function useUpdateCredential() {
 export function useDeleteCredential() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ poolId, credId }: { poolId: number; credId: number }) =>
-      deleteCredential(poolId, credId),
+    mutationFn: ({ credId }: { poolId: number; credId: number }) => deleteCredential(credId),
     onSuccess: (_data, vars) => invalidatePoolCredentials(qc, vars.poolId),
   });
 }
@@ -122,14 +121,13 @@ export function useBatchUpdateCredentialStatus() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
-      poolId,
       ids,
       status,
     }: {
       poolId: number;
       ids: number[];
       status: string;
-    }) => batchUpdateCredentialStatus(poolId, { ids, status }),
+    }) => batchUpdateCredentialStatus({ ids, status }),
     onSuccess: (_data, vars) => invalidatePoolCredentials(qc, vars.poolId),
   });
 }
@@ -137,8 +135,8 @@ export function useBatchUpdateCredentialStatus() {
 export function useBatchDeleteCredentials() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ poolId, ids }: { poolId: number; ids: number[] }) =>
-      batchDeleteCredentials(poolId, { ids }),
+    mutationFn: ({ ids }: { poolId: number; ids: number[] }) =>
+      batchDeleteCredentials({ ids }),
     onSuccess: (_data, vars) => invalidatePoolCredentials(qc, vars.poolId),
   });
 }

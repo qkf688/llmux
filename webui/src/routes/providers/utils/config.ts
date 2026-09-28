@@ -147,13 +147,21 @@ export function detailToFormValues(detail: ProviderDetail): ProviderFormValues {
       if (g.Source === "pool") {
         return { name: g.Name, weight: g.Weight, source: "pool" as const, inlineKeys: [], groupId: g.ID, poolId: g.PoolID != null ? String(g.PoolID) : "" };
       }
-      // 掩码回填：每条掩码行携带既有凭据 ID（「显示」拉明文的引用、未拉取时按 id 保留保存）。
-      // 掩码行 key 恒为服务端掩码文本——明文永不出常规响应，前端不再自行拼装。
+      // 掩码回填：每条掩码行携带既有凭据 ID（「显示」拉明文的引用、未拉取时按 id 保留保存）
+      // 与凭据状态（状态徽标 / 启停按钮的数据源）。掩码行 key 恒为服务端掩码文本——
+      // 明文永不出常规响应，前端不再自行拼装。
       return {
         name: g.Name,
         weight: g.Weight,
         source: "inline" as const,
-        inlineKeys: (g.InlineKeys ?? []).map((k) => ({ id: k.ID, key: k.KeyMasked, masked: true })),
+        inlineKeys: (g.InlineKeys ?? []).map((k) => ({
+          id: k.ID,
+          key: k.KeyMasked,
+          masked: true,
+          status: k.Status,
+          cooldownUntil: k.CooldownUntil,
+          failCount: k.FailCount,
+        })),
         groupId: g.ID,
         poolId: "",
       };

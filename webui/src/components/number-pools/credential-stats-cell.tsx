@@ -1,4 +1,4 @@
-import { formatCredentialLastUsed } from "./credential-status";
+import { formatCredentialLastUsed } from "@/components/credentials/credential-status";
 
 type CredentialStatsProps = {
   totalRequests: number;

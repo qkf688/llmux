@@ -26,8 +26,9 @@ webui/src/
 ├── routes/                 # 页面 + route-config.ts + layout
 │   ├── providers|models|virtual-models|model-providers|...
 │   └── settings/
-├── components/             # ui/、charts/、page-header.tsx、page-toolbar.tsx、table-card.tsx、stat-card.tsx
-│   └── number-pools/       # 号池域跨路由共享（pool-detail-dialog / credential-key-cell / use-credential-key-reveal / credential-status / 删除确认弹窗）
+├── components/             # ui/、charts/、credentials/、page-header.tsx、page-toolbar.tsx、table-card.tsx、stat-card.tsx
+│   ├── credentials/        # 凭据展示共享（credential-status 词汇/色板 + credential-status-badge：号池页与供应商内联 key 行共用）
+│   └── number-pools/       # 号池域跨路由共享（pool-detail-dialog / credential-key-cell / use-credential-key-reveal / 删除确认弹窗）
 ├── lib/animations/         # 动效 token 单一来源（EASING / NUMBER_ANIMATION_MS）
 ├── lib/api/                # core client + modules（auth/catalog/logs/system；auth 走全路径 import 不进 index 桶）
 ├── lib/clipboard.ts        # 剪贴板写入跨域单源（三级降级 + 普通/机密两个提示入口）

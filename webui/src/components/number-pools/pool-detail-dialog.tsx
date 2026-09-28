@@ -47,18 +47,16 @@ import { CredentialKeyCell } from "./credential-key-cell";
 import { CredentialTestButton } from "./credential-test-button";
 import { useCredentialKeyReveal } from "./use-credential-key-reveal";
 import { useCredentialTesting } from "./use-credential-testing";
+import { CredentialStatusBadge } from "@/components/credentials/credential-status-badge";
 import {
-  COOLDOWN_BADGE_CLS,
-  CREDENTIAL_STATUS_BADGE_CLS,
   CREDENTIAL_STATUS_DOT_CLS,
   CREDENTIAL_STATUS_LABEL,
   CREDENTIAL_STATUS_ORDER,
-  isCredentialInCooldown,
-} from "./credential-status";
+} from "@/components/credentials/credential-status";
 import { CredentialStats } from "./credential-stats-cell";
 
 const PAGE_SIZE = 20;
-// 筛选下拉 = 「全部」+ 状态顺序单表派生：状态清单只活在 credential-status.ts 一处
+// 筛选下拉 = 「全部」+ 状态顺序单表派生：状态清单只活在 components/credentials/credential-status 一处
 const STATUS_FILTER_OPTIONS: Array<"all" | CredentialStatus> = ["all", ...CREDENTIAL_STATUS_ORDER];
 
 type PoolDetailDialogProps = {
@@ -109,8 +107,8 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
 
   // 已显示的明文只在当前视图内有效：翻页 / 筛选 / 搜索 / 关弹窗一律作废（契约见 useCredentialKeyReveal）
   const keyReveal = useCredentialKeyReveal({
-    poolId: open ? poolId : null,
-    view: open ? `${page}|${statusFilter}|${debouncedQ}` : "closed",
+    active: open,
+    view: `${page}|${statusFilter}|${debouncedQ}`,
   });
 
   // 「按凭据测试」结论与明文同视图生命周期：翻页/筛选/搜索/关弹窗一律作废（契约见 useCredentialTesting）
@@ -238,29 +236,9 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
     });
   };
 
-  const renderStatusBadges = (status: string, cooldownUntil: string | null) => {
-    const known = status in CREDENTIAL_STATUS_LABEL ? (status as CredentialStatus) : null;
-    return (
-      <div className="flex flex-wrap items-center gap-1">
-        {known ? (
-          <span
-            className={`inline-flex rounded-full px-2 py-0.5 text-[10.5px] font-medium ${CREDENTIAL_STATUS_BADGE_CLS[known]}`}
-          >
-            {CREDENTIAL_STATUS_LABEL[known]}
-          </span>
-        ) : (
-          <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-[10.5px] font-medium text-muted-foreground">
-            {status}
-          </span>
-        )}
-        {isCredentialInCooldown(cooldownUntil) && (
-          <span className={`inline-flex rounded-full px-2 py-0.5 text-[10.5px] font-medium ${COOLDOWN_BADGE_CLS}`}>
-            冷却
-          </span>
-        )}
-      </div>
-    );
-  };
+  const renderStatusBadges = (status: string, cooldownUntil: string | null) => (
+    <CredentialStatusBadge status={status} cooldownUntil={cooldownUntil} />
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

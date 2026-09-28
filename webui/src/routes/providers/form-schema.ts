@@ -27,12 +27,20 @@ export type ProviderFormEndpoint = z.infer<typeof providerFormEndpointSchema>;
 
 /** 内联 key 表单行：掩码态（回填）/ 明文态（已显示或新增）二选一。
  * - masked=true：服务端掩码文本（只读），保存时按 id 保留，key 不提交；
- * - masked=false：明文（可编辑），保存时 key 原样提交（新增 id 缺省）。 */
+ * - masked=false：明文（可编辑），保存时 key 原样提交（新增 id 缺省）。
+ * 既有凭据同时携带状态信息（详情回填），供状态徽标与「启用/停用」使用——新增行无此信息。
+ * 状态是**凭据属性**、不属于表单提交内容：保存只写 key 与归属（见 buildProviderPayload）。 */
 export const providerFormInlineKeyRowSchema = z.object({
   /** 既有凭据 ID：详情回填的掩码行有值；新增行缺省（提交时按 0 处理） */
   id: z.number().optional(),
   key: z.string(),
   masked: z.boolean(),
+  /** 凭据状态（active/disabled/error/temp_unsched）；新增行缺省 */
+  status: z.string().optional(),
+  /** 冷却截止时间（ISO），在冷却窗口内徽标额外显示「冷却」 */
+  cooldownUntil: z.string().nullable().optional(),
+  /** 鉴权连败计数（判停后非 0；启停动作会清掉它） */
+  failCount: z.number().optional(),
 });
 
 export type ProviderFormInlineKeyRow = z.infer<typeof providerFormInlineKeyRowSchema>;

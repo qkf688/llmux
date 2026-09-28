@@ -1,7 +1,7 @@
 /**
  * 号池凭据明文「显示 / 复制」状态机。
  *
- * 明文来源唯一：受控端点 `GET /pools/:id/credentials/:credId/raw`（列表响应恒为服务端掩码 KeyMasked）。
+ * 明文来源唯一：受控端点 `GET /credentials/:id/raw`（列表响应恒为服务端掩码 KeyMasked）。
  *
  * 生命周期契约（安全边界，改动前先读）：
  * - 明文只驻留本 hook 的内存 state，**不进 TanStack Query 缓存**：缓存会把明文长期留在
@@ -26,8 +26,8 @@ import { toErrorMessage } from "@/lib/errors";
 export type CredentialKeyAction = "reveal" | "copy";
 
 type CredentialKeyRevealInput = {
-  /** 号池 ID；弹窗关闭时传 null，明文拉取与剪贴板写入一律拒绝 */
-  poolId: number | null;
+  /** 宿主视图是否存活（号池详情弹窗关闭时传 false）；false 时明文拉取与剪贴板写入一律拒绝 */
+  active: boolean;
   /** 视图标识（页码/筛选/搜索/开关拼成），变化即作废全部已显示明文 */
   view: string;
 };
@@ -47,12 +47,12 @@ export type CredentialKeyReveal = {
 };
 
 export function useCredentialKeyReveal({
-  poolId,
+  active,
   view,
 }: CredentialKeyRevealInput): CredentialKeyReveal {
   const [revealed, setRevealed] = useState<Record<number, string>>({});
   const [pending, setPending] = useState<Readonly<Record<number, CredentialKeyAction>>>({});
-  // 单调递增世代号：view/poolId 变化即 +1，在途响应比对不符则整轮丢弃
+  // 单调递增世代号：view/active 变化即 +1，在途响应比对不符则整轮丢弃
   // （防翻页后的明文写进新视图，与 providers 详情弹窗的 requestId 守卫同一姿势）
   const generation = useRef(0);
 
@@ -60,7 +60,7 @@ export function useCredentialKeyReveal({
     generation.current += 1;
     setRevealed({});
     setPending({});
-  }, [view, poolId]);
+  }, [view, active]);
 
   const markPending = useCallback((credId: number, action: CredentialKeyAction) => {
     setPending((prev) => ({ ...prev, [credId]: action }));
@@ -81,21 +81,21 @@ export function useCredentialKeyReveal({
   /** 拉明文；世代不符（视图已切换）返回 null 表示「本轮作废」，错误也一并吞掉不再提示 */
   const fetchPlaintext = useCallback(
     async (credId: number, startedAt: number): Promise<string | null> => {
-      if (poolId == null) return null;
+      if (!active) return null;
       try {
-        const { key } = await getCredentialRaw(poolId, credId);
+        const { key } = await getCredentialRaw(credId);
         return generation.current === startedAt ? key : null;
       } catch (err) {
         if (generation.current !== startedAt) return null;
         throw err;
       }
     },
-    [poolId],
+    [active],
   );
 
   const toggle = useCallback(
     async (credId: number) => {
-      if (poolId == null) return;
+      if (!active) return;
 
       if (revealed[credId] != null) {
         setRevealed((prev) => {
@@ -119,13 +119,13 @@ export function useCredentialKeyReveal({
         dropPending(credId, startedAt);
       }
     },
-    [poolId, revealed, pending, fetchPlaintext, markPending, dropPending],
+    [active, revealed, pending, fetchPlaintext, markPending, dropPending],
   );
 
   const copy = useCallback(
     async (credId: number, keyMasked: string) => {
-      // poolId 检查必须排在缓存分支之前：弹窗已关时残留明文一律不得再出前端
-      if (poolId == null) return;
+      // active 检查必须排在缓存分支之前：弹窗已关时残留明文一律不得再出前端
+      if (!active) return;
 
       const cached = revealed[credId];
       if (cached != null) {
@@ -147,7 +147,7 @@ export function useCredentialKeyReveal({
         dropPending(credId, startedAt);
       }
     },
-    [poolId, revealed, pending, fetchPlaintext, markPending, dropPending],
+    [active, revealed, pending, fetchPlaintext, markPending, dropPending],
   );
 
   const forget = useCallback((credIds: number[]) => {

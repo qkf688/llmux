@@ -14,7 +14,7 @@ import {
   CREDENTIAL_STATUS_DOT_CLS,
   CREDENTIAL_STATUS_LABEL,
   CREDENTIAL_STATUS_ORDER,
-} from "@/components/number-pools/credential-status";
+} from "@/components/credentials/credential-status";
 
 type PoolsDesktopTableProps = {
   pools: PoolListItem[];

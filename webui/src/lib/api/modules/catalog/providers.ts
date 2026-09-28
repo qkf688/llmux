@@ -1,4 +1,5 @@
 import type { ErrorType } from "@/lib/errors";
+import type { CredentialView } from "./credentials";
 import { apiRequest } from "../../core/client";
 
 export interface Provider {
@@ -28,12 +29,9 @@ export interface ProviderEndpoint {
   Enabled: boolean;
 }
 
-/** 内联凭据详情项：掩码展示 + 凭据 ID（编辑弹窗引用该条做受控明文拉取） */
-export interface ProviderInlineKeyItem {
-  ID: number;
-  /** 服务端掩码（短 key/解密失败退化 ****）；详情只出掩码，明文走 raw 端点显式拉取 */
-  KeyMasked: string;
-}
+/** 内联凭据项：与号池页共用同一凭据视图（掩码 + 状态/冷却/连败）——编辑弹窗口据此显示
+ *  状态徽标与「启用/停用」（内联 key 判停后的人工恢复）。 */
+export type ProviderInlineKeyItem = CredentialView;
 
 /** 凭据分组（详情路径；Source/InlineKeys/PoolID 为派生字段） */
 export interface ProviderGroupDetail {

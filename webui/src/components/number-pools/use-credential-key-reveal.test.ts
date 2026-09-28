@@ -23,7 +23,7 @@ vi.mock("sonner", () => ({
 import { toast } from "sonner";
 import { useCredentialKeyReveal } from "./use-credential-key-reveal";
 
-const POOL_ID = 7;
+
 const MASKED = "sk-****ab12";
 const VIEW = "1|all|";
 
@@ -33,7 +33,7 @@ const VIEW = "1|all|";
 // 文案本身由 client.test.ts 的失败矩阵覆盖。
 const RAW_HTTP_500 = new Error("Failed to decrypt key [req=aa11bb22cc33]");
 
-type RevealProps = { poolId: number | null; view: string };
+type RevealProps = { active: boolean; view: string };
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -43,8 +43,8 @@ function createDeferred<T>() {
   return { promise, resolve };
 }
 
-function renderReveal(initialProps: RevealProps = { poolId: POOL_ID, view: VIEW }) {
-  return renderHook(({ poolId, view }: RevealProps) => useCredentialKeyReveal({ poolId, view }), {
+function renderReveal(initialProps: RevealProps = { active: true, view: VIEW }) {
+  return renderHook(({ active, view }: RevealProps) => useCredentialKeyReveal({ active, view }), {
     initialProps,
   });
 }
@@ -73,7 +73,7 @@ describe("useCredentialKeyReveal 显示", () => {
 
     await revealOnce(result, 11);
 
-    expect(getCredentialRawMock).toHaveBeenCalledWith(POOL_ID, 11);
+    expect(getCredentialRawMock).toHaveBeenCalledWith(11);
     expect(result.current.plaintextOf(11)).toBe("sk-plain-1");
     expect(result.current.isRevealed(11)).toBe(true);
     expect(result.current.pendingAction(11)).toBeNull();
@@ -209,7 +209,7 @@ describe("useCredentialKeyReveal 明文生命周期", () => {
     const { result, rerender } = renderReveal();
     await revealOnce(result, 11);
 
-    rerender({ poolId: POOL_ID, view: "2|all|" });
+    rerender({ active: true, view: "2|all|" });
 
     expect(result.current.plaintextOf(11)).toBeNull();
     expect(result.current.isRevealed(11)).toBe(false);
@@ -223,7 +223,7 @@ describe("useCredentialKeyReveal 明文生命周期", () => {
       void result.current.toggle(11);
     });
 
-    rerender({ poolId: POOL_ID, view: "2|all|" });
+    rerender({ active: true, view: "2|all|" });
     await act(async () => {
       deferred.resolve({ key: "sk-stale" });
     });
@@ -241,7 +241,7 @@ describe("useCredentialKeyReveal 明文生命周期", () => {
     await act(async () => {
       void result.current.toggle(11);
     });
-    rerender({ poolId: POOL_ID, view: "2|all|" });
+    rerender({ active: true, view: "2|all|" });
     await act(async () => {
       void result.current.toggle(11);
     });
@@ -279,18 +279,18 @@ describe("useCredentialKeyReveal 明文生命周期", () => {
     expect(result.current.plaintextOf(12)).toBe("sk-plain-1");
   });
 
-  it("poolId 为 null（弹窗关闭）时拒绝任何明文拉取与剪贴板写入", async () => {
+  it("弹窗关闭（active=false）时拒绝任何明文拉取与剪贴板写入", async () => {
     getCredentialRawMock.mockResolvedValue({ key: "sk-plain-1" });
     const { result, rerender } = renderReveal();
     await revealOnce(result, 11);
 
-    rerender({ poolId: null, view: "closed" });
+    rerender({ active: false, view: "closed" });
     await act(async () => {
       await result.current.toggle(11);
       await result.current.copy(11, MASKED);
     });
 
-    // 关闭前只打过一次端点；关闭后 toggle/copy 一律拒绝（含 poolId 检查前置于缓存分支）
+    // 关闭前只打过一次端点；关闭后 toggle/copy 一律拒绝（含 active 检查前置于缓存分支）
     expect(getCredentialRawMock).toHaveBeenCalledTimes(1);
     expect(copySecretWithToastMock).not.toHaveBeenCalled();
   });

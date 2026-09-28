@@ -1,7 +1,29 @@
 import { describe, expect, it } from "vitest";
-import type { ProviderDetail } from "@/lib/api";
+import type { CredentialView, ProviderDetail } from "@/lib/api";
 import { buildConfigFromForm, buildProviderPayload, detailToFormValues } from "./config";
 import { defaultProviderFormValues, type ProviderFormValues } from "../form-schema";
+
+/** 凭据视图工厂（后端 service/credview.View）：用例只关心 ID/掩码/状态，其余字段由基座补齐。
+ *  用 Partial 工厂而非 `as CredentialView`——新增字段时 tsc 会在这里报错，不会静默放过。 */
+function credentialView(p: Partial<CredentialView> & { ID: number; KeyMasked: string }): CredentialView {
+  return {
+    PoolID: null,
+    GroupID: 1,
+    Status: "active",
+    Note: "",
+    CooldownUntil: null,
+    CooldownReason: "",
+    FailCount: 0,
+    LastUsedAt: null,
+    LastProbeAt: null,
+    TotalRequests: 0,
+    TotalErrors: 0,
+    TotalTokens: 0,
+    CreatedAt: "2026-09-28T00:00:00Z",
+    UpdatedAt: "2026-09-28T00:00:00Z",
+    ...p,
+  };
+}
 
 function formValues(overrides: Partial<ProviderFormValues> = {}): ProviderFormValues {
   return {
@@ -45,8 +67,8 @@ function detail(overrides: Partial<ProviderDetail> = {}): ProviderDetail {
         Models: "",
         Source: "inline",
         InlineKeys: [
-          { ID: 101, KeyMasked: "sk-****-1" },
-          { ID: 102, KeyMasked: "sk-****-2" },
+          credentialView({ ID: 101, KeyMasked: "sk-****-1" }),
+          credentialView({ ID: 102, KeyMasked: "sk-****-2" }),
         ],
         PoolID: null,
       },
@@ -282,8 +304,8 @@ describe("detailToFormValues - 详情掩码回填（对齐号池 KeyMasked）", 
         weight: 1,
         source: "inline",
         inlineKeys: [
-          { id: 101, key: "sk-****-1", masked: true },
-          { id: 102, key: "sk-****-2", masked: true },
+          { id: 101, key: "sk-****-1", masked: true, status: "active", cooldownUntil: null, failCount: 0 },
+          { id: 102, key: "sk-****-2", masked: true, status: "active", cooldownUntil: null, failCount: 0 },
         ],
         groupId: 21,
         poolId: "",
@@ -332,7 +354,9 @@ describe("detailToFormValues - 详情掩码回填（对齐号池 KeyMasked）", 
             Weight: 1,
             Models: "",
             Source: "inline",
-            InlineKeys: [{ ID: 103, KeyMasked: "****" }],
+            InlineKeys: [
+              credentialView({ ID: 103, KeyMasked: "****", Status: "temp_unsched", FailCount: 3 }),
+            ],
             PoolID: null,
           },
         ],
@@ -341,7 +365,8 @@ describe("detailToFormValues - 详情掩码回填（对齐号池 KeyMasked）", 
 
     expect(values.groups?.[0]).toMatchObject({
       source: "inline",
-      inlineKeys: [{ id: 103, key: "****", masked: true }],
+      // 状态随掩码一起回填：编辑弹窗据此显示状态徽标与「启用」（判停 key 的人工恢复入口）
+      inlineKeys: [{ id: 103, key: "****", masked: true, status: "temp_unsched", failCount: 3 }],
       groupId: 23,
     });
   });

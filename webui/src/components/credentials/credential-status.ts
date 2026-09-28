@@ -1,5 +1,12 @@
 /**
- * 凭据状态展示契约（label）。
+ * 凭据状态展示契约（label / 色板 / 冷却判定）——号池页与供应商编辑弹窗共用。
+ *
+ * 为什么从 components/number-pools 移到 components/credentials：凭据提为第一等资源后
+ * （`/api/credentials`），供应商分组的内联 key 行也要显示同一套状态（判停后可一键恢复），
+ * 状态词汇与配色必须只有一处来源，否则两个页面会漂移出两套说法。
+ * 徽标组件在 `credential-status-badge.tsx`（同目录），本文件只放常量与纯函数
+ * （eslint react-refresh 要求组件文件不混出常量）。
+ *
  * 冷却不占状态机——UI 用 CooldownUntil 派生 badge，不在此表。
  */
 import type { CredentialStatus } from "@/lib/api";

@@ -2,7 +2,6 @@ package chat
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -48,14 +47,11 @@ func BalanceChat(ctx context.Context, in BalanceInput) (*BalanceResult, error) {
 	pwm := in.ProvidersWithMeta
 
 	// 超时/重试已全局化（per-model time_out/max_retry 移除）：
-	// ResourceHeaderTimeout 与总预算从此解耦——总预算 = 全局总超时，等头窗口 = 全局
-	// 响应头超时。二者不同值时，「等头超时」不再一击致命：候选 1 等头超时只消耗
-	// 等头窗口，总预算未耗尽时候选 2 仍有完整窗口（原实现同一值双角色）。
+	// 等头窗口 = 全局响应头超时；总时长上限 = 请求 ctx 的 deadline（Stage 33 起由
+	// handler 入口经 WithRequestTotalTimeout 挂载，到点连流式输出一起掐断）。
+	// 二者解耦语义不变：「等头超时」只消耗等头窗口，总上限未耗尽时候选 2 仍有
+	// 完整窗口（原实现同一值双角色）。
 	headerTimeout := time.Second * time.Duration(getRequestHeaderTimeout(ctx))
-	totalTimeout := time.Second * time.Duration(getRequestTotalTimeout(ctx))
-
-	timer := time.NewTimer(totalTimeout)
-	defer timer.Stop()
 
 	outcome := runProviderRetryLoop(retryLoopInput{
 		Ctx:           ctx,
@@ -69,15 +65,14 @@ func BalanceChat(ctx context.Context, in BalanceInput) (*BalanceResult, error) {
 		Model:         pwm.Model,
 		MaxRetry:      getRequestMaxRetry(ctx),
 		ClientTimeout: headerTimeout,
-		Deadline:      timer.C,
-		DeadlineErr:   errors.New("retry time out"),
 	})
 
 	switch outcome.Status {
 	case retryLoopSucceeded:
 		return outcome.Result, nil
 	case retryLoopAborted:
-		return nil, outcome.Err
+		// 网关自己掐断（deadline）映射 504，调用方撤走原样透传（mapAbortErr）。
+		return nil, mapAbortErr(outcome.Err)
 	default:
 		return nil, newRetryExhaustedError("maximum retry attempts reached")
 	}

@@ -53,6 +53,12 @@ func BalanceChat(ctx context.Context, in BalanceInput) (*BalanceResult, error) {
 	return chat.BalanceChat(ctx, in)
 }
 
+// WithRequestTotalTimeout 给请求挂上网关总超时（Stage 33）：派生带 deadline 的请求 ctx，
+// 到点整个请求（含流式输出）被掐断。cancel 必须在响应写完后才调用。
+func WithRequestTotalTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	return chat.WithRequestTotalTimeout(ctx)
+}
+
 type RecordLogInput = chat.RecordLogInput
 
 func RecordLog(ctx context.Context, in RecordLogInput) {

@@ -154,10 +154,11 @@ func buildSettingSchemas() map[string]SettingSchema {
 		{Key: SettingKeyReasoningEffortUnknownStrategy, Field: "ReasoningEffortUnknownStrategy", Type: SettingTypeString, Default: "clamp_to_default", Category: "reasoning", Enum: []string{"clamp_to_default", "passthrough"}},
 
 		// 请求参数（全局超时/重试，替代原 per-model time_out/max_retry）
-		// 总预算默认 90 = 响应头超时 30 × 最大重试 3：最坏"每次尝试都等头超时"时，
-		// 后续候选仍各有完整等头窗口（等头超时不再一击致命，见 chat_balance 解耦）。
+		// 总超时 = 请求的硬时长上限（Stage 33 起挂在请求 ctx 的 deadline 上，到点含
+		// 流式输出一刀切、按超时归因结算）。默认 600 秒是「正常长回答不被截」的余量，
+		// 按自己最长的用法调；它与等头超时（30s/次 × 重试）解耦，不再互为双角色。
 		{Key: SettingKeyRequestHeaderTimeout, Field: "RequestHeaderTimeout", Type: SettingTypeInt, Default: 30, Category: "request", Min: intPtr(1)},
-		{Key: SettingKeyRequestTotalTimeout, Field: "RequestTotalTimeout", Type: SettingTypeInt, Default: 90, Category: "request", Min: intPtr(1)},
+		{Key: SettingKeyRequestTotalTimeout, Field: "RequestTotalTimeout", Type: SettingTypeInt, Default: 600, Category: "request", Min: intPtr(1)},
 		{Key: SettingKeyStreamFirstByteTimeout, Field: "StreamFirstByteTimeout", Type: SettingTypeInt, Default: 15, Category: "request", Min: intPtr(1)},
 		{Key: SettingKeyRequestMaxRetry, Field: "RequestMaxRetry", Type: SettingTypeInt, Default: 3, Category: "request", Min: intPtr(1)},
 		// Stage 2 资源防御：上游单条非流式响应体上限（MiB）。下限 1 = 「不可关闭」的落点——

@@ -122,6 +122,14 @@ func chatHandlerByStyle(c *gin.Context, style consts.Style) {
 }
 
 func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor service.Processer, style string) {
+	// 网关总超时落请求 ctx（Stage 33）：到点整个请求（含流式输出）被掐断，且超时
+	// （deadline）与调用方撤走（取消）在 ctx 上可区分，收尾归因以此为单源
+	// （chat_settlement.requestAbandoned）。cancel 在 handler 返回（响应写完）时才
+	// 释放——过早 cancel 会掐断正在输出的流。计时从进来到收完，覆盖读体/预处理/
+	// 选路/上游调用/流式回写全程。
+	ctx, cancelTimeout := service.WithRequestTotalTimeout(c.Request.Context())
+	defer cancelTimeout()
+
 	// 读取原始请求体：多读 1 字节探测超限（入站硬上限 consts.MaxInboundBodyBytes，
 	// /v1 由调用方 key 鉴权、攻击者可控，Stage 2 资源防御）。
 	reqBody, err := io.ReadAll(io.LimitReader(c.Request.Body, consts.MaxInboundBodyBytes+1))
@@ -145,7 +153,6 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 	}
 	// 按模型获取可用 provider（reqMeta 先于解析构造：模型不存在/虚拟选模失败的
 	// 错误日志也在这一步落库，归因快照必须已在场）
-	ctx := c.Request.Context()
 	reqMeta := newReqMeta(c)
 	providersWithMeta, err := service.ProvidersWithMetaBymodelsName(ctx, style, *before, reqMeta)
 	if err != nil {

@@ -644,7 +644,7 @@ const (
 
 	// 请求参数相关设置（全局超时/重试，替代原 per-model time_out/max_retry）
 	SettingKeyRequestHeaderTimeout   = "request_header_timeout"    // 单次尝试等待响应头的超时（秒）
-	SettingKeyRequestTotalTimeout    = "request_total_timeout"     // 整个请求的总预算超时（秒，含所有重试/故障转移）
+	SettingKeyRequestTotalTimeout    = "request_total_timeout"     // 整个请求的总时长上限（秒，硬上限：到点含流式输出一刀切）
 	SettingKeyStreamFirstByteTimeout = "stream_first_byte_timeout" // 流式响应头到达后等待首个数据字节的超时（秒）
 	SettingKeyRequestMaxRetry        = "request_max_retry"         // 单候选池最大尝试次数
 	// SettingKeyUpstreamMaxResponseMiB 上游单条**非流式**响应体的体积上限（MiB，Stage 2 资源防御）。

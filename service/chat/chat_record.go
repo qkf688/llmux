@@ -129,15 +129,24 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 // isClientDisconnectErr 判定客户端断连类失败（坏管道 / 连接重置 / 请求取消）。
 // 只认 errors.Is/As 语义匹配：*net.Error 覆盖 Windows WSAECONNRESET 等平台差异，
 // 不做错误文本匹配。
+// 超时**不是**断连（Stage 33）：deadline / 网络超时归「服务端或上游掐断」，按断连
+// 降级会把超时吞成「调用方撤走」的同形留痕——net.Error 家族里 context.DeadlineExceeded
+// 与 http 客户端超时都带 Timeout()=true，必须先于断连判定排除。
 func isClientDisconnectErr(err error) bool {
 	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, io.ErrClosedPipe) {
 		return true
 	}
 	var netErr net.Error
-	return errors.As(err, &netErr)
+	if errors.As(err, &netErr) {
+		return !netErr.Timeout()
+	}
+	return false
 }
 
 // resolveUsageSource 决定最终写入的 usage 并打上来源标记。

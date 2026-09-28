@@ -2,7 +2,6 @@ package chat
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -19,14 +18,10 @@ func balanceChatVirtual(ctx context.Context, in BalanceInput) (*BalanceResult, e
 		"real_models_count", len(pwm.OrderedRealModels),
 	)
 
-	// 全局化后总预算语义 = 跨真实模型共享的全局总超时帽子（等头窗口见下，
-	// 二者解耦：等头超时不再拖垮后续真实模型的窗口）。
-	globalTimer := time.NewTimer(time.Second * time.Duration(getRequestTotalTimeout(ctx)))
-	defer globalTimer.Stop()
+	// 全局化后总预算语义 = 跨真实模型共享的总时长上限（等头窗口见下，二者解耦：
+	// 等头超时不再拖垮后续真实模型的窗口）。Stage 33 起该上限就是请求 ctx 的
+	// deadline（handler 入口经 WithRequestTotalTimeout 挂载），不再是独立计时器。
 	headerTimeout := time.Second * time.Duration(getRequestHeaderTimeout(ctx))
-
-	// 全局超时错误在外层循环与内层重试循环共用同一实例，保证两处返回的语义一致。
-	deadlineErr := errors.New("virtual model global timeout")
 
 	// 钉定的真实模型排尝试首位（缓存亲和 AC-4）：本地副本重排，不动 virtualmodel
 	// 策略状态；未钉时顺序不变。故障转移语义不变——钉定模型穷尽后照常试其余模型。
@@ -38,9 +33,8 @@ func balanceChatVirtual(ctx context.Context, in BalanceInput) (*BalanceResult, e
 	for modelIndex, orderedModel := range ordered {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-globalTimer.C:
-			return nil, deadlineErr
+			// 网关掐断（deadline）映射 504，调用方撤走原样透传（mapAbortErr）。
+			return nil, mapAbortErr(ctx.Err())
 		default:
 		}
 
@@ -84,8 +78,6 @@ func balanceChatVirtual(ctx context.Context, in BalanceInput) (*BalanceResult, e
 			Model:         &realModel,
 			MaxRetry:      getRequestMaxRetry(ctx),
 			ClientTimeout: headerTimeout,
-			Deadline:      globalTimer.C,
-			DeadlineErr:   deadlineErr,
 			LogAttrs:      []any{"virtual_model", pwm.VirtualModelName, "real_model", realModel.Name},
 		})
 

@@ -1,6 +1,8 @@
 package chat
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 )
@@ -34,4 +36,20 @@ func newNoRouteForModelError(modelName string) error {
 func newRetryExhaustedError(detail string) error {
 	return newClientRequestError(http.StatusBadGateway,
 		fmt.Sprintf("all providers failed for this request (%s)", detail))
+}
+
+// newGatewayTimeoutError 网关总超时（请求 ctx deadline 到点、服务端掐断）统一走
+// 504 Gateway Timeout：语义是「网关等不到完整响应」，与真 500（网关 bug）、502（上游
+// 全挂）区分，客户端与监控可分类。静态文案不拼内部错误文本（framework-conventions §5）。
+func newGatewayTimeoutError() error {
+	return newClientRequestError(http.StatusGatewayTimeout, "gateway total timeout exceeded")
+}
+
+// mapAbortErr 把「网关自己掐断」（deadline 到点）映射为自带 504 的超时错误；
+// 调用方撤走（Canceled）等其余取消原样透传——ctx 已死说明对面多半已收不到。
+func mapAbortErr(err error) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return newGatewayTimeoutError()
+	}
+	return err
 }

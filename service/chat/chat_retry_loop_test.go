@@ -53,9 +53,6 @@ func TestRunProviderRetryLoop(t *testing.T) {
 			RealModelName: "m",
 			MaxRetry:      5,
 			ClientTimeout: time.Second,
-			// 不触发的超时通道：本组用例只关心候选淘汰与取消路径。
-			Deadline:    make(chan time.Time),
-			DeadlineErr: errors.New("unused"),
 		}
 	}
 
@@ -184,8 +181,6 @@ func TestRunProviderRetryLoop_SkipsUnselectableProviderThenSucceeds(t *testing.T
 		},
 		MaxRetry:      5,
 		ClientTimeout: 2 * time.Second,
-		Deadline:      make(chan time.Time),
-		DeadlineErr:   errors.New("unused"),
 	})
 
 	if outcome.Status != retryLoopSucceeded {
@@ -304,8 +299,6 @@ func TestRunProviderRetryLoop_CredentialsExhausted_ProbeRecoverInGroup(t *testin
 		},
 		MaxRetry:      5,
 		ClientTimeout: 2 * time.Second,
-		Deadline:      make(chan time.Time),
-		DeadlineErr:   errors.New("unused"),
 	})
 
 	if outcome.Status != retryLoopSucceeded {
@@ -430,8 +423,6 @@ func TestRunProviderRetryLoop_OuterSelectProbeReselect_WhitelistMatchesUpstreamM
 		},
 		MaxRetry:      5,
 		ClientTimeout: 2 * time.Second,
-		Deadline:      make(chan time.Time),
-		DeadlineErr:   errors.New("unused"),
 	})
 
 	if outcome.Status != retryLoopSucceeded {
@@ -540,8 +531,6 @@ func TestRunProviderRetryLoop_CredentialsExhausted_ProbeFailsOrganizationFailure
 		Pool:          pool,
 		MaxRetry:      5,
 		ClientTimeout: 2 * time.Second,
-		Deadline:      make(chan time.Time),
-		DeadlineErr:   errors.New("unused"),
 	})
 
 	if outcome.Status != retryLoopExhausted {

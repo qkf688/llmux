@@ -42,12 +42,9 @@ type retryLoopInput struct {
 	MaxRetry      int
 	ClientTimeout time.Duration
 
-	// Deadline 超时信号：真实路径为本次请求的局部计时器，虚拟路径为跨真实模型
-	// 共享的全局计时器，故由调用方持有并传入通道而非在此创建。
-	Deadline <-chan time.Time
-	// DeadlineErr 为 Deadline 触发时返回的错误；两条路径语义不同（单模型重试超时
-	// vs 虚拟模型全局超时），由调用方给定。
-	DeadlineErr error
+	// 总时长上限不在本循环内维护（Stage 33）：由调用方挂在请求 ctx 的 deadline 上
+	// （handler 入口 WithRequestTotalTimeout），Ctx.Done 一并覆盖「调用方撤走」与
+	// 「网关掐断」，两者的归因区分在 chat_settlement.requestAbandoned。
 
 	// LogAttrs 追加到本循环所有选路日志的上下文键值（虚拟路径带
 	// virtual_model / real_model，便于在多真实模型间区分）。
@@ -107,8 +104,6 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 		select {
 		case <-in.Ctx.Done():
 			return retryLoopOutcome{Status: retryLoopAborted, Err: in.Ctx.Err()}
-		case <-in.Deadline:
-			return retryLoopOutcome{Status: retryLoopAborted, Err: in.DeadlineErr}
 		default:
 		}
 
@@ -214,8 +209,6 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 			select {
 			case <-in.Ctx.Done():
 				return retryLoopOutcome{Status: retryLoopAborted, Err: in.Ctx.Err()}
-			case <-in.Deadline:
-				return retryLoopOutcome{Status: retryLoopAborted, Err: in.DeadlineErr}
 			default:
 			}
 

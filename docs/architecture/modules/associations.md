@@ -73,7 +73,7 @@ Create / Update 对 `req.CustomerHeaders` 走 `common.SanitizeOutboundHeaders`�
   - 尊重 `Model.AutoAssociate`（`false` 跳过）
   - 跳过 `Provider.Blacklisted`
   - 默认 `Weight` 读 `SettingKeyAutoWeightDecayDefault`、`Priority` 读 `SettingKeyAutoPriorityDecayDefault`（schema 默认 100/100；缺失/非法回退到 `DefaultWeightFallback`/`DefaultPriorityFallback` 常量，由调用方 `service.associate` 传入 `NewDefaultAssociation`）
-  - 无效关联：provider 不存在，或 `ProviderModel` 不在组织级目录（各分组白名单并集 ∪ `custom_models`）；`GetProviderModels` 读库失败则不删
+  - 无效关联：provider 不存在，或 `ProviderModel` 不在组织级目录（各分组白名单并集 ∪ `custom_models`）；`GetProviderModels` 读库失败则不删。该目录与生产选路的可服务判定集**同集**（2026-09-28 起 `custom_models` 进选路判定，供应商级授权、全部分组可服务），清理判「无效」与生产判「无组可服务」不会互相矛盾
 
 ---
 

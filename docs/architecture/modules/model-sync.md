@@ -45,6 +45,7 @@ models.ModelSyncLog
 - **同步粒度 = 分组**：每个 KeyGroup 取活跃凭据调 `Models()`，全量写入该组 `Models` CSV；请求数 ≈ 分组数，与凭据数无关
 - **任何「打上游拿模型」的路径都必须经 `channel.NewClientFromSelection`**（逐组诊断的入口是 `channel.NewClientForGroup`）：`Provider.Config` 自 S6 起不含 `api_key`（凭据只在 `credentials` 表、运行时由 `channel.BuildConfig` 注入明文），绕过选路直用 config 等于不带 Authorization 打上游 → 恒 401「You didn't provide an API key」。管理端浏览（`ListUpstreamModels`）曾因此失效，现已收口
 - **白名单命名空间 = 上游模型名**：同步把 `/models` 返回的上游模型 ID 原样写入该组 `Models` CSV，**不做名字翻译**；消费侧（生产选路 `channel.Select` 的 `upstreamModel` 入参、组织级目录校验、管理端连通测试）都在这个命名空间比对——网关模型名（`Model.Name` / 请求里的 `model`）不是白名单成员，重命名关联（`ProviderModel ≠ Model.Name`）的可服务性由上游名表达
+- **白名单唯一写入方 = 本模块（2026-09-28）**：`KeyGroup.Models` 是同步快照，全量替换是刻意语义；供应商表单不带该字段、分组保存按 id 就地更新不触碰它（此前删光重建会把快照冲成空 = 不限）。上游 `/models` 不返回的模型不在白名单里是结构性的——走供应商 `custom_models`（解析单源 `common.ExtractCustomModels`，供应商级授权、不受分组白名单约束），不给同步加手工成员
 - **空白名单**：空 = 未同步/不限制（选路不限；不向组织级目录贡献模型 ID）
 - **不再写 `Config.upstream_models`**：同步真相在分组白名单；组织级目录由 `GetProviderModelCatalogs` 批量聚合（端点 `GET /api/providers/model-catalog`，前端目录唯一数据源，详见 providers.md 契约表）
 - 过滤规则（如仅 `:free`）为配置驱动，适配不同公益站场景；按分组拉回后套用

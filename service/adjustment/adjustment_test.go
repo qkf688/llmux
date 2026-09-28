@@ -2,6 +2,7 @@ package adjustment
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -11,9 +12,12 @@ import (
 )
 
 // mapReader 是测试用 settings.Reader：命中 map 则返回覆盖值，否则走 default。
+// failKeys 中的键在 E 变体里模拟「读失败」（返回 err），裸变体仍返回 map 值——
+// 用于回归「旧代码退默认值/覆盖值冒充真配置」与「新代码显式降级」的行为差异。
 type mapReader struct {
-	bools map[string]bool
-	ints  map[string]int
+	bools    map[string]bool
+	ints     map[string]int
+	failKeys map[string]bool
 }
 
 func (m mapReader) Bool(_ context.Context, key string, defaultValue bool) bool {
@@ -40,6 +44,20 @@ func (m mapReader) Int(_ context.Context, key string, defaultValue, minValue int
 
 func (m mapReader) String(_ context.Context, _ string, defaultValue string) string {
 	return defaultValue
+}
+
+func (m mapReader) BoolE(ctx context.Context, key string, defaultValue bool) (bool, error) {
+	if m.failKeys[key] {
+		return defaultValue, errors.New("simulated settings read failure")
+	}
+	return m.Bool(ctx, key, defaultValue), nil
+}
+
+func (m mapReader) IntE(ctx context.Context, key string, defaultValue, minValue int) (int, error) {
+	if m.failKeys[key] {
+		return defaultValue, errors.New("simulated settings read failure")
+	}
+	return m.Int(ctx, key, defaultValue, minValue), nil
 }
 
 func useSettings(t *testing.T, r mapReader) {

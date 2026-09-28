@@ -33,6 +33,14 @@ func (r rawFieldCapSettingsReader) String(_ context.Context, _ string, def strin
 	return def
 }
 
+func (r rawFieldCapSettingsReader) BoolE(ctx context.Context, key string, def bool) (bool, error) {
+	return r.Bool(ctx, key, def), nil
+}
+
+func (r rawFieldCapSettingsReader) IntE(ctx context.Context, key string, def, min int) (int, error) {
+	return r.Int(ctx, key, def, min), nil
+}
+
 var _ settings.Reader = rawFieldCapSettingsReader{}
 
 func setRawLogFieldMaxKiB(t *testing.T, kib int) {

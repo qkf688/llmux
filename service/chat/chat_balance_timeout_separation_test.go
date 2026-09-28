@@ -12,8 +12,10 @@ import (
 	"github.com/qkf688/llmux/providers"
 )
 
-// timeoutSettingsReader 测试用 settings.Reader stub：只覆写请求参数四键，
-// 其余回退 defaultValue。超时最小粒度秒，测试用 1s 等头窗口 + 3s 总预算。
+// timeoutSettingsReader 测试用 settings.Reader stub：只覆写请求参数键，
+// 其余回退 defaultValue。超时最小粒度秒，测试用 1s 等头窗口 + 3s 总时长上限。
+// 总时长上限不在 BalanceChat 内读取（Stage 33 起经 WithRequestTotalTimeout 挂进
+// 请求 ctx 的 deadline），该键供派生 deadline 的用例使用。
 type timeoutSettingsReader struct{}
 
 func (timeoutSettingsReader) Bool(_ context.Context, _ string, def bool) bool { return def }
@@ -23,7 +25,7 @@ func (timeoutSettingsReader) Int(_ context.Context, key string, def, _ int) int 
 	case models.SettingKeyRequestHeaderTimeout:
 		return 1 // 等头窗口 1s
 	case models.SettingKeyRequestTotalTimeout:
-		return 3 // 总预算 3s（> 1s 等头 + 第二候选窗口）
+		return 3 // 总时长上限 3s（供 WithRequestTotalTimeout 派生 deadline）
 	case models.SettingKeyRequestMaxRetry:
 		return 2 // 两次尝试（候选 1 → 候选 2）
 	}
@@ -32,12 +34,21 @@ func (timeoutSettingsReader) Int(_ context.Context, key string, def, _ int) int 
 
 func (timeoutSettingsReader) String(_ context.Context, _ string, def string) string { return def }
 
-// TestBalanceChat_HeaderTimeout_CandidateHasFullWindow 锁定「等头窗口与总预算解耦」
+func (r timeoutSettingsReader) BoolE(ctx context.Context, key string, def bool) (bool, error) {
+	return r.Bool(ctx, key, def), nil
+}
+
+func (r timeoutSettingsReader) IntE(ctx context.Context, key string, def, min int) (int, error) {
+	return r.Int(ctx, key, def, min), nil
+}
+
+// TestBalanceChat_HeaderTimeout_CandidateHasFullWindow 锁定「等头窗口与总时长上限解耦」
 // 的行为（AC-8）：候选 1 等头超时后，候选 2 仍有完整窗口可继续尝试。
 //
-// 构造：等头=1s、总预算=3s、MaxRetry=2；候选 1 上游 1.5s 不回响应头（等头超时），
-// 候选 2 立即成功。若总预算与等头同一值（旧双角色语义），候选 1 耗满 1s 后
-// Deadline 同步耗尽，候选 2 必然 aborted、断言变红——本用例能区分新旧语义。
+// 构造：等头=1s、总时长上限=3s（Stage 33 起以请求 ctx deadline 表达，同 handler 挂法）、
+// MaxRetry=2；候选 1 上游 1.5s 不回响应头（等头超时），候选 2 立即成功。若总上限与
+// 等头同一值（旧双角色语义），候选 1 耗满 1s 后总上限同步耗尽，候选 2 必然 aborted、
+// 断言变红——本用例能区分新旧语义。
 func TestBalanceChat_HeaderTimeout_CandidateHasFullWindow(t *testing.T) {
 	initChatRecordTestDB(t)
 	cipher := setupChatChannelCipher(t)
@@ -84,8 +95,11 @@ func TestBalanceChat_HeaderTimeout_CandidateHasFullWindow(t *testing.T) {
 		t.Fatalf("build candidate pool: %v", err)
 	}
 
-	// 真实路径 CandidatePool 经 buildCandidatePool 装配。
-	result, err := BalanceChat(context.Background(), BalanceInput{
+	// 真实路径 CandidatePool 经 buildCandidatePool 装配。总时长上限以请求 ctx deadline
+	// 表达（3s，同 handler 的挂法），候选 1 等头耗掉 1s 后仍有完整预算给候选 2。
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	result, err := BalanceChat(ctx, BalanceInput{
 		Start:  time.Now(),
 		Style:  "openai",
 		Before: Before{Model: "m1", Stream: false, raw: []byte(`{"model":"m1","messages":[{"role":"user","content":"hi"}]}`)},

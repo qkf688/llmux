@@ -161,6 +161,12 @@ func (s affinityGateStub) Int(_ context.Context, _ string, defaultValue, _ int) 
 func (s affinityGateStub) String(_ context.Context, _ string, defaultValue string) string {
 	return defaultValue
 }
+func (s affinityGateStub) BoolE(ctx context.Context, key string, defaultValue bool) (bool, error) {
+	return s.Bool(ctx, key, defaultValue), nil
+}
+func (s affinityGateStub) IntE(ctx context.Context, key string, defaultValue, minValue int) (int, error) {
+	return s.Int(ctx, key, defaultValue, minValue), nil
+}
 
 var _ settings.Reader = affinityGateStub{}
 

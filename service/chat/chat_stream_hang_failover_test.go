@@ -27,6 +27,14 @@ func (gateHangSettingsReader) Int(_ context.Context, key string, def, _ int) int
 
 func (gateHangSettingsReader) String(_ context.Context, _ string, def string) string { return def }
 
+func (r gateHangSettingsReader) BoolE(ctx context.Context, key string, def bool) (bool, error) {
+	return r.Bool(ctx, key, def), nil
+}
+
+func (r gateHangSettingsReader) IntE(ctx context.Context, key string, def, min int) (int, error) {
+	return r.Int(ctx, key, def, min), nil
+}
+
 // AC-4（#24-2 验收承诺的「挂死 → 自动换下家」集成测试）：上游回 200 + SSE 响应头后
 // 一字不发（212 事故形态）→ 首字节看门狗在**提交前**判失败并自动换下家，客户端
 // 只收到好候选字节、零错误字节。改造前该形态要等 handler 写完 200 响应头才发现，

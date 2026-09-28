@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -78,6 +79,7 @@ type credCooldownSettingsReader struct {
 	CooldownServerSec int
 	AuthFailThreshold int
 	ProbeIntervalSec  int
+	failKeys          map[string]bool // E 变体模拟读失败的键（裸变体仍返回覆写值）
 }
 
 func (r credCooldownSettingsReader) Bool(_ context.Context, _ string, def bool) bool { return def }
@@ -101,6 +103,20 @@ func (r credCooldownSettingsReader) Int(_ context.Context, key string, def, _ in
 
 func (r credCooldownSettingsReader) String(_ context.Context, _ string, def string) string {
 	return def
+}
+
+func (r credCooldownSettingsReader) BoolE(ctx context.Context, key string, def bool) (bool, error) {
+	if r.failKeys[key] {
+		return def, errors.New("simulated settings read failure")
+	}
+	return r.Bool(ctx, key, def), nil
+}
+
+func (r credCooldownSettingsReader) IntE(ctx context.Context, key string, def, min int) (int, error) {
+	if r.failKeys[key] {
+		return def, errors.New("simulated settings read failure")
+	}
+	return r.Int(ctx, key, def, min), nil
 }
 
 // TestApplyCredentialCooldown_ConfigurableWindows 锁「冷却窗口可配 + 按失败类型分窗」（#6-1）：

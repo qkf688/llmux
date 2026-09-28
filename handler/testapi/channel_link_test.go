@@ -317,8 +317,8 @@ func TestProviderTestHandler_ModelNotWhitelistedIsValidationFailure(t *testing.T
 	if got := gjson.Get(w.Body.String(), "data.error_type").String(); got != "validation" {
 		t.Fatalf("error_type = %q, want validation", got)
 	}
-	if err := gjson.Get(w.Body.String(), "data.error").String(); !strings.Contains(err, "不在任何分组白名单内") {
-		t.Fatalf("error = %q, want 含「不在任何分组白名单内」", err)
+	if err := gjson.Get(w.Body.String(), "data.error").String(); !strings.Contains(err, "不在任何分组白名单") || !strings.Contains(err, "自定义模型") {
+		t.Fatalf("error = %q, want 含「不在任何分组白名单」与「自定义模型」两条出路指引", err)
 	}
 	if hits.Load() != 0 {
 		t.Fatalf("upstream hits = %d, want 0（白名单未命中不得打上游）", hits.Load())

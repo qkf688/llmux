@@ -96,7 +96,9 @@ func ResolveAssociationLink(ctx context.Context, id string) (*testLink, error) {
 	}
 	candidates := channel.GroupCandidatesForModel(snapshot, mp.ProviderModel)
 	if len(candidates) == 0 {
-		return nil, fmt.Errorf("%w: 模型 %q 不在任何分组白名单内，生产路由同样不会选中它",
+		// 判定集 = 分组白名单 ∪ custom_models（与生产选路同口径）：两条都不含才判不可服务，
+		// 文案把两条出路都指出来，管理员不用猜该改白名单还是该加自定义模型。
+		return nil, fmt.Errorf("%w: 模型 %q 不在任何分组白名单、也不在自定义模型清单内，生产路由同样不会选中它（可将该模型加入供应商的自定义模型，或等模型同步回填白名单）",
 			errNoWhitelistedGroup, mp.ProviderModel)
 	}
 

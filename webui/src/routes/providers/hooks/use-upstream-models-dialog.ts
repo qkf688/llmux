@@ -145,7 +145,7 @@ export function useUpstreamModelsDialog({
     if (!provider) return;
 
     // 落点 = custom：S5 后 config.upstream_models 是死键，上游模型入目录只能手填为自定义；
-    // 上游来源的正式编辑入口在供应商表单分组白名单
+    // 上游来源没有手动编辑入口——白名单由模型同步写入，供应商表单不带该字段
     const entry = catalogData.find((item) => item.ProviderID === provider.ID);
     const custom = entry?.Custom ?? [];
     const additions = selectedUpstreamModels.filter(

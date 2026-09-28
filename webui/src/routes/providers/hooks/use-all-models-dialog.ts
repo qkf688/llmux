@@ -188,9 +188,9 @@ export function useAllModelsDialog({
     return updated;
   };
 
-  /** 目录写路径唯一入口：只维护 config.custom_models（上游来源的编辑入口在
-   *  供应商表单分组白名单）。legacy partial PUT：req.Config != "" 时后端才写
-   *  config，故空对象 config 也不会误清。 */
+  /** 目录写路径唯一入口：只维护 config.custom_models（上游来源没有手动编辑入口——
+   *  白名单由模型同步写入，供应商表单不带该字段）。legacy partial PUT：req.Config != ""
+   *  时后端才写 config，故空对象 config 也不会误清。 */
   const persistModels = async (provider: Provider, customModels: string[]) => {
     const nextConfig = buildConfigWithCustomModels(provider.Config, customModels);
     await updateProvider(provider.ID, {
@@ -266,7 +266,7 @@ export function useAllModelsDialog({
     const removalSet = new Set(
       modelsToRemove.map((item) => item.toLowerCase()),
     );
-    // 只删 custom 行：上游来源（分组白名单）不可从目录删除，编辑入口在供应商表单
+    // 只删 custom 行：上游来源（分组白名单）不可从目录删除，白名单由模型同步维护
     const nextCustom = custom.filter(
       (item) => !removalSet.has(item.toLowerCase()),
     );

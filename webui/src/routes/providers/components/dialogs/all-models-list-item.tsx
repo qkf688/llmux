@@ -131,7 +131,7 @@ export function AllModelsListItem({
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            {isUpstream ? "上游模型由分组白名单管理，请到供应商编辑弹窗调整" : "移除"}
+            {isUpstream ? "上游模型由同步维护（工具栏「同步」回填分组白名单），此处不可移除" : "移除"}
           </TooltipContent>
         </Tooltip>
       </div>

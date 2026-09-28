@@ -1,6 +1,9 @@
 package providerapi
 
-import "github.com/qkf688/llmux/models"
+import (
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/credview"
+)
 
 // ProviderTemplate 供应商配置模板。
 type ProviderTemplate struct {
@@ -63,14 +66,6 @@ type ProviderListItem struct {
 	GroupCount    int64 `json:"GroupCount"`
 }
 
-// InlineKeyItem 内联凭据详情项：掩码展示 + 凭据 ID（编辑弹窗引用该条做受控明文拉取）。
-// KeyMasked 由服务端掩码（credentialcrypto.MaskKey），短 key/解密失败退化为 ****，
-// 详情响应不含明文——明文仅经受控端点 GET …/inline-keys/raw 显式拉取。
-type InlineKeyItem struct {
-	ID        uint   `json:"ID"`
-	KeyMasked string `json:"KeyMasked"`
-}
-
 // InlineKeyRawItem 受控明文端点返回项：按凭据 id 归位，前端整组替换掩码行时不依赖
 // 数组顺序——删掩码行未保存、并发保存改动同组，都不会把明文错位归到别的行上。
 type InlineKeyRawItem struct {
@@ -83,13 +78,13 @@ type InlineKeysRawData struct {
 	Keys []InlineKeyRawItem `json:"keys"`
 }
 
-// GroupDetail 详情页分组：内嵌 KeyGroup + 派生 Source + inline 凭据掩码项
-// （管理端 JWT 域，安全对齐号池 KeyMasked 体系；明文不出常规响应）。
+// GroupDetail 详情页分组：内嵌 KeyGroup + 派生 Source + inline 凭据视图项
+// （掩码/状态/冷却等由 service/credview 单源提供，与号池页同一形状；明文不出常规响应）。
 // PoolID 三态指针禁 omitempty；InlineKeys 空数组表示 inline 无 key 或 pool 来源。
 type GroupDetail struct {
 	models.KeyGroup
 	Source     string          `json:"Source"`
-	InlineKeys []InlineKeyItem `json:"InlineKeys"`
+	InlineKeys []credview.View `json:"InlineKeys"`
 }
 
 // ProviderDetail 供应商详情：Provider + 展开的 endpoints/groups（编辑弹窗回填用）。

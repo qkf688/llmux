@@ -6,6 +6,7 @@ import (
 	"github.com/qkf688/llmux/handler/associations"
 	"github.com/qkf688/llmux/handler/auth"
 	"github.com/qkf688/llmux/handler/autoassoc"
+	"github.com/qkf688/llmux/handler/credentials"
 	"github.com/qkf688/llmux/handler/database"
 	"github.com/qkf688/llmux/handler/importexport"
 	"github.com/qkf688/llmux/handler/logs"
@@ -73,6 +74,7 @@ func RegisterAll(r *gin.Engine, d Deps) {
 	virtualmodels.Register(api)
 
 	pools.Register(api)
+	credentials.Register(api)
 
 	apikeys.Register(api)
 

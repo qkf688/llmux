@@ -9,14 +9,13 @@ import (
 	"github.com/qkf688/llmux/handler/testsupport"
 )
 
-// TestRegisterRouteOrder_BatchBeforeCredID 锁定注册顺序契约：
-// /pools/:id/credentials/batch/* 固定段必须优先于 /pools/:id/credentials/:credId 注册，
-// 否则 gin 会把 "batch" 当成 credId 捕获，批量端点被单条路径劫持。
+// 号池域的路由顺序契约：批量导入（静态段 batch）与按凭据测试（:credId 子树）必须共存且
+// 互不遮蔽。凭据自身的批量端点已迁到 handler/credentials（那里的顺序契约由
+// TestRegisterRouteOrder_StaticSegmentsBeforeID 锁定）。
 //
-// 判别式：batch 固定段若正确命中批量端点，会先做号池存在性校验，
-// 池 9999 不存在 → code=404 "Pool not found"；
-// 若被 :credId 劫持，则会先解析 credId="batch" → code=400 "Invalid ID format"。
-func TestRegisterRouteOrder_BatchBeforeCredID(t *testing.T) {
+// 判别式：两条路径都先做号池存在性校验，池 9999 不存在 → code=404 "Pool not found"；
+// 被误吞/遮蔽时表现为 405/404 未注册或落进另一 handler 的解析错误。
+func TestRegisterRouteOrder_ImportNotShadowedByCredIDTest(t *testing.T) {
 	testsupport.InitTestDB(t)
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -28,9 +27,8 @@ func TestRegisterRouteOrder_BatchBeforeCredID(t *testing.T) {
 		path   string
 		body   string
 	}{
-		{"batch/status 固定段优先", "PATCH", "/pools/9999/credentials/batch/status", `{"ids":[1],"status":"disabled"}`},
-		{"batch 固定段优先", "DELETE", "/pools/9999/credentials/batch", `{"ids":[1]}`},
-		{"batch/import 固定段优先", "POST", "/pools/9999/credentials/batch/import", `{"keys":["sk-route-import-ABCD1234"]}`},
+		{"batch/import 未被 :credId/test 遮蔽", "POST", "/pools/9999/credentials/batch/import", `{"keys":["sk-route-import-ABCD1234"]}`},
+		{"credId/test 正确路由", "POST", "/pools/9999/credentials/5/test", `{}`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -41,44 +39,9 @@ func TestRegisterRouteOrder_BatchBeforeCredID(t *testing.T) {
 			if w.Code != 200 {
 				t.Fatalf("HTTP %d, 期望 200 信封, body=%s", w.Code, w.Body.String())
 			}
-			body := w.Body.String()
-			if strings.Contains(body, "Pool not found") {
-				return // 命中批量端点（池存在性 404）
+			if body := w.Body.String(); !strings.Contains(body, "Pool not found") {
+				t.Fatalf("未路由到预期端点（应命中池存在性 404）: body=%s", body)
 			}
-			if strings.Contains(body, "Invalid ID format") {
-				t.Fatalf("batch 被 :credId 劫持（Invalid ID format）: body=%s", body)
-			}
-			t.Fatalf("未命中任何预期分支: body=%s", body)
 		})
-	}
-}
-
-// TestRegisterRouteOrder_TestSuffixRoutedAndBatchImportNotShadowed 锁定新增的
-// POST /pools/:id/credentials/:credId/test 与既有 POST /pools/:id/credentials/batch/import
-// 互不遮蔽（:credId 参数子树与 batch 静态子树共存）。
-//
-// 判别式：POST .../credentials/5/test → 命中 TestCredential → requirePool(9999 不存在)
-// 回 code=404 "Pool not found"（而非被 batch/import 误吞或 405/404 路由未注册）；
-// POST .../credentials/batch/import → 仍命中批量导入（池存在性 404）。
-func TestRegisterRouteOrder_TestSuffixRoutedAndBatchImportNotShadowed(t *testing.T) {
-	testsupport.InitTestDB(t)
-	gin.SetMode(gin.TestMode)
-	r := gin.New()
-	Register(r)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest("POST", "/pools/9999/credentials/5/test", strings.NewReader("{}"))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-	if body := w.Body.String(); !strings.Contains(body, "Pool not found") {
-		t.Fatalf(".../credentials/5/test 未路由到 TestCredential（应命中池存在性 404）: body=%s", body)
-	}
-
-	w2 := httptest.NewRecorder()
-	req2 := httptest.NewRequest("POST", "/pools/9999/credentials/batch/import", strings.NewReader(`{"keys":["sk-x"]}`))
-	req2.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w2, req2)
-	if body := w2.Body.String(); !strings.Contains(body, "Pool not found") {
-		t.Fatalf("batch/import 被 :credId/test 遮蔽: body=%s", body)
 	}
 }

@@ -1,8 +1,6 @@
 package pools
 
 import (
-	"time"
-
 	"github.com/qkf688/llmux/models"
 )
 
@@ -39,63 +37,6 @@ type PoolRefGroup struct {
 	ProviderName string `json:"ProviderName"`
 	GroupID      uint   `json:"GroupID"`
 	GroupName    string `json:"GroupName"`
-}
-
-// CredentialListItem 凭据列表项：掩码后的展示形态，不含明文/密文 Key。
-type CredentialListItem struct {
-	ID             uint       `json:"ID"`
-	PoolID         *uint      `json:"PoolID"`
-	GroupID        *uint      `json:"GroupID"`
-	Status         string     `json:"Status"`
-	Note           string     `json:"Note"`
-	KeyMasked      string     `json:"KeyMasked"`
-	CooldownUntil  *time.Time `json:"CooldownUntil"`
-	CooldownReason string     `json:"CooldownReason"`
-	FailCount      int        `json:"FailCount"`
-	LastUsedAt     *time.Time `json:"LastUsedAt"`
-	LastProbeAt    *time.Time `json:"LastProbeAt"`
-	TotalRequests  int64      `json:"TotalRequests"`
-	TotalErrors    int64      `json:"TotalErrors"`
-	TotalTokens    int64      `json:"TotalTokens"`
-	CreatedAt      time.Time  `json:"CreatedAt"`
-	UpdatedAt      time.Time  `json:"UpdatedAt"`
-}
-
-// CredentialListData 凭据列表分页信封。
-type CredentialListData struct {
-	Items    []CredentialListItem `json:"items"`
-	Total    int64                `json:"total"`
-	Page     int                  `json:"page"`
-	PageSize int                  `json:"page_size"`
-}
-
-// CreateCredentialRequest 凭据创建请求体（设计定案：每条 = 一个明文 key）。
-type CreateCredentialRequest struct {
-	Key  string `json:"key"`
-	Note string `json:"note"`
-}
-
-// UpdateCredentialRequest 凭据单条更新请求体（note 可清空，status 可切）。
-// 均用指针区分「字段缺席」与「显式置空/改值」。
-type UpdateCredentialRequest struct {
-	Note   *string `json:"note"`
-	Status *string `json:"status"`
-}
-
-// BatchCredentialStatusRequest 批量启停请求体。
-type BatchCredentialStatusRequest struct {
-	IDs    []uint `json:"ids"`
-	Status string `json:"status"`
-}
-
-// BatchCredentialDeleteRequest 批量删除请求体。
-type BatchCredentialDeleteRequest struct {
-	IDs []uint `json:"ids"`
-}
-
-// CredentialRawData 明文查看响应（受控端点 GET .../raw）。
-type CredentialRawData struct {
-	Key string `json:"key"`
 }
 
 // CredentialTestResult 号池详情「按凭据测试」（#24-B）响应：与 handler/testapi 四个连通测试

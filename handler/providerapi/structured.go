@@ -11,6 +11,7 @@ import (
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/providers"
 	"github.com/qkf688/llmux/repository"
+	"github.com/qkf688/llmux/service/credview"
 )
 
 const (
@@ -447,26 +448,20 @@ func loadProviderDetail(ctx context.Context, repos *repository.Repositories, pro
 		credsByGroup[*c.GroupID] = append(credsByGroup[*c.GroupID], c)
 	}
 
-	cipher := credentialcrypto.Default()
 	details := make([]GroupDetail, 0, len(groups))
 	for _, g := range groups {
 		gd := GroupDetail{
 			KeyGroup:   g,
-			InlineKeys: []InlineKeyItem{},
+			InlineKeys: []credview.View{},
 		}
 		if g.PoolID != nil {
 			gd.Source = groupSourcePool
 		} else {
 			gd.Source = groupSourceInline
-			for _, c := range credsByGroup[g.ID] {
-				// 详情只出服务端掩码（对齐号池 KeyMasked 体系），明文经受控端点单独拉。
-				// 解密失败/无 cipher 的降级与留痕由 MaskStored 单源负责（与号池同策略）：
-				// 掩码态下用户仍能按 id 保留该条，不会像旧空串方案那样静默丢凭据。
-				gd.InlineKeys = append(gd.InlineKeys, InlineKeyItem{
-					ID:        c.ID,
-					KeyMasked: credentialcrypto.MaskStored(cipher, c.Key, "credential_id", c.ID, "group_id", g.ID),
-				})
-			}
+			// 凭据视图单源（service/credview）：与号池页同一形状——掩码、状态、冷却、连败
+			// 都在里面，编辑弹窗据此显示状态徽标与「启用」（内联 key 判停后的人工恢复）。
+			// 明文仍只经受控 raw 端点拉取；解密失败/无 cipher 的降级与留痕由 MaskStored 负责。
+			gd.InlineKeys = credview.ViewsOf(credsByGroup[g.ID])
 		}
 		details = append(details, gd)
 	}

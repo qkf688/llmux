@@ -61,10 +61,26 @@ var groupNestedKeys = []responseKeyContract{
 	{key: "InlineKeys"},
 }
 
-// inline key 掩码项契约：详情路径只出 ID + KeyMasked（明文仅受控 raw 端点拉取）。
+// inline key 视图项契约：详情路径出完整的凭据视图（service/credview.View 单源，
+// 与 /api/credentials 列表同一形状）——掩码 + 状态/冷却/连败（内联 key 判停后的人工
+// 恢复靠这些字段驱动 UI），明文仅受控 raw 端点拉取。
 var inlineKeyItemNestedKeys = []responseKeyContract{
 	{key: "ID"},
+	{key: "PoolID", nilable: true},
+	{key: "GroupID", nilable: true},
+	{key: "Status"},
+	{key: "Note"},
 	{key: "KeyMasked"},
+	{key: "CooldownUntil", nilable: true},
+	{key: "CooldownReason"},
+	{key: "FailCount"},
+	{key: "LastUsedAt", nilable: true},
+	{key: "LastProbeAt", nilable: true},
+	{key: "TotalRequests"},
+	{key: "TotalErrors"},
+	{key: "TotalTokens"},
+	{key: "CreatedAt"},
+	{key: "UpdatedAt"},
 }
 
 func assertResponseKeys(t *testing.T, raw, prefix string, keys []responseKeyContract) {
@@ -172,7 +188,7 @@ func TestProviderStructuredResponse_KeysPresent(t *testing.T) {
 		t.Run(name+"/nested", func(t *testing.T) {
 			assertResponseKeys(t, body, "data.Endpoints.0.", endpointNestedKeys)
 			assertResponseKeys(t, body, "data.Groups.0.", groupNestedKeys)
-			// inline 组掩码项契约：ID + KeyMasked（服务端掩码；不含任何明文键）
+			// inline 组视图项契约：完整凭据视图（掩码 + 状态/冷却/连败），不含任何明文键
 			assertResponseKeys(t, body, "data.Groups.0.InlineKeys.0.", inlineKeyItemNestedKeys)
 			if got := gjson.Get(body, "data.Groups.0.InlineKeys.0.KeyMasked").String(); got == "" {
 				t.Fatalf("InlineKeys.0.KeyMasked should not be empty: %s", body)

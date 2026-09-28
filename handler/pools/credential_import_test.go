@@ -150,8 +150,7 @@ func TestBatchImport_InPoolDuplicate(t *testing.T) {
 	setupCipherForCredTest(t)
 	poolID := createPoolAndGetID(t, "池内去重池")
 	existing := "sk-pool-dup-ABCD1234"
-	body0, _ := createCredentialViaHandler(t, poolID, `{"key":"`+existing+`"}`)
-	origID := gjson.Get(body0, "data.ID").Uint()
+	origID := seedCredentialInPool(t, poolID, existing)
 
 	body, _ := batchImportViaHandler(t, poolID, importKeysBody(existing, "sk-pool-new-ABCD1234"))
 	if gjson.Get(body, "code").Int() != 200 {
@@ -189,9 +188,7 @@ func TestBatchImport_Mixed(t *testing.T) {
 	setupCipherForCredTest(t)
 	poolID := createPoolAndGetID(t, "混合池")
 	poolDup := "sk-mix-pool-ABCD1234"
-	if body0, code := createCredentialViaHandler(t, poolID, `{"key":"`+poolDup+`"}`); code != 200 {
-		t.Fatalf("预置池内 key 失败 body=%s", body0)
-	}
+	seedCredentialInPool(t, poolID, poolDup)
 	keys := []string{
 		"sk-mix-new1-ABCD1234",     // 0 imported
 		poolDup,                    // 1 skipped duplicate_in_pool

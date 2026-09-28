@@ -434,68 +434,74 @@ func TestKeyGroupRepo_CountByPoolIDs(t *testing.T) {
 	}
 }
 
-// TestCredentialRepo_BatchWithinPool 锁定批量启停/删除的池内限界语义：
-// 越池 ID 不计入 RowsAffected，也不改动他池数据（S2-3 批量端点防越池误操作）。
-func TestCredentialRepo_BatchWithinPool(t *testing.T) {
+// TestCredentialRepo_BatchByIDs 锁定按 ID 批量启停/删除语义：凭据是第一等资源后，
+// 批量口径 = 给定 IDs 命中即改，不再有号池限界（归属过滤只存在于列表查询侧）；
+// 归属不同的凭据（号池 / 分组内联）在同一次调用里一并生效——内联凭据的人工恢复
+// 与批量启停正是走这条路径。
+func TestCredentialRepo_BatchByIDs(t *testing.T) {
 	ctx := context.Background()
 	repo := NewCredentialRepo(newChannelTestDB(t))
 
 	poolA, poolB := uint(1), uint(2)
+	groupC := uint(3)
 	creds := []*models.Credential{
 		{Key: "enc-a1", KeyHash: "ha1", PoolID: &poolA, Status: models.CredentialStatusActive},
 		{Key: "enc-a2", KeyHash: "ha2", PoolID: &poolA, Status: models.CredentialStatusActive},
-		{Key: "enc-a3", KeyHash: "ha3", PoolID: &poolA, Status: models.CredentialStatusActive},
 		{Key: "enc-b1", KeyHash: "hb1", PoolID: &poolB, Status: models.CredentialStatusActive},
+		{Key: "enc-c1", KeyHash: "hc1", GroupID: &groupC, Status: models.CredentialStatusActive},
 	}
 	for _, c := range creds {
 		if err := repo.Create(ctx, c); err != nil {
 			t.Fatalf("Create: %v", err)
 		}
 	}
-	idsA := []uint{creds[0].ID, creds[1].ID}
-	idsB := []uint{creds[3].ID}
+	all := []uint{creds[0].ID, creds[1].ID, creds[2].ID, creds[3].ID}
 
-	// 批量启停：池A操作带入池B的ID，只应命中池A的2条
+	// 批量启停：跨归属的 ID 一律命中（含分组内联凭据）
 	statusFields := map[string]any{"status": models.CredentialStatusDisabled}
-	updated, err := repo.UpdateFieldsByIDs(ctx, poolA, append(idsA, idsB...), statusFields)
+	updated, err := repo.UpdateFieldsByIDs(ctx, all, statusFields)
 	if err != nil {
 		t.Fatalf("UpdateFieldsByIDs: %v", err)
 	}
-	if updated != 2 {
-		t.Fatalf("UpdateFieldsByIDs RowsAffected = %d, want 2", updated)
+	if updated != 4 {
+		t.Fatalf("UpdateFieldsByIDs RowsAffected = %d, want 4", updated)
 	}
-	got, _ := repo.Get(ctx, creds[0].ID)
-	if got.Status != models.CredentialStatusDisabled {
-		t.Fatalf("池A凭据未更新: %+v", got)
-	}
-	gotB, _ := repo.Get(ctx, creds[3].ID)
-	if gotB.Status != models.CredentialStatusActive {
-		t.Fatalf("池B凭据被越池改动: %+v", gotB)
+	for _, c := range creds {
+		got, err := repo.Get(ctx, c.ID)
+		if err != nil {
+			t.Fatalf("Get(%d): %v", c.ID, err)
+		}
+		if got.Status != models.CredentialStatusDisabled {
+			t.Fatalf("凭据 %d 未更新: %+v", c.ID, got)
+		}
 	}
 
 	// 空 IDs 直接返回 0（不产生 SQL）
-	if updated, err := repo.UpdateFieldsByIDs(ctx, poolA, nil, statusFields); err != nil || updated != 0 {
+	if updated, err := repo.UpdateFieldsByIDs(ctx, nil, statusFields); err != nil || updated != 0 {
 		t.Fatalf("UpdateFieldsByIDs(nil) = (%d, %v), want (0, nil)", updated, err)
 	}
 
-	// 批量删除：同样只删池内
-	deleted, err := repo.DeleteByIDs(ctx, poolA, append(idsA, idsB...))
+	// 批量删除：同样按 ID 命中，跨归属一并软删
+	deleted, err := repo.DeleteByIDs(ctx, all)
 	if err != nil {
 		t.Fatalf("DeleteByIDs: %v", err)
 	}
-	if deleted != 2 {
-		t.Fatalf("DeleteByIDs RowsAffected = %d, want 2", deleted)
+	if deleted != 4 {
+		t.Fatalf("DeleteByIDs RowsAffected = %d, want 4", deleted)
 	}
 	byPoolA, err := repo.List(ctx, CredentialFilter{PoolID: &poolA})
 	if err != nil {
 		t.Fatalf("List byPoolA: %v", err)
 	}
-	if len(byPoolA) != 1 {
-		t.Fatalf("池A剩余凭据数 = %d, want 1", len(byPoolA))
+	if len(byPoolA) != 0 {
+		t.Fatalf("池A剩余凭据数 = %d, want 0（已软删）", len(byPoolA))
 	}
-	byPoolB, _ := repo.List(ctx, CredentialFilter{PoolID: &poolB})
-	if len(byPoolB) != 1 {
-		t.Fatalf("池B凭据数 = %d, want 1（越池不应被删）", len(byPoolB))
+	byGroup, err := repo.List(ctx, CredentialFilter{GroupID: &groupC})
+	if err != nil {
+		t.Fatalf("List byGroup: %v", err)
+	}
+	if len(byGroup) != 0 {
+		t.Fatalf("分组内联剩余凭据数 = %d, want 0（已软删）", len(byGroup))
 	}
 }
 

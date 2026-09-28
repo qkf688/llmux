@@ -40,6 +40,10 @@ type credentialCipher interface {
 
 // BatchImportCredentials 批量粘贴导入凭据：去重（批内首现 + 池内现有）+ 加密落库 +
 // 失败行回显。行级事务语义：单行加密/落库异常收集为 failed 行，不阻断其余行落库。
+//
+// 为什么留在号池域而不是凭据域（handler/credentials）：这是一次「往这个池里灌 N 条 key」
+// 的池级动作（含池内 hash 去重 + 逐行回显契约），入参是池而不是凭据；凭据自身的属性与
+// 动作（状态 / 备注 / 明文 / 以后的凭据级设置）都在凭据域，两边职责不重叠。
 // POST /api/pools/:id/credentials/batch/import
 // 请求体 {"keys": ["sk-1", ...]}（前端按行拆分后传数组，服务端不做文本解析）；
 // 单请求上限 maxCredentialImportBatch 条。
@@ -147,67 +151,4 @@ func importCredentialRows(ctx context.Context, repo repository.CredentialRepo, p
 		data.Rows = append(data.Rows, BatchImportRow{Index: i, Key: credentialcrypto.MaskKey(trimmed), Status: importStatusImported})
 	}
 	return data, nil
-}
-
-// BatchUpdateCredentialStatus 批量启停同一号池下的凭据（池内限界，不越池）。
-// PATCH /api/pools/:id/credentials/batch/status
-func BatchUpdateCredentialStatus(c *gin.Context) {
-	poolID, ok := httpx.ParseUintParamAllowZero(c, "id")
-	if !ok {
-		return
-	}
-	var req BatchCredentialStatusRequest
-	if !httpx.BindJSON(c, &req) {
-		return
-	}
-	if len(req.IDs) == 0 {
-		httpresp.BadRequest(c, "No IDs provided")
-		return
-	}
-	if !models.IsValidCredentialStatus(req.Status) {
-		httpresp.BadRequest(c, "Invalid status")
-		return
-	}
-	ctx := c.Request.Context()
-	if _, ok := requirePool(c, ctx, poolID); !ok {
-		return
-	}
-	// 恢复 active 时按状态机约定连带重置鉴权失败计数（单一来源 models.CredentialRecoveryFields）
-	fields := map[string]any{"status": req.Status}
-	for k, v := range models.CredentialRecoveryFields(req.Status) {
-		fields[k] = v
-	}
-	updated, err := repos().Credential.UpdateFieldsByIDs(ctx, poolID, req.IDs, fields)
-	if err != nil {
-		httpresp.InternalErrorMessage(c, "Failed to update status", err)
-		return
-	}
-	httpresp.Success(c, map[string]any{"updated": updated})
-}
-
-// BatchDeleteCredentials 批量删除同一号池下的凭据（池内限界，不越池）。
-// DELETE /api/pools/:id/credentials/batch
-func BatchDeleteCredentials(c *gin.Context) {
-	poolID, ok := httpx.ParseUintParamAllowZero(c, "id")
-	if !ok {
-		return
-	}
-	var req BatchCredentialDeleteRequest
-	if !httpx.BindJSON(c, &req) {
-		return
-	}
-	if len(req.IDs) == 0 {
-		httpresp.BadRequest(c, "No IDs provided")
-		return
-	}
-	ctx := c.Request.Context()
-	if _, ok := requirePool(c, ctx, poolID); !ok {
-		return
-	}
-	deleted, err := repos().Credential.DeleteByIDs(ctx, poolID, req.IDs)
-	if err != nil {
-		httpresp.InternalErrorMessage(c, "Failed to delete credentials", err)
-		return
-	}
-	httpresp.Success(c, map[string]any{"deleted": deleted})
 }

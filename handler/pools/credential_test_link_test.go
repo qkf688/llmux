@@ -122,8 +122,7 @@ func TestTestCredential_HitsUpstreamWithTargetKey(t *testing.T) {
 	srv := startCredTestUpstream(t, map[string]struct{}{"Bearer " + plain: {}}, sink)
 
 	poolID := createPoolAndGetID(t, "链路池")
-	credBody, _ := createCredentialViaHandler(t, poolID, `{"key":"`+plain+`"}`)
-	credID := uint(gjson.Get(credBody, "data.ID").Uint())
+	credID := seedCredentialInPool(t, poolID, plain)
 	group := seedCredTestUpstreamChain(t, poolID, "链路供应商", "openai", srv.URL)
 
 	body, httpCode := callTestCredential(t, poolID, credID)
@@ -175,10 +174,8 @@ func TestTestCredential_DoesNotFallBackToFirstUsableCredential(t *testing.T) {
 	srv := startCredTestUpstream(t, map[string]struct{}{"Bearer sk-target-XY99OK": {}}, sink)
 
 	poolID := createPoolAndGetID(t, "两把钥匙池")
-	firstBody, _ := createCredentialViaHandler(t, poolID, `{"key":"sk-first-DEADBEEF"}`)
-	_ = firstBody // ID 更小、故意是坏 key
-	targetBody, _ := createCredentialViaHandler(t, poolID, `{"key":"sk-target-XY99OK"}`)
-	targetID := uint(gjson.Get(targetBody, "data.ID").Uint())
+	seedCredentialInPool(t, poolID, "sk-first-DEADBEEF") // ID 更小、故意是坏 key
+	targetID := seedCredentialInPool(t, poolID, "sk-target-XY99OK")
 
 	seedCredTestUpstreamChain(t, poolID, "两把钥匙供应商", "openai", srv.URL)
 
@@ -203,8 +200,7 @@ func TestTestCredential_UpstreamAuthFailureReportsNotWriteBack(t *testing.T) {
 	srv := startCredTestUpstream(t, nil, sink) // 全不放行 → 必 401
 
 	poolID := createPoolAndGetID(t, "坏钥匙池")
-	credBody, _ := createCredentialViaHandler(t, poolID, `{"key":"`+plain+`"}`)
-	credID := uint(gjson.Get(credBody, "data.ID").Uint())
+	credID := seedCredentialInPool(t, poolID, plain)
 	seedCredTestUpstreamChain(t, poolID, "坏钥匙供应商", "openai", srv.URL)
 
 	body, httpCode := callTestCredential(t, poolID, credID)
@@ -252,8 +248,7 @@ func TestTestCredential_CrossPoolIsNotFound(t *testing.T) {
 	_ = startCredTestUpstream(t, nil, sink)
 
 	poolA := createPoolAndGetID(t, "越池A")
-	body, _ := createCredentialViaHandler(t, poolA, `{"key":"sk-cross-ABCD1234"}`)
-	credID := uint(gjson.Get(body, "data.ID").Uint())
+	credID := seedCredentialInPool(t, poolA, "sk-cross-ABCD1234")
 	poolB := createPoolAndGetID(t, "越池B")
 
 	resp, httpCode := callTestCredential(t, poolB, credID)
@@ -278,8 +273,7 @@ func TestTestCredential_PoolWithoutReferencingGroup(t *testing.T) {
 	_ = startCredTestUpstream(t, nil, sink)
 
 	poolID := createPoolAndGetID(t, "无组池")
-	body, _ := createCredentialViaHandler(t, poolID, `{"key":"sk-nogroup-ABCD1234"}`)
-	credID := uint(gjson.Get(body, "data.ID").Uint())
+	credID := seedCredentialInPool(t, poolID, "sk-nogroup-ABCD1234")
 
 	resp, httpCode := callTestCredential(t, poolID, credID)
 	if httpCode != http.StatusOK {
@@ -318,8 +312,7 @@ func TestTestCredential_PicksLowestProviderThenGroup(t *testing.T) {
 	loseSrv := startCredTestUpstream(t, map[string]struct{}{"Bearer " + plain: {}}, loseSink)
 
 	poolID := createPoolAndGetID(t, "多组池")
-	credBody, _ := createCredentialViaHandler(t, poolID, `{"key":"`+plain+`"}`)
-	credID := uint(gjson.Get(credBody, "data.ID").Uint())
+	credID := seedCredentialInPool(t, poolID, plain)
 
 	// providerWin 先建 → ProviderID 更小；但其分组后建 → GroupID 更大。
 	providerWin := models.Provider{Name: "低ID供应商", Type: "openai", Config: `{"base_url":"https://win.example"}`}
@@ -381,8 +374,7 @@ func TestTestCredential_PoolWithoutTestModel_FailsValidationNoUpstream(t *testin
 
 	// 池故意不设测试模型（createPoolAndGetID 只给 name）。
 	poolID := createPoolAndGetID(t, "缺测试模型池")
-	credBody, _ := createCredentialViaHandler(t, poolID, `{"key":"sk-notm-ABCD1234"}`)
-	credID := uint(gjson.Get(credBody, "data.ID").Uint())
+	credID := seedCredentialInPool(t, poolID, "sk-notm-ABCD1234")
 
 	provider := models.Provider{Name: "缺模型供应商", Type: "openai", Config: `{"base_url":"https://should-not-use.example"}`}
 	if err := models.DB.Create(&provider).Error; err != nil {

@@ -53,13 +53,14 @@ type CredentialRepo interface {
 	// DeleteByPoolID 删除指定号池下的全部凭据（软删），返回受影响行数。
 	// 号池删除时的级联清理用；分组内联凭据（GroupID 归属）不受影响。
 	DeleteByPoolID(ctx context.Context, poolID uint) (int64, error)
-	// UpdateFieldsByIDs 按字段 map 批量更新同一号池下指定 IDs 的凭据（池内限界
-	// 防越池，map 可显式写 NULL/零值）。批量启停与恢复重置共用（#6-2：切回
-	// active 时连带清 fail_count/cooldown_reason，字段由调用方经
-	// models.CredentialRecoveryFields 构造，本层不掺状态机语义）。
-	UpdateFieldsByIDs(ctx context.Context, poolID uint, ids []uint, fields map[string]any) (int64, error)
-	// DeleteByIDs 批量软删同一号池下指定 IDs 的凭据（池内限界防越池）。
-	DeleteByIDs(ctx context.Context, poolID uint, ids []uint) (int64, error)
+	// UpdateFieldsByIDs 按字段 map 批量更新指定 IDs 的凭据（map 可显式写 NULL/零值）。
+	// 凭据是第一等资源后按 ID 直改，不再带号池限界——归属过滤只用于列表查询，
+	// 不用于写路径。批量启停与恢复重置共用（#6-2：切回 active 时连带清
+	// fail_count/cooldown_reason，字段由调用方经 models.CredentialRecoveryFields
+	// 构造，本层不掺状态机语义）。
+	UpdateFieldsByIDs(ctx context.Context, ids []uint, fields map[string]any) (int64, error)
+	// DeleteByIDs 批量软删指定 IDs 的凭据。
+	DeleteByIDs(ctx context.Context, ids []uint) (int64, error)
 	// ExistingHashes 返回指定号池下现存（未软删）凭据中命中的 KeyHash 集合，
 	// 供批量导入一次查询完成池内查重（防逐条 N+1）。KeyHash 非 unique，去重是
 	// 应用层语义；跨池同 key 复用合法，不在此处做全局拦截。
@@ -262,19 +263,19 @@ func (r *credentialRepo) DeleteByPoolID(ctx context.Context, poolID uint) (int64
 	return result.RowsAffected, result.Error
 }
 
-func (r *credentialRepo) UpdateFieldsByIDs(ctx context.Context, poolID uint, ids []uint, fields map[string]any) (int64, error) {
+func (r *credentialRepo) UpdateFieldsByIDs(ctx context.Context, ids []uint, fields map[string]any) (int64, error) {
 	if len(ids) == 0 || len(fields) == 0 {
 		return 0, nil
 	}
-	result := r.db.WithContext(ctx).Model(&models.Credential{}).Where("pool_id = ? AND id IN ?", poolID, ids).Updates(fields)
+	result := r.db.WithContext(ctx).Model(&models.Credential{}).Where("id IN ?", ids).Updates(fields)
 	return result.RowsAffected, result.Error
 }
 
-func (r *credentialRepo) DeleteByIDs(ctx context.Context, poolID uint, ids []uint) (int64, error) {
+func (r *credentialRepo) DeleteByIDs(ctx context.Context, ids []uint) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	result := r.db.WithContext(ctx).Where("pool_id = ? AND id IN ?", poolID, ids).Delete(&models.Credential{})
+	result := r.db.WithContext(ctx).Where("id IN ?", ids).Delete(&models.Credential{})
 	return result.RowsAffected, result.Error
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/common/credentialcrypto"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
@@ -136,10 +137,10 @@ func DropCustomModels(config string) (string, error) {
 	if err := json.Unmarshal([]byte(config), &parsed); err != nil {
 		return "", fmt.Errorf("channel: parse config to drop custom_models: %w", err)
 	}
-	if _, ok := parsed["custom_models"]; !ok {
+	if _, ok := parsed[common.CustomModelsConfigKey]; !ok {
 		return config, nil
 	}
-	delete(parsed, "custom_models")
+	delete(parsed, common.CustomModelsConfigKey)
 	out, err := json.Marshal(parsed)
 	if err != nil {
 		return "", fmt.Errorf("channel: marshal config after dropping custom_models: %w", err)

@@ -357,3 +357,61 @@ func TestGroupCandidatesForModel_WhitelistOnlyDeterministic(t *testing.T) {
 		t.Fatal("空快照必须返回空候选")
 	}
 }
+
+// customModelSnapshot 供应商声明了自定义模型 cm-1（Provider.Config.custom_models），
+// 但两个分组的白名单都非空且**不含**它——正是「上游 /models 不返回、只在自定义清单里」
+// 的场景（2026-09-28 拍板：自定义模型 = 供应商级声明授权，全部分组可服务）。
+func customModelSnapshot() *Snapshot {
+	return &Snapshot{
+		Provider: models.Provider{
+			Model:  gorm.Model{ID: 1},
+			Type:   "openai",
+			Config: `{"base_url":"https://default.example/v1","custom_models":["cm-1"]}`,
+		},
+		Endpoints: []models.Endpoint{
+			{ProviderID: 1, Protocol: string(consts.ProtocolOpenAI), URL: "", Enabled: true},
+		},
+		Groups: []models.KeyGroup{
+			{Model: gorm.Model{ID: 1}, ProviderID: 1, Name: "组A", Weight: 1, Models: "other-1"},
+			{Model: gorm.Model{ID: 2}, ProviderID: 1, Name: "组B", Weight: 2, Models: "other-2"},
+		},
+		CredentialsByGroup: map[uint][]models.Credential{
+			1: {{KeyHash: "h-a"}},
+			2: {{KeyHash: "h-b"}},
+		},
+	}
+}
+
+// TestSelectGroup_CustomModelBypassesWhitelist 锁「自定义模型不受分组白名单约束」：
+// 模型在 Provider.Config.custom_models 里时全部分组可选（改前：白名单不含 → 恒
+// ErrNoGroupMatches，正是「自定义模型无组可服务」缺陷）；不在清单里的模型维持白名单口径。
+func TestSelectGroup_CustomModelBypassesWhitelist(t *testing.T) {
+	snap := customModelSnapshot()
+
+	g, err := SelectGroup(&Selector{}, snap, "cm-1")
+	if err != nil {
+		t.Fatalf("SelectGroup(cm-1) error: %v（自定义模型必须可选中组）", err)
+	}
+	if g.Name != "组A" && g.Name != "组B" {
+		t.Fatalf("SelectGroup(cm-1) = %q, want 组A/组B", g.Name)
+	}
+
+	// 非自定义且白名单不含：维持白名单过滤口径
+	if _, err := SelectGroup(&Selector{}, snap, "not-declared"); !errors.Is(err, ErrNoGroupMatches) {
+		t.Fatalf("SelectGroup(not-declared) err = %v, want %v", err, ErrNoGroupMatches)
+	}
+}
+
+// TestGroupCandidatesForModel_CustomModelAllGroups 锁连通测试与生产选路同口径：
+// 自定义模型的候选组 = 该供应商全部分组（管理端测试不得给出「生产走不到」的假结论）。
+func TestGroupCandidatesForModel_CustomModelAllGroups(t *testing.T) {
+	snap := customModelSnapshot()
+
+	got := GroupCandidatesForModel(snap, "cm-1")
+	if len(got) != 2 {
+		t.Fatalf("候选数 = %d, want 2（自定义模型全部分组可服务）", len(got))
+	}
+	if got[0].ID != 1 || got[1].ID != 2 {
+		t.Fatalf("顺序 = %v, want ID ASC [1 2]", []uint{got[0].ID, got[1].ID})
+	}
+}

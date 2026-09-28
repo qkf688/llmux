@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/qkf688/llmux/balancer"
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/models"
 )
 
@@ -35,7 +36,7 @@ func selectGroupWithPrefer(s *Selector, snapshot *Snapshot, upstreamModel string
 
 // preferredGroup 在同套过滤产物（groupWeightBuckets）里找钉定组：不入桶 = 钉定失效。
 func preferredGroup(snapshot *Snapshot, upstreamModel string, preferID uint) (models.KeyGroup, bool) {
-	for _, gs := range groupWeightBuckets(snapshot.Groups, snapshot.Provider.ID, upstreamModel) {
+	for _, gs := range groupWeightBuckets(snapshot, upstreamModel) {
 		for _, g := range gs {
 			if g.ID == preferID {
 				return g, true
@@ -60,7 +61,7 @@ func preferredGroup(snapshot *Snapshot, upstreamModel string, preferID uint) (mo
 // upstreamModel 是**上游模型名**（白名单命名空间，见 groupMatchesModel）。
 // 无分组通过过滤 → ErrNoGroupMatches，由上层（#13 故障转移）判定分组成败。
 func SelectGroup(s *Selector, snapshot *Snapshot, upstreamModel string) (models.KeyGroup, error) {
-	buckets := groupWeightBuckets(snapshot.Groups, snapshot.Provider.ID, upstreamModel)
+	buckets := groupWeightBuckets(snapshot, upstreamModel)
 	if len(buckets) == 0 {
 		return models.KeyGroup{}, fmt.Errorf(
 			"%w: provider %d upstream model %q (%d groups)", ErrNoGroupMatches, snapshot.Provider.ID, upstreamModel, len(snapshot.Groups))
@@ -83,16 +84,17 @@ func SelectGroup(s *Selector, snapshot *Snapshot, upstreamModel string) (models.
 // groupWeightBuckets 白名单过滤 + 按 weight 聚成权重档（map[weight][]KeyGroup，
 // 档内保持入参顺序）。组顺序稳定是档内轮询取模正确的前提（同一键的候选顺序
 // 不应随请求变化，否则轮询会跳跃）。
-func groupWeightBuckets(groups []models.KeyGroup, providerID uint, upstreamModel string) map[int][]models.KeyGroup {
+func groupWeightBuckets(snapshot *Snapshot, upstreamModel string) map[int][]models.KeyGroup {
 	out := make(map[int][]models.KeyGroup)
-	for _, g := range groups {
-		if g.ProviderID != providerID {
+	custom := isCustomModel(snapshot, upstreamModel)
+	for _, g := range snapshot.Groups {
+		if g.ProviderID != snapshot.Provider.ID {
 			continue
 		}
 		if g.Weight <= 0 {
 			continue
 		}
-		if !groupMatchesModel(g, upstreamModel) {
+		if !groupMatchesModel(g, upstreamModel, custom) {
 			continue
 		}
 		out[g.Weight] = append(out[g.Weight], g)
@@ -100,14 +102,35 @@ func groupWeightBuckets(groups []models.KeyGroup, providerID uint, upstreamModel
 	return out
 }
 
-// groupMatchesModel 分组白名单判定（白名单空 = 不限，设计定案「空 = 未同步/不限制」）。
+// isCustomModel 判断 upstreamModel 是否为供应商级自定义模型（Provider.Config 的
+// custom_models 清单）。自定义模型是管理员显式声明「该供应商支持此模型」（上游 /models
+// 不返回它），2026-09-28 拍板：供应商级声明授权、不受分组白名单约束，全部分组可服务——
+// 白名单的本职是「这组 key 实际授权了什么」，上游不返回的模型永远拿不到白名单成员资格，
+// 再拿它过滤就把声明过的模型判成不可服务。清单解析单源在 common.ExtractCustomModels。
+func isCustomModel(snapshot *Snapshot, upstreamModel string) bool {
+	if upstreamModel == "" {
+		return false
+	}
+	for _, id := range common.ExtractCustomModels(snapshot.Provider.Config) {
+		if id == upstreamModel {
+			return true
+		}
+	}
+	return false
+}
+
+// groupMatchesModel 分组可服务判定（白名单空 = 不限，设计定案「空 = 未同步/不限制」；
+// custom = 供应商级自定义模型则不受白名单约束，见 isCustomModel）。
 //
 // 命名空间是**上游模型名**（供应商侧的 model 标识，即 ModelWithProvider.ProviderModel），
 // 与写侧同源：modelsync 拉 /models 后把上游模型 ID 原样填进 KeyGroup.Models，autoassoc
 // 的组织级目录按「白名单并集 ∪ custom_models」并要求关联的上游名 ∈ 目录，testapi 诊断
 // 也传 ProviderModel。传网关侧模型名（Model.Name / 请求里的 model）会让重命名关联
 // （ProviderModel ≠ Model.Name）在名单非空后恒不可选——两套名字必须只留一套。
-func groupMatchesModel(g models.KeyGroup, upstreamModel string) bool {
+func groupMatchesModel(g models.KeyGroup, upstreamModel string, custom bool) bool {
+	if custom {
+		return true
+	}
 	if strings.TrimSpace(g.Models) == "" {
 		return true
 	}
@@ -155,16 +178,18 @@ func GroupCandidates(snapshot *Snapshot) []models.KeyGroup {
 //
 // 与 SelectGroup 不同处只看白名单，不排除 weight<=0 的组：权重决定流量分摊而非可用性，
 // 把 weight=0 判成「不可用」会让管理员看到「无候选组」而该组 key 其实完好。
-// 白名单空 = 不限（与 groupMatchesModel 同一语义）。
+// 白名单空 = 不限（与 groupMatchesModel 同一语义）；供应商级自定义模型同样全部分组有资格
+// （与 SelectGroup 同一套可服务判定，保证连通测试与生产选路结论一致）。
 // upstreamModel 是上游模型名——调用方传 ModelWithProvider.ProviderModel（testapi 即如此），
 // 与生产选路口径单源；传网关名会让「测出通过」与「生产走不到」重新分叉。
 func GroupCandidatesForModel(snapshot *Snapshot, upstreamModel string) []models.KeyGroup {
 	out := make([]models.KeyGroup, 0, len(snapshot.Groups))
+	custom := isCustomModel(snapshot, upstreamModel)
 	for _, g := range snapshot.Groups {
 		if g.ProviderID != snapshot.Provider.ID {
 			continue
 		}
-		if !groupMatchesModel(g, upstreamModel) {
+		if !groupMatchesModel(g, upstreamModel, custom) {
 			continue
 		}
 		out = append(out, g)

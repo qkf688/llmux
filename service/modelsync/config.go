@@ -2,31 +2,13 @@ package modelsync
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/providers"
 	"github.com/qkf688/llmux/repository"
 )
-
-func extractCustomModels(config string) []string {
-	var parsed map[string]any
-	if err := json.Unmarshal([]byte(config), &parsed); err != nil {
-		return nil
-	}
-	custom, ok := parsed["custom_models"].([]interface{})
-	if !ok {
-		return nil
-	}
-	out := make([]string, 0, len(custom))
-	for _, item := range custom {
-		if modelID, ok := item.(string); ok {
-			out = append(out, modelID)
-		}
-	}
-	return out
-}
 
 func splitModelsCSV(s string) []string {
 	if strings.TrimSpace(s) == "" {
@@ -66,7 +48,7 @@ func mergeProviderModelCatalog(config string, groups []models.KeyGroup) []string
 	for _, id := range out {
 		seen[id] = struct{}{}
 	}
-	for _, id := range extractCustomModels(config) {
+	for _, id := range common.ExtractCustomModels(config) {
 		if _, ok := seen[id]; ok {
 			continue
 		}
@@ -168,7 +150,7 @@ func GetProviderModelCatalogs(ctx context.Context, repos *repository.Repositorie
 			return nil, err
 		}
 		upstream := buildUpstreamEntries(groups)
-		custom := extractCustomModels(p.Config)
+		custom := common.ExtractCustomModels(p.Config)
 		if upstream == nil {
 			upstream = []UpstreamModelEntry{}
 		}

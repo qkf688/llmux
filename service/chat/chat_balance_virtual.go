@@ -33,8 +33,8 @@ func balanceChatVirtual(ctx context.Context, in BalanceInput) (*BalanceResult, e
 	for modelIndex, orderedModel := range ordered {
 		select {
 		case <-ctx.Done():
-			// 网关掐断（deadline）映射 504，调用方撤走原样透传（mapAbortErr）。
-			return nil, mapAbortErr(ctx.Err())
+			// 归因映射在 BalanceChat 唯一出口（mapAbortErr），此处原样上抛。
+			return nil, ctx.Err()
 		default:
 		}
 
@@ -100,7 +100,7 @@ func balanceChatVirtual(ctx context.Context, in BalanceInput) (*BalanceResult, e
 		slog.Warn("all providers exhausted for real model, trying next", "real_model", realModel.Name)
 	}
 
-	return nil, newRetryExhaustedError("all real models exhausted for virtual model")
+	return nil, retryExhaustedOutcome(ctx, "all real models exhausted for virtual model")
 }
 
 // saveVirtualSkipLog 记录「某个真实模型被整体跳过」的日志：此时尚未选出供应商，

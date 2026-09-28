@@ -30,7 +30,15 @@ type BalanceResult struct {
 	SideChannel *models.TransformSideChannel
 }
 
+// BalanceChat 是两条候选路径（真实 / 虚拟模型）的公共出口。超时归因映射只在本
+// 函数返回处做一次（Stage 33 收口）：网关掐断（deadline）统一 504、调用方撤走
+// 原样透传——内层任何出口禁止自映射，否则漏一处就有一条路径回裸 500。
 func BalanceChat(ctx context.Context, in BalanceInput) (*BalanceResult, error) {
+	res, err := balanceChat(ctx, in)
+	return res, mapAbortErr(err)
+}
+
+func balanceChat(ctx context.Context, in BalanceInput) (*BalanceResult, error) {
 	slog.Info("request",
 		"model", in.Before.Model,
 		"stream", in.Before.Stream,
@@ -71,9 +79,8 @@ func BalanceChat(ctx context.Context, in BalanceInput) (*BalanceResult, error) {
 	case retryLoopSucceeded:
 		return outcome.Result, nil
 	case retryLoopAborted:
-		// 网关自己掐断（deadline）映射 504，调用方撤走原样透传（mapAbortErr）。
-		return nil, mapAbortErr(outcome.Err)
+		return nil, outcome.Err
 	default:
-		return nil, newRetryExhaustedError("maximum retry attempts reached")
+		return nil, retryExhaustedOutcome(ctx, "maximum retry attempts reached")
 	}
 }

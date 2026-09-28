@@ -47,9 +47,20 @@ func newGatewayTimeoutError() error {
 
 // mapAbortErr 把「网关自己掐断」（deadline 到点）映射为自带 504 的超时错误；
 // 调用方撤走（Canceled）等其余取消原样透传——ctx 已死说明对面多半已收不到。
+// 调用点单源在 BalanceChat 返回处（真实/虚拟两路径全部出口共用），内层禁自映射。
 func mapAbortErr(err error) error {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return newGatewayTimeoutError()
 	}
 	return err
+}
+
+// retryExhaustedOutcome 穷尽出口的归因修正：末次尝试恰撞 deadline 时重试循环以
+// exhausted 收场（已无剩余迭代可走中止分支），本质仍是网关掐断——按超时归因
+// （最终经 BalanceChat 唯一出口映射 504），不记「上游全挂」的 502。
+func retryExhaustedOutcome(ctx context.Context, detail string) error {
+	if err := ctx.Err(); errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	return newRetryExhaustedError(detail)
 }

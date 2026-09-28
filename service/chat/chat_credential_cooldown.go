@@ -8,6 +8,7 @@ import (
 
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/credwrite"
+	"github.com/qkf688/llmux/service/settings"
 )
 
 // cooldownReason429 429 限流冷却 reason 机器码：分窗判定（cooldownWindowForReason）
@@ -52,11 +53,23 @@ func cooldownReasonForStatus(statusCode int) string {
 // 鉴权失败（401/403）不走冷却，走判停路径（#6-2，见 chat_credential_auth_fail.go）。
 // 分窗判定集中此一处（OCP）：复用既有窗口的新失败类型此判定即覆盖（多半连这都不用改）；
 // 但「新窗口」类型需同步设置项全链 6 处（键常量/schema/DTO/前端 interface/卡片 intFields/本函数）。
-func cooldownWindowForReason(ctx context.Context, reason string) time.Duration {
+// 窗口读失败返回 ok=false（已留痕）——调用方必须跳过冷却写，不得拿默认窗口兜底
+// （Stage 33 显式降级，Ruling 4）。
+func cooldownWindowForReason(ctx context.Context, reason string) (time.Duration, bool) {
 	if reason == cooldownReason429 {
-		return time.Duration(getCredHealthCooldown429Sec(ctx)) * time.Second
+		sec, err := getCredHealthCooldown429Sec(ctx)
+		if err != nil {
+			settings.LogReadSkip("credential cooldown", models.SettingKeyCredHealthCooldown429Sec, err)
+			return 0, false
+		}
+		return time.Duration(sec) * time.Second, true
 	}
-	return time.Duration(getCredHealthCooldownServerSec(ctx)) * time.Second
+	sec, err := getCredHealthCooldownServerSec(ctx)
+	if err != nil {
+		settings.LogReadSkip("credential cooldown", models.SettingKeyCredHealthCooldownServerSec, err)
+		return 0, false
+	}
+	return time.Duration(sec) * time.Second, true
 }
 
 // applyCredentialCooldown 写单条凭据的冷却状态（CooldownUntil 到期自动恢复）。

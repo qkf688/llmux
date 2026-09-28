@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"time"
 
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/transform"
@@ -93,11 +94,21 @@ func getRequestHeaderTimeout(ctx context.Context) int {
 	return settingsReader.Int(ctx, models.SettingKeyRequestHeaderTimeout, 30, 1)
 }
 
-// getRequestTotalTimeout 获取整个请求的总预算超时（秒），含所有重试/故障转移。
-// 默认值与 setting schema 一致（90 = 30×3，保证等头超时后后续候选仍有完整窗口）。
-// 驱动 chat_balance 的重试循环 Deadline。
+// getRequestTotalTimeout 获取整个请求的总时长上限（秒），含读体/预处理/选路/上游
+// 调用/流式输出全程。默认值与 setting schema 一致（600：正常长回答不被截的余量）。
+// Stage 33 起该值挂进请求 ctx 的 deadline（见 WithRequestTotalTimeout），
+// 到点整个请求被掐断并按超时归因结算，不再是「仅阻止下一次重试」的计时器。
 func getRequestTotalTimeout(ctx context.Context) int {
-	return settingsReader.Int(ctx, models.SettingKeyRequestTotalTimeout, 90, 1)
+	return settingsReader.Int(ctx, models.SettingKeyRequestTotalTimeout, 600, 1)
+}
+
+// WithRequestTotalTimeout 给请求挂上网关总超时（Stage 33）：派生带 deadline 的请求 ctx，
+// 到点整个请求（含流式输出）被掐断——「总超时」从此是真上限，不再只是「别再开下一次重试」。
+// 超时（DeadlineExceeded）与调用方撤走（Canceled）在 ctx 上可区分，归因单源在
+// chat_settlement.requestAbandoned。cancel 必须在 handler 返回（响应写完）时调用，
+// 过早 cancel 会掐断正在输出的流。
+func WithRequestTotalTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, time.Second*time.Duration(getRequestTotalTimeout(ctx)))
 }
 
 // getStreamFirstByteTimeout 获取流式响应头后首字节等待超时（秒），
@@ -122,21 +133,23 @@ func getUpstreamMaxResponseBytes(ctx context.Context) int64 {
 
 // getCredHealthCooldown429Sec 获取凭据 429 限流冷却窗口（秒）。
 // 默认值与 setting schema 一致（60），驱动 applyCredentialCooldown 的 429 分窗。
-func getCredHealthCooldown429Sec(ctx context.Context) int {
-	return settingsReader.Int(ctx, models.SettingKeyCredHealthCooldown429Sec, 60, 1)
+// 读失败返回 err（Stage 33 显式降级）：窗口不可信时调用方必须跳过冷却写，不得兜底。
+func getCredHealthCooldown429Sec(ctx context.Context) (int, error) {
+	return settingsReader.IntE(ctx, models.SettingKeyCredHealthCooldown429Sec, 60, 1)
 }
 
 // getCredHealthCooldownServerSec 获取凭据服务端错误冷却窗口（秒，5xx/超时/网络）。
-// 默认值与 setting schema 一致（60）。
-func getCredHealthCooldownServerSec(ctx context.Context) int {
-	return settingsReader.Int(ctx, models.SettingKeyCredHealthCooldownServerSec, 60, 1)
+// 默认值与 setting schema 一致（60）。读失败处置同 getCredHealthCooldown429Sec。
+func getCredHealthCooldownServerSec(ctx context.Context) (int, error) {
+	return settingsReader.IntE(ctx, models.SettingKeyCredHealthCooldownServerSec, 60, 1)
 }
 
 // getCredHealthAuthFailThreshold 获取凭据连续鉴权失败（401/403）判停阈值。
 // 连续失败达阈值后 Status 变为 temp_unsched（选路剔除；探活恢复为 #6-3，人工可经
 // 凭据 CRUD 改回 active）。默认值与 setting schema 一致（3）。
-func getCredHealthAuthFailThreshold(ctx context.Context) int {
-	return settingsReader.Int(ctx, models.SettingKeyCredHealthAuthFailThreshold, 3, 1)
+// 读失败返回 err（Stage 33 显式降级）：判停是停用类动作，阈值不可信时只计数不判停。
+func getCredHealthAuthFailThreshold(ctx context.Context) (int, error) {
+	return settingsReader.IntE(ctx, models.SettingKeyCredHealthAuthFailThreshold, 3, 1)
 }
 
 // getCredHealthProbeIntervalSec 获取凭据惰性探活最小间隔（秒）。

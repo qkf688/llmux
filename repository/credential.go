@@ -39,6 +39,9 @@ type CredentialRepo interface {
 	// IncrementFailCountAndStopIfThreshold 原子自增 fail_count；仅当 status 为 active
 	// （或空串视同 active）且自增后达阈值时判停 temp_unsched 并写 stopReason、清 cooldown_until。
 	IncrementFailCountAndStopIfThreshold(ctx context.Context, id uint, threshold int, stopReason string) (int64, error)
+	// IncrementFailCountNoStop 只原子自增 fail_count、永不判停：判停阈值读不到时的
+	// 显式降级形态（Stage 33）——计数照记，停用决策跳过，不拿编造阈值执行判停。
+	IncrementFailCountNoStop(ctx context.Context, id uint) (int64, error)
 	// RecordCredentialSuccess 原子自增 total_requests 并刷新 last_used_at=at
 	// （凭据终身统计，chat 成功尝试记账；软删行不写，RowsAffected=0）。
 	RecordCredentialSuccess(ctx context.Context, id uint, at time.Time) (int64, error)
@@ -223,6 +226,19 @@ WHERE id = ? AND deleted_at IS NULL`,
 		models.CredentialStatusActive, threshold, models.CredentialStatusTempUnsched,
 		models.CredentialStatusActive, threshold, stopReason,
 		models.CredentialStatusActive, threshold,
+		id,
+	)
+	return result.RowsAffected, result.Error
+}
+
+// IncrementFailCountNoStop 只自增 fail_count、不写任何判停字段（见接口注释）。
+// 刻意单列一条只含计数的 UPDATE：复用 IncrementFailCountAndStopIfThreshold 需要
+// 哨兵阈值（math.MaxInt 之类），判停语义就藏进了一个「永不命中」的魔数里。
+func (r *credentialRepo) IncrementFailCountNoStop(ctx context.Context, id uint) (int64, error) {
+	result := r.db.WithContext(ctx).Exec(`
+UPDATE credentials SET
+  fail_count = fail_count + 1
+WHERE id = ? AND deleted_at IS NULL`,
 		id,
 	)
 	return result.RowsAffected, result.Error

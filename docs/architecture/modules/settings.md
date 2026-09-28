@@ -38,6 +38,8 @@ models.Setting
 | `settings.Store` | 类型安全读写 | `service/settings/` | 同包 |
 | `SettingRepo` | KV 持久化 | `repository/setting.go` | GORM |
 | `GetSettingBool/Int/String` | 兼容通用读取 | `models/setting_reader.go` | 同文件 |
+| `GetSettingBoolE/IntE`（Stage 33） | 「读失败可辨」读取：查询失败/存值非法 → err，key 不存在 → default（未设置是有效状态） | `models/setting_reader.go` | 同文件 |
+| `settings.Reader.BoolE/IntE` + `settings.LogReadSkip`（Stage 33） | Reader 的 E 变体 + 「读失败 → 跳过依赖该配置的写动作」留痕单源 | `service/settings/reader.go` | `modelsReader`；调用方 `service/adjustment`、`service/chat` 凭据结算 |
 
 ## 5. 特殊约定
 
@@ -51,10 +53,10 @@ models.Setting
   - 消费方：`service/chat` 的 `buildThinkingClampConfig`（`chat_settings.go`）经 `settingsReader` 读取这两个设置 + `ThinkingLevelsResolved` 白名单，构建 `transform.ThinkingClampConfig` 传入 chat 主路径钳制。
 - **请求参数相关设置（全局超时/重试，2026-08 替代原 per-model time_out/max_retry）**：
   - `SettingKeyRequestHeaderTimeout`：int，Default=`30`，Min=1。单次尝试等上游响应头的窗口（`providers` 的 `ResponseHeaderTimeout`）。
-  - `SettingKeyRequestTotalTimeout`：int，Default=`90`，Min=1。整个请求的预算上限（真实路径=重试循环 Deadline；虚拟路径=跨真实模型共享 globalTimer）。
+  - `SettingKeyRequestTotalTimeout`：int，Default=`600`（Stage 33 起，原 90），Min=1。**整个请求的硬时长上限**（Stage 33）：`handler/v1/chat.go` 入口经 `service.WithRequestTotalTimeout` 挂进请求 ctx 的 deadline，到点含流式输出一刀切、按超时归因结算；旧「重试循环 Deadline 计时器 / 虚拟路径 globalTimer」机制已移除，总上限单源在请求 ctx。
   - `SettingKeyStreamFirstByteTimeout`：int，Default=`15`，Min=1。流式响应头后首字节等待窗口，驱动 `service/chat` 提交门的首字节看门狗。
   - `SettingKeyRequestMaxRetry`：int，Default=`3`，Min=1。单候选池尝试次数。
-  - 消费方：`service/chat` 的 `getRequestHeaderTimeout / getRequestTotalTimeout / getStreamFirstByteTimeout / getRequestMaxRetry`（`chat_settings.go`）经 `settingsReader` 读取；首字节等待的消费方是本包提交门（`chat_commit_gate.go`，2026-09-22 起看门狗迁入 `service/chat`，`handler/v1` 不再读取）。响应头超时与总超时**解耦**：等头超时不再拖垮后续候选窗口（`chat_balance.go` / `chat_balance_virtual.go`）。
+  - 消费方：`service/chat` 的 `getRequestHeaderTimeout / getRequestTotalTimeout / getStreamFirstByteTimeout / getRequestMaxRetry`（`chat_settings.go`）经 `settingsReader` 读取；总超时经 `chat.WithRequestTotalTimeout`（`service/chat_facade.go` 转发）在 `handler/v1/chat.go` 入口挂进请求 ctx；首字节等待的消费方是本包提交门（`chat_commit_gate.go`，2026-09-22 起看门狗迁入 `service/chat`，`handler/v1` 不再读取）。响应头超时与总超时**解耦**：等头超时不再拖垮后续候选窗口（`chat_balance.go` / `chat_balance_virtual.go`）。
 - **资源防御相关设置（Stage 2，2026-09-17）**：
   - `SettingKeyUpstreamMaxResponseMiB`：int，Default=`32`，Min=`1`。上游单条**非流式**响应体上限（MiB，不可关闭）；消费方 `service/chat` 的 `getUpstreamMaxResponseBytes` → `limitUpstreamResponseBody`（`upstream_body_limit.go`）在 attempt 内整读加限，超限判供应商异常→组织级转移（不冷却凭据）。入站侧不走配置：硬上限 `consts.MaxInboundBodyBytes`（20 MiB）+ 错误体 1 MiB 诊断单源（`common.ReadCappedBody`），防线刻意不可被运营调小。
   - `SettingKeyRawLogFieldMaxKiB`：int，Default=`256`，Min=`16`。原始采集落库文本的单字段上限（KiB），一个设置项盖 `RequestBody`/`RawRequestBody`/`RawResponseBody`/`Error` 四字段；消费方 `getRawLogFieldMaxBytes`（`chat_settings.go`）→ 采集点统一 `common.TruncateUTF8`（rune 边界+标记）。
@@ -66,7 +68,7 @@ models.Setting
   - `SettingKeyCredHealthCooldownServerSec`：int，Default=`60`，Min=1。凭据服务端错误冷却窗口（秒，5xx/超时/网络）。
   - `SettingKeyCredHealthAuthFailThreshold`：int，Default=`3`，Min=1。凭据连续鉴权失败（401/403）判停阈值：达 N 后 Status=`temp_unsched`（选路剔除，探活恢复为 #6-3），成功请求重置计数。
   - `SettingKeyCredHealthProbeIntervalSec`：int，Default=`60`，Min=1。凭据惰性探活最小间隔（秒）：`temp_unsched` 距 `LastProbeAt` 不足该间隔则跳过探活。
-  - 消费方：`service/chat` 的 `getCredHealthCooldown429Sec / getCredHealthCooldownServerSec / getCredHealthAuthFailThreshold / getCredHealthProbeIntervalSec`（`chat_settings.go`）经 `settingsReader` 读取 → `cooldownWindowForReason`（`chat_credential_cooldown.go`）按 reason 分窗写 `CooldownUntil`；`applyCredentialAuthFailure`（`chat_credential_auth_fail.go`）读阈值判停写 `temp_unsched`（401/403 不走冷却）；探活间隔由 chat 读出后注入 `credprobe.Request.Interval`（#6-3，credprobe 本身不读 settings）；选路侧 `channel` 的 `credentialUsable` 判定冷却中与非 active 状态剔除（`channel-routing.md`）。
+  - 消费方：`service/chat` 的 `getCredHealthCooldown429Sec / getCredHealthCooldownServerSec / getCredHealthAuthFailThreshold / getCredHealthProbeIntervalSec`（`chat_settings.go`）经 `settingsReader` 读取 → `cooldownWindowForReason`（`chat_credential_cooldown.go`）按 reason 分窗写 `CooldownUntil`；判停阈值由凭据结算写桥 `persistCredentialAuthFailure`（`chat_credential_write_bridge.go`，credwrite worker 腿）读取后写 `temp_unsched`（401/403 不走冷却）；探活间隔由 chat 读出后注入 `credprobe.Request.Interval`（#6-3，credprobe 本身不读 settings）；选路侧 `channel` 的 `credentialUsable` 判定冷却中与非 active 状态剔除（`channel-routing.md`）。**Stage 33 显式降级**：前三个读取（读失败会引发写动作）走 E 变体——窗口读失败跳过冷却写、判停阈值读失败只计数不判停（`IncrementFailCountNoStop`），均留痕（`settings.LogReadSkip`）。
 
 ---
 

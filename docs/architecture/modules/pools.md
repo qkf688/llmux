@@ -29,7 +29,7 @@ handler/pools/           # 号池管理 API 域（池 CRUD + 健康统计 + 批�
   repos.go               # repos() 访问 repository.Default()
 repository/
   pool.go                # PoolRepo + StatsByIDs（GROUP BY 聚合健康统计）+ UpdateFields
-  credential.go          # CredentialRepo：ListPaged/Get/Create/UpdateFields/UpdateFieldsByIDs(按 ID)/Delete/DeleteByIDs/DeleteByPoolID/ExistingHashes/RecordCredential*/IncrementFailCountAndStopIfThreshold 等（契约与消费方见 credentials.md）
+  credential.go          # CredentialRepo：ListPaged/Get/Create/UpdateFields/UpdateFieldsByIDs(按 ID)/Delete/DeleteByIDs/DeleteByPoolID/ExistingHashes/RecordCredential*/IncrementFailCountAndStopIfThreshold/IncrementFailCountNoStop（Stage 33 阈值读失败只计数不判停）等（契约与消费方见 credentials.md）
   endpoint.go            # EndpointRepo
   key_group.go           # KeyGroupRepo + CountByPoolIDs（引用守卫）+ ListByPoolIDs（引用明细）+ UpdateFields
 models/

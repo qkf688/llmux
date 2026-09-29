@@ -29,9 +29,8 @@ var dbSeq atomic.Int64
 // New 返回进程内唯一的共享内存库（cache=shared + 单连接）。
 //
 // cache=shared 让多连接共享同一份内存库（裸 :memory: 每个连接各是一份空库，
-// 表不可见）；再加单连接是双保险——与既有 ConfigureSQLiteForSingleConn 的
-// 同款约束（SQLite `:memory:` 每连接独立空库，见项目测试纪律），并发 goroutine
-// 的写入在连接池上串行化，不会出现「建表连接 ≠ 查询连接」。
+// 表不可见）；再加单连接是双保险——SQLite 内存库每连接独立，单连接把并发写在
+// 连接池上串行化，杜绝「建表连接 ≠ 查询连接」各看各的空库（项目测试纪律同条）。
 func New(t *testing.T, tables ...any) *gorm.DB {
 	t.Helper()
 	return NewWithConfig(t, nil, tables...)

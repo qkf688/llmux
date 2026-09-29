@@ -39,7 +39,7 @@ models.Setting
 | `SettingRepo` | KV 持久化 | `repository/setting.go` | GORM |
 | `GetSettingBool/Int/String` | 兼容通用读取 | `models/setting_reader.go` | 同文件 |
 | `GetSettingBoolE/IntE`（Stage 33） | 「读失败可辨」读取：查询失败/存值非法 → err，key 不存在 → default（未设置是有效状态） | `models/setting_reader.go` | 同文件 |
-| `settings.Reader.BoolE/IntE` + `settings.LogReadSkip`（Stage 33） | Reader 的 E 变体 + 「读失败 → 跳过依赖该配置的写动作」留痕单源 | `service/settings/reader.go` | `modelsReader`；调用方 `service/adjustment`、`service/chat` 凭据结算 |
+| `settings.Reader.BoolE/IntE` + `settings.LogReadSkip`（Stage 33；Stage 36 限频） | Reader 的 E 变体 + 「读失败 → 跳过依赖该配置的写动作」留痕单源。留痕**按设置项每 60 秒最多一条**并带出窗口内被压掉的条数（`suppressed`），总次数不丢——一次请求会走过 5~8 个此类步骤，逐步留痕会让日志量 ≈ 请求量 × 步数 | `service/settings/reader.go` | `modelsReader`；调用方 `service/adjustment`、`service/chat` 凭据结算、`service/healthcheck` |
 
 ## 5. 特殊约定
 
@@ -47,6 +47,7 @@ models.Setting
 - 交叉字段归一化（如 `normalizeUpdateSettingsRequest`）可能不在 schema 内，新增约束时需排查
 - **热读未完全单路径**：并存 `models.GetSetting*`、`service/settings.Reader`、部分业务包自写 getter（默认值/min 语义可能不一致）
 - 键名使用 `SettingKey*` 常量，禁止魔法字符串散落
+- **通用设置响应组装按「目标结构体有没有这个位置」分流（Stage 36，2026-09-30）**：`buildSettingsResponse` 遍历 schema 时先过 `models.SettingFieldPresent`，为假则该键**静默跳过**；判据是「通用响应 DTO 里有没有对应字段」，**不是**按设置域粗筛——健康检测系设置在自己的独立域（`handler/settings/health.go`），在通用页没有位置是已知归属边界，此前却以「failed to set setting field」的形态每键报一条（一次 `GET /settings` 固定刷 7 条 WARN）。静默跳过的风险由**字段契约门**兜住：`TestGenericSettingsResponseFieldContract` 要求每个非独立域的设置项都在响应里有位置，并反向锁定 health 域中与通用页共享的那两个键（`count_health_check_as_success` / `count_health_check_as_failure`，它们**必须**继续出现在通用设置页）——新增设置项时该门会替人挡住漏字段
 - **思考档位相关设置（Stage B 扩档）**：
   - `SettingKeyReasoningEffortDefaultValue`：Type=string，Default=`low`，Enum=`[minimal, low, medium, high, xhigh, max]`（6 档，不含 none/auto）。用于 `auto` 不支持且白名单空时的兜底 + `unknownStrategy=clamp_to_default` 时的回退值。
   - `SettingKeyReasoningEffortUnknownStrategy`：Type=string，Default=`clamp_to_default`，Enum=`[clamp_to_default, passthrough]`。用于请求中的 reasoning_effort 不在模型白名单时的处理策略。

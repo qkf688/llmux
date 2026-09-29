@@ -3,6 +3,8 @@ package settings
 import (
 	"context"
 	"log/slog"
+	"sync"
+	"time"
 
 	"github.com/qkf688/llmux/models"
 )
@@ -57,6 +59,73 @@ func (modelsReader) IntE(ctx context.Context, key string, defaultValue, minValue
 // LogReadSkip 记录「设置读取失败 → 依赖该配置的写动作被跳过」（Stage 33 显式降级口径）。
 // 跳过与写库失败都要留痕：否则事后无法回答「漏了多少次账、漏的哪一步」。
 // 消息形状单源在此，各结算域（adjustment / chat 凭据结算）共用，禁散落自造文案。
+//
+// 留痕密度按设置项限频（Stage 36）：调用点遍布结算与健康检测，一次请求会走过多个
+// 「读配置 → 写库」步骤，逐步各打一条会让日志量 ≈ 请求量 × 步数——恰在数据库不稳、
+// 最需要日志的时刻把有用信息淹没（与本项目「整行限长防刷屏」同取向）。
+// 窗口内被压掉的次数在下一条留痕里带出（`suppressed`），总次数不丢。
 func LogReadSkip(step, key string, err error) {
-	slog.Warn("settings read failed: dependent write step skipped", "step", step, "key", key, "error", err)
+	suppressed, ok := skipLogLimiter.allow(key)
+	if !ok {
+		return
+	}
+
+	slog.Warn("settings read failed: dependent write step skipped",
+		"step", step, "key", key, "suppressed", suppressed, "error", err)
+}
+
+// skipLogWindow 是同一设置项两条留痕之间的最小间隔。
+const skipLogWindow = 60 * time.Second
+
+// readSkipLimiter 是「按设置项限频 + 累计被压条数」的进程内状态。
+// 进程重启后计数归零，属已告知的代价（重启前被压掉的条数不再有下文）。
+type readSkipLimiter struct {
+	mu   sync.Mutex
+	last map[string]time.Time
+	// dropped 记录窗口内被压掉的条数，下一条留痕带出后归零。
+	dropped map[string]int
+}
+
+// now 可注入，供测试推快时间（禁在用例里真等一个窗口）。
+var skipLogNow = time.Now
+
+var skipLogLimiter = &readSkipLimiter{
+	last:    map[string]time.Time{},
+	dropped: map[string]int{},
+}
+
+// allow 判断该设置项此刻能否出留痕；不能则累加被压条数。
+// 返回的 int 是本次留痕要带出的「被压掉条数」（首次/超窗为 0）。
+func (l *readSkipLimiter) allow(key string) (int, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	now := skipLogNow()
+	if last, ok := l.last[key]; ok && now.Sub(last) < skipLogWindow {
+		l.dropped[key]++
+		return 0, false
+	}
+
+	dropped := l.dropped[key]
+	l.dropped[key] = 0
+	l.last[key] = now
+	return dropped, true
+}
+
+// resetReadSkipLimiter 清空限频状态。
+func resetReadSkipLimiter() {
+	skipLogLimiter.mu.Lock()
+	defer skipLogLimiter.mu.Unlock()
+
+	skipLogLimiter.last = map[string]time.Time{}
+	skipLogLimiter.dropped = map[string]int{}
+}
+
+// ResetReadSkipLimiterForTest 清空留痕限频状态，仅供测试。
+//
+// 为什么必须导出：限频状态是进程级的，跨用例（以及 -count=N 的重复轮次）会互相污染
+// ——上一轮的窗口计数会把下一轮的留痕压掉，断言留痕的用例就会假红/假绿
+// （与 Stage 41 Assemble 跨 count 累积假红同型）。
+func ResetReadSkipLimiterForTest() {
+	resetReadSkipLimiter()
 }

@@ -76,6 +76,15 @@ function useCapabilityTest(api: CapabilityTestApi) {
           }
           return null;
         }
+        // 登录过期不是「测试失败」：失效出口已处置（标记/清会话/跳转），这里按非失败终止
+        // 收场——复位 loading、不写结论、不标「已取消」，格子回到「没测过」的样子，
+        // 与 SSE 通道同口径，不以「测试失败」掩盖掉线。
+        if (err instanceof UnauthorizedError) {
+          if (isCurrent()) {
+            setResults((prev) => ({ ...prev, [key]: { loading: false, result: null } }));
+          }
+          return null;
+        }
         const message = `测试失败: ${toErrorMessage(err)}`;
         if (isCurrent()) {
           setResults((prev) => ({

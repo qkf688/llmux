@@ -9,6 +9,7 @@ import {
   testModelProviderVision,
   type ModelProviderTestResult,
 } from "@/lib/api";
+import { UnauthorizedError } from "@/lib/api/core/client";
 import { authStore } from "@/stores/auth";
 import { consumeLoginExpiryNotice, hasLoginExpiryNotice } from "@/stores/auth/login-expiry-notice";
 import type { Updater } from "@/stores/core/updater";
@@ -184,6 +185,22 @@ describe("useModelProvidersTesting", () => {
       result: { passed: false, error: "测试失败: boom" },
     });
     consoleError.mockRestore();
+  });
+
+  it("能力测试撞登录过期不写「测试失败」：格子回到「没测过」的样子", async () => {
+    // mock 错误形状取传输层实际抛出的东西（handleUnauthorized → UnauthorizedError），不是后端文案。
+    vi.mocked(testModelProviderVision).mockRejectedValue(new UnauthorizedError());
+
+    const { result } = renderTesting("vision");
+    await act(async () => {
+      result.current.executeTestNow();
+    });
+
+    // 登录过期不是测试失败：不写结论、不标「已取消」，与 SSE 通道同口径（不以「测试失败」掩盖掉线）。
+    expect(result.current.visionTestResults[capabilityTestKey(7, "non_stream")]).toEqual({
+      loading: false,
+      result: null,
+    });
   });
 
   it("关弹窗中止在飞测试：loading 复位、标「已取消」，不写成失败", async () => {

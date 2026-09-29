@@ -27,6 +27,15 @@ func (h *HealthChecker) checkOneWithBatch(ctx context.Context, mp *models.ModelW
 
 	provider, model, err := getProviderAndModel(ctx, mp)
 	if err != nil {
+		// 读不到供应商/模型行（行缺失或库不可用）同样是**本机原因**：必须留一行「未完成」，
+		// 不能静默跳过——静默会绕过分类单源，也让批次完成判定永远差这一条（审查回批 W3）。
+		logEntry := buildHealthCheckLog(batchID, mp, "", "", time.Since(start).Milliseconds())
+		logEntry.Status = models.HealthCheckStatusNotMeasured
+		logEntry.Error = err.Error()
+		if saveErr := h.saveHealthCheckLog(ctx, &logEntry); saveErr != nil {
+			slog.Error("failed to save health check log", "error", saveErr)
+		}
+		slog.Warn("health check not measured (provider/model unreadable)", "id", mp.ID, "error", err, "batch_id", batchID)
 		return
 	}
 
@@ -166,8 +175,11 @@ func (h *HealthChecker) doCheck(ctx context.Context, provider *models.Provider, 
 		}
 		// headers 每次重建：BuildReq 会就地写认证头，跨组复用同一 map 会互相污染。
 		if err := requestUpstream(ctx, client, buildRequestHeaders(mp), mp.ProviderModel, testBody, format); err != nil {
-			// 走到这里请求已经发出去过，拿到的是上游的结论（含超时/断连）——这才算一次失败。
-			upstreamAnswered = true
+			// 走到这里未必发出去过：BuildReq 失败（多为端点 URL 非法）由 requestUpstream 包成
+			// errLocalCheck 回传，那仍是本机配置问题，不能置 upstreamAnswered（否则记成上游失败）。
+			if !isLocalCheckError(err) {
+				upstreamAnswered = true
+			}
 			failures = append(failures, fmt.Sprintf("group %q: %s", group.Name, err))
 			continue
 		}
@@ -196,7 +208,10 @@ func requestUpstream(ctx context.Context, client providers.Provider, headers htt
 
 	req, err := client.BuildReq(probeCtx, headers, model, body)
 	if err != nil {
-		return err
+		// 请求**没构造出来**（实测可达：端点 URL 含空格/非法转义时 http.NewRequestWithContext 报错）
+		// = 本机配置问题，不是上游结论。记成上游失败会衰减权重、达阈值停用，并把排障方向带向供应商
+		// ——正是本 Stage 要消灭的「把本机问题记在供应商头上」。
+		return &errLocalCheck{err}
 	}
 
 	httpClient := providers.GetClientWithProxy(common.DiagnosticResponseHeaderTimeout, client.GetProxy())

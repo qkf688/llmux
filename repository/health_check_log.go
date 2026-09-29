@@ -32,8 +32,11 @@ type HealthCheckLogListResult struct {
 type HealthCheckLogRepo interface {
 	// Create 创建健康检测日志。
 	Create(ctx context.Context, log *models.HealthCheckLog) error
-	// ListRecentByModelProviderID 按 checked_at 倒序返回指定关联最近 limit 条日志。
-	ListRecentByModelProviderID(ctx context.Context, modelProviderID uint, limit int) ([]models.HealthCheckLog, error)
+	// ListRecentDecidedByModelProviderID 按 checked_at 倒序返回指定关联最近 limit 条**有结论**的日志
+	// （status ∈ decided）。为什么要有这个变体（Stage 36 审查回批）：连续失败统计只认「上游给了结论」
+	// 的行，而本机没测成的行同样是日志行——按行数截断会让它们把已有结论挤出窗口，
+	// 于是「故障期旧账、恢复后照结」静默失效（10 条未完成就能把 3 次真实失败挤没）。
+	ListRecentDecidedByModelProviderID(ctx context.Context, modelProviderID uint, limit int, decided []string) ([]models.HealthCheckLog, error)
 	List(ctx context.Context, opts HealthCheckLogListOptions) (*HealthCheckLogListResult, error)
 	HardDeleteAll(ctx context.Context) (int64, error)
 	// EnforceRetention 保留最新 retention 条，超出部分软删（禁止硬删）。
@@ -54,10 +57,15 @@ func (r *healthCheckLogRepo) Create(ctx context.Context, log *models.HealthCheck
 	return r.db.WithContext(ctx).Create(log).Error
 }
 
-func (r *healthCheckLogRepo) ListRecentByModelProviderID(ctx context.Context, modelProviderID uint, limit int) ([]models.HealthCheckLog, error) {
+func (r *healthCheckLogRepo) ListRecentDecidedByModelProviderID(ctx context.Context, modelProviderID uint, limit int, decided []string) ([]models.HealthCheckLog, error) {
+	if len(decided) == 0 {
+		return nil, nil
+	}
+
 	var logs []models.HealthCheckLog
 	if err := r.db.WithContext(ctx).
 		Where("model_provider_id = ?", modelProviderID).
+		Where("status IN ?", decided).
 		Order("checked_at DESC").
 		Limit(limit).
 		Find(&logs).Error; err != nil {

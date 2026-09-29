@@ -118,25 +118,23 @@ func (h *HealthChecker) disableDecision(ctx context.Context) (enabled bool, thre
 
 // getConsecutiveFailures 统计「最近连续几次拿到上游坏结论」。
 //
-// 本机没测成的记录既不是成功也不是失败：**跳过继续往前数**，不打断已有连续失败
-// （Stage 36 Ruling 3）。若按「遇到就截断」处理，数据库抖一阵子就会把连续失败数
-// 静默清零，与「故障期旧账、恢复后照结」的口径相反。
+// 窗口取**最近 10 条有结论的记录**（未完成的行不进窗口，Stage 36 Ruling 3）：本机没测成的行
+// 既不是成功也不是失败，若按行数截窗，它们会把已有结论挤出窗口，使「故障期旧账、恢复后
+// 照阈值结账」静默失效（3 次真实失败 + 10 轮未完成 → 恢复后从 1 重新数）。
 func (h *HealthChecker) getConsecutiveFailures(ctx context.Context, mpID uint) (int, error) {
-	logs, err := repos().HealthCheckLog.ListRecentByModelProviderID(ctx, mpID, 10)
+	logs, err := repos().HealthCheckLog.ListRecentDecidedByModelProviderID(ctx, mpID, 10,
+		[]string{models.HealthCheckStatusSuccess, models.HealthCheckStatusError})
 	if err != nil {
 		return 0, err
 	}
 
 	count := 0
 	for _, log := range logs {
-		switch log.Status {
-		case models.HealthCheckStatusSuccess:
+		// 窗口已保证只含有结论的行：成功截断，其余（error）累加。
+		if log.Status == models.HealthCheckStatusSuccess {
 			return count, nil
-		case models.HealthCheckStatusError:
-			count++
-		default:
-			// 未完成（本机原因）：无结论，跳过继续往前数。
 		}
+		count++
 	}
 	return count, nil
 }

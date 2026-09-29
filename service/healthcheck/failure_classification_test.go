@@ -57,9 +57,8 @@ func assertAssociationStillEnabled(t *testing.T, mpID uint) {
 // 记成失败会让数据库抖一阵子就攒出连续失败，恢复后按真阈值把可用关联停用。
 func TestCheckOneWithBatch_LocalReasons_WriteNotMeasured(t *testing.T) {
 	cases := []struct {
-		name  string
-		seed  func(t *testing.T, providerID uint)
-		after func(t *testing.T, hits *atomic.Int64)
+		name string
+		seed func(t *testing.T, providerID uint)
 	}{
 		{
 			name: "无启用的主协议端点",
@@ -72,6 +71,15 @@ func TestCheckOneWithBatch_LocalReasons_WriteNotMeasured(t *testing.T) {
 			name: "没有任何分组",
 			seed: func(t *testing.T, providerID uint) {
 				seedEndpoint(t, providerID, "openai", "https://unused.example")
+			},
+		},
+		{
+			// 端点 URL 非法（真实可达路径：providerapi 对 URL 无语法校验）→ 请求构造失败。
+			// 这属本机配置问题，记成上游失败会衰减权重/判停（审查回批 W1）。
+			name: "端点 URL 非法（请求构造失败）",
+			seed: func(t *testing.T, providerID uint) {
+				seedEndpoint(t, providerID, "openai", "https://bad host.example/v1")
+				seedInlineGroup(t, setupHealthCheckCipher(t), providerID, "g1", "sk-1")
 			},
 		},
 	}
@@ -100,6 +108,30 @@ func TestCheckOneWithBatch_LocalReasons_WriteNotMeasured(t *testing.T) {
 			}
 			assertAssociationStillEnabled(t, mp.ID)
 		})
+	}
+}
+
+// TestCheckOneWithBatch_ProviderRowMissing_WritesNotMeasured 取供应商/模型行失败也要进三态（W3）：
+// 静默 return 会绕过分类单源，且让批次完成判定永远差这一条（界面转圈）。
+func TestCheckOneWithBatch_ProviderRowMissing_WritesNotMeasured(t *testing.T) {
+	h, mgr := newTestChecker(t)
+	defer mgr.Shutdown(context.Background())
+
+	// 关联指向不存在的供应商行 → getProviderAndModel 失败
+	enabled := true
+	mp := models.ModelWithProvider{
+		ModelID: 1, ProviderID: 99999, ProviderModel: "pm", Weight: 10, Priority: 10, Status: &enabled,
+	}
+	if err := models.DB.Create(&mp).Error; err != nil {
+		t.Fatalf("create association: %v", err)
+	}
+
+	h.checkOneWithBatch(context.Background(), &mp, "b-missing-provider")
+
+	got := latestHealthCheckLog(t, mp.ID)
+	if got.Status != models.HealthCheckStatusNotMeasured {
+		t.Fatalf("log status = %q (%s), want %q（读不到本机数据不是上游结论，且必须留行）",
+			got.Status, got.Error, models.HealthCheckStatusNotMeasured)
 	}
 }
 

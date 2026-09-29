@@ -255,6 +255,34 @@ func TestGetConsecutiveFailures_IgnoresNotMeasuredRows(t *testing.T) {
 	}
 }
 
+// TestGetConsecutiveFailures_NotMeasuredRowsDoNotEvictVerdicts 审查回批 W2 回归：
+// 未完成的行**不占连续失败的窗口**——否则数据库长时间不稳（十几轮未完成）会把之前攒下的
+// 真实失败全部挤出窗口，恢复后从 1 重新数，"故障期旧账、恢复后照阈值结账"静默失效。
+func TestGetConsecutiveFailures_NotMeasuredRowsDoNotEvictVerdicts(t *testing.T) {
+	initHealthCheckTestDB(t)
+
+	ctx := context.Background()
+	mp := createAssociation(t)
+
+	statuses := []string{
+		models.HealthCheckStatusError,
+		models.HealthCheckStatusError,
+		models.HealthCheckStatusError,
+	}
+	for i := 0; i < 12; i++ {
+		statuses = append(statuses, models.HealthCheckStatusNotMeasured)
+	}
+	seedHealthCheckLogs(t, mp.ID, statuses...)
+
+	got, err := (&HealthChecker{}).getConsecutiveFailures(ctx, mp.ID)
+	if err != nil {
+		t.Fatalf("getConsecutiveFailures: %v", err)
+	}
+	if got != 3 {
+		t.Fatalf("consecutive failures = %d, want 3（12 轮未完成不得把 3 次真实失败挤出窗口）", got)
+	}
+}
+
 // TestGetConsecutiveFailures_SuccessBreaksStreak 成功仍然截断连续失败（口径不能被跳过规则带松）。
 func TestGetConsecutiveFailures_SuccessBreaksStreak(t *testing.T) {
 	initHealthCheckTestDB(t)

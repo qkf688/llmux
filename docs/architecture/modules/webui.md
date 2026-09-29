@@ -34,9 +34,10 @@ webui/src/
 ├── lib/clipboard.ts        # 剪贴板写入跨域单源（三级降级 + 普通/机密两个提示入口）
 ├── lib/concurrent-batch.ts # 批量并发调度跨域单源（按项回 成功/失败/已取消 三态；providers 两套 + model-providers 一处批量共用）
 ├── lib/header-rows.ts      # 出站自定义头「行 ↔ Record」折叠与预设互斥单源（api-keys 与关联两弹窗共用，4a；语法权威在服务端 common/outboundheaders.go）
+├── lib/health-check-status.ts # 健康检测三态文案/配色跨域单源（日志页与批量结果弹窗共用；状态值域与后端 models.HealthCheckStatus* 同源）
 ├── hooks/                  # 含 hooks/api 查询封装
 ├── stores/                 # Zustand（含 core/updater）
-└── test/
+└── test/                   # vitest setup + 跨 components/routes 的共用测试夹具（health-check-fixtures.ts）
 ```
 
 页面文件夹常见形态：

@@ -74,16 +74,23 @@ type retryLoopOutcome struct {
 // runProviderRetryLoop 在给定候选池上执行「选路 → 尝试 → 淘汰」重试循环。
 //
 // retryLog 通道的生命周期完全由本函数持有：一个候选池对应一条通道，循环退出即
-// 关闭。调用方无需（也不应）手动 close——虚拟路径此前在 5 个返回分支各写一次
-// close，漏一处即泄漏 RecordRetryLog goroutine。
+// 关闭（含丢弃分支当场关闭）。调用方无需（也不应）手动 close——虚拟路径此前在
+// 5 个返回分支各写一次 close，漏一处即泄漏 RecordRetryLog goroutine。
 //
 // RecordRetryLog 经 bgtask 登记：其 ctx 不随请求取消（留痕必须跑完，见 bgtask 包注释），
-// 且进程关闭时会等它把通道剩余元素排空落库。结算（权重/优先级衰减）不在该 goroutine
-// 内做——它已移回产出侧经 beginFailureSettlement 判定（Stage 24）。
+// 且进程关闭时会等它把通道剩余元素排空落库。登记被丢弃（关机收尾段的丢弃窗口）时
+// 当场收手不再重试：没有消费者的通道投满即挂死，而此时重试结果也无处交付。
+// 结算（权重/优先级衰减）不在该 goroutine 内做——它已移回产出侧经 beginFailureSettlement 判定（Stage 24）。
 func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 	retryLog := make(chan models.ChatLog, in.MaxRetry)
+	if !bgtask.Go(func(ctx context.Context) { RecordRetryLog(ctx, retryLog) }) {
+		// 丢弃窗口（Stage 35）：日志落库任务被丢，retryLog 无人消费——关通道防悬垂，
+		// 并终止整个重试循环（进程正在收尾，重试结果无处交付；继续投递还会把日志
+		// 堆进没人读的通道，缓冲一满 send 即挂死）。
+		close(retryLog)
+		return retryLoopOutcome{Status: retryLoopAborted, Err: errRetryLogTaskDiscarded}
+	}
 	defer close(retryLog)
-	bgtask.Go(func(ctx context.Context) { RecordRetryLog(ctx, retryLog) })
 
 	// style 已由 handler 层固定路由校验，必可解析（与 attempt 内同容忍度）。
 	// 循环不变量，提到循环外只算一次。

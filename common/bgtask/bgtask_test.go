@@ -27,6 +27,28 @@ func TestManagerGoWaitsForTask(t *testing.T) {
 	}
 }
 
+// TestManagerGoReturnsRegistrationResult 锁丢弃窗口的可观测信号（Stage 35）：
+// Shutdown 置位后 Go 返回 false 且 fn 不执行。调用方的兜底（关日志管道 / 关通道）
+// 全靠这个返回值——信号失灵 = 丢弃窗口里无人消费的管道把请求挂死到进程退出。
+func TestManagerGoReturnsRegistrationResult(t *testing.T) {
+	m := NewManager()
+
+	if !m.Go(func(context.Context) {}) {
+		t.Fatal("Shutdown 前 Go() = false, want true（正常登记）")
+	}
+	if err := m.Shutdown(context.Background()); err != nil {
+		t.Fatalf("Shutdown() = %v, want nil", err)
+	}
+
+	var ran atomic.Bool
+	if m.Go(func(context.Context) { ran.Store(true) }) {
+		t.Fatal("Shutdown 后 Go() = true, want false（任务应被丢弃）")
+	}
+	if ran.Load() {
+		t.Fatal("被丢弃的任务不得执行（fn 必须零运行）")
+	}
+}
+
 // TestManagerTaskCtxNotCanceledOnShutdown 任务 ctx 必须**不随** Shutdown 取消。
 // 取消会把 SaveChatLog / 权重衰减打断，比不排空丢得更多。
 func TestManagerTaskCtxNotCanceledOnShutdown(t *testing.T) {

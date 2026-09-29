@@ -182,39 +182,67 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 	res := balanced.Response
 	defer res.Body.Close()
 
-	pr, pw := io.Pipe()
-	tee := io.TeeReader(res.Body, pw)
-
 	// 后处理与记录 tokens 走 bgtask 登记（Stage 30，AGENTS §6：会写库的后台 goroutine
 	// 必须进登记本，禁裸 go）：关机时由 bgtask.Shutdown 排空（先于关库，main shutdown
 	// 四步序），「关机时正在写的请求记录不丢」的职责单属登记本——原 WaitGroup 丝线
 	// （handler 自等 + Shutdown 等在途请求的两层接力）随之退场，双轨并存会两套等待互相等。
 	// 断流错误路径 return 后同理由排空覆盖：失败留痕（updateChatLogByID）写完才关库。
-	bgtask.Go(func(taskCtx context.Context) {
-		service.RecordLog(taskCtx, service.RecordLogInput{
-			ReqStart:     startReq,
-			Reader:       pr,
-			Processer:    postProcessor,
-			LogID:        balanced.LogID,
-			Before:       *before,
-			IOLog:        providersWithMeta.IOLog,
-			ProviderName: balanced.ProviderName,
-			SideChannel:  balanced.SideChannel,
-		})
-	})
+	// 登记被丢弃（关机收尾段的丢弃窗口）时的放手语义见 attachLogRecord。
+	body, finishLog := attachLogRecord(ctx, service.RecordLogInput{
+		ReqStart:     startReq,
+		Processer:    postProcessor,
+		LogID:        balanced.LogID,
+		Before:       *before,
+		IOLog:        providersWithMeta.IOLog,
+		ProviderName: balanced.ProviderName,
+		SideChannel:  balanced.SideChannel,
+	}, res.Body)
 
 	writeHeader(c, ctx, before.Stream, res.Header)
 	// 响应头已提交后任何失败都不能再走 httpresp 收口（JSON 会污染已开始的流），
 	// 收尾口径统一在 writeResponseBody：流式写协议内 error 事件，非流式静默截断。
 	// 「头后无数据」类失败已在 service 提交门（commit-before-write）被拦下换下家，
 	// 走到这里的中断都是提交后的残余窗口（上游断流/写客户端失败）。
-	if copyErr := writeResponseBody(c, style, before.Stream, tee); copyErr != nil {
-		pw.CloseWithError(copyErr)
+	if copyErr := writeResponseBody(c, style, before.Stream, body); copyErr != nil {
+		finishLog(copyErr)
 		return
 	}
 
 	// 关闭写入端，让读取端知道数据已发送完
+	finishLog(nil)
+}
+
+// attachLogRecord 登记日志后处理（bgtask）并按登记结果分流响应体（Stage 35 丢弃窗口）。
+//
+//   - 登记成功：响应体 tee 进日志管道，finishLog(err) 收尾管道（nil=正文写完的 EOF，
+//     err=断流，经 CloseWithError 传给日志侧走失败留痕）。
+//   - 登记被丢弃（bgtask 已置 shutdown，只在关机收尾段可达）：当场放手——关掉无人
+//     消费的管道（不关则 tee 写端挂死在无读端的 io.Pipe 上，请求拖到进程退出）、
+//     响应体直通客户端让请求马上收尾放行，并给该行日志留「未能写完」失败痕迹。
+//     正文随任务丢弃是丢弃窗口的共识代价，行停在建行占位 success 才是失真。
+//
+// finishLog 必须在响应写完后恰好调用一次；丢弃路径的 finishLog 是空操作（管道已关），
+// 调用方收尾姿势不分支。
+func attachLogRecord(ctx context.Context, in service.RecordLogInput, resBody io.Reader) (io.Reader, func(error)) {
+	pr, pw := io.Pipe()
+	in.Reader = pr
+	registered := bgtask.Go(func(taskCtx context.Context) {
+		service.RecordLog(taskCtx, in)
+	})
+	if registered {
+		return io.TeeReader(resBody, pw), func(err error) {
+			if err != nil {
+				pw.CloseWithError(err)
+				return
+			}
+			pw.Close()
+		}
+	}
+
+	pr.Close()
 	pw.Close()
+	service.MarkLogUnfinished(ctx, in.LogID, in.ReqStart)
+	return resBody, func(error) {}
 }
 
 func writeHeader(c *gin.Context, ctx context.Context, stream bool, header http.Header) {

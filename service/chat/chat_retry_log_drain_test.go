@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -40,5 +41,45 @@ func TestRecordRetryLogDrainedOnShutdown(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("persisted retry logs = %d, want 1 (not drained before shutdown returned)", count)
+	}
+}
+
+// TestRunProviderRetryLoop_LogTaskDiscardedClosesChannelAndAborts 丢弃窗口回归
+// （Stage 35）：bgtask 拒绝登记（关机收尾段）时，重试循环必须当场收手——通道随
+// 丢弃分支关闭（防悬垂）、不发起任何尝试、快速返回 aborted。此前无兜底：
+// RecordRetryLog 被丢后 retryLog 无人消费，循环继续投递，缓冲一满 send 即挂死。
+func TestRunProviderRetryLoop_LogTaskDiscardedClosesChannelAndAborts(t *testing.T) {
+	initChatRecordTestDB(t)
+
+	mgr := bgtask.NewManager()
+	bgtask.SetDefault(mgr)
+	t.Cleanup(func() { bgtask.SetDefault(bgtask.NewManager()) })
+
+	// 先关 Manager，让 runProviderRetryLoop 的登记落入丢弃窗口。
+	shutCtx, cancelShut := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelShut()
+	if err := mgr.Shutdown(shutCtx); err != nil {
+		t.Fatalf("Shutdown() = %v, want nil", err)
+	}
+
+	done := make(chan retryLoopOutcome, 1)
+	go func() {
+		done <- runProviderRetryLoop(retryLoopInput{
+			Ctx:      context.Background(),
+			Start:    time.Now(),
+			MaxRetry: 2,
+		})
+	}()
+
+	select {
+	case out := <-done:
+		if out.Status != retryLoopAborted {
+			t.Fatalf("Status = %v, want retryLoopAborted（丢弃窗口不得发起尝试）", out.Status)
+		}
+		if !errors.Is(out.Err, errRetryLogTaskDiscarded) {
+			t.Fatalf("Err = %v, want errRetryLogTaskDiscarded", out.Err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("丢弃窗口里重试循环被挂住（无人消费的 retryLog 阻塞 send 的同型死法）")
 	}
 }

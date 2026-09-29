@@ -126,6 +126,22 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 	}
 }
 
+// MarkLogUnfinished 给「日志后处理任务被关机丢弃」的行写「未能写完」失败留痕
+// （Stage 35 丢弃窗口）。丢弃时日志正文随任务一起丢是共识代价，但行不能停在
+// 建行占位的 success——那会让「这行日志没记全」伪装成一条成功记录。
+//
+// 走 updateChatLogByID 单源收口（detached ctx）：丢弃只发生在关机收尾段，请求
+// ctx 与 bgtask 都在关，不陪葬的写才落得下去。刻意不走 RecordLog 的错误分支——
+// 那条路会连带写 ProviderStats 失败计数，而这个请求本身是成功的（响应已交付，
+// 丢的只是日志正文），误记失败会冤枉供应商。
+func MarkLogUnfinished(ctx context.Context, logID uint, reqStart time.Time) {
+	updateChatLogByID(ctx, logID, models.ChatLog{
+		Status:    "error",
+		Error:     "log record task discarded at shutdown: response body not recorded",
+		ProxyTime: time.Since(reqStart),
+	}, "failed to mark log unfinished")
+}
+
 // isClientDisconnectErr 判定客户端断连类失败（坏管道 / 连接重置 / 请求取消）。
 // 只认 errors.Is/As 语义匹配：*net.Error 覆盖 Windows WSAECONNRESET 等平台差异，
 // 不做错误文本匹配。

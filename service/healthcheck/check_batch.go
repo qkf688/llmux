@@ -9,10 +9,10 @@ import (
 	"github.com/qkf688/llmux/service/settings"
 )
 
-// errRoundSkipped 表示整轮检测未执行：本轮所需配置读不出来（Stage 36 拍板：这轮干脆不测）。
-// 单列一个哨兵而不是普通错误——调用方要能把「配置读不出来」与「查关联列表失败」分开：
-// 前者是已知降级（Warn 一条、下轮再看），后者是真故障（Error）。
-var errRoundSkipped = errors.New("health check round skipped: settings unreadable")
+// ErrRoundSkipped 表示整轮检测未执行：本轮所需配置读不出来（Stage 36 拍板：这轮干脆不测）。
+// 导出是为了让调用方能把它与「查关联列表失败」分开：前者是已知降级（一条 Warn、下轮再看），
+// 后者是真故障（Error）。
+var ErrRoundSkipped = errors.New("health check round skipped: settings unreadable")
 
 // ValidateRoundConfig 在启动整轮检测前同步确认本轮所需配置可读（Stage 36 Ruling 1）。
 //
@@ -21,7 +21,7 @@ var errRoundSkipped = errors.New("health check round skipped: settings unreadabl
 func (h *HealthChecker) ValidateRoundConfig(ctx context.Context) error {
 	if _, err := h.getCheckDisabledOnlyE(ctx); err != nil {
 		settings.LogReadSkip("health check scope", models.SettingKeyHealthCheckCheckDisabledOnly, err)
-		return errRoundSkipped
+		return ErrRoundSkipped
 	}
 	return nil
 }
@@ -30,7 +30,7 @@ func (h *HealthChecker) ValidateRoundConfig(ctx context.Context) error {
 // 进程关闭时可被取消——此前自建 context.Background() 让一轮检测完全没有取消感知。
 func (h *HealthChecker) checkAll(ctx context.Context) {
 	modelProviders, checkDisabledOnly, err := h.listModelProvidersForCheck(ctx)
-	if errors.Is(err, errRoundSkipped) {
+	if errors.Is(err, ErrRoundSkipped) {
 		slog.Warn("health check round skipped: settings unreadable")
 		return
 	}
@@ -54,7 +54,7 @@ func (h *HealthChecker) checkAll(ctx context.Context) {
 func (h *HealthChecker) CheckAllWithBatch(ctx context.Context, batchID string) error {
 	modelProviders, checkDisabledOnly, err := h.listModelProvidersForCheck(ctx)
 	if err != nil {
-		if errors.Is(err, errRoundSkipped) {
+		if errors.Is(err, ErrRoundSkipped) {
 			slog.Warn("batch health check skipped: settings unreadable", "batch_id", batchID)
 			return err
 		}
@@ -82,7 +82,7 @@ func (h *HealthChecker) listModelProvidersForCheck(ctx context.Context) ([]model
 		// 读不出来就不测这一轮：按默认值继续等于替用户把「只测已停用的」关掉，
 		// 对全部关联发真实探测请求（按量计费）——读不出来时不该扩大开销。
 		settings.LogReadSkip("health check scope", models.SettingKeyHealthCheckCheckDisabledOnly, err)
-		return nil, false, errRoundSkipped
+		return nil, false, ErrRoundSkipped
 	}
 
 	var status *bool

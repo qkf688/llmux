@@ -2,6 +2,7 @@ package healthcheck
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
@@ -11,6 +12,7 @@ import (
 	"github.com/qkf688/llmux/httpresp"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service"
+	"github.com/qkf688/llmux/service/healthcheck"
 	"gorm.io/gorm"
 )
 
@@ -46,6 +48,12 @@ func RunHealthCheckAll(c *gin.Context) {
 	// 经 bgtask 登记：批量检测会落库，进程关闭时须排空而非被硬切。
 	bgtask.Go(func(ctx context.Context) {
 		if err := service.GetHealthChecker().CheckAllWithBatch(ctx, batchID); err != nil {
+			// 配置读不出来是已知降级（启动前已探过一次，这里只在竞态窗口可达），按 Warn 记：
+			// 与真故障共用 ERROR 通道会让告警把降级算成故障。
+			if errors.Is(err, healthcheck.ErrRoundSkipped) {
+				slog.Warn("batch health check skipped: settings unreadable", "batch_id", batchID)
+				return
+			}
 			slog.Error("failed to run batch health check", "error", err, "batch_id", batchID)
 		}
 	})

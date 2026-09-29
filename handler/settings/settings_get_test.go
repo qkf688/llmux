@@ -59,7 +59,7 @@ func TestBuildSettingsResponse_SharedHealthKeys_StillApplied(t *testing.T) {
 
 // TestGenericSettingsResponseFieldContract 通用设置响应字段契约（Stage 36 机械门）：
 // ① 每个非 health 域的设置项都必须在通用响应结构里有位置——否则它在设置页上永远显示默认值，
-//    而这种「漏字段」正是分流静默跳过的副作用，必须由门挡住，不靠人盯；
+// 而这种「漏字段」正是分流静默跳过的副作用，必须由门挡住，不靠人盯；
 // ② 反向锁定 health 域里被通用页复用的那一组（集合相等），防按域粗筛时误伤。
 func TestGenericSettingsResponseFieldContract(t *testing.T) {
 	// 通用设置页共享的 health 键（有意为之的一份清单，改动必须显式过这里）

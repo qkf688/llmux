@@ -58,10 +58,10 @@ func RunHealthCheckAll(c *gin.Context) {
 
 // BatchHealthCheckStatus 批次健康检测状态响应
 type BatchHealthCheckStatus struct {
-	BatchID    string                  `json:"batch_id"`
-	TotalCount int                     `json:"total_count"`
-	Success    int                     `json:"success"`
-	Failed     int                     `json:"failed"`
+	BatchID    string `json:"batch_id"`
+	TotalCount int    `json:"total_count"`
+	Success    int    `json:"success"`
+	Failed     int    `json:"failed"`
 	// NotMeasured 本机原因没测成的条数（Stage 36 三态）：既不是成功也不是失败，
 	// 单列才能让 success + failed + not_measured + pending 与 total 加得平。
 	NotMeasured int                     `json:"not_measured"`

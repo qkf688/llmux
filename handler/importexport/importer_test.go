@@ -3,26 +3,19 @@ package importexport
 import (
 	"testing"
 
-	"github.com/glebarez/sqlite"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 	"gorm.io/gorm"
 )
 
 func newImportTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"))
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	if err := db.AutoMigrate(
+	return testutil.New(t,
 		&models.Provider{},
 		&models.Model{},
 		&models.ModelWithProvider{},
 		&models.Setting{},
-	); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return db
+	)
 }
 
 func TestImportConfigData_ClearsAndInsertsZeroProviders(t *testing.T) {

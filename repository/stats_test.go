@@ -6,28 +6,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 	"gorm.io/gorm"
 )
 
 func newStatsTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"))
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	if err := db.AutoMigrate(
+	return testutil.New(t,
 		&models.StatsTotal{},
 		&models.StatsDaily{},
 		&models.StatsHourly{},
 		&models.StatsModelTotal{},
 		&models.StatsRealModelTotal{},
 		&models.StatsProviderTotal{},
-	); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return db
+	)
 }
 
 // 固定时刻，避免依赖 time.Now 导致跨零点 flaky。

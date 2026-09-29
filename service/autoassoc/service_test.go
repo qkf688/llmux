@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/glebarez/sqlite"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/repository"
 	"gorm.io/gorm"
@@ -18,21 +18,14 @@ func (m staticMatcher) Match(name string) []uint {
 
 func newTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open("file:autoassoc_"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	if err := db.AutoMigrate(
+	return testutil.New(t,
 		&models.Model{},
 		&models.Provider{},
 		&models.ModelWithProvider{},
 		&models.ModelTemplateItem{},
 		&models.Setting{},
 		&models.KeyGroup{},
-	); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return db
+	)
 }
 
 // seedProviderModels 为供应商写入分组白名单（组织级目录来源，替代旧 Config.upstream_models）。

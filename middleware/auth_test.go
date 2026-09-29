@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/glebarez/sqlite"
 	"github.com/qkf688/llmux/common/credentialcrypto"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/repository"
 	"github.com/tidwall/gjson"
@@ -24,22 +24,8 @@ import (
 
 func newAuthTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"))
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	// sqlite 内存库多连接下表不可见，强制单连接。
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatalf("raw db: %v", err)
-	}
-	sqlDB.SetMaxOpenConns(1)
-	sqlDB.SetMaxIdleConns(1)
-	t.Cleanup(func() { _ = sqlDB.Close() })
-	if err := db.AutoMigrate(&models.User{}, &models.ApiKey{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return db
+	// 建库/单连接/关库清理统一走 testutil（内存库唯一 DSN，防跨测串库）
+	return testutil.New(t, &models.User{}, &models.ApiKey{})
 }
 
 // newAuthTestEnv 建 admin 用户 + 挂 AuthAPIKey 保护的 /v1/ping（回显归因快照）。

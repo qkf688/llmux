@@ -5,21 +5,14 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/glebarez/sqlite"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 	"gorm.io/gorm"
 )
 
 func newVMTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"))
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	if err := db.AutoMigrate(&models.VirtualModel{}, &models.VirtualModelMapping{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return db
+	return testutil.New(t, &models.VirtualModel{}, &models.VirtualModelMapping{})
 }
 
 func TestVirtualModelMappingRepo_HardDeleteAllowsRecreate(t *testing.T) {

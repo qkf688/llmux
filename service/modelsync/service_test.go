@@ -12,29 +12,18 @@ import (
 	"time"
 
 	"github.com/qkf688/llmux/common/credentialcrypto"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
-	"github.com/qkf688/llmux/service/internal/testutil"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 const testSyncCredHexKey = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
 
+// setupModelSyncTestDB 建库走 testutil.New：唯一名内存库 + 单连接 + 自动清理
+// 内建，-count=N 连跑不再跨轮串数据。
 func setupModelSyncTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-
-	dsn := fmt.Sprintf("file:model_sync_test_%d?mode=memory&cache=shared", time.Now().UnixNano())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("failed to open sqlite db: %v", err)
-	}
-
-	sqlDB := testutil.ConfigureSQLiteForSingleConn(t, db)
-	t.Cleanup(func() {
-		_ = sqlDB.Close()
-	})
-
-	if err := db.AutoMigrate(
+	return testutil.New(t,
 		&models.Provider{},
 		&models.ModelSyncLog{},
 		&models.Setting{},
@@ -42,11 +31,7 @@ func setupModelSyncTestDB(t *testing.T) *gorm.DB {
 		&models.KeyGroup{},
 		&models.Credential{},
 		&models.Pool{},
-	); err != nil {
-		t.Fatalf("failed to migrate model sync tables: %v", err)
-	}
-
-	return db
+	)
 }
 
 func setupSyncCipher(t *testing.T) *credentialcrypto.Cipher {

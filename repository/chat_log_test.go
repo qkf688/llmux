@@ -6,26 +6,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 	"gorm.io/gorm"
 )
 
 func newLogTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"))
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	if err := db.AutoMigrate(
+	return testutil.New(t,
 		&models.ChatLog{},
 		&models.ChatIO{},
 		&models.HealthCheckLog{},
 		&models.ModelSyncLog{},
-	); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return db
+	)
 }
 
 func TestChatLogRepo_ListAndHardDeleteFiltered(t *testing.T) {

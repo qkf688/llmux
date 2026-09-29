@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/settings"
 )
@@ -54,10 +55,7 @@ func TestCreateChatIO_InputCappedHeadTail(t *testing.T) {
 	setRawLogFieldMaxKiB(t, 16) // 16 KiB
 
 	payload := strings.Repeat("字", (64<<10)/3) // 64 KiB 中文，截断处多在多字节中间
-	logRow := models.ChatLog{Status: "success"}
-	if err := models.DB.Create(&logRow).Error; err != nil {
-		t.Fatalf("create log row: %v", err)
-	}
+	logRow := testutil.NewRow(t, models.DB, models.ChatLog{Status: "success"})
 
 	limit := getRawLogFieldMaxBytes(context.Background())
 	if err := createChatIO(context.Background(), logRow.ID, []byte(payload), nil); err != nil {
@@ -90,10 +88,7 @@ func TestCreateChatIO_InputWithinLimitUnchanged(t *testing.T) {
 	setRawLogFieldMaxKiB(t, 16)
 
 	payload := strings.Repeat("a", 4<<10) // 4 KiB，远低于 16 KiB 上限
-	logRow := models.ChatLog{Status: "success"}
-	if err := models.DB.Create(&logRow).Error; err != nil {
-		t.Fatalf("create log row: %v", err)
-	}
+	logRow := testutil.NewRow(t, models.DB, models.ChatLog{Status: "success"})
 
 	if err := createChatIO(context.Background(), logRow.ID, []byte(payload), nil); err != nil {
 		t.Fatalf("createChatIO: %v", err)

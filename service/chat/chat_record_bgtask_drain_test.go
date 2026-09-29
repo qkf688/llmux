@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/qkf688/llmux/common/bgtask"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 )
 
@@ -19,10 +20,7 @@ import (
 func TestRecordLog_BgtaskShutdownDrainsWriteback(t *testing.T) {
 	initChatRecordTestDB(t)
 
-	logRow := models.ChatLog{Name: "m", ProviderModel: "pm", ProviderName: "p", Status: "success"}
-	if err := models.DB.Create(&logRow).Error; err != nil {
-		t.Fatalf("create log: %v", err)
-	}
+	logRow := testutil.NewRow(t, models.DB, models.ChatLog{Name: "m", ProviderModel: "pm", ProviderName: "p", Status: "success"})
 
 	// processer 阻塞到放行：让 Shutdown 撞上「正在写」状态，验证排空等待而非甩手。
 	release := make(chan struct{})

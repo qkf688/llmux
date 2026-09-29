@@ -4,21 +4,14 @@ import (
 	"context"
 	"testing"
 
-	"github.com/glebarez/sqlite"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 	"gorm.io/gorm"
 )
 
 func newModelTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"))
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	if err := db.AutoMigrate(&models.Model{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return db
+	return testutil.New(t, &models.Model{})
 }
 
 // UpdateFields 必须能写入零值（GORM 结构体 Updates 会跳过零值）。

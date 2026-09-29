@@ -5,21 +5,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 	"gorm.io/gorm"
 )
 
 func newSyncLogTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"))
-	if err != nil {
-		t.Fatalf("open test db: %v", err)
-	}
-	if err := db.AutoMigrate(&models.ModelSyncLog{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return db
+	return testutil.New(t, &models.ModelSyncLog{})
 }
 
 // seedSyncLogs 直接建行；SyncedAt 显式给值以保证排序可预期。

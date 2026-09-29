@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/repository"
 	"github.com/qkf688/llmux/service/credwrite"
@@ -47,7 +48,7 @@ func TestRecordLog_ErrorsOnly_ClearsRawFieldsOnSuccess(t *testing.T) {
 		t.Fatalf("enable errors-only: %v", err)
 	}
 
-	log := models.ChatLog{
+	log := testutil.NewRow(t, models.DB, models.ChatLog{
 		Name:            "m",
 		ProviderModel:   "pm",
 		ProviderName:    "p",
@@ -57,10 +58,7 @@ func TestRecordLog_ErrorsOnly_ClearsRawFieldsOnSuccess(t *testing.T) {
 		ResponseHeaders: `{"Content-Type":["application/json"]}`,
 		ResponseBody:    `{"will":"be cleared"}`,
 		RawResponseBody: `{"raw":"be cleared"}`,
-	}
-	if err := models.DB.Create(&log).Error; err != nil {
-		t.Fatalf("create log: %v", err)
-	}
+	})
 
 	proc := func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
 		_, _ = io.ReadAll(pr)
@@ -103,7 +101,7 @@ func TestRecordLog_ErrorsOnly_DoesNotClearRawFieldsOnErrorStatus(t *testing.T) {
 		t.Fatalf("enable errors-only: %v", err)
 	}
 
-	log := models.ChatLog{
+	log := testutil.NewRow(t, models.DB, models.ChatLog{
 		Name:            "m",
 		ProviderModel:   "pm",
 		ProviderName:    "p",
@@ -113,10 +111,7 @@ func TestRecordLog_ErrorsOnly_DoesNotClearRawFieldsOnErrorStatus(t *testing.T) {
 		ResponseHeaders: `{"Content-Type":["application/json"]}`,
 		ResponseBody:    `{"keep":"me"}`,
 		RawResponseBody: `{"raw":"keep"}`,
-	}
-	if err := models.DB.Create(&log).Error; err != nil {
-		t.Fatalf("create log: %v", err)
-	}
+	})
 
 	proc := func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
 		_, _ = io.ReadAll(pr)

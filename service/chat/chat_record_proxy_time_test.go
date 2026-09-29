@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 )
 
@@ -16,15 +17,12 @@ import (
 func TestRecordLog_Success_BackfillsProxyTime(t *testing.T) {
 	initChatRecordTestDB(t)
 
-	log := models.ChatLog{
+	log := testutil.NewRow(t, models.DB, models.ChatLog{
 		Name:          "m1",
 		ProviderModel: "pm1",
 		ProviderName:  "p1",
 		Status:        "success",
-	}
-	if err := models.DB.Create(&log).Error; err != nil {
-		t.Fatalf("create log: %v", err)
-	}
+	})
 
 	// 回拨 ReqStart：真实请求中它是 handler 的 startReq，processer 读到 EOF 返回时
 	// 必然已过毫秒级时间；回拨让断言有可测阈值，不必在测试里真实 sleep。
@@ -63,15 +61,12 @@ func TestRecordLog_Success_BackfillsProxyTime(t *testing.T) {
 func TestRecordLog_ProcesserError_BackfillsProxyTime(t *testing.T) {
 	initChatRecordTestDB(t)
 
-	log := models.ChatLog{
+	log := testutil.NewRow(t, models.DB, models.ChatLog{
 		Name:          "m1",
 		ProviderModel: "pm1",
 		ProviderName:  "p1",
 		Status:        "success",
-	}
-	if err := models.DB.Create(&log).Error; err != nil {
-		t.Fatalf("create log: %v", err)
-	}
+	})
 
 	reqStart := time.Now().Add(-300 * time.Millisecond)
 

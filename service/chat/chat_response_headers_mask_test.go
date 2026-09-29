@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/qkf688/llmux/common"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 )
 
@@ -15,10 +16,7 @@ import (
 func TestUpdateRequestAndResponseLog_MasksResponseHeaders(t *testing.T) {
 	initChatRecordTestDB(t)
 
-	log := models.ChatLog{Name: "m-resp-mask", Status: "success", Style: "openai"}
-	if err := models.DB.Create(&log).Error; err != nil {
-		t.Fatalf("create log: %v", err)
-	}
+	log := testutil.NewRow(t, models.DB, models.ChatLog{Name: "m-resp-mask", Status: "success", Style: "openai"})
 
 	resHeader := http.Header{
 		"Content-Type": {"application/json"},

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 )
 
@@ -20,10 +21,7 @@ import (
 func TestRecordLog_ProcesserFailure_LogsExactlyOnce(t *testing.T) {
 	initChatRecordTestDB(t)
 
-	logRow := models.ChatLog{Name: "m", ProviderModel: "pm", ProviderName: "p", Status: "success"}
-	if err := models.DB.Create(&logRow).Error; err != nil {
-		t.Fatalf("create log: %v", err)
-	}
+	logRow := testutil.NewRow(t, models.DB, models.ChatLog{Name: "m", ProviderModel: "pm", ProviderName: "p", Status: "success"})
 
 	var logs strings.Builder
 	prev := slog.Default()
@@ -68,10 +66,7 @@ func TestRecordLog_ProcesserFailure_LogsExactlyOnce(t *testing.T) {
 func TestRecordLog_ClientDisconnect_LogsWarn(t *testing.T) {
 	initChatRecordTestDB(t)
 
-	logRow := models.ChatLog{Name: "m", ProviderModel: "pm", ProviderName: "p", Status: "success"}
-	if err := models.DB.Create(&logRow).Error; err != nil {
-		t.Fatalf("create log: %v", err)
-	}
+	logRow := testutil.NewRow(t, models.DB, models.ChatLog{Name: "m", ProviderModel: "pm", ProviderName: "p", Status: "success"})
 
 	var logs strings.Builder
 	prev := slog.Default()

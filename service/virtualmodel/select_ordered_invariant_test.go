@@ -4,9 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/glebarez/sqlite"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
-	"gorm.io/gorm"
 )
 
 // SelectRealModelsOrdered 的**出口不变式**：只要返回 err == nil，列表必非空。
@@ -21,19 +20,13 @@ import (
 // 本用例即红——否则回归形态是主路径 orderedModels[0] panic（Recovery 兜成 500），
 // 而原实现是干净的错误返回。
 func TestSelectRealModelsOrdered_NonEmptyWhenNoError(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"))
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	if err := db.AutoMigrate(
+	db := testutil.New(t,
 		&models.Model{},
 		&models.Provider{},
 		&models.ModelWithProvider{},
 		&models.VirtualModel{},
 		&models.VirtualModelMapping{},
-	); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	)
 
 	s := &Service{db: db, roundRobinState: make(map[uint]int)}
 	ctx := context.Background()

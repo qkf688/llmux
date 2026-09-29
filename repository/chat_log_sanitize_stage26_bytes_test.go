@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/glebarez/sqlite"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
-	"gorm.io/gorm"
 )
 
 // Stage 26 回归（risk-review C1 同款口径扩展到响应列）：SanitizeLegacyLogSnapshots
@@ -18,14 +16,8 @@ import (
 // 显式关库再扫主文件（Windows 不 Close 还会让 t.TempDir 清理失败把用例判红）。
 func TestChatLogRepo_SanitizeLegacyLogSnapshots_PhysicalBytesErased(t *testing.T) {
 	ctx := context.Background()
-	dbPath := filepath.Join(t.TempDir(), "sanitize26-bytes.db")
-	db, err := gorm.Open(sqlite.Open(dbPath))
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	if err := db.AutoMigrate(&models.ChatLog{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	// 文件库 + 返回库路径：关库后要扫主库文件物理字节（见下方 VACUUM 断言）。
+	db, dbPath := testutil.NewFile(t, testutil.FileOptions{}, &models.ChatLog{})
 	repo := NewChatLogRepo(db)
 
 	const (

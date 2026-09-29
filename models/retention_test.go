@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"gorm.io/driver/sqlite"
+	"github.com/qkf688/llmux/internal/testutil"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -20,18 +20,8 @@ type retentionProbe struct {
 
 func setupRetentionDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	// 每测独立 DSN，避免 :memory:?cache=shared 串库
-	dsn := fmt.Sprintf("file:retention_%s?mode=memory&cache=private", t.Name())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	if err := db.AutoMigrate(&retentionProbe{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return db
+	// 唯一名 + 清理已内建（testutil 契约），替代原「每测独立 DSN，避免串库」
+	return testutil.NewWithConfig(t, &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)}, &retentionProbe{})
 }
 
 func TestEnforceRetentionByOldestID_SoftDelete(t *testing.T) {

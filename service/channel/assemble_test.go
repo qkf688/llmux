@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/qkf688/llmux/common/credentialcrypto"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/repository"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -19,16 +19,11 @@ func reposFromDB(db *gorm.DB) *repository.Repositories { return repository.New(d
 
 // newAssembleTestDB 内存库 + 仅装配所需三表（credentials/endpoints/key_groups）。
 // pools 表不需要：凭据筛选无 Join，PoolID 只是 index 列（无外键约束）。
+// 建库走 testutil.New：原固定名内存库在 go test -count=N 连跑时跨轮串数据，
+// 第 2 轮断言假红（endpoints = 4, want 2）；testutil 每次调用发进程内唯一名库。
 func newAssembleTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open("file:assemble_test?mode=memory&cache=shared"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("gorm.Open: %v", err)
-	}
-	if err := db.AutoMigrate(&models.Credential{}, &models.Endpoint{}, &models.KeyGroup{}); err != nil {
-		t.Fatalf("AutoMigrate: %v", err)
-	}
-	return db
+	return testutil.New(t, &models.Credential{}, &models.Endpoint{}, &models.KeyGroup{})
 }
 
 // TestAssemble_CredentialMerge 锁装配归并语义：

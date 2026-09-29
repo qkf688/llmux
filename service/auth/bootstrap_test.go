@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/glebarez/sqlite"
 	"github.com/qkf688/llmux/common/credentialcrypto"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/repository"
 	"gorm.io/gorm"
@@ -15,13 +15,7 @@ import (
 
 func newBootstrapEnv(t *testing.T) (*repository.Repositories, *gorm.DB) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"))
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	if err := db.AutoMigrate(&models.User{}, &models.ApiKey{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	db := testutil.New(t, &models.User{}, &models.ApiKey{})
 	hexKey := hex.EncodeToString([]byte("0123456789012345678901234567890a"))
 	cipher, err := credentialcrypto.New(hexKey)
 	if err != nil {

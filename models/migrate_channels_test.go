@@ -5,23 +5,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/glebarez/sqlite"
 	"github.com/qkf688/llmux/common/credentialcrypto"
 	"github.com/qkf688/llmux/consts"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/tidwall/gjson"
 	"gorm.io/gorm"
 )
 
 func testChannelDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"))
-	if err != nil {
-		t.Fatalf("open test db: %v", err)
-	}
-	if err := db.AutoMigrate(&Provider{}, &Pool{}, &Credential{}, &Endpoint{}, &KeyGroup{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return db
+	return testutil.New(t, &Provider{}, &Pool{}, &Credential{}, &Endpoint{}, &KeyGroup{})
 }
 
 func testChannelCipher(t *testing.T) *credentialcrypto.Cipher {

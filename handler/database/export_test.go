@@ -8,30 +8,17 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/glebarez/sqlite"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 	"gorm.io/gorm"
 )
 
 // openExportFixtureDB 在 t.TempDir() 下建一个 WAL 模式文件库并迁移最小表集，
-// 返回已打开的 gorm.DB。导出回归依赖真实文件库（WAL 未 checkpoint 场景在 :memory:
-// 上不存在），不用 :memory:。
+// 返回已打开的 gorm.DB 与库文件路径。导出回归依赖真实文件库（WAL 未 checkpoint
+// 场景在 :memory: 上不存在），不用 :memory:；WAL 形态由 FileOptions.WAL 承担。
 func openExportFixtureDB(t *testing.T) (*gorm.DB, string) {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "llmux.db")
-	db, err := gorm.Open(sqlite.Open(dbPath+"?_pragma=journal_mode(WAL)"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	t.Cleanup(func() {
-		if sqlDB, err := db.DB(); err == nil {
-			_ = sqlDB.Close()
-		}
-	})
-	if err := db.AutoMigrate(&models.Setting{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return db, dbPath
+	return testutil.NewFile(t, testutil.FileOptions{WAL: true}, &models.Setting{})
 }
 
 // swapDBPath 临时改写 models 的库路径供 handler 读取，并把测试库挂到 models.DB
@@ -85,15 +72,8 @@ func TestExportDatabase_ContainsUncheckpointedWALWrites(t *testing.T) {
 	if err := os.WriteFile(exported, rec.Body.Bytes(), 0o644); err != nil {
 		t.Fatalf("write exported: %v", err)
 	}
-	out, err := gorm.Open(sqlite.Open(exported), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open exported db: %v", err)
-	}
-	t.Cleanup(func() {
-		if sqlDB, err := out.DB(); err == nil {
-			_ = sqlDB.Close()
-		}
-	})
+	// 打开导出物，断言种子行存在（OpenExisting 只挂清理，不建表不迁移）。
+	out := testutil.OpenExisting(t, exported)
 	var count int64
 	if err := out.Model(&models.Setting{}).Where("key = ?", "export_probe").Count(&count).Error; err != nil {
 		t.Fatalf("count probe row in export: %v", err)

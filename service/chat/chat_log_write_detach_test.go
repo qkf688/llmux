@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/qkf688/llmux/consts"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 )
 
@@ -16,10 +17,7 @@ import (
 func TestUpdateChatLogByID_DeadCtxStillWrites(t *testing.T) {
 	initChatRecordTestDB(t)
 
-	log := models.ChatLog{Name: "m-detach", Status: "success", Style: "openai"}
-	if err := models.DB.Create(&log).Error; err != nil {
-		t.Fatalf("create log: %v", err)
-	}
+	log := testutil.NewRow(t, models.DB, models.ChatLog{Name: "m-detach", Status: "success", Style: "openai"})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // 请求已死：超时/断连场景的等价形态
@@ -66,10 +64,7 @@ func TestSavePreProviderFailureLog_DeadCtxStillCreates(t *testing.T) {
 func TestUpdateChatLogByID_LogIDZeroShortCircuits(t *testing.T) {
 	initChatRecordTestDB(t)
 
-	log := models.ChatLog{Name: "m-bystander", Status: "success", Style: "openai"}
-	if err := models.DB.Create(&log).Error; err != nil {
-		t.Fatalf("create log: %v", err)
-	}
+	log := testutil.NewRow(t, models.DB, models.ChatLog{Name: "m-bystander", Status: "success", Style: "openai"})
 
 	updateChatLogByID(context.Background(), 0,
 		models.ChatLog{Status: "error", Error: "should touch nothing"}, "failed to update log status")

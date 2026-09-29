@@ -2,16 +2,12 @@ package modelsync
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"testing"
-	"time"
 
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/repository"
-	"github.com/qkf688/llmux/service/internal/testutil"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 func TestMatchesAnyRule(t *testing.T) {
@@ -25,16 +21,7 @@ func TestMatchesAnyRule(t *testing.T) {
 }
 
 func TestGetProviderModels_FromGroupWhitelist(t *testing.T) {
-	dsn := fmt.Sprintf("file:get_provider_models_%d?mode=memory&cache=shared", time.Now().UnixNano())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	sqlDB := testutil.ConfigureSQLiteForSingleConn(t, db)
-	t.Cleanup(func() { _ = sqlDB.Close() })
-	if err := db.AutoMigrate(&models.Provider{}, &models.KeyGroup{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	db := testutil.New(t, &models.Provider{}, &models.KeyGroup{})
 
 	provider := models.Provider{
 		Name:   "p",

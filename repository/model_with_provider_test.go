@@ -5,21 +5,14 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/glebarez/sqlite"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 	"gorm.io/gorm"
 )
 
 func newAssocTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"))
-	if err != nil {
-		t.Fatalf("open test db: %v", err)
-	}
-	if err := db.AutoMigrate(&models.ModelWithProvider{}, &models.ModelTemplateItem{}, &models.Provider{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return db
+	return testutil.New(t, &models.ModelWithProvider{}, &models.ModelTemplateItem{}, &models.Provider{})
 }
 
 func TestModelWithProviderRepo_CRUDAndBatch(t *testing.T) {

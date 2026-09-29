@@ -2,14 +2,11 @@ package service
 
 import (
 	"context"
-	"fmt"
-	"github.com/qkf688/llmux/service/internal/testutil"
 	"testing"
-	"time"
 
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/virtualmodel"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -17,33 +14,17 @@ func resetVirtualModelServiceSingleton() {
 	virtualmodel.ResetSingletonForTest()
 }
 
-// setupTestDB 创建测试数据库
+// setupTestDB 创建测试数据库（testutil.New：唯一名内存库 + 单连接 + 自动清理）
 func setupTestDB(t *testing.T) *gorm.DB {
 	resetVirtualModelServiceSingleton()
 
-	dsn := fmt.Sprintf("file:virtual_model_test_%d?mode=memory&cache=shared", time.Now().UnixNano())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("failed to connect database: %v", err)
-	}
-	sqlDB := testutil.ConfigureSQLiteForSingleConn(t, db)
-	t.Cleanup(func() {
-		_ = sqlDB.Close()
-	})
-
-	// 自动迁移表结构
-	err = db.AutoMigrate(
+	return testutil.New(t,
 		&models.VirtualModel{},
 		&models.VirtualModelMapping{},
 		&models.Model{},
 		&models.Provider{},
 		&models.ModelWithProvider{},
 	)
-	if err != nil {
-		t.Fatalf("failed to migrate database: %v", err)
-	}
-
-	return db
 }
 
 // createTestModels 创建测试用的模型数据

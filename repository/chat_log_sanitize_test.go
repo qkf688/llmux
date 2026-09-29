@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/glebarez/sqlite"
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
-	"gorm.io/gorm"
 )
 
 // Stage 16 契约（存量清洗）：启动装配时一次性把存量 chat_logs.request_headers 里的
@@ -94,14 +92,8 @@ func TestChatLogRepo_SanitizeLegacyRequestHeaders(t *testing.T) {
 // 恢复明文，「明文档案已消灭」的声称只在逻辑行成立。
 func TestChatLogRepo_SanitizeLegacyRequestHeaders_PhysicalBytesErased(t *testing.T) {
 	ctx := context.Background()
-	dbPath := filepath.Join(t.TempDir(), "sanitize-bytes.db")
-	db, err := gorm.Open(sqlite.Open(dbPath))
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	if err := db.AutoMigrate(&models.ChatLog{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	// 文件库 + 返回库路径：关库后要扫主库文件物理字节（见下方 VACUUM 断言）。
+	db, dbPath := testutil.NewFile(t, testutil.FileOptions{}, &models.ChatLog{})
 	repo := NewChatLogRepo(db)
 
 	const secret = "sk-legacy-PLAINTEXT-MARKER"

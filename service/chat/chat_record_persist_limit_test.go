@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/qkf688/llmux/internal/testutil"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/settings"
 )
@@ -118,10 +119,7 @@ func TestPersistChatLog_ChatIOOutputCapped(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		chunks = append(chunks, chunk)
 	}
-	logRow := models.ChatLog{Status: "success"}
-	if err := models.DB.Create(&logRow).Error; err != nil {
-		t.Fatalf("create log row: %v", err)
-	}
+	logRow := testutil.NewRow(t, models.DB, models.ChatLog{Status: "success"})
 	in := RecordLogInput{LogID: logRow.ID, IOLog: true}
 	output := &models.OutputUnion{OfStringArray: chunks}
 

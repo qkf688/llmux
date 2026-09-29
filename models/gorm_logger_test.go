@@ -6,12 +6,11 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
+	"github.com/qkf688/llmux/internal/testutil"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -23,24 +22,13 @@ type gormLogLeakProbe struct {
 	Token string `gorm:"uniqueIndex;type:varchar(64)"`
 }
 
-// openGormLogTestDB 用 t.TempDir 下独立文件库：DSN 天然唯一，不受子测试名
-// （含 /、CJK）干扰，也不依赖 cache=shared 与连接复用的巧合；测试结束先关连接
-// 再让 TempDir 清理（cleanup LIFO），不泄漏句柄。
+// openGormLogTestDB 用 testutil.NewFile 独立文件库：TempDir 唯一 DSN 不受子测试名
+// （含 /、CJK）干扰，也不依赖 cache=shared 与连接复用的巧合；「测试结束先关连接
+// 再让 TempDir 清理」的意图由 testutil 契约内建（cleanup LIFO，不泄漏句柄）。
+// 原 DSN 的 busy_timeout(5000) 由 FileOptions.BusyTimeoutMs 承担。
 func openGormLogTestDB(t *testing.T, gormCfg *gorm.Config) *gorm.DB {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "gormlog.db") + "?_pragma=busy_timeout(5000)"
-	db, err := gorm.Open(sqlite.Open(path), gormCfg)
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	t.Cleanup(func() {
-		if sqlDB, dbErr := db.DB(); dbErr == nil {
-			_ = sqlDB.Close()
-		}
-	})
-	if err := db.AutoMigrate(&gormLogLeakProbe{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	db, _ := testutil.NewFile(t, testutil.FileOptions{BusyTimeoutMs: 5000, Gorm: gormCfg}, &gormLogLeakProbe{})
 	return db
 }
 

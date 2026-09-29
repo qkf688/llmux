@@ -3,6 +3,7 @@ package adjustment
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -12,15 +13,30 @@ import (
 )
 
 // mapReader 是测试用 settings.Reader：命中 map 则返回覆盖值，否则走 default。
-// failKeys 中的键在 E 变体里模拟「读失败」（返回 err），裸变体仍返回 map 值——
-// 用于回归「旧代码退默认值/覆盖值冒充真配置」与「新代码显式降级」的行为差异。
+//
+// 两处必须按**生产三态**建模（Stage 36）：
+//   - failKeys 命中 = 读失败，此时**裸变体与 E 变体一起失败**（生产里两者读同一张表，
+//     不存在「只有 E 变体读不到」的世界）；旧 mock 让裸变体照旧返回覆写值，等于把
+//     「读失败时裸读退默认值/覆写值驱动写」这条真实风险从测试里抹掉；
+//   - 存值非法（低于 min）= 读失败（生产 GetSettingIntE 的语义），裸变体退 default，
+//     不再静默钳到 min 冒充正常值。
 type mapReader struct {
 	bools    map[string]bool
 	ints     map[string]int
 	failKeys map[string]bool
 }
 
+func (m mapReader) readErr(key string) error {
+	if m.failKeys[key] {
+		return errors.New("simulated settings read failure")
+	}
+	return nil
+}
+
 func (m mapReader) Bool(_ context.Context, key string, defaultValue bool) bool {
+	if m.readErr(key) != nil {
+		return defaultValue
+	}
 	if m.bools != nil {
 		if v, ok := m.bools[key]; ok {
 			return v
@@ -30,14 +46,9 @@ func (m mapReader) Bool(_ context.Context, key string, defaultValue bool) bool {
 }
 
 func (m mapReader) Int(_ context.Context, key string, defaultValue, minValue int) int {
-	v := defaultValue
-	if m.ints != nil {
-		if x, ok := m.ints[key]; ok {
-			v = x
-		}
-	}
-	if minValue > 0 && v < minValue {
-		return minValue
+	v, err := m.intValue(key, defaultValue, minValue)
+	if err != nil {
+		return defaultValue
 	}
 	return v
 }
@@ -47,17 +58,35 @@ func (m mapReader) String(_ context.Context, _ string, defaultValue string) stri
 }
 
 func (m mapReader) BoolE(ctx context.Context, key string, defaultValue bool) (bool, error) {
-	if m.failKeys[key] {
-		return defaultValue, errors.New("simulated settings read failure")
+	if err := m.readErr(key); err != nil {
+		return defaultValue, err
 	}
 	return m.Bool(ctx, key, defaultValue), nil
 }
 
-func (m mapReader) IntE(ctx context.Context, key string, defaultValue, minValue int) (int, error) {
-	if m.failKeys[key] {
-		return defaultValue, errors.New("simulated settings read failure")
+func (m mapReader) IntE(_ context.Context, key string, defaultValue, minValue int) (int, error) {
+	if err := m.readErr(key); err != nil {
+		return defaultValue, err
 	}
-	return m.Int(ctx, key, defaultValue, minValue), nil
+	return m.intValue(key, defaultValue, minValue)
+}
+
+// intValue 按生产语义取值：覆盖值存在但非法（低于 min）→ 报错（不静默钳到 min）。
+func (m mapReader) intValue(key string, defaultValue, minValue int) (int, error) {
+	if err := m.readErr(key); err != nil {
+		return defaultValue, err
+	}
+
+	v := defaultValue
+	if m.ints != nil {
+		if x, ok := m.ints[key]; ok {
+			v = x
+		}
+	}
+	if minValue > 0 && v < minValue {
+		return defaultValue, fmt.Errorf("simulated invalid stored value %d for %s (min %d)", v, key, minValue)
+	}
+	return v, nil
 }
 
 func useSettings(t *testing.T, r mapReader) {

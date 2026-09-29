@@ -150,3 +150,32 @@ func TestApplySuccessAdjustments_ReadFail_SkipsIncrease(t *testing.T) {
 		t.Fatalf("Weight/Priority = %d/%d, want 10/10（配置读不到 → 提升写跳过）", got.Weight, got.Priority)
 	}
 }
+
+// TestApplySuccessAdjustments_GateReadFail_SkipsIncrease 成功侧**闸门**读失败腿（Stage 36 补缺口）：
+// 闸门本身读不到时不得按默认「计入成功」继续写提升——覆写值 true 让旧代码照样提升，
+// 这条腿此前无人覆盖（步长/上限读失败是另一条腿，见上一条用例）。
+func TestApplySuccessAdjustments_GateReadFail_SkipsIncrease(t *testing.T) {
+	initAdjustmentTestDB(t)
+	useSettings(t, mapReader{
+		bools: map[string]bool{
+			models.SettingKeyAutoSuccessIncrease: true, // 裸变体的危险覆写值
+		},
+		ints: map[string]int{
+			models.SettingKeyAutoWeightIncreaseStep:   3,
+			models.SettingKeyAutoWeightIncreaseMax:    100,
+			models.SettingKeyAutoPriorityIncreaseStep: 3,
+			models.SettingKeyAutoPriorityIncreaseMax:  100,
+		},
+		failKeys: map[string]bool{
+			models.SettingKeyAutoSuccessIncrease: true,
+		},
+	})
+
+	mp := createModelProvider(t, 10, 10, 0, nil)
+	ApplySuccessAdjustments(context.Background(), mp.ID)
+
+	got := loadModelProvider(t, mp.ID)
+	if got.Weight != 10 || got.Priority != 10 {
+		t.Fatalf("Weight/Priority = %d/%d, want 10/10（闸门读不到 → 提升写整体跳过）", got.Weight, got.Priority)
+	}
+}

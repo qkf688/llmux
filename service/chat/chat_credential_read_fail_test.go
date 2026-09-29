@@ -50,7 +50,7 @@ func TestPersistCredentialAuthFailure_ThresholdReadFail_CountsWithoutStop(t *tes
 func TestPersistCredentialCooldown_WindowReadFail_SkipsCooldown(t *testing.T) {
 	initChatRecordTestDB(t)
 	SetSettingsReader(credCooldownSettingsReader{
-		Cooldown429Sec: 60, // 裸变体的覆写值：旧代码会拿它写冷却
+		Cooldown429Sec: 60, // 危险覆写值：读不到时若退它，就会写出一段编造的冷却
 		failKeys: map[string]bool{
 			models.SettingKeyCredHealthCooldown429Sec: true,
 		},
@@ -72,5 +72,37 @@ func TestPersistCredentialCooldown_WindowReadFail_SkipsCooldown(t *testing.T) {
 	}
 	if got.CooldownUntil != nil {
 		t.Fatal("CooldownUntil != nil, want 窗口读不到 → 冷却写跳过（不拿编造窗口写冷却）")
+	}
+}
+
+// TestPersistCredentialCooldown_ServerWindowReadFail_SkipsCooldown 服务端窗冷却读失败腿
+// （Stage 36 补缺口）：5xx/网络与 429 共用一个分窗判定函数，[非 429 走服务端窗] 这条
+// 分支此前没有读失败用例——同构代码不等于已覆盖，须同样跳过冷却写、不得退默认窗口。
+func TestPersistCredentialCooldown_ServerWindowReadFail_SkipsCooldown(t *testing.T) {
+	initChatRecordTestDB(t)
+	SetSettingsReader(credCooldownSettingsReader{
+		CooldownServerSec: 120, // 危险覆写值：读不到时若退它，就会写出一段编造的冷却
+		failKeys: map[string]bool{
+			models.SettingKeyCredHealthCooldownServerSec: true,
+		},
+	})
+	t.Cleanup(func() { SetSettingsReader(nil) })
+
+	cred := models.Credential{Key: "enc", KeyHash: "hash"}
+	if err := models.DB.Create(&cred).Error; err != nil {
+		t.Fatalf("create credential: %v", err)
+	}
+
+	// 非 429 的凭据级失败（5xx）走服务端窗
+	if err := persistCredentialCooldown(context.Background(), cred.ID, cooldownReasonForStatus(500)); err != nil {
+		t.Fatalf("persist cooldown: %v", err)
+	}
+
+	var got models.Credential
+	if err := models.DB.First(&got, cred.ID).Error; err != nil {
+		t.Fatalf("reload credential: %v", err)
+	}
+	if got.CooldownUntil != nil {
+		t.Fatalf("CooldownUntil != nil (reason=%q), want 服务端窗读不到 → 冷却写跳过", got.CooldownReason)
 	}
 }

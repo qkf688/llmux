@@ -74,17 +74,36 @@ func TestApplyCredentialCooldown(t *testing.T) {
 
 // credCooldownSettingsReader 测试用 settings.Reader stub：只覆写凭据健康键，
 // 其余回退 defaultValue。窗口最小粒度秒。
+//
+// failKeys 命中 = 读失败，**裸变体与 E 变体一起失败**（Stage 36 按生产三态建模：
+// 生产里两者读同一张表，不存在「只有 E 变体读不到」的世界；旧 mock 让裸变体照旧
+// 返回覆写值，会把「读失败时裸读退覆写值驱动写」这条真实风险从测试里抹掉）。
 type credCooldownSettingsReader struct {
 	Cooldown429Sec    int
 	CooldownServerSec int
 	AuthFailThreshold int
 	ProbeIntervalSec  int
-	failKeys          map[string]bool // E 变体模拟读失败的键（裸变体仍返回覆写值）
+	failKeys          map[string]bool
 }
 
-func (r credCooldownSettingsReader) Bool(_ context.Context, _ string, def bool) bool { return def }
+func (r credCooldownSettingsReader) readErr(key string) error {
+	if r.failKeys[key] {
+		return errors.New("simulated settings read failure")
+	}
+	return nil
+}
+
+func (r credCooldownSettingsReader) Bool(_ context.Context, key string, def bool) bool {
+	if r.readErr(key) != nil {
+		return def
+	}
+	return def
+}
 
 func (r credCooldownSettingsReader) Int(_ context.Context, key string, def, _ int) int {
+	if r.readErr(key) != nil {
+		return def
+	}
 	switch key {
 	case models.SettingKeyCredHealthCooldown429Sec:
 		return r.Cooldown429Sec
@@ -106,15 +125,15 @@ func (r credCooldownSettingsReader) String(_ context.Context, _ string, def stri
 }
 
 func (r credCooldownSettingsReader) BoolE(ctx context.Context, key string, def bool) (bool, error) {
-	if r.failKeys[key] {
-		return def, errors.New("simulated settings read failure")
+	if err := r.readErr(key); err != nil {
+		return def, err
 	}
 	return r.Bool(ctx, key, def), nil
 }
 
 func (r credCooldownSettingsReader) IntE(ctx context.Context, key string, def, min int) (int, error) {
-	if r.failKeys[key] {
-		return def, errors.New("simulated settings read failure")
+	if err := r.readErr(key); err != nil {
+		return def, err
 	}
 	return r.Int(ctx, key, def, min), nil
 }

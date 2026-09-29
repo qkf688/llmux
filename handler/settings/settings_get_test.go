@@ -1,10 +1,95 @@
 package settings
 
 import (
+	"log/slog"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/qkf688/llmux/models"
 )
+
+// TestBuildSettingsResponse_HealthKeys_NoWarn 通用设置页拼装不得对已知归属边界刷警告（Stage 36）：
+// 健康检测系设置走独立域（health.go），在通用设置页没有位置。此前每读到一个这样的键就
+// 记一条「failed to set setting field」，一次 GET /settings 固定刷 7 条——把真警告淹掉、
+// 也把人往「组装出错」的错方向带。
+func TestBuildSettingsResponse_HealthKeys_NoWarn(t *testing.T) {
+	var logs strings.Builder
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	rows := []models.Setting{
+		{Key: models.SettingKeyHealthCheckEnabled, Value: "true"},
+		{Key: models.SettingKeyHealthCheckInterval, Value: "30"},
+		{Key: models.SettingKeyHealthCheckFailureThreshold, Value: "5"},
+		{Key: models.SettingKeyHealthCheckFailureDisableEnabled, Value: "false"},
+		{Key: models.SettingKeyHealthCheckAutoEnable, Value: "true"},
+		{Key: models.SettingKeyHealthCheckLogRetentionCount, Value: "500"},
+		{Key: models.SettingKeyHealthCheckCheckDisabledOnly, Value: "true"},
+	}
+
+	if _, err := buildSettingsResponse(rows); err != nil {
+		t.Fatalf("buildSettingsResponse error: %v", err)
+	}
+	if strings.Contains(logs.String(), "failed to set setting field") {
+		t.Errorf("已知归属边界被当成组装失败上报，每次打开设置页都会刷噪声:\n%s", logs.String())
+	}
+}
+
+// TestBuildSettingsResponse_SharedHealthKeys_StillApplied 反向锁定：健康检测域里
+// **同时属于通用设置页**的两个开关必须照旧被填上（按域粗筛会误伤它们）。
+func TestBuildSettingsResponse_SharedHealthKeys_StillApplied(t *testing.T) {
+	rows := []models.Setting{
+		{Key: models.SettingKeyHealthCheckCountAsSuccess, Value: "false"},
+		{Key: models.SettingKeyHealthCheckCountAsFailure, Value: "true"},
+	}
+
+	response, err := buildSettingsResponse(rows)
+	if err != nil {
+		t.Fatalf("buildSettingsResponse error: %v", err)
+	}
+	if response.CountHealthCheckAsSuccess {
+		t.Error("count_health_check_as_success = true, want false（通用设置页共享的键不得被分流误伤）")
+	}
+	if !response.CountHealthCheckAsFailure {
+		t.Error("count_health_check_as_failure = false, want true（通用设置页共享的键不得被分流误伤）")
+	}
+}
+
+// TestGenericSettingsResponseFieldContract 通用设置响应字段契约（Stage 36 机械门）：
+// ① 每个非 health 域的设置项都必须在通用响应结构里有位置——否则它在设置页上永远显示默认值，
+//    而这种「漏字段」正是分流静默跳过的副作用，必须由门挡住，不靠人盯；
+// ② 反向锁定 health 域里被通用页复用的那一组（集合相等），防按域粗筛时误伤。
+func TestGenericSettingsResponseFieldContract(t *testing.T) {
+	// 通用设置页共享的 health 键（有意为之的一份清单，改动必须显式过这里）
+	expectedShared := map[string]bool{
+		models.SettingKeyHealthCheckCountAsSuccess: true,
+		models.SettingKeyHealthCheckCountAsFailure: true,
+	}
+	actualShared := map[string]bool{}
+	responseType := reflect.TypeOf(SettingsResponse{})
+
+	for _, schema := range models.SettingSchemas() {
+		_, present := responseType.FieldByName(schema.Field)
+
+		if schema.Category == "health" {
+			if present {
+				actualShared[schema.Key] = true
+			}
+			continue
+		}
+
+		if !present {
+			t.Errorf("设置项 %s（字段 %s）在通用设置响应里没有位置：要么补字段，要么把它的归属改成独立域（静默跳过的代价必须由本门兜住）",
+				schema.Key, schema.Field)
+		}
+	}
+
+	if !reflect.DeepEqual(actualShared, expectedShared) {
+		t.Errorf("通用设置页共享的 health 键集合 = %v, want %v", actualShared, expectedShared)
+	}
+}
 
 func TestDefaultSettingsResponse(t *testing.T) {
 	response, err := buildSettingsResponse(nil)

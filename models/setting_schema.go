@@ -205,16 +205,39 @@ func ApplySettingDefaults(dst any) error {
 	return nil
 }
 
-// SetSettingField 根据 schema 将解析后的值设置到 DTO 结构体指针的对应字段。
-func SetSettingField(dst any, s SettingSchema, parsed any) error {
+// settingFieldOf 取目标结构体上 schema 声明的可写字段；不可写（结构体上没有 / 不可设置）返回 false。
+func settingFieldOf(dst any, field string) (reflect.Value, bool) {
 	v := reflect.ValueOf(dst)
 	if v.Kind() != reflect.Ptr || v.IsNil() {
-		return fmt.Errorf("dst must be a non-nil pointer")
+		return reflect.Value{}, false
 	}
 	v = v.Elem()
+	if v.Kind() != reflect.Struct {
+		return reflect.Value{}, false
+	}
 
-	field := v.FieldByName(s.Field)
-	if !field.IsValid() || !field.CanSet() {
+	f := v.FieldByName(field)
+	if !f.IsValid() || !f.CanSet() {
+		return reflect.Value{}, false
+	}
+	return f, true
+}
+
+// SettingFieldPresent 判断 schema 声明的字段在目标 DTO 上是否存在且可写。
+//
+// 用途（Stage 36）：调用方按「目标结构体有没有这个位置」分流，而不是按设置域粗筛。
+// 「schema 有、目标结构体没有」是已知的归属边界（如健康检测设置走独立域、不在通用
+// 设置响应里），不是组装失败——逐条按失败上报会让每次打开设置页刷固定噪声。
+// 静默跳过的代价由字段契约门兜住（handler/settings 的 TestGenericSettingsResponseFieldContract）。
+func SettingFieldPresent(dst any, s SettingSchema) bool {
+	_, ok := settingFieldOf(dst, s.Field)
+	return ok
+}
+
+// SetSettingField 根据 schema 将解析后的值设置到 DTO 结构体指针的对应字段。
+func SetSettingField(dst any, s SettingSchema, parsed any) error {
+	field, ok := settingFieldOf(dst, s.Field)
+	if !ok {
 		return fmt.Errorf("field %s not found or not settable", s.Field)
 	}
 

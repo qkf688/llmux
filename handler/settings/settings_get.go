@@ -39,6 +39,12 @@ func GetSettings(c *gin.Context) {
 }
 
 // buildSettingsResponse 根据 schema 默认值与数据库值构建 SettingsResponse。
+//
+// 对「schema 有、通用响应结构里没有位置」的键**静默跳过**（Stage 36）：健康检测系设置
+// 有自己的独立域（handler/settings/health.go），在通用设置页没有位置是已知归属边界，
+// 不是组装失败——逐条 WARN 会让每次打开设置页刷 7 条噪声、淹掉真警告，也把人往
+// 「组装出错」的方向带。静默跳过的风险（真漏字段被吞）由字段契约门兜住：
+// TestGenericSettingsResponseFieldContract 要求每个非独立域的设置项都在响应里有位置。
 func buildSettingsResponse(settingsList []models.Setting) (SettingsResponse, error) {
 	var response SettingsResponse
 	if err := models.ApplySettingDefaults(&response); err != nil {
@@ -48,6 +54,9 @@ func buildSettingsResponse(settingsList []models.Setting) (SettingsResponse, err
 	for _, setting := range settingsList {
 		schema, ok := SchemaForSettingKey(setting.Key)
 		if !ok {
+			continue
+		}
+		if !models.SettingFieldPresent(&response, schema) {
 			continue
 		}
 		parsed, err := settings.FromString(setting.Value, schema.Type)

@@ -127,6 +127,53 @@ func captureWarnLogs(t *testing.T) *strings.Builder {
 	return &logs
 }
 
+// createAssociation 建一条未设状态的关联（只给日志计数类用例提供 ID）。
+func createAssociation(t *testing.T) models.ModelWithProvider {
+	t.Helper()
+
+	mp := models.ModelWithProvider{ModelID: 1, ProviderID: 1, ProviderModel: "pm"}
+	if err := models.DB.Create(&mp).Error; err != nil {
+		t.Fatalf("create model provider: %v", err)
+	}
+	return mp
+}
+
+// seedHealthCheckLogs 按传入顺序（时间升序）写入健康检测日志。
+func seedHealthCheckLogs(t *testing.T, mpID uint, statuses ...string) {
+	t.Helper()
+
+	base := time.Now()
+	for i, status := range statuses {
+		if err := models.DB.Create(&models.HealthCheckLog{
+			ModelProviderID: mpID, Status: status, CheckedAt: base.Add(time.Duration(i) * time.Minute),
+		}).Error; err != nil {
+			t.Fatalf("create health check log: %v", err)
+		}
+	}
+}
+
+// seedEnabledAssociationWithUpstreamFailures 建「启用中 + 已有 n 次上游失败」的关联：
+// 判停相关用例的共用前置（默认阈值 3，够它在新旧行为下走向停用，差别只在读失败腿）。
+func seedEnabledAssociationWithUpstreamFailures(t *testing.T, n int) models.ModelWithProvider {
+	t.Helper()
+
+	enabled := true
+	mp := models.ModelWithProvider{
+		ModelID: 1, ProviderID: 1, ProviderModel: "pm",
+		Weight: 10, Priority: 10, Status: &enabled,
+	}
+	if err := models.DB.Create(&mp).Error; err != nil {
+		t.Fatalf("create model provider: %v", err)
+	}
+
+	statuses := make([]string, n)
+	for i := range statuses {
+		statuses[i] = models.HealthCheckStatusError
+	}
+	seedHealthCheckLogs(t, mp.ID, statuses...)
+	return mp
+}
+
 // TestHandleCheckResult_ThresholdReadError_SkipsDisableStep 判停跳过契约（Stage 36）：
 // 阈值读不出来（生产三态之一：存值非法 / 查询失败）时禁止拿默认值冒充真配置去停用关联
 // ——数据库不稳期正是最容易被假阈值误停用可用关联的时刻，与 Stage 33 结算侧同口径。
@@ -137,21 +184,7 @@ func TestHandleCheckResult_ThresholdReadError_SkipsDisableStep(t *testing.T) {
 	logs := captureWarnLogs(t)
 
 	ctx := context.Background()
-	enabled := true
-	mp := models.ModelWithProvider{
-		ModelID: 1, ProviderID: 1, ProviderModel: "pm",
-		Weight: 10, Priority: 10, Status: &enabled,
-	}
-	if err := models.DB.Create(&mp).Error; err != nil {
-		t.Fatalf("create model provider: %v", err)
-	}
-	for i := 0; i < 3; i++ {
-		if err := models.DB.Create(&models.HealthCheckLog{
-			ModelProviderID: mp.ID, Status: "error", CheckedAt: time.Now().Add(time.Duration(i) * time.Minute),
-		}).Error; err != nil {
-			t.Fatalf("create health check log: %v", err)
-		}
-	}
+	mp := seedEnabledAssociationWithUpstreamFailures(t, 3)
 
 	GetHealthChecker().handleCheckResult(ctx, &mp, "p1", models.HealthCheckStatusError)
 
@@ -181,21 +214,7 @@ func TestHandleCheckResult_SwitchReadError_SkipsDisableStep(t *testing.T) {
 	logs := captureWarnLogs(t)
 
 	ctx := context.Background()
-	enabled := true
-	mp := models.ModelWithProvider{
-		ModelID: 1, ProviderID: 1, ProviderModel: "pm",
-		Weight: 10, Priority: 10, Status: &enabled,
-	}
-	if err := models.DB.Create(&mp).Error; err != nil {
-		t.Fatalf("create model provider: %v", err)
-	}
-	for i := 0; i < 3; i++ {
-		if err := models.DB.Create(&models.HealthCheckLog{
-			ModelProviderID: mp.ID, Status: "error", CheckedAt: time.Now().Add(time.Duration(i) * time.Minute),
-		}).Error; err != nil {
-			t.Fatalf("create health check log: %v", err)
-		}
-	}
+	mp := seedEnabledAssociationWithUpstreamFailures(t, 3)
 
 	GetHealthChecker().handleCheckResult(ctx, &mp, "p1", models.HealthCheckStatusError)
 
@@ -218,21 +237,14 @@ func TestGetConsecutiveFailures_IgnoresNotMeasuredRows(t *testing.T) {
 	initHealthCheckTestDB(t)
 
 	ctx := context.Background()
-	mp := models.ModelWithProvider{ModelID: 1, ProviderID: 1, ProviderModel: "pm"}
-	if err := models.DB.Create(&mp).Error; err != nil {
-		t.Fatalf("create model provider: %v", err)
-	}
-
-	base := time.Now()
+	mp := createAssociation(t)
 	// 时间升序：error → not_measured → error → error（最新一条为 error）
-	rows := []string{"error", "not_measured", "error", "error"}
-	for i, status := range rows {
-		if err := models.DB.Create(&models.HealthCheckLog{
-			ModelProviderID: mp.ID, Status: status, CheckedAt: base.Add(time.Duration(i) * time.Minute),
-		}).Error; err != nil {
-			t.Fatalf("create health check log: %v", err)
-		}
-	}
+	seedHealthCheckLogs(t, mp.ID,
+		models.HealthCheckStatusError,
+		models.HealthCheckStatusNotMeasured,
+		models.HealthCheckStatusError,
+		models.HealthCheckStatusError,
+	)
 
 	got, err := (&HealthChecker{}).getConsecutiveFailures(ctx, mp.ID)
 	if err != nil {
@@ -248,19 +260,12 @@ func TestGetConsecutiveFailures_SuccessBreaksStreak(t *testing.T) {
 	initHealthCheckTestDB(t)
 
 	ctx := context.Background()
-	mp := models.ModelWithProvider{ModelID: 1, ProviderID: 1, ProviderModel: "pm"}
-	if err := models.DB.Create(&mp).Error; err != nil {
-		t.Fatalf("create model provider: %v", err)
-	}
-
-	base := time.Now()
-	for i, status := range []string{"error", "success", "error"} {
-		if err := models.DB.Create(&models.HealthCheckLog{
-			ModelProviderID: mp.ID, Status: status, CheckedAt: base.Add(time.Duration(i) * time.Minute),
-		}).Error; err != nil {
-			t.Fatalf("create health check log: %v", err)
-		}
-	}
+	mp := createAssociation(t)
+	seedHealthCheckLogs(t, mp.ID,
+		models.HealthCheckStatusError,
+		models.HealthCheckStatusSuccess,
+		models.HealthCheckStatusError,
+	)
 
 	got, err := (&HealthChecker{}).getConsecutiveFailures(ctx, mp.ID)
 	if err != nil {

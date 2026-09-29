@@ -189,7 +189,16 @@ export function useModelProvidersTesting({
       // 同一时刻只允许一条 ReAct 流：新的先停掉旧的（否则旧流的事件会追加进新结果）。
       currentControllerRef.current?.abort();
 
-      setReactTestResult((prev) => ({ ...prev, messages: "", loading: true, cancelled: false }));
+      // 复跑要清空上一轮结论（success/error 一并）：否则取消收场把旧结论误当「本流已出
+      // 结论」，会保留上一轮结论、漏标「已取消」（与 useCapabilityTest 开跑清 result 对称）。
+      setReactTestResult((prev) => ({
+        ...prev,
+        messages: "",
+        loading: true,
+        cancelled: false,
+        success: null,
+        error: null,
+      }));
 
       const controller = new AbortController();
       currentControllerRef.current = controller;
@@ -200,6 +209,13 @@ export function useModelProvidersTesting({
         if (currentControllerRef.current !== controller) return;
         setReactTestResult(updater);
       };
+
+      // 取消收场的单一口径（onerror 防御分支与 await 后主路径共用）：取消不抹已出结论——
+      // 本流 success/error 已写上就保留结论只停转圈，否则标「已取消」；半截日志保留。
+      const settleCancelled = () =>
+        applyIfCurrent((prev) =>
+          prev.success !== null ? { ...prev, loading: false } : { ...prev, loading: false, cancelled: true },
+        );
 
       try {
         // 长连接不经信封通道（fetchEventSource 自持连接），故只借统一入口的鉴权与
@@ -238,9 +254,9 @@ export function useModelProvidersTesting({
             applyIfCurrent((prev) => ({ ...prev, loading: false }));
           },
           onerror(err) {
-            // 取消不是失败：标 cancelled、保留已累积的半截日志，不设 error/success。
+            // 取消不是失败：走 settleCancelled（不抹已出结论），保留半截日志、不设 error/success。
             if (isAbortError(err)) {
-              applyIfCurrent((prev) => ({ ...prev, loading: false, cancelled: true }));
+              settleCancelled();
             } else if (err instanceof UnauthorizedError) {
               // 登录过期不是失败：失效出口已处置（标记/清会话/跳转），面板只收场不写结论，
               // 不以「测试失败」掩盖掉线。
@@ -260,10 +276,7 @@ export function useModelProvidersTesting({
         // （见测试 mock 顶部注释），故 await 正常返回后按本条流自己的 signal 快照补收场，
         // 判据取请求构建时刻的快照、不读处置时刻的全局状态。
         if (controller.signal.aborted) {
-          // 取消不抹已出结论：success/error 已写上就保留结论只停转圈，否则标「已取消」。
-          applyIfCurrent((prev) =>
-            prev.success !== null ? { ...prev, loading: false } : { ...prev, loading: false, cancelled: true },
-          );
+          settleCancelled();
         }
       } catch (err) {
         // 过期不是「测试失败」：失效出口已处置（标记/清会话/跳转），不写失败结论掩盖掉线。

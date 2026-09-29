@@ -346,13 +346,17 @@ describe("SSE 流 401 处置", () => {
             headers: options.headers,
             signal: options.signal,
           });
+          // abort 胜出后真实库 dispose 不再进任何回调（fetch.js 的 aborted 守卫），同款跳过。
+          if (options.signal?.aborted) return;
           await (options.onopen ?? defaultOnOpen)(response);
         } catch (err) {
+          if (options.signal?.aborted) return;
           // 真实库：onerror 抛出才终止整条连接（reject）；正常返回即重连。mock 不模拟
           // 重连，把「未抛出」直接判失败——终止契约的另一半必须有测试锁（见顶部注释）。
           options.onerror?.(err);
           throw new Error("mock: onerror 未抛出终止——真实库会以返回值为间隔重连，终止契约被破坏");
         }
+        if (options.signal?.aborted) return;
         options.onclose?.();
       })();
       // race 并进 abort 腿：中止以正常返回收场（dispose+resolve，不进 onerror/onclose）。
@@ -458,5 +462,70 @@ describe("ReAct 流取消收场", () => {
     expect(state.success).toBe(true);
     expect(state.cancelled).toBe(false);
     expect(state.loading).toBe(false);
+  });
+
+  it("复跑后取消：不留上一轮结论，标「已取消」", async () => {
+    // 第一轮正常收流出结论；第二轮（复跑）中途取消——收场判据只认本流结论，
+    // 上一轮的 success/error 不得被误当「已出结论」而漏标「已取消」。
+    vi.mocked(fetchEventSource)
+      .mockImplementationOnce(async (_input, options) => {
+        options.onmessage?.({ id: "", event: "success", data: "测试完成" });
+        options.onclose?.();
+      })
+      .mockImplementationOnce(async (_input, options) => {
+        options.onmessage?.({ id: "", event: "message", data: "第二轮半截" });
+        await abortResolves(options.signal);
+      });
+
+    const { setReactTestResult, getState } = createReactTestResultSetter();
+    const { result } = renderReactTest(setReactTestResult);
+
+    act(() => {
+      result.current.executeTestNow();
+    });
+    expect(getState().success).toBe(true);
+
+    act(() => {
+      result.current.executeTestNow(); // 复跑
+    });
+    await act(async () => {
+      result.current.dialogClose(); // 第二轮中途取消
+    });
+
+    const state = getState();
+    expect(state.cancelled).toBe(true);
+    expect(state.success).toBeNull();
+    expect(state.loading).toBe(false);
+    expect(state.messages).toContain("第二轮半截");
+  });
+
+  it("旧流被新测试顶掉后：迟到收场不得覆写新流", async () => {
+    vi.mocked(fetchEventSource)
+      .mockImplementationOnce(async (_input, options) => {
+        options.onmessage?.({ id: "", event: "message", data: "旧流半截" });
+        await abortResolves(options.signal);
+      })
+      .mockImplementationOnce(async (_input, options) => {
+        await abortResolves(options.signal);
+      });
+
+    const { setReactTestResult, getState } = createReactTestResultSetter();
+    const { result } = renderReactTest(setReactTestResult);
+
+    act(() => {
+      result.current.executeTestNow(); // 旧流在飞
+    });
+    await act(async () => {
+      result.current.executeTestNow(); // 新流顶掉旧流（旧流被 abort，其收场随后才跑）
+    });
+
+    // 顶掉 ≠ 用户取消：旧流的迟到收场不得把「已取消」写进新流在飞的面板。
+    const state = getState();
+    expect(state.loading).toBe(true);
+    expect(state.cancelled).toBe(false);
+
+    await act(async () => {
+      result.current.dialogClose();
+    });
   });
 });

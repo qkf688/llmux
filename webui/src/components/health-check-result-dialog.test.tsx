@@ -2,26 +2,12 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
-import { getBatchHealthCheckStatus, type HealthCheckLog } from "@/lib/api";
+import { getBatchHealthCheckStatus } from "@/lib/api";
+import { createHealthCheckLog } from "@/test/health-check-fixtures";
 
 import { HealthCheckResultDialog } from "./health-check-result-dialog";
 
 vi.mock("@/lib/api", () => ({ getBatchHealthCheckStatus: vi.fn() }));
-
-function createLog(ID: number, status: HealthCheckLog["status"]): HealthCheckLog {
-  return {
-    ID,
-    CreatedAt: "2026-01-01T00:00:00Z",
-    model_provider_id: ID,
-    model_name: "gpt-test",
-    provider_name: "prov",
-    provider_model: "gpt-4o",
-    status,
-    error: "",
-    response_time: 12,
-    checked_at: "2026-01-01T00:00:00Z",
-  };
-}
 
 describe("HealthCheckResultDialog", () => {
   it("未完成单列，四项与总计对得平；最近结果行也按三态显示", async () => {
@@ -33,7 +19,7 @@ describe("HealthCheckResultDialog", () => {
       not_measured: 2,
       pending: 1,
       completed: false,
-      logs: [createLog(1, "not_measured")],
+      logs: [createHealthCheckLog(1, "not_measured")],
     });
 
     render(

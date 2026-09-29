@@ -138,8 +138,11 @@ export function useModelProvidersTesting({
 
   const abortAllTests = useCallback(() => {
     abortAllCapabilityTests();
+    // ReAct 这条不置空 ref：置空会让「用户取消」与「被新测试顶掉」同形——取消收场会被
+    // 当成旧流的迟到写入拦掉（面板 loading 残留、「已取消」恒不置位）。用户取消要写收场，
+    // ref 保留给该流 await 后的收场与 finally 自解绑；只有「新测试接管」（handleTest /
+    // handleReactTest 换掉 ref）才拦旧流写入。
     currentControllerRef.current?.abort();
-    currentControllerRef.current = null;
   }, [abortAllCapabilityTests]);
 
   // 切走页面（组件卸载）时同样要停：否则能力测试/ReAct 会在后台继续跑满并计费。
@@ -244,6 +247,15 @@ export function useModelProvidersTesting({
             throw err;
           },
         });
+        // 取消主路径收场：真实库 abort = dispose + resolve，既不进 onerror 也不进 catch
+        // （见测试 mock 顶部注释），故 await 正常返回后按本条流自己的 signal 快照补收场，
+        // 判据取请求构建时刻的快照、不读处置时刻的全局状态。
+        if (controller.signal.aborted) {
+          // 取消不抹已出结论：success/error 已写上就保留结论只停转圈，否则标「已取消」。
+          applyIfCurrent((prev) =>
+            prev.success !== null ? { ...prev, loading: false } : { ...prev, loading: false, cancelled: true },
+          );
+        }
       } catch (err) {
         // 过期不是「测试失败」：失效出口已处置（标记/清会话/跳转），不写失败结论掩盖掉线。
         // 收场复位按当前性做：过期错误可能不经 onerror——发起测试瞬间无凭证时
@@ -252,8 +264,8 @@ export function useModelProvidersTesting({
           applyIfCurrent((prev) => ({ ...prev, loading: false }));
           return;
         }
-        // 取消的防御性分支。注意真实库的取消主路径是 dispose + resolve（不进 catch、
-        // 也不进 onerror），面板的「已取消」收场缺口见 .local/find-issues/ 内登记条目。
+        // 取消的防御性分支。真实库的取消主路径是 dispose + resolve（不进 catch、
+        // 也不进 onerror），收场在上面 await 之后按 signal 快照补写。
         if (isAbortError(err)) {
           return;
         }

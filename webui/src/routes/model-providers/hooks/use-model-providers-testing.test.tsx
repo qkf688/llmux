@@ -33,12 +33,26 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 // 故 mock 把「onerror 未抛出」判为终止契约被破坏直接失败——否则删掉调用点的终止
 // throw 用例仍全绿，锁不住「必须终止」这半边（变异检验实锤过：真实库里那等于
 // 拿同一过期 token 每秒重连死循环）。刻意未模拟的语义（写在这里防误导后来者）：
-// 重连重试、abort（真实库 abort 是 dispose+resolve，不进 onerror/catch）、last-event-id。
+// 重连重试、last-event-id。abort 已模拟（见 mockImplementation 的 race 分支：真实库
+// abort 是 dispose+resolve，不进 onerror/catch 也不进 onclose）；「流停在半空等取消」
+// 的长流夹具在各取消用例里以同一语义现场建模。
 vi.mock("@microsoft/fetch-event-source", () => ({
   fetchEventSource: vi.fn(),
 }));
 
 const setTestMode = vi.fn();
+
+/** 真实库 abort 语义的中止腿：signal 中止即 resolve（dispose+resolve，无任何回调）。 */
+function abortResolves(signal: AbortSignal | null | undefined): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (!signal) return; // 无 signal = 永不中止，这条腿不结算
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    signal.addEventListener("abort", () => resolve());
+  });
+}
 
 function renderTesting(testType: TestType, testMode: TestMode = "non_stream") {
   return renderHook(() =>
@@ -51,6 +65,33 @@ function renderTesting(testType: TestType, testMode: TestMode = "non_stream") {
       selectedTestId: 7,
       testType,
       testMode,
+    }),
+  );
+}
+
+/** setReactTestResult 的有状态替身：vi.fn() 只留调用记录，读不出面板终态。 */
+function createReactTestResultSetter() {
+  let state: ReactTestResultState = { loading: false, messages: "", success: null, error: null };
+  return {
+    setReactTestResult: (next: Updater<ReactTestResultState>) => {
+      state = typeof next === "function" ? next(state) : next;
+    },
+    getState: () => state,
+  };
+}
+
+/** ReAct 流专用渲染：流式面板状态走有状态替身，才能读出终态断言。 */
+function renderReactTest(setReactTestResult: (next: Updater<ReactTestResultState>) => void) {
+  return renderHook(() =>
+    useModelProvidersTesting({
+      setTestDialogOpen: vi.fn(),
+      setSelectedTestId: vi.fn(),
+      setTestType: vi.fn(),
+      setTestMode: vi.fn(),
+      setReactTestResult,
+      selectedTestId: 7,
+      testType: "react",
+      testMode: "non_stream",
     }),
   );
 }
@@ -256,32 +297,6 @@ describe("SSE 流 401 处置", () => {
     }
   };
 
-  /** setReactTestResult 的有状态替身：vi.fn() 只留调用记录，读不出面板终态。 */
-  function createReactTestResultSetter() {
-    let state: ReactTestResultState = { loading: false, messages: "", success: null, error: null };
-    return {
-      setReactTestResult: (next: Updater<ReactTestResultState>) => {
-        state = typeof next === "function" ? next(state) : next;
-      },
-      getState: () => state,
-    };
-  }
-
-  function renderReactTest(setReactTestResult: (next: Updater<ReactTestResultState>) => void) {
-    return renderHook(() =>
-      useModelProvidersTesting({
-        setTestDialogOpen: vi.fn(),
-        setSelectedTestId: vi.fn(),
-        setTestType: vi.fn(),
-        setTestMode: vi.fn(),
-        setReactTestResult,
-        selectedTestId: 7,
-        testType: "react",
-        testMode: "non_stream",
-      }),
-    );
-  }
-
   beforeEach(() => {
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
@@ -306,21 +321,26 @@ describe("SSE 流 401 处置", () => {
     });
 
     vi.mocked(fetchEventSource).mockImplementation(async (input, options) => {
-      const doFetch = options.fetch ?? globalThis.fetch;
-      try {
-        const response = await doFetch(input, {
-          method: options.method,
-          headers: options.headers,
-          signal: options.signal,
-        });
-        await (options.onopen ?? defaultOnOpen)(response);
-      } catch (err) {
-        // 真实库：onerror 抛出才终止整条连接（reject）；正常返回即重连。mock 不模拟
-        // 重连，把「未抛出」直接判失败——终止契约的另一半必须有测试锁（见顶部注释）。
-        options.onerror?.(err);
-        throw new Error("mock: onerror 未抛出终止——真实库会以返回值为间隔重连，终止契约被破坏");
-      }
-      options.onclose?.();
+      const run = (async () => {
+        const doFetch = options.fetch ?? globalThis.fetch;
+        try {
+          const response = await doFetch(input, {
+            method: options.method,
+            headers: options.headers,
+            signal: options.signal,
+          });
+          await (options.onopen ?? defaultOnOpen)(response);
+        } catch (err) {
+          // 真实库：onerror 抛出才终止整条连接（reject）；正常返回即重连。mock 不模拟
+          // 重连，把「未抛出」直接判失败——终止契约的另一半必须有测试锁（见顶部注释）。
+          options.onerror?.(err);
+          throw new Error("mock: onerror 未抛出终止——真实库会以返回值为间隔重连，终止契约被破坏");
+        }
+        options.onclose?.();
+      })();
+      // race 并进 abort 腿：中止以正常返回收场（dispose+resolve，不进 onerror/onclose）。
+      run.catch(() => {}); // race 定局后 run 的迟到拒绝不落成未处理拒绝
+      await Promise.race([run, abortResolves(options.signal)]);
     });
   });
 
@@ -356,6 +376,70 @@ describe("SSE 流 401 处置", () => {
     const state = getState();
     expect(state.error).toBeNull();
     expect(state.success).toBeNull();
+    expect(state.loading).toBe(false);
+  });
+});
+
+describe("ReAct 流取消收场", () => {
+  beforeEach(() => {
+    authStore.setState({ token: "test-jwt", user: { id: 1, username: "admin", role: "admin" } });
+    vi.mocked(fetchEventSource).mockReset();
+  });
+
+  afterEach(() => {
+    authStore.setState({ token: null, user: null });
+    vi.mocked(fetchEventSource).mockReset();
+  });
+
+  it("取消 ReAct 流 → 面板标「已取消」且 loading 复位，半截日志保留", async () => {
+    // 长流夹具：吐一段半截内容后停在半空等取消；取消按真实库 abort 语义收场
+    // （dispose+resolve，不进 onerror 也不进 onclose）。
+    vi.mocked(fetchEventSource).mockImplementation(async (_input, options) => {
+      options.onmessage?.({ id: "", event: "message", data: "半截回答" });
+      await abortResolves(options.signal);
+    });
+
+    const { setReactTestResult, getState } = createReactTestResultSetter();
+    const { result } = renderReactTest(setReactTestResult);
+
+    act(() => {
+      result.current.executeTestNow();
+    });
+    expect(getState().loading).toBe(true);
+    expect(getState().messages).toContain("半截回答");
+
+    await act(async () => {
+      result.current.dialogClose();
+    });
+
+    const state = getState();
+    expect(state.loading).toBe(false);
+    expect(state.cancelled).toBe(true);
+    // 取消不是失败：半截日志保留，不写成功/失败结论。
+    expect(state.messages).toContain("半截回答");
+    expect(state.success).toBeNull();
+    expect(state.error).toBeNull();
+  });
+
+  it("取消撞上已出结论：保留结论只停转圈，不抹成「已取消」", async () => {
+    vi.mocked(fetchEventSource).mockImplementation(async (_input, options) => {
+      options.onmessage?.({ id: "", event: "success", data: "测试完成" });
+      await abortResolves(options.signal);
+    });
+
+    const { setReactTestResult, getState } = createReactTestResultSetter();
+    const { result } = renderReactTest(setReactTestResult);
+
+    act(() => {
+      result.current.executeTestNow();
+    });
+    await act(async () => {
+      result.current.dialogClose();
+    });
+
+    const state = getState();
+    expect(state.success).toBe(true);
+    expect(state.cancelled).toBe(false);
     expect(state.loading).toBe(false);
   });
 });

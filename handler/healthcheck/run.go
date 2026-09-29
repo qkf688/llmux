@@ -36,6 +36,13 @@ func RunHealthCheck(c *gin.Context) {
 func RunHealthCheckAll(c *gin.Context) {
 	batchID := uuid.New().String()
 
+	// 启动前同步探一次本轮配置（Stage 36 Ruling 1）：本接口先返回批次号、真正干活在后台，
+	// 读失败若留到后台，前端只会看到一个永远不完成的批次（轮询无超时）。
+	if err := service.GetHealthChecker().ValidateRoundConfig(c.Request.Context()); err != nil {
+		httpresp.InternalErrorMessage(c, "Failed to start health check", err)
+		return
+	}
+
 	// 经 bgtask 登记：批量检测会落库，进程关闭时须排空而非被硬切。
 	bgtask.Go(func(ctx context.Context) {
 		if err := service.GetHealthChecker().CheckAllWithBatch(ctx, batchID); err != nil {
@@ -55,9 +62,12 @@ type BatchHealthCheckStatus struct {
 	TotalCount int                     `json:"total_count"`
 	Success    int                     `json:"success"`
 	Failed     int                     `json:"failed"`
-	Pending    int                     `json:"pending"`
-	Completed  bool                    `json:"completed"`
-	Logs       []models.HealthCheckLog `json:"logs"`
+	// NotMeasured 本机原因没测成的条数（Stage 36 三态）：既不是成功也不是失败，
+	// 单列才能让 success + failed + not_measured + pending 与 total 加得平。
+	NotMeasured int                     `json:"not_measured"`
+	Pending     int                     `json:"pending"`
+	Completed   bool                    `json:"completed"`
+	Logs        []models.HealthCheckLog `json:"logs"`
 }
 
 // GetBatchHealthCheckStatus 查询批次健康检测状态
@@ -87,14 +97,18 @@ func GetBatchHealthCheckStatus(c *gin.Context) {
 		return
 	}
 
-	// 统计结果
+	// 统计结果（三态：未完成单列，禁并进失败——并进去等于把本机问题记在供应商头上）
 	successCount := 0
 	failedCount := 0
+	notMeasuredCount := 0
 	for _, log := range logs {
-		if log.Status == "success" {
+		switch log.Status {
+		case models.HealthCheckStatusSuccess:
 			successCount++
-		} else if log.Status == "error" {
+		case models.HealthCheckStatusError:
 			failedCount++
+		case models.HealthCheckStatusNotMeasured:
+			notMeasuredCount++
 		}
 	}
 
@@ -103,13 +117,14 @@ func GetBatchHealthCheckStatus(c *gin.Context) {
 	completed := pendingCount == 0
 
 	status := BatchHealthCheckStatus{
-		BatchID:    batchID,
-		TotalCount: int(totalCount),
-		Success:    successCount,
-		Failed:     failedCount,
-		Pending:    pendingCount,
-		Completed:  completed,
-		Logs:       logs,
+		BatchID:     batchID,
+		TotalCount:  int(totalCount),
+		Success:     successCount,
+		Failed:      failedCount,
+		NotMeasured: notMeasuredCount,
+		Pending:     pendingCount,
+		Completed:   completed,
+		Logs:        logs,
 	}
 
 	httpresp.Success(c, status)

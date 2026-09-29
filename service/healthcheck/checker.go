@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/qkf688/llmux/common/bgtask"
+	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/settings"
 )
 
 // HealthChecker 健康检测服务。
@@ -50,7 +52,14 @@ func (h *HealthChecker) Start(ctx context.Context) {
 		return
 	}
 
-	if !h.isEnabled(ctx) {
+	enabled, err := h.isEnabledE(ctx)
+	if err != nil {
+		// 启动期读失败：不启动，但必须与「用户没启用」分开报——两者后续处置完全不同
+		// （前者是故障，后者是配置）。启动期没有重试路径（见 find-issues 同名条目）。
+		slog.Warn("health check not started: enabled switch unreadable", "error", err)
+		return
+	}
+	if !enabled {
 		slog.Info("health check is disabled")
 		return
 	}
@@ -121,16 +130,31 @@ func (h *HealthChecker) run(ctx context.Context, tick <-chan time.Time) {
 		case <-ctx.Done():
 			return
 		case <-tick:
-			if !h.isEnabled(ctx) {
+			if h.tickOnce(ctx) {
 				slog.Info("health check disabled, stopping checker")
 				h.Stop()
 				return
 			}
-
-			h.updateIntervalIfNeeded(ctx)
-			h.checkAll(ctx)
 		}
 	}
+}
+
+// tickOnce 处理一个 tick，返回 true 表示巡检应停止（用户把健康检测关掉了）。
+//
+// 读失败**不许**退默认值把自己停掉（Stage 36 Ruling 4）：停机是持久副作用——没有任何
+// 机制把巡检拉回来（只有设置页保存触发的 Restart 能救），数据库抖一下就等于健康检测
+// 永久消失。故读失败只留痕、继续跑，下个 tick 再看。
+func (h *HealthChecker) tickOnce(ctx context.Context) bool {
+	enabled, err := h.isEnabledE(ctx)
+	if err != nil {
+		settings.LogReadSkip("health check enabled switch", models.SettingKeyHealthCheckEnabled, err)
+	} else if !enabled {
+		return true
+	}
+
+	h.updateIntervalIfNeeded(ctx)
+	h.checkAll(ctx)
+	return false
 }
 
 func (h *HealthChecker) updateIntervalIfNeeded(ctx context.Context) {

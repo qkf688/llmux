@@ -664,6 +664,17 @@ const (
 	SettingKeyCredHealthProbeIntervalSec  = "cred_health_probe_interval_sec"  // 凭据惰性探活最小间隔（秒）
 )
 
+// HealthCheckLog 状态取值（单源：后端统计、判停计数、前端展示共用一个口径，禁散落字面量）。
+const (
+	// HealthCheckStatusSuccess：请求发出去且上游给了通过结论。
+	HealthCheckStatusSuccess = "success"
+	// HealthCheckStatusError：请求发出去且上游给了失败结论（超时 / 非通过状态码 / 内容形状非法）。
+	HealthCheckStatusError = "error"
+	// HealthCheckStatusNotMeasured：本机原因没测成（读不到库、没有启用的端点、没有可用凭据），
+	// 不是上游的结论——不计入判停、不触发权重/优先级衰减、也不打断已有连续失败（Stage 36）。
+	HealthCheckStatusNotMeasured = "not_measured"
+)
+
 // HealthCheckLog 模型健康检测日志
 type HealthCheckLog struct {
 	gorm.Model
@@ -672,7 +683,7 @@ type HealthCheckLog struct {
 	ModelName       string    `gorm:"index" json:"model_name"`         // 模型名称
 	ProviderName    string    `gorm:"index" json:"provider_name"`      // 提供商名称
 	ProviderModel   string    `json:"provider_model"`                  // 提供商模型名称
-	Status          string    `gorm:"index" json:"status"`             // 检测状态: success, error
+	Status          string    `gorm:"index" json:"status"`             // 检测状态: success, error, not_measured（见上方常量）
 	Error           string    `json:"error,omitempty"`                 // 错误信息
 	ResponseTime    int64     `json:"response_time"`                   // 响应时间（毫秒）
 	CheckedAt       time.Time `gorm:"index" json:"checked_at"`         // 检测时间

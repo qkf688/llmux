@@ -60,3 +60,27 @@ func getSettingBool(ctx context.Context, key string, defaultValue bool) bool {
 func getSettingInt(ctx context.Context, key string, defaultValue, minValue int) int {
 	return models.GetSettingInt(ctx, key, defaultValue, minValue)
 }
+
+// getSettingBoolE / getSettingIntE 是「读失败可辨」变体（Stage 36，与 Stage 33 结算侧同口径）：
+// key 不存在 → (default, nil)（未设置是有效状态）；查询失败 / 存值非法 → (default, err)。
+// **「读失败会引发写动作或改变巡检范围」的决策点必须用这一对**并按 err 显式降级。
+func getSettingBoolE(ctx context.Context, key string, defaultValue bool) (bool, error) {
+	return models.GetSettingBoolE(ctx, key, defaultValue)
+}
+
+func getSettingIntE(ctx context.Context, key string, defaultValue, minValue int) (int, error) {
+	return models.GetSettingIntE(ctx, key, defaultValue, minValue)
+}
+
+// isEnabledE 与 isEnabled 同取值语义，区分读失败（Stage 36 Ruling 4）：
+// 读失败退默认 false 会让巡检循环把自己**永久**停掉，而没有任何机制把它拉回来。
+func (h *HealthChecker) isEnabledE(ctx context.Context) (bool, error) {
+	return getSettingBoolE(ctx, models.SettingKeyHealthCheckEnabled, false)
+}
+
+// getCheckDisabledOnlyE 与 getCheckDisabledOnly 同取值语义，区分读失败（Stage 36）。
+// 读失败退默认 false 会把「只测已停用的」翻成「全量测」——探测是真实计费请求，
+// 读不出来时不得扩大开销。
+func (h *HealthChecker) getCheckDisabledOnlyE(ctx context.Context) (bool, error) {
+	return getSettingBoolE(ctx, models.SettingKeyHealthCheckCheckDisabledOnly, false)
+}

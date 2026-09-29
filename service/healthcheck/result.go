@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/settings"
 )
 
 // AdjustmentHooks 注入健康检测后对权重/优先级的调整逻辑。
@@ -29,30 +30,43 @@ func SetAdjustmentHooks(hooks AdjustmentHooks) {
 	adjustmentHooksMu.Unlock()
 }
 
-func (h *HealthChecker) handleCheckResult(ctx context.Context, mp *models.ModelWithProvider, providerName string, success bool) {
-	failureThreshold := h.getFailureThreshold(ctx)
-	autoEnable := h.getAutoEnable(ctx)
-	failureDisableEnabled := h.getFailureDisableEnabled(ctx)
-
-	if success {
-		if shouldCountHealthCheckSuccess(ctx) {
-			applySuccessAdjustments(ctx, mp.ID)
-		}
-
-		if autoEnable && (mp.Status == nil || !*mp.Status) {
-			// 必须走 UpdateFields：结构体 Updates 会把 consecutive_failures 的 0 当零值跳过，
-			// 计数不清零会让关联恢复后再失败一次就立刻被重新禁用。
-			if _, err := repos().ModelWithProvider.UpdateFields(ctx, mp.ID, map[string]any{
-				"status":               true,
-				"consecutive_failures": 0,
-			}); err != nil {
-				slog.Error("failed to enable model provider after health check success", "id", mp.ID, "error", err)
-			} else {
-				slog.Info("model provider auto-enabled after health check success", "id", mp.ID)
-			}
-		}
-		return
+// handleCheckResult 处理一次检测结果。status 取 models.HealthCheckStatus* 三态之一。
+//
+// 三态分开处置（Stage 36）：通过 → 调整 + 自动启用；上游失败 → 衰减 + 判停；
+// 本机没测成 → 什么都不做——它不是上游的结论，不该记在供应商头上（不衰减、不判停）。
+func (h *HealthChecker) handleCheckResult(ctx context.Context, mp *models.ModelWithProvider, providerName, status string) {
+	switch status {
+	case models.HealthCheckStatusSuccess:
+		h.handleCheckSuccess(ctx, mp)
+	case models.HealthCheckStatusError:
+		h.handleCheckFailure(ctx, mp, providerName)
 	}
+}
+
+func (h *HealthChecker) handleCheckSuccess(ctx context.Context, mp *models.ModelWithProvider) {
+	if shouldCountHealthCheckSuccess(ctx) {
+		applySuccessAdjustments(ctx, mp.ID)
+	}
+
+	// 开关只在成功分支读：失败路径不需要它，少一次读少一处读失败面。
+	autoEnable := h.getAutoEnable(ctx)
+	if autoEnable && (mp.Status == nil || !*mp.Status) {
+		// 必须走 UpdateFields：结构体 Updates 会把 consecutive_failures 的 0 当零值跳过，
+		// 计数不清零会让关联恢复后再失败一次就立刻被重新禁用。
+		if _, err := repos().ModelWithProvider.UpdateFields(ctx, mp.ID, map[string]any{
+			"status":               true,
+			"consecutive_failures": 0,
+		}); err != nil {
+			slog.Error("failed to enable model provider after health check success", "id", mp.ID, "error", err)
+		} else {
+			slog.Info("model provider auto-enabled after health check success", "id", mp.ID)
+		}
+	}
+}
+
+func (h *HealthChecker) handleCheckFailure(ctx context.Context, mp *models.ModelWithProvider, providerName string) {
+	// 判停所需的两项配置先取：读不到就跳过判停步（留痕在 disableDecision 内）。
+	failureDisableEnabled, failureThreshold, decisionOK := h.disableDecision(ctx)
 
 	failCount, err := h.getConsecutiveFailures(ctx, mp.ID)
 	if err != nil {
@@ -63,6 +77,10 @@ func (h *HealthChecker) handleCheckResult(ctx context.Context, mp *models.ModelW
 	if shouldCountHealthCheckFailure(ctx) {
 		applyWeightDecay(ctx, mp.ID, providerName, mp.ProviderModel)
 		applyPriorityDecay(ctx, mp.ID, providerName, mp.ProviderModel)
+	}
+
+	if !decisionOK {
+		return
 	}
 
 	if failureDisableEnabled && failCount >= failureThreshold && (mp.Status == nil || *mp.Status) {
@@ -76,6 +94,33 @@ func (h *HealthChecker) handleCheckResult(ctx context.Context, mp *models.ModelW
 	}
 }
 
+// disableDecision 汇总「连续失败判定停用」所需的两项配置。
+//
+// 任一读不到 → ok=false：本轮跳过判停步并留痕，禁止拿默认值冒充真配置执行停用写
+// （Stage 36，与 Stage 33 结算侧同口径）。这两项的默认值组合（阈值 3 + 允许停用）
+// 恰好是「最容易被误停用」的那一组——数据库不稳期正是故障期，读失败照默认值判
+// 会把还能服务的关联停掉，且停用原因不入库、后台只看到「已停用」。
+func (h *HealthChecker) disableDecision(ctx context.Context) (enabled bool, threshold int, ok bool) {
+	enabled, err := getSettingBoolE(ctx, models.SettingKeyHealthCheckFailureDisableEnabled, true)
+	if err != nil {
+		settings.LogReadSkip("healthcheck auto-disable switch", models.SettingKeyHealthCheckFailureDisableEnabled, err)
+		return false, 0, false
+	}
+
+	threshold, err = getSettingIntE(ctx, models.SettingKeyHealthCheckFailureThreshold, 3, 1)
+	if err != nil {
+		settings.LogReadSkip("healthcheck auto-disable threshold", models.SettingKeyHealthCheckFailureThreshold, err)
+		return false, 0, false
+	}
+
+	return enabled, threshold, true
+}
+
+// getConsecutiveFailures 统计「最近连续几次拿到上游坏结论」。
+//
+// 本机没测成的记录既不是成功也不是失败：**跳过继续往前数**，不打断已有连续失败
+// （Stage 36 Ruling 3）。若按「遇到就截断」处理，数据库抖一阵子就会把连续失败数
+// 静默清零，与「故障期旧账、恢复后照结」的口径相反。
 func (h *HealthChecker) getConsecutiveFailures(ctx context.Context, mpID uint) (int, error) {
 	logs, err := repos().HealthCheckLog.ListRecentByModelProviderID(ctx, mpID, 10)
 	if err != nil {
@@ -84,10 +129,14 @@ func (h *HealthChecker) getConsecutiveFailures(ctx context.Context, mpID uint) (
 
 	count := 0
 	for _, log := range logs {
-		if log.Status != "error" {
-			break
+		switch log.Status {
+		case models.HealthCheckStatusSuccess:
+			return count, nil
+		case models.HealthCheckStatusError:
+			count++
+		default:
+			// 未完成（本机原因）：无结论，跳过继续往前数。
 		}
-		count++
 	}
 	return count, nil
 }

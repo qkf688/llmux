@@ -2,6 +2,7 @@ package healthcheck
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -32,21 +33,25 @@ func (h *HealthChecker) checkOneWithBatch(ctx context.Context, mp *models.ModelW
 	checkErr := h.doCheck(ctx, provider, mp)
 	responseTime := time.Since(start).Milliseconds()
 	logEntry := buildHealthCheckLog(batchID, mp, provider.Name, model.Name, responseTime)
+	logEntry.Status = healthCheckStatusFor(checkErr)
 
-	if checkErr != nil {
-		logEntry.Status = "error"
+	switch logEntry.Status {
+	case models.HealthCheckStatusSuccess:
+		slog.Info("health check passed", "model", model.Name, "provider", provider.Name, "response_time", responseTime, "batch_id", batchID)
+	case models.HealthCheckStatusNotMeasured:
+		// 与「上游失败」分通道：本机没测成不是供应商的问题，混在同一条文案里会把排障方向带偏。
+		logEntry.Error = checkErr.Error()
+		slog.Warn("health check not measured (local reason)", "model", model.Name, "provider", provider.Name, "error", checkErr, "batch_id", batchID)
+	default:
 		logEntry.Error = checkErr.Error()
 		slog.Warn("health check failed", "model", model.Name, "provider", provider.Name, "error", checkErr, "batch_id", batchID)
-	} else {
-		logEntry.Status = "success"
-		slog.Info("health check passed", "model", model.Name, "provider", provider.Name, "response_time", responseTime, "batch_id", batchID)
 	}
 
 	if err := h.saveHealthCheckLog(ctx, &logEntry); err != nil {
 		slog.Error("failed to save health check log", "error", err)
 	}
 
-	h.handleCheckResult(ctx, mp, provider.Name, checkErr == nil)
+	h.handleCheckResult(ctx, mp, provider.Name, logEntry.Status)
 }
 
 // CheckSingle 手动检测单个模型提供商。
@@ -70,20 +75,46 @@ func (h *HealthChecker) CheckSingleWithBatch(ctx context.Context, mpID uint, bat
 	checkErr := h.doCheck(ctx, provider, mp)
 	responseTime := time.Since(start).Milliseconds()
 	logEntry := buildHealthCheckLog(batchID, mp, provider.Name, model.Name, responseTime)
-
+	logEntry.Status = healthCheckStatusFor(checkErr)
 	if checkErr != nil {
-		logEntry.Status = "error"
 		logEntry.Error = checkErr.Error()
-	} else {
-		logEntry.Status = "success"
 	}
 
 	if err := h.saveHealthCheckLog(ctx, &logEntry); err != nil {
 		return nil, err
 	}
 
-	h.handleCheckResult(ctx, mp, provider.Name, checkErr == nil)
+	h.handleCheckResult(ctx, mp, provider.Name, logEntry.Status)
 	return &logEntry, nil
+}
+
+// errLocalCheck 标记「本机没测成」：请求压根没发出去，或没有任何一次拿到上游结论。
+//
+// 分类单源在此（Stage 36）：一次检测只有两种东西——上游给的结论，与没走到上游。
+// 后者（读不到库 / 没有启用的端点 / 没有可用凭据）**不算一次失败**：记在供应商头上
+// 会让数据库抖一阵子就攒出「连续失败」，恢复后按真阈值把完全可用的关联停用，
+// 而且后台只看到「已停用」，分不出是上游坏了还是我们自己的问题。
+type errLocalCheck struct{ err error }
+
+func (e *errLocalCheck) Error() string { return e.err.Error() }
+func (e *errLocalCheck) Unwrap() error { return e.err }
+
+// isLocalCheckError 判断这次没测成是否属本机原因。
+func isLocalCheckError(err error) bool {
+	var local *errLocalCheck
+	return errors.As(err, &local)
+}
+
+// healthCheckStatusFor 把一次检测结果映射成日志状态：nil → 通过；本机原因 → 未完成；其余 → 上游失败。
+func healthCheckStatusFor(checkErr error) string {
+	switch {
+	case checkErr == nil:
+		return models.HealthCheckStatusSuccess
+	case isLocalCheckError(checkErr):
+		return models.HealthCheckStatusNotMeasured
+	default:
+		return models.HealthCheckStatusError
+	}
 }
 
 // doCheck 以「诊断口径」打一次真实 completion 判定关联健康：
@@ -98,6 +129,10 @@ func (h *HealthChecker) CheckSingleWithBatch(ctx context.Context, mpID uint, bat
 // 坏了」并不等于这条关联不可用（生产路由本来就会故障转移到其余分组）。成功即短路，
 // 失败请求不产生 token 费用，额外代价可接受。
 //
+// 失败**分类**（Stage 36）：只有「请求真的发出去、拿到上游坏结论」才算一次失败；
+// 装配失败 / 没有启用的端点 / 没有分组 / 没有可用凭据都是本机原因，包成 errLocalCheck
+// 由调用方记成「未完成」，不进连续失败计数。
+//
 // 为什么凭据口径（NewClientForGroup 内部的 FirstUsableCredential）而非 DefaultSelector().Select：
 // ① 检测要可复现（配置没动则每轮同一条 key，失败趋势才有意义）；② 不得推进 chat 链路的
 // 轮询指针（一轮巡检就把真实流量的 key 分配挪一格）；③ 分组白名单不参与过滤
@@ -105,15 +140,15 @@ func (h *HealthChecker) CheckSingleWithBatch(ctx context.Context, mpID uint, bat
 func (h *HealthChecker) doCheck(ctx context.Context, provider *models.Provider, mp *models.ModelWithProvider) error {
 	snapshot, err := channel.NewAssembler(repos()).Assemble(ctx, *provider)
 	if err != nil {
-		return err
+		return &errLocalCheck{err}
 	}
 	endpoint, ok := channel.SelectPrimaryEndpoint(provider.Type, snapshot.Endpoints)
 	if !ok {
-		return fmt.Errorf("no enabled %s endpoint for provider %q", consts.ProtocolOfType(provider.Type), provider.Name)
+		return &errLocalCheck{fmt.Errorf("no enabled %s endpoint for provider %q", consts.ProtocolOfType(provider.Type), provider.Name)}
 	}
 	groups := channel.GroupCandidates(snapshot)
 	if len(groups) == 0 {
-		return fmt.Errorf("provider %q has no key groups", provider.Name)
+		return &errLocalCheck{fmt.Errorf("provider %q has no key groups", provider.Name)}
 	}
 
 	testBody, format := chooseTestProbe(provider.Type)
@@ -121,21 +156,29 @@ func (h *HealthChecker) doCheck(ctx context.Context, provider *models.Provider, 
 
 	// 逐组失败原因都留下：health_check_logs.error 是排查入口，只报「失败」等于丢掉线索。
 	failures := make([]string, 0, len(groups))
+	upstreamAnswered := false
 	for _, group := range groups {
 		client, err := channel.NewClientForGroup(snapshot, group, endpoint, now)
 		if err != nil {
+			// 组内没有可用凭据（空 / 全冷却 / 已停用）属本机状态，不是上游结论。
 			failures = append(failures, fmt.Sprintf("group %q: %s", group.Name, err))
 			continue
 		}
 		// headers 每次重建：BuildReq 会就地写认证头，跨组复用同一 map 会互相污染。
 		if err := requestUpstream(ctx, client, buildRequestHeaders(mp), mp.ProviderModel, testBody, format); err != nil {
+			// 走到这里请求已经发出去过，拿到的是上游的结论（含超时/断连）——这才算一次失败。
+			upstreamAnswered = true
 			failures = append(failures, fmt.Sprintf("group %q: %s", group.Name, err))
 			continue
 		}
 		return nil
 	}
 
-	return fmt.Errorf("health check failed for provider %q: %s", provider.Name, strings.Join(failures, "; "))
+	aggregate := fmt.Errorf("health check failed for provider %q: %s", provider.Name, strings.Join(failures, "; "))
+	if !upstreamAnswered {
+		return &errLocalCheck{aggregate}
+	}
+	return aggregate
 }
 
 // requestUpstream 发一次检测请求并判定：状态码未通过（口径见 common.IsPassingStatus，

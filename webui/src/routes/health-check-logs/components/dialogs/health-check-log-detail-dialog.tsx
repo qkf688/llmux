@@ -1,6 +1,10 @@
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { HealthCheckLog } from "@/lib/api";
-import { formatResponseTime, isHealthCheckSuccess } from "../../utils/formatters";
+import {
+  HEALTH_CHECK_STATUS_TEXT_CLASS,
+  formatResponseTime,
+  getHealthCheckStatusLabel,
+} from "../../utils/formatters";
 import { formatDateTime } from "@/lib/formatters";
 import { DetailCard } from "../shared/detail-card";
 
@@ -18,8 +22,6 @@ export function HealthCheckLogDetailDialog({
   if (!log) {
     return null;
   }
-
-  const success = isHealthCheckSuccess(log.status);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -41,8 +43,8 @@ export function HealthCheckLogDetailDialog({
                 </div>
                 <div className="text-sm">
                   <span className="text-muted-foreground">状态：</span>
-                  <span className={success ? "text-success" : "text-destructive"}>
-                    {success ? "成功" : "失败"}
+                  <span className={HEALTH_CHECK_STATUS_TEXT_CLASS[log.status]}>
+                    {getHealthCheckStatusLabel(log.status)}
                   </span>
                 </div>
               </div>

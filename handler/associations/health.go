@@ -56,6 +56,10 @@ func GetModelProviderStatus(c *gin.Context) {
 }
 
 // GetModelProviderHealthStatus 获取模型提供商的健康检测结果。
+// 返回最近 limit 条检测的**状态字符串**（success / error / not_measured），按时间升序。
+//
+// 为什么不再是 bool 列表（Stage 36）：三态里「本机没测成」既不是成功也不是失败，
+// 压成真假会让前端把本机问题画成上游失败，与判停口径自相矛盾。
 // HealthCheckLog 只读聚合：日志 repo 在 T3.0b，此处暂留 query 辅助。
 func GetModelProviderHealthStatus(c *gin.Context) {
 	modelProviderIDStr := c.Query("model_provider_id")
@@ -92,9 +96,9 @@ func GetModelProviderHealthStatus(c *gin.Context) {
 		return
 	}
 
-	status := make([]bool, 0, len(logs))
+	status := make([]string, 0, len(logs))
 	for _, log := range logs {
-		status = append(status, log.Status == "success")
+		status = append(status, log.Status)
 	}
 	slices.Reverse(status)
 	httpresp.Success(c, status)

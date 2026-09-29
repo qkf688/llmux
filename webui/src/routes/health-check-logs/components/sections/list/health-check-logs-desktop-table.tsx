@@ -8,7 +8,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { HealthCheckLog } from "@/lib/api";
-import { formatResponseTime, isHealthCheckSuccess } from "../../../utils/formatters";
+import {
+  HEALTH_CHECK_STATUS_TEXT_CLASS,
+  formatResponseTime,
+  getHealthCheckStatusLabel,
+} from "../../../utils/formatters";
 import { formatDateTime } from "@/lib/formatters";
 
 type HealthCheckLogsDesktopTableProps = {
@@ -35,42 +39,36 @@ export function HealthCheckLogsDesktopTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {logs.map((log) => {
-            const success = isHealthCheckSuccess(log.status);
-
-            return (
-              <TableRow key={log.ID}>
-                <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                  {formatDateTime(log.checked_at)}
-                </TableCell>
-                <TableCell className="font-medium">{log.model_name}</TableCell>
-                <TableCell className="text-xs">{log.provider_name}</TableCell>
-                <TableCell className="max-w-[150px] truncate text-xs" title={log.provider_model}>
-                  {log.provider_model}
-                </TableCell>
-                <TableCell>
-                  <span
-                    className={`inline-flex items-center px-2 py-1 ${
-                      success ? "text-success" : "text-destructive"
-                    }`}
-                  >
-                    {success ? "成功" : "失败"}
-                  </span>
-                </TableCell>
-                <TableCell>{formatResponseTime(log.response_time)}</TableCell>
-                <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-2"
-                    onClick={() => onOpenDetail(log)}
-                  >
-                    详情
-                  </Button>
-                </TableCell>
-              </TableRow>
-            );
-          })}
+          {logs.map((log) => (
+            <TableRow key={log.ID}>
+              <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                {formatDateTime(log.checked_at)}
+              </TableCell>
+              <TableCell className="font-medium">{log.model_name}</TableCell>
+              <TableCell className="text-xs">{log.provider_name}</TableCell>
+              <TableCell className="max-w-[150px] truncate text-xs" title={log.provider_model}>
+                {log.provider_model}
+              </TableCell>
+              <TableCell>
+                <span
+                  className={`inline-flex items-center px-2 py-1 ${HEALTH_CHECK_STATUS_TEXT_CLASS[log.status]}`}
+                >
+                  {getHealthCheckStatusLabel(log.status)}
+                </span>
+              </TableCell>
+              <TableCell>{formatResponseTime(log.response_time)}</TableCell>
+              <TableCell>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2"
+                  onClick={() => onOpenDetail(log)}
+                >
+                  详情
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
         </TableBody>
       </Table>
     </div>

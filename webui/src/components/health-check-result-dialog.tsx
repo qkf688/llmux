@@ -11,8 +11,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { LoadingState } from "@/components/ui/loading-state";
 import { StatCard, StatGrid } from "@/components/stat-card";
-import { getBatchHealthCheckStatus, type BatchHealthCheckStatus } from "@/lib/api";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { getBatchHealthCheckStatus, type BatchHealthCheckStatus, type HealthCheckStatus } from "@/lib/api";
+import {
+  HEALTH_CHECK_STATUS_TEXT_CLASS,
+  getHealthCheckStatusLabel,
+} from "@/lib/health-check-status";
+import { CheckCircle2, CircleMinus, XCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface HealthCheckResultDialogProps {
@@ -20,6 +24,13 @@ interface HealthCheckResultDialogProps {
   onOpenChange: (open: boolean) => void;
   batchId: string | null;
 }
+
+// 状态图标只服务于本弹窗的「最近结果」行，文案与配色仍走 lib 单源
+const STATUS_ICONS: Record<HealthCheckStatus, typeof CheckCircle2> = {
+  success: CheckCircle2,
+  error: XCircle,
+  not_measured: CircleMinus,
+};
 
 // 格式化响应时间
 const formatTime = (milliseconds: number): string => {
@@ -120,11 +131,12 @@ export function HealthCheckResultDialog({
             <LoadingState text="" className="py-8" spinnerClassName="w-8 h-8" />
           ) : (
             <>
-              {/* 统计概览 */}
-              <StatGrid>
+              {/* 统计概览：未完成单列，四项与总计对得平 */}
+              <StatGrid className="lg:grid-cols-5">
                 <StatCard label="总计" value={status.total_count} />
                 <StatCard label="成功" value={status.success} tone="success" />
                 <StatCard label="失败" value={status.failed} tone="danger" />
+                <StatCard label="未完成" value={status.not_measured} tone="neutral" />
                 <StatCard label="待检测" value={status.pending} tone="info" />
               </StatGrid>
 
@@ -163,33 +175,32 @@ export function HealthCheckResultDialog({
                         </tr>
                       </thead>
                       <tbody>
-                        {status.logs.slice(0, 10).map((log) => (
-                          <tr
-                            key={log.ID}
-                            className="border-t hover:bg-muted/30 transition-colors"
-                          >
-                            <td className="px-3 py-2">
-                              {log.status === "success" ? (
-                                <span className="flex items-center gap-1 text-success">
-                                  <CheckCircle2 className="w-4 h-4" />
-                                  成功
+                        {status.logs.slice(0, 10).map((log) => {
+                          const StatusIcon = STATUS_ICONS[log.status];
+
+                          return (
+                            <tr
+                              key={log.ID}
+                              className="border-t hover:bg-muted/30 transition-colors"
+                            >
+                              <td className="px-3 py-2">
+                                <span
+                                  className={`flex items-center gap-1 ${HEALTH_CHECK_STATUS_TEXT_CLASS[log.status]}`}
+                                >
+                                  <StatusIcon className="w-4 h-4" />
+                                  {getHealthCheckStatusLabel(log.status)}
                                 </span>
-                              ) : (
-                                <span className="flex items-center gap-1 text-destructive">
-                                  <XCircle className="w-4 h-4" />
-                                  失败
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 font-mono text-xs">
-                              {log.model_name}
-                            </td>
-                            <td className="px-3 py-2">{log.provider_name}</td>
-                            <td className="px-3 py-2 text-right font-mono text-xs">
-                              {formatTime(log.response_time)}
-                            </td>
-                          </tr>
-                        ))}
+                              </td>
+                              <td className="px-3 py-2 font-mono text-xs">
+                                {log.model_name}
+                              </td>
+                              <td className="px-3 py-2">{log.provider_name}</td>
+                              <td className="px-3 py-2 text-right font-mono text-xs">
+                                {formatTime(log.response_time)}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

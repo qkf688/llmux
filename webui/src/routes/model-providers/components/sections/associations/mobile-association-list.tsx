@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { AssociationBatchTestResult } from "../../../types";
-import type { ModelWithProvider, Provider } from "@/lib/api";
+import type { HealthCheckStatus, ModelWithProvider, Provider } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -34,7 +34,7 @@ type MobileAssociationListProps = {
   isAllSelected: boolean;
   isPartialSelected: boolean;
   providerStatus: Record<number, boolean[]>;
-  healthStatus: Record<number, boolean[]>;
+  healthStatus: Record<number, HealthCheckStatus[]>;
   statusUpdating: Record<number, boolean>;
   associationTestResults: Record<number, AssociationBatchTestResult>;
   deleteId: number | null;

@@ -1,4 +1,5 @@
 import type { ErrorType } from "@/lib/errors";
+import type { HealthCheckStatus } from "../system/health-check";
 import { apiRequest } from "../../core/client";
 
 // 测试执行模式与流式诊断块是**回包契约**（值域镜像后端 handler/testapi 的
@@ -67,15 +68,16 @@ export async function getModelProviders(modelId: number): Promise<ModelWithProvi
   return apiRequest<ModelWithProvider[]>(`/model-providers?model_id=${modelId}`);
 }
 
+// 健康检测状态值域由健康检测域定义（同一份 HealthCheckLog.status），此处复用而非另立别名
 export async function getModelProviderHealthStatus(
   modelProviderId: number,
   limit = 10
-): Promise<boolean[]> {
+): Promise<HealthCheckStatus[]> {
   const params = new URLSearchParams({
     model_provider_id: modelProviderId.toString(),
     limit: limit.toString(),
   });
-  return apiRequest<boolean[]>(`/model-providers/health-status?${params.toString()}`);
+  return apiRequest<HealthCheckStatus[]>(`/model-providers/health-status?${params.toString()}`);
 }
 
 export async function getModelProviderStatus(

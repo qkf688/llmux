@@ -2,6 +2,10 @@ import { PageToolbar, ToolbarFilter } from "@/components/page-toolbar";
 import { SelectItem } from "@/components/ui/select";
 import type { Model, Provider } from "@/lib/api";
 import type { HealthCheckLogsFilters } from "../../types";
+import {
+  HEALTH_CHECK_STATUSES,
+  getHealthCheckStatusLabel,
+} from "../../utils/formatters";
 
 type HealthCheckFiltersProps = {
   filters: HealthCheckLogsFilters;
@@ -53,8 +57,11 @@ export function HealthCheckFilters({
         placeholder="状态"
       >
         <SelectItem value="all">全部</SelectItem>
-        <SelectItem value="success">成功</SelectItem>
-        <SelectItem value="error">错误</SelectItem>
+        {HEALTH_CHECK_STATUSES.map((status) => (
+          <SelectItem key={status} value={status}>
+            {getHealthCheckStatusLabel(status)}
+          </SelectItem>
+        ))}
       </ToolbarFilter>
     </PageToolbar>
   );

@@ -1,5 +1,5 @@
 import type { AssociationBatchTestResult } from "../../../types";
-import type { ModelWithProvider, Provider } from "@/lib/api";
+import type { HealthCheckStatus, ModelWithProvider, Provider } from "@/lib/api";
 import Loading from "@/components/loading";
 import { TableCard } from "@/components/table-card";
 import { DesktopAssociationTable } from "./desktop-association-table";
@@ -15,7 +15,7 @@ type AssociationListSectionProps = {
   isAllSelected: boolean;
   isPartialSelected: boolean;
   providerStatus: Record<number, boolean[]>;
-  healthStatus: Record<number, boolean[]>;
+  healthStatus: Record<number, HealthCheckStatus[]>;
   statusUpdating: Record<number, boolean>;
   associationTestResults: Record<number, AssociationBatchTestResult>;
   deleteId: number | null;

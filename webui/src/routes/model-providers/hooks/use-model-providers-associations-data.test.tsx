@@ -9,11 +9,13 @@ import { useModelProvidersAssociationsData } from "./use-model-providers-associa
 import { createMockAssociation } from "../test-fixtures";
 
 // 被测链路仅经 useModelProvidersQuery 消费 getModelProviders；
-// 另两个为防御性预置：若未来直接 import useModelProvidersAssociationStatus，其网络依赖不会因缺导出而静默 undefined
+// 另两个为防御性预置：若未来直接 import useModelProvidersAssociationStatus，其网络依赖不会因缺导出而静默 undefined。
+// 健康检测预置回三态字符串（Stage 36 起 /model-providers/health-status 不再是布尔数组），
+// 三态透传本身由 use-model-providers-association-status.test.tsx 覆盖。
 vi.mock("@/lib/api", () => ({
   getModelProviders: vi.fn(),
   getModelProviderStatus: vi.fn(),
-  getModelProviderHealthStatus: vi.fn(),
+  getModelProviderHealthStatus: vi.fn().mockResolvedValue(["success", "error", "not_measured"]),
 }));
 
 type LoadProviderStatus = (providers: ModelWithProvider[], modelId: number) => Promise<void>;

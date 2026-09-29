@@ -1,11 +1,20 @@
 import { useCallback, useState } from "react";
-import { getModelProviderHealthStatus, getModelProviderStatus, type Model, type ModelWithProvider } from "@/lib/api";
+import {
+  getModelProviderHealthStatus,
+  getModelProviderStatus,
+  type HealthCheckStatus,
+  type Model,
+  type ModelWithProvider,
+} from "@/lib/api";
 
+/** 最近 10 次请求成败（/model-providers/status，仍是两态布尔） */
 type ProviderStatusState = Record<number, boolean[]>;
+/** 最近 10 次健康检测（/model-providers/health-status，三态字符串） */
+type HealthStatusState = Record<number, HealthCheckStatus[]>;
 
 export function useModelProvidersAssociationStatus(models: Model[]) {
   const [providerStatus, setProviderStatus] = useState<ProviderStatusState>({});
-  const [healthStatus, setHealthStatus] = useState<ProviderStatusState>({});
+  const [healthStatus, setHealthStatus] = useState<HealthStatusState>({});
 
   const loadProviderStatus = useCallback(
     async (providers: ModelWithProvider[], modelId: number) => {
@@ -17,7 +26,7 @@ export function useModelProvidersAssociationStatus(models: Model[]) {
       if (!selectedModel || providers.length === 0) return;
 
       const newStatus: ProviderStatusState = {};
-      const newHealthStatus: ProviderStatusState = {};
+      const newHealthStatus: HealthStatusState = {};
 
       await Promise.all(
         providers.map(async (provider) => {

@@ -12,6 +12,11 @@ export interface HealthCheckSettings {
   check_disabled_only: boolean;
 }
 
+// 健康检测状态三态（值域与后端 models.HealthCheckStatus* 常量同源）：
+// success/error 是上游给出的结论，not_measured 是本机原因没测成
+// （读不到库、没有启用的端点、没有可用凭据）——不是供应商的问题。
+export type HealthCheckStatus = "success" | "error" | "not_measured";
+
 export interface HealthCheckLog {
   ID: number;
   CreatedAt: string;
@@ -20,7 +25,7 @@ export interface HealthCheckLog {
   model_name: string;
   provider_name: string;
   provider_model: string;
-  status: string;
+  status: HealthCheckStatus;
   error: string;
   response_time: number;
   checked_at: string;
@@ -39,6 +44,8 @@ export interface BatchHealthCheckStatus {
   total_count: number;
   success: number;
   failed: number;
+  // 本机原因没测成的条数：既不算成功也不算失败，不单列则四项加不平 total_count
+  not_measured: number;
   pending: number;
   completed: boolean;
   logs: HealthCheckLog[];

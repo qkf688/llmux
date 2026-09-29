@@ -20,7 +20,9 @@ const LEVELS = [
   { min: 1, level: 1 },
 ] as const;
 
-const LEGEND_LEVELS = [0, ...LEVELS.map((l) => l.level)] as const;
+// LEVELS 按 min 降序声明（供 getActivityLevel 的 find 先命中最高档），
+// 图例要按「少 → 多」展示，故按 level 升序重排，仍与档位表单一同源
+const LEGEND_LEVELS = [0, ...LEVELS.map((l) => l.level).sort((a, b) => a - b)] as const;
 
 function getActivityLevel(value: number): number {
   if (value <= 0) return 0;

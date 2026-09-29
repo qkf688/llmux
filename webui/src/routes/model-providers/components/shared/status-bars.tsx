@@ -1,12 +1,11 @@
 import type { HealthCheckStatus } from "@/lib/api";
 import { Spinner } from "@/components/ui/spinner";
 
-// 格子取值有两种来源：布尔来自 /model-providers/status（聊天日志成败，仍是两态），
-// 三态字符串来自 /model-providers/health-status（成功 / 失败 / 未完成）。
-type StatusBarValue = boolean | HealthCheckStatus;
-
+// 只认三态词汇（Stage 36）：这里曾是 `boolean | HealthCheckStatus` 的联合，
+// 于是「聊天成败」与「健康检测」两组数据可以互换着传，把前者塞进健康槽会静默编译通过。
+// 布尔来自 /model-providers/status 的那一路，由调用方在传参处显式声明映射。
 type StatusBarsProps = {
-  bars: StatusBarValue[] | undefined;
+  bars: HealthCheckStatus[] | undefined;
   successClassName: string;
   failClassName: string;
   notMeasuredClassName?: string;
@@ -17,12 +16,6 @@ type StatusBarsProps = {
   failTitle?: string;
   notMeasuredTitle?: string;
 };
-
-function toStatusKind(value: StatusBarValue): HealthCheckStatus {
-  if (value === "not_measured") return "not_measured";
-  if (value === "success" || value === true) return "success";
-  return "error";
-}
 
 export function StatusBars({
   bars,
@@ -46,17 +39,16 @@ export function StatusBars({
 
   return (
     <div className="flex space-x-1 items-end h-6">
-      {bars.map((value, index) => {
-        const kind = toStatusKind(value);
+      {bars.map((status, index) => {
         // 未完成照旧占一格：跳过会让格子数与检测次数错位，拿旧数据补位等于把本机问题记成上游结论
         const colorClassName =
-          kind === "success"
+          status === "success"
             ? successClassName
-            : kind === "not_measured"
+            : status === "not_measured"
               ? notMeasuredClassName
               : failClassName;
         const title =
-          kind === "success" ? successTitle : kind === "not_measured" ? notMeasuredTitle : failTitle;
+          status === "success" ? successTitle : status === "not_measured" ? notMeasuredTitle : failTitle;
 
         return (
           <div

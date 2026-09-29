@@ -97,7 +97,8 @@ export function MobileAssociationList({
       {associations.map((association) => {
         const provider = providers.find((item) => item.ID === association.ProviderID);
         const isAssociationEnabled = association.Status ?? true;
-        const statusBars = providerStatus[association.ID];
+        // 聊天成败是两态布尔，传进格子前显式映射成三态词汇（组件只认一套词汇）
+        const statusBars = providerStatus[association.ID]?.map((ok): HealthCheckStatus => (ok ? "success" : "error"));
         const healthBars = healthStatus[association.ID];
         const currentResult = associationTestResults[association.ID];
         const isExpanded = !!expandedAssociations[association.ID];

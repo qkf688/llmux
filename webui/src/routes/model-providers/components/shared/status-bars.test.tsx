@@ -28,9 +28,10 @@ describe("StatusBars", () => {
     expect(bars[2].getAttribute("title")).toBe("未完成（本机原因）");
   });
 
-  it("布尔格子（聊天日志成败）仍按两态着色", () => {
+  it("布尔来源在调用处映射后同样按两态着色（组件只认三态词汇）", () => {
     const bars = renderBars({
-      bars: [true, false],
+      // 聊天成败这一路在调用方显式映射：true → success、false → error
+      bars: ["success", "error"],
       successClassName: "bg-success",
       failClassName: "bg-destructive",
     });

@@ -51,16 +51,18 @@
 ### 常用命令
 
 ```bash
-# 后端（makefile 目标仅 run/fmt/tidy/mkdb/webui/add，无 test/lint）
+# 后端（makefile 目标：run / fmt / tidy / mkdb / webui / add / test / check）
 make run              # go fmt + go mod tidy + mkdir db + go run .（默认 :7070）
 make fmt              # go fmt ./...
-go test ./...                        # 全部 Go 测试
+make test             # go test ./... -count=1（全部 Go 测试，含 gate_* 机械门）
+make check            # 提交前一键自查：fmt + vet + test
 go test ./service/virtualmodel/...   # 单包测试
 go test -run TestName ./path/to/pkg  # 单测
 
 # 前端（在 webui/ 下）
 pnpm dev              # Vite HMR :5173
 pnpm run build        # tsc -b && vite build（改前端后进二进制必须 rebuild）
+pnpm typecheck        # tsc -b 类型检查（不产出 dist，比 build 快）
 pnpm lint             # eslint .
 pnpm test             # vitest run（另有 test:watch / preview）
 make webui            # 生产构建供 Go embed：cd webui && pnpm install && pnpm run build
@@ -152,7 +154,7 @@ make webui            # 生产构建供 Go embed：cd webui && pnpm install && p
 > 每项须可机械验证（命令 / grep / 文件存在性）。
 
 - [ ] `go test ./...` 通过；若改 Go 源文件已执行 `go fmt ./...`（或 `make fmt`）
-- [ ] 若改前端：`cd webui && pnpm lint` 与 `pnpm run build`（`tsc -b && vite build`）均通过；需嵌入二进制则 `make webui`
+- [ ] 若改前端：`cd webui && pnpm lint`、`pnpm typecheck` 与 `pnpm run build`（`tsc -b && vite build`）均通过；需嵌入二进制则 `make webui`
 - [ ] 新增/修改公共注册：无重复注册；相关 `TestRegister*_DuplicatePanics` 或等价测试仍通过
 - [ ] 新供应商 type：已 `Register`+`RegisterMetadata`，且 `rg` 外围 type 分支已处理
 - [ ] 新协议 style：chat 注册（Beforer/Processer/StreamErrorWriter）+ transform 适配 + `register_v1` + `consts.Style*` 四处（及流式路由若需要）均已改

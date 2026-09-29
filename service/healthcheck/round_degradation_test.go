@@ -2,7 +2,6 @@ package healthcheck
 
 import (
 	"context"
-	"log/slog"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
@@ -105,7 +104,6 @@ func TestValidateRoundConfig_UnreadableSettings_Fails(t *testing.T) {
 // TestValidateRoundConfig_ReadableSettings_Passes 反向：配置可读时必须放行。
 func TestValidateRoundConfig_ReadableSettings_Passes(t *testing.T) {
 	initHealthCheckTestDB(t)
-	_ = slog.Default()
 
 	if err := (&HealthChecker{}).ValidateRoundConfig(context.Background()); err != nil {
 		t.Fatalf("ValidateRoundConfig: %v, want nil", err)

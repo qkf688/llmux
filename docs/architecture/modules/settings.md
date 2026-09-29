@@ -39,7 +39,7 @@ models.Setting
 | `SettingRepo` | KV 持久化 | `repository/setting.go` | GORM |
 | `GetSettingBool/Int/String` | 兼容通用读取 | `models/setting_reader.go` | 同文件 |
 | `GetSettingBoolE/IntE`（Stage 33） | 「读失败可辨」读取：查询失败/存值非法 → err，key 不存在 → default（未设置是有效状态） | `models/setting_reader.go` | 同文件 |
-| `settings.Reader.BoolE/IntE` + `settings.LogReadSkip`（Stage 33；Stage 36 限频） | Reader 的 E 变体 + 「读失败 → 跳过依赖该配置的写动作」留痕单源。留痕**按设置项每 60 秒最多一条**并带出窗口内被压掉的条数（`suppressed`），总次数不丢——一次请求会走过 5~8 个此类步骤，逐步留痕会让日志量 ≈ 请求量 × 步数 | `service/settings/reader.go` | `modelsReader`；调用方 `service/adjustment`、`service/chat` 凭据结算、`service/healthcheck` |
+| `settings.Reader.BoolE/IntE` + `settings.LogReadSkip`（Stage 33；Stage 36 限频） | Reader 的 E 变体 + 「读失败 → 跳过依赖该配置的写动作」留痕单源。留痕**按设置项每 60 秒最多一条**并带出窗口内被压掉的条数（`suppressed`）——一次请求会走过 5~8 个此类步骤，逐步留痕会让日志量 ≈ 请求量 × 步数。已告知口径：故障持续期总次数可由 `suppressed` 累加还原，但窗口内没有下一条时（故障恰在该窗口结束 / 进程重启）这段计数无下文，要精确总数须另设计数通道 | `service/settings/reader.go` | `modelsReader`；调用方 `service/adjustment`、`service/chat` 凭据结算、`service/healthcheck` |
 
 ## 5. 特殊约定
 

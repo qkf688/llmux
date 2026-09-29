@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"encoding/json"
 	"log/slog"
 	"reflect"
 	"strings"
@@ -60,7 +61,9 @@ func TestBuildSettingsResponse_SharedHealthKeys_StillApplied(t *testing.T) {
 // TestGenericSettingsResponseFieldContract 通用设置响应字段契约（Stage 36 机械门）：
 // ① 每个非 health 域的设置项都必须在通用响应结构里有位置——否则它在设置页上永远显示默认值，
 // 而这种「漏字段」正是分流静默跳过的副作用，必须由门挡住，不靠人盯；
-// ② 反向锁定 health 域里被通用页复用的那一组（集合相等），防按域粗筛时误伤。
+// ② 该字段还必须在**响应体 JSON 里真的出现**（按 json tag 取键名，禁 `json:"-"` / 空 tag）——
+// 只断 Go 字段存在会让「加了字段忘写 tag、或写成不序列化」双绿，而前端是按 snake_case 键读的；
+// ③ 反向锁定 health 域里被通用页复用的那一组（集合相等），防按域粗筛时误伤。
 func TestGenericSettingsResponseFieldContract(t *testing.T) {
 	// 通用设置页共享的 health 键（有意为之的一份清单，改动必须显式过这里）
 	expectedShared := map[string]bool{
@@ -70,8 +73,17 @@ func TestGenericSettingsResponseFieldContract(t *testing.T) {
 	actualShared := map[string]bool{}
 	responseType := reflect.TypeOf(SettingsResponse{})
 
+	raw, err := json.Marshal(SettingsResponse{})
+	if err != nil {
+		t.Fatalf("marshal SettingsResponse: %v", err)
+	}
+	var wire map[string]any
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		t.Fatalf("unmarshal SettingsResponse: %v", err)
+	}
+
 	for _, schema := range models.SettingSchemas() {
-		_, present := responseType.FieldByName(schema.Field)
+		field, present := responseType.FieldByName(schema.Field)
 
 		if schema.Category == "health" {
 			if present {
@@ -83,6 +95,17 @@ func TestGenericSettingsResponseFieldContract(t *testing.T) {
 		if !present {
 			t.Errorf("设置项 %s（字段 %s）在通用设置响应里没有位置：要么补字段，要么把它的归属改成独立域（静默跳过的代价必须由本门兜住）",
 				schema.Key, schema.Field)
+			continue
+		}
+
+		jsonKey := strings.Split(field.Tag.Get("json"), ",")[0]
+		if jsonKey == "" || jsonKey == "-" {
+			t.Errorf("设置项 %s 的字段 %s 没有可用的 json 键（tag=%q）：前端按 snake_case 键读，加字段必须同时写 tag",
+				schema.Key, schema.Field, field.Tag.Get("json"))
+			continue
+		}
+		if _, ok := wire[jsonKey]; !ok {
+			t.Errorf("设置项 %s 的 json 键 %q 没出现在响应体里（前端读不到）", schema.Key, jsonKey)
 		}
 	}
 

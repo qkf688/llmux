@@ -63,7 +63,9 @@ func (modelsReader) IntE(ctx context.Context, key string, defaultValue, minValue
 // 留痕密度按设置项限频（Stage 36）：调用点遍布结算与健康检测，一次请求会走过多个
 // 「读配置 → 写库」步骤，逐步各打一条会让日志量 ≈ 请求量 × 步数——恰在数据库不稳、
 // 最需要日志的时刻把有用信息淹没（与本项目「整行限长防刷屏」同取向）。
-// 窗口内被压掉的次数在下一条留痕里带出（`suppressed`），总次数不丢。
+// 窗口内被压掉的条数在下一条留痕里带出（`suppressed`）：故障持续期总次数可累加还原；
+// 但**该窗口内没有下一条**（故障恰好在此窗口结束、或进程重启）时，这段计数就没有下文，
+// 属已告知的口径（要精确总数须另设计数通道，见 settings 模块文档）。
 func LogReadSkip(step, key string, err error) {
 	suppressed, ok := skipLogLimiter.allow(key)
 	if !ok {

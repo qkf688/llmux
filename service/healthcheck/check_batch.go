@@ -55,7 +55,8 @@ func (h *HealthChecker) CheckAllWithBatch(ctx context.Context, batchID string) e
 	modelProviders, checkDisabledOnly, err := h.listModelProvidersForCheck(ctx)
 	if err != nil {
 		if errors.Is(err, ErrRoundSkipped) {
-			slog.Warn("batch health check skipped: settings unreadable", "batch_id", batchID)
+			// 留痕归调用方（handler 侧带 batch_id 记一条 Warn）：这里再记一条会让同一次跳过
+			// 出两条同文案 Warn，而降噪正是本 Stage 的主题。
 			return err
 		}
 		slog.Error("failed to get model providers for batch health check", "error", err, "batch_id", batchID)

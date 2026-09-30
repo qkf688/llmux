@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/qkf688/llmux/consts"
+	preprocessanthropic "github.com/qkf688/llmux/service/chat/preprocess/anthropic"
 	preprocessopenai "github.com/qkf688/llmux/service/chat/preprocess/openai"
 	"github.com/qkf688/llmux/service/transform"
 	"github.com/tidwall/gjson"
@@ -47,9 +48,10 @@ func withOptionalRequestTrace(ctx context.Context) context.Context {
 }
 
 // buildRequestBodyForProvider 聚合两条路径（真实/虚拟模型）的全部请求体改写。
-// 执行顺序：stripThinkingFields（先剥离不支持 thinking 的）→ passthrough/transform 钳制 → clampMaxTokens
-// → reconcileThinkingBudgetWithMaxTokens（收敛 clampMaxTokens 可能造出的 budget >= max_tokens 非法组合）。
-// 改动时须同步两条路径的测试。
+// 执行顺序：stripThinkingFields（先剥离不支持 thinking 的）→ passthrough/transform 钳制
+// → patchOutgoingRequestBody（按出站 wire 形状补齐 / 收掉该形状不认的客户端私有扩展）
+// → clampMaxTokens → reconcileThinkingBudgetWithMaxTokens（收敛 clampMaxTokens 可能造出的
+// budget >= max_tokens 非法组合）。改动时须同步两条路径的测试。
 func buildRequestBodyForProvider(ctx context.Context, caps ProviderRequestCaps) ([]byte, bool, error) {
 	style := caps.Style
 	raw := caps.Raw
@@ -82,7 +84,7 @@ func buildRequestBodyForProvider(ctx context.Context, caps ProviderRequestCaps) 
 		if caps.ThinkingClamp != nil {
 			raw = clampPassthroughReasoning(raw, clientFormat, caps.ThinkingClamp)
 		}
-		validated, err := validateAndPatchOutgoingOpenAIRequest(upstreamFormat, raw)
+		validated, err := patchOutgoingRequestBody(upstreamFormat, raw)
 		if err != nil {
 			return nil, false, err
 		}
@@ -104,7 +106,7 @@ func buildRequestBodyForProvider(ctx context.Context, caps ProviderRequestCaps) 
 	if err != nil {
 		return nil, false, err
 	}
-	validated, err := validateAndPatchOutgoingOpenAIRequest(upstreamFormat, convertedBody)
+	validated, err := patchOutgoingRequestBody(upstreamFormat, convertedBody)
 	if err != nil {
 		return nil, false, err
 	}
@@ -210,14 +212,34 @@ func stripThinkingBlocksFromMessages(body []byte) ([]byte, bool) {
 	return body, changed
 }
 
-// validateAndPatchOutgoingOpenAIRequest 只对**出站 body 是 OpenAI Chat 形状**时生效：
+// patchOutgoingRequestBody 是出站前的**唯一**形状收敛落点：按出站 wire 形状补齐该形状要求的
+// 字段、并收掉该形状不认的客户端私有扩展。两条构建路径（passthrough / transform）共用同一落点，
+// 判定依据是形状而非「body 是谁生成的」——转换产物同样需要 OpenAI 侧补齐，直通产物同样需要
+// Anthropic 侧归一化：客户端协议可以是规范之外的**超集**（DeepSeek Messages 即是），私有块在
+// 直通时不会经过任何转换层，只能在这里收掉（背景见 service/anthropic/deepseek_messages.go）。
+func patchOutgoingRequestBody(upstreamFormat consts.WireFormat, body []byte) ([]byte, error) {
+	switch upstreamFormat {
+	case consts.FormatOpenAIChat:
+		return patchOutgoingOpenAIChatRequest(body)
+	case consts.FormatAnthropic:
+		patched, changed, err := preprocessanthropic.NormalizeDeepSeekToolChangeBlocks(body)
+		if err != nil {
+			// 归一化失败不阻断主流程（与 OpenAI 侧补齐同口径）：保留原 body 交上游判定，
+			// 失败原因进日志，不把内部错误文本回客户端。
+			slog.Warn("normalize deepseek tool change blocks failed, sending original body", "error", err)
+			return body, nil
+		}
+		if changed {
+			return patched, nil
+		}
+	}
+	return body, nil
+}
+
+// patchOutgoingOpenAIChatRequest 只对**出站 body 是 OpenAI Chat 形状**时生效：
 // 校验/补齐的都是 OpenAI Chat 特有字段（tool_call 函数名、tool_call_id、message.content），
 // 判定依据必须是 wire format 而非「上游是哪一家」——OpenAI 兼容的新上游同样需要这层补齐。
-func validateAndPatchOutgoingOpenAIRequest(upstreamFormat consts.WireFormat, body []byte) ([]byte, error) {
-	if upstreamFormat != consts.FormatOpenAIChat {
-		return body, nil
-	}
-
+func patchOutgoingOpenAIChatRequest(body []byte) ([]byte, error) {
 	if err := preprocessopenai.ValidateToolCallFunctionNames(body); err != nil {
 		return nil, newClientRequestError(http.StatusBadRequest, err.Error())
 	}

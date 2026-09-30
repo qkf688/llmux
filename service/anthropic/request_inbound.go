@@ -350,6 +350,20 @@ func parseContentBlocks(raw json.RawMessage) contentBlocks {
 				out.redactedData = block.Data.Value
 			}
 
+		case BlockTypeToolAddition, BlockTypeToolRemoval:
+			// DeepSeek Messages 工具变更扩展（非 Anthropic 规范）：显式认领并渲染成文本 part，
+			// 不再落进 default 被静默丢弃——转换线的上游都不认这个块，语义只能由文本承载，
+			// 丢掉等于让模型看不到「中途新增了哪个工具」。本函数同时服务响应入站（请求/响应
+			// 共用同一次遍历），响应侧若被上游回显该块同样降级为文本，不另设分支。
+			// 完整背景与直通侧口径见 deepseek_messages.go。
+			var block anthropicToolChangeBlock
+			if !shared.DecodeJSONObject(item, &block) {
+				continue
+			}
+			if text := ToolChangeNoticeText(envelope.Type.Value, block.Tool.Name.Value); text != "" {
+				parts = append(parts, models.UnifiedMessageContentPart{Type: "text", Text: &text})
+			}
+
 		default:
 			if part, ok := parseTextOrImageBlock(item, envelope.Type.Value); ok {
 				parts = append(parts, part)

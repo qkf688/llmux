@@ -143,6 +143,22 @@ type anthropicRedactedThinkingBlock struct {
 	Data shared.Optional[string] `json:"data"`
 }
 
+// anthropicToolChangeBlock 是 DeepSeek Messages 工具变更块（tool_addition / tool_removal）
+// 的 DTO：两个 type 共用一个 struct——它们的形状与语义只差「加还是删」，没有理由拆两份。
+//
+// 只读**线形态**的嵌套 tool.name：{"tool":{"type":"tool_reference","name":"read_page"}}。
+// 不额外认平的 toolName——那只是客户端会话内的块形态、不出现在线协议里，多认一种形状等于
+// 给未来的漂移留后门（事故背景与归一化口径见 deepseek_messages.go）。
+type anthropicToolChangeBlock struct {
+	Tool anthropicToolReference `json:"tool"`
+}
+
+// anthropicToolReference 是工具变更块里 tool 字段的 DTO：type 恒为 tool_reference，
+// 网关不解读它，只取 name。
+type anthropicToolReference struct {
+	Name shared.Optional[string] `json:"name"`
+}
+
 // anthropicMessage 是 messages 数组元素的 DTO；content 停在 RawMessage，
 // 因为它是 string｜块数组二义，由 parseContentBlocks 分派。
 type anthropicMessage struct {

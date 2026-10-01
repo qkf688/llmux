@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/settings"
 	"github.com/qkf688/llmux/service/transform"
 )
 
@@ -94,12 +95,35 @@ func getRequestHeaderTimeout(ctx context.Context) int {
 	return settingsReader.Int(ctx, models.SettingKeyRequestHeaderTimeout, 30, 1)
 }
 
+// conservativeRequestTotalTimeoutFallback 是 request_total_timeout 读失败时的保守值。
+// 读失败 = DB 故障 / 存值解析失败 / 低于 Min 越界（models.GetSettingIntE 既有契约）。
+//
+// 为什么 60s：
+//   - 默认 600s 的 1/10；读失败是异常态，按"宁可误杀慢请求也要保住网关存活"的取向收紧
+//   - stage36 已补齐"读失败期间真实失败照记、恢复后结账"，慢请求即便被误杀也会按超时归因结算
+//   - 不放 settings 表：避免与"默认 600"是两个不同语义的配置项混淆
+//
+// 为什么是代码常量而非 settings：
+//   - 60s 是 stage37 的语义常量，不是用户面向的配置；混进 settings 会让用户误以为可以调
+//   - 改这里要发版——这正是想要的"不让人随手调"的效果
+const conservativeRequestTotalTimeoutFallback = 60 * time.Second
+
 // getRequestTotalTimeout 获取整个请求的总时长上限（秒），含读体/预处理/选路/上游
 // 调用/流式输出全程。默认值与 setting schema 一致（600：正常长回答不被截的余量）。
 // Stage 33 起该值挂进请求 ctx 的 deadline（见 WithRequestTotalTimeout），
 // 到点整个请求被掐断并按超时归因结算，不再是「仅阻止下一次重试」的计时器。
+//
+// 读失败处置（Stage 37）：DB 故障 / 解析失败 / Min 越界 → 返回 conservativeRequestTotalTimeoutFallback
+// （60s）并通过 settings.LogReadSkip 留痕——按设置项限频（Stage 36）每 60 秒最多一条，
+// 同一窗口内被压掉的次数在下一条里带出。
 func getRequestTotalTimeout(ctx context.Context) int {
-	return settingsReader.Int(ctx, models.SettingKeyRequestTotalTimeout, 600, 1)
+	value, err := settingsReader.IntE(ctx, models.SettingKeyRequestTotalTimeout, 600, 1)
+	if err != nil {
+		settings.LogReadSkip("request total timeout conservative fallback",
+			models.SettingKeyRequestTotalTimeout, err)
+		return int(conservativeRequestTotalTimeoutFallback / time.Second)
+	}
+	return value
 }
 
 // WithRequestTotalTimeout 给请求挂上网关总超时（Stage 33）：派生带 deadline 的请求 ctx，

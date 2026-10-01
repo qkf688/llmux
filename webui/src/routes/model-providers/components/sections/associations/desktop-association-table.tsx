@@ -75,10 +75,29 @@ export function DesktopAssociationTable({
 }: DesktopAssociationTableProps) {
   return (
     <div className="hidden lg:block w-full overflow-x-auto">
-      <Table className="min-w-[950px]">
+      {/* 固定布局：列宽只由 colgroup 决定，不再随单元格内容长度变化——否则长模型名/供应商名会挤窄
+          「能力」「操作」列，触发内部 flex-wrap 换行，同一张表里行高差 2 倍以上。
+          min-w 必须 ≥ 各列宽之和 + 模型名列的可读宽度，否则固定布局会按比例压缩列宽，把挤压缩回来。 */}
+      <Table className="table-fixed min-w-[1400px]">
+        <colgroup>
+          <col className="w-[44px]" />
+          <col className="w-[48px]" />
+          {/* 提供商模型列不设宽：由它吸收宽屏下的剩余空间（取值来自表宽，仍与内容无关） */}
+          <col />
+          <col className="w-[72px]" />
+          <col className="w-[130px]" />
+          <col className="w-[186px]" />
+          <col className="w-[56px]" />
+          <col className="w-[68px]" />
+          <col className="w-[110px]" />
+          <col className="w-[108px]" />
+          <col className="w-[108px]" />
+          <col className="w-[84px]" />
+          <col className="w-[212px]" />
+        </colgroup>
         <TableHeader className={`z-20 ${STICKY_HEADER_CLS}`}>
           <TableRow className="group">
-            <TableHead className="w-[50px]">
+            <TableHead>
               <Checkbox
                 checked={isAllSelected}
                 ref={(el) => {
@@ -146,13 +165,19 @@ export function DesktopAssociationTable({
                   />
                 </TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground">{association.ID}</TableCell>
-                <TableCell className="max-w-[200px] truncate" title={association.ProviderModel}>
-                  {association.ProviderModel}
+                {/* 截断必须落在内层块级元素上：max-width 不被 table-cell 的布局算法采信，
+                    直接加在 td 上等于没截断，长名字反而撑宽该列去挤邻列 */}
+                <TableCell title={association.ProviderModel}>
+                  <span className="block truncate">{association.ProviderModel}</span>
                 </TableCell>
                 <TableCell>{provider?.Type ?? "未知"}</TableCell>
-                <TableCell>{provider?.Name ?? "未知"}</TableCell>
+                <TableCell title={provider?.Name}>
+                  <span className="block truncate">{provider?.Name ?? "未知"}</span>
+                </TableCell>
                 <TableCell>
+                  {/* 徽章不换行：列宽已固定，禁止 wrap 才能保证任何数据下行高一致 */}
                   <CapabilityBadges
+                    nowrap
                     toolCall={association.ToolCall}
                     structuredOutput={association.StructuredOutput}
                     image={association.Image}
@@ -221,7 +246,7 @@ export function DesktopAssociationTable({
                   )}
                 </TableCell>
                 <TableCell className={STICKY_ACTIONS_CELL_CLS}>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-nowrap gap-2">
                     <Button variant="outline" size="sm" onClick={() => onEdit(association)}>
                       编辑
                     </Button>

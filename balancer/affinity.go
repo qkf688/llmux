@@ -120,6 +120,41 @@ func (a *Affinity) Put(key string, t Target, now time.Time) {
 	}
 }
 
+// DeleteIf 摘掉指定键的钉定，且**仅当它当前仍指向 expectMWP（ModelWithProviderID）**
+// 时才摘，返回是否真的摘掉。提交后失败（上游腰斩）时由 chat 层调用：这次没能从钉定
+// 目标拿到成功，且已无法换家重来——不清钉会让该对话的下一个请求继续优先撞它。
+//
+// 为何要「比对后再删」而不是直接 Delete：
+//   - 清钉发生在**响应交付之后**的日志管道 goroutine 里，而改钉（recordStickyTarget）
+//     发生在转发成功那一刻。同一段对话的并发请求可能在两者之间改钉：若不比对，本次
+//     的清钉会误删掉「另一次请求刚写进去的新钉」。
+//   - 反过来，比对也**不会**挡住该清的：转发成功时 recordStickyTarget 已把钉子指到
+//     本次真正服务的关联（含故障转移后的赢家），故清钉只要比对本次服务的关联即可命中。
+//
+// 比对粒度取关联而非凭据：同一关联内换 key 仍是「这家出了问题」，清关联级记忆才对。
+//
+// 与 Reset 全清的分界：只摘这一条对话，其余对话的钉定原样存活。一段对话出问题不该
+// 让全体活跃会话集体失忆（那是 Reset 才会造成的惊群，故不在此路径使用）。
+// 空键 / 未知键 / 重复删除 / 钉定已指向别家，一律返回 false，调用方无需先判存在性。
+// 摘掉后该键不再占槽，后续成功仍可 Put 重建。
+func (a *Affinity) DeleteIf(key string, expectMWP uint) bool {
+	if key == "" {
+		return false
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	el, ok := a.byKey[key]
+	if !ok {
+		return false
+	}
+	if el.Value.(*affinityEntry).target.ModelWithProviderID != expectMWP {
+		return false // 钉定已指向别家：不是「刚断流的那家」，不动它
+	}
+	a.ll.Remove(el)
+	delete(a.byKey, key)
+	return true
+}
+
 // evictOldest 淘汰最久未用记录（调用方持锁）。
 func (a *Affinity) evictOldest() {
 	el := a.ll.Back()

@@ -30,6 +30,12 @@ type RecordLogInput struct {
 	IOLog        bool
 	ProviderName string
 	SideChannel  *models.TransformSideChannel
+
+	// ServingModelWithProviderID 本次响应**实际由哪个关联提供**（含故障转移后的赢家）；
+	// 0 = 无可比对对象。提交后失败发生在响应已交付之后、下游只能经日志管道感知，日志侧
+	// 据此判断「这段对话的钉定是否还指着刚失败的这家，要清掉它」——本字段与表内当前钉定
+	// 不一致时（并发里另一次请求刚改过钉）不动它，见 clearStickyTarget / balancer.DeleteIf。
+	ServingModelWithProviderID uint
 }
 
 // RecordLog 是后处理编排器：processer 解析 → stats 统计 → 日志落库 → raw 字段清理。
@@ -57,6 +63,31 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 				Error:     fmt.Sprintf("processer error: %v", err),
 				ProxyTime: time.Since(in.ReqStart),
 			}, "failed to update log status on processer error")
+
+			// 提交后失败清钉（2026-10-01）：本分支是**响应已开写之后**所有后处理失败的
+			// 唯一收口——客户端已拿到 200 与部分内容，无法换家重来，故当「钉定仍指着
+			// 刚服务完的那个关联」时清掉它，让下一轮回到常规随机选择。
+			//
+			// 范围不止「上游腰斩」：流中吐 error 帧、SSE 扫描错、usage 字段吐了合法
+			// JSON 但非对象（process.go 的三条上抛路径）都汇进本分支。它们同属供应商侧
+			// 缺陷，清钉对它们同样成立。
+			//
+			// 两条护栏，缺一不可：① ServingModelWithProviderID 与表内当前钉定一致（比对在
+			// balancer.DeleteIf，故并发里另一次请求刚改过钉时不动它）② 失败不是客户端撤走
+			// ——供应商没做错就别动它的记忆。② 分两路：IsUpstreamReadErr 是**错误产生处
+			// 记下的方向事实**，优先于 isClientDisconnectErr 的类型反推（后者把上游 RST
+			// 这类非超时 net.Error 误判成客户端断连，真机实测过）；其余走后者，把
+			// context.Canceled / 坏管道 / 非超时 net.Error 归给客户端、把上游截断与上游
+			// 超时归给供应商（超时=供应商慢，与 Stage 24 结算口径一致）。
+			//
+			// 提交前失败会换家重试并在成功后改钉，本来就自愈；502（多家全挂）在 handler
+			// 提前返回、根本不进本函数，结构上到不了这里。
+			//
+			// 刻意只挂本分支、绝不挂下方外层收口：外层还兜着 persistChatLog 失败，
+			// 那不是本次尝试的失败，挂那里会让「日志写库一失败就抹掉好端端的钉定」。
+			if in.ServingModelWithProviderID != 0 && (IsUpstreamReadErr(err) || !isClientDisconnectErr(err)) {
+				clearStickyTarget(ctx, in.Before, in.ServingModelWithProviderID)
+			}
 
 			if statErr := chatstats.RecordProviderStats(ctx, in.ProviderName, false, 0, 0); statErr != nil {
 				slog.Warn("failed to record provider stats on processer error", "error", statErr)

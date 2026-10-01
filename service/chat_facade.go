@@ -65,6 +65,11 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 	chat.RecordLog(ctx, in)
 }
 
+// MarkUpstreamReader 给 reader 的**读**错误打上「来自上游」方向标记，供 RecordLog 的
+// 提交后失败清钉判定区分「上游故障」与「客户端撤走」——io.Copy 的 error 本身不带方向，
+// 只能在错误产生处标记。调用点须在 tee 之外（先包 reader 再 TeeReader），见 chat 包注释。
+func MarkUpstreamReader(r io.Reader) io.Reader { return chat.MarkUpstreamReader(r) }
+
 // MarkLogUnfinished 给「日志后处理任务被关机丢弃」的日志行写「未能写完」失败痕迹
 // （bgtask 丢弃窗口的收尾动作，Stage 35）。丢正文、留痕迹，行不得停在建行占位 success。
 func MarkLogUnfinished(ctx context.Context, logID uint, reqStart time.Time) {

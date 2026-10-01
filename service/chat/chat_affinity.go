@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/qkf688/llmux/balancer"
@@ -40,6 +41,32 @@ func recordStickyTarget(ctx context.Context, before Before, target balancer.Targ
 		return
 	}
 	balancer.DefaultAffinity().Put(key, target, time.Now())
+}
+
+// clearStickyTarget 清掉本对话指向 servingMWP 的钉定，返回是否真的清掉了。提交后
+// 失败（上游腰斩等，见 chat_record.go 的触发注释）时调用：这次没能从钉定目标拿到
+// 成功，且响应已开写、无法换家从头再来——不清钉会让该对话的下一个请求继续优先撞
+// 它，形成「每请求必交一次失败」的循环（实测：某中转 92s 处腰斩，同一段对话下一轮
+// 仍先撞它）。
+//
+// servingMWP = 本次**实际提供服务**的关联（含故障转移后的赢家）而非「读钉时看到的那
+// 个」：转发成功那一刻 recordStickyTarget 已把钉子改指到它，故比对它才能既清得掉
+// 常态转移、又不误删并发里另一次请求刚写进去的新钉（判据在 balancer.DeleteIf）。
+// 0 表示无可比对对象（表内真实钉定的 ModelWithProviderID 恒非 0），比对必然落空。
+//
+// 只清本对话：同表其它对话的钉定原样存活。Reset 才是全清，会造成全体活跃会话集体
+// 失忆，故不在此路径使用。留一行痕是因为自愈动作不可见 = 事后无从排查；行数与
+// RecordLog「一次失败恰一条留痕」同口径，不与它的 ERROR 重复。
+func clearStickyTarget(ctx context.Context, before Before, servingMWP uint) bool {
+	key := affinityKeyFor(ctx, before)
+	if key == "" {
+		return false // 开关关闭或未识别对话身份：本就不粘，无钉可清
+	}
+	if !balancer.DefaultAffinity().DeleteIf(key, servingMWP) {
+		return false
+	}
+	slog.Info("sticky target cleared", "affinity_key", key, "model_with_provider_id", servingMWP)
+	return true
 }
 
 // preferRealModelsFirst 把钉定的真实模型稳定前移到尝试首位（其余模型相对顺序不变）。

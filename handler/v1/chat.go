@@ -189,13 +189,14 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 	// 断流错误路径 return 后同理由排空覆盖：失败留痕（updateChatLogByID）写完才关库。
 	// 登记被丢弃（关机收尾段的丢弃窗口）时的放手语义见 attachLogRecord。
 	body, finishLog := attachLogRecord(ctx, service.RecordLogInput{
-		ReqStart:     startReq,
-		Processer:    postProcessor,
-		LogID:        balanced.LogID,
-		Before:       *before,
-		IOLog:        providersWithMeta.IOLog,
-		ProviderName: balanced.ProviderName,
-		SideChannel:  balanced.SideChannel,
+		ReqStart:                   startReq,
+		Processer:                  postProcessor,
+		LogID:                      balanced.LogID,
+		Before:                     *before,
+		IOLog:                      providersWithMeta.IOLog,
+		ProviderName:               balanced.ProviderName,
+		SideChannel:                balanced.SideChannel,
+		ServingModelWithProviderID: balanced.ServingModelWithProviderID,
 	}, res.Body)
 
 	writeHeader(c, ctx, before.Stream, res.Header)
@@ -230,7 +231,9 @@ func attachLogRecord(ctx context.Context, in service.RecordLogInput, resBody io.
 		service.RecordLog(taskCtx, in)
 	})
 	if registered {
-		return io.TeeReader(resBody, pw), func(err error) {
+		// 打标在 tee **之外**：tee 往日志管道的写失败（如日志侧提前收尾的坏管道）不是
+		// 上游故障，被混进标记会把「日志管道收尾」误判成「上游腰斩」而误清粘性。
+		return io.TeeReader(service.MarkUpstreamReader(resBody), pw), func(err error) {
 			if err != nil {
 				pw.CloseWithError(err)
 				return

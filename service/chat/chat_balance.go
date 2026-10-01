@@ -28,6 +28,11 @@ type BalanceResult struct {
 	// SideChannel 承载转换旁路产物：上游原始 SSE 累积体与上游原始 usage。
 	// 直通路径无转换层可旁路，故为 nil。
 	SideChannel *models.TransformSideChannel
+
+	// ServingModelWithProviderID 本次响应实际由哪个关联提供（含故障转移后的赢家）；
+	// 0 = 无可比对对象。提交后失败发生在响应已交付之后、下游只能经日志管道感知，日志
+	// 侧据此判断「这段对话的钉定是否还指着刚失败的这家」——详见 clearStickyTarget。
+	ServingModelWithProviderID uint
 }
 
 // BalanceChat 是两条候选路径（真实 / 虚拟模型）的公共出口。超时归因映射只在本

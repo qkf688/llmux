@@ -278,6 +278,12 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 					LogID:        result.LogID,
 					ProviderName: provider.Name,
 					SideChannel:  result.SideChannel,
+					// 本次**实际服务**的关联（含故障转移后的赢家），不是「读钉时看到的
+					// 那个」：紧邻上方的 recordStickyTarget 刚把钉子改指到它，故提交后
+					// 失败时按它比对即可清掉——早期版本拿循环开头的旧 sticky 比对，会把
+					// 「转移成功后腰斩」这个最常见的循环挡在门外。组内换 key 不影响本
+					// 字段：清的是关联级记忆。
+					ServingModelWithProviderID: modelWithProvider.ID,
 				}}
 			}
 

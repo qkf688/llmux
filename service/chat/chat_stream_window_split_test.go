@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -164,5 +165,119 @@ func TestBalanceChat_Stream_SlowUpstreamBeyondStreamWindow_StillFails(t *testing
 	var statusCoder interface{ StatusCode() int }
 	if !errors.As(err, &statusCoder) || statusCoder.StatusCode() != http.StatusBadGateway {
 		t.Fatalf("err = %v, want 502（换家换不到仍是「上游全挂」口径）", err)
+	}
+}
+
+// windowFailureLogError 读本次尝试落库的失败文本——面板「错误」列看到的就是它。
+func windowFailureLogError(t *testing.T) string {
+	t.Helper()
+	var got models.ChatLog
+	if err := models.DB.Where("provider_name = ?", "slow-provider").First(&got).Error; err != nil {
+		t.Fatalf("reload chat log: %v", err)
+	}
+	if got.Status != "error" {
+		t.Fatalf("chat log status = %q, want error", got.Status)
+	}
+	return got.Error
+}
+
+// TestBalanceChat_WindowTimeout_FailureTextCarriesCategoryAndWindow 窗口掐断的失败文本
+// 要能让面板分清「窗口掐的」与「上游自己断的」，并带出窗口秒数（Stage 38）：
+// 流式与非流式两个分支各一条直达用例（各自窗口取 1s、另键留 3s，秒数可区分两个分支）。
+// 变异：describeUpstreamWindowTimeout 直接返回原 err → 两条都红；两个分支文案写反 → 红。
+func TestBalanceChat_WindowTimeout_FailureTextCarriesCategoryAndWindow(t *testing.T) {
+	t.Run("流式等头窗口", func(t *testing.T) {
+		pool, model := setupWindowSplitSlowProvider(t, 1600*time.Millisecond)
+		SetSettingsReader(splitWindowSettingsReader{streamWindowSec: 1, nonStreamWindowSec: 3, maxRetry: 1})
+		t.Cleanup(func() { SetSettingsReader(nil) })
+
+		if _, err := balanceOnce(t, pool, model.Name, true); err == nil {
+			t.Fatal("err = nil, want 窗口超时失败")
+		}
+		got := windowFailureLogError(t)
+		assertContains(t, got, "流式等头窗口")
+		assertContains(t, got, "1 秒")
+		assertContains(t, got, headerWindowTimeoutMarker) // 上游原文保留在同一条里
+	})
+
+	t.Run("非流式整段预算窗口", func(t *testing.T) {
+		pool, model := setupWindowSplitSlowProvider(t, 1600*time.Millisecond)
+		SetSettingsReader(splitWindowSettingsReader{streamWindowSec: 3, nonStreamWindowSec: 1, maxRetry: 1})
+		t.Cleanup(func() { SetSettingsReader(nil) })
+
+		if _, err := balanceOnce(t, pool, model.Name, false); err == nil {
+			t.Fatal("err = nil, want 窗口超时失败")
+		}
+		got := windowFailureLogError(t)
+		assertContains(t, got, "非流式整段预算窗口")
+		assertContains(t, got, "1 秒")
+		assertContains(t, got, headerWindowTimeoutMarker)
+	})
+}
+
+func assertContains(t *testing.T, text, want string) {
+	t.Helper()
+	if !strings.Contains(text, want) {
+		t.Fatalf("失败文本缺 %q，got %q", want, text)
+	}
+}
+
+// windowTimeoutStubError 模拟 Do 阶段的超时错误形态：实现 net.Error 的 Timeout()，
+// 文本可控（用于喂 net/http 的等头超时原文与其它来源的超时原文）。
+type windowTimeoutStubError struct{ msg string }
+
+func (e windowTimeoutStubError) Error() string { return e.msg }
+func (windowTimeoutStubError) Timeout() bool   { return true }
+func (windowTimeoutStubError) Temporary() bool { return false }
+
+// TestDescribeUpstreamWindowTimeout_OnlyOurWindow 锁归因判据的边界：只有「我们的窗口 +
+// net/http 等响应头超时原文」才贴类别；上游自己断连、连接/握手调优超时、请求 ctx 已到点
+// （网关总超时族）、窗口未知四种情况一律原样返回——贴错类别比不贴更有害。
+func TestDescribeUpstreamWindowTimeout_OnlyOurWindow(t *testing.T) {
+	headerTimeout := windowTimeoutStubError{msg: `Post "http://up/v1/chat/completions": net/http: timeout awaiting response headers`}
+	dialTimeout := windowTimeoutStubError{msg: "dial tcp 127.0.0.1:8800: i/o timeout"}
+	upstreamReset := errors.New("read tcp 127.0.0.1:8800: connection reset by peer")
+
+	expiredCtx, cancelExpired := context.WithCancel(context.Background())
+	cancelExpired()
+
+	tests := []struct {
+		name      string
+		ctx       context.Context
+		err       error
+		stream    bool
+		window    time.Duration
+		wantParts []string // nil = 期望原样返回
+	}{
+		{name: "流式窗口到点", ctx: context.Background(), err: headerTimeout, stream: true, window: 30 * time.Second,
+			wantParts: []string{"流式等头窗口", "30 秒", headerWindowTimeoutMarker}},
+		{name: "非流式窗口到点", ctx: context.Background(), err: headerTimeout, stream: false, window: 90 * time.Second,
+			wantParts: []string{"非流式整段预算窗口", "90 秒", headerWindowTimeoutMarker}},
+		{name: "上游自己断连", ctx: context.Background(), err: upstreamReset, stream: false, window: 90 * time.Second},
+		{name: "连接调优超时非我们的窗口", ctx: context.Background(), err: dialTimeout, stream: false, window: 90 * time.Second},
+		{name: "请求ctx已结束（总超时/撤走族）", ctx: expiredCtx, err: headerTimeout, stream: false, window: 90 * time.Second},
+		{name: "窗口未知", ctx: context.Background(), err: headerTimeout, stream: false, window: 0},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := describeUpstreamWindowTimeout(tc.ctx, tc.err, tc.stream, tc.window)
+			if tc.wantParts == nil {
+				if got.Error() != tc.err.Error() {
+					t.Fatalf("got %q, want 原样返回 %q（不贴类别）", got.Error(), tc.err.Error())
+				}
+				return
+			}
+			for _, part := range tc.wantParts {
+				if !strings.Contains(got.Error(), part) {
+					t.Fatalf("got %q, want 含 %q", got.Error(), part)
+				}
+			}
+			// 类别前缀不得切断错误链：断连/超时归因都按 errors.Is/As 匹配。
+			var netErr net.Error
+			if !errors.As(got, &netErr) {
+				t.Fatalf("got %q, want 仍可 errors.As 到 net.Error（错误链未被切断）", got.Error())
+			}
+		})
 	}
 }

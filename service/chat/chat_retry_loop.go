@@ -258,6 +258,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 				Selection:         selection,
 				ChatModel:         chatModel,
 				Client:            client,
+				UpstreamWindow:    in.UpstreamWindow,
 			}, retryLog)
 
 			if result.FatalErr != nil {

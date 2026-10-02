@@ -2,9 +2,12 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/qkf688/llmux/common"
@@ -152,6 +155,44 @@ func buildAttemptFailureUpdate(cause error, proxyTime time.Duration, logRawOptio
 		errorUpdate.RawResponseBody = rawResponseBodyStr
 	}
 	return errorUpdate
+}
+
+// headerWindowTimeoutMarker 是 net/http 在 ResponseHeaderTimeout 到点时给出的原文片段。
+// Do 阶段还有两类超时来自 providers 连接池调优常量（dial 30s / TLS 握手 10s），与本次
+// 窗口值无关——判据刻意用**正向标记**而不是「排除已知的其它超时来源」：将来出现新的
+// 超时来源会落到「不贴类别」（原始文本仍在日志里），而不是「贴错类别」。若 stdlib 改了
+// 这句文案，退化为不贴类别，不会给出错误归因。
+const headerWindowTimeoutMarker = "timeout awaiting response headers"
+
+// isUpstreamWindowTimeout 判「这次 Do 失败是我们自己的单次尝试窗口到点掐断的」：
+//   - 错误自报超时（net.Error.Timeout()）；
+//   - 请求 ctx 未到点——ctx 到点是网关总超时（600s 帽子，归因走 504），不算窗口掐断；
+//   - 原文命中 net/http 的等响应头超时标记。
+func isUpstreamWindowTimeout(ctx context.Context, err error) bool {
+	var netErr net.Error
+	if !errors.As(err, &netErr) || !netErr.Timeout() {
+		return false
+	}
+	if ctx.Err() != nil {
+		return false
+	}
+	return strings.Contains(err.Error(), headerWindowTimeoutMarker)
+}
+
+// describeUpstreamWindowTimeout 给「被我们窗口掐断」的失败文本补上人能读的类别与窗口
+// 秒数（Stage 38）：面板上要能一眼分开「窗口掐的」与「上游自己断的」，而客户端原文只有
+// 一句英文。原始错误用 %w 保留在链上——isClientDisconnectErr / httpresp.isClientDisconnect
+// 等判据按 errors.Is/As 匹配，断链会让归因静默失效（同 wrapTransformError 的约束）。
+// 窗口未知（≤0，测试直构 attempt 的形态）时不贴类别：无从判断是哪个窗口掐的。
+func describeUpstreamWindowTimeout(ctx context.Context, err error, stream bool, window time.Duration) error {
+	if window <= 0 || !isUpstreamWindowTimeout(ctx, err) {
+		return err
+	}
+	seconds := int(window / time.Second)
+	if stream {
+		return fmt.Errorf("等待上游响应头超过 %d 秒（流式等头窗口，网关主动掐断）: %w", seconds, err)
+	}
+	return fmt.Errorf("等待上游整段回答超过 %d 秒（非流式整段预算窗口，网关主动掐断）: %w", seconds, err)
 }
 
 func applyProviderSelectionResult(weightItems, priorityItems map[uint]int, id uint, result singleProviderAttemptResult) {

@@ -19,43 +19,13 @@ import (
 // 本文件是 Stage 38「单次尝试窗口按入站 stream 分流」的回归组：非流式请求上游要生成
 // 完整回答才发响应头，故它的窗口语义是「整段生成预算」，与流式等头不同源。
 // 断言一律落在可观测行为上：窗口内返回 = 成功；超过所属窗口 = 失败（对外 502 口径不变）。
-
-// splitWindowSettingsReader 让两个窗口取到**可区分**的值（流式等头 vs 非流式整段）。
-// 取可区分值是关键：两者同值时，分不出「按 stream 分流」与「沿用旧单一窗口」。
-type splitWindowSettingsReader struct {
-	streamWindowSec    int
-	nonStreamWindowSec int
-	maxRetry           int
-}
-
-func (r splitWindowSettingsReader) Bool(_ context.Context, _ string, def bool) bool { return def }
-
-func (r splitWindowSettingsReader) Int(_ context.Context, key string, def, _ int) int {
-	switch key {
-	case models.SettingKeyRequestHeaderTimeout:
-		return r.streamWindowSec
-	case models.SettingKeyNonStreamResponseTimeout:
-		return r.nonStreamWindowSec
-	case models.SettingKeyRequestMaxRetry:
-		return r.maxRetry
-	}
-	return def
-}
-
-func (r splitWindowSettingsReader) String(_ context.Context, _ string, def string) string { return def }
-
-func (r splitWindowSettingsReader) BoolE(ctx context.Context, key string, def bool) (bool, error) {
-	return r.Bool(ctx, key, def), nil
-}
-
-func (r splitWindowSettingsReader) IntE(ctx context.Context, key string, def, min int) (int, error) {
-	return r.Int(ctx, key, def, min), nil
-}
+// 设置桩复用 chat_balance_timeout_separation_test.go 的参数化 timeoutSettingsReader
+// ——两个窗口在这里取**可区分**的值：两者同值时，分不出「按 stream 分流」与「沿用旧单一窗口」。
 
 // TestUpstreamAttemptWindow_SplitsByStream 锁分流判据本身：同一份设置下，两种入站形态
 // 取到不同窗口。变异：resolver 忽略 stream 参数、恒取响应头键 → 红。
 func TestUpstreamAttemptWindow_SplitsByStream(t *testing.T) {
-	SetSettingsReader(splitWindowSettingsReader{streamWindowSec: 30, nonStreamWindowSec: 90, maxRetry: 1})
+	SetSettingsReader(timeoutSettingsReader{streamWindowSec: 30, nonStreamWindowSec: 90, maxRetry: 1})
 	t.Cleanup(func() { SetSettingsReader(nil) })
 
 	if got := upstreamAttemptWindow(context.Background(), true); got != 30*time.Second {
@@ -138,7 +108,7 @@ func balanceOnce(t *testing.T, pool CandidatePool, modelName string, stream bool
 // 变异：非流式也走流式的 1s 等头窗口（改动前的单一窗口语义）→ 本条红。
 func TestBalanceChat_NonStream_SlowUpstreamInsideNonStreamWindow_Succeeds(t *testing.T) {
 	pool, model := setupWindowSplitSlowProvider(t, 1600*time.Millisecond)
-	SetSettingsReader(splitWindowSettingsReader{streamWindowSec: 1, nonStreamWindowSec: 3, maxRetry: 1})
+	SetSettingsReader(timeoutSettingsReader{streamWindowSec: 1, nonStreamWindowSec: 3, maxRetry: 1})
 	t.Cleanup(func() { SetSettingsReader(nil) })
 
 	result, err := balanceOnce(t, pool, model.Name, false)
@@ -155,7 +125,7 @@ func TestBalanceChat_NonStream_SlowUpstreamInsideNonStreamWindow_Succeeds(t *tes
 // 对外仍是 502「上游全挂」口径（Stage 38 拍板不改调用方可见状态码）。
 func TestBalanceChat_Stream_SlowUpstreamBeyondStreamWindow_StillFails(t *testing.T) {
 	pool, model := setupWindowSplitSlowProvider(t, 1600*time.Millisecond)
-	SetSettingsReader(splitWindowSettingsReader{streamWindowSec: 1, nonStreamWindowSec: 3, maxRetry: 1})
+	SetSettingsReader(timeoutSettingsReader{streamWindowSec: 1, nonStreamWindowSec: 3, maxRetry: 1})
 	t.Cleanup(func() { SetSettingsReader(nil) })
 
 	_, err := balanceOnce(t, pool, model.Name, true)
@@ -188,7 +158,7 @@ func windowFailureLogError(t *testing.T) string {
 func TestBalanceChat_WindowTimeout_FailureTextCarriesCategoryAndWindow(t *testing.T) {
 	t.Run("流式等头窗口", func(t *testing.T) {
 		pool, model := setupWindowSplitSlowProvider(t, 1600*time.Millisecond)
-		SetSettingsReader(splitWindowSettingsReader{streamWindowSec: 1, nonStreamWindowSec: 3, maxRetry: 1})
+		SetSettingsReader(timeoutSettingsReader{streamWindowSec: 1, nonStreamWindowSec: 3, maxRetry: 1})
 		t.Cleanup(func() { SetSettingsReader(nil) })
 
 		if _, err := balanceOnce(t, pool, model.Name, true); err == nil {
@@ -202,7 +172,7 @@ func TestBalanceChat_WindowTimeout_FailureTextCarriesCategoryAndWindow(t *testin
 
 	t.Run("非流式整段预算窗口", func(t *testing.T) {
 		pool, model := setupWindowSplitSlowProvider(t, 1600*time.Millisecond)
-		SetSettingsReader(splitWindowSettingsReader{streamWindowSec: 3, nonStreamWindowSec: 1, maxRetry: 1})
+		SetSettingsReader(timeoutSettingsReader{streamWindowSec: 3, nonStreamWindowSec: 1, maxRetry: 1})
 		t.Cleanup(func() { SetSettingsReader(nil) })
 
 		if _, err := balanceOnce(t, pool, model.Name, false); err == nil {

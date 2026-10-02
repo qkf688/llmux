@@ -12,26 +12,41 @@ import (
 	"github.com/qkf688/llmux/providers"
 )
 
-// timeoutSettingsReader 测试用 settings.Reader stub：只覆写请求参数键，
-// 其余回退 defaultValue。超时最小粒度秒，测试用 1s 单次尝试窗口 + 3s 总时长上限。
-// 两个窗口同为 1s：本文件的用例入站为非流式，分流后非流式取「整段预算」键
-// （Stage 38）——两键都给 1s 才能继续表达「窗口到点后候选 2 仍有完整预算」。
+// timeoutSettingsReader 测试用 settings.Reader stub：只覆写请求参数的四个键（字段为 0
+// 表示不覆写、回退 defaultValue），其余键一律回退 defaultValue。超时最小粒度秒。
+//
+// 参数化而非写死值（Stage 38）：窗口分流用例与「窗口到点后候选 2 仍有完整预算」用例
+// 需要**可区分**的窗口值，写死值的桩在第二处会被复制成近似副本——桩只留这一份。
+//
 // 总时长上限不在 BalanceChat 内读取（Stage 33 起经 WithRequestTotalTimeout 挂进
 // 请求 ctx 的 deadline），该键供派生 deadline 的用例使用。
-type timeoutSettingsReader struct{}
+type timeoutSettingsReader struct {
+	streamWindowSec    int // 流式等头窗口
+	nonStreamWindowSec int // 非流式整段预算窗口
+	totalTimeoutSec    int // 总时长上限（供 WithRequestTotalTimeout 派生 deadline）
+	maxRetry           int // 单候选池尝试次数
+}
 
 func (timeoutSettingsReader) Bool(_ context.Context, _ string, def bool) bool { return def }
 
-func (timeoutSettingsReader) Int(_ context.Context, key string, def, _ int) int {
+func (r timeoutSettingsReader) Int(_ context.Context, key string, def, _ int) int {
 	switch key {
 	case models.SettingKeyRequestHeaderTimeout:
-		return 1 // 流式等头窗口 1s
+		if r.streamWindowSec > 0 {
+			return r.streamWindowSec
+		}
 	case models.SettingKeyNonStreamResponseTimeout:
-		return 1 // 非流式整段预算窗口 1s
+		if r.nonStreamWindowSec > 0 {
+			return r.nonStreamWindowSec
+		}
 	case models.SettingKeyRequestTotalTimeout:
-		return 3 // 总时长上限 3s（供 WithRequestTotalTimeout 派生 deadline）
+		if r.totalTimeoutSec > 0 {
+			return r.totalTimeoutSec
+		}
 	case models.SettingKeyRequestMaxRetry:
-		return 2 // 两次尝试（候选 1 → 候选 2）
+		if r.maxRetry > 0 {
+			return r.maxRetry
+		}
 	}
 	return def
 }
@@ -56,7 +71,9 @@ func (r timeoutSettingsReader) IntE(ctx context.Context, key string, def, min in
 func TestBalanceChat_HeaderTimeout_CandidateHasFullWindow(t *testing.T) {
 	initChatRecordTestDB(t)
 	cipher := setupChatChannelCipher(t)
-	SetSettingsReader(timeoutSettingsReader{})
+	// 两键同为 1s：本用例入站为非流式，分流后取「整段预算」键（Stage 38）——
+	// 两键都给 1s 才能继续表达「窗口到点后候选 2 仍有完整预算」。
+	SetSettingsReader(timeoutSettingsReader{streamWindowSec: 1, nonStreamWindowSec: 1, totalTimeoutSec: 3, maxRetry: 2})
 	t.Cleanup(func() { SetSettingsReader(nil) })
 
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

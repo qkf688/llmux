@@ -65,7 +65,7 @@ func balanceChat(ctx context.Context, in BalanceInput) (*BalanceResult, error) {
 	// WithRequestTotalTimeout 挂载，到点连流式输出一起掐断）。
 	// 二者解耦语义不变：窗口到点只消耗该窗口，总上限未耗尽时候选 2 仍有完整窗口
 	//（原实现同一值双角色）。
-	window := upstreamAttemptWindow(ctx, in.Before.Stream)
+	window := resolveUpstreamWindow(ctx, in.Before.Stream)
 
 	outcome := runProviderRetryLoop(retryLoopInput{
 		Ctx:            ctx,

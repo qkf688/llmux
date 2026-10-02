@@ -183,16 +183,20 @@ func isUpstreamWindowTimeout(ctx context.Context, err error) bool {
 // 秒数（Stage 38）：面板上要能一眼分开「窗口掐的」与「上游自己断的」，而客户端原文只有
 // 一句英文。原始错误用 %w 保留在链上——isClientDisconnectErr / httpresp.isClientDisconnect
 // 等判据按 errors.Is/As 匹配，断链会让归因静默失效（同 wrapTransformError 的约束）。
-// 窗口未知（≤0，测试直构 attempt 的形态）时不贴类别：无从判断是哪个窗口掐的。
-func describeUpstreamWindowTimeout(ctx context.Context, err error, stream bool, window time.Duration) error {
-	if window <= 0 || !isUpstreamWindowTimeout(ctx, err) {
+// 类别与秒数都取自调用方实际施加的那个窗口（upstreamWindow 同源带出），本函数不自判
+// 入站形态；窗口未知（值为 0，测试直构 attempt 的形态）时不贴类别：无从判断是哪个窗口。
+// 文案只说机制做到的事：窗口由 transport 的 ResponseHeaderTimeout 施加，覆盖到「收到
+// 响应头」为止——非流式的上游通常要生成完整回答才发头，但「先发头再慢写 body」的形态
+// 不受本窗口约束（只受总超时约束，那类失败也不含本判据的原文标记），故不写「等整段回答」。
+func describeUpstreamWindowTimeout(ctx context.Context, err error, window upstreamWindow) error {
+	if window.Window <= 0 || !isUpstreamWindowTimeout(ctx, err) {
 		return err
 	}
-	seconds := int(window / time.Second)
-	if stream {
+	seconds := int(window.Window / time.Second)
+	if window.Kind == upstreamWindowStream {
 		return fmt.Errorf("等待上游响应头超过 %d 秒（流式等头窗口，网关主动掐断）: %w", seconds, err)
 	}
-	return fmt.Errorf("等待上游整段回答超过 %d 秒（非流式整段预算窗口，网关主动掐断）: %w", seconds, err)
+	return fmt.Errorf("等待上游响应头超过 %d 秒（非流式整段预算窗口：上游通常要生成完整回答才发响应头；网关主动掐断）: %w", seconds, err)
 }
 
 func applyProviderSelectionResult(weightItems, priorityItems map[uint]int, id uint, result singleProviderAttemptResult) {

@@ -41,11 +41,11 @@ type retryLoopInput struct {
 
 	// MaxRetry 本候选池内最多尝试几次（含组内换 key）。
 	MaxRetry int
-	// UpstreamWindow 单次尝试施加到 transport 的等待窗口（流式等响应头 / 非流式等整段
-	// 回答，Stage 38 由 upstreamAttemptWindow 解析）。注意它不是 http.Client.Timeout
-	// （后者恒 0，见 providers/cache.go），而是 ResponseHeaderTimeout 那个值；同一个值
-	// 也随尝试传给失败文案，印出的秒数与实际施加值同源。
-	UpstreamWindow time.Duration
+	// UpstreamWindow 单次尝试施加到 transport 的等待窗口（值 + 类别，流式等响应头 /
+	// 非流式等整段回答，Stage 38 由 resolveUpstreamWindow 单源产出）。注意它不是
+	// http.Client.Timeout（后者恒 0，见 providers/cache.go），而是 ResponseHeaderTimeout
+	// 那个值；同一个值也随尝试传给失败文案，印出的秒数与实际施加值同源。
+	UpstreamWindow upstreamWindow
 
 	// 总时长上限不在本循环内维护（Stage 33）：由调用方挂在请求 ctx 的 deadline 上
 	// （handler 入口 WithRequestTotalTimeout），Ctx.Done 一并覆盖「调用方撤走」与
@@ -232,7 +232,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 				orgFailure = nil
 				break
 			}
-			client := providers.GetClientWithProxy(in.UpstreamWindow, chatModel.GetProxy())
+			client := providers.GetClientWithProxy(in.UpstreamWindow.Window, chatModel.GetProxy())
 			slog.Info("using provider", retryLogAttrs(in.LogAttrs,
 				"provider", provider.Name,
 				"model", modelWithProvider.ProviderModel,

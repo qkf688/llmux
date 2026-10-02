@@ -25,11 +25,23 @@ type timeoutSettingsReader struct {
 	nonStreamWindowSec int // 非流式整段预算窗口
 	totalTimeoutSec    int // 总时长上限（供 WithRequestTotalTimeout 派生 deadline）
 	maxRetry           int // 单候选池尝试次数
+	// fallbackToSchemaDefault 模拟「读失败 / 键缺失」：所有键都回退 defaultValue
+	//（生产语义 = models 读不到该键时用调用方传的 default）。
+	fallbackToSchemaDefault bool
 }
 
 func (timeoutSettingsReader) Bool(_ context.Context, _ string, def bool) bool { return def }
 
 func (r timeoutSettingsReader) Int(_ context.Context, key string, def, _ int) int {
+	// 零值桩 = 忘了填字段：四个键都会回退生产默认值，用例静默失去判据
+	//（TestWithRequestTotalTimeout_DerivesDeadline 在参数化后曾因此拿到生产默认 600 而变红）。
+	// 把「漏填」变成响亮的失败，而不是让断言悄悄测到生产默认值。
+	if r == (timeoutSettingsReader{}) {
+		panic("timeoutSettingsReader 需显式给字段：零值会让所有键回退生产默认值，用例失去判据")
+	}
+	if r.fallbackToSchemaDefault {
+		return def
+	}
 	switch key {
 	case models.SettingKeyRequestHeaderTimeout:
 		if r.streamWindowSec > 0 {
@@ -135,5 +147,40 @@ func TestBalanceChat_HeaderTimeout_CandidateHasFullWindow(t *testing.T) {
 	}
 	if result.ProviderName != "fast-provider" {
 		t.Fatalf("ProviderName = %q, want %q（应故障转移到候选 2）", result.ProviderName, "fast-provider")
+	}
+}
+
+// TestRequestParamReaders_FallbackMatchesSchemaDefault 锁「读取器兜底值 == schema 默认值」：
+// 两者是同一语义的两处手写（reader 的 default 参数 vs SettingSchemas 的 Default），漂移会让
+// 「新建库种入的值」与「读失败时回退的值」不一致——Stage 38 的 getNonStreamResponseTimeout
+// 就曾把 90 写成 30（生产靠 seed 落库掩盖，只有读失败路径才暴露）。
+func TestRequestParamReaders_FallbackMatchesSchemaDefault(t *testing.T) {
+	SetSettingsReader(timeoutSettingsReader{fallbackToSchemaDefault: true})
+	t.Cleanup(func() { SetSettingsReader(nil) })
+
+	schemas := models.SettingSchemas()
+	ctx := context.Background()
+	cases := []struct {
+		key string
+		got int
+	}{
+		{models.SettingKeyRequestHeaderTimeout, getRequestHeaderTimeout(ctx)},
+		{models.SettingKeyNonStreamResponseTimeout, getNonStreamResponseTimeout(ctx)},
+		{models.SettingKeyRequestTotalTimeout, getRequestTotalTimeout(ctx)},
+		{models.SettingKeyStreamFirstByteTimeout, getStreamFirstByteTimeout(ctx)},
+		{models.SettingKeyRequestMaxRetry, getRequestMaxRetry(ctx)},
+	}
+	for _, tc := range cases {
+		schema, ok := schemas[tc.key]
+		if !ok {
+			t.Fatalf("schema 未注册 %s", tc.key)
+		}
+		want, ok := schema.Default.(int)
+		if !ok {
+			t.Fatalf("%s 的 schema 默认值不是 int：%#v", tc.key, schema.Default)
+		}
+		if tc.got != want {
+			t.Errorf("%s：读取器兜底 %d ≠ schema 默认 %d（改默认值时两处必须同步）", tc.key, tc.got, want)
+		}
 	}
 }

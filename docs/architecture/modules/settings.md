@@ -54,7 +54,7 @@ models.Setting
   - 消费方：`service/chat` 的 `buildThinkingClampConfig`（`chat_settings.go`）经 `settingsReader` 读取这两个设置 + `ThinkingLevelsResolved` 白名单，构建 `transform.ThinkingClampConfig` 传入 chat 主路径钳制。
 - **请求参数相关设置（全局超时/重试，2026-08 替代原 per-model time_out/max_retry）**：
   - `SettingKeyRequestHeaderTimeout`：int，Default=`30`，Min=1。**流式**请求单次尝试等上游响应头的窗口（`providers` 的 `ResponseHeaderTimeout`）。
-  - `SettingKeyNonStreamResponseTimeout`：int，Default=`90`，Min=1。**非流式**请求单次尝试等上游返回完整回答的窗口（Stage 38，2026-10-03）：非流式上游要生成完整回答才发响应头，故该窗口语义上等价「整段生成预算」——沿用等头那个 30s，会让平均耗时接近 30s 的慢供应商长期撞线（实测 2.8% 稳定失败率）。
+  - `SettingKeyNonStreamResponseTimeout`：int，Default=`90`，Min=1。**非流式**请求单次尝试等上游返回完整回答的窗口（Stage 38，2026-10-03）：非流式上游要生成完整回答才发响应头，故该窗口语义上等价「整段生成预算」——沿用等头那个 30s，会让平均耗时接近 30s 的慢供应商长期撞线（实测 2.8% 稳定失败率）。**口径边界**：窗口由 transport 的 `ResponseHeaderTimeout` 施加，只覆盖到「收到响应头」为止；上游先发头再慢写正文的形态不受它约束（只受总超时约束）。
   - `SettingKeyRequestTotalTimeout`：int，Default=`600`（Stage 33 起，原 90），Min=1。**整个请求的硬时长上限**（Stage 33）：`handler/v1/chat.go` 入口经 `service.WithRequestTotalTimeout` 挂进请求 ctx 的 deadline，到点含流式输出一刀切、按超时归因结算；旧「重试循环 Deadline 计时器 / 虚拟路径 globalTimer」机制已移除，总上限单源在请求 ctx。
   - `SettingKeyStreamFirstByteTimeout`：int，Default=`15`，Min=1。流式响应头后首字节等待窗口，驱动 `service/chat` 提交门的首字节看门狗。
   - `SettingKeyRequestMaxRetry`：int，Default=`3`，Min=1。单候选池尝试次数。

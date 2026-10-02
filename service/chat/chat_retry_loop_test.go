@@ -52,7 +52,7 @@ func TestRunProviderRetryLoop(t *testing.T) {
 			},
 			RealModelName:  "m",
 			MaxRetry:       5,
-			UpstreamWindow: time.Second,
+			UpstreamWindow: upstreamWindow{Window: time.Second},
 		}
 	}
 
@@ -180,7 +180,7 @@ func TestRunProviderRetryLoop_SkipsUnselectableProviderThenSucceeds(t *testing.T
 			PriorityItems: map[uint]int{badMWP.ID: 1, goodMWP.ID: 1},
 		},
 		MaxRetry:       5,
-		UpstreamWindow: 2 * time.Second,
+		UpstreamWindow: upstreamWindow{Window: 2 * time.Second},
 	})
 
 	if outcome.Status != retryLoopSucceeded {
@@ -298,7 +298,7 @@ func TestRunProviderRetryLoop_CredentialsExhausted_ProbeRecoverInGroup(t *testin
 			PriorityItems: map[uint]int{mwp.ID: 1},
 		},
 		MaxRetry:       5,
-		UpstreamWindow: 2 * time.Second,
+		UpstreamWindow: upstreamWindow{Window: 2 * time.Second},
 	})
 
 	if outcome.Status != retryLoopSucceeded {
@@ -422,7 +422,7 @@ func TestRunProviderRetryLoop_OuterSelectProbeReselect_WhitelistMatchesUpstreamM
 			PriorityItems: map[uint]int{mwp.ID: 1},
 		},
 		MaxRetry:       5,
-		UpstreamWindow: 2 * time.Second,
+		UpstreamWindow: upstreamWindow{Window: 2 * time.Second},
 	})
 
 	if outcome.Status != retryLoopSucceeded {
@@ -530,7 +530,7 @@ func TestRunProviderRetryLoop_CredentialsExhausted_ProbeFailsOrganizationFailure
 		RealModelName:  "m",
 		Pool:           pool,
 		MaxRetry:       5,
-		UpstreamWindow: 2 * time.Second,
+		UpstreamWindow: upstreamWindow{Window: 2 * time.Second},
 	})
 
 	if outcome.Status != retryLoopExhausted {

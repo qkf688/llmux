@@ -122,7 +122,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		// 回填端到端耗时：上游请求已发出，建行快照不含任何上游耗时。
 		// 客户端原文里分不出「我们的窗口到点掐断」与「上游自己断连」（都是 url.Error），
 		// 在此补类别与窗口值供日志面板归因（Stage 38）；原始错误以 %w 保留在同一条文本里。
-		failureCause := describeUpstreamWindowTimeout(input.Ctx, err, input.Before.Stream, input.UpstreamWindow)
+		failureCause := describeUpstreamWindowTimeout(input.Ctx, err, input.UpstreamWindow)
 		updateChatLogByID(input.Ctx, logID,
 			buildAttemptFailureUpdate(failureCause, time.Since(input.Start), logRawOptions, logSnapshot, nil, ""),
 			"failed to update log status")

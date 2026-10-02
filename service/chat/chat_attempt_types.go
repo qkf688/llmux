@@ -29,10 +29,11 @@ type singleProviderAttemptInput struct {
 	Selection channel.SelectionResult
 	ChatModel providers.Provider
 	Client    *http.Client
-	// UpstreamWindow 本尝试实际施加的单次尝试等待窗口（流式等响应头 / 非流式等整段回答，
-	// Stage 38）。只服务失败文案归因：与构造 Client 的窗口同源，避免失败时重读设置
-	// ——那时请求 ctx 可能已死，读设置会退默认值、印出与实际不符的秒数。
-	UpstreamWindow time.Duration
+	// UpstreamWindow 本尝试实际施加的单次尝试等待窗口（值 + 类别，流式等响应头 /
+	// 非流式等整段回答，Stage 38）。只服务失败文案归因：与构造 Client 的窗口同源，
+	// 避免失败时重读设置——那时请求 ctx 可能已死，读设置会退默认值、印出与实际不符
+	// 的秒数；类别同源也避免「值按一种形态算、文案按另一种形态算」。
+	UpstreamWindow upstreamWindow
 }
 
 type singleProviderAttemptResult struct {

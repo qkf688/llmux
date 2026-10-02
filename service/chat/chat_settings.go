@@ -103,16 +103,42 @@ func getNonStreamResponseTimeout(ctx context.Context) int {
 	return settingsReader.Int(ctx, models.SettingKeyNonStreamResponseTimeout, 90, 1)
 }
 
-// upstreamAttemptWindow 解析「单次上游尝试」实际施加的等待窗口（Stage 38 单源）：
+// upstreamWindowKind 是单次尝试等待窗口的类别，决定「窗口到点」失败文案的归因措辞。
+// 与窗口值同源产出（resolveUpstreamWindow）：值若按一个分支算、文案按另一个分支算，
+// 下次加入第三种入站形态时就会静默印错类别。
+type upstreamWindowKind int
+
+const (
+	// upstreamWindowStream 流式入站：等的是上游响应头（真实等头，通常 1~2s 就到）。
+	upstreamWindowStream upstreamWindowKind = iota
+	// upstreamWindowNonStream 非流式入站：等的是上游开始回话——上游要生成完整回答才发
+	// 响应头，故这一段等待通常等同于整段生成。注意窗口只覆盖「等到响应头」这一段：
+	// 上游先发头再慢写 body 的形态不受本窗口约束（只受总超时约束）。
+	upstreamWindowNonStream
+)
+
+// upstreamWindow 单次尝试实际施加的等待窗口：值 + 类别同源带出。
+type upstreamWindow struct {
+	Kind   upstreamWindowKind
+	Window time.Duration
+}
+
+// resolveUpstreamWindow 解析「单次上游尝试」实际施加的等待窗口（Stage 38 单源）：
 // 按入站 stream 分流——流式等响应头、非流式等整段回答。真实/虚拟两条路径共用此函数，
 // 窗口值随后既驱动 providers.GetClientWithProxy 的 ResponseHeaderTimeout，也随尝试
 // 传到失败文案（印出的秒数与实际施加值同源，不在失败时重读设置——那时请求 ctx 可能
-// 已死，读设置会退默认值印错数）。
-func upstreamAttemptWindow(ctx context.Context, stream bool) time.Duration {
+// 已死，读设置会退默认值印错数）；类别与值一起带出，文案不再自行判断是哪种窗口。
+func resolveUpstreamWindow(ctx context.Context, stream bool) upstreamWindow {
 	if stream {
-		return time.Second * time.Duration(getRequestHeaderTimeout(ctx))
+		return upstreamWindow{
+			Kind:   upstreamWindowStream,
+			Window: time.Second * time.Duration(getRequestHeaderTimeout(ctx)),
+		}
 	}
-	return time.Second * time.Duration(getNonStreamResponseTimeout(ctx))
+	return upstreamWindow{
+		Kind:   upstreamWindowNonStream,
+		Window: time.Second * time.Duration(getNonStreamResponseTimeout(ctx)),
+	}
 }
 
 // conservativeRequestTotalTimeoutFallback 是 request_total_timeout 读失败时的保守值。

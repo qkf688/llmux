@@ -149,8 +149,10 @@ func TestBalanceChat_DeadlineCtx_SettlesAsProviderFailure(t *testing.T) {
 
 // TestWithRequestTotalTimeout_DerivesDeadline 锁「总超时值 → 请求 ctx deadline」的派生：
 // handler 入口经此挂网关总超时，到点全请求（含流式输出）受控。
+// 桩必须**显式**给总超时键：Stage 38 起该桩是「字段 0 就回退生产默认值」的参数化桩
+// （此前是固定值桩，total 键恒 3），漏填会静默取 600 让本用例失去判据。
 func TestWithRequestTotalTimeout_DerivesDeadline(t *testing.T) {
-	SetSettingsReader(timeoutSettingsReader{})
+	SetSettingsReader(timeoutSettingsReader{streamWindowSec: 1, nonStreamWindowSec: 1, totalTimeoutSec: 3, maxRetry: 2})
 	t.Cleanup(func() { SetSettingsReader(nil) })
 
 	ctx, cancel := WithRequestTotalTimeout(context.Background())
@@ -160,7 +162,7 @@ func TestWithRequestTotalTimeout_DerivesDeadline(t *testing.T) {
 	if !ok {
 		t.Fatal("派生 ctx 无 deadline，want 带网关总超时 deadline")
 	}
-	// timeoutSettingsReader 的总超时键为 3 秒
+	// 上面显式给的总超时键 = 3 秒
 	if got := time.Until(dl); got < 2*time.Second || got > 4*time.Second {
 		t.Fatalf("deadline 剩余 %v, want ≈3s（取自设置项）", got)
 	}

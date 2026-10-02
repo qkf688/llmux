@@ -22,17 +22,21 @@ import (
 // 设置桩复用 chat_balance_timeout_separation_test.go 的参数化 timeoutSettingsReader
 // ——两个窗口在这里取**可区分**的值：两者同值时，分不出「按 stream 分流」与「沿用旧单一窗口」。
 
-// TestUpstreamAttemptWindow_SplitsByStream 锁分流判据本身：同一份设置下，两种入站形态
-// 取到不同窗口。变异：resolver 忽略 stream 参数、恒取响应头键 → 红。
-func TestUpstreamAttemptWindow_SplitsByStream(t *testing.T) {
+// TestResolveUpstreamWindow_SplitsByStream 锁分流判据本身：同一份设置下，两种入站形态
+// 取到不同窗口，且**类别与值同源**（类别决定失败文案，值决定实际施加的窗口——两者若
+// 各自分支，下次加入第三种入站形态时会静默印错类别）。
+// 变异：resolver 忽略 stream 参数、恒取响应头键 → 两条断言都红。
+func TestResolveUpstreamWindow_SplitsByStream(t *testing.T) {
 	SetSettingsReader(timeoutSettingsReader{streamWindowSec: 30, nonStreamWindowSec: 90, maxRetry: 1})
 	t.Cleanup(func() { SetSettingsReader(nil) })
 
-	if got := upstreamAttemptWindow(context.Background(), true); got != 30*time.Second {
-		t.Fatalf("流式窗口 = %v, want 30s（等上游响应头）", got)
+	stream := resolveUpstreamWindow(context.Background(), true)
+	if stream.Kind != upstreamWindowStream || stream.Window != 30*time.Second {
+		t.Fatalf("流式窗口 = %+v, want 类别 stream / 30s（等上游响应头）", stream)
 	}
-	if got := upstreamAttemptWindow(context.Background(), false); got != 90*time.Second {
-		t.Fatalf("非流式窗口 = %v, want 90s（等整段回答，等价整段生成预算）", got)
+	nonStream := resolveUpstreamWindow(context.Background(), false)
+	if nonStream.Kind != upstreamWindowNonStream || nonStream.Window != 90*time.Second {
+		t.Fatalf("非流式窗口 = %+v, want 类别 nonStream / 90s（等整段回答）", nonStream)
 	}
 }
 
@@ -215,23 +219,27 @@ func TestDescribeUpstreamWindowTimeout_OnlyOurWindow(t *testing.T) {
 		name      string
 		ctx       context.Context
 		err       error
-		stream    bool
-		window    time.Duration
+		window    upstreamWindow
 		wantParts []string // nil = 期望原样返回
 	}{
-		{name: "流式窗口到点", ctx: context.Background(), err: headerTimeout, stream: true, window: 30 * time.Second,
+		{name: "流式窗口到点", ctx: context.Background(), err: headerTimeout,
+			window:    upstreamWindow{Kind: upstreamWindowStream, Window: 30 * time.Second},
 			wantParts: []string{"流式等头窗口", "30 秒", headerWindowTimeoutMarker}},
-		{name: "非流式窗口到点", ctx: context.Background(), err: headerTimeout, stream: false, window: 90 * time.Second,
+		{name: "非流式窗口到点", ctx: context.Background(), err: headerTimeout,
+			window:    upstreamWindow{Kind: upstreamWindowNonStream, Window: 90 * time.Second},
 			wantParts: []string{"非流式整段预算窗口", "90 秒", headerWindowTimeoutMarker}},
-		{name: "上游自己断连", ctx: context.Background(), err: upstreamReset, stream: false, window: 90 * time.Second},
-		{name: "连接调优超时非我们的窗口", ctx: context.Background(), err: dialTimeout, stream: false, window: 90 * time.Second},
-		{name: "请求ctx已结束（总超时/撤走族）", ctx: expiredCtx, err: headerTimeout, stream: false, window: 90 * time.Second},
-		{name: "窗口未知", ctx: context.Background(), err: headerTimeout, stream: false, window: 0},
+		{name: "上游自己断连", ctx: context.Background(), err: upstreamReset,
+			window: upstreamWindow{Kind: upstreamWindowNonStream, Window: 90 * time.Second}},
+		{name: "连接调优超时非我们的窗口", ctx: context.Background(), err: dialTimeout,
+			window: upstreamWindow{Kind: upstreamWindowNonStream, Window: 90 * time.Second}},
+		{name: "请求ctx已结束（总超时/撤走族）", ctx: expiredCtx, err: headerTimeout,
+			window: upstreamWindow{Kind: upstreamWindowNonStream, Window: 90 * time.Second}},
+		{name: "窗口未知", ctx: context.Background(), err: headerTimeout, window: upstreamWindow{}},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := describeUpstreamWindowTimeout(tc.ctx, tc.err, tc.stream, tc.window)
+			got := describeUpstreamWindowTimeout(tc.ctx, tc.err, tc.window)
 			if tc.wantParts == nil {
 				if got.Error() != tc.err.Error() {
 					t.Fatalf("got %q, want 原样返回 %q（不贴类别）", got.Error(), tc.err.Error())

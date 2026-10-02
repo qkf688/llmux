@@ -161,6 +161,8 @@ func buildSettingSchemas() map[string]SettingSchema {
 		// 单次尝试的等待窗口按入站 stream 分流（Stage 38）：流式等的是响应头（真实等头），
 		// 非流式等的是上游生成完整回答（响应头在整段写完后才发）——同一字段承担两种语义
 		// 会让慢供应商的非流式请求长期撞线（实测 2.8% 稳定失败率）。两个键各自独立调。
+		// 口径边界：窗口由 transport 的 ResponseHeaderTimeout 施加，只覆盖到「收到响应头」
+		// 为止——上游先发头再慢写正文时该预算不生效（只受总超时约束）。
 		{Key: SettingKeyRequestHeaderTimeout, Field: "RequestHeaderTimeout", Type: SettingTypeInt, Default: 30, Category: "request", Min: intPtr(1)},
 		{Key: SettingKeyNonStreamResponseTimeout, Field: "NonStreamResponseTimeout", Type: SettingTypeInt, Default: 90, Category: "request", Min: intPtr(1)},
 		{Key: SettingKeyRequestTotalTimeout, Field: "RequestTotalTimeout", Type: SettingTypeInt, Default: 600, Category: "request", Min: intPtr(1)},

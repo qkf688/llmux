@@ -299,3 +299,37 @@ func TestUpdateSettingsFromRequest_NonStreamResponseTimeout_RoundTrip(t *testing
 		t.Errorf("GET 响应体 data.non_stream_response_timeout = %d, want 120，body=%s", v.Int(), body)
 	}
 }
+
+// TestUpdateSettingsFromRequest_MissingNonStreamResponseTimeout_RejectsWholeUpdate 锁
+// 「新增设置项后，持旧字段清单的客户端整单被拒」这一 fail-closed 语义（Stage 38）：
+// PUT 缺该键 = Go 零值 0 < Min=1 → 全量校验先于事务，整单 400 且不半写——不会静默把
+// 它写成 0（本仓前端恒发 GET 全对象，故正常路径不受影响；外部脚本/升级前旧 bundle 会
+// 看到明确的 400，而不是配置被悄悄改坏）。
+func TestUpdateSettingsFromRequest_MissingNonStreamResponseTimeout_RejectsWholeUpdate(t *testing.T) {
+	testsupport.InitTestDB(t)
+	ctx := context.Background()
+
+	req := &UpdateSettingsRequest{}
+	if err := models.ApplySettingDefaults(req); err != nil {
+		t.Fatalf("ApplySettingDefaults: %v", err)
+	}
+	req.NonStreamResponseTimeout = 0 // 模拟旧字段清单漏发该键
+	req.LogRetentionCount = 42       // 合法哨兵：若部分写入会被读回
+
+	err := updateSettingsFromRequest(ctx, req)
+	if err == nil {
+		t.Fatal("err = nil, want 校验失败（缺键=0 低于下限，整单拒绝）")
+	}
+	var clientErr directClientError
+	if !errors.As(err, &clientErr) {
+		t.Fatalf("err = %v, want directClientError（越界是客户端校验错，应 400）", err)
+	}
+
+	store := settingStore()
+	if got := store.GetInt(ctx, models.SettingKeyLogRetentionCount); got != 100 {
+		t.Errorf("LogRetentionCount = %d, want 默认 100（校验失败不得留下部分写入）", got)
+	}
+	if got := store.GetInt(ctx, models.SettingKeyNonStreamResponseTimeout); got != 90 {
+		t.Errorf("NonStreamResponseTimeout = %d, want 默认 90（缺键不得被静默写成 0）", got)
+	}
+}

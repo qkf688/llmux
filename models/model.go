@@ -350,8 +350,12 @@ type ChatLog struct {
 	Status        string `gorm:"index"` // error or success
 	// Stream 入站 stream 标记快照：true = 流式 / false = 非流式。
 	// 建行时由 service/chat/chat_attempt 从 Before.Stream 拷贝（落点同 ApiKeyID 等快照字段）。
-	// 用 bool 而非 *bool：开发阶段不背历史包袱，存量行默认 false 即「未记录即非流式」，
-	// 不引入「未设置」三态语义；DTO 与前端 INTERFACE 键恒在、值与库一致。
+	// 用 bool 而非 *bool：不引入「未设置」三态语义。
+	// **默认是流式**——落到两层：
+	//   1. 存量行：上线前 chat_logs.stream IS NULL 行一次 UPDATE 已落 1（备份在 db/llmux.db.pre-stream-default-backfill.bak）。
+	//   2. 新建行：service/chat/chat_attempt.go 始终显式从 Before.Stream 拷贝，DB 列无需 DEFAULT 约束。
+	// 不加 gorm:"default:true"——GORM 的 default 标签在 bool 字段零值时覆盖显式 false（Go footgun），
+	// 与「false 是合法值」语义冲突；现状靠代码侧显式赋值兜底即可。
 	Stream    bool
 	Style     string // 类型
 	UserAgent string `gorm:"index"` // 用户代理

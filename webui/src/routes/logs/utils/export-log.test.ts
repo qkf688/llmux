@@ -9,6 +9,7 @@ const buildBaseLog = (): ChatLog => ({
   provider_model: "gpt-x-1",
   provider_name: "openai",
   status: "success",
+  stream: false,
   style: "openai",
   user_agent: "curl/8",
   remote_ip: "127.0.0.1",

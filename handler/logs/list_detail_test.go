@@ -300,3 +300,110 @@ func TestGetRequestLogs_ReturnsUsageDetailsAndSource(t *testing.T) {
 		t.Fatalf("usage_source = %v, want %v", item["usage_source"], models.UsageSourceUpstream)
 	}
 }
+
+// TestGetRequestLogs_StreamField_KeyPresentAndValueCorrect 锁定入站 stream 字段的 JSON
+// 契约：列表与详情响应里 stream 键恒在、值与库行一致（true / false 都不被吞），
+// 任何把字段丢掉或加 omitempty 的改动立刻红。落点 = handler/logs/dto.go 的
+// chatLogResponse.Stream（无 omitempty）+ buildChatLogResponse 的拷贝映射。
+func TestGetRequestLogs_StreamField_KeyPresentAndValueCorrect(t *testing.T) {
+	testsupport.InitTestDB(t)
+
+	streamLog := models.ChatLog{
+		Name:          "m-stream",
+		ProviderName:  "p1",
+		ProviderModel: "pm1",
+		Status:        "success",
+		Style:         "openai",
+		Stream:        true,
+	}
+	nonStreamLog := models.ChatLog{
+		Name:          "m-nonstream",
+		ProviderName:  "p1",
+		ProviderModel: "pm1",
+		Status:        "success",
+		Style:         "openai",
+		Stream:        false,
+	}
+	for _, l := range []*models.ChatLog{&streamLog, &nonStreamLog} {
+		if err := models.DB.Create(l).Error; err != nil {
+			t.Fatalf("create log: %v", err)
+		}
+	}
+
+	c, w := testsupport.NewTestContext("GET", "/logs?page=1&page_size=20")
+	GetRequestLogs(c)
+	if w.Code != 200 {
+		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	var payload testsupport.APIEnvelope[requestLogsResponse]
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
+	}
+	if len(payload.Data.Data) != 2 {
+		t.Fatalf("logs length = %d, want 2", len(payload.Data.Data))
+	}
+
+	for _, item := range payload.Data.Data {
+		v, ok := item["stream"]
+		if !ok {
+			t.Fatalf("stream key missing in log %v（键必须恒在，omitempty 会让 false 被吞，违反 AGENTS §5）", item["name"])
+		}
+		got, ok := v.(bool)
+		if !ok {
+			t.Fatalf("stream type = %T, want bool", v)
+		}
+		switch item["name"] {
+		case "m-stream":
+			if got != true {
+				t.Fatalf("m-stream stream = %v, want true", got)
+			}
+		case "m-nonstream":
+			if got != false {
+				t.Fatalf("m-nonstream stream = %v, want false（false 必须显式返，键整个消失会让面板永远看不到非流式）", got)
+			}
+		default:
+			t.Fatalf("unexpected log name %v", item["name"])
+		}
+	}
+}
+
+// TestGetRequestLogDetail_StreamField_KeyPresentAndValueCorrect 详情端点单独锁：
+// 列表/详情两条路径独立验证，防 buildChatLogResponse 单点遗漏。
+func TestGetRequestLogDetail_StreamField_KeyPresentAndValueCorrect(t *testing.T) {
+	testsupport.InitTestDB(t)
+
+	log := models.ChatLog{
+		Name:          "m-stream",
+		ProviderName:  "p1",
+		ProviderModel: "pm1",
+		Status:        "success",
+		Style:         "openai",
+		Stream:        true,
+	}
+	if err := models.DB.Create(&log).Error; err != nil {
+		t.Fatalf("create log: %v", err)
+	}
+
+	c, w := testsupport.NewTestContext("GET", "/logs/"+strconv.FormatUint(uint64(log.ID), 10))
+	c.Params = gin.Params{{Key: "id", Value: strconv.FormatUint(uint64(log.ID), 10)}}
+	GetRequestLogDetail(c)
+	if w.Code != 200 {
+		t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	var payload testsupport.APIEnvelope[map[string]any]
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
+	}
+
+	v, ok := payload.Data["stream"]
+	if !ok {
+		t.Fatalf("stream key missing in detail response（键必须恒在）")
+	}
+	got, ok := v.(bool)
+	if !ok {
+		t.Fatalf("stream type = %T, want bool", v)
+	}
+	if got != true {
+		t.Fatalf("stream = %v, want true", got)
+	}
+}

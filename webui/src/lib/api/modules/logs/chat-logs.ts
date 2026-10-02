@@ -69,6 +69,8 @@ export interface ChatLog {
    * 后端键恒在（DTO 无 omitempty）：存量行/内部路径为空串 = 无编号，不是缺键 */
   request_id: string;
   status: string;
+  /** 入站 stream 标记：true = 流式 / false = 非流式。键恒在，与后端 DTO 一致。 */
+  stream: boolean;
   style: string;
   user_agent: string;
   remote_ip?: string;

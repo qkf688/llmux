@@ -348,10 +348,15 @@ type ChatLog struct {
 	ProviderModel string `gorm:"index"`
 	ProviderName  string `gorm:"index"`
 	Status        string `gorm:"index"` // error or success
-	Style         string // 类型
-	UserAgent     string `gorm:"index"` // 用户代理
-	RemoteIP      string // 访问ip
-	ChatIO        bool   // 是否开启IO记录
+	// Stream 入站 stream 标记快照：true = 流式 / false = 非流式。
+	// 建行时由 service/chat/chat_attempt 从 Before.Stream 拷贝（落点同 ApiKeyID 等快照字段）。
+	// 用 bool 而非 *bool：开发阶段不背历史包袱，存量行默认 false 即「未记录即非流式」，
+	// 不引入「未设置」三态语义；DTO 与前端 INTERFACE 键恒在、值与库一致。
+	Stream    bool
+	Style     string // 类型
+	UserAgent string `gorm:"index"` // 用户代理
+	RemoteIP  string // 访问ip
+	ChatIO    bool   // 是否开启IO记录
 
 	Error          string        // if status is error, this field will be set
 	Retry          int           // 重试次数

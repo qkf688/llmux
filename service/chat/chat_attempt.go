@@ -22,6 +22,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		ProviderModel: input.ModelWithProvider.ProviderModel,
 		ProviderName:  input.Provider.Name,
 		Status:        "success",
+		Stream:        input.Before.Stream,
 		Style:         input.Style,
 		UserAgent:     input.ReqMeta.UserAgent,
 		RemoteIP:      input.ReqMeta.RemoteIP,

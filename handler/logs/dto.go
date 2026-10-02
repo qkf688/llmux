@@ -26,10 +26,13 @@ type chatLogResponse struct {
 	ProviderModel string `json:"provider_model"`
 	ProviderName  string `json:"provider_name"`
 	Status        string `json:"status"`
-	Style         string `json:"style"`
-	UserAgent     string `json:"user_agent"`
-	RemoteIP      string `json:"remote_ip"`
-	ChatIO        bool   `json:"chat_io"`
+	// Stream 入站 stream 标记快照（与 models.ChatLog.Stream 同源）。键恒在不走 omitempty：
+	// false 是有效值（"非流式"），吞掉会让面板永远看不到非流式那条（AGENTS §5）。
+	Stream    bool   `json:"stream"`
+	Style     string `json:"style"`
+	UserAgent string `json:"user_agent"`
+	RemoteIP  string `json:"remote_ip"`
+	ChatIO    bool   `json:"chat_io"`
 
 	Error          string        `json:"error"`
 	Retry          int           `json:"retry"`
@@ -190,6 +193,7 @@ func buildChatLogResponse(log models.ChatLog, enrich chatLogEnrichResult, includ
 		ProviderModel: log.ProviderModel,
 		ProviderName:  log.ProviderName,
 		Status:        log.Status,
+		Stream:        log.Stream,
 		Style:         log.Style,
 		UserAgent:     log.UserAgent,
 		RemoteIP:      log.RemoteIP,

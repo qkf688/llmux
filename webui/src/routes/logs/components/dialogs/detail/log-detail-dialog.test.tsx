@@ -17,6 +17,7 @@ const makeLog = (p: Partial<ChatLog>): ChatLog => ({
   provider_model: "gpt-x-1",
   provider_name: "prov",
   status: "success",
+  stream: false,
   style: "openai",
   user_agent: "cli/1.0",
   error: "",

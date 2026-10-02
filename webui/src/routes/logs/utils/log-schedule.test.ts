@@ -12,6 +12,7 @@ const buildLog = (schedule: Partial<ChatLog>): ChatLog => ({
   provider_model: "gpt-x-1",
   provider_name: "openai",
   status: "success",
+  stream: false,
   style: "openai",
   user_agent: "curl/8",
   error: "",

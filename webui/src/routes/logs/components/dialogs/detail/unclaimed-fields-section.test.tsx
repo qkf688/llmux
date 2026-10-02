@@ -24,6 +24,7 @@ const buildLog = ({
   provider_model: "gpt-x-1",
   provider_name: "openai",
   status: "success",
+  stream: false,
   style,
   user_agent: "curl/8",
   error: "",

@@ -652,10 +652,14 @@ const (
 	SettingKeyReasoningEffortUnknownStrategy = "reasoning_effort_unknown_strategy" // 未知档位策略（clamp_to_default / passthrough）
 
 	// 请求参数相关设置（全局超时/重试，替代原 per-model time_out/max_retry）
-	SettingKeyRequestHeaderTimeout   = "request_header_timeout"    // 单次尝试等待响应头的超时（秒）
-	SettingKeyRequestTotalTimeout    = "request_total_timeout"     // 整个请求的总时长上限（秒，硬上限：到点含流式输出一刀切）
-	SettingKeyStreamFirstByteTimeout = "stream_first_byte_timeout" // 流式响应头到达后等待首个数据字节的超时（秒）
-	SettingKeyRequestMaxRetry        = "request_max_retry"         // 单候选池最大尝试次数
+	// 两个「等待上游」的窗口语义不同源（Stage 38）：流式请求等的是上游响应头（真实等头，
+	// 通常 1~2s 就到）；非流式请求上游要生成完整回答才发响应头，同一个窗口等价于
+	// 「整段回答必须在 N 秒内写完」，故拆成两个键——同一字段一刀切属口径混用。
+	SettingKeyRequestHeaderTimeout     = "request_header_timeout"      // 流式请求单次尝试等待响应头的超时（秒）
+	SettingKeyNonStreamResponseTimeout = "non_stream_response_timeout" // 非流式请求单次尝试等待完整回答的窗口（秒，等价整段生成预算）
+	SettingKeyRequestTotalTimeout      = "request_total_timeout"       // 整个请求的总时长上限（秒，硬上限：到点含流式输出一刀切）
+	SettingKeyStreamFirstByteTimeout   = "stream_first_byte_timeout"   // 流式响应头到达后等待首个数据字节的超时（秒）
+	SettingKeyRequestMaxRetry          = "request_max_retry"           // 单候选池最大尝试次数
 	// SettingKeyUpstreamMaxResponseMiB 上游单条**非流式**响应体的体积上限（MiB，Stage 2 资源防御）。
 	// 合法大响应主场景是文生图 base64（单张高清图编码后 4~8MB），默认 32 = 最大合法场景 ×4 余量；
 	// 病态/被劫持上游的超大 body 在响应头提交给客户端之前即被拦截并故障转移。下限 1 MiB（不可关闭）。

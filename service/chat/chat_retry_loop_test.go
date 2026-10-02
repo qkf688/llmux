@@ -50,9 +50,9 @@ func TestRunProviderRetryLoop(t *testing.T) {
 				WeightItems:   map[uint]int{1: 10, 2: 10},
 				PriorityItems: map[uint]int{1: 1, 2: 1},
 			},
-			RealModelName: "m",
-			MaxRetry:      5,
-			ClientTimeout: time.Second,
+			RealModelName:  "m",
+			MaxRetry:       5,
+			UpstreamWindow: time.Second,
 		}
 	}
 
@@ -179,8 +179,8 @@ func TestRunProviderRetryLoop_SkipsUnselectableProviderThenSucceeds(t *testing.T
 			WeightItems:   map[uint]int{badMWP.ID: 10, goodMWP.ID: 10},
 			PriorityItems: map[uint]int{badMWP.ID: 1, goodMWP.ID: 1},
 		},
-		MaxRetry:      5,
-		ClientTimeout: 2 * time.Second,
+		MaxRetry:       5,
+		UpstreamWindow: 2 * time.Second,
 	})
 
 	if outcome.Status != retryLoopSucceeded {
@@ -297,8 +297,8 @@ func TestRunProviderRetryLoop_CredentialsExhausted_ProbeRecoverInGroup(t *testin
 			WeightItems:   map[uint]int{mwp.ID: 10},
 			PriorityItems: map[uint]int{mwp.ID: 1},
 		},
-		MaxRetry:      5,
-		ClientTimeout: 2 * time.Second,
+		MaxRetry:       5,
+		UpstreamWindow: 2 * time.Second,
 	})
 
 	if outcome.Status != retryLoopSucceeded {
@@ -421,8 +421,8 @@ func TestRunProviderRetryLoop_OuterSelectProbeReselect_WhitelistMatchesUpstreamM
 			WeightItems:   map[uint]int{mwp.ID: 10},
 			PriorityItems: map[uint]int{mwp.ID: 1},
 		},
-		MaxRetry:      5,
-		ClientTimeout: 2 * time.Second,
+		MaxRetry:       5,
+		UpstreamWindow: 2 * time.Second,
 	})
 
 	if outcome.Status != retryLoopSucceeded {
@@ -523,14 +523,14 @@ func TestRunProviderRetryLoop_CredentialsExhausted_ProbeFailsOrganizationFailure
 	}
 
 	outcome := runProviderRetryLoop(retryLoopInput{
-		Ctx:           context.Background(),
-		Start:         time.Now(),
-		Style:         string(consts.StyleOpenAI),
-		Before:        Before{Model: "m", Stream: false, raw: []byte(`{"model":"m","messages":[{"role":"user","content":"hi"}]}`)},
-		RealModelName: "m",
-		Pool:          pool,
-		MaxRetry:      5,
-		ClientTimeout: 2 * time.Second,
+		Ctx:            context.Background(),
+		Start:          time.Now(),
+		Style:          string(consts.StyleOpenAI),
+		Before:         Before{Model: "m", Stream: false, raw: []byte(`{"model":"m","messages":[{"role":"user","content":"hi"}]}`)},
+		RealModelName:  "m",
+		Pool:           pool,
+		MaxRetry:       5,
+		UpstreamWindow: 2 * time.Second,
 	})
 
 	if outcome.Status != retryLoopExhausted {

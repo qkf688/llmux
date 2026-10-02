@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/virtualmodel"
@@ -18,10 +17,10 @@ func balanceChatVirtual(ctx context.Context, in BalanceInput) (*BalanceResult, e
 		"real_models_count", len(pwm.OrderedRealModels),
 	)
 
-	// 全局化后总预算语义 = 跨真实模型共享的总时长上限（等头窗口见下，二者解耦：
-	// 等头超时不再拖垮后续真实模型的窗口）。Stage 33 起该上限就是请求 ctx 的
+	// 全局化后总预算语义 = 跨真实模型共享的总时长上限（单次尝试窗口见下，二者解耦：
+	// 窗口到点不再拖垮后续真实模型的窗口）。Stage 33 起该上限就是请求 ctx 的
 	// deadline（handler 入口经 WithRequestTotalTimeout 挂载），不再是独立计时器。
-	headerTimeout := time.Second * time.Duration(getRequestHeaderTimeout(ctx))
+	window := upstreamAttemptWindow(ctx, in.Before.Stream)
 
 	// 钉定的真实模型排尝试首位（缓存亲和 AC-4）：本地副本重排，不动 virtualmodel
 	// 策略状态；未钉时顺序不变。故障转移语义不变——钉定模型穷尽后照常试其余模型。
@@ -67,18 +66,18 @@ func balanceChatVirtual(ctx context.Context, in BalanceInput) (*BalanceResult, e
 		}
 
 		outcome := runProviderRetryLoop(retryLoopInput{
-			Ctx:           ctx,
-			Start:         in.Start,
-			Style:         in.Style,
-			Before:        in.Before,
-			ReqMeta:       in.ReqMeta,
-			IOLog:         pwm.IOLog,
-			Pool:          pool,
-			RealModelName: realModel.Name,
-			Model:         &realModel,
-			MaxRetry:      getRequestMaxRetry(ctx),
-			ClientTimeout: headerTimeout,
-			LogAttrs:      []any{"virtual_model", pwm.VirtualModelName, "real_model", realModel.Name},
+			Ctx:            ctx,
+			Start:          in.Start,
+			Style:          in.Style,
+			Before:         in.Before,
+			ReqMeta:        in.ReqMeta,
+			IOLog:          pwm.IOLog,
+			Pool:           pool,
+			RealModelName:  realModel.Name,
+			Model:          &realModel,
+			MaxRetry:       getRequestMaxRetry(ctx),
+			UpstreamWindow: window,
+			LogAttrs:       []any{"virtual_model", pwm.VirtualModelName, "real_model", realModel.Name},
 		})
 
 		switch outcome.Status {

@@ -156,8 +156,13 @@ func buildSettingSchemas() map[string]SettingSchema {
 		// 请求参数（全局超时/重试，替代原 per-model time_out/max_retry）
 		// 总超时 = 请求的硬时长上限（Stage 33 起挂在请求 ctx 的 deadline 上，到点含
 		// 流式输出一刀切、按超时归因结算）。默认 600 秒是「正常长回答不被截」的余量，
-		// 按自己最长的用法调；它与等头超时（30s/次 × 重试）解耦，不再互为双角色。
+		// 按自己最长的用法调；它与下面两个单次尝试窗口解耦，不再互为双角色。
+		//
+		// 单次尝试的等待窗口按入站 stream 分流（Stage 38）：流式等的是响应头（真实等头），
+		// 非流式等的是上游生成完整回答（响应头在整段写完后才发）——同一字段承担两种语义
+		// 会让慢供应商的非流式请求长期撞线（实测 2.8% 稳定失败率）。两个键各自独立调。
 		{Key: SettingKeyRequestHeaderTimeout, Field: "RequestHeaderTimeout", Type: SettingTypeInt, Default: 30, Category: "request", Min: intPtr(1)},
+		{Key: SettingKeyNonStreamResponseTimeout, Field: "NonStreamResponseTimeout", Type: SettingTypeInt, Default: 90, Category: "request", Min: intPtr(1)},
 		{Key: SettingKeyRequestTotalTimeout, Field: "RequestTotalTimeout", Type: SettingTypeInt, Default: 600, Category: "request", Min: intPtr(1)},
 		{Key: SettingKeyStreamFirstByteTimeout, Field: "StreamFirstByteTimeout", Type: SettingTypeInt, Default: 15, Category: "request", Min: intPtr(1)},
 		{Key: SettingKeyRequestMaxRetry, Field: "RequestMaxRetry", Type: SettingTypeInt, Default: 3, Category: "request", Min: intPtr(1)},

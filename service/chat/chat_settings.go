@@ -88,11 +88,31 @@ func getEnableFormatConversion(ctx context.Context) bool {
 	return settingsReader.Bool(ctx, models.SettingKeyEnableFormatConversion, true)
 }
 
-// getRequestHeaderTimeout 获取单次尝试等待响应头的超时（秒）。
+// getRequestHeaderTimeout 获取「流式请求单次尝试等待上游响应头」的超时（秒）。
 // 默认值与 setting schema 一致（30），语义 = 原 per-model TimeOut 的 ResponseHeaderTimeout 角色。
-// 驱动 providers.GetClientWithProxy 的 ResponseHeaderTimeout。
 func getRequestHeaderTimeout(ctx context.Context) int {
 	return settingsReader.Int(ctx, models.SettingKeyRequestHeaderTimeout, 30, 1)
+}
+
+// getNonStreamResponseTimeout 获取「非流式请求单次尝试等待完整回答」的窗口（秒）。
+// 默认值与 setting schema 一致（90）：上游非流式请求要生成完整回答才发响应头，故该
+// 窗口等价「整段生成预算」——沿用等头那个 30s 会把平均耗时接近 30s 的慢供应商长期
+// 判死（实测 2.8% 稳定失败率，Stage 38 拆键的现场证据）。与总超时（600s 帽子）解耦：
+// 窗口到点只消耗本次尝试，后续候选仍有完整窗口。
+func getNonStreamResponseTimeout(ctx context.Context) int {
+	return settingsReader.Int(ctx, models.SettingKeyNonStreamResponseTimeout, 90, 1)
+}
+
+// upstreamAttemptWindow 解析「单次上游尝试」实际施加的等待窗口（Stage 38 单源）：
+// 按入站 stream 分流——流式等响应头、非流式等整段回答。真实/虚拟两条路径共用此函数，
+// 窗口值随后既驱动 providers.GetClientWithProxy 的 ResponseHeaderTimeout，也随尝试
+// 传到失败文案（印出的秒数与实际施加值同源，不在失败时重读设置——那时请求 ctx 可能
+// 已死，读设置会退默认值印错数）。
+func upstreamAttemptWindow(ctx context.Context, stream bool) time.Duration {
+	if stream {
+		return time.Second * time.Duration(getRequestHeaderTimeout(ctx))
+	}
+	return time.Second * time.Duration(getNonStreamResponseTimeout(ctx))
 }
 
 // conservativeRequestTotalTimeoutFallback 是 request_total_timeout 读失败时的保守值。

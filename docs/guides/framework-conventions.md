@@ -83,7 +83,7 @@ HTTP 500（本机自己坏，**含 panic**）**禁止**把内部 `err` 原文回
 
 ## 7. 诊断类时间预算单源 + 检测类内容形状门（Stage 19 质量门，2026-09-23）
 
-**时间预算单源**：诊断族（`common` 整域 / `service/healthcheck` / `service/credprobe` / `providers` / `handler/testapi` / `handler/pools`）的非测试代码**禁止**裸写时间字面量（`time.Second/…` 单位表达式、`time.Duration(`/`time.ParseDuration(` 转换，**含 const/var 声明行**）——诊断类时间预算一律登记进 `common/upstream_timeout.go`（值 + 为什么是这个值，这是**唯一**合法住所，写到别处同样判红），调用点只引名字（`common.Diagnostic*`）。为什么：健康检查与两处 `Models()` 曾各写一份 `30*time.Second`，单独改一处就会出现「同一条链路探针说超时、健康检查说成功」的互相矛盾结论（find-issues 2026-09-17）。生产聊天超时不在此列（来自设置项 `SettingKeyRequestHeaderTimeout`，语义独立）。
+**时间预算单源**：诊断族（`common` 整域 / `service/healthcheck` / `service/credprobe` / `providers` / `handler/testapi` / `handler/pools`）的非测试代码**禁止**裸写时间字面量（`time.Second/…` 单位表达式、`time.Duration(`/`time.ParseDuration(` 转换，**含 const/var 声明行**）——诊断类时间预算一律登记进 `common/upstream_timeout.go`（值 + 为什么是这个值，这是**唯一**合法住所，写到别处同样判红），调用点只引名字（`common.Diagnostic*`）。为什么：健康检查与两处 `Models()` 曾各写一份 `30*time.Second`，单独改一处就会出现「同一条链路探针说超时、健康检查说成功」的互相矛盾结论（find-issues 2026-09-17）。生产聊天超时不在此列（来自设置项 `SettingKeyRequestHeaderTimeout` 与 `SettingKeyNonStreamResponseTimeout`——按入站 stream 分流的两个单次尝试窗口，Stage 38，语义独立）。
 
 - 放行只有行级标记 `//gate:diag-timeout-allow <非空理由>`：理由为空判红、标记了不再违规同样判红（防注释沉积）；不做文件级豁免。现存例外两类：`providers/cache.go` 的 Transport 连接池调优（生产/诊断共用，非诊断请求超时参数）、`service/healthcheck/settings.go` 的分钟值单位换算。
 - 执法：`gate_diag_timeout_test.go` 编进 `go test ./...`——文本行级判据（剥 `//` 注释后匹配；含 `time.ParseDuration(`，无单位裸数字与跨行写法是已声明的接受性漏判）+ `TestGateDiagTimeoutJudgment`（mustCatch/mustPass 判据自测，含伪标记 `allowX` 不放行）+ `TestGateDiagTimeoutMarker`（标记三态：缺理由 / 失效 / 放行；标记前缀必须以行尾或空白收尾、只认代码行尾注释）+ 常量哨兵（判 `^\s*Name\s*=` **声明形状**而非文本提及，防「删声明留注释」绕门）+ `gateSourceFiles` 遍历（数量下限 + 六族锚点文件；与目录同名的门面文件如 `service/healthcheck.go` 同样在扫描面内）。

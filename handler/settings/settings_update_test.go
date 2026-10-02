@@ -262,3 +262,40 @@ func TestUpdateSettingsFromRequest_ResponseLogMaxKiB_RejectsOutOfRange(t *testin
 		})
 	}
 }
+
+// TestUpdateSettingsFromRequest_NonStreamResponseTimeout_RoundTrip 覆盖
+// non_stream_response_timeout（Stage 38 新增的非流式整段预算窗口）的 PUT 往返：
+// 写入合法非默认值后，数据库读回与 GET 响应都应命中该值。
+// 这是「后台改这个数就生效」的写侧证据；读侧（按入站 stream 取哪个键）由
+// service/chat 的窗口分流用例锁定。
+func TestUpdateSettingsFromRequest_NonStreamResponseTimeout_RoundTrip(t *testing.T) {
+	testsupport.InitTestDB(t)
+	ctx := context.Background()
+
+	req := &UpdateSettingsRequest{}
+	if err := models.ApplySettingDefaults(req); err != nil {
+		t.Fatalf("ApplySettingDefaults: %v", err)
+	}
+	if req.NonStreamResponseTimeout != 90 {
+		t.Fatalf("schema 默认值 = %d, want 90（慢供应商现场证据支撑的余量）", req.NonStreamResponseTimeout)
+	}
+	req.NonStreamResponseTimeout = 120 // Min=1 的合法非默认值
+
+	if err := updateSettingsFromRequest(ctx, req); err != nil {
+		t.Fatalf("updateSettingsFromRequest: %v", err)
+	}
+
+	store := settingStore()
+	if got := store.GetInt(ctx, models.SettingKeyNonStreamResponseTimeout); got != 120 {
+		t.Errorf("NonStreamResponseTimeout = %d, want 120", got)
+	}
+
+	body := getSettingsViaHandler(t)
+	v := gjson.Get(body, "data.non_stream_response_timeout")
+	if !v.Exists() {
+		t.Fatalf("GET 响应体缺键 data.non_stream_response_timeout，body=%s", body)
+	}
+	if v.Int() != 120 {
+		t.Errorf("GET 响应体 data.non_stream_response_timeout = %d, want 120，body=%s", v.Int(), body)
+	}
+}

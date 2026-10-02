@@ -70,11 +70,12 @@ type Settings struct {
 	ReasoningEffortMappingEnabled  bool   `json:"reasoning_effort_mapping_enabled"`
 	ReasoningEffortDefaultValue    string `json:"reasoning_effort_default_value"`    // minimal/low/medium/high/xhigh/max
 	ReasoningEffortUnknownStrategy string `json:"reasoning_effort_unknown_strategy"` // clamp_to_default / passthrough
-	// 请求参数相关设置（全局超时/重试）
-	RequestHeaderTimeout   int `json:"request_header_timeout"`    // 单次尝试等待响应头超时（秒）
-	RequestTotalTimeout    int `json:"request_total_timeout"`     // 整个请求总时长上限（秒，硬上限：到点含流式输出一刀切）
-	StreamFirstByteTimeout int `json:"stream_first_byte_timeout"` // 流式响应头后首字节等待超时（秒）
-	RequestMaxRetry        int `json:"request_max_retry"`         // 单候选池最大尝试次数
+	// 请求参数相关设置（全局超时/重试）——两个单次尝试窗口按入站 stream 分流（Stage 38）
+	RequestHeaderTimeout     int `json:"request_header_timeout"`      // 流式请求等待上游响应头超时（秒）
+	NonStreamResponseTimeout int `json:"non_stream_response_timeout"` // 非流式请求等待上游完整回答的窗口（秒，等价整段生成预算）
+	RequestTotalTimeout      int `json:"request_total_timeout"`       // 整个请求总时长上限（秒，硬上限：到点含流式输出一刀切）
+	StreamFirstByteTimeout   int `json:"stream_first_byte_timeout"`   // 流式响应头后首字节等待超时（秒）
+	RequestMaxRetry          int `json:"request_max_retry"`           // 单候选池最大尝试次数
 	// UpstreamMaxResponseMiB 上游单条非流式响应体上限（MiB，Stage 2 资源防御；下限 1，不可关闭）
 	UpstreamMaxResponseMiB int `json:"upstream_max_response_mib"`
 	// 凭据健康相关设置

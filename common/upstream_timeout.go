@@ -11,8 +11,9 @@ import "time"
 // 预算一律在此登记「值 + 为什么是这个值」，调用点只引名字，漂移只剩「刻意改常量」这一处。
 // 例外（非诊断超时语义，如 Transport 调优、单位换算）走行级标记 //gate:diag-timeout-allow <理由>。
 //
-// 生产聊天超时不在此列：它来自设置项 SettingKeyRequestHeaderTimeout（默认同为 30s 但语义
-// 独立），不走这一族。
+// 生产聊天超时不在此列：它来自设置项 SettingKeyRequestHeaderTimeout（流式等头，默认 30s）
+// 与 SettingKeyNonStreamResponseTimeout（非流式整段预算，默认 90s，Stage 38 起按入站
+// stream 分流），两者语义独立，不走这一族。
 const (
 	// DiagnosticResponseHeaderTimeout 诊断类请求的 transport（响应头）超时：healthcheck 与
 	// 两处 Models() 拉取共用的默认。client 整体超时恒 0（providers/cache.go），这个值管

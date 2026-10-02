@@ -13,7 +13,9 @@ import (
 )
 
 // timeoutSettingsReader 测试用 settings.Reader stub：只覆写请求参数键，
-// 其余回退 defaultValue。超时最小粒度秒，测试用 1s 等头窗口 + 3s 总时长上限。
+// 其余回退 defaultValue。超时最小粒度秒，测试用 1s 单次尝试窗口 + 3s 总时长上限。
+// 两个窗口同为 1s：本文件的用例入站为非流式，分流后非流式取「整段预算」键
+// （Stage 38）——两键都给 1s 才能继续表达「窗口到点后候选 2 仍有完整预算」。
 // 总时长上限不在 BalanceChat 内读取（Stage 33 起经 WithRequestTotalTimeout 挂进
 // 请求 ctx 的 deadline），该键供派生 deadline 的用例使用。
 type timeoutSettingsReader struct{}
@@ -23,7 +25,9 @@ func (timeoutSettingsReader) Bool(_ context.Context, _ string, def bool) bool { 
 func (timeoutSettingsReader) Int(_ context.Context, key string, def, _ int) int {
 	switch key {
 	case models.SettingKeyRequestHeaderTimeout:
-		return 1 // 等头窗口 1s
+		return 1 // 流式等头窗口 1s
+	case models.SettingKeyNonStreamResponseTimeout:
+		return 1 // 非流式整段预算窗口 1s
 	case models.SettingKeyRequestTotalTimeout:
 		return 3 // 总时长上限 3s（供 WithRequestTotalTimeout 派生 deadline）
 	case models.SettingKeyRequestMaxRetry:
@@ -42,12 +46,12 @@ func (r timeoutSettingsReader) IntE(ctx context.Context, key string, def, min in
 	return r.Int(ctx, key, def, min), nil
 }
 
-// TestBalanceChat_HeaderTimeout_CandidateHasFullWindow 锁定「等头窗口与总时长上限解耦」
-// 的行为（AC-8）：候选 1 等头超时后，候选 2 仍有完整窗口可继续尝试。
+// TestBalanceChat_HeaderTimeout_CandidateHasFullWindow 锁定「单次尝试窗口与总时长上限
+// 解耦」的行为（AC-8）：候选 1 窗口超时后，候选 2 仍有完整窗口可继续尝试。
 //
-// 构造：等头=1s、总时长上限=3s（Stage 33 起以请求 ctx deadline 表达，同 handler 挂法）、
-// MaxRetry=2；候选 1 上游 1.5s 不回响应头（等头超时），候选 2 立即成功。若总上限与
-// 等头同一值（旧双角色语义），候选 1 耗满 1s 后总上限同步耗尽，候选 2 必然 aborted、
+// 构造：单次尝试窗口=1s、总时长上限=3s（Stage 33 起以请求 ctx deadline 表达，同 handler
+// 挂法）、MaxRetry=2；候选 1 上游 1.5s 不回响应头（窗口超时），候选 2 立即成功。若总上限
+// 与窗口同一值（旧双角色语义），候选 1 耗满 1s 后总上限同步耗尽，候选 2 必然 aborted、
 // 断言变红——本用例能区分新旧语义。
 func TestBalanceChat_HeaderTimeout_CandidateHasFullWindow(t *testing.T) {
 	initChatRecordTestDB(t)
@@ -56,7 +60,7 @@ func TestBalanceChat_HeaderTimeout_CandidateHasFullWindow(t *testing.T) {
 	t.Cleanup(func() { SetSettingsReader(nil) })
 
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(1500 * time.Millisecond) // 不回响应头：超过 1s 等头窗口
+		time.Sleep(1500 * time.Millisecond) // 不回响应头：超过 1s 的尝试窗口
 	}))
 	defer slow.Close()
 

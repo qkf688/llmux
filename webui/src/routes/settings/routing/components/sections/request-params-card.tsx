@@ -5,21 +5,30 @@ import type { RoutingSettingsSectionProps } from "../../types";
 
 /**
  * 请求参数卡：全局超时/重试与上游响应体积防御的设置。
- * 语义分区明确——响应头超时只管"等头"，总超时是整请求预算帽子，
- * 首字节等待是流式"头后无数据"的看门狗窗口；等头超时不再一击致命
- * （总预算独立，后续候选仍有完整窗口，见 service/chat/chat_balance.go）；
- * 上游响应上限是 Stage 2 资源防御（超限=供应商异常→故障转移，不冷却凭据）。
+ * 语义分区明确——「响应头超时」只服务流式请求的等头；「非流式响应超时」是非流式
+ * 请求等上游写完整段回答的窗口（上游要生成完才发响应头，与流式等头不同源，
+ * Stage 38 拆键）；总超时是整请求预算帽子；首字节等待是流式"头后无数据"的看门狗
+ * 窗口；任一单次尝试窗口到点不再一击致命（总预算独立，后续候选仍有完整窗口，
+ * 见 service/chat/chat_balance.go）；上游响应上限是 Stage 2 资源防御
+ * （超限=供应商异常→故障转移，不冷却凭据）。
  */
 const intFields: Array<{
-  key: "request_header_timeout" | "request_total_timeout" | "stream_first_byte_timeout" | "request_max_retry" | "upstream_max_response_mib";
+  key: "request_header_timeout" | "non_stream_response_timeout" | "request_total_timeout" | "stream_first_byte_timeout" | "request_max_retry" | "upstream_max_response_mib";
   label: string;
   description: string;
   suffix?: string;
 }> = [
   {
     key: "request_header_timeout",
-    label: "响应头超时",
-    description: "单次尝试等待上游响应头的最长时间（秒），超时算该候选失败、可重试。",
+    label: "流式响应头超时",
+    description: "流式请求单次尝试等待上游响应头的最长时间（秒），超时算该候选失败、可重试。",
+    suffix: "秒",
+  },
+  {
+    key: "non_stream_response_timeout",
+    label: "非流式响应超时",
+    description:
+      "非流式请求单次尝试等待上游写完整段回答的最长时间（秒）——上游要生成完才发响应头，故这是整段生成预算；超时算该候选失败、可重试。",
     suffix: "秒",
   },
   {

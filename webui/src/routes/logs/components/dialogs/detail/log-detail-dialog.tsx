@@ -10,6 +10,7 @@ import {
 } from "../../../utils/formatters";
 import { formatDateTime } from "@/lib/formatters";
 import { DetailCard } from "./detail-card";
+import { StreamBadge } from "../../shared";
 import { RequestResponseSection } from "./request-response-section";
 import { MismatchedFieldsSection, UnclaimedFieldsSection } from "./unclaimed-fields-section";
 import type { ChatLogExportSections } from "../../../utils/export-log";
@@ -84,6 +85,11 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDet
             <DialogTitle>日志详情: {detailLog.id}</DialogTitle>
             <DialogDescription>查看请求/响应内容、性能指标与错误信息</DialogDescription>
           </DialogHeader>
+        </div>
+
+        {/* 流式 / 非流式 顶部独立 banner：标题与主内容中间；底色档随流/非流切换（共享件内已锁） */}
+        <div className="flex-shrink-0 px-3 sm:px-4 pt-3 sm:pt-4">
+          <StreamBadge stream={detailLog.stream} variant="banner" />
         </div>
 
         <DialogBody className="p-3">

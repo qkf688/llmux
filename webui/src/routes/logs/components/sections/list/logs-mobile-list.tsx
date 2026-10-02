@@ -4,7 +4,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { StaggerItem, StaggerList } from "@/components/ui/stagger-list";
 import type { ChatLog } from "@/lib/api";
 import { Trash2 } from "lucide-react";
-import { LogScheduleCell } from "../../shared";
+import { LogScheduleCell, StreamBadge } from "../../shared";
 import { formatByteLength, formatTime } from "../../../utils/formatters";
 import { formatDateTime } from "@/lib/formatters";
 
@@ -51,6 +51,8 @@ export function LogsMobileList({
                 onCheckedChange={(checked) => onSelectOne(log.id, checked === true)}
                 className="mt-0.5 shrink-0"
               />
+              {/* 流式 / 非流式 行首小图标：checkbox 之后、模型名之前；与桌面同源（StreamBadge 共享件） */}
+              <StreamBadge stream={log.stream} textClassName="text-[10px]" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-start gap-2 min-w-0">
                   <h3 className="font-semibold text-[13px] leading-snug break-words overflow-hidden [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical]">

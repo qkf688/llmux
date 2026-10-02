@@ -15,7 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { ChatLog } from "@/lib/api";
 import { Trash2 } from "lucide-react";
-import { LogScheduleCell } from "../../shared";
+import { LogScheduleCell, StreamBadge } from "../../shared";
 import { formatTime } from "../../../utils/formatters";
 import { formatDateTime } from "@/lib/formatters";
 
@@ -58,6 +58,8 @@ export function LogsDesktopTable({
                 aria-label="全选"
               />
             </TableHead>
+            {/* 流式 / 非流式 列：行首、checkbox 之后；颜色档与 detail banner 同源（StreamBadge 共享件） */}
+            <TableHead className="w-[64px] text-xs font-normal text-muted-foreground">模式</TableHead>
             <TableHead>时间</TableHead>
             <TableHead>模型名称</TableHead>
             <TableHead>状态</TableHead>
@@ -80,6 +82,9 @@ export function LogsDesktopTable({
                   onCheckedChange={(checked) => onSelectOne(log.id, checked === true)}
                   aria-label={`选择日志 ${log.id}`}
                 />
+              </TableCell>
+              <TableCell>
+                <StreamBadge stream={log.stream} />
               </TableCell>
               <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                 {formatDateTime(log.created_at)}

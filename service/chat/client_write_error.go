@@ -1,6 +1,10 @@
 package chat
 
-import "errors"
+import (
+	"context"
+	"errors"
+	"io"
+)
 
 // 写侧错误标记：让「客户端侧失败」的方向信息穿过日志管道到达判定层。
 //
@@ -33,14 +37,34 @@ func IsClientWriteErr(err error) bool {
 // 失败判定区分「供应商故障」与「客户端侧失败」（清粘性钉定 + 供应商失败统计 + 留痕
 // 级别三处共用同一判据，见 chat_record.go 的 clientSideFailure）。
 //
-// 读侧错误已带 upstreamReadErr 标记，原样放过：io.Copy 返回的错误既可能是读 src 失败
+// ctx 是该请求的 ctx（总时限挂在它的 deadline 上），下面第 2 条判据要读它。
+//
+// 1. 读侧错误已带 upstreamReadErr 标记，原样放过：io.Copy 返回的错误既可能是读 src 失败
 // 也可能是写 dst 失败，两者在错误链里都只是一枚 err，此时**不能**盖上写侧标记——
 // 覆盖会把「上游腰斩」误判成「客户端不收」，粘性钉定该清的不清、供应商白背锅。
-func MarkResponseWriteError(err error) error {
+//  2. 总时限已耗尽（ctx.Err()==DeadlineExceeded）不盖：写上限钉的就是 ctx 的 deadline，
+//     预算到点那一刻 socket deadline 与 ctx deadline 同时触发，第一次写立刻失败——那是
+//     「预算烧完」，不是「客户端不收」，须保留既有的「超时归供应商」记账（2026-10-04
+//     拍板）。**只认 DeadlineExceeded、不认 Canceled**：客户端中途断开是 ctx 被取消，
+//     那确实是客户端侧，仍须打标。
+//  3. io.ErrClosedPipe 不盖：handler/v1/chat.go 的 io.TeeReader 刻意在方向标记**之外**
+//     （管道写失败不是上游腰斩），故日志侧提前收尾时 pw.Write 的失败是**没有方向标记的
+//     第三种失败源**，默认会被兜成「客户端」；但它的诱因通常是上游吐了让解析器提前退出
+//     的内容，账该记在上游（2026-10-04 拍板）。注意这**只**改统计面：清钉与留痕级别
+//     两处走 clientSideFailure，其中 isClientDisconnectErr 自 Stage 24（commit 4d1264a
+//     「断连类降 Warn」）起就把 io.ErrClosedPipe 直接算断连，与本标记是两条独立判据，
+//     改那一行属动既有口径，待拍板。
+func MarkResponseWriteError(ctx context.Context, err error) error {
 	if err == nil {
 		return nil
 	}
 	if IsUpstreamReadErr(err) {
+		return err
+	}
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return err
+	}
+	if errors.Is(err, io.ErrClosedPipe) {
 		return err
 	}
 	return clientWriteErr{err}

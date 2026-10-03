@@ -264,9 +264,18 @@ func TestRecordLog_PostCommitFailure_DepinMatrix(t *testing.T) {
 		{
 			name:       "服务的就是被钉的那家+写回被掐(客户端不收结果)→不清",
 			servingMWP: depinPinnedMWP,
-			procErr:    fmt.Errorf("write response body failed: %w", MarkResponseWriteError(newWriteCutoffErr())),
+			// 传总时限未到的活 ctx：预算到点那一格按 2026-10-04 拍板归供应商（不清钉
+			// 变成清），与本条要锁的「客户端不收结果」不是同一格。
+			procErr:    fmt.Errorf("write response body failed: %w", MarkResponseWriteError(context.Background(), newWriteCutoffErr())),
 			wantPinned: true,
 			why:        "写上限到点掐断与上游超时的错误形状同形（*net.OpError + Timeout()），类型层分不开；靠写侧方向标记认出是客户端不收。供应商把响应完整产出了，清钉等于让好端点每轮都被随机选（Stage 39 R3）",
+		},
+		{
+			name:       "服务的就是被钉的那家+总时限已耗尽→清",
+			servingMWP: depinPinnedMWP,
+			procErr:    fmt.Errorf("write response body failed: %w", MarkResponseWriteError(expiredCtx(t), newWriteCutoffErr())),
+			wantPinned: false,
+			why:        "预算烧完不是客户端不收（2026-10-04 拍板），供应商该记失败也该清钉",
 		},
 	}
 

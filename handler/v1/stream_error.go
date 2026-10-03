@@ -28,6 +28,8 @@ const streamInterruptMessage = "upstream stream interrupted before completion"
 // 写回错误打上「来自客户端」方向标记（service.MarkResponseWriteError）：读上游失败
 // 与写客户端失败在 io.Copy 返回的 error 里是同一枚，分不开方向；不标记的话，提交后
 // 失败的清钉与供应商失败统计会把「客户端不收结果」算到供应商头上（Stage 39，R3）。
+// 打标函数自带三条例外（已带读侧标记 / 总时限已耗尽 / 日志管道收尾不打标），故本函数
+// 不自己判方向——判定单源在 service/chat，别在这里复制一份。
 func writeResponseBody(ctx context.Context, c *gin.Context, style string, stream bool, src io.Reader) error {
 	applyClientWriteDeadline(c, ctx)
 
@@ -38,7 +40,7 @@ func writeResponseBody(ctx context.Context, c *gin.Context, style string, stream
 				err = errors.Join(err, emitErr)
 			}
 		}
-		return fmt.Errorf("write response body failed: %w", service.MarkResponseWriteError(err))
+		return fmt.Errorf("write response body failed: %w", service.MarkResponseWriteError(ctx, err))
 	}
 	return nil
 }

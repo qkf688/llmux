@@ -71,13 +71,17 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 func MarkUpstreamReader(r io.Reader) io.Reader { return chat.MarkUpstreamReader(r) }
 
 // MarkResponseWriteError 给「写回响应」这一步的错误打上「来自客户端」方向标记，供
-// RecordLog 的提交后失败判定把「客户端不收结果（被写上限掐断）」与「供应商故障」分开：
-// 前者不清粘性钉定、不记供应商失败。读侧错误（已带上游标记）原样放过不被覆盖。
-func MarkResponseWriteError(err error) error { return chat.MarkResponseWriteError(err) }
+// RecordLog 的提交后失败判定把「客户端不收结果」与「供应商故障」分开：前者不清粘性
+// 钉定、不记供应商失败。ctx 是该请求的 ctx——总时限已耗尽时不打标（预算烧完归供应商）。
+// 读侧错误（已带上游标记）与日志管道收尾（io.ErrClosedPipe）同样原样放过不被覆盖。
+func MarkResponseWriteError(ctx context.Context, err error) error {
+	return chat.MarkResponseWriteError(ctx, err)
+}
 
 // IsClientWriteError 判定错误是否来自写客户端（带写侧方向标记）。handler 层用它自证
 // 「写回失败确实被打上了客户端侧标记」——该标记是提交后失败判定（不清粘性钉定、
 // 不记供应商失败）与留痕级别的唯一依据，漏打则两类失败会被算到供应商头上。
+// 仅供 handler 跨包契约断言使用，生产路径不打这个标记的消费点。
 func IsClientWriteError(err error) bool { return chat.IsClientWriteErr(err) }
 
 // MarkLogUnfinished 给「日志后处理任务被关机丢弃」的日志行写「未能写完」失败痕迹

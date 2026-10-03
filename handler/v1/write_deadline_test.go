@@ -88,11 +88,12 @@ func TestWriteResponseBody_ClientNotReading_CutOffAtTotalTimeout(t *testing.T) {
 		if !errors.As(writeErr, &netErr) || !netErr.Timeout() {
 			t.Fatalf("写回错误不是超时：%v（want 写上限到点的超时）", writeErr)
 		}
-		// 方向标记是提交后失败判定的唯一依据（不清粘性钉定 / 不记供应商失败统计 /
-		// 留痕降 Warn 全靠它）。漏打则这类失败会被算到供应商头上——去掉
-		// writeResponseBody 里的 MarkResponseWriteError，本行即红。
-		if !service.IsClientWriteError(writeErr) {
-			t.Fatalf("写回错误缺写侧方向标记：%v（上游读错误才该放过，写错误必须标记）", writeErr)
+		// 方向标记：写上限钉的就是 ctx 的 deadline，故本用例的写失败**必然发生在总时限
+		// 到点那一刻**，按 2026-10-04 拍板口径不算客户端侧（预算烧完算供应商的）→ 期望
+		// **无**写侧标记。反向的「有标记」由 TestWriteResponseBody_ClientDisconnect_*
+		// 锁（总时限未到的真断开）；两条都在才既锁住调用点没漏、又锁住到点那格归供应商。
+		if service.IsClientWriteError(writeErr) {
+			t.Fatalf("总时限到点的写失败被打上了写侧标记：%v（该格按拍板归供应商）", writeErr)
 		}
 		// 下限取上限的 1/4：排除「连接被立刻关掉」这种与上限无关的收场；取 1/4 而非
 		// 紧贴上限，避开 Windows 单调钟 tick 步进。
@@ -104,6 +105,58 @@ func TestWriteResponseBody_ClientNotReading_CutOffAtTotalTimeout(t *testing.T) {
 		}
 	case <-time.After(8 * time.Second):
 		t.Fatalf("写回 8s 内未收场：客户端不读时 io.Copy 永久阻塞，写上限（%v）没生效", limit)
+	}
+}
+
+// TestWriteResponseBody_ClientDisconnect_MarkedAsClientSide 端到端锁「打标调用点没漏」：
+// 客户端发完请求就断开连接（**总时限远未到**），handler 往客户端写大 body 时写失败，
+// 该错误必须带上写侧方向标记——提交后失败判定的清钉 / 供应商失败统计 / 留痕级别三处
+// 全靠它，漏打则「客户端跑路」会被记到供应商头上。
+//
+// 与 TestWriteResponseBody_ClientNotReading_CutOffAtTotalTimeout 互为反向，两条缺一不可：
+//   - 那条的写失败发生在**总时限到点**（写上限钉的就是 ctx 的 deadline），按 2026-10-04
+//     拍板口径归供应商，断言「无标记」；
+//   - 本条的写失败发生在**总时限未到**，是真·客户端断开，断言「有标记」。
+//
+// 只留前者，把 writeResponseBody 里的 MarkResponseWriteError 整个摘掉也照样绿。
+//
+// 变异自检验证——去掉 writeResponseBody 里的 MarkResponseWriteError 调用：本行即红。
+func TestWriteResponseBody_ClientDisconnect_MarkedAsClientSide(t *testing.T) {
+	// 总时限给到 30s：远大于本用例耗时，确保写失败一定来自「客户端断开」而非预算到点。
+	const budget = 30 * time.Second
+
+	done := make(chan error, 1)
+	router := gin.New()
+	router.POST("/probe", func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), budget)
+		defer cancel()
+		done <- writeResponseBody(ctx, c, string(consts.StyleOpenAI), false, endlessReader{})
+	})
+	addr := serveOnEphemeralPort(t, router)
+
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	if _, err := conn.Write([]byte("POST /probe HTTP/1.1\r\nHost: llmux\r\nContent-Length: 0\r\n\r\n")); err != nil {
+		t.Fatalf("write request: %v", err)
+	}
+	// 立刻断开：发完请求就 Close，收发缓冲里还压着未读数据 → 走 RST，
+	// 服务端的下一次写立即失败。
+	if err := conn.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	select {
+	case writeErr := <-done:
+		if writeErr == nil {
+			t.Fatal("写回返回 nil，want 客户端断开导致的写错误")
+		}
+		if !service.IsClientWriteError(writeErr) {
+			t.Fatalf("客户端断开（总时限未到）缺写侧方向标记：%v", writeErr)
+		}
+	case <-time.After(8 * time.Second):
+		t.Fatalf("客户端断开后 8s 内写回未收场：%v", budget)
 	}
 }
 

@@ -36,6 +36,18 @@ func newWriteCutoffErr() error {
 	return &net.OpError{Op: "write", Net: "tcp", Err: writeTimeoutLikeError{}}
 }
 
+// expiredCtx 造一个「总时限已耗尽」的 ctx（Err()==DeadlineExceeded），供打标判据与
+// 提交后失败矩阵共用同一形状，避免各用例各造一遍而形状漂移。
+func expiredCtx(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	t.Cleanup(cancel)
+	if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		t.Fatalf("前置条件不成立：过期 ctx 的 Err() = %v，want DeadlineExceeded", ctx.Err())
+	}
+	return ctx
+}
+
 // providerFailureCount 读该供应商的累计失败计数；没有行 = 一次都没记过（=0）。
 func providerFailureCount(t *testing.T, providerName string) int64 {
 	t.Helper()
@@ -50,21 +62,23 @@ func providerFailureCount(t *testing.T, providerName string) int64 {
 	return row.FailureCount
 }
 
-// TestMarkResponseWriteError_三态 锁方向标记本身的语义：nil 不包；**已带上游标记的读
-// 错误原样放过**（io.Copy 的错误分不清是读 src 失败还是写 dst 失败，盖上写侧标记会把
-// 「上游腰斩」误判成「客户端不收」，粘性钉定该清的不清、供应商白背锅）；其余才盖写侧
-// 标记，且 errors.Is/As 仍能触达内层（诊断能力不被标记层吞掉）。
+// TestMarkResponseWriteError_UpstreamPassthrough 锁方向标记的「上游优先」判据：nil 不包；
+// **已带上游标记的读错误原样放过**（io.Copy 的错误分不清是读 src 失败还是写 dst 失败，
+// 盖上写侧标记会把「上游腰斩」误判成「客户端不收」，粘性钉定该清的不清、供应商白背锅）；
+// 其余才盖写侧标记，且 errors.Is/As 仍能触达内层（诊断能力不被标记层吞掉）。
 func TestMarkResponseWriteError_UpstreamPassthrough(t *testing.T) {
+	// 总时限未到：普通写错误该被打上写侧标记。
+	ctx := context.Background()
 	inner := errors.New("boom")
 	// 已带上游标记的读错误：io.Copy 分不清读 src 失败还是写 dst 失败，生产里它必须
 	// 原样穿过 MarkResponseWriteError（否则上游腰斩会被当成客户端不收）。
 	upstreamMarked := fmt.Errorf("write response body failed: %w", upstreamReadErr{err: inner})
 
-	if got := MarkResponseWriteError(nil); got != nil {
+	if got := MarkResponseWriteError(ctx, nil); got != nil {
 		t.Fatalf("MarkResponseWriteError(nil) = %v, want nil", got)
 	}
 
-	marked := MarkResponseWriteError(inner)
+	marked := MarkResponseWriteError(ctx, inner)
 	if !IsClientWriteErr(marked) {
 		t.Fatal("普通写错误未被打上写侧标记")
 	}
@@ -75,7 +89,7 @@ func TestMarkResponseWriteError_UpstreamPassthrough(t *testing.T) {
 	// 断言必须打在**返回值**上：IsUpstreamReadErr 走 errors.As，能穿过 clientWriteErr 的
 	// Unwrap 摸到内层的 upstreamReadErr，故「包没包」这一条两种实现都成立；查入参则
 	// 与 MarkResponseWriteError 的行为完全无关，删掉它的「原样放过」保护也不会红。
-	gotUp := MarkResponseWriteError(upstreamMarked)
+	gotUp := MarkResponseWriteError(ctx, upstreamMarked)
 	if !IsUpstreamReadErr(gotUp) {
 		t.Fatal("上游读错误被写侧标记覆盖，上游方向丢失")
 	}
@@ -84,12 +98,77 @@ func TestMarkResponseWriteError_UpstreamPassthrough(t *testing.T) {
 	}
 }
 
+// TestMarkResponseWriteError_BudgetExhausted_NotMarked 锁 2026-10-04 拍板口径：总时限
+// 已耗尽时**不盖**写侧标记，保留既有的「超时归供应商」记账。
+//
+// 背景：写上限钉的就是 ctx 的总时限，预算到点那一刻 socket deadline 与 ctx deadline
+// 同时触发。若不加这一条判据，「预算被烧完」会一律被当成「客户端不收」而不记供应商
+// 失败——与手册「等上游答到点而超时 = 慢供应商，照常结算」直接矛盾。
+//
+// 只认 DeadlineExceeded、**不认 Canceled**：客户端中途断开是 ctx 被取消，那确实是
+// 客户端侧，仍须打标（否则供应商要为客户端跑路背锅）。
+//
+// 变异自检验证——删掉 ctx.Err() 这条判据：本用例两条断言全红。
+func TestMarkResponseWriteError_BudgetExhausted_NotMarked(t *testing.T) {
+	exhausted := expiredCtx(t)
+	// 用同一个哨兵实例比对：*net.OpError 按指针身份比 errors.Is，每次 new 一个比不了。
+	cutoff := newWriteCutoffErr()
+
+	got := MarkResponseWriteError(exhausted, cutoff)
+	if IsClientWriteErr(got) {
+		t.Fatal("总时限已耗尽仍被打上写侧标记（会把预算烧完算成客户端不收）")
+	}
+	if got != cutoff {
+		t.Fatalf("不盖标记时必须原样返回同一个错误，实际 %v（want %v）", got, cutoff)
+	}
+	// 形状必须仍是超时类：判定层 isClientDisconnectErr 明确排除超时，靠它不被误判成
+	// 断连，才落回「超时归供应商」。
+	var netErr net.Error
+	if !errors.As(got, &netErr) || !netErr.Timeout() {
+		t.Fatalf("原样返回后丢了超时形态：%v", got)
+	}
+
+	// 客户端中途断开（ctx 被 Canceled，非 DeadlineExceeded）仍须打标。
+	cancelled, cancel2 := context.WithCancel(context.Background())
+	cancel2()
+	if !IsClientWriteErr(MarkResponseWriteError(cancelled, newWriteCutoffErr())) {
+		t.Fatal("客户端断开（ctx=Canceled）被当成了非客户端侧")
+	}
+}
+
+// TestMarkResponseWriteError_LogPipeTeardown_NotMarked 锁 tee 收尾这一格：
+// handler/v1/chat.go 的 io.TeeReader 刻意在方向标记**之外**（管道写失败不是上游腰斩），
+// 故日志侧提前收尾时 pw.Write 抛的 io.ErrClosedPipe 是**没有方向标记的第三种失败源**。
+// 旧口径下它被兜成「客户端」，等于把「上游吐了让解析器提前退出的内容」记成客户端不收。
+//
+// 变异自检验证——删掉 ErrClosedPipe 这条判据：本用例红。
+func TestMarkResponseWriteError_LogPipeTeardown_NotMarked(t *testing.T) {
+	ctx := context.Background()
+	// 真实形状是 fmt.Errorf 包过 io.ErrClosedPipe（TeeReader.Read 从写 pw 的失败里冒出来）。
+	teeErr := fmt.Errorf("write response body failed: %w", io.ErrClosedPipe)
+
+	got := MarkResponseWriteError(ctx, teeErr)
+	if IsClientWriteErr(got) {
+		t.Fatal("日志管道收尾的 io.ErrClosedPipe 被当成客户端侧（诱因通常在上游内容）")
+	}
+	if !errors.Is(got, io.ErrClosedPipe) {
+		t.Fatal("原样返回后丢了 io.ErrClosedPipe，错误链被改动了")
+	}
+}
+
 // TestRecordLog_ClientWriteCutoff_SkipsProviderFailureStat 锁 Stage 39 R3 的统计面：
-// 写回被掐（客户端不收结果）不记供应商失败；上游腰斩与客户端断连照旧记（既有口径不动）。
+// 带**写侧标记**的错误不记供应商失败；上游腰斩、客户端断连、以及 2026-10-04 拍板的
+// 两格（总时限已耗尽 / 日志管道提前收尾）照旧记。
 //
 // 变异自检验证——去掉 `if !IsClientWriteErr(err)` 这一层（= 改动前）：
 // 第一条用例 failure_count 由 0 变 1 → 红。
 func TestRecordLog_ClientWriteCutoff_SkipsProviderFailureStat(t *testing.T) {
+	// 标记的判定只在 MarkResponseWriteError 内部，故此处都用「总时限未到」的活 ctx 造
+	// 标记（写侧标记要成立得过打标函数这一关，两格例外见后两条用例）。
+	live := context.Background()
+	exhausted, cancelExhausted := context.WithDeadline(live, time.Now().Add(-time.Second))
+	defer cancelExhausted()
+
 	cases := []struct {
 		name        string
 		procErr     error
@@ -98,7 +177,7 @@ func TestRecordLog_ClientWriteCutoff_SkipsProviderFailureStat(t *testing.T) {
 	}{
 		{
 			name:        "写回被掐(客户端不收结果)→不记供应商失败",
-			procErr:     fmt.Errorf("write response body failed: %w", MarkResponseWriteError(newWriteCutoffErr())),
+			procErr:     fmt.Errorf("write response body failed: %w", MarkResponseWriteError(live, newWriteCutoffErr())),
 			wantFailure: 0,
 			why:         "供应商把响应完整产出了，记失败会污染面板上的供应商成功率",
 		},
@@ -113,6 +192,18 @@ func TestRecordLog_ClientWriteCutoff_SkipsProviderFailureStat(t *testing.T) {
 			procErr:     fmt.Errorf("write response body failed: %w", context.Canceled),
 			wantFailure: 1,
 			why:         "既有口径（Stage 24/33），本次刻意不动；与写被掐的差异已登记 find-issues",
+		},
+		{
+			name:        "总时限已耗尽→照旧记一次失败",
+			procErr:     fmt.Errorf("write response body failed: %w", MarkResponseWriteError(exhausted, newWriteCutoffErr())),
+			wantFailure: 1,
+			why:         "2026-10-04 拍板：预算烧完算供应商的，与手册「超时归慢供应商」一致",
+		},
+		{
+			name:        "日志管道提前收尾→照旧记一次失败",
+			procErr:     fmt.Errorf("write response body failed: %w", MarkResponseWriteError(live, io.ErrClosedPipe)),
+			wantFailure: 1,
+			why:         "2026-10-04 拍板：tee 收尾的诱因通常在上游内容，不算客户端侧",
 		},
 	}
 
@@ -146,12 +237,16 @@ func captureSlogOutput(t *testing.T) *strings.Builder {
 }
 
 // TestRecordLog_ClientWriteCutoff_LogsAtWarn 锁 Stage 18 的级别口径：客户端侧故障按
-// ERROR 计数会把告警刷爆（「建连即断」同族）。写回被掐是客户端不收结果，属客户端侧 →
-// Warn；上游真故障仍 ERROR。
+// ERROR 计数会把告警刷爆（「建连即断」同族）。带写侧标记的是客户端不收结果 → Warn；
+// 上游真故障、以及 2026-10-04 拍板的两格（总时限已耗尽 / 日志管道提前收尾）仍 ERROR。
 //
 // 变异自检验证——把 `clientSideFailure(err)` 改回 `isClientDisconnectErr(err)`
 // （= 改动前）：写超时不算断连 → 落 ERROR 分支 → 第一条用例红。
 func TestRecordLog_ClientWriteCutoff_LogsAtWarn(t *testing.T) {
+	live := context.Background()
+	exhausted, cancelExhausted := context.WithDeadline(live, time.Now().Add(-time.Second))
+	defer cancelExhausted()
+
 	cases := []struct {
 		name      string
 		procErr   error
@@ -159,13 +254,29 @@ func TestRecordLog_ClientWriteCutoff_LogsAtWarn(t *testing.T) {
 	}{
 		{
 			name:      "写回被掐→Warn",
-			procErr:   fmt.Errorf("write response body failed: %w", MarkResponseWriteError(newWriteCutoffErr())),
+			procErr:   fmt.Errorf("write response body failed: %w", MarkResponseWriteError(live, newWriteCutoffErr())),
 			wantLevel: "level=WARN",
 		},
 		{
 			name:      "上游腰斩→ERROR",
 			procErr:   fmt.Errorf("write response body failed: %w", io.ErrUnexpectedEOF),
 			wantLevel: "level=ERROR",
+		},
+		{
+			name:      "总时限已耗尽→ERROR",
+			procErr:   fmt.Errorf("write response body failed: %w", MarkResponseWriteError(exhausted, newWriteCutoffErr())),
+			wantLevel: "level=ERROR",
+		},
+		{
+			// 这一格的状态是**半实现**：写侧标记已按 2026-10-04 拍板不打（故上面
+			// SkipsProviderFailureStat 矩阵里它记到了供应商失败），但清钉与留痕级别两处
+			// 仍落客户端侧——chat_record.go 的 isClientDisconnectErr 自 Stage 24
+			// （commit 4d1264a「断连类降 Warn」）起就把 io.ErrClosedPipe 直接算断连，
+			// 与本 Stage 的标记是两条独立判据。改那一行等于动 Stage 24 的既有口径，
+			// 待用户拍板，登记在 .local/find-issues。
+			name:      "日志管道提前收尾→当前仍 Warn（待拍板）",
+			procErr:   fmt.Errorf("write response body failed: %w", MarkResponseWriteError(live, io.ErrClosedPipe)),
+			wantLevel: "level=WARN",
 		},
 	}
 

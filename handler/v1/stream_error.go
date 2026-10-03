@@ -67,8 +67,12 @@ func applyClientWriteDeadline(c *gin.Context, ctx context.Context) {
 		// 无总时限即无写上限。入口（chatHandler）必挂 deadline，此处只是不 panic 的兜底。
 		return
 	}
-	// ErrNotSupported = 写端不是真实 net/http 连接（测试里的 recorder 等），无从设限，
-	// 不是运行期异常；其余失败是运行期真降级（客户端不收时可能无限阻塞），留一条痕。
+	// ErrNotSupported = ResponseController 穿不到真实的 net.Conn，生产上有两条触发面：
+	// 测试里的 recorder，以及**被中间件包了一层且没转发 Unwrap 的 ResponseWriter**——
+	// gin-contrib/gzip 的 gzipWriter 就是（实测探针确认返回 ErrNotSupported）。本项目
+	// /v1/ 走 gzip.WithExcludedPaths 排除，故聊天路径不受影响；给别的管理端路径复用本
+	// 函数前须先确认它没被 gzip 包住，否则上限会静默失效。其余失败是运行期真降级
+	// （客户端不收时可能无限阻塞），留一条痕。
 	if err := http.NewResponseController(c.Writer).SetWriteDeadline(deadline); err != nil &&
 		!errors.Is(err, http.ErrNotSupported) {
 		slog.Warn("set client write deadline failed, response may block on a slow client", "error", err)

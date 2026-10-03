@@ -54,7 +54,7 @@ func providerFailureCount(t *testing.T, providerName string) int64 {
 // 错误原样放过**（io.Copy 的错误分不清是读 src 失败还是写 dst 失败，盖上写侧标记会把
 // 「上游腰斩」误判成「客户端不收」，粘性钉定该清的不清、供应商白背锅）；其余才盖写侧
 // 标记，且 errors.Is/As 仍能触达内层（诊断能力不被标记层吞掉）。
-func TestMarkResponseWriteError_三态(t *testing.T) {
+func TestMarkResponseWriteError_UpstreamPassthrough(t *testing.T) {
 	inner := errors.New("boom")
 	// 已带上游标记的读错误：io.Copy 分不清读 src 失败还是写 dst 失败，生产里它必须
 	// 原样穿过 MarkResponseWriteError（否则上游腰斩会被当成客户端不收）。
@@ -72,10 +72,14 @@ func TestMarkResponseWriteError_三态(t *testing.T) {
 		t.Fatal("打标后 errors.Is 触达不到内层错误（诊断能力被标记层吞掉）")
 	}
 
-	if got := MarkResponseWriteError(upstreamMarked); !IsUpstreamReadErr(got) {
+	// 断言必须打在**返回值**上：IsUpstreamReadErr 走 errors.As，能穿过 clientWriteErr 的
+	// Unwrap 摸到内层的 upstreamReadErr，故「包没包」这一条两种实现都成立；查入参则
+	// 与 MarkResponseWriteError 的行为完全无关，删掉它的「原样放过」保护也不会红。
+	gotUp := MarkResponseWriteError(upstreamMarked)
+	if !IsUpstreamReadErr(gotUp) {
 		t.Fatal("上游读错误被写侧标记覆盖，上游方向丢失")
 	}
-	if IsClientWriteErr(upstreamMarked) {
+	if IsClientWriteErr(gotUp) {
 		t.Fatal("上游读错误被判成写客户端错误")
 	}
 }

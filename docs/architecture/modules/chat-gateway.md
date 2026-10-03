@@ -31,6 +31,7 @@ service/
 │   ├── before.go           # 请求前处理（含对话身份键派生：canonicalJSON 规范化语义值，抗序列化漂移）
 │   ├── chat_affinity.go    # 缓存亲和编排单源（2026-09-23）：开关判定、钉定读取（stickyTargetFor）、成功改钉（recordStickyTarget）、提交后失败清钉（clearStickyTarget，2026-10-01）、虚拟路径真实模型稳定前移（preferRealModelsFirst）
 │   ├── upstream_read_error.go # 读侧错误方向标记（2026-10-01）：MarkUpstreamReader 在错误产生处给「读上游」的失败套 upstreamReadErr，IsUpstreamReadErr 供提交后清钉判定区分上游故障与客户端撤走（io.Copy 的 error 不带方向，见 §5）
+│   ├── client_write_error.go # 写侧错误方向标记（2026-10-04，Stage 39）：MarkResponseWriteError 给「写客户端」的失败套 clientWriteErr（已带 upstreamReadErr 的原样放过），IsClientWriteErr 供提交后失败判定的清钉 / 供应商失败统计 / 留痕级别三处共用；与读侧同构，原因同见 §5
 │   ├── process.go          # 响应/SSE 处理
 │   ├── chat_balance*.go    # 选路入口与虚拟模型故障转移（真实/虚拟两条路径的编排）
 │   ├── chat_retry_loop.go  # 单候选池上的重试循环（两条 balance 路径共用；候选级选路经 channel，组内凭据故障转移在候选内层循环）

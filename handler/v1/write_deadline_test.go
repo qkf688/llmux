@@ -49,7 +49,7 @@ func serveOnEphemeralPort(t *testing.T, h http.Handler) string {
 // TestWriteResponseBody_ClientNotReading_CutOffAtTotalTimeout 是本 Stage 的核心用例：
 // 客户端发完请求就再不读响应，服务端必须在该请求的总时限内收场。
 //
-// 变异自检验证——去掉 setClientWriteDeadline 里的 SetWriteDeadline 调用（= 回到改动前）：
+// 变异自检验证——去掉 applyClientWriteDeadline 里的 SetWriteDeadline 调用（= 回到改动前）：
 //   - io.Copy 永久阻塞在 socket 缓冲满的那一刻 → 8s 兜底到点 → 红。
 //
 // 这是「写上限真的挂在写路径上」的证据：recorder 形态下 io.Copy 恒成功，用例会假绿。
@@ -117,14 +117,30 @@ func TestWriteResponseBody_ClientNotReading_CutOffAtTotalTimeout(t *testing.T) {
 // 本项目曾为此写了一段手动清理，是多余实现、已删。本用例改为守住**这个行为**：谁哪天
 // 换掉 server 实现或改走 HTTP/2 而库不再清，它会红。
 //
-// 第二次的响应体必须大到能把 socket 发送缓冲填满，否则测不出：socket deadline 只在
-// 操作**会阻塞**时才生效（写得进缓冲就立刻成功），2 字节的响应即使上限早已过期也
-// 照样发得出去——曾据此写出过一版「第二次请求拿到 200」的假绿用例，变异检验时没咬住。
+// 第二次的响应体必须大到能把 socket 发送缓冲填满，否则测不出。跨平台取 16 MiB 这个
+// 两侧都成立的值：Unix 上 socket deadline 只在操作**会阻塞**时才生效（写得进缓冲就
+// 立刻成功），小响应即使上限早已过期也照样发得出去；Windows 上实测已过期即失败。
+// 曾据此写出过一版「第二次请求拿到 200」的假绿用例，变异检验时没咬住。
 func TestWriteResponseBody_KeepAliveConnUsableAfterDeadlineRequest(t *testing.T) {
 	const limit = 300 * time.Millisecond
 	// 16 MiB：必须超过系统可能自动调大的 socket 发送缓冲（Linux tcp_wmem 封顶 4 MiB），
 	// 写才会真的阻塞、已过期的上限才会显形。
 	bigBody := bytes.Repeat([]byte("x"), 16<<20)
+
+	// 写回错误经通道回测试 goroutine 再断言：testing 规定测试结束后再 Log 会 panic。
+	// 写上限真没清干净时 handler 会报错，而此刻下面的主断言往往已先 t.Fatalf 收场，
+	// 把 t.Errorf 留在 handler goroutine 里就会 panic 盖掉原本干净的失败信息。
+	handlerErrs := make(chan error, 2)
+	t.Cleanup(func() {
+		for {
+			select {
+			case err := <-handlerErrs:
+				t.Errorf("写回失败: %v", err)
+			default:
+				return
+			}
+		}
+	})
 
 	var callCount atomic.Int32
 	router := gin.New()
@@ -136,7 +152,7 @@ func TestWriteResponseBody_KeepAliveConnUsableAfterDeadlineRequest(t *testing.T)
 			src = bytes.NewReader(bigBody) // 第二次：大到填满发送缓冲
 		}
 		if err := writeResponseBody(ctx, c, string(consts.StyleOpenAI), false, src); err != nil {
-			t.Errorf("写回失败: %v", err)
+			handlerErrs <- err
 		}
 	})
 	addr := serveOnEphemeralPort(t, router)

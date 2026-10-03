@@ -209,10 +209,13 @@ const (
 //
 // 只配读方向、不配 WriteTimeout：写上限是**请求级**语义（跟 request_total_timeout 对齐，
 // 见 handler/v1 的 applyClientWriteDeadline），一个全局值会连带砍掉正常的长流式响应。
-func newHTTPServer(addr string, handler http.Handler) *http.Server {
+//
+// 形参不叫 handler：同文件已 import 本项目的 handler 包，起同名会在函数体内把它遮蔽掉
+// （今天函数体不需要引用才编得过），后人往里加一行 handler.Deps 就会撞上。
+func newHTTPServer(addr string, routes http.Handler) *http.Server {
 	return &http.Server{
 		Addr:              addr,
-		Handler:           handler,
+		Handler:           routes,
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       readRequestTimeout,
 	}

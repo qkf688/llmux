@@ -32,9 +32,17 @@ func Metrics(c *gin.Context) {
 	})
 }
 
+// Count 仪表盘真实命中模型排行的一行。
+//
+// 三个 token 字段恒为非负整数、无三态语义，故不设指针也不用 omitempty：
+// 「该模型没有 token 记录」（早于 token 统计起点的历史调用）与「token 确为 0」
+// 在库里无法区分，读侧一律按「未知」呈现，故协议层原样透出 0 由前端决定怎么显示。
 type Count struct {
-	Model string `json:"model"`
-	Calls int64  `json:"calls"`
+	Model            string `json:"model"`
+	Calls            int64  `json:"calls"`
+	PromptTokens     int64  `json:"prompt_tokens"`
+	CompletionTokens int64  `json:"completion_tokens"`
+	TotalTokens      int64  `json:"total_tokens"`
 }
 
 func RealModelCounts(c *gin.Context) {
@@ -46,7 +54,13 @@ func RealModelCounts(c *gin.Context) {
 
 	results := make([]Count, 0, len(rows))
 	for _, row := range rows {
-		results = append(results, Count{Model: row.Name, Calls: row.Calls})
+		results = append(results, Count{
+			Model:            row.Name,
+			Calls:            row.Calls,
+			PromptTokens:     row.PromptTokens,
+			CompletionTokens: row.CompletionTokens,
+			TotalTokens:      row.TotalTokens,
+		})
 	}
 
 	httpresp.Success(c, results)

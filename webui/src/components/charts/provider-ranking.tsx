@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { TrendingUp } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RankEmptyState } from "@/components/charts/rank-empty-state";
 import type { ProviderMetric } from "@/lib/api";
 import { formatCompactCount, formatPercent, formatTimeNs } from "@/lib/formatters";
 
@@ -38,12 +38,7 @@ export function ProviderRankCard({
 
   const renderList = () => {
     if (ranked.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-          <TrendingUp className="w-12 h-12 mb-3 opacity-30" />
-          <p className="text-sm">暂无数据</p>
-        </div>
-      );
+      return <RankEmptyState />;
     }
 
     return (

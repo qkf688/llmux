@@ -36,6 +36,11 @@ type RecordLogInput struct {
 	// 据此判断「这段对话的钉定是否还指着刚失败的这家，要清掉它」——本字段与表内当前钉定
 	// 不一致时（并发里另一次请求刚改过钉）不动它，见 clearStickyTarget / balancer.DeleteIf。
 	ServingModelWithProviderID uint
+
+	// RealModelName 本次真实命中的模型名，与建行时刻写入日志的同源（虚拟路径下
+	// 是落地名，直连时为空 → 由 Before.Model 兜底）。token 统计键靠它，不能从
+	// processer 的返回值取——那边只填了耗时与 usage，模型名不在其中。
+	RealModelName string
 }
 
 // RecordLog 是后处理编排器：processer 解析 → stats 统计 → 日志落库 → raw 字段清理。
@@ -111,6 +116,20 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 		// 统计独立于日志存储：即使关闭日志记录（logID==0），也要写入 tokens 统计。
 		if err := chatstats.RecordTokenStats(ctx, in.ReqStart, logUpdate.Usage.TotalTokens); err != nil {
 			slog.Warn("failed to record token stats", "error", err)
+		}
+
+		// 真实模型维度的 token：与上面的时间维度 token 同一个 usage 快照。
+		// 必须排在 resolveUsageSource 之后（否则用的是修正前的 token），
+		// 也必须在 LogID==0 的早退之前（统计不随关日志关闭）。
+		// 统计键取自入参而非 processer 返回值：后者只填了耗时与 usage。
+		if err := chatstats.RecordRealModelTokenStats(
+			ctx,
+			realModelStatKeyOf(in.RealModelName, in.Before.Model),
+			logUpdate.Usage.PromptTokens,
+			logUpdate.Usage.CompletionTokens,
+			logUpdate.Usage.TotalTokens,
+		); err != nil {
+			slog.Warn("failed to record real model token stats", "error", err)
 		}
 
 		responseTimeMs := int64(logUpdate.FirstChunkTime.Milliseconds())

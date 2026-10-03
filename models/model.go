@@ -482,11 +482,22 @@ type StatsHourly struct {
 
 // StatsRealModelTotal 真实命中模型调用统计（全量累计）
 // 口径：按 ChatLog.RealModelName（为空时由写入侧回退到 ChatLog.Name）累计。
+//
+// Calls 与 token 三列的写入点不同，这是 usage 的时序决定的，不是随意分工：
+// Calls 在建行时刻（SaveChatLog）就确定，那一刻只有模型名；token 要等上游响应
+// 结束、转换层归集出 usage 才拿得到，只能在结算点（chat.RecordLog）累加。
+// 两条路径用同一个模型名口径（RealModelName 空则回落 Name），故两套数字可对账。
 type StatsRealModelTotal struct {
-	Name      string    `gorm:"primaryKey;type:varchar(255)" json:"name"`
-	Calls     int64     `json:"calls"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Name  string `gorm:"primaryKey;type:varchar(255)" json:"name"`
+	Calls int64  `json:"calls"`
+	// Token 三列与 Calls 的历史起点不同：2026-09-09 之前 chat_logs 已被保留策略
+	// 清空，那些调用的 token 无法回填，故早于该日期的模型此三列恒为 0。
+	// 读侧（仪表盘）须把 0 显示为「未知」而非「零消耗」。
+	PromptTokens     int64     `json:"prompt_tokens"`
+	CompletionTokens int64     `json:"completion_tokens"`
+	TotalTokens      int64     `json:"total_tokens"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // StatsProviderTotal 供应商调用统计（全量累计）

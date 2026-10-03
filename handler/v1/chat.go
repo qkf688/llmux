@@ -197,6 +197,7 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 		ProviderName:               balanced.ProviderName,
 		SideChannel:                balanced.SideChannel,
 		ServingModelWithProviderID: balanced.ServingModelWithProviderID,
+		RealModelName:              balanced.RealModelName,
 	}, res.Body)
 
 	writeHeader(c, ctx, before.Stream, res.Header)

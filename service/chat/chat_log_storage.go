@@ -34,6 +34,29 @@ func withDetachedLogCtx(ctx context.Context, fn func(ctx context.Context)) {
 	fn(detached)
 }
 
+// realModelStatKeyOf 真实模型维度统计的键：优先真实命中模型名，为空时回退
+// 用户请求的模型名（虚拟选模失败的异常路径只写得出后者）。
+//
+// 口径单源的理由：calls 在建行时刻（SaveChatLog）记一次，token 在结算时刻
+// （RecordLog）再记一次，两次写同一张表的同一主键。口径若在两处各写一遍，
+// 将来改动只落一处就会让同一模型裂成两行各自计数——且这种错账在 UI 上完全
+// 看不出来（排行照常显示，只是数字对不上）。
+//
+// 两个参数分开传而不是收 *models.ChatLog：结算时刻的 processer 返回值只填了
+// 耗时与 usage，模型名不在其中（见 process.go 的 createProcesser），只能由
+// 调用方按 RecordLogInput 的同源字段传进来。
+func realModelStatKeyOf(realModelName, name string) string {
+	if realModelName != "" {
+		return realModelName
+	}
+	return name
+}
+
+// realModelStatKey 建行时刻的键，直接取日志快照上的两个字段。
+func realModelStatKey(log *models.ChatLog) string {
+	return realModelStatKeyOf(log.RealModelName, log.Name)
+}
+
 func SaveChatLog(ctx context.Context, log models.ChatLog) (uint, error) {
 	// Stage 17 收口：统计与建行的写库 ctx 不随请求取消——日志留痕是审计副作用，
 	// 不陪葬在途请求的生死。
@@ -45,10 +68,7 @@ func SaveChatLog(ctx context.Context, log models.ChatLog) (uint, error) {
 		slog.Warn("failed to record request stats", "error", err)
 	}
 	// 真实模型统计：优先用 RealModelName，异常路径回退到 Name。
-	realModelName := log.RealModelName
-	if realModelName == "" {
-		realModelName = log.Name
-	}
+	realModelName := realModelStatKey(&log)
 	if err := chatstats.RecordRealModelRequestStats(writeCtx, realModelName); err != nil {
 		slog.Warn("failed to record real model request stats", "error", err)
 	}

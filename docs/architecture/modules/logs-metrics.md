@@ -38,9 +38,9 @@ models/retention.go
 |------|------|----------|--------|
 | `chatLogResponse` / `chatIOResponse` | `/api/logs*` 与 `/api/logs/:id/chat-io` 的对外响应契约（全 snake_case），与 `models.ChatLog`/`ChatIO` 解耦；含两个读时计算字段 `unclaimed_request_fields` / `mismatched_request_fields`（见下）；S3-3 起含四个调度明细键 `endpoint_protocol`/`endpoint_url`/`key_group_name`/`credential_note`（映射 `ChatLog` 同字段，前端 logs 展示层已按同名键消费）；#4-3 起含两个密钥归因键 `api_key_id`/`api_key_name`（映射 `ChatLog` 同字段，见下） | `handler/logs/dto.go` | 同文件的 `buildChatLogResponse` / `buildChatIOResponse` / `computeRequestFieldDiagnostics`（`computeUnclaimedRequestFields` / `computeMismatchedRequestFields` 各传一组检测函数 + 哨兵） |
 | `ChatLogRepo` / `ChatIORepo` | 日志与 IO 持久化访问 | `repository/chat_log.go` | GORM |
-| `StatsRepo` | 四张 Stats* 表（StatsTotal/Daily/Hourly + StatsRealModelTotal）的写入（`AddTimeBased`/`IncRealModelCalls`/`AddProviderStats`）与读侧聚合（`GetTotal`/`SumDailiesSince`/`List*`）。**StatsModelTotal 已废弃**（仪表盘不再按「用户请求模型名」维度独立排行） | `repository/stats.go` | GORM（`clause.OnConflict` upsert） |
+| `StatsRepo` | 四张 Stats* 表（StatsTotal/Daily/Hourly + StatsRealModelTotal）的写入（`AddTimeBased`/`IncRealModelCalls`/`AddRealModelTokens`/`AddProviderStats`）与读侧聚合（`GetTotal`/`SumDailiesSince`/`List*`）。**StatsModelTotal 已废弃**（仪表盘不再按「用户请求模型名」维度独立排行） | `repository/stats.go` | GORM（`clause.OnConflict` upsert） |
 | `RecordLog` / 落库编排 | 请求结束后 processer + 落库；processer 失败分支是**响应已开写后**所有后处理失败的唯一收口（写 `Status=error` + 一条留痕），并据入参 `ServingModelWithProviderID` 与失败分类决定是否清除该对话的粘性钉定（见 chat-gateway §5「提交后失败清钉」） | `service/chat` | 同包 |
-| `chatstats.Record*` | 请求/token/供应商统计累加 | `service/chatstats/` | 同包 |
+| `chatstats.Record*` | 请求/token/供应商统计累加。`StatsRealModelTotal` 的两次写入**分属不同时点**且口径必须同源：`IncRealModelCalls` 在建行时刻（`SaveChatLog`）记 calls，token 要等上游响应结束、转换层归集出 usage 才拿得到，故在结算时刻（`RecordLog`）由 `RecordRealModelTokenStats` 补记。统计键单源于 `service/chat/chat_log_storage.go` 的 `realModelStatKeyOf`（真实命中名优先、为空回落用户请求名）——两次若各写一遍口径，同一模型会裂成两行各自计数且看板看不出异常。**结算时刻的统计键取自 `RecordLogInput.RealModelName` 而非 processer 返回值**（后者只填了耗时与 usage，见 `process.go` 的 `createProcesser`），该字段自 `BalanceResult` 沿选路链路透传，与建行同源于 `retryLoopInput.RealModelName` | `service/chatstats/` | 同包 |
 | `EnforceRetentionByOldestID` | 按策略裁剪旧日志 | `models/retention.go` | 同文件 |
 
 ## 5. 特殊约定

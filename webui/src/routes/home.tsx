@@ -178,7 +178,8 @@ export default function Home() {
         </CardHeader>
         <CardContent className="px-3 sm:px-6">
           <div className="rounded-lg border bg-card/50 p-3 sm:p-4">
-            <div className="text-xs text-muted-foreground mb-2">真实命中模型排行</div>
+            {/* 小节标题「真实命中模型排行」与次数/Token 切换器同属 ModelRankingList
+                内部（一行内左右分置），此处不再重复渲染。 */}
             <Suspense fallback={<Loading message="加载真实模型排行..." />}>
               <ModelRankingList data={realModelCounts} />
             </Suspense>

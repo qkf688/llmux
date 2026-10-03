@@ -135,6 +135,96 @@ func TestStatsRepo_AddProviderStats(t *testing.T) {
 	}
 }
 
+// realModelRow 读单行真实模型统计，空表时返回 nil。
+func realModelRow(t *testing.T, ctx context.Context, repo StatsRepo, name string) *models.StatsRealModelTotal {
+	t.Helper()
+	rows, err := repo.ListRealModelCallsDesc(ctx)
+	if err != nil {
+		t.Fatalf("list real model totals: %v", err)
+	}
+	for i := range rows {
+		if rows[i].Name == name {
+			return &rows[i]
+		}
+	}
+	return nil
+}
+
+func TestStatsRepo_AddRealModelTokens_AccumulatesAlongsideCalls(t *testing.T) {
+	ctx := context.Background()
+	repo := NewStatsRepo(newStatsTestDB(t))
+
+	// 先建行计 calls（建行时刻），再结算 token（结算时刻）——生产路径的先后顺序。
+	if err := repo.IncRealModelCalls(ctx, "m1"); err != nil {
+		t.Fatalf("inc calls: %v", err)
+	}
+	if err := repo.AddRealModelTokens(ctx, RealModelTokenDelta{
+		Name: "m1", PromptTokens: 100, CompletionTokens: 20, TotalTokens: 120,
+	}); err != nil {
+		t.Fatalf("add tokens: %v", err)
+	}
+	if err := repo.AddRealModelTokens(ctx, RealModelTokenDelta{
+		Name: "m1", PromptTokens: 50, CompletionTokens: 10, TotalTokens: 60,
+	}); err != nil {
+		t.Fatalf("add tokens again: %v", err)
+	}
+
+	row := realModelRow(t, ctx, repo, "m1")
+	if row == nil {
+		t.Fatal("m1 row missing, want calls and tokens on the same row")
+	}
+	if row.TotalTokens != 180 || row.PromptTokens != 150 || row.CompletionTokens != 30 {
+		t.Fatalf("tokens = %d/%d/%d, want 180/150/30",
+			row.TotalTokens, row.PromptTokens, row.CompletionTokens)
+	}
+	// token 写入走独立 upsert，若它整行覆盖过会把已记的 calls 抹成 0。
+	if row.Calls != 1 {
+		t.Fatalf("calls = %d, want 1（token 累加不得覆盖 calls）", row.Calls)
+	}
+}
+
+func TestStatsRepo_AddRealModelTokens_RejectsNoOp(t *testing.T) {
+	ctx := context.Background()
+	repo := NewStatsRepo(newStatsTestDB(t))
+
+	// 空模型名不建行。
+	if err := repo.AddRealModelTokens(ctx, RealModelTokenDelta{TotalTokens: 100}); err != nil {
+		t.Fatalf("empty name should be a no-op, got %v", err)
+	}
+	// 失败请求无 usage，三列全 0：建行只会造出「有行但恒零」的假账，
+	// 读侧无法区分「真没消耗」与「没上报 usage」。
+	if err := repo.AddRealModelTokens(ctx, RealModelTokenDelta{Name: "m1"}); err != nil {
+		t.Fatalf("all-zero delta should be a no-op, got %v", err)
+	}
+	if row := realModelRow(t, ctx, repo, "m1"); row != nil {
+		t.Fatalf("row = %+v, want no row written", row)
+	}
+}
+
+func TestStatsRepo_AddRealModelTokens_AccumulatesOnlyPositiveColumns(t *testing.T) {
+	ctx := context.Background()
+	repo := NewStatsRepo(newStatsTestDB(t))
+
+	// 上游只回 total 未拆分输入输出时，拆分两列不应被写成 0 以外的任何值。
+	if err := repo.AddRealModelTokens(ctx, RealModelTokenDelta{Name: "m1", TotalTokens: 500}); err != nil {
+		t.Fatalf("add total only: %v", err)
+	}
+	row := realModelRow(t, ctx, repo, "m1")
+	if row == nil || row.TotalTokens != 500 || row.PromptTokens != 0 || row.CompletionTokens != 0 {
+		t.Fatalf("row = %+v, want total 500 with split columns untouched", row)
+	}
+	// 负数（上游脏 usage）不得倒扣已累计值。
+	if err := repo.AddRealModelTokens(ctx, RealModelTokenDelta{
+		Name: "m1", PromptTokens: -1, CompletionTokens: -1, TotalTokens: -1,
+	}); err != nil {
+		t.Fatalf("negative delta should be skipped, got %v", err)
+	}
+	row = realModelRow(t, ctx, repo, "m1")
+	if row.TotalTokens != 500 {
+		t.Fatalf("total = %d, want 500（负增量不得倒扣）", row.TotalTokens)
+	}
+}
+
 func TestStatsRepo_ReadsFilterByDate(t *testing.T) {
 	ctx := context.Background()
 	repo := NewStatsRepo(newStatsTestDB(t))

@@ -33,6 +33,11 @@ type BalanceResult struct {
 	// 0 = 无可比对对象。提交后失败发生在响应已交付之后、下游只能经日志管道感知，日志
 	// 侧据此判断「这段对话的钉定是否还指着刚失败的这家」——详见 clearStickyTarget。
 	ServingModelWithProviderID uint
+
+	// RealModelName 本次真实命中的模型名（虚拟路径下的落地名；直连时与 Before.Model 同值）。
+	// 与 ProviderName 同为「选路结果」的一部分，须一并带到后处理：token 只有响应结束
+	// 才归集得到，届时已没有选路上下文，而按 chat_logs 回读在关日志时根本没有行可读。
+	RealModelName string
 }
 
 // BalanceChat 是两条候选路径（真实 / 虚拟模型）的公共出口。超时归因映射只在本

@@ -37,9 +37,20 @@ type ProviderStatsDelta struct {
 	Tokens         int64
 }
 
+// RealModelTokenDelta 真实模型维度的一次 token 增量。
+// 与 ProviderStatsDelta.Tokens 单列不同，这里分列携带输入/输出：
+// 读侧要展示输入输出构成，且两者的比值是识别上游 usage 归集异常
+// （输入远小于输出等）的唯一依据，压成总数就再也拆不开了。
+type RealModelTokenDelta struct {
+	Name             string
+	PromptTokens     int64
+	CompletionTokens int64
+	TotalTokens      int64
+}
+
 // StatsRepo 封装四张统计表（StatsTotal / StatsDaily / StatsHourly /
 // StatsProviderTotal）的数据访问。StatsModelTotal 已废弃（仪表盘不再按
-//「用户请求模型名」维度独立排行，详见 models/migrate.go 的 dropLegacyStatsModelTable）。
+// 「用户请求模型名」维度独立排行，详见 models/migrate.go 的 dropLegacyStatsModelTable）。
 // 写侧按语义建模而非按表建模：调用方不需要知道「时间维度统计是三张表」。
 type StatsRepo interface {
 	// AddTimeBased 按 at 所属日期/小时，向 total/daily/hourly 三表的同一字段累加 delta。
@@ -47,7 +58,12 @@ type StatsRepo interface {
 	// 统计数据允许部分丢失，不值得为它承担事务开销。
 	AddTimeBased(ctx context.Context, at time.Time, field TimeStatsField, delta int64) error
 	// IncRealModelCalls 累加真实模型维度调用次数；name 为空时不写入。
+	// 建行时刻（SaveChatLog）调用：那刻只有模型名，token 尚不可知。
 	IncRealModelCalls(ctx context.Context, name string) error
+	// AddRealModelTokens 累加真实模型维度 token；name 为空或三列全为 0 时不写入
+	// （失败请求没有 usage，写 0 行只会让读侧把「未知」误显成「零消耗」）。
+	// 结算时刻（chat.RecordLog）调用，与 IncRealModelCalls 分属不同时点。
+	AddRealModelTokens(ctx context.Context, d RealModelTokenDelta) error
 	// AddProviderStats 累加供应商维度请求/成功失败/token/累计响应时间；ProviderName 为空时不写入。
 	AddProviderStats(ctx context.Context, d ProviderStatsDelta) error
 
@@ -151,6 +167,41 @@ func (r *statsRepo) incCallsByName(ctx context.Context, row any) error {
 			"updated_at": time.Now(),
 		}),
 	}).Create(row).Error
+}
+
+// AddRealModelTokens 累加真实模型维度 token 三列。只累加实际有值的列——
+// 失败请求没有 usage，其三列全 0；此时若照写会造出一行 calls 有值、token 恒 0
+// 的记录，读侧无法区分「这次请求真没消耗」与「这次请求没上报 usage」。
+func (r *statsRepo) AddRealModelTokens(ctx context.Context, d RealModelTokenDelta) error {
+	if d.Name == "" {
+		return nil
+	}
+	updates := map[string]any{"updated_at": time.Now()}
+	if d.PromptTokens > 0 {
+		updates["prompt_tokens"] = gorm.Expr("prompt_tokens + ?", d.PromptTokens)
+	}
+	if d.CompletionTokens > 0 {
+		updates["completion_tokens"] = gorm.Expr("completion_tokens + ?", d.CompletionTokens)
+	}
+	if d.TotalTokens > 0 {
+		updates["total_tokens"] = gorm.Expr("total_tokens + ?", d.TotalTokens)
+	}
+	if len(updates) == 1 {
+		return nil
+	}
+
+	// Create 侧必须带真实初值：ON CONFLICT DO UPDATE 只在主键冲突时执行，
+	// 没有 calls 行的新模型走的是纯 INSERT，此时写进去的是 Create 的值——
+	// 漏带就会把这次 token 记成 0（DoUpdates 里的累加表达式对新行不参与）。
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "name"}},
+		DoUpdates: clause.Assignments(updates),
+	}).Create(&models.StatsRealModelTotal{
+		Name:             d.Name,
+		PromptTokens:     max(d.PromptTokens, 0),
+		CompletionTokens: max(d.CompletionTokens, 0),
+		TotalTokens:      max(d.TotalTokens, 0),
+	}).Error
 }
 
 func (r *statsRepo) AddProviderStats(ctx context.Context, d ProviderStatsDelta) error {

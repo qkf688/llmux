@@ -290,6 +290,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 					// 「转移成功后腰斩」这个最常见的循环挡在门外。组内换 key 不影响本
 					// 字段：清的是关联级记忆。
 					ServingModelWithProviderID: modelWithProvider.ID,
+					RealModelName:              in.RealModelName,
 				}}
 			}
 

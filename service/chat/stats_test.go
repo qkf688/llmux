@@ -53,14 +53,6 @@ func TestDisableAllLogs_StillUpdatesStats(t *testing.T) {
 		t.Fatalf("daily.tokens = %d, want 0 before RecordLog", daily.Tokens)
 	}
 
-	var modelTotal models.StatsModelTotal
-	if err := models.DB.First(&modelTotal, "name = ?", "m1").Error; err != nil {
-		t.Fatalf("load stats model total: %v", err)
-	}
-	if modelTotal.Calls != 1 {
-		t.Fatalf("modelTotal.calls = %d, want 1", modelTotal.Calls)
-	}
-
 	var realModelTotal models.StatsRealModelTotal
 	if err := models.DB.First(&realModelTotal, "name = ?", "m1").Error; err != nil {
 		t.Fatalf("load stats real model total: %v", err)

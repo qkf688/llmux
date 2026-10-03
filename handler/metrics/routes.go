@@ -7,7 +7,6 @@ func Register(rg gin.IRoutes) {
 	rg.GET("/metrics/use/:days", Metrics)
 	rg.GET("/metrics/dailies/:days", MetricsDailies)
 	rg.GET("/metrics/hourlies/today", MetricsHourliesToday)
-	rg.GET("/metrics/counts", Counts)
 	rg.GET("/metrics/real-model-counts", RealModelCounts)
 	rg.GET("/metrics/total", MetricsTotal)
 	rg.GET("/metrics/providers", ProviderMetrics)

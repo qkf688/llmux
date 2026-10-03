@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"encoding/json"
+	"net/http/httptest"
 	"strconv"
 	"testing"
 	"time"
@@ -12,16 +13,63 @@ import (
 	"github.com/qkf688/llmux/models"
 )
 
-func TestMetricsAndCounts_NotAffectedByClearAllLogs(t *testing.T) {
+// assertEnvelopeOK 通用「HTTP 200 + 解码 APIEnvelope + Code=200」三段断言，
+// 把 status/Code/unmarshal 三行交给一处管，调用方只关心数据字段。metrics
+// handler 测试里多处复用（check-duplicates 重复率门要求同块 10 行 × ≥2
+// 处合并到抽象）。
+func assertEnvelopeOK[T any](t *testing.T, w *httptest.ResponseRecorder, label string) testsupport.APIEnvelope[T] {
+	t.Helper()
+	if w.Code != 200 {
+		t.Fatalf("%s: status = %d, want 200, body=%s", label, w.Code, w.Body.String())
+	}
+	var payload testsupport.APIEnvelope[T]
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("%s: unmarshal: %v, body=%s", label, err, w.Body.String())
+	}
+	if payload.Code != 200 {
+		t.Fatalf("%s: payload code = %d, want 200", label, payload.Code)
+	}
+	return payload
+}
+
+// assertMetricsUse 调用 /metrics/use/:days 并断言返回的 reqs/tokens。
+// before / after clear + days=30 sanity-check 共三处复用此形状。
+func assertMetricsUse(t *testing.T, days int, wantReqs, wantTokens int64, label string) {
+	t.Helper()
+	dayStr := strconv.Itoa(days)
+	c, w := testsupport.NewTestContext("GET", "/metrics/use/"+dayStr)
+	c.Params = gin.Params{{Key: "days", Value: dayStr}}
+	Metrics(c)
+	payload := assertEnvelopeOK[MetricsRes](t, w, label)
+	if payload.Data.Reqs != wantReqs || payload.Data.Tokens != wantTokens {
+		t.Fatalf("%s: metrics = %+v, want reqs=%d tokens=%d", label, payload.Data, wantReqs, wantTokens)
+	}
+}
+
+// assertRealModelCounts 调用 /metrics/real-model-counts 并断言首条数据。
+// before / after clear 两处复用此形状。
+func assertRealModelCounts(t *testing.T, wantModel string, wantCalls int64, label string) {
+	t.Helper()
+	c, w := testsupport.NewTestContext("GET", "/metrics/real-model-counts")
+	RealModelCounts(c)
+	payload := assertEnvelopeOK[[]Count](t, w, label)
+	if len(payload.Data) == 0 || payload.Data[0].Model != wantModel || payload.Data[0].Calls != wantCalls {
+		t.Fatalf("%s: real model counts = %+v, want first item %s=%d", label, payload.Data, wantModel, wantCalls)
+	}
+}
+
+// TestMetricsAndRealModelCounts_NotAffectedByClearAllLogs 端到端验证：
+// StatsDaily（时间维度）与 StatsRealModelTotal（真实模型累计）的指标在清空
+// chat_logs 后不受影响——这两张累计表由 chatstats 写入路径独立维护，与日志
+// 详情表无依赖。StatsModelTotal 已废弃（仪表盘不再按「用户请求模型名」维度
+// 独立排行），不再断言。
+func TestMetricsAndRealModelCounts_NotAffectedByClearAllLogs(t *testing.T) {
 	testsupport.InitTestDB(t)
 
 	today := time.Now().Format("2006-01-02")
 
 	if err := models.DB.Create(&models.StatsDaily{Date: today, Reqs: 7, Tokens: 99}).Error; err != nil {
 		t.Fatalf("create stats daily: %v", err)
-	}
-	if err := models.DB.Create(&models.StatsModelTotal{Name: "m1", Calls: 42}).Error; err != nil {
-		t.Fatalf("create stats model total: %v", err)
 	}
 	if err := models.DB.Create(&models.StatsRealModelTotal{Name: "m1", Calls: 5}).Error; err != nil {
 		t.Fatalf("create stats real model total: %v", err)
@@ -36,64 +84,8 @@ func TestMetricsAndCounts_NotAffectedByClearAllLogs(t *testing.T) {
 		t.Fatalf("create chat io: %v", err)
 	}
 
-	// metrics before clear
-	{
-		c, w := testsupport.NewTestContext("GET", "/metrics/use/0")
-		c.Params = gin.Params{{Key: "days", Value: "0"}}
-		Metrics(c)
-		if w.Code != 200 {
-			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
-		}
-
-		var payload testsupport.APIEnvelope[MetricsRes]
-		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
-			t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
-		}
-		if payload.Code != 200 {
-			t.Fatalf("payload code = %d, want 200, body=%s", payload.Code, w.Body.String())
-		}
-		if payload.Data.Reqs != 7 || payload.Data.Tokens != 99 {
-			t.Fatalf("metrics = %+v, want reqs=7 tokens=99", payload.Data)
-		}
-	}
-
-	// counts before clear
-	{
-		c, w := testsupport.NewTestContext("GET", "/metrics/counts")
-		Counts(c)
-		if w.Code != 200 {
-			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
-		}
-		var payload testsupport.APIEnvelope[[]Count]
-		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
-			t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
-		}
-		if payload.Code != 200 {
-			t.Fatalf("payload code = %d, want 200, body=%s", payload.Code, w.Body.String())
-		}
-		if len(payload.Data) == 0 || payload.Data[0].Model != "m1" || payload.Data[0].Calls != 42 {
-			t.Fatalf("counts = %+v, want first item m1=42", payload.Data)
-		}
-	}
-
-	// real model counts before clear
-	{
-		c, w := testsupport.NewTestContext("GET", "/metrics/real-model-counts")
-		RealModelCounts(c)
-		if w.Code != 200 {
-			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
-		}
-		var payload testsupport.APIEnvelope[[]Count]
-		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
-			t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
-		}
-		if payload.Code != 200 {
-			t.Fatalf("payload code = %d, want 200, body=%s", payload.Code, w.Body.String())
-		}
-		if len(payload.Data) == 0 || payload.Data[0].Model != "m1" || payload.Data[0].Calls != 5 {
-			t.Fatalf("real model counts = %+v, want first item m1=5", payload.Data)
-		}
-	}
+	assertMetricsUse(t, 0, 7, 99, "before clear")
+	assertRealModelCounts(t, "m1", 5, "before clear")
 
 	// clear logs
 	{
@@ -116,64 +108,8 @@ func TestMetricsAndCounts_NotAffectedByClearAllLogs(t *testing.T) {
 		}
 	}
 
-	// metrics after clear
-	{
-		c, w := testsupport.NewTestContext("GET", "/metrics/use/0")
-		c.Params = gin.Params{{Key: "days", Value: "0"}}
-		Metrics(c)
-		if w.Code != 200 {
-			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
-		}
-
-		var payload testsupport.APIEnvelope[MetricsRes]
-		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
-			t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
-		}
-		if payload.Code != 200 {
-			t.Fatalf("payload code = %d, want 200, body=%s", payload.Code, w.Body.String())
-		}
-		if payload.Data.Reqs != 7 || payload.Data.Tokens != 99 {
-			t.Fatalf("metrics after clear = %+v, want reqs=7 tokens=99", payload.Data)
-		}
-	}
-
-	// counts after clear
-	{
-		c, w := testsupport.NewTestContext("GET", "/metrics/counts")
-		Counts(c)
-		if w.Code != 200 {
-			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
-		}
-		var payload testsupport.APIEnvelope[[]Count]
-		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
-			t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
-		}
-		if payload.Code != 200 {
-			t.Fatalf("payload code = %d, want 200, body=%s", payload.Code, w.Body.String())
-		}
-		if len(payload.Data) == 0 || payload.Data[0].Model != "m1" || payload.Data[0].Calls != 42 {
-			t.Fatalf("counts after clear = %+v, want first item m1=42", payload.Data)
-		}
-	}
-
-	// real model counts after clear
-	{
-		c, w := testsupport.NewTestContext("GET", "/metrics/real-model-counts")
-		RealModelCounts(c)
-		if w.Code != 200 {
-			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
-		}
-		var payload testsupport.APIEnvelope[[]Count]
-		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
-			t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
-		}
-		if payload.Code != 200 {
-			t.Fatalf("payload code = %d, want 200, body=%s", payload.Code, w.Body.String())
-		}
-		if len(payload.Data) == 0 || payload.Data[0].Model != "m1" || payload.Data[0].Calls != 5 {
-			t.Fatalf("real model counts after clear = %+v, want first item m1=5", payload.Data)
-		}
-	}
+	assertMetricsUse(t, 0, 7, 99, "after clear")
+	assertRealModelCounts(t, "m1", 5, "after clear")
 
 	// Ensure the log tables are actually cleared.
 	{
@@ -195,22 +131,5 @@ func TestMetricsAndCounts_NotAffectedByClearAllLogs(t *testing.T) {
 	}
 
 	// Also sanity-check Metrics with days=30 uses the same source (stats_dailies).
-	{
-		c, w := testsupport.NewTestContext("GET", "/metrics/use/30")
-		c.Params = gin.Params{{Key: "days", Value: strconv.Itoa(30)}}
-		Metrics(c)
-		if w.Code != 200 {
-			t.Fatalf("status code = %d, want 200, body=%s", w.Code, w.Body.String())
-		}
-		var payload testsupport.APIEnvelope[MetricsRes]
-		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
-			t.Fatalf("unmarshal response: %v, body=%s", err, w.Body.String())
-		}
-		if payload.Code != 200 {
-			t.Fatalf("payload code = %d, want 200, body=%s", payload.Code, w.Body.String())
-		}
-		if payload.Data.Reqs != 7 || payload.Data.Tokens != 99 {
-			t.Fatalf("metrics 30 days = %+v, want reqs=7 tokens=99", payload.Data)
-		}
-	}
+	assertMetricsUse(t, 30, 7, 99, "30 days")
 }

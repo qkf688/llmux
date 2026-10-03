@@ -480,14 +480,6 @@ type StatsHourly struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// StatsModelTotal 模型调用统计（全量累计）
-type StatsModelTotal struct {
-	Name      string    `gorm:"primaryKey;type:varchar(255)" json:"name"`
-	Calls     int64     `json:"calls"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
-
 // StatsRealModelTotal 真实命中模型调用统计（全量累计）
 // 口径：按 ChatLog.RealModelName（为空时由写入侧回退到 ChatLog.Name）累计。
 type StatsRealModelTotal struct {

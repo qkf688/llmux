@@ -27,7 +27,7 @@ handler/metrics/       # dashboard 计数与时序
 service/chat/*record* / chat_log_storage.go  # 日志落库编排
 service/chatstats/     # Stats* 写入组合（叶子包，经 StatsRepo）
 repository/chat_log.go
-repository/stats.go    # 六张 Stats* 表的 upsert 与聚合读
+repository/stats.go    # 四张 Stats* 表（StatsTotal/Daily/Hourly/ProviderTotal）的 upsert 与聚合读
 models.ChatLog / ChatIO / Stats*
 models/retention.go
 ```
@@ -38,7 +38,7 @@ models/retention.go
 |------|------|----------|--------|
 | `chatLogResponse` / `chatIOResponse` | `/api/logs*` 与 `/api/logs/:id/chat-io` 的对外响应契约（全 snake_case），与 `models.ChatLog`/`ChatIO` 解耦；含两个读时计算字段 `unclaimed_request_fields` / `mismatched_request_fields`（见下）；S3-3 起含四个调度明细键 `endpoint_protocol`/`endpoint_url`/`key_group_name`/`credential_note`（映射 `ChatLog` 同字段，前端 logs 展示层已按同名键消费）；#4-3 起含两个密钥归因键 `api_key_id`/`api_key_name`（映射 `ChatLog` 同字段，见下） | `handler/logs/dto.go` | 同文件的 `buildChatLogResponse` / `buildChatIOResponse` / `computeRequestFieldDiagnostics`（`computeUnclaimedRequestFields` / `computeMismatchedRequestFields` 各传一组检测函数 + 哨兵） |
 | `ChatLogRepo` / `ChatIORepo` | 日志与 IO 持久化访问 | `repository/chat_log.go` | GORM |
-| `StatsRepo` | 六张 Stats* 表的写入（`AddTimeBased`/`IncModelCalls`/`IncRealModelCalls`/`AddProviderStats`）与读侧聚合（`GetTotal`/`SumDailiesSince`/`List*`） | `repository/stats.go` | GORM（`clause.OnConflict` upsert） |
+| `StatsRepo` | 四张 Stats* 表（StatsTotal/Daily/Hourly + StatsRealModelTotal）的写入（`AddTimeBased`/`IncRealModelCalls`/`AddProviderStats`）与读侧聚合（`GetTotal`/`SumDailiesSince`/`List*`）。**StatsModelTotal 已废弃**（仪表盘不再按「用户请求模型名」维度独立排行） | `repository/stats.go` | GORM（`clause.OnConflict` upsert） |
 | `RecordLog` / 落库编排 | 请求结束后 processer + 落库；processer 失败分支是**响应已开写后**所有后处理失败的唯一收口（写 `Status=error` + 一条留痕），并据入参 `ServingModelWithProviderID` 与失败分类决定是否清除该对话的粘性钉定（见 chat-gateway §5「提交后失败清钉」） | `service/chat` | 同包 |
 | `chatstats.Record*` | 请求/token/供应商统计累加 | `service/chatstats/` | 同包 |
 | `EnforceRetentionByOldestID` | 按策略裁剪旧日志 | `models/retention.go` | 同文件 |

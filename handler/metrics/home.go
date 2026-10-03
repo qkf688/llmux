@@ -37,21 +37,6 @@ type Count struct {
 	Calls int64  `json:"calls"`
 }
 
-func Counts(c *gin.Context) {
-	rows, err := repos().Stats.ListModelCallsDesc(c.Request.Context())
-	if err != nil {
-		httpresp.InternalServerError(c, err)
-		return
-	}
-
-	results := make([]Count, 0, len(rows))
-	for _, row := range rows {
-		results = append(results, Count{Model: row.Name, Calls: row.Calls})
-	}
-
-	httpresp.Success(c, results)
-}
-
 func RealModelCounts(c *gin.Context) {
 	rows, err := repos().Stats.ListRealModelCallsDesc(c.Request.Context())
 	if err != nil {

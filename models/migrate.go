@@ -29,7 +29,6 @@ func migrate(ctx context.Context) {
 		&StatsTotal{},
 		&StatsDaily{},
 		&StatsHourly{},
-		&StatsModelTotal{},
 		&StatsRealModelTotal{},
 		&StatsProviderTotal{},
 		&Setting{},
@@ -45,6 +44,7 @@ func migrate(ctx context.Context) {
 	purgeSoftDeleted(ctx, &VirtualModelMapping{}, &ModelTemplateItem{}, &VirtualModel{}, &Setting{})
 	cleanupSoftDeletedModels(ctx)
 	dropLegacyProviderAuthType(DB)
+	dropLegacyStatsModelTable(DB)
 	// 兼容性考虑
 	if _, err := gorm.G[ModelWithProvider](DB).Where("status IS NULL").Update(ctx, "status", true); err != nil {
 		panic(err)
@@ -157,5 +157,18 @@ func dropLegacyProviderAuthType(db *gorm.DB) {
 	}
 	if err := db.Exec("ALTER TABLE providers DROP COLUMN auth_type").Error; err != nil {
 		panic(fmt.Errorf("drop legacy providers.auth_type column: %w", err))
+	}
+}
+
+// dropLegacyStatsModelTable 删除已废弃的 stats_model_totals 表（仪表盘
+// 已不再按「用户请求模型名」维度独立排行，前端 getModelCounts 已删；仪表盘
+// 现按真实命中模型 + chat_logs 行级 GROUP BY 双口径展示）。幂等：旧库升级
+// 时被清，新库无残留。
+func dropLegacyStatsModelTable(db *gorm.DB) {
+	if !db.Migrator().HasTable("stats_model_totals") {
+		return
+	}
+	if err := db.Migrator().DropTable("stats_model_totals"); err != nil {
+		panic(fmt.Errorf("drop legacy stats_model_totals table: %w", err))
 	}
 }

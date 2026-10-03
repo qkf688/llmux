@@ -17,7 +17,6 @@ func newStatsTestDB(t *testing.T) *gorm.DB {
 		&models.StatsTotal{},
 		&models.StatsDaily{},
 		&models.StatsHourly{},
-		&models.StatsModelTotal{},
 		&models.StatsRealModelTotal{},
 		&models.StatsProviderTotal{},
 	)
@@ -87,44 +86,6 @@ func TestStatsRepo_GetTotal_NotFoundOnEmpty(t *testing.T) {
 	repo := NewStatsRepo(newStatsTestDB(t))
 	if _, err := repo.GetTotal(context.Background()); !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Fatalf("err = %v, want ErrRecordNotFound", err)
-	}
-}
-
-func TestStatsRepo_IncCalls_AccumulatesAndSortsDesc(t *testing.T) {
-	ctx := context.Background()
-	repo := NewStatsRepo(newStatsTestDB(t))
-
-	if err := repo.IncModelCalls(ctx, ""); err != nil {
-		t.Fatalf("empty name should be a no-op, got %v", err)
-	}
-	for range 3 {
-		if err := repo.IncModelCalls(ctx, "gpt"); err != nil {
-			t.Fatalf("inc model: %v", err)
-		}
-	}
-	if err := repo.IncModelCalls(ctx, "claude"); err != nil {
-		t.Fatalf("inc model: %v", err)
-	}
-	for range 2 {
-		if err := repo.IncRealModelCalls(ctx, "real-a"); err != nil {
-			t.Fatalf("inc real model: %v", err)
-		}
-	}
-
-	got, err := repo.ListModelCallsDesc(ctx)
-	if err != nil {
-		t.Fatalf("list model calls: %v", err)
-	}
-	if len(got) != 2 || got[0].Name != "gpt" || got[0].Calls != 3 || got[1].Name != "claude" || got[1].Calls != 1 {
-		t.Fatalf("model calls = %+v, want gpt:3 then claude:1", got)
-	}
-
-	real, err := repo.ListRealModelCallsDesc(ctx)
-	if err != nil {
-		t.Fatalf("list real model calls: %v", err)
-	}
-	if len(real) != 1 || real[0].Name != "real-a" || real[0].Calls != 2 {
-		t.Fatalf("real model calls = %+v, want real-a:2", real)
 	}
 }
 

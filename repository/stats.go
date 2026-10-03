@@ -37,16 +37,15 @@ type ProviderStatsDelta struct {
 	Tokens         int64
 }
 
-// StatsRepo 封装六张统计表（StatsTotal / StatsDaily / StatsHourly /
-// StatsModelTotal / StatsRealModelTotal / StatsProviderTotal）的数据访问。
+// StatsRepo 封装四张统计表（StatsTotal / StatsDaily / StatsHourly /
+// StatsProviderTotal）的数据访问。StatsModelTotal 已废弃（仪表盘不再按
+//「用户请求模型名」维度独立排行，详见 models/migrate.go 的 dropLegacyStatsModelTable）。
 // 写侧按语义建模而非按表建模：调用方不需要知道「时间维度统计是三张表」。
 type StatsRepo interface {
 	// AddTimeBased 按 at 所属日期/小时，向 total/daily/hourly 三表的同一字段累加 delta。
 	// delta <= 0 时不做任何写入。三次 upsert 各自独立提交，不包事务：
 	// 统计数据允许部分丢失，不值得为它承担事务开销。
 	AddTimeBased(ctx context.Context, at time.Time, field TimeStatsField, delta int64) error
-	// IncModelCalls 累加模型维度调用次数；name 为空时不写入。
-	IncModelCalls(ctx context.Context, name string) error
 	// IncRealModelCalls 累加真实模型维度调用次数；name 为空时不写入。
 	IncRealModelCalls(ctx context.Context, name string) error
 	// AddProviderStats 累加供应商维度请求/成功失败/token/累计响应时间；ProviderName 为空时不写入。
@@ -60,8 +59,6 @@ type StatsRepo interface {
 	ListDailiesSince(ctx context.Context, since time.Time) ([]models.StatsDaily, error)
 	// ListHourliesByDate 列出指定日期的小时统计，按小时升序；缺失的小时不补零，由调用方处理。
 	ListHourliesByDate(ctx context.Context, day time.Time) ([]models.StatsHourly, error)
-	// ListModelCallsDesc 列出模型维度统计，按调用次数降序。
-	ListModelCallsDesc(ctx context.Context) ([]models.StatsModelTotal, error)
 	// ListRealModelCallsDesc 列出真实模型维度统计，按调用次数降序。
 	ListRealModelCallsDesc(ctx context.Context) ([]models.StatsRealModelTotal, error)
 	// ListProviderTotalsDesc 列出供应商维度统计，按请求总数降序；比率计算由调用方完成。
@@ -137,13 +134,6 @@ func setTimeStatsField(field TimeStatsField, delta int64, reqs *int64, tokens *i
 	}
 }
 
-func (r *statsRepo) IncModelCalls(ctx context.Context, name string) error {
-	if name == "" {
-		return nil
-	}
-	return r.incCallsByName(ctx, &models.StatsModelTotal{Name: name, Calls: 1})
-}
-
 func (r *statsRepo) IncRealModelCalls(ctx context.Context, name string) error {
 	if name == "" {
 		return nil
@@ -152,7 +142,7 @@ func (r *statsRepo) IncRealModelCalls(ctx context.Context, name string) error {
 }
 
 // incCallsByName 按 name 主键 upsert 并自增 calls。
-// StatsModelTotal 与 StatsRealModelTotal 表结构同形，共用同一写法。
+// StatsRealModelTotal 单表复用本写法。
 func (r *statsRepo) incCallsByName(ctx context.Context, row any) error {
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "name"}},
@@ -251,14 +241,6 @@ func (r *statsRepo) ListHourliesByDate(ctx context.Context, day time.Time) ([]mo
 		Where("date = ?", day.Format(statsDateLayout)).
 		Order("hour ASC").
 		Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	return rows, nil
-}
-
-func (r *statsRepo) ListModelCallsDesc(ctx context.Context) ([]models.StatsModelTotal, error) {
-	var rows []models.StatsModelTotal
-	if err := r.db.WithContext(ctx).Order("calls DESC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	return rows, nil

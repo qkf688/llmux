@@ -9,13 +9,12 @@ import (
 	"github.com/qkf688/llmux/repository"
 )
 
-// RecordRequestStats 累加请求次数（total/daily/hourly）及可选模型维度 calls。
-func RecordRequestStats(ctx context.Context, at time.Time, modelName string) error {
-	stats := repos().Stats
-	if err := stats.AddTimeBased(ctx, at, repository.StatsFieldReqs, 1); err != nil {
-		return err
-	}
-	return stats.IncModelCalls(ctx, modelName)
+// RecordRequestStats 累加请求次数到时间维度统计（total/daily/hourly）。模型
+// 维度的虚拟→真实聚合改走 chat_logs 行级 GROUP BY（详见
+// repository.ChatLogRepo.GroupRoutingDesc），不再维护 StatsModelTotal 累计表。
+// modelName 参数保留以保持调用方兼容；不再写入任何表。
+func RecordRequestStats(ctx context.Context, at time.Time, _ string) error {
+	return repos().Stats.AddTimeBased(ctx, at, repository.StatsFieldReqs, 1)
 }
 
 // RecordRealModelRequestStats 累加真实模型维度 calls。

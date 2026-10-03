@@ -128,7 +128,7 @@ func main() {
 
 	startBackgroundServices(ctx)
 
-	srv := &http.Server{Addr: ":7070", Handler: router}
+	srv := newHTTPServer(":7070", router)
 	go func() {
 		// ErrServerClosed 是 Shutdown 的正常返回，不是启动失败。
 		// 启动失败不能 os.Exit：此时 startBackgroundServices 已登记了可能正在写库的
@@ -184,11 +184,46 @@ func newRouter(deps handler.Deps, trustedProxies []string) (*gin.Engine, error) 
 	return router, nil
 }
 
+// 读方向的两个上限（Stage 39）。http.Server 这两个字段的零值是「永不超时」：不配，
+// 一个连上只发半行请求头就停住的客户端能一直占住一条连接（读头那档发生在鉴权之前，
+// 连有效密钥都不用，是外部随手可打的口子）。
+//
+// 请求体那档的机制与读头不同，别混为一谈：net/http **不预读请求体**，头读完就进
+// handler，体是 handler 自己按需读的（生产 chatHandler 整读，见 handler/v1/chat.go）。
+// 所以 ReadTimeout 兜住的是「handler 卡在读体」，不是「服务端掐连接」——它表现为
+// handler 那次 Read 到点返回错误。对本项目有效正因如此：聊天入口确实整读请求体。
+//
+// 语义校正（别按字段名想当然）：ReadTimeout 是**整个请求**（头 + 体）读完的预算，
+// 不是「体单独多久」——读头另有 ReadHeaderTimeout 的独立预算，体拿到的是余额。
+// 60s 按「整请求读完」定：正常聊天请求几 KB、毫秒级完成，余量极大；而 20 MiB 的入站
+// 上限（consts.MaxInboundBodyBytes）在这个预算里也传得完，慢速上传那种异常场景正是
+// 要掐掉的。两个值刻意不做设置项：读头 5s 是业界惯例（正常客户端毫秒级），做成旋钮
+// 只会被人乱调；真需要放宽大请求的用户有 request_total_timeout 那条正路可走。
+const (
+	readHeaderTimeout  = 5 * time.Second  // 读完请求头
+	readRequestTimeout = 60 * time.Second // 整个请求读完（头 + 体）
+)
+
+// newHTTPServer 构造带读方向上限的 *http.Server。抽成函数而非内联字面量：装配值需要
+// 被测试直接断言（5s/60s 无法在单测里真等），内联字面量只能靠读源码的结构断言来锁。
+//
+// 只配读方向、不配 WriteTimeout：写上限是**请求级**语义（跟 request_total_timeout 对齐，
+// 见 handler/v1 的 applyClientWriteDeadline），一个全局值会连带砍掉正常的长流式响应。
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readRequestTimeout,
+	}
+}
+
 // 关闭各阶段的等待上限。
 //
 // serverShutdownTimeout 必须存在而非「等到自然结束」：流式（SSE）响应在 handler 层
-// 由 io.Copy 阻塞回写，HTTP client 无整体超时，上游不结束流就永远不结束——没有上限
-// 会让 Shutdown 无限挂住。超时后剩余连接被强制关闭，代价是截断在途流式响应。
+// 由 io.Copy 阻塞回写，上游不结束流就永远不结束（写回本身另有请求级上限兜底，见
+// newHTTPServer 注释）——没有上限会让 Shutdown 无限挂住。超时后剩余连接被强制关闭，
+// 代价是截断在途流式响应。
 const (
 	serverShutdownTimeout = 30 * time.Second
 	bgtaskDrainTimeout    = 10 * time.Second

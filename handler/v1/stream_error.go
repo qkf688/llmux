@@ -1,10 +1,12 @@
 package v1
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/service"
@@ -23,7 +25,12 @@ const streamInterruptMessage = "upstream stream interrupted before completion"
 // 写 chat_logs Status=error，并留该次失败的**唯一一条**留痕（断连类 Warn、其余 ERROR，
 // 级别判定在 RecordLog 收口）——handler 再自记即双份，按行计数的告警会把一次故障
 // 算成两次（framework-conventions §5 边界③，2026-09-23 双份留痕回批）。
-func writeResponseBody(c *gin.Context, style string, stream bool, src io.Reader) error {
+// 写回错误打上「来自客户端」方向标记（service.MarkResponseWriteError）：读上游失败
+// 与写客户端失败在 io.Copy 返回的 error 里是同一枚，分不开方向；不标记的话，提交后
+// 失败的清钉与供应商失败统计会把「客户端不收结果」算到供应商头上（Stage 39，R3）。
+func writeResponseBody(ctx context.Context, c *gin.Context, style string, stream bool, src io.Reader) error {
+	applyClientWriteDeadline(c, ctx)
+
 	if _, err := io.Copy(c.Writer, src); err != nil {
 		if stream {
 			if emitErr := writeStreamErrorEvent(c, style); emitErr != nil {
@@ -31,9 +38,41 @@ func writeResponseBody(c *gin.Context, style string, stream bool, src io.Reader)
 				err = errors.Join(err, emitErr)
 			}
 		}
-		return fmt.Errorf("write response body failed: %w", err)
+		return fmt.Errorf("write response body failed: %w", service.MarkResponseWriteError(err))
 	}
 	return nil
+}
+
+// applyClientWriteDeadline 把「可写到的时刻」钉成该请求的总时限（ctx 上由
+// service.WithRequestTotalTimeout 挂的那个 deadline）。
+//
+// 缺了它，一个只发请求、之后再也不读结果的客户端会让 writeResponseBody 永久阻塞：
+// 程序卡在一次 Write 里出不来，而「到点必掐」在写方向上并不成立——收上游那半早就
+// 完成了，到点检查看不到任何异常。实测（Stage 39）：不加本函数，「发请求后不读响应」
+// 的客户端能一直占着处理线程与上游连接。
+//
+// 用 http.NewResponseController 而非 http.Server.WriteTimeout：后者是**全局**值，
+// 会连带砍掉正常的长流式响应（流式输出本来就可能跑满总时限）；这里是请求级语义，
+// 与 request_total_timeout 同源——总时限调小，写上限跟着调小。gin 的 responseWriter
+// 实现了 Unwrap，ResponseController 能穿透到真实的 ResponseWriter。
+//
+// 刻意**不在写完时清零**（曾写过一段手动清理，是多余的）：net/http 在每个请求收尾
+// 自己清——server.go 的 `conn.serve` 请求循环里 `w.finishRequest()` 紧跟
+// `c.rwc.SetWriteDeadline(time.Time{})`。故同一 keep-alive 连接的下一次请求不会带着
+// 已过期的写上限（过期不可再延长）。若将来改走 HTTP/2 或换掉 net/http 的 server
+// 实现，须重新核对那一行是否仍在。
+func applyClientWriteDeadline(c *gin.Context, ctx context.Context) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		// 无总时限即无写上限。入口（chatHandler）必挂 deadline，此处只是不 panic 的兜底。
+		return
+	}
+	// ErrNotSupported = 写端不是真实 net/http 连接（测试里的 recorder 等），无从设限，
+	// 不是运行期异常；其余失败是运行期真降级（客户端不收时可能无限阻塞），留一条痕。
+	if err := http.NewResponseController(c.Writer).SetWriteDeadline(deadline); err != nil &&
+		!errors.Is(err, http.ErrNotSupported) {
+		slog.Warn("set client write deadline failed, response may block on a slow client", "error", err)
+	}
 }
 
 // writeStreamErrorEvent 在响应头（200/SSE）已提交后向客户端写出该协议形状的

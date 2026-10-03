@@ -70,6 +70,16 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 // 只能在错误产生处标记。调用点须在 tee 之外（先包 reader 再 TeeReader），见 chat 包注释。
 func MarkUpstreamReader(r io.Reader) io.Reader { return chat.MarkUpstreamReader(r) }
 
+// MarkResponseWriteError 给「写回响应」这一步的错误打上「来自客户端」方向标记，供
+// RecordLog 的提交后失败判定把「客户端不收结果（被写上限掐断）」与「供应商故障」分开：
+// 前者不清粘性钉定、不记供应商失败。读侧错误（已带上游标记）原样放过不被覆盖。
+func MarkResponseWriteError(err error) error { return chat.MarkResponseWriteError(err) }
+
+// IsClientWriteError 判定错误是否来自写客户端（带写侧方向标记）。handler 层用它自证
+// 「写回失败确实被打上了客户端侧标记」——该标记是提交后失败判定（不清粘性钉定、
+// 不记供应商失败）与留痕级别的唯一依据，漏打则两类失败会被算到供应商头上。
+func IsClientWriteError(err error) bool { return chat.IsClientWriteErr(err) }
+
 // MarkLogUnfinished 给「日志后处理任务被关机丢弃」的日志行写「未能写完」失败痕迹
 // （bgtask 丢弃窗口的收尾动作，Stage 35）。丢正文、留痕迹，行不得停在建行占位 success。
 func MarkLogUnfinished(ctx context.Context, logID uint, reqStart time.Time) {

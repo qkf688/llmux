@@ -85,17 +85,26 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 			// context.Canceled / 坏管道 / 非超时 net.Error 归给客户端、把上游截断与上游
 			// 超时归给供应商（超时=供应商慢，与 Stage 24 结算口径一致）。
 			//
+			// 这些类非超时 net.Error 与**写回被写上限掐断**（Stage 39，客户端不收结果；其
+			// 错误形状与上游超时同形、类型层分不开）同属客户端侧，清钉对它们不成立。
 			// 提交前失败会换家重试并在成功后改钉，本来就自愈；502（多家全挂）在 handler
 			// 提前返回、根本不进本函数，结构上到不了这里。
 			//
 			// 刻意只挂本分支、绝不挂下方外层收口：外层还兜着 persistChatLog 失败，
 			// 那不是本次尝试的失败，挂那里会让「日志写库一失败就抹掉好端端的钉定」。
-			if in.ServingModelWithProviderID != 0 && (IsUpstreamReadErr(err) || !isClientDisconnectErr(err)) {
+			if in.ServingModelWithProviderID != 0 && (IsUpstreamReadErr(err) || !clientSideFailure(err)) {
 				clearStickyTarget(ctx, in.Before, in.ServingModelWithProviderID)
 			}
 
-			if statErr := chatstats.RecordProviderStats(ctx, in.ProviderName, false, 0, 0); statErr != nil {
-				slog.Warn("failed to record provider stats on processer error", "error", statErr)
+			// 写回被掐断不记供应商失败统计（Stage 39，R3）：供应商把响应完整产出了，是
+			// 客户端不收，记进去会污染面板上的供应商成功率、并让「谁的问题」在统计面
+			// 失真。刻意只排这一类：客户端主动断连（点停止按钮）仍照旧计数，那是既有
+			// 口径（Stage 24/33）不在本次改动内，两者在这张统计表上的差异已登记
+			// find-issues。
+			if !IsClientWriteErr(err) {
+				if statErr := chatstats.RecordProviderStats(ctx, in.ProviderName, false, 0, 0); statErr != nil {
+					slog.Warn("failed to record provider stats on processer error", "error", statErr)
+				}
 			}
 			return fmt.Errorf("processer error: %w", err)
 		}
@@ -168,7 +177,7 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 		// 本次后处理失败的唯一一条留痕（Stage 18 口径）：内层不自记，细节在错误链
 		// 与 chat_logs 的 Error 字段。客户端断连类降 Warn（framework-conventions §5
 		// 级别约定）：断连不是服务器故障，按 ERROR 计数的告警会被「建连即断」刷爆。
-		if isClientDisconnectErr(err) {
+		if clientSideFailure(err) {
 			slog.Warn("record log error", "log_id", in.LogID, "error", err)
 		} else {
 			slog.Error("record log error", "log_id", in.LogID, "error", err)
@@ -213,6 +222,17 @@ func isClientDisconnectErr(err error) bool {
 		return !netErr.Timeout()
 	}
 	return false
+}
+
+// clientSideFailure 判定这次失败是不是调用方造成的：客户端断连（点停止、代理撤走、
+// 坏管道）与**写回被写上限掐断**（Stage 39，客户端不收结果）同族，供应商都没做错。
+//
+// 清粘性钉定与留痕级别两处同源：两处各判一次会随新增失败类型漂移（Stage 39 之前
+// 清钉判「不是断连就清」、级别判「是断连就降 Warn」，写超时一类同时落在「该清」与
+// 「该升 ERROR」两个错误结论上）。既有行为逐条等价：不含写侧标记时本函数 ≡
+// isClientDisconnectErr。
+func clientSideFailure(err error) bool {
+	return isClientDisconnectErr(err) || IsClientWriteErr(err)
 }
 
 // resolveUsageSource 决定最终写入的 usage 并打上来源标记。

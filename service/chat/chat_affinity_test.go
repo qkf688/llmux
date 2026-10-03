@@ -261,6 +261,13 @@ func TestRecordLog_PostCommitFailure_DepinMatrix(t *testing.T) {
 			wantPinned: false,
 			why:        "RST 是非超时 net.Error，isClientDisconnectErr 会误判成客户端断连；读侧打标优先于该反推（2026-10-01 code-review C2）",
 		},
+		{
+			name:       "服务的就是被钉的那家+写回被掐(客户端不收结果)→不清",
+			servingMWP: depinPinnedMWP,
+			procErr:    fmt.Errorf("write response body failed: %w", MarkResponseWriteError(newWriteCutoffErr())),
+			wantPinned: true,
+			why:        "写上限到点掐断与上游超时的错误形状同形（*net.OpError + Timeout()），类型层分不开；靠写侧方向标记认出是客户端不收。供应商把响应完整产出了，清钉等于让好端点每轮都被随机选（Stage 39 R3）",
+		},
 	}
 
 	for _, tc := range cases {

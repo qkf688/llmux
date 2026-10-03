@@ -205,7 +205,7 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 	// 收尾口径统一在 writeResponseBody：流式写协议内 error 事件，非流式静默截断。
 	// 「头后无数据」类失败已在 service 提交门（commit-before-write）被拦下换下家，
 	// 走到这里的中断都是提交后的残余窗口（上游断流/写客户端失败）。
-	if copyErr := writeResponseBody(c, style, before.Stream, body); copyErr != nil {
+	if copyErr := writeResponseBody(ctx, c, style, before.Stream, body); copyErr != nil {
 		finishLog(copyErr)
 		return
 	}

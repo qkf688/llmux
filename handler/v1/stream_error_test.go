@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"errors"
 	"io"
 	"log/slog"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/consts"
+	"github.com/qkf688/llmux/service"
 )
 
 // TestWriteStreamErrorEvent_ErrorEventShapes 三种入站格式的 SSE error 事件形状断言
@@ -107,7 +109,12 @@ func TestWriteResponseBody_MidStreamInterrupt_EmitsProtocolErrorEvent(t *testing
 	c, _ := gin.CreateTestContext(w)
 
 	src := &chunkThenErrReader{chunk: []byte("data: chunk\n\n"), err: errors.New("boom")}
-	err := writeResponseBody(c, string(consts.StyleOpenAI), true, src)
+	// 无 deadline 的 ctx = 不设写上限，保持本组用例的原语义（写上限另有 write_deadline_test.go）。
+	// src 用 service.MarkUpstreamReader 包一层与生产同形：生产里交给 writeResponseBody 的
+	// body 是 io.TeeReader(MarkUpstreamReader(resBody), pw)，src 的读错误带「来自上游」标记。
+	// 不包的话，这些「读错误」在测试里没有标记，会被 writeResponseBody 当成写错误盖上
+	// 客户端侧标记——测的是一个生产里不存在的形态（Stage 39）。
+	err := writeResponseBody(context.Background(), c, string(consts.StyleOpenAI), true, service.MarkUpstreamReader(src))
 	if err == nil {
 		t.Fatal("writeResponseBody err = nil, want 中断错误上抛")
 	}
@@ -131,7 +138,7 @@ func TestWriteResponseBody_NonStreamInterrupt_DoesNotAppendEnvelope(t *testing.T
 	c, _ := gin.CreateTestContext(w)
 
 	src := &chunkThenErrReader{chunk: []byte(`{"id":"x"`), err: errors.New("boom")}
-	err := writeResponseBody(c, string(consts.StyleOpenAI), false, src)
+	err := writeResponseBody(context.Background(), c, string(consts.StyleOpenAI), false, service.MarkUpstreamReader(src))
 	if err == nil {
 		t.Fatal("writeResponseBody err = nil, want 中断错误上抛")
 	}
@@ -158,7 +165,7 @@ func TestWriteResponseBody_NonStreamInterrupt_NoSelfLog(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 
 	src := &chunkThenErrReader{chunk: []byte(`{"id":"x"`), err: errors.New("boom")}
-	err := writeResponseBody(c, string(consts.StyleOpenAI), false, src)
+	err := writeResponseBody(context.Background(), c, string(consts.StyleOpenAI), false, service.MarkUpstreamReader(src))
 	if err == nil {
 		t.Fatal("writeResponseBody err = nil, want 中断错误上抛")
 	}
@@ -176,7 +183,8 @@ func TestWriteResponseBody_ReadError_EmitsProtocolErrorEvent(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 
-	err := writeResponseBody(c, string(consts.StyleAnthropic), true, errReader{err: errors.New("read boom")})
+	err := writeResponseBody(context.Background(), c, string(consts.StyleAnthropic), true,
+		service.MarkUpstreamReader(errReader{err: errors.New("read boom")}))
 	if err == nil {
 		t.Fatal("writeResponseBody err = nil, want 读错误上抛")
 	}

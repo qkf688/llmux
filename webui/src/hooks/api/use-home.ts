@@ -4,7 +4,6 @@ import {
   getTotalMetrics,
   getDailyMetrics,
   getHourlyMetricsToday,
-  getModelCounts,
   getRealModelCounts,
   getDatabaseStats,
   getProviderMetrics,
@@ -41,11 +40,6 @@ export function useHomeMetrics() {
       {
         queryKey: ['models', 'real-counts'],
         queryFn: getRealModelCounts,
-        staleTime: 60_000,
-      },
-      {
-        queryKey: ['models', 'requested-counts'],
-        queryFn: getModelCounts,
         staleTime: 60_000,
       },
       {

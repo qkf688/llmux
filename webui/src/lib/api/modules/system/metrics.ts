@@ -38,10 +38,6 @@ export async function getTotalMetrics(): Promise<MetricsData> {
   return apiRequest<MetricsData>("/metrics/total");
 }
 
-export async function getModelCounts(): Promise<ModelCount[]> {
-  return apiRequest<ModelCount[]>("/metrics/counts");
-}
-
 export async function getRealModelCounts(): Promise<ModelCount[]> {
   return apiRequest<ModelCount[]>("/metrics/real-model-counts");
 }

@@ -91,12 +91,11 @@ export default function Home() {
   const dailyMetrics = results[3].data ?? [];
   const hourlyMetrics = results[4].data ?? [];
   const realModelCounts = results[5].data ?? [];
-  const requestedModelCounts = results[6].data ?? [];
-  const dbStats = results[7].data ?? null;
-  const providerMetrics = results[8].data ?? [];
+  const dbStats = results[6].data ?? null;
+  const providerMetrics = results[7].data ?? [];
 
-  // KPI 查询（索引 0,1,2,7）loading 时才阻塞整页；图表查询（索引 3,4,5,6,8）渐进填充
-  const kpiLoading = results[0].isPending || results[1].isPending || results[2].isPending || results[7].isPending;
+  // KPI 查询（索引 0,1,2,6）loading 时才阻塞整页；图表查询（索引 3,4,5,7）渐进填充
+  const kpiLoading = results[0].isPending || results[1].isPending || results[2].isPending || results[6].isPending;
 
   const dbUsagePercent = dbStats && dbStats.page_count > 0
     ? ((dbStats.page_count - dbStats.free_pages) / dbStats.page_count) * 100
@@ -175,22 +174,14 @@ export default function Home() {
       <Card className="py-4 gap-3 sm:py-6 sm:gap-6">
         <CardHeader className="px-3 sm:px-6">
           <CardTitle className="text-sm font-medium sm:text-base">模型数据分析</CardTitle>
-          <CardDescription className="hidden sm:block">真实命中模型与用户请求模型对比</CardDescription>
+          <CardDescription className="hidden sm:block">按真实命中模型查看调用分布</CardDescription>
         </CardHeader>
         <CardContent className="px-3 sm:px-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            <div className="rounded-lg border bg-card/50 p-3 sm:p-4">
-              <div className="text-xs text-muted-foreground mb-2">真实命中模型排行</div>
-              <Suspense fallback={<Loading message="加载真实模型排行..." />}>
-                <ModelRankingList data={realModelCounts} />
-              </Suspense>
-            </div>
-            <div className="rounded-lg border bg-card/50 p-3 sm:p-4">
-              <div className="text-xs text-muted-foreground mb-2">用户请求模型排行</div>
-              <Suspense fallback={<Loading message="加载请求模型排行..." />}>
-                <ModelRankingList data={requestedModelCounts} />
-              </Suspense>
-            </div>
+          <div className="rounded-lg border bg-card/50 p-3 sm:p-4">
+            <div className="text-xs text-muted-foreground mb-2">真实命中模型排行</div>
+            <Suspense fallback={<Loading message="加载真实模型排行..." />}>
+              <ModelRankingList data={realModelCounts} />
+            </Suspense>
           </div>
         </CardContent>
       </Card>

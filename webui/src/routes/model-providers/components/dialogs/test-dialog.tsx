@@ -1,6 +1,8 @@
-import type { ReactNode } from "react";
-import type { TestMode, TestType } from "../../types";
+import { Copy } from "lucide-react";
+import type { CapabilityTestKey, TestMode, TestType } from "../../types";
 import type { ModelProviderTestResult } from "@/lib/api";
+import type { ReactTestResultState } from "@/stores/model-providers/types";
+import { copyTextWithToast } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,13 +17,25 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ExpandableError } from "@/components/expandable-error";
 import { LoadingState } from "@/components/ui/loading-state";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { visionTestImageDataURL } from "../../vision-test-image";
 // 复合键与结果表类型都从执行单元导入：键格式是「关联结果存储」的隐式契约，
 // 两处各拼一遍 `${id}:${mode}` 会在改键时静默读空。
 import { capabilityTestKey, type CapabilityTestResults } from "../../hooks/use-model-providers-testing";
+// 段名 / 流式诊断四项数 / 复制文本拼装都在本模块定：结果区展示与剪贴板共用同一份。
+import {
+  buildCapabilityReport,
+  buildReactReport,
+  rawOutputLabel,
+  streamStatsItems,
+  type CapabilityTestSpec,
+  type CapabilityTestType,
+} from "./test-result-report";
 
 // 结果按「关联:模式」存一格；键的构造与类型都来自执行单元（capabilityTestKey），
 // 避免两处各拼一遍格式在改键时静默读空。
+
+type CapabilityTestEntry = CapabilityTestResults[CapabilityTestKey];
 
 type TestDialogProps = {
   open: boolean;
@@ -35,13 +49,7 @@ type TestDialogProps = {
   structuredTestResults: CapabilityTestResults;
   thinkingTestResults: CapabilityTestResults;
   visionTestResults: CapabilityTestResults;
-  reactTestResult: {
-    loading: boolean;
-    messages: string;
-    success: boolean | null;
-    error: string | null;
-    cancelled?: boolean;
-  };
+  reactTestResult: ReactTestResultState;
   onClose: () => void;
   onExecute: () => void;
 };
@@ -79,15 +87,28 @@ const TEST_MODE_OPTIONS: { value: TestMode; label: string; description: string }
   },
 ];
 
-// 终止事件值域（镜像后端 handler/testapi 的 streamTerminal*）。未知值原样展示，
-// 后端加新值时不至于在这里静默显示成空。
-const TERMINAL_EVENT_LABELS: Record<string, string> = {
-  "[DONE]": "[DONE]",
-  message_stop: "message_stop",
-  "response.completed": "response.completed",
-  "response.failed": "response.failed",
-  "response.incomplete": "response.incomplete",
-  none: "未收到（流被切断）",
+// 四类能力测试的段名与取值：屏幕上的段落与复制出去的文本从这张表取，两边不会各写一份而漂移。
+// 新增能力测试类型 = 这里加一行（Record 穷尽性会强制补齐），不再逐类型抄 JSX（OCP + DRY）。
+const CAPABILITY_SPECS: Record<CapabilityTestType, CapabilityTestSpec> = {
+  connectivity: { passedLabel: "连通性测试通过", failedLabel: "连通性测试失败" },
+  structured_output: {
+    passedLabel: "结构化输出能力测试通过",
+    failedLabel: "结构化输出能力测试失败",
+    detail: {
+      label: "解析结果",
+      value: (result) => (result.parsed != null ? JSON.stringify(result.parsed, null, 2) : null),
+    },
+  },
+  thinking: {
+    passedLabel: "Thinking 能力测试通过",
+    failedLabel: "Thinking 能力测试失败",
+    detail: { label: "推理内容", value: (result) => result.thinking_text || null },
+  },
+  vision: {
+    passedLabel: "图片识别能力测试通过",
+    failedLabel: "图片识别能力测试失败",
+    detail: { label: "识别结果", value: (result) => result.vision_text || null },
+  },
 };
 
 // 日志/输出统一展示块：react 日志、各能力测试的原始输出/提取内容等处复用。
@@ -117,21 +138,13 @@ function ResultPlaceholder() {
   );
 }
 
-// 流式诊断块：帧数 / 首帧耗时 / 总耗时 / 终止事件。这四个数是判断「渠道是不是真支持流式」
-// 的直接证据（缺终止事件 = 流被切断，是最常见也最难从一句「失败」里看出来的缺陷）。
+// 流式诊断块：帧数 / 首帧耗时 / 总耗时 / 终止事件。四项的取值与复制文本共用
+// streamStatsItems，改口径只改一处。
 function StreamStatsSection({ result }: { result: ModelProviderTestResult }) {
-  const stats = result.stream;
-  if (!stats) {
+  const items = streamStatsItems(result);
+  if (items.length === 0) {
     return null;
   }
-  const items: { label: string; value: string }[] = [
-    { label: "SSE 帧数", value: String(stats.frames) },
-    // 一帧都没收到时首帧耗时是 0，与「瞬时首帧」看起来一样——显示成占位符，
-    // 免得把「上游压根没吐字」读成「响应飞快」。
-    { label: "首帧耗时", value: stats.frames > 0 ? `${stats.first_frame_ms} ms` : "—" },
-    { label: "总耗时", value: `${stats.duration_ms} ms` },
-    { label: "终止事件", value: TERMINAL_EVENT_LABELS[stats.terminated_by] ?? stats.terminated_by },
-  ];
   return (
     <div className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-md border bg-background/40 p-2 text-xs sm:grid-cols-4">
       {items.map((item) => (
@@ -144,28 +157,20 @@ function StreamStatsSection({ result }: { result: ModelProviderTestResult }) {
   );
 }
 
-// JSON 型能力测试（结构化输出 / thinking / vision）共用同一形状的回包：
-// loading → 占位 → 结论 + 流式诊断 + 类型专属提取文本 + 原始输出。三态切换收敛进本组件，
-// 新增测试类型不再逐块复制 JSX（DRY）。renderDetail 返回 null 时不渲染该块。
+// JSON 型能力测试（连通性 / 结构化输出 / thinking / vision）共用同一形状的回包：
+// loading → 占位 → 结论 + 流式诊断 + 类型专属提取文本 + 原始输出。三态切换与段落取舍收敛进
+// 本组件，新增测试类型不再逐块复制 JSX（DRY）。detail 取空时该块不渲染。
 function CapabilityResultSection({
-  loading,
-  result,
-  cancelled,
-  passedLabel,
-  failedLabel,
-  renderDetail,
+  spec,
+  entry,
 }: {
-  loading: boolean;
-  result: ModelProviderTestResult | null;
-  cancelled?: boolean;
-  passedLabel: string;
-  failedLabel: string;
-  renderDetail?: (result: ModelProviderTestResult) => ReactNode;
+  spec: CapabilityTestSpec;
+  entry: CapabilityTestEntry | undefined;
 }) {
-  if (loading) {
+  if (entry?.loading) {
     return <LoadingState text="测试中..." />;
   }
-  if (cancelled) {
+  if (entry?.cancelled) {
     // 已取消独立成态：不显示成「失败」（不证明供应商不行），也不显示成「未测」。
     return (
       <div className="flex h-full flex-col items-center justify-center gap-1 text-sm text-muted-foreground">
@@ -174,13 +179,14 @@ function CapabilityResultSection({
       </div>
     );
   }
+  const result = entry?.result ?? null;
   if (!result) {
     return <ResultPlaceholder />;
   }
   const passed = result.passed === true;
-  const errorMessage = result.error || result.message || (passed ? passedLabel : failedLabel);
-  const rawOutput = result.raw_output ?? "";
-  const isStreamMode = result.mode === "stream";
+  const errorMessage = result.error || result.message || (passed ? spec.passedLabel : spec.failedLabel);
+  const detail = spec.detail;
+  const detailValue = detail?.value(result) ?? null;
   return (
     <div className="space-y-3">
       <ExpandableError
@@ -189,9 +195,39 @@ function CapabilityResultSection({
         defaultExpanded={!passed}
       />
       <StreamStatsSection result={result} />
-      {renderDetail ? renderDetail(result) : null}
-      {rawOutput && <LogBlock label={isStreamMode ? "原始 SSE 输出" : "原始输出"} value={rawOutput} />}
+      {detail && detailValue && <LogBlock label={detail.label} value={detailValue} wrap />}
+      {result.raw_output && <LogBlock label={rawOutputLabel(result)} value={result.raw_output} />}
     </div>
+  );
+}
+
+// 复制整份测试结果：与内容同处一个结果框，按钮和它复制的东西不隔框。
+// report 为 null = 本状态无结论可带走（未执行 / 已取消 / 测试中），置灰点不动；
+// 置灰时不再挂 Tooltip——disabled 按钮收不到鼠标事件，悬停说明本来就弹不出来。
+function CopyResultButton({ report }: { report: string | null }) {
+  const button = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className="size-7 text-muted-foreground hover:bg-muted hover:text-foreground"
+      disabled={!report}
+      onClick={() => {
+        if (report) void copyTextWithToast(report, "已复制测试结果");
+      }}
+      aria-label="复制测试结果"
+    >
+      <Copy className="size-4" />
+    </Button>
+  );
+  if (!report) {
+    return button;
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent>复制本次测试的全部结果</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -214,25 +250,42 @@ export function TestDialog({
   // 结果格按「关联:模式」定位：切换模式就是换一个格子，不会读到上一模式的结论。
   const entryOf = (map: CapabilityTestResults) =>
     selectedTestId ? map[capabilityTestKey(selectedTestId, testMode)] : undefined;
-  const connectivityEntry = entryOf(testResults);
-  const structuredEntry = entryOf(structuredTestResults);
-  const thinkingEntry = entryOf(thinkingTestResults);
-  const visionEntry = entryOf(visionTestResults);
+  const entryByCapabilityType: Record<CapabilityTestType, CapabilityTestEntry | undefined> = {
+    connectivity: entryOf(testResults),
+    structured_output: entryOf(structuredTestResults),
+    thinking: entryOf(thinkingTestResults),
+    vision: entryOf(visionTestResults),
+  };
 
   // 测试类型 → 是否执行中。Record 穷尽性保证新增 TestType 时这里被类型系统强制补一行，
   // 不再用嵌套三元（旧链的 else 分支会把未知类型误当 structured 的 loading）。
   const loadingByTestType: Record<TestType, boolean> = {
-    connectivity: !!connectivityEntry?.loading,
+    connectivity: !!entryByCapabilityType.connectivity?.loading,
     react: reactTestResult.loading,
-    structured_output: !!structuredEntry?.loading,
-    thinking: !!thinkingEntry?.loading,
-    vision: !!visionEntry?.loading,
+    structured_output: !!entryByCapabilityType.structured_output?.loading,
+    thinking: !!entryByCapabilityType.thinking?.loading,
+    vision: !!entryByCapabilityType.vision?.loading,
   };
   const executeDisabled = loadingByTestType[testType];
 
   // ReAct 端点自己发流（第三方 agent 库），模式开关对它没有意义——禁用而不是隐藏，
   // 是为了让「为什么这里不能选」有地方写说明，而不是留个凭空消失的控件。
   const modeSelectionDisabled = testType === "react" || executeDisabled;
+
+  // 当前测试类型的整份复制文本（结论 + 逐段正文 + 流式诊断）。能力测试按格有无 result 判：
+  // 该格没有 result 就是「未执行 / 执行中 / 已取消」三态，与结果区渲染占位的判据同源。
+  const capabilityReportOf = (type: CapabilityTestType): string | null => {
+    const result = entryByCapabilityType[type]?.result;
+    return result ? buildCapabilityReport(CAPABILITY_SPECS[type], result) : null;
+  };
+  const reportByTestType: Record<TestType, () => string | null> = {
+    connectivity: () => capabilityReportOf("connectivity"),
+    react: () => buildReactReport(reactTestResult),
+    structured_output: () => capabilityReportOf("structured_output"),
+    thinking: () => capabilityReportOf("thinking"),
+    vision: () => capabilityReportOf("vision"),
+  };
+  const copyableReport = reportByTestType[testType]();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -314,13 +367,14 @@ export function TestDialog({
 
           {/* 固定高度结果区：切换测试类型 / 展开错误 / 追加日志时，dialog 外框尺寸恒定，仅此处内部滚动 */}
           <div className="h-64 overflow-y-auto rounded-md border bg-muted/20 p-3">
-            {testType === "connectivity" && (
+            <div className="mb-2 flex justify-end">
+              <CopyResultButton report={copyableReport} />
+            </div>
+
+            {testType !== "react" && (
               <CapabilityResultSection
-                loading={!!connectivityEntry?.loading}
-                result={connectivityEntry?.result ?? null}
-                cancelled={connectivityEntry?.cancelled}
-                passedLabel="连通性测试通过"
-                failedLabel="连通性测试失败"
+                spec={CAPABILITY_SPECS[testType]}
+                entry={entryByCapabilityType[testType]}
               />
             )}
 
@@ -354,47 +408,6 @@ export function TestDialog({
               ) : (
                 <ResultPlaceholder />
               ))}
-
-            {testType === "structured_output" && (
-              <CapabilityResultSection
-                loading={!!structuredEntry?.loading}
-                result={structuredEntry?.result ?? null}
-                cancelled={structuredEntry?.cancelled}
-                passedLabel="结构化输出能力测试通过"
-                failedLabel="结构化输出能力测试失败"
-                renderDetail={(result) =>
-                  result.parsed != null ? (
-                    <LogBlock label="解析结果" value={JSON.stringify(result.parsed, null, 2)} wrap />
-                  ) : null
-                }
-              />
-            )}
-
-            {testType === "thinking" && (
-              <CapabilityResultSection
-                loading={!!thinkingEntry?.loading}
-                result={thinkingEntry?.result ?? null}
-                cancelled={thinkingEntry?.cancelled}
-                passedLabel="Thinking 能力测试通过"
-                failedLabel="Thinking 能力测试失败"
-                renderDetail={(result) =>
-                  result.thinking_text ? <LogBlock label="推理内容" value={result.thinking_text} wrap /> : null
-                }
-              />
-            )}
-
-            {testType === "vision" && (
-              <CapabilityResultSection
-                loading={!!visionEntry?.loading}
-                result={visionEntry?.result ?? null}
-                cancelled={visionEntry?.cancelled}
-                passedLabel="图片识别能力测试通过"
-                failedLabel="图片识别能力测试失败"
-                renderDetail={(result) =>
-                  result.vision_text ? <LogBlock label="识别结果" value={result.vision_text} wrap /> : null
-                }
-              />
-            )}
           </div>
         </DialogBody>
 

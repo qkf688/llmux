@@ -19,9 +19,12 @@ export interface ModelWithProvider {
   ModelID: number;
   ProviderModel: string;
   ProviderID: number;
-  ToolCall: boolean;
-  StructuredOutput: boolean;
-  Image: boolean;
+  // 能力三态：null=继承 Model 同名真值，true/false=override。
+  // 键名为 PascalCase 且后端保证**始终存在**（`models.ModelWithProvider` 直返，禁 omitempty）；
+  // 若键名失配读到的会是 undefined，编辑弹窗会把继承误判成 override 并在保存时写坏数据。
+  ToolCall: boolean | null;
+  StructuredOutput: boolean | null;
+  Image: boolean | null;
   WithHeader: boolean;
   CustomerHeaders: Record<string, string> | null;
   Status: boolean | null;
@@ -97,9 +100,10 @@ export async function createModelProvider(association: {
   model_id: number;
   provider_model: string;
   provider_id: number;
-  tool_call: boolean;
-  structured_output: boolean;
-  image: boolean;
+  // 能力三态：null/不传 = 继承 model 的能力真值（默认态）。
+  tool_call?: boolean | null;
+  structured_output?: boolean | null;
+  image?: boolean | null;
   with_header: boolean;
   customer_headers: Record<string, string>;
   weight: number;
@@ -120,9 +124,10 @@ export async function updateModelProvider(
     model_id?: number;
     provider_model?: string;
     provider_id?: number;
-    tool_call?: boolean;
-    structured_output?: boolean;
-    image?: boolean;
+    // 能力三态：null = 显式清回继承（后端写 NULL），不发字段同样清回继承。
+    tool_call?: boolean | null;
+    structured_output?: boolean | null;
+    image?: boolean | null;
     with_header?: boolean;
     customer_headers?: Record<string, string>;
     weight?: number;

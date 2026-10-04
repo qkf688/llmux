@@ -54,16 +54,36 @@ type Model struct {
 	// SupportsThinking=false 时此字段被忽略（thinking 整体剥离）。
 	// 6 档有序 [minimal, low, medium, high, xhigh, max] + 2 特殊 [none, auto]；none/auto 不参与就近钳制。
 	ThinkingLevels []string `json:"thinking_levels,omitempty" gorm:"serializer:json"`
+
+	// 以下三项是模型固有能力真值（ToolCall 工具调用 / StructuredOutput 结构化输出 /
+	// Image 视觉），与 SupportsThinking 同为 Model 层 single source of truth：
+	// 二态 bool，无「未设置」——Model 层不存在继承对象，nil 与 false 业务等价；
+	// 「继承」语义只存在于 ModelWithProvider 的对应 override 字段（nil=继承本字段）。
+	//
+	// 为什么能力真值必须同时留在关联层：能力在物理上是**链路**属性而非模型属性——
+	// 同一模型经不同第三方中转时，视觉/工具支持度可能不一致（中转站可能直接丢图或报错）。
+	// Model 层给真值、关联层按需 override，缺任一层都会丢表达能力：
+	// 只留 Model 层 → 无法表达「某家中转不支持视觉」；
+	// 只留关联层 → 每加一个供应商都要人肉重填三格，且无统一真值可继承。
+	ToolCall         bool `json:"tool_call"`         // 是否支持工具调用
+	StructuredOutput bool `json:"structured_output"` // 是否支持结构化输出
+	Image            bool `json:"image"`             // 是否支持视觉（图片输入）
 }
 
 type ModelWithProvider struct {
 	gorm.Model
-	ModelID             uint
-	ProviderModel       string
-	ProviderID          uint
-	ToolCall            *bool             // 能否接受带有工具调用的请求
-	StructuredOutput    *bool             // 能否接受带有结构化输出的请求
-	Image               *bool             // 能否接受带有图片的请求(视觉)
+	ModelID       uint
+	ProviderModel string
+	ProviderID    uint
+	// ToolCall / StructuredOutput / Image 三项能力 override，三态语义（与下方
+	// SupportsThinking 同范式）：
+	//   nil = 继承 Model 的同名能力真值（绝大多数第三方与官方一致，新建关联即此态）；
+	//   true / false = override（仅用于「该链路比模型弱」或「比模型强」的少数情形）。
+	// 生效值由 repository 的 COALESCE(mwp.<col>, model.<col>) 在 SQL 层解析，
+	// 供 service/chat 的能力筛选（见 queryEnabledModelProviders）使用。
+	ToolCall            *bool             // 能否接受带有工具调用的请求；nil=继承 Model.ToolCall
+	StructuredOutput    *bool             // 能否接受带有结构化输出的请求；nil=继承 Model.StructuredOutput
+	Image               *bool             // 能否接受带有图片的请求(视觉)；nil=继承 Model.Image
 	WithHeader          *bool             // 是否透传header
 	Status              *bool             // 是否启用
 	CustomerHeaders     map[string]string `gorm:"serializer:json"` // 自定义headers

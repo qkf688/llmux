@@ -42,6 +42,10 @@ var realModelKeysWithLevels = []testutil.APIResponseKey{
 	{Key: "auto_associate", WantSetType: gjson.True, Nilable: true},
 	{Key: "supports_thinking", WantSetType: gjson.True},
 	{Key: "thinking_levels", WantSetType: gjson.JSON},
+	// 能力真值三项：Model 层为二态 bool（无三态语义），键名走 snake_case tag。
+	{Key: "tool_call", WantSetType: gjson.True},
+	{Key: "structured_output", WantSetType: gjson.True},
+	{Key: "image", WantSetType: gjson.True},
 }
 
 // realModelKeysWithoutLevels 空值态表 = 有值态表去掉 omitempty 契约键 thinking_levels。
@@ -76,13 +80,23 @@ func serveModels(t *testing.T) string {
 		AutoAssociate:    &on,
 		SupportsThinking: true,
 		ThinkingLevels:   []string{"low", "high"},
+		ToolCall:         true,
+		StructuredOutput: true,
+		Image:            true,
 	}
 	if err := repository.Default().Model.Create(t.Context(), &full); err != nil {
 		t.Fatalf("create full model: %v", err)
 	}
 	// 三态字段全 nil：IOLog / IsUpstream / auto_associate 必须序列化成 null 且键仍在
 	//（禁 omitempty 类断层），thinking_levels 空切片整键不出现。
-	nulls := models.Model{Name: "m-nulls", SupportsThinking: true}
+	// 能力真值三项在 Model 上是二态 bool（非三态，无 null 语义），按表头约定统一置 true。
+	nulls := models.Model{
+		Name:             "m-nulls",
+		SupportsThinking: true,
+		ToolCall:         true,
+		StructuredOutput: true,
+		Image:            true,
+	}
 	if err := repository.Default().Model.Create(t.Context(), &nulls); err != nil {
 		t.Fatalf("create nulls model: %v", err)
 	}

@@ -58,6 +58,13 @@ models.Model / ModelTemplateItem
 - GORM map-based UpdateFields 不走 `serializer:json`，需手动序列化。`models.SerializeThinkingLevelsForUpdate([]string)` 用于 Model（非三态），`models.SerializeThinkingLevelsPtrForUpdate(*[]string)` 用于 ModelWithProvider（三态）。详见 `associations.md`。
 - `models.IsSixLevelEffort(effort)` 校验 effort 是否为 6 档有序档位之一（不含 none/auto），用于 `buildThinkingClampConfig` 兜底校验 autoFallback 设置值。
 
+### `Model.ToolCall / StructuredOutput / Image`（能力真值）
+
+- `bool` ×3（**非** `*bool`）：与 `SupportsThinking` 同风格——Model 层是能力真实值的 single source of truth，无继承对象，`nil` 与 `false` 业务等价；三态语义只属于 `ModelWithProvider` 的同名 override 字段（见 `associations.md`）。
+- 默认 `false`：存量模型与 modelsync 同步创建的模型升级后默认不支持三项能力，需在 model 编辑页「模型能力」区手动勾选。**这是升级后的行为变更**：存量关联行保留原有 true/false 值作为有效 override（不迁移为 NULL），因此不勾模型能力时**存量链路的对外行为完全不变**；只有新建关联才会走继承路径。
+- 消费方：`repository.ListEnabledByModelID` 在 SQL 层以 `COALESCE(mwp.<col>, model.<col>)` 解析最终能力，供 `service/chat` 的能力筛选（`strict_capability_match` 开启时）使用。
+- json tag 为 snake_case（`tool_call` / `structured_output` / `image`），与 `ModelWithProvider` 上的 PascalCase **相反**——跨实体复制字段时逐一核对（AGENTS §5）。
+
 ---
 
 *本文档由 Project Architecture Documenter skill 生成，生成日期：2026-07-23*

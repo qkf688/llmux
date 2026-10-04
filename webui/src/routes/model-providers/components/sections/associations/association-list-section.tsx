@@ -8,6 +8,8 @@ import { MobileAssociationList } from "./mobile-association-list";
 type AssociationListSectionProps = {
   loading: boolean;
   selectedModelId: number | null;
+  // 当前模型的固有能力真值，透传给能力徽章渲染「继承（启用/禁用）」。
+  modelCaps?: { tool_call: boolean; structured_output: boolean; image: boolean };
   hasAssociationFilter: boolean;
   associations: ModelWithProvider[];
   providers: Provider[];
@@ -33,6 +35,7 @@ type AssociationListSectionProps = {
 export function AssociationListSection({
   loading,
   selectedModelId,
+  modelCaps,
   hasAssociationFilter,
   associations,
   providers,
@@ -72,6 +75,7 @@ export function AssociationListSection({
         <div className="h-full flex flex-col">
           <DesktopAssociationTable
             associations={associations}
+            modelCaps={modelCaps}
             providers={providers}
             selectedAssociationIds={selectedAssociationIds}
             isAllSelected={isAllSelected}
@@ -93,6 +97,7 @@ export function AssociationListSection({
           />
           <MobileAssociationList
             associations={associations}
+            modelCaps={modelCaps}
             providers={providers}
             selectedAssociationIds={selectedAssociationIds}
             isAllSelected={isAllSelected}

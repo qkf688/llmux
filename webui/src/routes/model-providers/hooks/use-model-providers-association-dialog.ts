@@ -34,9 +34,12 @@ export function useModelProvidersAssociationDialog({
       model_id: association.ModelID,
       provider_model: association.ProviderModel,
       provider_id: association.ProviderID,
-      tool_call: association.ToolCall,
-      structured_output: association.StructuredOutput,
-      image: association.Image,
+      // 能力三态：null=继承 model 真值，true/false=本链路 override。
+      // 用 == null 而非 === null：键名一旦漂移（如后端误加 omitempty）读到的会是
+      // undefined，严格判等会恒判 "true" 并在保存时把继承静默改写成 override。
+      tool_call: toTriState(association.ToolCall),
+      structured_output: toTriState(association.StructuredOutput),
+      image: toTriState(association.Image),
       with_header: association.WithHeader,
       weight: association.Weight,
       priority: association.Priority ?? 100,
@@ -65,9 +68,9 @@ export function useModelProvidersAssociationDialog({
       model_id: selectedModelId || 0,
       provider_model: "",
       provider_id: 0,
-      tool_call: true,
-      structured_output: true,
-      image: true,
+      tool_call: "inherit", // 默认继承 model 的能力真值
+      structured_output: "inherit",
+      image: "inherit",
       with_header: false,
       weight: defaultWeight,
       priority: defaultPriority,

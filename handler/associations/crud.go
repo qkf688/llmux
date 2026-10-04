@@ -87,12 +87,13 @@ func CreateModelProvider(c *gin.Context) {
 	}
 
 	modelProvider := models.ModelWithProvider{
-		ModelID:          req.ModelID,
-		ProviderModel:    req.ProviderModel,
-		ProviderID:       req.ProviderID,
-		ToolCall:         &req.ToolCall,
-		StructuredOutput: &req.StructuredOutput,
-		Image:            &req.Image,
+		ModelID:       req.ModelID,
+		ProviderModel: req.ProviderModel,
+		ProviderID:    req.ProviderID,
+		// 能力三态：nil 落库为 NULL = 继承 Model 能力真值（新建关联的默认态）。
+		ToolCall:         req.ToolCall,
+		StructuredOutput: req.StructuredOutput,
+		Image:            req.Image,
 		WithHeader:       &req.WithHeader,
 		CustomerHeaders:  customerHeaders,
 		Weight:           req.Weight,
@@ -182,21 +183,18 @@ func UpdateModelProvider(c *gin.Context) {
 		}
 	}
 
-	// supports_thinking / thinking_levels 三态需要 nil 显式写 NULL（struct Updates 会跳过 nil 指针），
-	// 其余字段保持 struct 部分更新语义（跳过零值，缺省不改）。
-	// 两步在同一事务内执行（RunInTx），避免非原子：失败整体回滚。
+	// 五项三态字段（supports_thinking / thinking_levels / tool_call / structured_output / image）
+	// 需要 nil 显式写 NULL（struct Updates 会跳过 nil 指针），其余字段保持 struct 部分更新
+	// 语义（跳过零值，缺省不改）。两步在同一事务内执行（RunInTx），避免非原子：失败整体回滚。
 	updates := models.ModelWithProvider{
-		ModelID:          req.ModelID,
-		ProviderID:       req.ProviderID,
-		ProviderModel:    req.ProviderModel,
-		ToolCall:         &req.ToolCall,
-		StructuredOutput: &req.StructuredOutput,
-		Image:            &req.Image,
-		WithHeader:       &req.WithHeader,
-		CustomerHeaders:  customerHeaders,
-		Weight:           req.Weight,
-		Priority:         req.Priority,
-		MaxTokens:        req.MaxTokens,
+		ModelID:         req.ModelID,
+		ProviderID:      req.ProviderID,
+		ProviderModel:   req.ProviderModel,
+		WithHeader:      &req.WithHeader,
+		CustomerHeaders: customerHeaders,
+		Weight:          req.Weight,
+		Priority:        req.Priority,
+		MaxTokens:       req.MaxTokens,
 	}
 
 	if err := repos().RunInTx(ctx, func(txRepos *repository.Repositories) error {
@@ -214,6 +212,10 @@ func UpdateModelProvider(c *gin.Context) {
 		_, err = txRepos.ModelWithProvider.UpdateFields(ctx, uint(id), map[string]any{
 			"supports_thinking": req.SupportsThinking,
 			"thinking_levels":   thinkingLevelsVal,
+			// 能力三兄弟同 supports_thinking：缺省 nil = 显式清回继承。
+			"tool_call":         req.ToolCall,
+			"structured_output": req.StructuredOutput,
+			"image":             req.Image,
 		})
 		return err
 	}); err != nil {

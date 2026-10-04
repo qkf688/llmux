@@ -7,8 +7,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// ModelCapabilityFilter 关联能力筛选：字段为 true 时要求关联具备该能力。
+// ModelCapabilityFilter 关联能力筛选：字段为 true 时要求关联**最终**具备该能力。
 // 全部为 false 时不附加任何能力条件（对应「关闭严格能力匹配」）。
+//
+// 「最终」= override 优先、否则继承模型真值，即 SQL 侧 COALESCE(mwp.<col>, model.<col>)：
+// mwp.<col> 存了值（含 false）走 override，存 NULL 才继承。见 ListEnabledByModelID。
 type ModelCapabilityFilter struct {
 	ToolCall         bool
 	StructuredOutput bool
@@ -19,7 +22,8 @@ type ModelCapabilityFilter struct {
 type ModelWithProviderRepo interface {
 	// ListByModelID 返回指定模型的全部关联。
 	ListByModelID(ctx context.Context, modelID uint) ([]models.ModelWithProvider, error)
-	// ListEnabledByModelID 返回指定模型下 status=true 的关联，并按 caps 附加能力过滤。
+	// ListEnabledByModelID 返回指定模型下 status=true 的关联，并按 caps 过滤**最终**能力
+	//（override 优先、否则继承 Model 真值，见实现处 COALESCE）。
 	ListEnabledByModelID(ctx context.Context, modelID uint, caps ModelCapabilityFilter) ([]models.ModelWithProvider, error)
 	// ListByStatus 按启用状态返回关联；status 为 nil 时返回全部。
 	ListByStatus(ctx context.Context, status *bool) ([]models.ModelWithProvider, error)
@@ -76,16 +80,25 @@ func (r *modelWithProviderRepo) ListByModelID(ctx context.Context, modelID uint)
 	return rows, nil
 }
 
+// ListEnabledByModelID 返回指定模型下 status=true 的关联，并按 caps 附加能力过滤。
+//
+// 能力过滤走 JOIN models + COALESCE(mwp.<col>, model.<col>) = true：
+// 关联层存了 override（含显式 false）以 override 为准，存 NULL 才继承模型真值。
+// 不能写成单表 `WHERE tool_call = true`——那会把「继承且模型本身支持」的关联全部误杀，
+// 等于逼着每条新关联都人肉重填三格，继承语义形同虚设。
 func (r *modelWithProviderRepo) ListEnabledByModelID(ctx context.Context, modelID uint, caps ModelCapabilityFilter) ([]models.ModelWithProvider, error) {
-	query := r.db.WithContext(ctx).Where("model_id = ? AND status = ?", modelID, true)
+	query := r.db.WithContext(ctx).
+		Model(&models.ModelWithProvider{}).
+		Joins("JOIN models ON models.id = model_with_providers.model_id").
+		Where("model_with_providers.model_id = ? AND model_with_providers.status = ?", modelID, true)
 	if caps.ToolCall {
-		query = query.Where("tool_call = ?", true)
+		query = query.Where("COALESCE(model_with_providers.tool_call, models.tool_call) = ?", true)
 	}
 	if caps.StructuredOutput {
-		query = query.Where("structured_output = ?", true)
+		query = query.Where("COALESCE(model_with_providers.structured_output, models.structured_output) = ?", true)
 	}
 	if caps.Image {
-		query = query.Where("image = ?", true)
+		query = query.Where("COALESCE(model_with_providers.image, models.image) = ?", true)
 	}
 
 	var rows []models.ModelWithProvider

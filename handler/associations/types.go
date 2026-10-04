@@ -6,11 +6,13 @@ type ModelWithProviderRequest struct {
 	// ProviderModel 是上游模型名（供应商侧的 model 标识），不是供应商名称。
 	// json 键与字段名对齐为 provider_model：旧键名 provider_name 与字段语义错位，
 	// 极易被误读成 Provider.Name（本仓其余域的 provider_name 确实都指供应商名称）。
-	ProviderModel    string            `json:"provider_model"`
-	ProviderID       uint              `json:"provider_id"`
-	ToolCall         bool              `json:"tool_call"`
-	StructuredOutput bool              `json:"structured_output"`
-	Image            bool              `json:"image"`
+	ProviderModel string `json:"provider_model"`
+	ProviderID    uint   `json:"provider_id"`
+	// 能力三态（与 supports_thinking 同范式）：nil=继承 Model 的能力真值，true/false=override。
+	// 用 *bool 而非 bool：bool 无法区分「显式关闭」与「未传」，会把继承态静默改写成 override。
+	ToolCall         *bool             `json:"tool_call"`
+	StructuredOutput *bool             `json:"structured_output"`
+	Image            *bool             `json:"image"`
 	WithHeader       bool              `json:"with_header"`
 	CustomerHeaders  map[string]string `json:"customer_headers"`
 	Weight           int               `json:"weight"`

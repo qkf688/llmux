@@ -29,6 +29,7 @@ import { ChevronDown, ChevronUp, MoreVertical, TestTube, Trash2 } from "lucide-r
 
 type MobileAssociationListProps = {
   associations: ModelWithProvider[];
+  modelCaps?: { tool_call: boolean; structured_output: boolean; image: boolean };
   providers: Provider[];
   selectedAssociationIds: number[];
   isAllSelected: boolean;
@@ -50,6 +51,7 @@ type MobileAssociationListProps = {
 
 export function MobileAssociationList({
   associations,
+  modelCaps,
   providers,
   selectedAssociationIds,
   isAllSelected,
@@ -205,6 +207,7 @@ export function MobileAssociationList({
                         structuredOutput={association.StructuredOutput}
                         image={association.Image}
                         withHeader={association.WithHeader}
+                        modelCaps={modelCaps}
                       />
                     }
                   />

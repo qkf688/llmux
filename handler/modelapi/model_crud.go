@@ -45,6 +45,10 @@ func CreateModel(c *gin.Context) {
 		AutoAssociate:    req.AutoAssociate,
 		SupportsThinking: req.SupportsThinking != nil && *req.SupportsThinking,
 		ThinkingLevels:   req.ThinkingLevels,
+		// 能力真值：DTO *bool 缺省 = false（与 SupportsThinking 同口径）
+		ToolCall:         req.ToolCall != nil && *req.ToolCall,
+		StructuredOutput: req.StructuredOutput != nil && *req.StructuredOutput,
+		Image:            req.Image != nil && *req.Image,
 	}
 	if err := repos().Model.Create(c.Request.Context(), &model); err != nil {
 		httpresp.InternalErrorMessage(c, "Failed to create model", err)
@@ -82,6 +86,17 @@ func UpdateModel(c *gin.Context) {
 	// 条件写：缺省（nil）时保留存量值，避免 PUT 不带该字段把已开启的模型静默重置为 false
 	if req.SupportsThinking != nil {
 		updates["supports_thinking"] = *req.SupportsThinking
+	}
+	// 能力真值三项同 SupportsThinking 的条件写：缺省保留存量，
+	// 避免不带该字段的 PUT 把已开启的模型能力静默重置为 false（会连带改掉所有继承它的关联）。
+	if req.ToolCall != nil {
+		updates["tool_call"] = *req.ToolCall
+	}
+	if req.StructuredOutput != nil {
+		updates["structured_output"] = *req.StructuredOutput
+	}
+	if req.Image != nil {
+		updates["image"] = *req.Image
 	}
 	// ThinkingLevels：DTO 用 []string（非指针），nil=不约束（空切片语义）。
 	// 始终写入：前端不发字段时 JSON 解析为 nil，写入空切片（=不约束）；

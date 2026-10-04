@@ -189,6 +189,56 @@ export function ModelFormDialog({
               </div>
             </div>
 
+            {/* 模型固有能力真值：关联侧默认继承这三项。
+                多数第三方与官方能力一致，这里勾一次，全部关联自动跟随；
+                只有个别链路能力弱于模型时，才去关联上单独覆盖。 */}
+            <div className="rounded-lg border p-4 space-y-3">
+              <div>
+                <div className="text-base">模型能力</div>
+                <div className="text-sm text-muted-foreground">
+                  声明该模型本身支持的能力。模型-供应商关联默认继承这里的设置，仅当某个链路不支持时才单独覆盖。
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-x-6 gap-y-2">
+                <FormField
+                  control={form.control}
+                  name="tool_call"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center gap-2 space-y-0">
+                      <FormControl>
+                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                      <FormLabel className="text-sm">工具调用</FormLabel>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="structured_output"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center gap-2 space-y-0">
+                      <FormControl>
+                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                      <FormLabel className="text-sm">结构化输出</FormLabel>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="image"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center gap-2 space-y-0">
+                      <FormControl>
+                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                      <FormLabel className="text-sm">视觉</FormLabel>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
             <FormField
               control={form.control}
               name="thinking_levels"

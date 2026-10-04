@@ -48,6 +48,52 @@ type AssociationFormDialogProps = {
   onProviderChange: () => void;
 };
 
+// 能力三态字段（三项共用）："inherit" 跟随模型真值，true/false 为本链路的 override。
+// 绝大多数第三方与官方能力一致，无需逐条标注，故默认态是「继承」而非勾选框。
+// modelValue 仅用于把"继承时的实际取值"显示出来，避免用户选了继承却看不出最终能力。
+function CapabilityTriStateField({
+  form,
+  name,
+  label,
+  modelValue,
+}: {
+  form: UseFormReturn<FormValues>;
+  name: "tool_call" | "structured_output" | "image";
+  label: string;
+  modelValue: boolean;
+}) {
+  const inheritedText = modelValue ? "启用" : "禁用";
+  return (
+    <FormField
+      control={form.control}
+      name={name}
+      render={({ field }) => (
+        <FormItem className="rounded-md border p-4">
+          <div className="space-y-1">
+            <FormLabel>{label}</FormLabel>
+            <div className="text-sm text-muted-foreground">
+              覆盖模型级能力；"继承"跟随模型设置（当前：{inheritedText}）
+            </div>
+          </div>
+          <FormControl>
+            <Select value={field.value} onValueChange={field.onChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="选择" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="inherit">继承（当前：{inheritedText}）</SelectItem>
+                <SelectItem value="true">启用</SelectItem>
+                <SelectItem value="false">禁用</SelectItem>
+              </SelectContent>
+            </Select>
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+}
+
 export function AssociationFormDialog({
   open,
   onOpenChange,
@@ -70,6 +116,9 @@ export function AssociationFormDialog({
   const handleSubmit = editingAssociation ? onSubmitUpdate : onSubmitCreate;
   // 仅订阅 model_id 字段变化（比 form.watch 每渲染全表单订阅更小）
   const selectedModelId = useWatch({ control: form.control, name: "model_id" });
+  // 当前选中模型的固有能力真值，供能力三态字段展示「继承时的实际取值」，
+  // 也供下方 supports_thinking / thinking_levels 复用（避免每处重复 find）。
+  const selectedModel = models.find((m) => m.ID === selectedModelId);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -222,49 +271,23 @@ export function AssociationFormDialog({
               )}
 
               <FormLabel>模型能力</FormLabel>
-              <FormField
-                control={form.control}
+              <CapabilityTriStateField
+                form={form}
                 name="tool_call"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                    <FormControl>
-                      <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>工具调用</FormLabel>
-                    </div>
-                  </FormItem>
-                )}
+                label="工具调用"
+                modelValue={selectedModel?.tool_call ?? false}
               />
-
-              <FormField
-                control={form.control}
+              <CapabilityTriStateField
+                form={form}
                 name="structured_output"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                    <FormControl>
-                      <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>结构化输出</FormLabel>
-                    </div>
-                  </FormItem>
-                )}
+                label="结构化输出"
+                modelValue={selectedModel?.structured_output ?? false}
               />
-
-              <FormField
-                control={form.control}
+              <CapabilityTriStateField
+                form={form}
                 name="image"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                    <FormControl>
-                      <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>视觉</FormLabel>
-                    </div>
-                  </FormItem>
-                )}
+                label="视觉"
+                modelValue={selectedModel?.image ?? false}
               />
 
               <FormLabel>参数配置</FormLabel>
@@ -272,7 +295,6 @@ export function AssociationFormDialog({
                 control={form.control}
                 name="supports_thinking"
                 render={({ field }) => {
-                  const selectedModel = models.find((m) => m.ID === selectedModelId);
                   const inherited = selectedModel ? selectedModel.supports_thinking : false;
                   return (
                     <FormItem className="rounded-md border p-4">
@@ -303,7 +325,6 @@ export function AssociationFormDialog({
                 control={form.control}
                 name="thinking_levels_mode"
                 render={({ field }) => {
-                  const selectedModel = models.find((m) => m.ID === selectedModelId);
                   const inheritedLevels = selectedModel?.thinking_levels;
                   const inheritedLabel =
                     inheritedLevels === undefined || inheritedLevels === null

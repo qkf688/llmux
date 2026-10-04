@@ -12,9 +12,11 @@ export const formSchema = z.object({
   // 上游模型名（供应商侧的 model 标识），非供应商名称——与后端 provider_model 键同名
   provider_model: z.string().default(""),
   provider_id: z.number().min(0, { message: "提供商ID必须大于等于0" }),
-  tool_call: z.boolean(),
-  structured_output: z.boolean(),
-  image: z.boolean(),
+  // 能力三态："inherit"=继承 model 的能力真值，"true"/"false"=本链路 override。
+  // 绝大多数第三方与官方一致，默认继承；仅个别链路弱于模型时才 override。
+  tool_call: z.enum(["inherit", "true", "false"]),
+  structured_output: z.enum(["inherit", "true", "false"]),
+  image: z.enum(["inherit", "true", "false"]),
   with_header: z.boolean(),
   weight: z.number().positive({ message: "权重必须大于0" }),
   priority: z.number().min(0, { message: "优先级必须大于等于0" }),

@@ -41,4 +41,35 @@ describe("CapabilityBadges", () => {
 
     expect(screen.getByText("无")).toBeTruthy();
   });
+
+  // 继承态（null）必须与「显式关闭」（false）视觉可区分：
+  // 两者最终能力可能不同（继承的是模型真值），压成同一个渲染会让用户
+  // 误以为该链路不支持，从而重复去关联上逐条标注——正是本次改动要消灭的动作。
+  it("继承态与显式关闭渲染不同：继承带 modelCaps 时显示实际取值", () => {
+    render(
+      <CapabilityBadges
+        toolCall={null}
+        structuredOutput={false}
+        image={null}
+        withHeader={false}
+        modelCaps={{ tool_call: true, structured_output: false, image: true }}
+      />,
+    );
+
+    expect(screen.getByText("工具·继承（启用）")).toBeTruthy();
+    expect(screen.getByText("视觉·继承（启用）")).toBeTruthy();
+    // 显式 false 不渲染徽章，也不会与继承态混成同一段文案
+    expect(screen.queryByText("结构化")).toBeNull();
+  });
+
+  it("无 modelCaps 时继承态仍标注「继承」，不假装成已启用", () => {
+    render(
+      <CapabilityBadges toolCall={null} structuredOutput={null} image={null} withHeader={false} />,
+    );
+
+    expect(screen.getByText("工具·继承")).toBeTruthy();
+    expect(screen.getByText("结构化·继承")).toBeTruthy();
+    expect(screen.getByText("视觉·继承")).toBeTruthy();
+    expect(screen.queryByText("无")).toBeNull();
+  });
 });

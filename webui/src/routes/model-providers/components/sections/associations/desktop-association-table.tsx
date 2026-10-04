@@ -32,6 +32,7 @@ import { StatusBars } from "../../shared/status-bars";
 
 type DesktopAssociationTableProps = {
   associations: ModelWithProvider[];
+  modelCaps?: { tool_call: boolean; structured_output: boolean; image: boolean };
   providers: Provider[];
   selectedAssociationIds: number[];
   isAllSelected: boolean;
@@ -54,6 +55,7 @@ type DesktopAssociationTableProps = {
 
 export function DesktopAssociationTable({
   associations,
+  modelCaps,
   providers,
   selectedAssociationIds,
   isAllSelected,
@@ -182,6 +184,7 @@ export function DesktopAssociationTable({
                     structuredOutput={association.StructuredOutput}
                     image={association.Image}
                     withHeader={association.WithHeader}
+                    modelCaps={modelCaps}
                   />
                 </TableCell>
                 <TableCell>{association.Weight}</TableCell>

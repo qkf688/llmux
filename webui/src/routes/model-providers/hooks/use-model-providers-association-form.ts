@@ -9,9 +9,9 @@ export function useModelProvidersAssociationForm() {
       model_id: 0,
       provider_model: "",
       provider_id: 0,
-      tool_call: true,
-      structured_output: true,
-      image: true,
+      tool_call: "inherit", // 默认继承 model 的能力真值
+      structured_output: "inherit",
+      image: "inherit",
       with_header: false,
       weight: 5,
       priority: 10,

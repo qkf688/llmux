@@ -17,14 +17,16 @@ func TestNewDefaultAssociation(t *testing.T) {
 	if assoc.Priority != 8 || assoc.Weight != DefaultWeightFallback {
 		t.Fatalf("priority/weight = %d/%d", assoc.Priority, assoc.Weight)
 	}
-	if assoc.ToolCall == nil || !*assoc.ToolCall {
-		t.Fatal("ToolCall should be true")
+	// 能力三项默认继承 Model 真值（nil），不再逐条硬编码——多数第三方与官方一致。
+	// 继承语义的逐字段断言见 defaults_capability_test.go。
+	if assoc.ToolCall != nil {
+		t.Fatalf("ToolCall = %v, want nil（继承）", *assoc.ToolCall)
 	}
 	if assoc.Status == nil || !*assoc.Status {
 		t.Fatal("Status should be true")
 	}
-	if assoc.StructuredOutput == nil || *assoc.StructuredOutput {
-		t.Fatal("StructuredOutput should be false")
+	if assoc.StructuredOutput != nil {
+		t.Fatalf("StructuredOutput = %v, want nil（继承）", *assoc.StructuredOutput)
 	}
 }
 

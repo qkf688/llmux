@@ -17,9 +17,11 @@ export const buildAssociationPayload = (
     model_id: values.model_id,
     provider_model: (overrides?.providerModel ?? values.provider_model) || "",
     provider_id: overrides?.providerId ?? values.provider_id,
-    tool_call: values.tool_call,
-    structured_output: values.structured_output,
-    image: values.image,
+    // 能力三态转换与 supports_thinking 共用单源（tri-state.ts）：
+    // inherit → undefined（不传该字段，后端写 NULL=继承模型能力真值）。
+    tool_call: fromTriState(values.tool_call),
+    structured_output: fromTriState(values.structured_output),
+    image: fromTriState(values.image),
     with_header: values.with_header,
     customer_headers: headers,
     weight: values.weight,

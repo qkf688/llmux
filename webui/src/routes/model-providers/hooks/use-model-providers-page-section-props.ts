@@ -84,6 +84,16 @@ export function useModelProvidersPageSectionProps(ctx: SectionPropsContext) {
   const associationListSectionProps = {
     loading: localState.loading,
     selectedModelId: localState.selectedModelId,
+    // 当前模型的固有能力真值：仅用于把关联能力列的「继承」态渲染成
+    // 「继承（启用/禁用）」，避免用户选了继承却看不出最终能力。这里算一次，
+    // 由 section 透传给表格/卡片，组件内不再重复查找模型。
+    modelCaps: selectedModel
+      ? {
+          tool_call: selectedModel.tool_call,
+          structured_output: selectedModel.structured_output,
+          image: selectedModel.image,
+        }
+      : undefined,
     hasAssociationFilter: filters.hasAssociationFilter,
     associations: filters.filteredModelProviders as ModelWithProvider[],
     providers: localState.providers,

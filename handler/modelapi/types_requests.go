@@ -13,6 +13,13 @@ type ModelRequest struct {
 	// SupportsThinking=false 时此字段被忽略（thinking 整体剥离）。
 	// 6 档有序 [minimal, low, medium, high, xhigh, max] + 2 特殊 [none, auto]。
 	ThinkingLevels []string `json:"thinking_levels,omitempty"`
+	// 能力真值三项（ToolCall 工具调用 / StructuredOutput 结构化输出 / Image 视觉）。
+	// 与 SupportsThinking 同范式用 *bool：nil=不改（Create 时视为 false），
+	// 供 ModelWithProvider 的对应 override 字段继承（nil=继承本字段）。
+	// 绝大多数第三方与官方能力一致，关联侧默认继承，无需逐条标注。
+	ToolCall         *bool `json:"tool_call,omitempty"`
+	StructuredOutput *bool `json:"structured_output,omitempty"`
+	Image            *bool `json:"image,omitempty"`
 }
 
 // BatchDeleteModelsRequest represents the request body for batch deleting models.

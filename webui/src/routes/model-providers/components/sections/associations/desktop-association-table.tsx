@@ -177,7 +177,9 @@ export function DesktopAssociationTable({
                   <span className="block truncate">{provider?.Name ?? "未知"}</span>
                 </TableCell>
                 <TableCell>
-                  {/* 徽章不换行：列宽已固定，禁止 wrap 才能保证任何数据下行高一致 */}
+                  {/* 徽章不换行：列宽已固定，禁止 wrap 才能保证任何数据下行高一致。
+                      徽章已收敛为「最终支持的能力」（最多三个 2 字短徽章），
+                      宽度与改动前持平，不会溢出压住权重/优先级。 */}
                   <CapabilityBadges
                     nowrap
                     toolCall={association.ToolCall}

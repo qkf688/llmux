@@ -116,6 +116,7 @@ export function useModelProvidersPage() {
     form: form.form,
     settings: localState.settings,
     selectedModelId,
+    models: localState.models,
     setOpen,
     setEditingAssociation,
     setSelectedProviderModels,

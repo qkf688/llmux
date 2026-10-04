@@ -7,9 +7,10 @@ function valuesWithHeaders(headers: { key: string; value: string }[]): FormValue
     model_id: 1,
     provider_model: "pm",
     provider_id: 1,
-    tool_call: "true",
-    structured_output: "false",
-    image: "inherit",
+    capabilities_mode: "custom",
+    tool_call: true,
+    structured_output: false,
+    image: true,
     with_header: false,
     weight: 10,
     priority: 10,
@@ -49,43 +50,48 @@ describe("buildAssociationPayload customer_headers 折叠（与 api-keys 共用 
   });
 });
 
-// 能力三态是本次「模型层补真值 + 关联层留 override」的传输面：
-// inherit 必须发 undefined（JSON.stringify 会丢掉 undefined 键 → 后端收不到 → 写 NULL 继承），
-// 而 true/false 必须原样发出去。四个值各自可区分，才不会把继承静默改写成 override。
-describe("buildAssociationPayload 能力三态", () => {
-  it("inherit → undefined（不传键，后端写 NULL=继承模型真值）", () => {
+// 能力总控的传输面：capabilities_mode 决定三项发不发、发什么。
+// 走错的后果是静默的——发错了只是能力配置不对，没有编译期或运行期报错。
+describe("buildAssociationPayload 能力总控", () => {
+  it("总控=继承 → 三项一律不发（后端写 NULL=继承模型真值）", () => {
     const payload = buildAssociationPayload({
       ...valuesWithHeaders([]),
-      tool_call: "inherit",
-      structured_output: "inherit",
-      image: "inherit",
+      capabilities_mode: "inherit",
+      // 即便表单里勾着东西，继承模式下也必须忽略——否则勾选框会变成假动作
+      tool_call: true,
+      structured_output: true,
+      image: true,
     });
     expect(payload.tool_call).toBeUndefined();
     expect(payload.structured_output).toBeUndefined();
     expect(payload.image).toBeUndefined();
   });
 
-  it("true/false → 原样传出（override），不被继承语义吞掉", () => {
+  it("总控=自定义 → 三项按勾选原样发出（含 false）", () => {
     const payload = buildAssociationPayload({
       ...valuesWithHeaders([]),
-      tool_call: "true",
-      structured_output: "false",
-      image: "inherit",
+      capabilities_mode: "custom",
+      tool_call: true,
+      structured_output: false,
+      image: false,
     });
     expect(payload.tool_call).toBe(true);
     expect(payload.structured_output).toBe(false);
-    expect(payload.image).toBeUndefined();
+    expect(payload.image).toBe(false);
   });
 
-  it("override=false 是有效值，不能与 inherit 混同", () => {
+  it("继承与显式关闭产生不同 payload，不能混同", () => {
     const inherited = buildAssociationPayload({
       ...valuesWithHeaders([]),
-      tool_call: "inherit",
+      capabilities_mode: "inherit",
+      tool_call: false,
     });
     const disabled = buildAssociationPayload({
       ...valuesWithHeaders([]),
-      tool_call: "false",
+      capabilities_mode: "custom",
+      tool_call: false,
     });
     expect(inherited.tool_call).not.toBe(disabled.tool_call);
+    expect(disabled.tool_call).toBe(false);
   });
 });

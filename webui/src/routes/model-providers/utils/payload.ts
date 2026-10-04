@@ -13,15 +13,17 @@ export const buildAssociationPayload = (
   // 在后端写入闸 common/outboundheaders.go，两域同一口径（4a）。
   const headers = rowsToHeaders(values.customer_headers || []);
 
+  // 能力：总控选「继承」时三项一律不发（后端写 NULL=继承模型真值）；
+  // 选「自定义」时三项按勾选原样发出（显式 override）。
+  const capsInherit = values.capabilities_mode === "inherit";
+
   return {
     model_id: values.model_id,
     provider_model: (overrides?.providerModel ?? values.provider_model) || "",
     provider_id: overrides?.providerId ?? values.provider_id,
-    // 能力三态转换与 supports_thinking 共用单源（tri-state.ts）：
-    // inherit → undefined（不传该字段，后端写 NULL=继承模型能力真值）。
-    tool_call: fromTriState(values.tool_call),
-    structured_output: fromTriState(values.structured_output),
-    image: fromTriState(values.image),
+    tool_call: capsInherit ? undefined : values.tool_call,
+    structured_output: capsInherit ? undefined : values.structured_output,
+    image: capsInherit ? undefined : values.image,
     with_header: values.with_header,
     customer_headers: headers,
     weight: values.weight,

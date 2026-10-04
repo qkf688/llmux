@@ -12,11 +12,15 @@ export const formSchema = z.object({
   // 上游模型名（供应商侧的 model 标识），非供应商名称——与后端 provider_model 键同名
   provider_model: z.string().default(""),
   provider_id: z.number().min(0, { message: "提供商ID必须大于等于0" }),
-  // 能力三态："inherit"=继承 model 的能力真值，"true"/"false"=本链路 override。
-  // 绝大多数第三方与官方一致，默认继承；仅个别链路弱于模型时才 override。
-  tool_call: z.enum(["inherit", "true", "false"]),
-  structured_output: z.enum(["inherit", "true", "false"]),
-  image: z.enum(["inherit", "true", "false"]),
+  // 能力总控：inherit=三项全部跟随模型真值（不提交，后端写 NULL）；
+  // custom=三项按下面的勾选显式指定。
+  // 单独设这个字段而非让三项各自带三态，是因为「继承」与「显式等于模型真值」
+  // 在 COALESCE 解析后等价，UI 上区分它俩只是给人添麻烦（见 associations.md）。
+  // 取值域与 thinking_levels_mode 一致：同弹窗内两块枚举统一，用户不必学两套。
+  capabilities_mode: z.enum(["inherit", "custom"]),
+  tool_call: z.boolean(),
+  structured_output: z.boolean(),
+  image: z.boolean(),
   with_header: z.boolean(),
   weight: z.number().positive({ message: "权重必须大于0" }),
   priority: z.number().min(0, { message: "优先级必须大于等于0" }),

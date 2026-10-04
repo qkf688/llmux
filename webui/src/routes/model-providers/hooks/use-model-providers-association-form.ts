@@ -9,9 +9,12 @@ export function useModelProvidersAssociationForm() {
       model_id: 0,
       provider_model: "",
       provider_id: 0,
-      tool_call: "inherit", // 默认继承 model 的能力真值
-      structured_output: "inherit",
-      image: "inherit",
+      // 能力默认全继承；勾选初值 false 只是占位——openEdit/openCreate 会用
+      // 模型真值重填，避免用户切到「自定义」时看到与生效能力不符的空勾选。
+      capabilities_mode: "inherit",
+      tool_call: false,
+      structured_output: false,
+      image: false,
       with_header: false,
       weight: 5,
       priority: 10,

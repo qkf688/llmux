@@ -48,49 +48,93 @@ type AssociationFormDialogProps = {
   onProviderChange: () => void;
 };
 
-// 能力三态字段（三项共用）："inherit" 跟随模型真值，true/false 为本链路的 override。
-// 绝大多数第三方与官方能力一致，无需逐条标注，故默认态是「继承」而非勾选框。
-// modelValue 仅用于把"继承时的实际取值"显示出来，避免用户选了继承却看不出最终能力。
-function CapabilityTriStateField({
+// 能力总控 + 明细勾选（三项共用一个组件）。
+//
+// 为什么是「总控 + 勾选」而不是三项各自三态下拉：
+//  ① 「继承」与「显式等于模型真值」在 COALESCE 解析后完全等价，UI 区分它俩只是添麻烦；
+//  ② 绝大多数链路要么整体跟随、要么整体弱于模型，一个动作就能覆盖主场景；
+//  ③ 总控下拉把"这条链路要不要单独管"表达成一个明确动作，不必让用户对三件平级的事各决策一次。
+//
+// 取值域（inherit / custom）与下方 thinking 白名单的 thinking_levels_mode 刻意一致：
+// 两块在同一弹窗内，枚举名与措辞统一才不需要用户学两套。
+function CapabilitySection({
   form,
-  name,
-  label,
-  modelValue,
+  modelCaps,
 }: {
   form: UseFormReturn<FormValues>;
-  name: "tool_call" | "structured_output" | "image";
-  label: string;
-  modelValue: boolean;
+  modelCaps: { tool_call: boolean; structured_output: boolean; image: boolean };
 }) {
-  const inheritedText = modelValue ? "启用" : "禁用";
+  const mode = useWatch({ control: form.control, name: "capabilities_mode" });
+  const caps: { name: "tool_call" | "structured_output" | "image"; label: string; modelKey: keyof typeof modelCaps }[] = [
+    { name: "tool_call", label: "工具调用", modelKey: "tool_call" },
+    { name: "structured_output", label: "结构化输出", modelKey: "structured_output" },
+    { name: "image", label: "视觉", modelKey: "image" },
+  ];
+  const inheritedSummary = caps
+    .map((c) => `${c.label} ${modelCaps[c.modelKey] ? "启用" : "禁用"}`)
+    .join(" · ");
+
   return (
-    <FormField
-      control={form.control}
-      name={name}
-      render={({ field }) => (
-        <FormItem className="rounded-md border p-4">
+    <>
+      <FormField
+        control={form.control}
+        name="capabilities_mode"
+        render={({ field }) => (
+          <FormItem className="rounded-md border p-4 space-y-3">
+            <div className="space-y-1">
+              <FormLabel>模型能力</FormLabel>
+              <div className="text-sm text-muted-foreground">
+                默认跟随模型设置（当前：{inheritedSummary}）。仅当这条链路的能力与模型不一致时才自定义。
+              </div>
+            </div>
+            <FormControl>
+              <Select value={field.value} onValueChange={field.onChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="inherit">继承（跟随模型设置）</SelectItem>
+                  <SelectItem value="custom">自定义</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      {/* 明细仅在「自定义」下出现：继承时摆一排勾选框只会让人以为它们生效。 */}
+      {mode === "custom" && (
+        <FormItem className="rounded-md border p-4 space-y-3">
           <div className="space-y-1">
-            <FormLabel>{label}</FormLabel>
+            <FormLabel>自定义</FormLabel>
             <div className="text-sm text-muted-foreground">
-              覆盖模型级能力；"继承"跟随模型设置（当前：{inheritedText}）
+              勾选这条链路实际支持的能力。取消勾选表示该链路不支持；保存后这三项不再跟随模型设置。
             </div>
           </div>
           <FormControl>
-            <Select value={field.value} onValueChange={field.onChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="选择" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="inherit">继承（当前：{inheritedText}）</SelectItem>
-                <SelectItem value="true">启用</SelectItem>
-                <SelectItem value="false">禁用</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex flex-wrap gap-x-6 gap-y-2 pt-1">
+              {caps.map((c) => (
+                <FormField
+                  key={c.name}
+                  control={form.control}
+                  name={c.name}
+                  render={({ field: capField }) => (
+                    <label className="flex items-center gap-2 cursor-pointer text-sm">
+                      <Checkbox
+                        checked={capField.value}
+                        onCheckedChange={(checked) => capField.onChange(checked === true)}
+                      />
+                      {c.label}
+                    </label>
+                  )}
+                />
+              ))}
+            </div>
           </FormControl>
-          <FormMessage />
         </FormItem>
       )}
-    />
+    </>
   );
 }
 
@@ -116,9 +160,11 @@ export function AssociationFormDialog({
   const handleSubmit = editingAssociation ? onSubmitUpdate : onSubmitCreate;
   // 仅订阅 model_id 字段变化（比 form.watch 每渲染全表单订阅更小）
   const selectedModelId = useWatch({ control: form.control, name: "model_id" });
-  // 当前选中模型的固有能力真值，供能力三态字段展示「继承时的实际取值」，
+  // 当前选中模型的固有能力真值，供能力总控展示「继承时的实际取值」，
   // 也供下方 supports_thinking / thinking_levels 复用（避免每处重复 find）。
   const selectedModel = models.find((m) => m.ID === selectedModelId);
+  // 订阅明细卡片的显隐条件：thinking 白名单只在「自定义」时渲染。
+  const thinkingMode = useWatch({ control: form.control, name: "thinking_levels_mode" });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -271,23 +317,13 @@ export function AssociationFormDialog({
               )}
 
               <FormLabel>模型能力</FormLabel>
-              <CapabilityTriStateField
+              <CapabilitySection
                 form={form}
-                name="tool_call"
-                label="工具调用"
-                modelValue={selectedModel?.tool_call ?? false}
-              />
-              <CapabilityTriStateField
-                form={form}
-                name="structured_output"
-                label="结构化输出"
-                modelValue={selectedModel?.structured_output ?? false}
-              />
-              <CapabilityTriStateField
-                form={form}
-                name="image"
-                label="视觉"
-                modelValue={selectedModel?.image ?? false}
+                modelCaps={{
+                  tool_call: selectedModel?.tool_call ?? false,
+                  structured_output: selectedModel?.structured_output ?? false,
+                  image: selectedModel?.image ?? false,
+                }}
               />
 
               <FormLabel>参数配置</FormLabel>
@@ -337,8 +373,7 @@ export function AssociationFormDialog({
                       <div className="space-y-1">
                         <FormLabel>思考档位白名单</FormLabel>
                         <div className="text-sm text-muted-foreground">
-                          覆盖模型级的思考档位白名单；"继承"跟随模型设置（当前：{inheritedLabel}）。
-                          自定义模式下勾选允许的档位，空列表=不约束
+                          不在白名单的档位会被就近钳制到最接近的档位；空列表=不约束。当前继承值：{inheritedLabel}
                         </div>
                       </div>
                       <FormControl>
@@ -357,50 +392,52 @@ export function AssociationFormDialog({
                   );
                 }}
               />
-              <FormField
-                control={form.control}
-                name="thinking_levels_custom"
-                render={({ field }) => (
-                  <FormItem className="rounded-md border p-4 space-y-3">
-                    <div className="space-y-1">
-                      <FormLabel>自定义白名单</FormLabel>
-                      <div className="text-sm text-muted-foreground">
-                        勾选允许的 reasoning_effort 档位；空列表=不约束（任意档位透传）。
-                        不在白名单的档位会被就近钳制到白名单内最接近的档位
+              {/* 明细仅在「自定义」下出现：继承时摆一排勾选框只会让人以为它们生效。 */}
+              {thinkingMode === "custom" && (
+                <FormField
+                  control={form.control}
+                  name="thinking_levels_custom"
+                  render={({ field }) => (
+                    <FormItem className="rounded-md border p-4 space-y-3">
+                      <div className="space-y-1">
+                        <FormLabel>自定义白名单</FormLabel>
+                        <div className="text-sm text-muted-foreground">
+                          勾选允许的 reasoning_effort 档位；全部不勾=不约束（任意档位透传）
+                        </div>
                       </div>
-                    </div>
-                    <FormControl>
-                      <div className="flex flex-wrap gap-3 pt-1">
-                        {THINKING_LEVEL_OPTIONS.map((opt) => {
-                          const checked = (field.value ?? []).includes(opt.value);
-                          return (
-                            <label
-                              key={opt.value}
-                              className="flex items-center gap-2 cursor-pointer text-sm"
-                            >
-                              <Checkbox
-                                checked={checked}
-                                onCheckedChange={(c) => {
-                                  const current = field.value ? [...field.value] : [];
-                                  if (c) {
-                                    current.push(opt.value);
-                                  } else {
-                                    const idx = current.indexOf(opt.value);
-                                    if (idx >= 0) current.splice(idx, 1);
-                                  }
-                                  field.onChange(current);
-                                }}
-                              />
-                              {opt.label}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                      <FormControl>
+                        <div className="flex flex-wrap gap-3 pt-1">
+                          {THINKING_LEVEL_OPTIONS.map((opt) => {
+                            const checked = (field.value ?? []).includes(opt.value);
+                            return (
+                              <label
+                                key={opt.value}
+                                className="flex items-center gap-2 cursor-pointer text-sm"
+                              >
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(c) => {
+                                    const current = field.value ? [...field.value] : [];
+                                    if (c) {
+                                      current.push(opt.value);
+                                    } else {
+                                      const idx = current.indexOf(opt.value);
+                                      if (idx >= 0) current.splice(idx, 1);
+                                    }
+                                    field.onChange(current);
+                                  }}
+                                />
+                                {opt.label}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
               <FormField
                 control={form.control}
                 name="with_header"

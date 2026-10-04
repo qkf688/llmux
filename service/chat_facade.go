@@ -67,7 +67,8 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 
 // MarkUpstreamReader 给 reader 的**读**错误打上「来自上游」方向标记，供 RecordLog 的
 // 提交后失败清钉判定区分「上游故障」与「客户端撤走」——io.Copy 的 error 本身不带方向，
-// 只能在错误产生处标记。调用点须在 tee 之外（先包 reader 再 TeeReader），见 chat 包注释。
+// 只能在错误产生处标记。终止 EOF（身份 io.EOF）不打标：它不是失败，打标会让每一轮正常
+// 读完的流被判失败。调用点须在 tee 之外（先包 reader 再 TeeReader），见 chat 包注释。
 func MarkUpstreamReader(r io.Reader) io.Reader { return chat.MarkUpstreamReader(r) }
 
 // MarkResponseWriteError 给「写回响应」这一步的错误打上「来自客户端」方向标记，供

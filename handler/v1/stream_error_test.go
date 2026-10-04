@@ -177,6 +177,49 @@ func TestWriteResponseBody_NonStreamInterrupt_NoSelfLog(t *testing.T) {
 	}
 }
 
+// 正常收尾（读取端以干净 EOF 结束）不是中断：交给 writeResponseBody 的 body 与生产同形
+// （service.MarkUpstreamReader 包 reader，见上一条注释），此时**不得**返回错误、更不得给
+// 客户端追加协议 error 事件。旧实现的后果按形态分两类：缺终止符的流与非流式整条被误判失败
+// （非流式是 scanner 要再读一次才出 token，从而吃到管道错误；2026-10-05 实测），日志落
+// `processer error: write response body failed: EOF`（真机库内该文案 14 条全部无 `[DONE]`）；
+// 带 `[DONE]` 的流因 processer 提前收工仍记 success，
+// 只是客户端在 `[DONE]` 之后多收一条 error 事件（停在 `[DONE]` 的客户端无感，读到 EOF 收尾
+// 的客户端会误判整轮失败）。
+// 流式与非流式**两半都要锁**：非流式走另一条判据链（日志侧 bufio.Scanner 的身份比较，
+// process.go 的非流式分支），只测流式会漏掉那半条独立路径。
+// 断言用 body 全等（而非「不含 error」）：多写任何字节都是污染。
+func TestWriteResponseBody_CleanEOF_MarkedReaderNoErrorEvent(t *testing.T) {
+	cases := []struct {
+		name   string
+		stream bool
+		src    string
+	}{
+		{"流式·含 [DONE] 的完整流", true, "data: {\"x\":1}\n\ndata: [DONE]\n\n"},
+		// 缺终止符的完整流现在算成功：这是用户批准的方案 A 取舍（内容完整性判据另立，见
+		// .local/find-issues/2026-10-05-缺终止符与干净截断无内容判据.md）；该判据落地时
+		// 本格要按新的内容口径翻转，不是「删掉即可」。
+		{"流式·缺终止符的完整流", true, "data: {\"x\":1}\n\n"},
+		{"非流式·完整 JSON 体", false, "{\"id\":\"x\",\"choices\":[]}"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+
+			err := writeResponseBody(context.Background(), c, string(consts.StyleOpenAI), tc.stream,
+				service.MarkUpstreamReader(strings.NewReader(tc.src)))
+			if err != nil {
+				t.Fatalf("writeResponseBody err = %v, want nil（正常收尾不是失败）", err)
+			}
+			if got := w.Body.String(); got != tc.src {
+				t.Fatalf("body = %q, want 原样 %q（不得追加 error 事件）", got, tc.src)
+			}
+		})
+	}
+}
+
 // 读错误（非写错误）同样走收口分支。
 func TestWriteResponseBody_ReadError_EmitsProtocolErrorEvent(t *testing.T) {
 	gin.SetMode(gin.TestMode)

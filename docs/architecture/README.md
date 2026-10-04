@@ -8,7 +8,7 @@
 | 属性 | 值 |
 |------|-----|
 | 项目类型 | 全栈（Go 后端 API 网关 + React 管理后台） |
-| 技术栈 | Go 1.25 + Gin + GORM/SQLite；React 19 + TypeScript 5.8 + Vite 7 + Tailwind CSS 4；TanStack Query + Zustand |
+| 技术栈 | Go 1.25 + Gin + GORM/SQLite；React 19 + TypeScript 5.8 + Vite 8（Rolldown 打包 + Oxc 转换） + Tailwind CSS 4；TanStack Query + Zustand |
 | 架构模式 | 技术分层 + 业务子包拆分（handler/service 按业务域分子包；扩展点用注册表） |
 | 包管理 | Go modules；前端 pnpm |
 | Monorepo | 否（单仓前后端，前端 `webui/` 构建产物由 Go `embed`） |

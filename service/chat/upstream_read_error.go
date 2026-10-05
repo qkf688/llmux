@@ -28,7 +28,7 @@ import (
 // 一次才出 token，从而吃到管道错误，2026-10-05 实测确认）整条被误判失败——日志落
 // `processer error: write response body failed: EOF`、清钉与供应商失败统计跟着
 // 被这条假失败牵着走；带 `[DONE]` 的 openai 流因 processer 提前收工仍记 success，只在客户端
-// 侧多收一条凭空多出的协议 error 事件（真机实测：库内 14 条该文案的行全部无 `[DONE]`）。
+// 侧多收一条凭空多出的协议 error 事件（真机 14 条该文案的行全部是流式 openai；库内未存响应体，`// 「无 `[DONE]`」由机制推得——带 `[DONE]` 时 processer 在哨兵处提前收工，此文案不可能出现）。
 // 流**是否完整**该由内容判据承担（缺 [DONE] 这类终止符目前不判失败，见
 // .local/find-issues/2026-10-05-缺终止符与干净截断无内容判据.md），不由传输层 EOF 承担。
 

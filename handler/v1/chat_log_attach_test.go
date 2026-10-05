@@ -16,15 +16,23 @@ import (
 
 // readBodyWithTimeout 读完 r 并带挂死保险：丢弃窗口的死法就是「写端永远读不完」，
 // 回归必须在超时里显式变红，而不是把测试挂住。
+// 同时断言读到干净 EOF（err == nil）：被测 body 在生产里是
+// io.TeeReader(service.MarkUpstreamReader(resBody), pw)，「正常读完被判成读失败」时
+// 这里读到的错误就是 EOF（2026-10-05 终止 EOF 误判即此形，本断言即那条缺陷的组合锁）。
 func readBodyWithTimeout(t *testing.T, r io.Reader) string {
 	t.Helper()
 	done := make(chan string, 1)
+	readErr := make(chan error, 1)
 	go func() {
-		b, _ := io.ReadAll(r)
+		b, err := io.ReadAll(r)
+		readErr <- err
 		done <- string(b)
 	}()
 	select {
 	case s := <-done:
+		if err := <-readErr; err != nil {
+			t.Fatalf("读响应体 err = %v, want nil（正常收尾不得被判成读失败）", err)
+		}
 		return s
 	case <-time.After(2 * time.Second):
 		t.Fatal("读响应体被挂住（丢弃窗口 tee 写端阻塞的同型死法）")

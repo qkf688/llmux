@@ -181,12 +181,16 @@ func TestWriteResponseBody_NonStreamInterrupt_NoSelfLog(t *testing.T) {
 // （service.MarkUpstreamReader 包 reader，见上一条注释），此时**不得**返回错误、更不得给
 // 客户端追加协议 error 事件。旧实现的后果按形态分两类：缺终止符的流与非流式整条被误判失败
 // （非流式是 scanner 要再读一次才出 token，从而吃到管道错误；2026-10-05 实测），日志落
-// `processer error: write response body failed: EOF`（真机库内该文案 14 条全部无 `[DONE]`）；
+// `processer error: write response body failed: EOF`（真机 14 条该文案的行全部是流式 openai；
+// 库内未存响应体，「无 `[DONE]`」由机制推得——带 `[DONE]` 时 processer 在哨兵处提前收工，
+// 此文案不可能出现）；
 // 带 `[DONE]` 的流因 processer 提前收工仍记 success，
 // 只是客户端在 `[DONE]` 之后多收一条 error 事件（停在 `[DONE]` 的客户端无感，读到 EOF 收尾
 // 的客户端会误判整轮失败）。
-// 流式与非流式**两半都要锁**：非流式走另一条判据链（日志侧 bufio.Scanner 的身份比较，
-// process.go 的非流式分支），只测流式会漏掉那半条独立路径。
+// 本用例锁的只是 handler 这一段接缝：writeResponseBody 返回 nil 且不追加任何字节（流式与非流式
+// 各一格）。**不是**「非流式完整链路」的覆盖——tee + 日志管道 + processer 的 bufio.Scanner
+// 二次读那半条由 chat_log_attach_test.go 的 TestAttachLogRecord_RegisteredTeesBodyToLogPipe
+// 断言干净 EOF 来锁（Ruling 4 承认的 handler 层缺口即补在那里）。
 // 断言用 body 全等（而非「不含 error」）：多写任何字节都是污染。
 func TestWriteResponseBody_CleanEOF_MarkedReaderNoErrorEvent(t *testing.T) {
 	cases := []struct {

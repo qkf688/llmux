@@ -6,17 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/qkf688/llmux/common/credentialcrypto"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/providers"
 	"github.com/qkf688/llmux/repository"
-	"github.com/qkf688/llmux/service/credview"
-)
-
-const (
-	groupSourceInline = "inline"
-	groupSourcePool   = "pool"
 )
 
 // errValidation 标记「请求数据/配置不合法」这类非 DB 故障（客户端可修复、重发即可）
@@ -92,63 +85,17 @@ func validateStructuredRequest(ctx context.Context, repos *repository.Repositori
 		if g.Weight < 0 {
 			return fmt.Errorf("groups[%d].weight must be >= 0", i)
 		}
-		switch g.Source {
-		case groupSourceInline:
-			keys, err := normalizeInlineKeys(g.InlineKeys)
-			if err != nil {
-				return err
-			}
-			if len(keys) == 0 {
-				// 统一中文友好文案：前端（zod 无 min 校验）依赖此条兜底——空 key 引用态或
-				// 明文全空都会被 normalize 剔除后落到这里（与「至少保留一个分组」同族）。
-				return fmt.Errorf("groups[%d].inline_keys 至少保留一个 key 或引用", i)
-			}
-		case groupSourcePool:
-			if g.PoolID == nil || *g.PoolID == 0 {
-				return fmt.Errorf("groups[%d].pool_id is required when source=pool", i)
-			}
-			if _, err := repos.Pool.Get(ctx, *g.PoolID); err != nil {
-				return fmt.Errorf("groups[%d].pool_id %d not found", i, *g.PoolID)
-			}
-		default:
-			return fmt.Errorf("groups[%d].source must be %q or %q", i, groupSourceInline, groupSourcePool)
+		if g.PoolID == nil || *g.PoolID == 0 {
+			return fmt.Errorf("groups[%d].pool_id is required", i)
+		}
+		if _, err := repos.Pool.Get(ctx, *g.PoolID); err != nil {
+			return fmt.Errorf("groups[%d].pool_id %d not found", i, *g.PoolID)
 		}
 	}
 	return nil
 }
 
-// normalizeInlineKeys 清理内联凭据写入项：剔除「无引用且无明文」的空条目（id=0 且
-// key 空——前端空白行/掩码占位提交的兜底），trim 明文；同 id 重复引用、同明文重复
-// 新增均报错——语义上一条凭据只能被引用一次，同组两条相同明文会让组内轮询给同一
-// key 双份流量权重，与号池「同池重复 KeyHash 400」对齐（不静默去重：用户提交什么
-// 就该得到什么反馈）。错误文本不含明文 key，避免敏感值经 BadRequest message 外泄。
-func normalizeInlineKeys(keys []InlineKeyInput) ([]InlineKeyInput, error) {
-	out := make([]InlineKeyInput, 0, len(keys))
-	seenID := make(map[uint]struct{}, len(keys))
-	seenKey := make(map[string]struct{}, len(keys))
-	for _, k := range keys {
-		key := strings.TrimSpace(k.Key)
-		if k.ID == 0 {
-			if key == "" {
-				continue
-			}
-			if _, dup := seenKey[key]; dup {
-				return nil, fmt.Errorf("inline_keys 存在重复的明文 key")
-			}
-			seenKey[key] = struct{}{}
-			out = append(out, InlineKeyInput{ID: 0, Key: key})
-			continue
-		}
-		if _, dup := seenID[k.ID]; dup {
-			return nil, fmt.Errorf("inline_keys 重复引用凭据 id=%d", k.ID)
-		}
-		seenID[k.ID] = struct{}{}
-		out = append(out, InlineKeyInput{ID: k.ID, Key: key})
-	}
-	return out, nil
-}
-
-// syncProviderChildren 在事务内按请求体全量同步 endpoints / groups / inline credentials。
+// syncProviderChildren 在事务内按请求体全量同步 endpoints / groups。
 // provider 行本身由调用方已 Create/Update；本函数只写子表。仅全量路径调用（调用方已解引用）。
 func syncProviderChildren(ctx context.Context, repos *repository.Repositories, providerID uint, endpoints []EndpointInput, groups []GroupInput) error {
 	if err := syncEndpoints(ctx, repos, providerID, endpoints); err != nil {
@@ -208,57 +155,23 @@ func syncEndpoints(ctx context.Context, repos *repository.Repositories, provider
 	return nil
 }
 
-// syncGroups 在事务内同步凭据分组与内联凭据。
+// syncGroups 在事务内同步凭据分组。
 //
-// 分组是**就地更新**而非删光重建：组 ID 稳定（引用它的凭据迁移、管理端弹窗定位、
-// 请求上下文里的钉定偏好都不因保存而失效），且 KeyGroup.Models（模型同步专属数据）
-// 不在写入体里——重建会把同步白名单冲成空（空 = 不限）并让组织级目录缩水、连累
-// 自动关联清理误删关联（白名单唯一写入方 = modelsync）。
+// 分组是**就地更新**而非删光重建：组 ID 稳定（管理端弹窗定位、请求上下文里的钉定偏好
+// 都不因保存而失效），且 KeyGroup.Models（模型同步专属数据）不在写入体里——重建会把
+// 同步白名单冲成空（空 = 不限）并让组织级目录缩水、连累自动关联清理误删关联
+// （白名单唯一写入方 = modelsync）。
 // 组 id=0/缺失 = 新建（白名单空 = 未同步/不限）；既有 id 必须属于本 provider 且
-// 不得重复（防跨供应商引用与同组双写，语义与 inline_keys 的 id 引用一致）。
+// 不得重复（防跨供应商引用与同组双写）。凭据本身不由本函数触碰——统一由号池拥有。
 func syncGroups(ctx context.Context, repos *repository.Repositories, providerID uint, inputs []GroupInput) error {
-	cipher := credentialcrypto.Default()
-	if cipher == nil {
-		// inline 组需要加密；若本次全是 pool 仍可能无 cipher——仅 inline 路径检查。
-		// 这是配置缺失（BadRequest），非 DB 故障——打哨兵供 handler 判 400。
-		for _, g := range inputs {
-			if g.Source == groupSourceInline {
-				return fmt.Errorf("encryption not configured: %w", errValidation)
-			}
-		}
-	}
-
 	existing, err := repos.KeyGroup.ListByProvider(ctx, providerID)
 	if err != nil {
 		return fmt.Errorf("list groups: %w", err)
 	}
 	existingByID := make(map[uint]models.KeyGroup, len(existing))
-	groupIDs := make([]uint, 0, len(existing))
 	for _, g := range existing {
 		existingByID[g.ID] = g
-		groupIDs = append(groupIDs, g.ID)
 	}
-
-	var oldCreds []models.Credential
-	if len(groupIDs) > 0 {
-		oldCreds, err = repos.Credential.ListByGroups(ctx, groupIDs, nil)
-		if err != nil {
-			return fmt.Errorf("list group credentials: %w", err)
-		}
-	}
-	byHash := make(map[string]models.Credential, len(oldCreds))
-	for _, c := range oldCreds {
-		// 同 hash 多条时保留最先一条；后续重复在 sync 时跳过已用
-		if _, ok := byHash[c.KeyHash]; !ok {
-			byHash[c.KeyHash] = c
-		}
-	}
-	// byID 供掩码回填引用定位（超 provider 范围/不存在均判别为引用无效）
-	byID := make(map[uint]models.Credential, len(oldCreds))
-	for _, c := range oldCreds {
-		byID[c.ID] = c
-	}
-	usedCred := make(map[uint]struct{}, len(oldCreds))
 
 	// 先校验全部组 id 引用（未知/重复 → 400），再落任何写——半程失败不得留下部分更新。
 	seenGroup := make(map[uint]struct{}, len(inputs))
@@ -281,9 +194,7 @@ func syncGroups(ctx context.Context, repos *repository.Repositories, providerID 
 			ProviderID: providerID,
 			Name:       strings.TrimSpace(in.Name),
 			Weight:     in.Weight,
-		}
-		if in.Source == groupSourcePool {
-			group.PoolID = in.PoolID
+			PoolID:     in.PoolID,
 		}
 		if in.ID != 0 {
 			// 就地更新：只写表单拥有的字段（name/weight/pool），Models 永不触碰。
@@ -291,10 +202,7 @@ func syncGroups(ctx context.Context, repos *repository.Repositories, providerID 
 			fields := map[string]any{
 				"name":    group.Name,
 				"weight":  in.Weight,
-				"pool_id": nil,
-			}
-			if in.Source == groupSourcePool {
-				fields["pool_id"] = *in.PoolID
+				"pool_id": *in.PoolID,
 			}
 			if _, err := repos.KeyGroup.UpdateFields(ctx, in.ID, fields); err != nil {
 				return fmt.Errorf("update group[%d] %d: %w", i, in.ID, err)
@@ -314,88 +222,9 @@ func syncGroups(ctx context.Context, repos *repository.Repositories, providerID 
 			}
 		}
 		keptGroup[group.ID] = struct{}{}
-
-		if in.Source == groupSourcePool {
-			continue
-		}
-
-		keys, err := normalizeInlineKeys(in.InlineKeys)
-		if err != nil {
-			// 校验路径已前置拦截同形态错误；事务内触达时打哨兵归 400（客户端可修复），
-			// 防被 respondTxError 误分类成 500。
-			return fmt.Errorf("groups[%d]: %w: %w", i, err, errValidation)
-		}
-		for _, item := range keys {
-			if item.ID > 0 {
-				// 引用既有凭据：key 空 = 原样保留；key 非空 = 替换该条内容。
-				// ID 必须属于本 provider 的旧凭据（不存在/重复引用判 400，防跨供应商引用）。
-				old, ok := byID[item.ID]
-				if !ok {
-					return fmt.Errorf("groups[%d] references credential %d not found: %w", i, item.ID, errValidation)
-				}
-				if _, used := usedCred[old.ID]; used {
-					return fmt.Errorf("credential %d referenced twice: %w", item.ID, errValidation)
-				}
-				if item.Key == "" {
-					// 掩码回填未拉明文的条目：沿用原密文，仅迁移到新组（保留语义）
-					if _, err := repos.Credential.UpdateFields(ctx, old.ID, map[string]any{"group_id": group.ID, "pool_id": nil}); err != nil {
-						return fmt.Errorf("reassign credential %d: %w", old.ID, err)
-					}
-					usedCred[old.ID] = struct{}{}
-					continue
-				}
-				// 显式提交新明文：hash 未变（显示后未改）等价保留；变化则更新密文+hash
-				hash := cipher.Hash(item.Key)
-				fields := map[string]any{"group_id": group.ID, "pool_id": nil}
-				if hash != old.KeyHash {
-					enc, encErr := cipher.Encrypt(item.Key)
-					if encErr != nil {
-						return fmt.Errorf("encrypt key: %w", encErr)
-					}
-					fields["key"] = enc
-					fields["key_hash"] = hash
-				}
-				if _, err := repos.Credential.UpdateFields(ctx, old.ID, fields); err != nil {
-					return fmt.Errorf("replace credential %d key: %w", old.ID, err)
-				}
-				usedCred[old.ID] = struct{}{}
-				continue
-			}
-			// 新增明文（id=0）：沿用 hash 复用旧行 / 新建，语义不变
-			plain := item.Key
-			hash := cipher.Hash(plain)
-			if old, ok := byHash[hash]; ok {
-				if _, used := usedCred[old.ID]; !used {
-					fields := map[string]any{
-						"group_id": group.ID,
-						"pool_id":  nil,
-					}
-					if _, err := repos.Credential.UpdateFields(ctx, old.ID, fields); err != nil {
-						return fmt.Errorf("reassign credential hash=%s: %w", hash, err)
-					}
-					usedCred[old.ID] = struct{}{}
-					continue
-				}
-			}
-			enc, encErr := cipher.Encrypt(plain)
-			if encErr != nil {
-				return fmt.Errorf("encrypt key: %w", encErr)
-			}
-			gid := group.ID
-			cred := &models.Credential{
-				Key:     enc,
-				KeyHash: hash,
-				GroupID: &gid,
-				Status:  models.CredentialStatusActive,
-			}
-			if err := repos.Credential.Create(ctx, cred); err != nil {
-				return fmt.Errorf("create credential: %w", err)
-			}
-			usedCred[cred.ID] = struct{}{}
-		}
 	}
 
-	// 未提交的既有组删除（其凭据在下方按未使用清理）。
+	// 未提交的既有组删除。凭据归号池所有，分组删除不动凭据（池仍在，别处可能还引用）。
 	for id := range existingByID {
 		if _, ok := keptGroup[id]; ok {
 			continue
@@ -404,19 +233,10 @@ func syncGroups(ctx context.Context, repos *repository.Repositories, providerID 
 			return fmt.Errorf("delete group %d: %w", id, err)
 		}
 	}
-
-	for _, c := range oldCreds {
-		if _, ok := usedCred[c.ID]; ok {
-			continue
-		}
-		if _, err := repos.Credential.Delete(ctx, c.ID); err != nil {
-			return fmt.Errorf("delete unused credential %d: %w", c.ID, err)
-		}
-	}
 	return nil
 }
 
-// loadProviderDetail 组装详情响应（inline keys 以服务端掩码项返回，明文仅受控端点拉取）。
+// loadProviderDetail 组装详情响应（分组只出 KeyGroup 本身；凭据经 PoolID 去号池页查看）。
 func loadProviderDetail(ctx context.Context, repos *repository.Repositories, provider models.Provider) (*ProviderDetail, error) {
 	// 顶层 AuthType 出库即派生（Stage 20）：响应直返实体，派生字段必须先于序列化填充。
 	providers.FillDerivedAuthType(&provider)
@@ -429,41 +249,9 @@ func loadProviderDetail(ctx context.Context, repos *repository.Repositories, pro
 		return nil, fmt.Errorf("list groups: %w", err)
 	}
 
-	groupIDs := make([]uint, 0, len(groups))
-	for _, g := range groups {
-		groupIDs = append(groupIDs, g.ID)
-	}
-	var creds []models.Credential
-	if len(groupIDs) > 0 {
-		creds, err = repos.Credential.ListByGroups(ctx, groupIDs, nil)
-		if err != nil {
-			return nil, fmt.Errorf("list credentials: %w", err)
-		}
-	}
-	credsByGroup := make(map[uint][]models.Credential, len(groups))
-	for _, c := range creds {
-		if c.GroupID == nil {
-			continue
-		}
-		credsByGroup[*c.GroupID] = append(credsByGroup[*c.GroupID], c)
-	}
-
 	details := make([]GroupDetail, 0, len(groups))
 	for _, g := range groups {
-		gd := GroupDetail{
-			KeyGroup:   g,
-			InlineKeys: []credview.View{},
-		}
-		if g.PoolID != nil {
-			gd.Source = groupSourcePool
-		} else {
-			gd.Source = groupSourceInline
-			// 凭据视图单源（service/credview）：与号池页同一形状——掩码、状态、冷却、连败
-			// 都在里面，编辑弹窗据此显示状态徽标与「启用」（内联 key 判停后的人工恢复）。
-			// 明文仍只经受控 raw 端点拉取；解密失败/无 cipher 的降级与留痕由 MaskStored 负责。
-			gd.InlineKeys = credview.ViewsOf(credsByGroup[g.ID])
-		}
-		details = append(details, gd)
+		details = append(details, GroupDetail{KeyGroup: g})
 	}
 
 	if endpoints == nil {

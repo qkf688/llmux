@@ -14,7 +14,7 @@ import (
 // 选路委托 modelsync.ListUpstreamModels——与落库同步同一条链路（协议端点 + 分组凭据 +
 // base_url 继承链）。禁止在此直接用 Provider.Config 组装客户端：S6 起 config 不再承载
 // api_key（凭据只存在于 credentials 表，运行时由 channel.BuildConfig 注入明文），
-// 绕过选路等于不带 Authorization 打上游，号池/内联凭据的供应商恒 401。
+// 绕过选路等于不带 Authorization 打上游，号池凭据的供应商恒 401。
 func GetProviderModels(c *gin.Context) {
 	providerID, err := parseUintParam(c.Param("id"))
 	if err != nil {

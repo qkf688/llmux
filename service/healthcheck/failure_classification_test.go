@@ -79,7 +79,7 @@ func TestCheckOneWithBatch_LocalReasons_WriteNotMeasured(t *testing.T) {
 			name: "端点 URL 非法（请求构造失败）",
 			seed: func(t *testing.T, providerID uint) {
 				seedEndpoint(t, providerID, "openai", "https://bad host.example/v1")
-				seedInlineGroup(t, setupHealthCheckCipher(t), providerID, "g1", "sk-1")
+				_, _ = seedPoolGroup(t, setupHealthCheckCipher(t), providerID, "g1", "sk-1")
 			},
 		},
 	}
@@ -152,7 +152,7 @@ func TestCheckOneWithBatch_UpstreamFailure_WritesError(t *testing.T) {
 		t.Fatalf("create provider: %v", err)
 	}
 	seedEndpoint(t, provider.ID, "openai", srv.URL)
-	seedInlineGroup(t, cipher, provider.ID, "g1", "sk-rejected")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "g1", "sk-rejected")
 	mp := seedModelAndAssociation(t, provider.ID)
 
 	h.checkOneWithBatch(context.Background(), &mp, "b-up")

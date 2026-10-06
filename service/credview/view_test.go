@@ -21,7 +21,7 @@ func setupCipher(t *testing.T) *credentialcrypto.Cipher {
 }
 
 // TestViewOf_MaskAndNilSemantics 锁视图映射的两条契约：
-// 掩码走 MaskStored 单源；无归属/无冷却的时间与指针字段保持 nil（序列化成 JSON null，
+// 掩码走 MaskStored 单源；无冷却的时间与指针字段保持 nil（序列化成 JSON null，
 // 前端据此区分「无」与「值」，故 View 上这些字段禁 omitempty）。
 func TestViewOf_MaskAndNilSemantics(t *testing.T) {
 	cipher := setupCipher(t)
@@ -32,6 +32,7 @@ func TestViewOf_MaskAndNilSemantics(t *testing.T) {
 	}
 
 	cred := models.Credential{
+		PoolID:         5,
 		Key:            enc,
 		Status:         models.CredentialStatusTempUnsched,
 		FailCount:      3,
@@ -43,15 +44,17 @@ func TestViewOf_MaskAndNilSemantics(t *testing.T) {
 	if view.ID != 7 {
 		t.Fatalf("ID=%d want 7", view.ID)
 	}
+	if view.PoolID != 5 {
+		t.Fatalf("PoolID=%d want 5（归属号池）", view.PoolID)
+	}
 	if want := credentialcrypto.MaskKey(plain); view.KeyMasked != want {
 		t.Fatalf("KeyMasked=%q want %q", view.KeyMasked, want)
 	}
 	if view.Status != models.CredentialStatusTempUnsched || view.FailCount != 3 || view.CooldownReason != "auth_fail" {
 		t.Fatalf("状态字段未如实透出: %+v", view)
 	}
-	if view.PoolID != nil || view.GroupID != nil || view.CooldownUntil != nil ||
-		view.LastUsedAt != nil || view.LastProbeAt != nil {
-		t.Fatalf("无归属/无冷却的指针字段应为 nil: %+v", view)
+	if view.CooldownUntil != nil || view.LastUsedAt != nil || view.LastProbeAt != nil {
+		t.Fatalf("无冷却的指针字段应为 nil: %+v", view)
 	}
 }
 

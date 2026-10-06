@@ -148,12 +148,9 @@ func TestBalanceChatVirtual_KeyHeadersAppliedOnVirtualPath(t *testing.T) {
 	if err := models.DB.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	grp := models.KeyGroup{ProviderID: provider.ID, Name: "g1", Weight: 1}
-	if err := models.DB.Create(&grp).Error; err != nil {
-		t.Fatalf("create key group: %v", err)
-	}
+	_, poolID := seedPooledGroup(t, provider.ID, "g1", 1, "")
 	plain := "sk-vh-key"
-	cred := models.Credential{GroupID: &grp.ID, Key: mustEncrypt(t, cipher, plain), KeyHash: cipher.Hash(plain)}
+	cred := models.Credential{PoolID: poolID, Key: mustEncrypt(t, cipher, plain), KeyHash: cipher.Hash(plain)}
 	if err := models.DB.Create(&cred).Error; err != nil {
 		t.Fatalf("create credential: %v", err)
 	}

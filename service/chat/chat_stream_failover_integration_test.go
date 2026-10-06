@@ -33,12 +33,9 @@ func setupGateFailoverProvider(t *testing.T, cipher *credentialcrypto.Cipher, mo
 	if err := models.DB.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint %s: %v", name, err)
 	}
-	grp := models.KeyGroup{ProviderID: provider.ID, Name: "g-" + name, Weight: 1}
-	if err := models.DB.Create(&grp).Error; err != nil {
-		t.Fatalf("create key group %s: %v", name, err)
-	}
+	_, poolID := seedPooledGroup(t, provider.ID, "g-"+name, 1, "")
 	plain := "sk-gate-" + name
-	cred := models.Credential{GroupID: &grp.ID, Key: mustEncrypt(t, cipher, plain), KeyHash: cipher.Hash(plain)}
+	cred := models.Credential{PoolID: poolID, Key: mustEncrypt(t, cipher, plain), KeyHash: cipher.Hash(plain)}
 	if err := models.DB.Create(&cred).Error; err != nil {
 		t.Fatalf("create credential %s: %v", name, err)
 	}

@@ -93,18 +93,7 @@ func TestBalanceChat_AnthropicPassthrough_StrictUpstreamAcceptsAfterNormalizatio
 	if err := models.DB.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	grp := models.KeyGroup{ProviderID: provider.ID, Name: "g1", Weight: 1}
-	if err := models.DB.Create(&grp).Error; err != nil {
-		t.Fatalf("create key group: %v", err)
-	}
-	cred := models.Credential{GroupID: &grp.ID, Key: mustEncrypt(t, cipher, "sk-any"), KeyHash: cipher.Hash("sk-any")}
-	if err := models.DB.Create(&cred).Error; err != nil {
-		t.Fatalf("create credential: %v", err)
-	}
-	mwp := models.ModelWithProvider{ModelID: model.ID, ProviderID: provider.ID, ProviderModel: "pm1", Weight: 10, Priority: 1}
-	if err := models.DB.Create(&mwp).Error; err != nil {
-		t.Fatalf("create association: %v", err)
-	}
+	_, _, mwp := seedGroupedChannel(t, cipher, provider.ID, "g1", model.ID, 10, 1, []string{"sk-any"}, nil)
 
 	pool, err := buildCandidatePool(context.Background(), []models.ModelWithProvider{mwp})
 	if err != nil {

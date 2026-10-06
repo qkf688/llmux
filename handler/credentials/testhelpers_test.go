@@ -65,31 +65,10 @@ func seedPool(t *testing.T, name string) uint {
 	return pool.ID
 }
 
-// seedInlineCredential 建「供应商 → 分组 → 内联凭据」最小链，返回 (providerID, groupID, credentialID)。
-// plain 传明文、落密文（与生产写路径同形态）；status/failCount/cooldownReason 用于构造
-// 被判停的内联凭据（本域最关键的场景：状态机判停后的人工恢复）。
-func seedInlineCredential(t *testing.T, groupName, plain, status string, failCount int, cooldownReason string) (uint, uint, uint) {
-	t.Helper()
-	if credentialcrypto.Default() == nil {
-		setupCipherForCredTest(t)
-	}
-	provider := &models.Provider{Name: "p-" + groupName, Type: "openai"}
-	if err := repository.Default().Provider.Create(t.Context(), provider); err != nil {
-		t.Fatalf("seed provider: %v", err)
-	}
-	group := &models.KeyGroup{ProviderID: provider.ID, Name: groupName, Weight: 1}
-	if err := repository.Default().KeyGroup.Create(t.Context(), group); err != nil {
-		t.Fatalf("seed group: %v", err)
-	}
-	cred := seedCredential(t, plain, status, failCount, cooldownReason)
-	if _, err := repository.Default().Credential.UpdateFields(t.Context(), cred, map[string]any{"group_id": group.ID}); err != nil {
-		t.Fatalf("attach credential to group: %v", err)
-	}
-	return provider.ID, group.ID, cred
-}
-
-// seedCredential 直接写库建凭据（无归属），返回 ID。
-func seedCredential(t *testing.T, plain, status string, failCount int, cooldownReason string) uint {
+// seedCredential 直接写库建归属 poolID 号池的凭据，返回 ID。
+// plain 传明文、落密文（与生产写路径同形态）；status/failCount/cooldownReason 用于
+// 构造被判停的凭据（本域最关键的场景：状态机判停后的人工恢复）。
+func seedCredential(t *testing.T, poolID uint, plain, status string, failCount int, cooldownReason string) uint {
 	t.Helper()
 	if credentialcrypto.Default() == nil {
 		setupCipherForCredTest(t)
@@ -99,6 +78,7 @@ func seedCredential(t *testing.T, plain, status string, failCount int, cooldownR
 		t.Fatalf("encrypt seed credential: %v", err)
 	}
 	cred := &models.Credential{
+		PoolID:         poolID,
 		Key:            enc,
 		KeyHash:        credentialcrypto.Default().Hash(plain),
 		Status:         status,
@@ -114,11 +94,7 @@ func seedCredential(t *testing.T, plain, status string, failCount int, cooldownR
 // seedPoolMember 在既有号池下挂一条凭据，返回凭据 ID。
 func seedPoolMember(t *testing.T, poolID uint, plain, status string) uint {
 	t.Helper()
-	credID := seedCredential(t, plain, status, 0, "")
-	if _, err := repository.Default().Credential.UpdateFields(t.Context(), credID, map[string]any{"pool_id": poolID}); err != nil {
-		t.Fatalf("attach credential to pool: %v", err)
-	}
-	return credID
+	return seedCredential(t, poolID, plain, status, 0, "")
 }
 
 // seedPoolCredential 建池并挂一条凭据，返回 (poolID, credentialID)。

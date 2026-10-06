@@ -85,7 +85,7 @@ func seedPoolBackedProvider(t *testing.T, name, endpointURL, plainKey string, mo
 			t.Fatalf("encrypt key: %v", err)
 		}
 		cred := models.Credential{
-			PoolID:  &pool.ID,
+			PoolID:  pool.ID,
 			Key:     enc,
 			KeyHash: cipher.Hash(plainKey),
 			Status:  models.CredentialStatusActive,

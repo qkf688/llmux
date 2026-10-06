@@ -30,8 +30,8 @@ var (
 		{key: "Key", wantSetType: gjson.String},
 		{key: "KeyHash", wantSetType: gjson.String},
 		{key: "Note", wantSetType: gjson.String},
-		{key: "GroupID", wantSetType: gjson.Number, nilable: true},
-		{key: "PoolID", wantSetType: gjson.Number, nilable: true},
+		// PoolID 为普通 uint（非三态）：未归属时是 0 而非 null，故不在 unset 契约内
+		{key: "PoolID", wantSetType: gjson.Number},
 		{key: "Status", wantSetType: gjson.String},
 		{key: "CooldownUntil", wantSetType: gjson.String, nilable: true},
 		{key: "CooldownReason", wantSetType: gjson.String},
@@ -96,7 +96,7 @@ func checkShapeTable(t *testing.T, raw, prefix string, keys []channelResponseKey
 // TestChannelEntities_KeysPresent_WhenSet 锁定四表实体所有业务字段在「有值态」下
 // 键存在且类型正确（PascalCase 直返形状）。
 func TestChannelEntities_KeysPresent_WhenSet(t *testing.T) {
-	groupID, poolID := uint(11), uint(12)
+	poolID := uint(12)
 	now := time.Now()
 	creds := uint(3)
 
@@ -105,8 +105,7 @@ func TestChannelEntities_KeysPresent_WhenSet(t *testing.T) {
 		Key:            "hex-ciphertext",
 		KeyHash:        "sha256-hex",
 		Note:           "备注",
-		GroupID:        &groupID,
-		PoolID:         &poolID,
+		PoolID:         poolID,
 		Status:         CredentialStatusActive,
 		CooldownUntil:  &now,
 		CooldownReason: "429 限流",
@@ -129,8 +128,9 @@ func TestChannelEntities_KeysPresent_WhenSet(t *testing.T) {
 }
 
 // TestChannelEntities_KeysPresent_WhenUnset 是 omitempty 类断层的主防线：
-// 三态字段全为 nil 时，键必须仍在且为 JSON null（GroupID/PoolID/CooldownUntil/
-// LastUsedAt/LastProbeAt/Provider.Protocols）。
+// 三态字段全为 nil 时，键必须仍在且为 JSON null（Credential.PoolID 已是普通 uint，
+// 未归属序列化为 0 而非 null，故不在本契约内；KeyGroup.PoolID/CooldownUntil/
+// LastUsedAt/LastProbeAt/Provider.Protocols 仍为三态）。
 func TestChannelEntities_KeysPresent_WhenUnset(t *testing.T) {
 	credential := Credential{Key: "hex", KeyHash: "h", Status: CredentialStatusActive}
 	keyGroup := KeyGroup{ProviderID: 2, Name: "默认组"}

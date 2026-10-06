@@ -2,7 +2,6 @@ package providerapi
 
 import (
 	"github.com/qkf688/llmux/models"
-	"github.com/qkf688/llmux/service/credview"
 )
 
 // ProviderTemplate 供应商配置模板。
@@ -18,25 +17,15 @@ type EndpointInput struct {
 	Enabled  bool   `json:"enabled"`
 }
 
-// InlineKeyInput 内联凭据写入项：ID 引用既有凭据（key 空 = 原样保留；key 非空 =
-// 替换该条内容），ID 为 0 表示以 key 命名新增。掩码回填的条目提交时 key 传空串
-// 由 ID 保留——避免掩码文本被当成明文落库（恶意/误提交的占位符顶替死 key）。
-type InlineKeyInput struct {
-	ID  uint   `json:"id"`
-	Key string `json:"key"`
-}
-
-// GroupInput 凭据分组写入体（凭据来源二选一：inline / pool）。
+// GroupInput 凭据分组写入体（凭据统一来自引用的号池）。
 // ID = 既有分组就地更新（0/缺失 = 新建）；模型白名单**不在**写入体里——KeyGroup.Models
 // 是模型同步的专属数据（唯一写入方 modelsync），供应商表单保存不得触碰（清掉它 = 同步
 // 快照丢失，且组织级目录缩水会连累自动关联清理误删关联）。
 type GroupInput struct {
-	ID         uint             `json:"id"`
-	Name       string           `json:"name"`
-	Weight     int              `json:"weight"`
-	Source     string           `json:"source"` // "inline" | "pool"
-	InlineKeys []InlineKeyInput `json:"inline_keys"`
-	PoolID     *uint            `json:"pool_id"`
+	ID     uint   `json:"id"`
+	Name   string `json:"name"`
+	Weight int    `json:"weight"`
+	PoolID *uint  `json:"pool_id"`
 }
 
 // ProviderRequest represents the request body for creating/updating a provider.
@@ -66,25 +55,10 @@ type ProviderListItem struct {
 	GroupCount    int64 `json:"GroupCount"`
 }
 
-// InlineKeyRawItem 受控明文端点返回项：按凭据 id 归位，前端整组替换掩码行时不依赖
-// 数组顺序——删掩码行未保存、并发保存改动同组，都不会把明文错位归到别的行上。
-type InlineKeyRawItem struct {
-	ID  uint   `json:"id"`
-	Key string `json:"key"`
-}
-
-// InlineKeysRawData 内联组明文查看响应（受控端点 GET …/inline-keys/raw）。
-type InlineKeysRawData struct {
-	Keys []InlineKeyRawItem `json:"keys"`
-}
-
-// GroupDetail 详情页分组：内嵌 KeyGroup + 派生 Source + inline 凭据视图项
-// （掩码/状态/冷却等由 service/credview 单源提供，与号池页同一形状；明文不出常规响应）。
-// PoolID 三态指针禁 omitempty；InlineKeys 空数组表示 inline 无 key 或 pool 来源。
+// GroupDetail 详情页分组：内嵌 KeyGroup（凭据经其 PoolID 引用号池，明文永不出响应）。
+// PoolID 三态指针禁 omitempty。
 type GroupDetail struct {
 	models.KeyGroup
-	Source     string          `json:"Source"`
-	InlineKeys []credview.View `json:"InlineKeys"`
 }
 
 // ProviderDetail 供应商详情：Provider + 展开的 endpoints/groups（编辑弹窗回填用）。

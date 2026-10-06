@@ -121,7 +121,7 @@ func TestNewClientFromSelection_OpenAI(t *testing.T) {
 	}
 	client, err := NewClientFromSelection(provider,
 		models.Endpoint{Model: gorm.Model{ID: 11}, Protocol: string(consts.ProtocolOpenAI), URL: srv.URL, Enabled: true},
-		credWithKey(t, cipher, "sk-pool-1"))
+		credWithKey(t, cipher, "sk-pool-1", 1))
 	if err != nil {
 		t.Fatalf("NewClientFromSelection: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestNewClientFromSelection_AnthropicUsesAPIKeyHeader(t *testing.T) {
 	client, err := NewClientFromSelection(
 		models.Provider{Model: gorm.Model{ID: 8}, Type: "anthropic", Config: `{"base_url":"https://unused.invalid"}`},
 		models.Endpoint{Model: gorm.Model{ID: 12}, Protocol: string(consts.ProtocolAnthropic), URL: srv.URL + "/v1", Enabled: true},
-		credWithKey(t, cipher, "sk-anthropic"))
+		credWithKey(t, cipher, "sk-anthropic", 1))
 	if err != nil {
 		t.Fatalf("NewClientFromSelection: %v", err)
 	}
@@ -184,7 +184,8 @@ func TestNewClientForGroup_UsesFirstUsableCredentialAndPropagatesSentinel(t *tes
 
 	provider := models.Provider{Model: gorm.Model{ID: 21}, Type: "openai", Config: `{"base_url":"https://should-not-be-used.invalid"}`}
 	endpoint := models.Endpoint{Model: gorm.Model{ID: 31}, Protocol: string(consts.ProtocolOpenAI), URL: srv.URL, Enabled: true}
-	group := models.KeyGroup{Model: gorm.Model{ID: 41}, ProviderID: provider.ID, Name: "g1", Weight: 1}
+	poolID := uint(51)
+	group := models.KeyGroup{Model: gorm.Model{ID: 41}, ProviderID: provider.ID, Name: "g1", Weight: 1, PoolID: &poolID}
 	groupID := group.ID
 	snapshot := &Snapshot{
 		Provider:  provider,
@@ -193,8 +194,8 @@ func TestNewClientForGroup_UsesFirstUsableCredentialAndPropagatesSentinel(t *tes
 		CredentialsByGroup: map[uint][]models.Credential{
 			// 第一条停用、第二条可用：诊断口径必须落到 sk-2
 			groupID: {
-				{Model: gorm.Model{ID: 51}, GroupID: &groupID, Key: "irrelevant", Status: models.CredentialStatusDisabled},
-				credWithKey(t, cipher, "sk-2"),
+				{Model: gorm.Model{ID: 51}, PoolID: poolID, Key: "irrelevant", Status: models.CredentialStatusDisabled},
+				credWithKey(t, cipher, "sk-2", poolID),
 			},
 		},
 	}
@@ -230,7 +231,7 @@ func TestNewClientFromSelection_UnknownProtocolFails(t *testing.T) {
 	_, err := NewClientFromSelection(
 		models.Provider{Type: "openai", Config: `{"base_url":"https://x.invalid"}`},
 		models.Endpoint{Model: gorm.Model{ID: 99}, Protocol: "grpc", URL: "https://x.invalid", Enabled: true},
-		credWithKey(t, cipher, "sk-1"))
+		credWithKey(t, cipher, "sk-1", 1))
 	if err == nil || !strings.Contains(err.Error(), "unknown endpoint protocol") {
 		t.Fatalf("err = %v, want unknown endpoint protocol 语义", err)
 	}
@@ -251,10 +252,11 @@ func TestNewClientFromSelection_CipherMissingFails(t *testing.T) {
 	}
 }
 
-// credWithKey 建一条已加密的 active 凭据（探活/同步的候选形态）。
-func credWithKey(t *testing.T, cipher *credentialcrypto.Cipher, plain string) models.Credential {
+// credWithKey 建一条已加密的 active 凭据（探活/同步的候选形态），归属 poolID 号池。
+func credWithKey(t *testing.T, cipher *credentialcrypto.Cipher, plain string, poolID uint) models.Credential {
 	t.Helper()
 	return models.Credential{
+		PoolID:  poolID,
 		Key:     mustEncrypt(t, plain),
 		KeyHash: cipher.Hash(plain),
 		Status:  models.CredentialStatusActive,

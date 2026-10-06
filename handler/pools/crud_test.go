@@ -89,7 +89,7 @@ func seedPoolWithCredential(t *testing.T, name string, status string) uint {
 	}
 
 	poolID := uint(id)
-	cred := &models.Credential{Key: "enc-key", KeyHash: "hash-" + name, PoolID: &poolID, Status: status}
+	cred := &models.Credential{Key: "enc-key", KeyHash: "hash-" + name, PoolID: poolID, Status: status}
 	if err := repository.Default().Credential.Create(t.Context(), cred); err != nil {
 		t.Fatalf("seed credential: %v", err)
 	}

@@ -28,8 +28,8 @@ func newAssembleTestDB(t *testing.T) *gorm.DB {
 
 // TestAssemble_CredentialMerge 锁装配归并语义：
 //
-//	内联凭据（GroupID）与号池凭据（PoolID 经分组引用）两侧都归入该分组；
-//	组内顺序按 ID ASC 稳定（轮询取模的前提）；无归属凭据的分组为空切片且键存在。
+//	分组只经 PoolID 引用号池，池内凭据全部归入该分组；
+//	组内顺序按 ID ASC 稳定（轮询取模的前提）；未选池的分组为空切片且键存在。
 func TestAssemble_CredentialMerge(t *testing.T) {
 	db := newAssembleTestDB(t)
 	ctx := context.Background()
@@ -40,23 +40,29 @@ func TestAssemble_CredentialMerge(t *testing.T) {
 	}).Error; err != nil {
 		t.Fatalf("create endpoints: %v", err)
 	}
+	// 组 1 与组 3 引用同一个池（池可复用），组 2 引用另一个池，组 4 未选池。
 	if err := db.Create(&[]models.KeyGroup{
-		{ProviderID: 1, Name: "内联组", Weight: 1},
-		{ProviderID: 1, Name: "号池组", Weight: 2, PoolID: uintPtr(9)},
+		{ProviderID: 1, Name: "池A组", Weight: 1, PoolID: uintPtr(7)},
+		{ProviderID: 1, Name: "池B组", Weight: 2, PoolID: uintPtr(9)},
+		{ProviderID: 1, Name: "同池组", Weight: 1, PoolID: uintPtr(7)},
 		{ProviderID: 1, Name: "空组", Weight: 1},
 	}).Error; err != nil {
 		t.Fatalf("create groups: %v", err)
 	}
 	// 创建（单条依次）：c3 先插得 ID=1、c1 后插得 ID=2——期望装配输出按
 	// ID ASC = [h3, h1]（组内候选顺序与插入无关，稳定升序是轮询取模的前提）
-	if err := db.Create(&models.Credential{Key: "c3", KeyHash: "h3", GroupID: uintPtr(1)}).Error; err != nil {
+	if err := db.Create(&models.Credential{Key: "c3", KeyHash: "h3", PoolID: 7}).Error; err != nil {
 		t.Fatalf("create c3: %v", err)
 	}
-	if err := db.Create(&models.Credential{Key: "c1", KeyHash: "h1", GroupID: uintPtr(1)}).Error; err != nil {
+	if err := db.Create(&models.Credential{Key: "c1", KeyHash: "h1", PoolID: 7}).Error; err != nil {
 		t.Fatalf("create c1: %v", err)
 	}
-	if err := db.Create(&models.Credential{Key: "c-pool", KeyHash: "h-pool", PoolID: uintPtr(9)}).Error; err != nil {
+	if err := db.Create(&models.Credential{Key: "c-pool", KeyHash: "h-pool", PoolID: 9}).Error; err != nil {
 		t.Fatalf("create c-pool: %v", err)
+	}
+	// 池 8 未被任何分组引用：不得泄漏进任何分组
+	if err := db.Create(&models.Credential{Key: "c-orphan", KeyHash: "h-orphan", PoolID: 8}).Error; err != nil {
+		t.Fatalf("create c-orphan: %v", err)
 	}
 
 	repos := reposFromDB(db)
@@ -68,28 +74,43 @@ func TestAssemble_CredentialMerge(t *testing.T) {
 	if len(snap.Endpoints) != 2 {
 		t.Fatalf("endpoints = %d, want 2", len(snap.Endpoints))
 	}
-	if len(snap.Groups) != 3 {
-		t.Fatalf("groups = %d, want 3", len(snap.Groups))
+	if len(snap.Groups) != 4 {
+		t.Fatalf("groups = %d, want 4", len(snap.Groups))
 	}
 
-	// 组 1：内联两条，按 ID ASC（c3 ID=1 在 c1 ID=2 之前）
+	// 组 1：池 7 内两条，按 ID ASC（c3 ID=1 在 c1 ID=2 之前）
 	g1 := snap.CredentialsByGroup[1]
 	if len(g1) != 2 {
-		t.Fatalf("group 1 credentials = %d, want 2 (内联归并)", len(g1))
+		t.Fatalf("group 1 credentials = %d, want 2（池内归并）", len(g1))
 	}
 	if g1[0].KeyHash != "h3" || g1[1].KeyHash != "h1" {
 		t.Fatalf("group 1 order = [%s %s], want [h3 h1]（ID ASC 稳定）", g1[0].KeyHash, g1[1].KeyHash)
 	}
 
-	// 组 2：号池凭据归入（经 PoolID 引用）
+	// 组 2：另一个池的凭据归入
 	g2 := snap.CredentialsByGroup[2]
 	if len(g2) != 1 || g2[0].KeyHash != "h-pool" {
-		t.Fatalf("group 2 credentials = %v, want [h-pool]（号池归并）", g2)
+		t.Fatalf("group 2 credentials = %v, want [h-pool]（池归并）", g2)
 	}
 
-	// 空组：键存在、空切片（轮询判定「无可用」路径不 panic）
-	if g, ok := snap.CredentialsByGroup[3]; !ok || len(g) != 0 {
-		t.Fatalf("group 3 = (%v, %v), want (empty slice, true)", g, ok)
+	// 组 3：与组 1 引用同一个池 → 拿到同一批凭据（池可复用）
+	g3 := snap.CredentialsByGroup[3]
+	if len(g3) != 2 || g3[0].KeyHash != "h3" || g3[1].KeyHash != "h1" {
+		t.Fatalf("group 3 credentials = %v, want 与组 1 同（池可复用）", g3)
+	}
+
+	// 组 4：未选池 → 键存在、空切片（轮询判定「无可用」路径不 panic）
+	if g, ok := snap.CredentialsByGroup[4]; !ok || len(g) != 0 {
+		t.Fatalf("group 4 = (%v, %v), want (empty slice, true)", g, ok)
+	}
+
+	// 池 8 的孤儿凭据不得出现在任何分组
+	for gid, creds := range snap.CredentialsByGroup {
+		for _, c := range creds {
+			if c.KeyHash == "h-orphan" {
+				t.Fatalf("未被引用的池 8 凭据泄漏进分组 %d", gid)
+			}
+		}
 	}
 }
 

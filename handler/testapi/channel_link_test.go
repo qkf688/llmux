@@ -3,6 +3,7 @@ package testapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -20,7 +21,7 @@ import (
 
 // 本文件锁 #19 的契约：testapi 四个测试端点打上游必须走「主协议端点 + 候选分组 +
 // 组内首个可用凭据」这条诊断链路，而**不是** Provider.Config。S6 起 Config 不再承载
-// api_key，直用 Config 会让号池/内联凭据的供应商恒被上游判 401（与 #21 健康检查同源）。
+// api_key，直用 Config 会让号池凭据的供应商恒被上游判 401（与 #21 健康检查同源）。
 // 同时锁 #19 落地的响应契约：结果对象恒带 passed / group_id / group_name，前端据此把
 // ✓/✕ 归位到正确的分组徽标（失败也必须在链路已选定时报出分组）。
 
@@ -115,42 +116,25 @@ func seedEndpointRow(t *testing.T, providerID uint, protocol, url string) models
 	return ep
 }
 
-// seedInlineGroup 建内联凭据分组；whitelist 为空 = 不限制；keys 为空 = 组内无凭据。
-func seedInlineGroup(t *testing.T, cipher *credentialcrypto.Cipher, providerID uint, name, whitelist string, keys ...string) models.KeyGroup {
-	t.Helper()
-	group := models.KeyGroup{ProviderID: providerID, Name: name, Weight: 1, Models: whitelist}
-	if err := models.DB.Create(&group).Error; err != nil {
-		t.Fatalf("create group %s: %v", name, err)
-	}
-	for _, k := range keys {
-		groupID := group.ID
-		cred := models.Credential{
-			GroupID: &groupID,
-			Key:     mustEncryptKey(t, cipher, k),
-			KeyHash: cipher.Hash(k),
-			Status:  models.CredentialStatusActive,
-		}
-		if err := models.DB.Create(&cred).Error; err != nil {
-			t.Fatalf("create credential: %v", err)
-		}
-	}
-	return group
-}
+// testapiPoolSeq 号池名序号：Pool.Name 是唯一索引，同一用例内多次建池不得撞名。
+var testapiPoolSeq atomic.Int64
 
-// seedPoolGroup 建「号池 + 引用该池的分组」——用户实际形态：凭据只存在于池内。
-func seedPoolGroup(t *testing.T, cipher *credentialcrypto.Cipher, providerID uint, groupName, poolName string, keys ...string) (models.Pool, models.KeyGroup) {
+// seedPoolGroup 建「号池 + 引用该池的分组」——凭据只存在于池内（内联凭据概念已删除：
+// 分组一律经 KeyGroup.PoolID 引用号池取凭据）。
+// whitelist 为空 = 不限制；keys 为空 = 池内无凭据。
+func seedPoolGroup(t *testing.T, cipher *credentialcrypto.Cipher, providerID uint, groupName, whitelist string, keys ...string) (models.Pool, models.KeyGroup) {
 	t.Helper()
-	pool := models.Pool{Name: poolName}
+	pool := models.Pool{Name: fmt.Sprintf("pool-%s-%d", groupName, testapiPoolSeq.Add(1))}
 	if err := models.DB.Create(&pool).Error; err != nil {
 		t.Fatalf("create pool: %v", err)
 	}
-	group := models.KeyGroup{ProviderID: providerID, Name: groupName, Weight: 1, PoolID: &pool.ID}
+	group := models.KeyGroup{ProviderID: providerID, Name: groupName, Weight: 1, Models: whitelist, PoolID: &pool.ID}
 	if err := models.DB.Create(&group).Error; err != nil {
 		t.Fatalf("create group %s: %v", groupName, err)
 	}
 	for _, k := range keys {
 		cred := models.Credential{
-			PoolID:  &pool.ID,
+			PoolID:  pool.ID,
 			Key:     mustEncryptKey(t, cipher, k),
 			KeyHash: cipher.Hash(k),
 			Status:  models.CredentialStatusActive,
@@ -162,15 +146,12 @@ func seedPoolGroup(t *testing.T, cipher *credentialcrypto.Cipher, providerID uin
 	return pool, group
 }
 
-func seedDisabledInlineGroup(t *testing.T, cipher *credentialcrypto.Cipher, providerID uint, name string) models.KeyGroup {
+// seedDisabledPoolGroup 建「池内唯一凭据为 disabled」的分组（验「无可调度凭据的组被跳过」）。
+func seedDisabledPoolGroup(t *testing.T, cipher *credentialcrypto.Cipher, providerID uint, name string) models.KeyGroup {
 	t.Helper()
-	group := models.KeyGroup{ProviderID: providerID, Name: name, Weight: 1}
-	if err := models.DB.Create(&group).Error; err != nil {
-		t.Fatalf("create group %s: %v", name, err)
-	}
-	groupID := group.ID
+	pool, group := seedPoolGroup(t, cipher, providerID, name, "")
 	cred := models.Credential{
-		GroupID: &groupID,
+		PoolID:  pool.ID,
 		Key:     mustEncryptKey(t, cipher, "sk-disabled"),
 		KeyHash: cipher.Hash("sk-disabled"),
 		Status:  models.CredentialStatusDisabled,
@@ -232,7 +213,7 @@ func TestProviderTestHandler_UsesPoolCredentialNotProviderConfig(t *testing.T) {
 
 	provider := seedProviderRow(t, "p-pool", "openai")
 	seedEndpointRow(t, provider.ID, "openai", srv.URL)
-	_, group := seedPoolGroup(t, cipher, provider.ID, "池组", "pool-1", "sk-pool-1")
+	_, group := seedPoolGroup(t, cipher, provider.ID, "池组", "", "sk-pool-1")
 	mwp := seedAssociation(t, provider.ID, 1, "gpt-4.1")
 
 	w := callProviderTest(t, mwp.ID)
@@ -274,7 +255,7 @@ func TestProviderTestHandler_AnthropicEndpointUsesAPIKeyHeader(t *testing.T) {
 
 	provider := seedProviderRow(t, "p-ant", "anthropic")
 	seedEndpointRow(t, provider.ID, "anthropic", srv.URL)
-	seedInlineGroup(t, cipher, provider.ID, "内联组", "", "sk-anthropic")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "池组-anthropic", "", "sk-anthropic")
 	mwp := seedAssociation(t, provider.ID, 1, "claude-sonnet-4")
 
 	w := callProviderTest(t, mwp.ID)
@@ -303,7 +284,7 @@ func TestProviderTestHandler_ModelNotWhitelistedIsValidationFailure(t *testing.T
 
 	provider := seedProviderRow(t, "p-wl", "openai")
 	seedEndpointRow(t, provider.ID, "openai", srv.URL)
-	seedInlineGroup(t, cipher, provider.ID, "只含别的模型", "other-model", "sk-1")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "只含别的模型", "other-model", "sk-1")
 	mwp := seedAssociation(t, provider.ID, 1, "gpt-4.1")
 
 	w := callProviderTest(t, mwp.ID)
@@ -341,7 +322,7 @@ func TestProviderTestHandler_NoUsableCredentialDoesNotHitUpstream(t *testing.T) 
 
 	provider := seedProviderRow(t, "p-nokey", "openai")
 	seedEndpointRow(t, provider.ID, "openai", srv.URL)
-	seedDisabledInlineGroup(t, cipher, provider.ID, "停用组")
+	seedDisabledPoolGroup(t, cipher, provider.ID, "停用组")
 	mwp := seedAssociation(t, provider.ID, 1, "gpt-4.1")
 
 	w := callProviderTest(t, mwp.ID)
@@ -369,8 +350,8 @@ func TestProviderTestHandler_SkipsGroupWithoutCredential(t *testing.T) {
 
 	provider := seedProviderRow(t, "p-two", "openai")
 	seedEndpointRow(t, provider.ID, "openai", srv.URL)
-	empty := seedDisabledInlineGroup(t, cipher, provider.ID, "全停用")
-	ok := seedInlineGroup(t, cipher, provider.ID, "可用组", "", "sk-ok")
+	empty := seedDisabledPoolGroup(t, cipher, provider.ID, "全停用")
+	_, ok := seedPoolGroup(t, cipher, provider.ID, "可用组", "", "sk-ok")
 	mwp := seedAssociation(t, provider.ID, 1, "gpt-4.1")
 
 	w := callProviderTest(t, mwp.ID)
@@ -400,14 +381,10 @@ func TestProviderTestHandler_DeterministicCredentialNoRRAdvance(t *testing.T) {
 
 	provider := seedProviderRow(t, "p-rr", "openai")
 	seedEndpointRow(t, provider.ID, "openai", srv.URL)
-	group := models.KeyGroup{ProviderID: provider.ID, Name: "两组", Weight: 1}
-	if err := models.DB.Create(&group).Error; err != nil {
-		t.Fatalf("create group: %v", err)
-	}
-	groupID := group.ID
+	pool, _ := seedPoolGroup(t, cipher, provider.ID, "两组", "")
 	for _, k := range []string{"sk-first", "sk-second"} {
 		cred := models.Credential{
-			GroupID: &groupID,
+			PoolID:  pool.ID,
 			Key:     mustEncryptKey(t, cipher, k),
 			KeyHash: cipher.Hash(k),
 			Status:  models.CredentialStatusActive,
@@ -465,7 +442,7 @@ func TestProviderModelTestHandler_AutoIgnoresWhitelist(t *testing.T) {
 
 	provider := seedProviderRow(t, "p-catalog", "openai")
 	seedEndpointRow(t, provider.ID, "openai", srv.URL)
-	group := seedInlineGroup(t, cipher, provider.ID, "白名单不含它", "something-else", "sk-x")
+	_, group := seedPoolGroup(t, cipher, provider.ID, "白名单不含它", "something-else", "sk-x")
 
 	w := callProviderModelTest(t, provider.ID, `{"model":"brand-new-model"}`)
 	payload := loadEnvelope(t, w)
@@ -493,8 +470,8 @@ func TestProviderModelTestHandler_GroupIDLocksGroup(t *testing.T) {
 
 	provider := seedProviderRow(t, "p-lock", "openai")
 	seedEndpointRow(t, provider.ID, "openai", srv.URL)
-	seedInlineGroup(t, cipher, provider.ID, "A 组", "", "sk-a")
-	groupB := seedInlineGroup(t, cipher, provider.ID, "B 组", "", "sk-b")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "A 组", "", "sk-a")
+	_, groupB := seedPoolGroup(t, cipher, provider.ID, "B 组", "", "sk-b")
 
 	w := callProviderModelTest(t, provider.ID, `{"model":"m1","group_id":`+strconv.FormatUint(uint64(groupB.ID), 10)+`}`)
 	payload := loadEnvelope(t, w)
@@ -521,7 +498,7 @@ func TestProviderModelTestHandler_UpstreamFailureStillReportsGroup(t *testing.T)
 
 	provider := seedProviderRow(t, "p-fail", "openai")
 	seedEndpointRow(t, provider.ID, "openai", srv.URL)
-	group := seedInlineGroup(t, cipher, provider.ID, "坏 key 组", "", "sk-dead")
+	_, group := seedPoolGroup(t, cipher, provider.ID, "坏 key 组", "", "sk-dead")
 
 	w := callProviderModelTest(t, provider.ID, `{"model":"m1"}`)
 	payload := loadEnvelope(t, w)
@@ -562,7 +539,7 @@ func TestProviderModelTestHandler_ForeignGroupRejected(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	other := seedProviderRow(t, "p-other", "openai")
-	otherGroup := seedInlineGroup(t, cipher, other.ID, "别家组", "", "sk-x")
+	_, otherGroup := seedPoolGroup(t, cipher, other.ID, "别家组", "", "sk-x")
 	provider := seedProviderRow(t, "p-mine", "openai")
 	seedEndpointRow(t, provider.ID, "openai", srv.URL)
 
@@ -588,7 +565,7 @@ func TestTestStructuredOutputHandler_NoEndpointFailsAsProviderError(t *testing.T
 
 	provider := seedProviderRow(t, "broken-provider", "openai")
 	// 有分组有凭据、但一个端点都没配 → 失败点落在「无启用端点」而非「无分组」。
-	seedInlineGroup(t, cipher, provider.ID, "有凭据", "", "sk-x")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "有凭据", "", "sk-x")
 	mwp := seedAssociation(t, provider.ID, 1, "gpt-x")
 
 	c, w := testsupport.NewTestContext("GET", "/api/test/structured-output/"+strconv.FormatUint(uint64(mwp.ID), 10))
@@ -623,7 +600,7 @@ func TestTestReactHandler_UsesPoolCredential(t *testing.T) {
 
 	provider := seedProviderRow(t, "p-react", "openai")
 	seedEndpointRow(t, provider.ID, "openai", srv.URL)
-	seedPoolGroup(t, cipher, provider.ID, "react 池组", "pool-react", "sk-react")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "react 池组", "", "sk-react")
 	mwp := seedAssociation(t, provider.ID, 1, "gpt-4.1")
 
 	w := callReactTest(t, mwp.ID)

@@ -1,9 +1,9 @@
-// Package credview 凭据对外视图（管理端 JSON 形状）的唯一来源。
+// View 凭据对外视图（管理端 JSON 形状）的唯一来源。
 //
 // 为什么单独成包：凭据视图原先是两处各拼一份——号池域 `pools.CredentialListItem` 与
-// 供应商分组的掩码项 `providerapi.InlineKeyItem`。同一把凭据两个形状，加字段（如状态、
-// 冷却）必定漏一处。凭据提为第一等资源后（`handler/credentials`），两个域都从这里取
-// 同一个视图：新增凭据级字段只改本文件。
+// 供应商分组的掩码项。同一把凭据两个形状，加字段（如状态、冷却）必定漏一处。
+// 凭据提为第一等资源后（`handler/credentials`），两个域都从这里取同一个视图：
+// 新增凭据级字段只改本文件。
 package credview
 
 import (
@@ -14,13 +14,11 @@ import (
 )
 
 // View 凭据视图：掩码后的展示形态，不含明文/密文/KeyHash（明文只经受控 raw 端点显式拉取）。
-// 字段以 PascalCase 对管理端前端暴露（与既有 `pools.CredentialListItem` 同形，前端零改动）。
-// 三态指针（PoolID/GroupID/CooldownUntil/...）**禁 omitempty**：nil 是「无该归属 / 无冷却」
-// 的有效语义，序列化成 JSON null，前端据此区分状态。
+// 字段以 PascalCase 对管理端前端暴露。三态指针（CooldownUntil/...）**禁 omitempty**：
+// nil 是「无该归属 / 无冷却」的有效语义，序列化成 JSON null，前端据此区分状态。
 type View struct {
 	ID             uint       `json:"ID"`
-	PoolID         *uint      `json:"PoolID"`
-	GroupID        *uint      `json:"GroupID"`
+	PoolID         uint       `json:"PoolID"`
 	Status         string     `json:"Status"`
 	Note           string     `json:"Note"`
 	KeyMasked      string     `json:"KeyMasked"`
@@ -43,7 +41,6 @@ func ViewOf(cred models.Credential) View {
 	return View{
 		ID:             cred.ID,
 		PoolID:         cred.PoolID,
-		GroupID:        cred.GroupID,
 		Status:         cred.Status,
 		Note:           cred.Note,
 		KeyMasked:      credentialcrypto.MaskStored(credentialcrypto.Default(), cred.Key, "credential_id", cred.ID),

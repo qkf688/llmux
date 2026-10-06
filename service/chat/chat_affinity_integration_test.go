@@ -52,12 +52,16 @@ func setupAffinityFixture(t *testing.T) (runReq func(raw string), auths func() [
 	if err := models.DB.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	grp := models.KeyGroup{ProviderID: provider.ID, Name: "g1", Weight: 1}
+	pool := models.Pool{Name: "pool-1"}
+	if err := models.DB.Create(&pool).Error; err != nil {
+		t.Fatalf("create pool: %v", err)
+	}
+	grp := models.KeyGroup{ProviderID: provider.ID, Name: "g1", Weight: 1, PoolID: &pool.ID}
 	if err := models.DB.Create(&grp).Error; err != nil {
 		t.Fatalf("create key group: %v", err)
 	}
 	for i, plain := range []string{"sk-key1", "sk-key2"} {
-		cred := models.Credential{GroupID: &grp.ID, Key: mustEncrypt(t, cipher, plain), KeyHash: cipher.Hash(plain)}
+		cred := models.Credential{PoolID: pool.ID, Key: mustEncrypt(t, cipher, plain), KeyHash: cipher.Hash(plain)}
 		if err := models.DB.Create(&cred).Error; err != nil {
 			t.Fatalf("create credential %s: %v", plain, err)
 		}
@@ -222,11 +226,15 @@ func TestBalanceChatVirtual_CacheAffinity_PinsRealModelFirst(t *testing.T) {
 		if err := models.DB.Create(&ep).Error; err != nil {
 			t.Fatalf("create endpoint %s: %v", name, err)
 		}
-		grp := models.KeyGroup{ProviderID: provider.ID, Name: name + "-g", Weight: 1}
+		pool := models.Pool{Name: "pool-" + name}
+		if err := models.DB.Create(&pool).Error; err != nil {
+			t.Fatalf("create pool %s: %v", name, err)
+		}
+		grp := models.KeyGroup{ProviderID: provider.ID, Name: name + "-g", Weight: 1, PoolID: &pool.ID}
 		if err := models.DB.Create(&grp).Error; err != nil {
 			t.Fatalf("create group %s: %v", name, err)
 		}
-		cred := models.Credential{GroupID: &grp.ID, Key: mustEncrypt(t, cipher, plain), KeyHash: cipher.Hash(plain)}
+		cred := models.Credential{PoolID: pool.ID, Key: mustEncrypt(t, cipher, plain), KeyHash: cipher.Hash(plain)}
 		if err := models.DB.Create(&cred).Error; err != nil {
 			t.Fatalf("create credential %s: %v", name, err)
 		}

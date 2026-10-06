@@ -45,16 +45,20 @@ func modelListBody(ids ...string) string {
 	return `{"object":"list","data":[` + strings.Join(parts, ",") + `]}`
 }
 
-// seedInlineGroup 建一个内联凭据分组（凭据 active），返回分组。plainKey 为空则建空组。
-func seedInlineGroup(t *testing.T, db *gorm.DB, cipher *credentialcrypto.Cipher, providerID uint, name, plainKey string) models.KeyGroup {
+// seedPoolGroup 建「号池 + 引用该池的分组」，返回分组。plainKey 为空则建池内无凭据的组。
+func seedPoolGroup(t *testing.T, db *gorm.DB, cipher *credentialcrypto.Cipher, providerID uint, name, plainKey string) models.KeyGroup {
 	t.Helper()
-	return seedInlineGroupWithStatus(t, db, cipher, providerID, name, plainKey, models.CredentialStatusActive)
+	return seedPoolGroupWithStatus(t, db, cipher, providerID, name, plainKey, models.CredentialStatusActive)
 }
 
-// seedInlineGroupWithStatus 同 seedInlineGroup，但可指定凭据状态（验证非 active 凭据不可调度）。
-func seedInlineGroupWithStatus(t *testing.T, db *gorm.DB, cipher *credentialcrypto.Cipher, providerID uint, name, plainKey, status string) models.KeyGroup {
+// seedPoolGroupWithStatus 同 seedPoolGroup，但可指定凭据状态（验证非 active 凭据不可调度）。
+func seedPoolGroupWithStatus(t *testing.T, db *gorm.DB, cipher *credentialcrypto.Cipher, providerID uint, name, plainKey, status string) models.KeyGroup {
 	t.Helper()
-	g := models.KeyGroup{ProviderID: providerID, Name: name, Weight: 1}
+	pool := models.Pool{Name: "pool-" + name}
+	if err := db.Create(&pool).Error; err != nil {
+		t.Fatalf("create pool %s: %v", name, err)
+	}
+	g := models.KeyGroup{ProviderID: providerID, Name: name, Weight: 1, PoolID: &pool.ID}
 	if err := db.Create(&g).Error; err != nil {
 		t.Fatalf("create group %s: %v", name, err)
 	}
@@ -62,7 +66,7 @@ func seedInlineGroupWithStatus(t *testing.T, db *gorm.DB, cipher *credentialcryp
 		return g
 	}
 	cred := models.Credential{
-		GroupID: &g.ID,
+		PoolID:  pool.ID,
 		Key:     mustEncryptKey(t, cipher, plainKey),
 		KeyHash: cipher.Hash(plainKey),
 		Status:  status,
@@ -100,7 +104,7 @@ func TestListUpstreamModels_UsesEndpointURLAndGroupCredential(t *testing.T) {
 	if err := db.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	group := seedInlineGroup(t, db, cipher, provider.ID, "g1", "sk-g1")
+	group := seedPoolGroup(t, db, cipher, provider.ID, "g1", "sk-g1")
 
 	got, err := ListUpstreamModels(ctx, repository.New(db), provider.ID)
 	if err != nil {
@@ -160,7 +164,7 @@ func TestListUpstreamModels_PoolCredential(t *testing.T) {
 		t.Fatalf("create group: %v", err)
 	}
 	cred := models.Credential{
-		PoolID:  &pool.ID,
+		PoolID:  pool.ID,
 		Key:     mustEncryptKey(t, cipher, "sk-pool-1"),
 		KeyHash: cipher.Hash("sk-pool-1"),
 		Status:  models.CredentialStatusActive,
@@ -202,8 +206,8 @@ func TestListUpstreamModels_MergesGroupsAndDedups(t *testing.T) {
 	if err := db.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	g1 := seedInlineGroup(t, db, cipher, provider.ID, "g1", "sk-g1")
-	g2 := seedInlineGroup(t, db, cipher, provider.ID, "g2", "sk-g2")
+	g1 := seedPoolGroup(t, db, cipher, provider.ID, "g1", "sk-g1")
+	g2 := seedPoolGroup(t, db, cipher, provider.ID, "g2", "sk-g2")
 
 	got, err := ListUpstreamModels(context.Background(), repository.New(db), provider.ID)
 	if err != nil {
@@ -256,8 +260,8 @@ func TestListUpstreamModels_EmptyGroupDoesNotBlockOthers(t *testing.T) {
 	if err := db.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	seedInlineGroup(t, db, cipher, provider.ID, "空组", "")
-	seedInlineGroup(t, db, cipher, provider.ID, "有key组", "sk-g2")
+	seedPoolGroup(t, db, cipher, provider.ID, "空组", "")
+	seedPoolGroup(t, db, cipher, provider.ID, "有key组", "sk-g2")
 
 	got, err := ListUpstreamModels(context.Background(), repository.New(db), provider.ID)
 	if err != nil {
@@ -285,7 +289,7 @@ func TestListUpstreamModels_NoUsableCredential(t *testing.T) {
 	if err := db.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	seedInlineGroupWithStatus(t, db, cipher, provider.ID, "禁用key组", "sk-disabled", models.CredentialStatusDisabled)
+	seedPoolGroupWithStatus(t, db, cipher, provider.ID, "禁用key组", "sk-disabled", models.CredentialStatusDisabled)
 
 	_, err := ListUpstreamModels(context.Background(), repository.New(db), provider.ID)
 	if err == nil || !strings.Contains(err.Error(), "no usable credential") {
@@ -313,7 +317,7 @@ func TestListUpstreamModels_AllGroupsFailSurfacesUpstreamError(t *testing.T) {
 	if err := db.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	seedInlineGroup(t, db, cipher, provider.ID, "g1", "sk-invalid")
+	seedPoolGroup(t, db, cipher, provider.ID, "g1", "sk-invalid")
 
 	_, err := ListUpstreamModels(context.Background(), repository.New(db), provider.ID)
 	if err == nil {
@@ -342,7 +346,7 @@ func TestListUpstreamModels_NoEnabledEndpoint(t *testing.T) {
 	if err := db.Model(&models.Endpoint{}).Where("id = ?", ep.ID).Update("enabled", false).Error; err != nil {
 		t.Fatalf("disable endpoint: %v", err)
 	}
-	seedInlineGroup(t, db, cipher, provider.ID, "g1", "sk-g1")
+	seedPoolGroup(t, db, cipher, provider.ID, "g1", "sk-g1")
 
 	_, err := ListUpstreamModels(context.Background(), repository.New(db), provider.ID)
 	if err == nil || !strings.Contains(err.Error(), "no enabled endpoint") {

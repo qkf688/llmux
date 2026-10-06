@@ -2,6 +2,7 @@ package models
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -27,7 +28,8 @@ func testChannelCipher(t *testing.T) *credentialcrypto.Cipher {
 }
 
 // TestMigrateLegacyProviders_ExpandsLegacyShape 锁定迁移展开形状：
-// 1 端点 + 1 分组 + 1 内联凭据（密文 + KeyHash），Config.api_key 清空、base_url 保留，
+// 1 端点 + 1 分组 + 1 号池（legacy-<type>-<id>）+ 1 池内凭据（密文 + KeyHash），
+// 分组引用该池、凭据 PoolID 指向该池；Config.api_key 清空、base_url 保留，
 // Protocols 按 type 派生。
 func TestMigrateLegacyProviders_ExpandsLegacyShape(t *testing.T) {
 	db := testChannelDB(t)
@@ -64,13 +66,29 @@ func TestMigrateLegacyProviders_ExpandsLegacyShape(t *testing.T) {
 		t.Fatalf("endpoint 形状不符: %+v", endpoints[0])
 	}
 
-	// 1 分组 + 1 凭据（挂在分组下）
+	// 1 分组 + 1 号池 + 1 池内凭据
 	var groups []KeyGroup
 	if err := db.Where("provider_id = ?", legacy.ID).Find(&groups).Error; err != nil {
 		t.Fatalf("list groups: %v", err)
 	}
 	if len(groups) != 1 || groups[0].Name != "默认组" || groups[0].Weight != 1 {
 		t.Fatalf("groups 形状不符: %+v", groups)
+	}
+
+	var pools []Pool
+	if err := db.Find(&pools).Error; err != nil {
+		t.Fatalf("list pools: %v", err)
+	}
+	if len(pools) != 1 {
+		t.Fatalf("pools 数量 = %d, want 1", len(pools))
+	}
+	pool := pools[0]
+	if wantName := fmt.Sprintf("legacy-%s-%d", legacy.Type, legacy.ID); pool.Name != wantName {
+		t.Fatalf("pool.Name = %q, want %q", pool.Name, wantName)
+	}
+	// 分组引用该池（凭据一律归属号池，分组经 PoolID 引用）
+	if groups[0].PoolID == nil || *groups[0].PoolID != pool.ID {
+		t.Fatalf("group.PoolID = %v, want 号池 %d", groups[0].PoolID, pool.ID)
 	}
 
 	var creds []Credential
@@ -81,8 +99,8 @@ func TestMigrateLegacyProviders_ExpandsLegacyShape(t *testing.T) {
 		t.Fatalf("credentials 数量 = %d, want 1", len(creds))
 	}
 	cred := creds[0]
-	if cred.GroupID == nil || *cred.GroupID != groups[0].ID {
-		t.Fatalf("credential.GroupID = %v, want 分组 %d", cred.GroupID, groups[0].ID)
+	if cred.PoolID != pool.ID {
+		t.Fatalf("credential.PoolID = %d, want 号池 %d", cred.PoolID, pool.ID)
 	}
 	if cred.Status != CredentialStatusActive {
 		t.Fatalf("credential.Status = %q, want active", cred.Status)
@@ -107,7 +125,8 @@ func TestMigrateLegacyProviders_ExpandsLegacyShape(t *testing.T) {
 	}
 }
 
-// TestMigrateLegacyProviders_Idempotent 锁定幂等：二次迁移不重复生成任何行。
+// TestMigrateLegacyProviders_Idempotent 锁定幂等：二次迁移不重复生成任何行
+// （含号池——分组已存在即整段跳过，不会再建池）。
 func TestMigrateLegacyProviders_Idempotent(t *testing.T) {
 	db := testChannelDB(t)
 	legacy := &Provider{
@@ -123,12 +142,13 @@ func TestMigrateLegacyProviders_Idempotent(t *testing.T) {
 	migrateLegacyProviders(context.Background(), db, cipher)
 	migrateLegacyProviders(context.Background(), db, cipher)
 
-	var endpointCount, groupCount, credCount int64
+	var endpointCount, groupCount, poolCount, credCount int64
 	db.Model(&Endpoint{}).Where("provider_id = ?", legacy.ID).Count(&endpointCount)
 	db.Model(&KeyGroup{}).Where("provider_id = ?", legacy.ID).Count(&groupCount)
+	db.Model(&Pool{}).Count(&poolCount)
 	db.Model(&Credential{}).Where("key_hash = ?", cipher.Hash("sk-legacy-123")).Count(&credCount)
-	if endpointCount != 1 || groupCount != 1 || credCount != 1 {
-		t.Fatalf("二次迁移后 endpoint=%d group=%d credential=%d, want 1/1/1", endpointCount, groupCount, credCount)
+	if endpointCount != 1 || groupCount != 1 || poolCount != 1 || credCount != 1 {
+		t.Fatalf("二次迁移后 endpoint=%d group=%d pool=%d credential=%d, want 1/1/1/1", endpointCount, groupCount, poolCount, credCount)
 	}
 }
 
@@ -173,8 +193,8 @@ func TestMigrateLegacyProviders_ProtocolsDerived(t *testing.T) {
 	}
 }
 
-// TestMigrateLegacyProviders_NoAPIKey 锁定 Config 无 api_key 时：生成分组但不建凭据，
-// Config 不被改写。
+// TestMigrateLegacyProviders_NoAPIKey 锁定 Config 无 api_key 时：生成分组但不建号池、
+// 不建凭据，Config 不被改写（凭据与池都只为搬运明文 key 而生）。
 func TestMigrateLegacyProviders_NoAPIKey(t *testing.T) {
 	db := testChannelDB(t)
 	legacy := &Provider{
@@ -188,11 +208,15 @@ func TestMigrateLegacyProviders_NoAPIKey(t *testing.T) {
 
 	migrateLegacyProviders(context.Background(), db, testChannelCipher(t))
 
-	var groups, creds int64
+	var groups, pools, creds int64
 	db.Model(&KeyGroup{}).Where("provider_id = ?", legacy.ID).Count(&groups)
+	db.Model(&Pool{}).Count(&pools)
 	db.Model(&Credential{}).Count(&creds)
 	if groups != 1 {
 		t.Fatalf("分组数 = %d, want 1", groups)
+	}
+	if pools != 0 {
+		t.Fatalf("号池数 = %d, want 0（无明文 key 不建池）", pools)
 	}
 	if creds != 0 {
 		t.Fatalf("凭据数 = %d, want 0", creds)

@@ -73,16 +73,16 @@ func TestPoolRepo_CRUD(t *testing.T) {
 	}
 }
 
-// TestCredentialRepo_List_Filters 锁定凭据按归属/状态/KeyHash 过滤。
+// TestCredentialRepo_List_Filters 锁定凭据按归属号池/状态/KeyHash 过滤。
 func TestCredentialRepo_List_Filters(t *testing.T) {
 	ctx := context.Background()
 	repo := NewCredentialRepo(newChannelTestDB(t))
 
-	poolID, groupID := uint(1), uint(2)
+	poolA, poolB := uint(1), uint(2)
 	creds := []*models.Credential{
-		{Key: "enc-1", KeyHash: "hash-a", PoolID: &poolID, Status: models.CredentialStatusActive},
-		{Key: "enc-2", KeyHash: "hash-b", GroupID: &groupID, Status: models.CredentialStatusDisabled},
-		{Key: "enc-3", KeyHash: "hash-c", PoolID: &poolID, Status: models.CredentialStatusError},
+		{Key: "enc-1", KeyHash: "hash-a", PoolID: poolA, Status: models.CredentialStatusActive},
+		{Key: "enc-2", KeyHash: "hash-b", PoolID: poolB, Status: models.CredentialStatusDisabled},
+		{Key: "enc-3", KeyHash: "hash-c", PoolID: poolA, Status: models.CredentialStatusError},
 	}
 	for _, c := range creds {
 		if err := repo.Create(ctx, c); err != nil {
@@ -90,7 +90,7 @@ func TestCredentialRepo_List_Filters(t *testing.T) {
 		}
 	}
 
-	byPool, err := repo.List(ctx, CredentialFilter{PoolID: &poolID})
+	byPool, err := repo.List(ctx, CredentialFilter{PoolID: &poolA})
 	if err != nil {
 		t.Fatalf("List byPool: %v", err)
 	}
@@ -98,12 +98,12 @@ func TestCredentialRepo_List_Filters(t *testing.T) {
 		t.Fatalf("byPool 数量 = %d, want 2", len(byPool))
 	}
 
-	byGroup, err := repo.List(ctx, CredentialFilter{GroupID: &groupID})
+	byOtherPool, err := repo.List(ctx, CredentialFilter{PoolID: &poolB})
 	if err != nil {
-		t.Fatalf("List byGroup: %v", err)
+		t.Fatalf("List byOtherPool: %v", err)
 	}
-	if len(byGroup) != 1 || byGroup[0].KeyHash != "hash-b" {
-		t.Fatalf("byGroup 结果不符: %+v", byGroup)
+	if len(byOtherPool) != 1 || byOtherPool[0].KeyHash != "hash-b" {
+		t.Fatalf("byOtherPool 结果不符: %+v", byOtherPool)
 	}
 
 	byStatus, err := repo.List(ctx, CredentialFilter{Status: models.CredentialStatusError})
@@ -122,8 +122,8 @@ func TestCredentialRepo_List_Filters(t *testing.T) {
 		t.Fatalf("byHash 数量 = %d, want 1", len(byHash))
 	}
 
-	// 三态字段清除：struct Update 会跳过零值，置空 PoolID 必须走 UpdateFields（map 显式写 NULL）
-	affected, err := repo.UpdateFields(ctx, byPool[0].ID, map[string]any{"pool_id": nil})
+	// 归属改池走 UpdateFields（map 显式写值，绕开 struct Updates 跳过零值的语义）
+	affected, err := repo.UpdateFields(ctx, byPool[0].ID, map[string]any{"pool_id": poolB})
 	if err != nil {
 		t.Fatalf("UpdateFields: %v", err)
 	}
@@ -131,8 +131,8 @@ func TestCredentialRepo_List_Filters(t *testing.T) {
 		t.Fatalf("UpdateFields RowsAffected = %d, want 1", affected)
 	}
 	reloaded, _ := repo.Get(ctx, byPool[0].ID)
-	if reloaded.PoolID != nil {
-		t.Fatalf("置 nil 后 PoolID = %v, want nil", reloaded.PoolID)
+	if reloaded.PoolID != poolB {
+		t.Fatalf("改池后 PoolID = %d, want %d", reloaded.PoolID, poolB)
 	}
 }
 
@@ -287,10 +287,10 @@ func TestPoolRepo_Stats(t *testing.T) {
 	}
 
 	creds := []*models.Credential{
-		{Key: "enc-1", KeyHash: "h-a", PoolID: &p1.ID, Status: models.CredentialStatusActive},
-		{Key: "enc-2", KeyHash: "h-b", PoolID: &p1.ID, Status: models.CredentialStatusActive},
-		{Key: "enc-3", KeyHash: "h-c", PoolID: &p1.ID, Status: models.CredentialStatusError},
-		{Key: "enc-4", KeyHash: "h-d", PoolID: &p2.ID, Status: models.CredentialStatusDisabled},
+		{Key: "enc-1", KeyHash: "h-a", PoolID: p1.ID, Status: models.CredentialStatusActive},
+		{Key: "enc-2", KeyHash: "h-b", PoolID: p1.ID, Status: models.CredentialStatusActive},
+		{Key: "enc-3", KeyHash: "h-c", PoolID: p1.ID, Status: models.CredentialStatusError},
+		{Key: "enc-4", KeyHash: "h-d", PoolID: p2.ID, Status: models.CredentialStatusDisabled},
 	}
 	for _, c := range creds {
 		if err := credRepo.Create(ctx, c); err != nil {
@@ -346,16 +346,16 @@ func TestPoolRepo_Stats(t *testing.T) {
 }
 
 // TestCredentialRepo_DeleteByPool 锁定按号池级联删除凭据（软删）；
-// 分组内联凭据（GroupID 归属）不受影响。
+// 归属其他号池的凭据不受影响（凭据只归属号池，无内联归属例外）。
 func TestCredentialRepo_DeleteByPool(t *testing.T) {
 	ctx := context.Background()
 	repo := NewCredentialRepo(newChannelTestDB(t))
 
-	poolID, groupID := uint(1), uint(2)
+	poolA, poolB := uint(1), uint(2)
 	creds := []*models.Credential{
-		{Key: "enc-1", KeyHash: "h1", PoolID: &poolID},
-		{Key: "enc-2", KeyHash: "h2", PoolID: &poolID},
-		{Key: "enc-3", KeyHash: "h3", GroupID: &groupID},
+		{Key: "enc-1", KeyHash: "h1", PoolID: poolA},
+		{Key: "enc-2", KeyHash: "h2", PoolID: poolA},
+		{Key: "enc-3", KeyHash: "h3", PoolID: poolB},
 	}
 	for _, c := range creds {
 		if err := repo.Create(ctx, c); err != nil {
@@ -363,7 +363,7 @@ func TestCredentialRepo_DeleteByPool(t *testing.T) {
 		}
 	}
 
-	affected, err := repo.DeleteByPoolID(ctx, poolID)
+	affected, err := repo.DeleteByPoolID(ctx, poolA)
 	if err != nil {
 		t.Fatalf("DeleteByPoolID: %v", err)
 	}
@@ -371,7 +371,7 @@ func TestCredentialRepo_DeleteByPool(t *testing.T) {
 		t.Fatalf("DeleteByPoolID RowsAffected = %d, want 2", affected)
 	}
 
-	byPool, err := repo.List(ctx, CredentialFilter{PoolID: &poolID})
+	byPool, err := repo.List(ctx, CredentialFilter{PoolID: &poolA})
 	if err != nil {
 		t.Fatalf("List byPool: %v", err)
 	}
@@ -379,12 +379,12 @@ func TestCredentialRepo_DeleteByPool(t *testing.T) {
 		t.Fatalf("级联删除后池内凭据数 = %d, want 0", len(byPool))
 	}
 
-	byGroup, err := repo.List(ctx, CredentialFilter{GroupID: &groupID})
+	byOtherPool, err := repo.List(ctx, CredentialFilter{PoolID: &poolB})
 	if err != nil {
-		t.Fatalf("List byGroup: %v", err)
+		t.Fatalf("List byOtherPool: %v", err)
 	}
-	if len(byGroup) != 1 || byGroup[0].KeyHash != "h3" {
-		t.Fatalf("分组内联凭据不应被级联删除: %+v", byGroup)
+	if len(byOtherPool) != 1 || byOtherPool[0].KeyHash != "h3" {
+		t.Fatalf("他池凭据不应被级联删除: %+v", byOtherPool)
 	}
 }
 
@@ -399,7 +399,7 @@ func TestKeyGroupRepo_CountByPoolIDs(t *testing.T) {
 		{ProviderID: 1, Name: "默认组", PoolID: &p1},
 		{ProviderID: 1, Name: "低价组", PoolID: &p1},
 		{ProviderID: 2, Name: "走量组", PoolID: &p2},
-		{ProviderID: 3, Name: "内联组"}, // 无 PoolID（内联凭据）
+		{ProviderID: 3, Name: "无池组"}, // 未引用号池
 	}
 	for _, g := range groups {
 		if err := repo.Create(ctx, g); err != nil {
@@ -428,20 +428,18 @@ func TestKeyGroupRepo_CountByPoolIDs(t *testing.T) {
 }
 
 // TestCredentialRepo_BatchByIDs 锁定按 ID 批量启停/删除语义：凭据是第一等资源后，
-// 批量口径 = 给定 IDs 命中即改，不再有号池限界（归属过滤只存在于列表查询侧）；
-// 归属不同的凭据（号池 / 分组内联）在同一次调用里一并生效——内联凭据的人工恢复
-// 与批量启停正是走这条路径。
+// 批量口径 = 给定 IDs 命中即改，不再有号池限界（归属过滤只存在于列表查询侧）——
+// 归属不同号池的凭据在同一次调用里一并生效。
 func TestCredentialRepo_BatchByIDs(t *testing.T) {
 	ctx := context.Background()
 	repo := NewCredentialRepo(newChannelTestDB(t))
 
-	poolA, poolB := uint(1), uint(2)
-	groupC := uint(3)
+	poolA, poolB, poolC := uint(1), uint(2), uint(3)
 	creds := []*models.Credential{
-		{Key: "enc-a1", KeyHash: "ha1", PoolID: &poolA, Status: models.CredentialStatusActive},
-		{Key: "enc-a2", KeyHash: "ha2", PoolID: &poolA, Status: models.CredentialStatusActive},
-		{Key: "enc-b1", KeyHash: "hb1", PoolID: &poolB, Status: models.CredentialStatusActive},
-		{Key: "enc-c1", KeyHash: "hc1", GroupID: &groupC, Status: models.CredentialStatusActive},
+		{Key: "enc-a1", KeyHash: "ha1", PoolID: poolA, Status: models.CredentialStatusActive},
+		{Key: "enc-a2", KeyHash: "ha2", PoolID: poolA, Status: models.CredentialStatusActive},
+		{Key: "enc-b1", KeyHash: "hb1", PoolID: poolB, Status: models.CredentialStatusActive},
+		{Key: "enc-c1", KeyHash: "hc1", PoolID: poolC, Status: models.CredentialStatusActive},
 	}
 	for _, c := range creds {
 		if err := repo.Create(ctx, c); err != nil {
@@ -450,7 +448,7 @@ func TestCredentialRepo_BatchByIDs(t *testing.T) {
 	}
 	all := []uint{creds[0].ID, creds[1].ID, creds[2].ID, creds[3].ID}
 
-	// 批量启停：跨归属的 ID 一律命中（含分组内联凭据）
+	// 批量启停：跨号池的 ID 一律命中
 	statusFields := map[string]any{"status": models.CredentialStatusDisabled}
 	updated, err := repo.UpdateFieldsByIDs(ctx, all, statusFields)
 	if err != nil {
@@ -474,7 +472,7 @@ func TestCredentialRepo_BatchByIDs(t *testing.T) {
 		t.Fatalf("UpdateFieldsByIDs(nil) = (%d, %v), want (0, nil)", updated, err)
 	}
 
-	// 批量删除：同样按 ID 命中，跨归属一并软删
+	// 批量删除：同样按 ID 命中，跨号池一并软删
 	deleted, err := repo.DeleteByIDs(ctx, all)
 	if err != nil {
 		t.Fatalf("DeleteByIDs: %v", err)
@@ -489,70 +487,63 @@ func TestCredentialRepo_BatchByIDs(t *testing.T) {
 	if len(byPoolA) != 0 {
 		t.Fatalf("池A剩余凭据数 = %d, want 0（已软删）", len(byPoolA))
 	}
-	byGroup, err := repo.List(ctx, CredentialFilter{GroupID: &groupC})
+	byPoolC, err := repo.List(ctx, CredentialFilter{PoolID: &poolC})
 	if err != nil {
-		t.Fatalf("List byGroup: %v", err)
+		t.Fatalf("List byPoolC: %v", err)
 	}
-	if len(byGroup) != 0 {
-		t.Fatalf("分组内联剩余凭据数 = %d, want 0（已软删）", len(byGroup))
+	if len(byPoolC) != 0 {
+		t.Fatalf("池C剩余凭据数 = %d, want 0（已软删）", len(byPoolC))
 	}
 }
 
-// TestCredentialRepo_ExistingHashes 锁定批量导入查重的仓储语义：
-// 命中/未命中、池内限界（跨池同 hash 不计）、软删行排除（语义 =「现存未删行去重」）、
-// 空 hashes 不产生查询。
-
-// TestCredentialRepo_ListByGroups 锁定装配侧收敛查询语义：
+// TestCredentialRepo_ListByPools 锁定装配侧收敛查询语义：
 //
-//	命中 = group_id IN ∪ pool_id IN（OR 合并）；同一条凭据只归一侧（二选一）不双计；
-//	结果按 id ASC（组内轮询取模基线）；两组皆空返回空且不产生错误。
-func TestCredentialRepo_ListByGroups(t *testing.T) {
+//	命中 = pool_id IN poolIDs；结果按 id ASC（组内轮询取模基线）；
+//	poolIDs 为空返回 nil 且不产生 SQL。
+func TestCredentialRepo_ListByPools(t *testing.T) {
 	ctx := context.Background()
 	db := newChannelTestDB(t)
 	repo := NewCredentialRepo(db)
 
-	poolID := uint(9)
 	if err := db.Create(&[]models.Credential{
-		{Key: "c1", KeyHash: "h1", GroupID: uintPtr(1)},
-		{Key: "c2", KeyHash: "h2", GroupID: uintPtr(2)},
-		{Key: "c3", KeyHash: "h3", GroupID: uintPtr(3)},
-		{Key: "c-pool", KeyHash: "h-pool", PoolID: &poolID},
+		{Key: "c1", KeyHash: "h1", PoolID: 1},
+		{Key: "c2", KeyHash: "h2", PoolID: 2},
+		{Key: "c3", KeyHash: "h3", PoolID: 3},
+		{Key: "c-pool", KeyHash: "h-pool", PoolID: 9},
 	}).Error; err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	// 只命中组 2 + 池 9：c2 与 c-pool
-	got, err := repo.ListByGroups(ctx, []uint{1, 2}, []uint{9})
+	// 只命中池 1 + 2 + 9：c1 / c2 / c-pool
+	got, err := repo.ListByPools(ctx, []uint{1, 2, 9})
 	if err != nil {
-		t.Fatalf("ListByGroups: %v", err)
+		t.Fatalf("ListByPools: %v", err)
 	}
 	if len(got) != 3 {
-		t.Fatalf("ListByGroups = %d 条, want 3（组1/组2/池9）", len(got))
+		t.Fatalf("ListByPools = %d 条, want 3（池1/池2/池9）", len(got))
 	}
 	if got[0].KeyHash != "h1" || got[1].KeyHash != "h2" || got[2].KeyHash != "h-pool" {
-		t.Fatalf("ListByGroups 顺序 = [%s %s %s], want [h1 h2 h-pool]（id ASC）", got[0].KeyHash, got[1].KeyHash, got[2].KeyHash)
+		t.Fatalf("ListByPools 顺序 = [%s %s %s], want [h1 h2 h-pool]（id ASC）", got[0].KeyHash, got[1].KeyHash, got[2].KeyHash)
 	}
 
-	// 组集合不含任何命中 → 空
-	empty, err := repo.ListByGroups(ctx, []uint{99}, nil)
+	// 无命中池 → 空
+	empty, err := repo.ListByPools(ctx, []uint{99})
 	if err != nil {
-		t.Fatalf("ListByGroups(99): %v", err)
+		t.Fatalf("ListByPools(99): %v", err)
 	}
 	if len(empty) != 0 {
-		t.Fatalf("ListByGroups(99) = %d 条, want 0", len(empty))
+		t.Fatalf("ListByPools(99) = %d 条, want 0", len(empty))
 	}
 
-	// 两组皆空 → nil 不产生 SQL
-	noop, err := repo.ListByGroups(ctx, nil, nil)
+	// 空 poolIDs → nil 不产生 SQL
+	noop, err := repo.ListByPools(ctx, nil)
 	if err != nil {
-		t.Fatalf("ListByGroups(nil,nil): %v", err)
+		t.Fatalf("ListByPools(nil): %v", err)
 	}
 	if noop != nil {
-		t.Fatalf("ListByGroups(nil,nil) = %v, want nil", noop)
+		t.Fatalf("ListByPools(nil) = %v, want nil", noop)
 	}
 }
-
-func uintPtr(v uint) *uint { return &v }
 
 // TestCredentialRepo_ExistingHashes 锁定批量导入查重的仓储语义：
 // 命中/未命中、池内限界（跨池同 hash 不计）、软删行排除（语义 =「现存未删行去重」）、
@@ -561,12 +552,12 @@ func TestCredentialRepo_ExistingHashes(t *testing.T) {
 	ctx := context.Background()
 	repo := NewCredentialRepo(newChannelTestDB(t))
 
-	poolA, poolB, groupID := uint(1), uint(2), uint(3)
+	poolA, poolB, poolC := uint(1), uint(2), uint(3)
 	creds := []*models.Credential{
-		{Key: "enc-1", KeyHash: "hash-keep", PoolID: &poolA},
-		{Key: "enc-2", KeyHash: "hash-deleted", PoolID: &poolA},
-		{Key: "enc-3", KeyHash: "hash-poolb", PoolID: &poolB},
-		{Key: "enc-4", KeyHash: "hash-group", GroupID: &groupID},
+		{Key: "enc-1", KeyHash: "hash-keep", PoolID: poolA},
+		{Key: "enc-2", KeyHash: "hash-deleted", PoolID: poolA},
+		{Key: "enc-3", KeyHash: "hash-poolb", PoolID: poolB},
+		{Key: "enc-4", KeyHash: "hash-poolc", PoolID: poolC},
 	}
 	for _, c := range creds {
 		if err := repo.Create(ctx, c); err != nil {
@@ -578,8 +569,8 @@ func TestCredentialRepo_ExistingHashes(t *testing.T) {
 		t.Fatalf("Delete: %v", err)
 	}
 
-	// 池A：命中现存行，未命中不返回；池B 与分组行不算池A命中；软删行不算命中
-	got, err := repo.ExistingHashes(ctx, poolA, []string{"hash-keep", "hash-deleted", "hash-poolb", "hash-group", "hash-none"})
+	// 池A：命中现存行，未命中不返回；池B/池C 与软删行不算池A命中
+	got, err := repo.ExistingHashes(ctx, poolA, []string{"hash-keep", "hash-deleted", "hash-poolb", "hash-poolc", "hash-none"})
 	if err != nil {
 		t.Fatalf("ExistingHashes: %v", err)
 	}
@@ -592,8 +583,8 @@ func TestCredentialRepo_ExistingHashes(t *testing.T) {
 	if got["hash-poolb"] {
 		t.Fatalf("跨池 hash-poolb 不应命中池A: %+v", got)
 	}
-	if got["hash-group"] {
-		t.Fatalf("分组行 hash-group 不应命中池A: %+v", got)
+	if got["hash-poolc"] {
+		t.Fatalf("跨池 hash-poolc 不应命中池A: %+v", got)
 	}
 	if got["hash-none"] {
 		t.Fatalf("不存在 hash-none 不应命中: %+v", got)

@@ -80,7 +80,7 @@ func seedThinkingAssociation(t *testing.T, upstreamURL string) uint {
 	cipher := setupTestAPICipher(t)
 	provider := seedProviderRow(t, "p-stream", "openai")
 	seedEndpointRow(t, provider.ID, "openai", upstreamURL)
-	seedInlineGroup(t, cipher, provider.ID, "流式组", "", "sk-stream")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "流式组", "", "sk-stream")
 	return seedAssociation(t, provider.ID, 1, "gpt-4.1").ID
 }
 
@@ -315,7 +315,7 @@ func TestConnectivityEndpoint_NonStreamFailureCarriesRawOutput(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	seedEndpointRow(t, provider.ID, "openai", srv.URL)
-	seedInlineGroup(t, cipher, provider.ID, "坏 key 组", "", "sk-nope")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "坏 key 组", "", "sk-nope")
 	associationID := seedAssociation(t, provider.ID, 1, "gpt-4.1").ID
 
 	w := callAssociationEndpoint(t, ProviderTestHandler, "test", associationID, "")

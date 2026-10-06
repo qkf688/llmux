@@ -15,7 +15,6 @@ import (
 
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
-	"github.com/qkf688/llmux/providers"
 	"github.com/qkf688/llmux/service/channel"
 )
 
@@ -135,16 +134,13 @@ func TestRunProviderRetryLoop_SkipsUnselectableProviderThenSucceeds(t *testing.T
 	if err := models.DB.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	grp := models.KeyGroup{ProviderID: good.ID, Name: "g1", Weight: 1}
-	if err := models.DB.Create(&grp).Error; err != nil {
-		t.Fatalf("create key group: %v", err)
-	}
+	_, poolID := seedPooledGroup(t, good.ID, "g1", 1, "")
 	plainKey := "sk-good-key"
 	encKey, err := cipher.Encrypt(plainKey)
 	if err != nil {
 		t.Fatalf("encrypt credential: %v", err)
 	}
-	cred := models.Credential{GroupID: &grp.ID, Key: encKey, KeyHash: cipher.Hash(plainKey)}
+	cred := models.Credential{PoolID: poolID, Key: encKey, KeyHash: cipher.Hash(plainKey)}
 	if err := models.DB.Create(&cred).Error; err != nil {
 		t.Fatalf("create credential: %v", err)
 	}
@@ -247,59 +243,13 @@ func TestRunProviderRetryLoop_CredentialsExhausted_ProbeRecoverInGroup(t *testin
 	}))
 	defer srv.Close()
 
-	provider := models.Provider{Name: "probe-loop", Type: providers.TypeOpenAI, Config: fmt.Sprintf(`{"base_url":%q}`, srv.URL)}
-	if err := models.DB.Create(&provider).Error; err != nil {
-		t.Fatalf("create provider: %v", err)
-	}
-	ep := models.Endpoint{ProviderID: provider.ID, Protocol: string(consts.ProtocolOpenAI), Enabled: true}
-	if err := models.DB.Create(&ep).Error; err != nil {
-		t.Fatalf("create endpoint: %v", err)
-	}
-	grp := models.KeyGroup{ProviderID: provider.ID, Name: "g1", Weight: 1}
-	if err := models.DB.Create(&grp).Error; err != nil {
-		t.Fatalf("create key group: %v", err)
-	}
-	// key1：active 首条命中；LastProbeAt 设在 60s 频控窗口内（now-30s），
-	// 401 判停后探活候选跳过它，保证探活目标收敛到 key2。
-	probedRecently := time.Now().Add(-30 * time.Second)
-	key1 := models.Credential{
-		GroupID: &grp.ID, Key: mustEncrypt(t, cipher, "sk-key1"), KeyHash: cipher.Hash("sk-key1"),
-		Status: models.CredentialStatusActive, LastProbeAt: &probedRecently,
-	}
-	// key2：已判停等待探活恢复（探活候选 ID ASC，key1 频控跳过后才轮到它）。
-	key2 := models.Credential{
-		GroupID: &grp.ID, Key: mustEncrypt(t, cipher, "sk-key2"), KeyHash: cipher.Hash("sk-key2"),
-		Status: models.CredentialStatusTempUnsched, CooldownReason: "auth_fail", FailCount: 3,
-	}
-	for _, cred := range []*models.Credential{&key1, &key2} {
-		if err := models.DB.Create(cred).Error; err != nil {
-			t.Fatalf("create credential: %v", err)
-		}
-	}
-	mwp := models.ModelWithProvider{ProviderID: provider.ID, ProviderModel: "pm1"}
-	if err := models.DB.Create(&mwp).Error; err != nil {
-		t.Fatalf("create association: %v", err)
-	}
+	_, _, candidatePool, key1ID, key2ID := seedProbeChannel(t, cipher, "probe-loop", srv.URL, 0, "", 10, 1,
+		func(t *testing.T, poolID uint) (uint, uint) {
+			t.Helper()
+			return seedProbeRecoveryCredentials(t, cipher, poolID)
+		})
 
-	outcome := runProviderRetryLoop(retryLoopInput{
-		Ctx:           context.Background(),
-		Start:         time.Now(),
-		Style:         string(consts.StyleOpenAI),
-		Before:        Before{Model: "m", Stream: false, raw: []byte(`{"model":"m","messages":[{"role":"user","content":"hi"}]}`)},
-		RealModelName: "m",
-		Pool: CandidatePool{
-			ProviderMap: map[uint]models.Provider{
-				provider.ID: provider,
-			},
-			ModelWithProviderMap: map[uint]models.ModelWithProvider{
-				mwp.ID: mwp,
-			},
-			WeightItems:   map[uint]int{mwp.ID: 10},
-			PriorityItems: map[uint]int{mwp.ID: 1},
-		},
-		MaxRetry:       5,
-		UpstreamWindow: upstreamWindow{Window: 2 * time.Second},
-	})
+	outcome := runProbeRetryLoop(candidatePool)
 
 	if outcome.Status != retryLoopSucceeded {
 		t.Fatalf("status = %d, want %d; err = %v", outcome.Status, retryLoopSucceeded, outcome.Err)
@@ -318,7 +268,7 @@ func TestRunProviderRetryLoop_CredentialsExhausted_ProbeRecoverInGroup(t *testin
 
 	// key1：401 达阈值（AuthFailThreshold=1）判停 temp_unsched
 	var key1Reload models.Credential
-	if err := models.DB.First(&key1Reload, key1.ID).Error; err != nil {
+	if err := models.DB.First(&key1Reload, key1ID).Error; err != nil {
 		t.Fatalf("reload key1: %v", err)
 	}
 	if key1Reload.Status != models.CredentialStatusTempUnsched {
@@ -326,7 +276,7 @@ func TestRunProviderRetryLoop_CredentialsExhausted_ProbeRecoverInGroup(t *testin
 	}
 	// key2：探活成功条件恢复 active + 计数清零 + 清 reason（#6-3 恢复写路径）
 	var key2Reload models.Credential
-	if err := models.DB.First(&key2Reload, key2.ID).Error; err != nil {
+	if err := models.DB.First(&key2Reload, key2ID).Error; err != nil {
 		t.Fatalf("reload key2: %v", err)
 	}
 	if key2Reload.Status != models.CredentialStatusActive {
@@ -379,51 +329,24 @@ func TestRunProviderRetryLoop_OuterSelectProbeReselect_WhitelistMatchesUpstreamM
 	}))
 	defer srv.Close()
 
-	provider := models.Provider{Name: "outer-probe", Type: providers.TypeOpenAI, Config: fmt.Sprintf(`{"base_url":%q}`, srv.URL)}
-	if err := models.DB.Create(&provider).Error; err != nil {
-		t.Fatalf("create provider: %v", err)
-	}
-	ep := models.Endpoint{ProviderID: provider.ID, Protocol: string(consts.ProtocolOpenAI), Enabled: true}
-	if err := models.DB.Create(&ep).Error; err != nil {
-		t.Fatalf("create endpoint: %v", err)
-	}
 	// 白名单 = 上游模型名 pm1；请求模型名是 m（刻意不同，锁命名空间）。
-	grp := models.KeyGroup{ProviderID: provider.ID, Name: "g1", Weight: 1, Models: "pm1"}
-	if err := models.DB.Create(&grp).Error; err != nil {
-		t.Fatalf("create key group: %v", err)
-	}
 	// 唯一凭据已判停：首轮 Select 直接「无可调度凭据」（不经过任何上游调用）→ 探活重选分支。
-	key := models.Credential{
-		GroupID: &grp.ID, Key: mustEncrypt(t, cipher, "sk-outer"), KeyHash: cipher.Hash("sk-outer"),
-		Status: models.CredentialStatusTempUnsched, CooldownReason: "auth_fail", FailCount: 3,
-	}
-	if err := models.DB.Create(&key).Error; err != nil {
-		t.Fatalf("create credential: %v", err)
-	}
-	mwp := models.ModelWithProvider{ProviderID: provider.ID, ProviderModel: "pm1"}
-	if err := models.DB.Create(&mwp).Error; err != nil {
-		t.Fatalf("create association: %v", err)
-	}
+	_, _, candidatePool, _, _ := seedProbeChannel(t, cipher, "outer-probe", srv.URL, 0, "pm1", 10, 1,
+		func(t *testing.T, poolID uint) (uint, uint) {
+			t.Helper()
+			cred := models.Credential{
+				PoolID:  poolID,
+				Key:     mustEncrypt(t, cipher, "sk-outer"),
+				KeyHash: cipher.Hash("sk-outer"),
+				Status:  models.CredentialStatusTempUnsched, CooldownReason: "auth_fail", FailCount: 3,
+			}
+			if err := models.DB.Create(&cred).Error; err != nil {
+				t.Fatalf("create credential: %v", err)
+			}
+			return cred.ID, 0
+		})
 
-	outcome := runProviderRetryLoop(retryLoopInput{
-		Ctx:           context.Background(),
-		Start:         time.Now(),
-		Style:         string(consts.StyleOpenAI),
-		Before:        Before{Model: "m", Stream: false, raw: []byte(`{"model":"m","messages":[{"role":"user","content":"hi"}]}`)},
-		RealModelName: "m",
-		Pool: CandidatePool{
-			ProviderMap: map[uint]models.Provider{
-				provider.ID: provider,
-			},
-			ModelWithProviderMap: map[uint]models.ModelWithProvider{
-				mwp.ID: mwp,
-			},
-			WeightItems:   map[uint]int{mwp.ID: 10},
-			PriorityItems: map[uint]int{mwp.ID: 1},
-		},
-		MaxRetry:       5,
-		UpstreamWindow: upstreamWindow{Window: 2 * time.Second},
-	})
+	outcome := runProbeRetryLoop(candidatePool)
 
 	if outcome.Status != retryLoopSucceeded {
 		t.Fatalf("status = %d, want %d; err = %v（探活后的第二处 Select 必须按上游模型名过白名单）", outcome.Status, retryLoopSucceeded, outcome.Err)
@@ -480,58 +403,13 @@ func TestRunProviderRetryLoop_CredentialsExhausted_ProbeFailsOrganizationFailure
 	}))
 	defer srv.Close()
 
-	provider := models.Provider{Name: "probe-fail-loop", Type: providers.TypeOpenAI, Config: fmt.Sprintf(`{"base_url":%q}`, srv.URL)}
-	if err := models.DB.Create(&provider).Error; err != nil {
-		t.Fatalf("create provider: %v", err)
-	}
-	ep := models.Endpoint{ProviderID: provider.ID, Protocol: string(consts.ProtocolOpenAI), Enabled: true}
-	if err := models.DB.Create(&ep).Error; err != nil {
-		t.Fatalf("create endpoint: %v", err)
-	}
-	grp := models.KeyGroup{ProviderID: provider.ID, Name: "g1", Weight: 1}
-	if err := models.DB.Create(&grp).Error; err != nil {
-		t.Fatalf("create key group: %v", err)
-	}
-	probedRecently := time.Now().Add(-30 * time.Second)
-	key1 := models.Credential{
-		GroupID: &grp.ID, Key: mustEncrypt(t, cipher, "sk-key1"), KeyHash: cipher.Hash("sk-key1"),
-		Status: models.CredentialStatusActive, LastProbeAt: &probedRecently,
-	}
-	// key2：唯一探活候选（key1 频控内被跳过），探活失败后保持 temp_unsched。
-	key2 := models.Credential{
-		GroupID: &grp.ID, Key: mustEncrypt(t, cipher, "sk-key2"), KeyHash: cipher.Hash("sk-key2"),
-		Status: models.CredentialStatusTempUnsched, CooldownReason: "auth_fail", FailCount: 3,
-	}
-	for _, cred := range []*models.Credential{&key1, &key2} {
-		if err := models.DB.Create(cred).Error; err != nil {
-			t.Fatalf("create credential: %v", err)
-		}
-	}
-	mwp := models.ModelWithProvider{ProviderID: provider.ID, ProviderModel: "pm1", Weight: 10, Priority: 1}
-	if err := models.DB.Create(&mwp).Error; err != nil {
-		t.Fatalf("create association: %v", err)
-	}
-	pool := CandidatePool{
-		ProviderMap: map[uint]models.Provider{
-			provider.ID: provider,
-		},
-		ModelWithProviderMap: map[uint]models.ModelWithProvider{
-			mwp.ID: mwp,
-		},
-		WeightItems:   map[uint]int{mwp.ID: 10},
-		PriorityItems: map[uint]int{mwp.ID: 1},
-	}
+	_, mwp, candidatePool, _, key2ID := seedProbeChannel(t, cipher, "probe-fail-loop", srv.URL, 0, "", 10, 1,
+		func(t *testing.T, poolID uint) (uint, uint) {
+			t.Helper()
+			return seedProbeRecoveryCredentials(t, cipher, poolID)
+		})
 
-	outcome := runProviderRetryLoop(retryLoopInput{
-		Ctx:            context.Background(),
-		Start:          time.Now(),
-		Style:          string(consts.StyleOpenAI),
-		Before:         Before{Model: "m", Stream: false, raw: []byte(`{"model":"m","messages":[{"role":"user","content":"hi"}]}`)},
-		RealModelName:  "m",
-		Pool:           pool,
-		MaxRetry:       5,
-		UpstreamWindow: upstreamWindow{Window: 2 * time.Second},
-	})
+	outcome := runProbeRetryLoop(candidatePool)
 
 	if outcome.Status != retryLoopExhausted {
 		t.Fatalf("status = %d, want %d; err = %v", outcome.Status, retryLoopExhausted, outcome.Err)
@@ -550,7 +428,7 @@ func TestRunProviderRetryLoop_CredentialsExhausted_ProbeFailsOrganizationFailure
 
 	// 组织级处置在失败结局真实可观测（无成功出口重置）：候选被移除（401 语义
 	// RemoveWeight+RemovePriority），ConsecutiveFailures 补累计一次。
-	if _, ok := pool.WeightItems[mwp.ID]; ok {
+	if _, ok := candidatePool.WeightItems[mwp.ID]; ok {
 		t.Fatalf("WeightItems[%d] still present, want removed（内层耗尽未恢复 → 组织级 RemoveWeight）", mwp.ID)
 	}
 	var mwpReload models.ModelWithProvider
@@ -564,7 +442,7 @@ func TestRunProviderRetryLoop_CredentialsExhausted_ProbeFailsOrganizationFailure
 	// key2 探活失败：仅 touch——LastProbeAt 被 stamp（claim/touch 都会写，锁「探活确曾
 	// 发生」），status 保持 temp_unsched 不被拉回 active（恢复失败不升级、不覆盖终态）。
 	var key2Reload models.Credential
-	if err := models.DB.First(&key2Reload, key2.ID).Error; err != nil {
+	if err := models.DB.First(&key2Reload, key2ID).Error; err != nil {
 		t.Fatalf("reload key2: %v", err)
 	}
 	if key2Reload.Status != models.CredentialStatusTempUnsched {

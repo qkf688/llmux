@@ -61,7 +61,7 @@ func TestTestReactHandler_XAPIKeyDialectUsesXAPIKeyHeader(t *testing.T) {
 	provider := seedProviderRowWithConfig(t, "p-xapi", "openai",
 		`{"base_url":"https://should-not-use.example","openai_auth_type":"x-api-key"}`)
 	seedEndpointRow(t, provider.ID, "openai", srv.URL)
-	seedInlineGroup(t, cipher, provider.ID, "xapi 组", "", "sk-xapi")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "xapi 组", "", "sk-xapi")
 	mwp := seedAssociation(t, provider.ID, 1, "gpt-4.1")
 
 	w := callReactTest(t, mwp.ID)
@@ -97,7 +97,7 @@ func TestTestReactHandler_EmptyCredentialFailsLocallyWithoutUpstream(t *testing.
 
 	provider := seedProviderRow(t, "p-empty-key", "openai")
 	seedEndpointRow(t, provider.ID, "openai", srv.URL)
-	seedInlineGroup(t, cipher, provider.ID, "空 key 组", "", "")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "空 key 组", "", "")
 	mwp := seedAssociation(t, provider.ID, 1, "gpt-4.1")
 
 	w := callReactTest(t, mwp.ID)
@@ -136,7 +136,7 @@ func TestTestReactHandler_AnthropicEmptyCredentialFailsLocallyWithoutUpstream(t 
 
 	provider := seedProviderRow(t, "p-empty-key-ant", "anthropic")
 	seedEndpointRow(t, provider.ID, "anthropic", srv.URL)
-	seedInlineGroup(t, cipher, provider.ID, "空 key 组", "", "")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "空 key 组", "", "")
 	mwp := seedAssociation(t, provider.ID, 1, "claude-sonnet-4")
 
 	w := callReactTest(t, mwp.ID)

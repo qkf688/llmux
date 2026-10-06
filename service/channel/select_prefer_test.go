@@ -23,11 +23,10 @@ func newPreferSnapshot(t *testing.T) *Snapshot {
 		}
 		return e
 	}
-	cred := func(id uint, groupID uint, plain string) models.Credential {
-		gid := groupID
+	cred := func(id uint, poolID uint, plain string) models.Credential {
 		return models.Credential{
 			Model:   gorm.Model{ID: id},
-			GroupID: &gid,
+			PoolID:  poolID,
 			Key:     enc(plain),
 			KeyHash: cipher.Hash(plain),
 		}
@@ -46,6 +45,8 @@ func newPreferSnapshot(t *testing.T) *Snapshot {
 			{Model: gorm.Model{ID: group1}, ProviderID: 1, Name: "g1", Weight: 1},
 			{Model: gorm.Model{ID: group2}, ProviderID: 1, Name: "g2", Weight: 1},
 		},
+		// 凭据归属分组所引用的号池（PoolID 与分组 ID 一一对应即可——本测试只关心
+		// 「凭据跟着分组走」的归并结果，不校验池本身）。
 		CredentialsByGroup: map[uint][]models.Credential{
 			group1: {cred(11, group1, "sk-11"), cred(12, group1, "sk-12")},
 			group2: {cred(21, group2, "sk-21"), cred(22, group2, "sk-22")},

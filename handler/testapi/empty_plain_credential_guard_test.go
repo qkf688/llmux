@@ -38,13 +38,9 @@ func TestEmptyPlainCredentialCompletionEndpointsDoNotHitUpstream(t *testing.T) {
 
 	provider := seedProviderRow(t, "p-empty-plain", "openai")
 	seedEndpointRow(t, provider.ID, "openai", srv.URL)
-	group := models.KeyGroup{ProviderID: provider.ID, Name: "空明文组", Weight: 1}
-	if err := models.DB.Create(&group).Error; err != nil {
-		t.Fatalf("create group: %v", err)
-	}
-	groupID := group.ID
+	pool, _ := seedPoolGroup(t, cipher, provider.ID, "空明文组", "")
 	cred := models.Credential{
-		GroupID: &groupID,
+		PoolID:  pool.ID,
 		Key:     encEmpty,
 		KeyHash: cipher.Hash(""),
 		Status:  models.CredentialStatusActive,

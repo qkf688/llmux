@@ -25,9 +25,8 @@ func NewAssembler(repos *repository.Repositories) *Assembler {
 //
 //   - endpoints：EndpointRepo.ListByProvider
 //   - groups：KeyGroupRepo.ListByProvider
-//   - credentials：CredentialRepo.ListByGroups（按本供应商分组/号池的两侧 ID 集合
-//     收敛，SQL 侧过滤并 id ASC 排序），再按分组归并——组 ID → 内联（GroupID）
-//     凭据 + 号池（分组 PoolID 引用）凭据
+//   - credentials：CredentialRepo.ListByPools（按本供应商分组引用的号池 ID 集合收敛，
+//     SQL 侧过滤并 id ASC 排序），再按分组归并——组 ID → 其 PoolID 池内凭据
 //
 // 候选顺序稳定性是轮询取模正确的前提（分组档内轮询 / 组内凭据轮询），
 // 三路数据统一在此按 ID ASC 收敛，不依赖 SQLite 的隐性行序。
@@ -44,22 +43,20 @@ func (a *Assembler) Assemble(ctx context.Context, provider models.Provider) (*Sn
 	sort.Slice(endpoints, func(i, j int) bool { return endpoints[i].ID < endpoints[j].ID })
 	sort.Slice(groups, func(i, j int) bool { return groups[i].ID < groups[j].ID })
 
-	groupIDs := make([]uint, 0, len(groups))
 	poolIDs := make([]uint, 0, len(groups))
 	for _, g := range groups {
-		groupIDs = append(groupIDs, g.ID)
 		if g.PoolID != nil {
 			poolIDs = append(poolIDs, *g.PoolID)
 		}
 	}
-	allCreds, err := a.repos.Credential.ListByGroups(ctx, groupIDs, poolIDs)
+	allCreds, err := a.repos.Credential.ListByPools(ctx, poolIDs)
 	if err != nil {
 		return nil, fmt.Errorf("channel: list credentials: %w", err)
 	}
 
 	byGroup := make(map[uint][]models.Credential, len(groups))
 	for _, g := range groups {
-		byGroup[g.ID] = groupCredentials(allCreds, g.ID, g.PoolID)
+		byGroup[g.ID] = groupCredentials(allCreds, g.PoolID)
 	}
 	return &Snapshot{
 		Provider:           provider,
@@ -69,16 +66,16 @@ func (a *Assembler) Assemble(ctx context.Context, provider models.Provider) (*Sn
 	}, nil
 }
 
-// groupCredentials 归并分组两侧凭据：内联（GroupID 命中）与号池（分组 PoolID
-// 引用的池内凭据）。凭据 GroupID/PoolID 二选一（设计定案），不会双计。
-// 组不含任何凭据时返回 v=nil；快照 map 键仍存在，选择路径据此走
-// ErrNoCredentialAvailable（与「组键缺失」语义一致，统一收口）。
-func groupCredentials(all []models.Credential, groupID uint, poolID *uint) []models.Credential {
+// groupCredentials 取分组所引用号池内的凭据。组未选池（PoolID 为 nil）或池内无凭据时
+// 返回 v=nil；快照 map 键仍存在，选择路径据此走 ErrNoCredentialAvailable
+// （与「组键缺失」语义一致，统一收口）。
+func groupCredentials(all []models.Credential, poolID *uint) []models.Credential {
+	if poolID == nil {
+		return nil
+	}
 	var out []models.Credential
 	for _, c := range all {
-		if c.GroupID != nil && *c.GroupID == groupID {
-			out = append(out, c)
-		} else if poolID != nil && c.PoolID != nil && *c.PoolID == *poolID {
+		if c.PoolID == *poolID {
 			out = append(out, c)
 		}
 	}

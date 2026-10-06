@@ -45,11 +45,8 @@ func TestApplyCredentialAuthFailure_CountsThenStops(t *testing.T) {
 	SetSettingsReader(credCooldownSettingsReader{Cooldown429Sec: 60, CooldownServerSec: 60, AuthFailThreshold: 3})
 	t.Cleanup(func() { SetSettingsReader(nil) })
 
-	grp := models.KeyGroup{ProviderID: 1, Name: "g1", Weight: 1}
-	if err := models.DB.Create(&grp).Error; err != nil {
-		t.Fatalf("create key group: %v", err)
-	}
-	cred := models.Credential{GroupID: &grp.ID, Key: "enc", KeyHash: "hash"}
+	_, poolID := seedPooledGroup(t, 1, "g1", 1, "")
+	cred := models.Credential{PoolID: poolID, Key: "enc", KeyHash: "hash"}
 	if err := models.DB.Create(&cred).Error; err != nil {
 		t.Fatalf("create credential: %v", err)
 	}
@@ -150,12 +147,9 @@ func TestExecuteSingleProviderAttempt_NonOK401_AuthFailStopsCredential(t *testin
 	if err := models.DB.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	grp := models.KeyGroup{ProviderID: providerRow.ID, Name: "g1", Weight: 1}
-	if err := models.DB.Create(&grp).Error; err != nil {
-		t.Fatalf("create key group: %v", err)
-	}
+	grp, poolID := seedPooledGroup(t, providerRow.ID, "g1", 1, "")
 	plain := "sk-authfail"
-	cred := models.Credential{GroupID: &grp.ID, Key: mustEncrypt(t, cipher, plain), KeyHash: cipher.Hash(plain), Note: "authfail-key"}
+	cred := models.Credential{PoolID: poolID, Key: mustEncrypt(t, cipher, plain), KeyHash: cipher.Hash(plain), Note: "authfail-key"}
 	if err := models.DB.Create(&cred).Error; err != nil {
 		t.Fatalf("create credential: %v", err)
 	}
@@ -388,12 +382,9 @@ func TestExecuteSingleProviderAttempt_SuccessResetsAuthFailCount(t *testing.T) {
 	if err := models.DB.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	grp := models.KeyGroup{ProviderID: providerRow.ID, Name: "g1", Weight: 1}
-	if err := models.DB.Create(&grp).Error; err != nil {
-		t.Fatalf("create key group: %v", err)
-	}
+	grp, poolID := seedPooledGroup(t, providerRow.ID, "g1", 1, "")
 	plain := "sk-resets"
-	cred := models.Credential{GroupID: &grp.ID, Key: mustEncrypt(t, cipher, plain), KeyHash: cipher.Hash(plain), Note: "reset-key", FailCount: 2}
+	cred := models.Credential{PoolID: poolID, Key: mustEncrypt(t, cipher, plain), KeyHash: cipher.Hash(plain), Note: "reset-key", FailCount: 2}
 	if err := models.DB.Create(&cred).Error; err != nil {
 		t.Fatalf("create credential: %v", err)
 	}

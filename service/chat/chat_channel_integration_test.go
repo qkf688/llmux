@@ -69,18 +69,7 @@ func TestBalanceChat_MultiProtocolEndpoints_PassthroughAndTransformByEndpoint(t 
 			t.Fatalf("create endpoint: %v", err)
 		}
 	}
-	grp := models.KeyGroup{ProviderID: provider.ID, Name: "g1", Weight: 1}
-	if err := models.DB.Create(&grp).Error; err != nil {
-		t.Fatalf("create key group: %v", err)
-	}
-	cred := models.Credential{GroupID: &grp.ID, Key: mustEncrypt(t, cipher, "sk-any"), KeyHash: cipher.Hash("sk-any")}
-	if err := models.DB.Create(&cred).Error; err != nil {
-		t.Fatalf("create credential: %v", err)
-	}
-	mwp := models.ModelWithProvider{ModelID: model.ID, ProviderID: provider.ID, ProviderModel: "pm1", Weight: 10, Priority: 1}
-	if err := models.DB.Create(&mwp).Error; err != nil {
-		t.Fatalf("create association: %v", err)
-	}
+	_, _, mwp := seedGroupedChannel(t, cipher, provider.ID, "g1", model.ID, 10, 1, []string{"sk-any"}, nil)
 
 	// ① openai 入站：wire 命中勾选协议 → 透传选中 openai 端点
 	runBalanceForStyle := func(style, raw string) {
@@ -182,23 +171,19 @@ func TestBalanceChat_KeyGroupWhitelist_CredentialPlainKeyAndURLOverride(t *testi
 	// 白名单命名空间是**上游模型名**（本用例关联 ProviderModel=pm1）：g1 白名单 [pm1]
 	// （命中）、g2 白名单 [m2]（不命中）——白名单过滤决定分组，不使用「命中分组读
 	// Authorization」之外的随机性。
-	g1 := models.KeyGroup{ProviderID: provider.ID, Name: "g1", Weight: 10, Models: "pm1"}
-	g2 := models.KeyGroup{ProviderID: provider.ID, Name: "g2", Weight: 1, Models: "m2"}
-	for _, g := range []*models.KeyGroup{&g1, &g2} {
-		if err := models.DB.Create(g).Error; err != nil {
-			t.Fatalf("create key group: %v", err)
-		}
-	}
+	g1, pool1 := seedPooledGroup(t, provider.ID, "g1", 10, "pm1")
+	g2, pool2 := seedPooledGroup(t, provider.ID, "g2", 1, "m2")
 	for _, gc := range []struct {
 		g      models.KeyGroup
+		poolID uint
 		plain  string
 		status string
 	}{
-		{g1, "sk-group1-key", "active"},
-		{g2, "sk-group2-key", "active"},
+		{g1, pool1, "sk-group1-key", "active"},
+		{g2, pool2, "sk-group2-key", "active"},
 	} {
 		enc := mustEncrypt(t, cipher, gc.plain)
-		cred := models.Credential{GroupID: &gc.g.ID, Key: enc, KeyHash: cipher.Hash(gc.plain)}
+		cred := models.Credential{PoolID: gc.poolID, Key: enc, KeyHash: cipher.Hash(gc.plain)}
 		if err := models.DB.Create(&cred).Error; err != nil {
 			t.Fatalf("create credential for %s: %v", gc.plain, err)
 		}
@@ -280,21 +265,17 @@ func TestBalanceChat_RenamedAssociation_WhitelistMatchesUpstreamModel(t *testing
 	// 两组同权重：过滤后各只剩一组，命中哪组由命名空间唯一决定（无加权随机余地）。
 	// gUpstream 白名单 = 上游模型名（同步写侧口径，应命中）；gGateway 白名单 = 网关
 	// 模型名（旧口径，必须落选——它一旦命中即说明比对又退回网关命名空间）。
-	gUpstream := models.KeyGroup{ProviderID: provider.ID, Name: "g-upstream", Weight: 10, Models: "pm1"}
-	gGateway := models.KeyGroup{ProviderID: provider.ID, Name: "g-gateway", Weight: 10, Models: "m1"}
-	for _, g := range []*models.KeyGroup{&gUpstream, &gGateway} {
-		if err := models.DB.Create(g).Error; err != nil {
-			t.Fatalf("create key group: %v", err)
-		}
-	}
+	gUpstream, upPool := seedPooledGroup(t, provider.ID, "g-upstream", 10, "pm1")
+	gGateway, gwPool := seedPooledGroup(t, provider.ID, "g-gateway", 10, "m1")
 	for _, gc := range []struct {
-		g     models.KeyGroup
-		plain string
+		g      models.KeyGroup
+		poolID uint
+		plain  string
 	}{
-		{gUpstream, "sk-upstream-ns-key"},
-		{gGateway, "sk-gateway-ns-key"},
+		{gUpstream, upPool, "sk-upstream-ns-key"},
+		{gGateway, gwPool, "sk-gateway-ns-key"},
 	} {
-		cred := models.Credential{GroupID: &gc.g.ID, Key: mustEncrypt(t, cipher, gc.plain), KeyHash: cipher.Hash(gc.plain)}
+		cred := models.Credential{PoolID: gc.poolID, Key: mustEncrypt(t, cipher, gc.plain), KeyHash: cipher.Hash(gc.plain)}
 		if err := models.DB.Create(&cred).Error; err != nil {
 			t.Fatalf("create credential for %s: %v", gc.plain, err)
 		}
@@ -374,14 +355,11 @@ func TestBalanceChat_SameGroupMultipleCredentials_RoundRobin(t *testing.T) {
 	if err := models.DB.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	grp := models.KeyGroup{ProviderID: provider.ID, Name: "g1", Weight: 1}
-	if err := models.DB.Create(&grp).Error; err != nil {
-		t.Fatalf("create key group: %v", err)
-	}
+	_, poolID := seedPooledGroup(t, provider.ID, "g1", 1, "")
 	// 创建顺序决定 ID ASC：key1 先建，轮询首现 key1。
 	for _, plain := range []string{"sk-key1", "sk-key2"} {
 		enc := mustEncrypt(t, cipher, plain)
-		cred := models.Credential{GroupID: &grp.ID, Key: enc, KeyHash: cipher.Hash(plain)}
+		cred := models.Credential{PoolID: poolID, Key: enc, KeyHash: cipher.Hash(plain)}
 		if err := models.DB.Create(&cred).Error; err != nil {
 			t.Fatalf("create credential %s: %v", plain, err)
 		}
@@ -451,12 +429,9 @@ func TestBalanceChat_ChatLogRecordsChannelSelection(t *testing.T) {
 	if err := models.DB.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	grp := models.KeyGroup{ProviderID: provider.ID, Name: "低价组", Weight: 1}
-	if err := models.DB.Create(&grp).Error; err != nil {
-		t.Fatalf("create key group: %v", err)
-	}
+	_, poolID := seedPooledGroup(t, provider.ID, "低价组", 1, "")
 	plain := "sk-log-key"
-	cred := models.Credential{GroupID: &grp.ID, Key: mustEncrypt(t, cipher, plain), KeyHash: cipher.Hash(plain), Note: "production-key"}
+	cred := models.Credential{PoolID: poolID, Key: mustEncrypt(t, cipher, plain), KeyHash: cipher.Hash(plain), Note: "production-key"}
 	if err := models.DB.Create(&cred).Error; err != nil {
 		t.Fatalf("create credential: %v", err)
 	}
@@ -567,13 +542,10 @@ func TestBalanceChat_CredentialFailover_SwapKeyWithinGroup(t *testing.T) {
 	if err := models.DB.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	grp := models.KeyGroup{ProviderID: provider.ID, Name: "g1", Weight: 1}
-	if err := models.DB.Create(&grp).Error; err != nil {
-		t.Fatalf("create key group: %v", err)
-	}
+	_, poolID := seedPooledGroup(t, provider.ID, "g1", 1, "")
 	// 创建顺序决定轮询首现：key1 先建，第一次 Select 命中 key1。
-	key1 := models.Credential{GroupID: &grp.ID, Key: mustEncrypt(t, cipher, "sk-key1"), KeyHash: cipher.Hash("sk-key1"), Note: "key1-note"}
-	key2 := models.Credential{GroupID: &grp.ID, Key: mustEncrypt(t, cipher, "sk-key2"), KeyHash: cipher.Hash("sk-key2"), Note: "key2-note"}
+	key1 := models.Credential{PoolID: poolID, Key: mustEncrypt(t, cipher, "sk-key1"), KeyHash: cipher.Hash("sk-key1"), Note: "key1-note"}
+	key2 := models.Credential{PoolID: poolID, Key: mustEncrypt(t, cipher, "sk-key2"), KeyHash: cipher.Hash("sk-key2"), Note: "key2-note"}
 	for _, cred := range []*models.Credential{&key1, &key2} {
 		if err := models.DB.Create(cred).Error; err != nil {
 			t.Fatalf("create credential: %v", err)
@@ -676,12 +648,9 @@ func TestBalanceChat_CredentialsExhausted_OrganizationFailure(t *testing.T) {
 	if err := models.DB.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	grp := models.KeyGroup{ProviderID: provider.ID, Name: "g1", Weight: 1}
-	if err := models.DB.Create(&grp).Error; err != nil {
-		t.Fatalf("create key group: %v", err)
-	}
-	key1 := models.Credential{GroupID: &grp.ID, Key: mustEncrypt(t, cipher, "sk-key1"), KeyHash: cipher.Hash("sk-key1")}
-	key2 := models.Credential{GroupID: &grp.ID, Key: mustEncrypt(t, cipher, "sk-key2"), KeyHash: cipher.Hash("sk-key2")}
+	_, poolID := seedPooledGroup(t, provider.ID, "g1", 1, "")
+	key1 := models.Credential{PoolID: poolID, Key: mustEncrypt(t, cipher, "sk-key1"), KeyHash: cipher.Hash("sk-key1")}
+	key2 := models.Credential{PoolID: poolID, Key: mustEncrypt(t, cipher, "sk-key2"), KeyHash: cipher.Hash("sk-key2")}
 	for _, cred := range []*models.Credential{&key1, &key2} {
 		if err := models.DB.Create(cred).Error; err != nil {
 			t.Fatalf("create credential: %v", err)
@@ -770,11 +739,8 @@ func TestBalanceChat_SingleKeyGroup_429_OrganizationSemantics(t *testing.T) {
 	if err := models.DB.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	grp := models.KeyGroup{ProviderID: provider.ID, Name: "g1", Weight: 1}
-	if err := models.DB.Create(&grp).Error; err != nil {
-		t.Fatalf("create key group: %v", err)
-	}
-	key := models.Credential{GroupID: &grp.ID, Key: mustEncrypt(t, cipher, "sk-only"), KeyHash: cipher.Hash("sk-only")}
+	_, poolID := seedPooledGroup(t, provider.ID, "g1", 1, "")
+	key := models.Credential{PoolID: poolID, Key: mustEncrypt(t, cipher, "sk-only"), KeyHash: cipher.Hash("sk-only")}
 	if err := models.DB.Create(&key).Error; err != nil {
 		t.Fatalf("create credential: %v", err)
 	}
@@ -857,11 +823,8 @@ func TestBalanceChat_ServerErrors_RemoveOrganizationSemantics(t *testing.T) {
 	if err := models.DB.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	grp := models.KeyGroup{ProviderID: provider.ID, Name: "g1", Weight: 1}
-	if err := models.DB.Create(&grp).Error; err != nil {
-		t.Fatalf("create key group: %v", err)
-	}
-	key := models.Credential{GroupID: &grp.ID, Key: mustEncrypt(t, cipher, "sk-5xx"), KeyHash: cipher.Hash("sk-5xx")}
+	_, poolID := seedPooledGroup(t, provider.ID, "g1", 1, "")
+	key := models.Credential{PoolID: poolID, Key: mustEncrypt(t, cipher, "sk-5xx"), KeyHash: cipher.Hash("sk-5xx")}
 	if err := models.DB.Create(&key).Error; err != nil {
 		t.Fatalf("create credential: %v", err)
 	}

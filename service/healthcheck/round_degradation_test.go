@@ -60,7 +60,7 @@ func TestCheckAll_ScopeSwitchUnreadable_SkipsRoundWithoutProbing(t *testing.T) {
 		t.Fatalf("create provider: %v", err)
 	}
 	seedEndpoint(t, provider.ID, "openai", srv.URL)
-	seedInlineGroup(t, cipher, provider.ID, "g1", "sk-1")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "g1", "sk-1")
 	mp := seedModelAndAssociation(t, provider.ID)
 
 	if err := models.DB.Exec("DROP TABLE settings").Error; err != nil {

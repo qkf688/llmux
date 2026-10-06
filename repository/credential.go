@@ -16,11 +16,10 @@ import (
 type CredentialRepo interface {
 	// List 返回符合条件的凭据；filter 为零值时返回全部。
 	List(ctx context.Context, filter CredentialFilter) ([]models.Credential, error)
-	// ListByGroups 返回归属命中的凭据：group_id IN groupIDs OR pool_id IN poolIDs，
-	// 按 id ASC 排序。两组都为空时返回 nil（不产生 SQL）。装配层按分组归并用——
-	// 只拉本供应商分组涉及的凭据，避免全表扫描（500 key 量级热路径）。
-	// 凭据 GroupID/PoolID 二选一（设计定案），同一条绝不双计。
-	ListByGroups(ctx context.Context, groupIDs, poolIDs []uint) ([]models.Credential, error)
+	// ListByPools 返回归属命中号池的凭据：pool_id IN poolIDs，按 id ASC 排序。
+	// poolIDs 为空时返回 nil（不产生 SQL）。装配层按分组归并用——只拉本供应商分组
+	// 引用的池内凭据，避免全表扫描（500 key 量级热路径）。
+	ListByPools(ctx context.Context, poolIDs []uint) ([]models.Credential, error)
 	// ListPaged 返回分页凭据列表及总数；page/pageSize 由调用方校验（>=1），
 	// Q 仅对 Note 做 LIKE 匹配（Key 需解密，不在此层搜索）。
 	ListPaged(ctx context.Context, filter CredentialFilter, page, pageSize int) ([]models.Credential, int64, error)
@@ -28,8 +27,8 @@ type CredentialRepo interface {
 	Get(ctx context.Context, id uint) (*models.Credential, error)
 	// Create 创建凭据。
 	Create(ctx context.Context, cred *models.Credential) error
-	// Update 根据 ID 更新凭据。struct 更新会跳过零值字段——清空三态指针
-	// （如切换凭据来源置空 PoolID/GroupID）必须用 UpdateFields。
+	// Update 根据 ID 更新凭据。struct 更新会跳过零值字段——清空 Note 等
+	// 需要用 UpdateFields（map 显式写 NULL/零值）。
 	Update(ctx context.Context, id uint, cred *models.Credential) error
 	// UpdateFields 按字段 map 更新（map 可显式写 NULL，绕过 struct 零值跳过语义）。
 	UpdateFields(ctx context.Context, id uint, fields map[string]any) (int64, error)
@@ -54,7 +53,7 @@ type CredentialRepo interface {
 	// Delete 根据 ID 删除凭据，返回受影响行数。
 	Delete(ctx context.Context, id uint) (int64, error)
 	// DeleteByPoolID 删除指定号池下的全部凭据（软删），返回受影响行数。
-	// 号池删除时的级联清理用；分组内联凭据（GroupID 归属）不受影响。
+	// 号池删除时的级联清理用。
 	DeleteByPoolID(ctx context.Context, poolID uint) (int64, error)
 	// UpdateFieldsByIDs 按字段 map 批量更新指定 IDs 的凭据（map 可显式写 NULL/零值）。
 	// 凭据是第一等资源后按 ID 直改，不再带号池限界——归属过滤只用于列表查询，
@@ -78,7 +77,6 @@ type CredentialRepo interface {
 // CredentialFilter 用于凭据 List 查询的筛选条件。
 type CredentialFilter struct {
 	PoolID  *uint
-	GroupID *uint
 	Status  string
 	KeyHash string
 	// Q 关键词搜索：仅对 Note 做 LIKE %Q%（Key 明文需解密，不在此层搜索）。
@@ -97,9 +95,6 @@ type credentialRepo struct {
 func applyCredentialFilter(query *gorm.DB, filter CredentialFilter) *gorm.DB {
 	if filter.PoolID != nil {
 		query = query.Where("pool_id = ?", *filter.PoolID)
-	}
-	if filter.GroupID != nil {
-		query = query.Where("group_id = ?", *filter.GroupID)
 	}
 	if filter.Status != "" {
 		query = query.Where("status = ?", filter.Status)
@@ -126,24 +121,14 @@ func (r *credentialRepo) List(ctx context.Context, filter CredentialFilter) ([]m
 	return creds, nil
 }
 
-func (r *credentialRepo) ListByGroups(ctx context.Context, groupIDs, poolIDs []uint) ([]models.Credential, error) {
-	conds := make([]string, 0, 2)
-	args := make([]any, 0, 2)
-	if len(groupIDs) > 0 {
-		conds = append(conds, "group_id IN ?")
-		args = append(args, groupIDs)
-	}
-	if len(poolIDs) > 0 {
-		conds = append(conds, "pool_id IN ?")
-		args = append(args, poolIDs)
-	}
-	if len(conds) == 0 {
-		// 两组皆空：装配侧无任何分组，返回空即可，不产生 SQL 也不必报错
+func (r *credentialRepo) ListByPools(ctx context.Context, poolIDs []uint) ([]models.Credential, error) {
+	if len(poolIDs) == 0 {
+		// 无引用池：装配侧无任何分组，取空即可，不产生 SQL 也不必报错
 		return nil, nil
 	}
 	var creds []models.Credential
 	query := r.db.WithContext(ctx).Model(&models.Credential{}).
-		Where(strings.Join(conds, " OR "), args...).
+		Where("pool_id IN ?", poolIDs).
 		Order("id ASC")
 	if err := query.Find(&creds).Error; err != nil {
 		return nil, err

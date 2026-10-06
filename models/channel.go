@@ -54,17 +54,16 @@ func CredentialRecoveryFields(status string) map[string]any {
 	return map[string]any{"fail_count": 0, "cooldown_reason": ""}
 }
 
-// Credential 凭据：一条 = 一个 key，归属号池（PoolID）或分组内联（GroupID）二选一。
+// Credential 凭据：一条 = 一个 key，归属号池（PoolID）。
 // Key 存密文（hex(nonce‖ciphertext)，见 common/credentialcrypto），
 // KeyHash 用于不解密即可完成的批量导入去重 / 搜索 / 日志关联。
-// GroupID / PoolID 为三态指针：nil 表示未归属该侧（设计语义「二选一」由调用层保证）。
+// 供应商分组不再直接持有凭据，一律经 KeyGroup.PoolID 引用号池取（内联凭据概念已删除）。
 type Credential struct {
 	gorm.Model
 	Key     string `gorm:"type:text;not null"`
 	KeyHash string `gorm:"type:varchar(64);index"`
 	Note    string `gorm:"type:text"`
-	GroupID *uint  `gorm:"index"`
-	PoolID  *uint  `gorm:"index"`
+	PoolID  uint   `gorm:"index"`
 	Status  string `gorm:"type:varchar(20);default:'active';index"`
 	// 冷却状态机字段（设计定案第 5 节）：CooldownUntil 到期自动恢复 active；
 	// 三级冷却共用一个窗口字段 + reason（无 OAuth/订阅场景，429 与过载语义合并）。
@@ -94,7 +93,7 @@ type Endpoint struct {
 }
 
 // KeyGroup 凭据分组：白名单过滤 + 价格权重选择（设计定案第 4 节）。
-// 凭据来源二选一：关联号池（PoolID）或分组内联凭据（credentials.GroupID）。
+// 凭据统一来自所引用的号池（PoolID），一个池可被多个分组复用。
 type KeyGroup struct {
 	gorm.Model
 	ProviderID uint   `gorm:"index;not null"`

@@ -50,6 +50,8 @@ var endpointNestedKeys = []responseKeyContract{
 	{key: "Enabled", boolKey: true},
 }
 
+// groupNestedKeys 分组详情键契约：内联凭据删除后分组只出 KeyGroup 本身，凭据经
+// PoolID 去号池页查看，明文/掩码永不出本响应。
 var groupNestedKeys = []responseKeyContract{
 	{key: "ID"},
 	{key: "ProviderID"},
@@ -57,30 +59,6 @@ var groupNestedKeys = []responseKeyContract{
 	{key: "Weight"},
 	{key: "Models"},
 	{key: "PoolID", nilable: true},
-	{key: "Source"},
-	{key: "InlineKeys"},
-}
-
-// inline key 视图项契约：详情路径出完整的凭据视图（service/credview.View 单源，
-// 与 /api/credentials 列表同一形状）——掩码 + 状态/冷却/连败（内联 key 判停后的人工
-// 恢复靠这些字段驱动 UI），明文仅受控 raw 端点拉取。
-var inlineKeyItemNestedKeys = []responseKeyContract{
-	{key: "ID"},
-	{key: "PoolID", nilable: true},
-	{key: "GroupID", nilable: true},
-	{key: "Status"},
-	{key: "Note"},
-	{key: "KeyMasked"},
-	{key: "CooldownUntil", nilable: true},
-	{key: "CooldownReason"},
-	{key: "FailCount"},
-	{key: "LastUsedAt", nilable: true},
-	{key: "LastProbeAt", nilable: true},
-	{key: "TotalRequests"},
-	{key: "TotalErrors"},
-	{key: "TotalTokens"},
-	{key: "CreatedAt"},
-	{key: "UpdatedAt"},
 }
 
 func assertResponseKeys(t *testing.T, raw, prefix string, keys []responseKeyContract) {
@@ -138,13 +116,14 @@ func TestProviderStructuredResponse_KeysPresent(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupProviderCrypto(t)
 
-	createBody := createProviderViaHandler(t, structuredCreateBody("p-shape", "sk-shape-CCCC3333"))
+	poolID := seedPool(t, "pool-shape")
+	createBody := createProviderViaHandler(t, structuredCreateBody("p-shape", poolID))
 	id := uint(gjson.Get(createBody, "data.ID").Uint())
 	if id == 0 {
 		t.Fatalf("create missing ID: %s", createBody)
 	}
 
-	updateBody := updateProviderViaHandler(t, id, structuredCreateBody("p-shape", "sk-shape-CCCC3333"))
+	updateBody := updateProviderViaHandler(t, id, structuredCreateBody("p-shape", poolID))
 	getBody := getProviderViaHandler(t, id)
 	listBody := listProvidersViaHandler(t)
 
@@ -165,13 +144,10 @@ func TestProviderStructuredResponse_KeysPresent(t *testing.T) {
 		})
 	}
 
-	// list 安全不变量：列表绝不展开 Groups / InlineKeys——掩码项只出现在详情路径，
-	// 明文唯一出口是受控 raw 端点。负向断言，防止未来把详情结构误并入 ProviderListItem 泄漏凭据。
+	// list 安全不变量：列表绝不展开 Groups——分组只在详情路径出现。
+	// 负向断言，防止未来把详情结构误并入 ProviderListItem 泄漏分组拓扑。
 	if gjson.Get(listBody, "data.0.Groups").Exists() {
-		t.Fatalf("list 不应含 Groups：列表项不得展开分组/凭据项。body=%s", listBody)
-	}
-	if gjson.Get(listBody, "data.0.InlineKeys").Exists() {
-		t.Fatalf("list 不应含 InlineKeys：列表项不得携带凭据项（掩码或明文）。body=%s", listBody)
+		t.Fatalf("list 不应含 Groups：列表项不得展开分组。body=%s", listBody)
 	}
 
 	// 嵌套 endpoints / groups（详情路径）
@@ -188,14 +164,19 @@ func TestProviderStructuredResponse_KeysPresent(t *testing.T) {
 		t.Run(name+"/nested", func(t *testing.T) {
 			assertResponseKeys(t, body, "data.Endpoints.0.", endpointNestedKeys)
 			assertResponseKeys(t, body, "data.Groups.0.", groupNestedKeys)
-			// inline 组视图项契约：完整凭据视图（掩码 + 状态/冷却/连败），不含任何明文键
-			assertResponseKeys(t, body, "data.Groups.0.InlineKeys.0.", inlineKeyItemNestedKeys)
-			if got := gjson.Get(body, "data.Groups.0.InlineKeys.0.KeyMasked").String(); got == "" {
-				t.Fatalf("InlineKeys.0.KeyMasked should not be empty: %s", body)
+			// 分组必带号池引用（非三态 nil：写入体已强制要求）
+			poolRef := gjson.Get(body, "data.Groups.0.PoolID")
+			if !poolRef.Exists() || poolRef.Type == gjson.Null {
+				t.Fatalf("group PoolID must exist and be non-null, got %s, body=%s", poolRef.Raw, body)
 			}
-			poolID := gjson.Get(body, "data.Groups.0.PoolID")
-			if !poolID.Exists() || poolID.Type != gjson.Null {
-				t.Fatalf("inline group PoolID must exist as null, got %s", poolID.Raw)
+			if poolRef.Uint() != uint64(poolID) {
+				t.Fatalf("group PoolID = %d, want %d, body=%s", poolRef.Uint(), poolID, body)
+			}
+			// 内联凭据字段彻底消失：Source / InlineKeys 若复现，前端会重新长出永不回填的凭据区
+			for _, key := range []string{"Source", "InlineKeys"} {
+				if gjson.Get(body, "data.Groups.0."+key).Exists() {
+					t.Fatalf("分组不应含 %s 键（内联凭据已删除）: %s", key, body)
+				}
 			}
 		})
 	}

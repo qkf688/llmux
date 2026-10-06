@@ -2,8 +2,8 @@ package credentials
 
 import "github.com/qkf688/llmux/service/credview"
 
-// CredentialListData 凭据列表分页信封。items 用 credview.View——与供应商分组详情里的
-// 内联凭据项同一形状（凭据视图单源），前端两处共用同一套字段与状态展示。
+// CredentialListData 凭据列表分页信封。items 用 credview.View（凭据视图单源，
+// 与号池详情共用同一套字段与状态展示）。
 type CredentialListData struct {
 	Items    []credview.View `json:"items"`
 	Total    int64           `json:"total"`
@@ -12,9 +12,8 @@ type CredentialListData struct {
 }
 
 // CreateCredentialRequest 凭据创建请求体（每条 = 一个明文 key）。
-// PoolID 必填：分组内联凭据的唯一写入口是供应商表单同步（providerapi.syncGroups），
-// 这里只服务「往号池里加一条 key」——两条路径都能写 group_id 会让内联凭据的归属与
-// 去重语义漂移（表单按 hash 复用行、池导入按池内 hash 去重，语义不同源）。
+// PoolID 必填：凭据一律归属号池，供应商分组经 KeyGroup.PoolID 引用号池取凭据，
+// 供应商表单自身不持有凭据。
 type CreateCredentialRequest struct {
 	PoolID uint   `json:"pool_id"`
 	Key    string `json:"key"`

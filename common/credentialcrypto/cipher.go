@@ -92,7 +92,7 @@ func (c *Cipher) Hash(plaintext string) string {
 
 // MaskKey 将明文 key 掩码为 sk-****ab12 形态（前缀 3 + **** + 后缀 4），
 // 过短时（≤8）一律退化为 ****：1+4 组合在 len 5-8 时几乎完整还原明文。
-// 号池与供应商内联 key 共用的脱敏展示原语——明文永不出后端的读路径用它对
+// 号池与供应商分组共用的脱敏展示原语——明文永不出后端的读路径用它对
 // 各条凭据做服务端掩码，避免两套掩码规则漂移。
 func MaskKey(plain string) string {
 	if len(plain) <= 8 {
@@ -103,7 +103,7 @@ func MaskKey(plain string) string {
 
 // MaskStored 将「加密存储形态」的 key 转为可展示掩码：cipher 未配置或解密失败
 // 一律退化为 ****（掩密文本身形似真实值、毫无意义，绝不能输出），并在失败时
-// slog.Warn 留痕。号池列表/详情与供应商内联 key 详情共用同一降级策略——
+// slog.Warn 留痕。号池列表/详情与凭据域读路径共用同一降级策略——
 // 掩码规则的单一来源，改「什么情况出 ****」只需动这里。
 // attrs 为附加结构化日志键值（如 "credential_id", id），可空。
 func MaskStored(cipher *Cipher, stored string, attrs ...any) string {

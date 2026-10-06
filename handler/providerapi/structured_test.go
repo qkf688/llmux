@@ -27,7 +27,42 @@ func setupProviderCrypto(t *testing.T) {
 	t.Cleanup(func() { credentialcrypto.SetDefault(nil) })
 }
 
-func structuredCreateBody(name string, inlineKey string) string {
+// seedPool 建号池并返回 ID。内联凭据概念已删除，供应商分组一律经 KeyGroup.PoolID
+// 引用号池，供应商表单自身不持有任何凭据——所以每条结构化用例都先备一个池。
+func seedPool(t *testing.T, name string) uint {
+	t.Helper()
+	pool := &models.Pool{Name: name}
+	if err := repository.Default().Pool.Create(t.Context(), pool); err != nil {
+		t.Fatalf("seedPool %q: %v", name, err)
+	}
+	return pool.ID
+}
+
+// seedPoolCredential 往池里放一条凭据（密文 + hash），模拟号池页维护出的真实数据。
+func seedPoolCredential(t *testing.T, poolID uint, plainKey string) models.Credential {
+	t.Helper()
+	cipher, err := credentialcrypto.New(testCredHexKey)
+	if err != nil {
+		t.Fatalf("credentialcrypto.New: %v", err)
+	}
+	enc, err := cipher.Encrypt(plainKey)
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	cred := &models.Credential{
+		PoolID:  poolID,
+		Key:     enc,
+		KeyHash: cipher.Hash(plainKey),
+		Status:  models.CredentialStatusActive,
+	}
+	if err := repository.Default().Credential.Create(t.Context(), cred); err != nil {
+		t.Fatalf("seedPoolCredential: %v", err)
+	}
+	return *cred
+}
+
+// structuredCreateBody 标准全量写入体：分组只带 pool_id 引用号池，不含任何凭据字段。
+func structuredCreateBody(name string, poolID uint) string {
 	return `{
 		"name":"` + name + `",
 		"type":"openai",
@@ -36,7 +71,7 @@ func structuredCreateBody(name string, inlineKey string) string {
 		"proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[{"id":0,"key":"` + inlineKey + `"}]}]
+		"groups":[{"name":"默认组","weight":1,"pool_id":` + strconv.FormatUint(uint64(poolID), 10) + `}]
 	}`
 }
 
@@ -69,11 +104,15 @@ func updateProviderViaHandler(t *testing.T, id uint, body string) string {
 	return w.Body.String()
 }
 
-func TestStructured_CreateWritesFourTablesAndStripsConfig(t *testing.T) {
+// TestStructured_CreateWritesChildrenAndStripsConfig 锁 Create 的三条落库副作用：
+// config 只存 adapter 字段（api_key/_schedule 已迁出）、端点写入成功、分组落库并指向
+// 请求给定的号池。分组不再内嵌凭据，故响应不含任何 InlineKeys 键。
+func TestStructured_CreateWritesChildrenAndStripsConfig(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupProviderCrypto(t)
 
-	body := createProviderViaHandler(t, structuredCreateBody("p-create", "sk-test-AAAA1111"))
+	poolID := seedPool(t, "pool-create")
+	body := createProviderViaHandler(t, structuredCreateBody("p-create", poolID))
 	if gjson.Get(body, "code").Int() != 200 {
 		t.Fatalf("envelope code = %s, body=%s", gjson.Get(body, "code").Raw, body)
 	}
@@ -106,79 +145,78 @@ func TestStructured_CreateWritesFourTablesAndStripsConfig(t *testing.T) {
 	if err != nil || len(groups) != 1 {
 		t.Fatalf("groups = %+v err=%v", groups, err)
 	}
-	creds, err := repository.Default().Credential.ListByGroups(ctx, []uint{groups[0].ID}, nil)
-	if err != nil || len(creds) != 1 {
-		t.Fatalf("creds = %+v err=%v", creds, err)
+	if groups[0].PoolID == nil || *groups[0].PoolID != poolID {
+		t.Fatalf("group PoolID = %v, want %d（分组必须引用请求给定的号池）", groups[0].PoolID, poolID)
 	}
-	if got := gjson.Get(body, "data.Groups.0.InlineKeys.0.KeyMasked").String(); got != "sk-****1111" {
-		t.Fatalf("InlineKeys item masked = %q, want sk-****1111 (plaintext must not leak): %s", got, body)
+	if got := gjson.Get(body, "data.Groups.0.PoolID").Uint(); got != uint64(poolID) {
+		t.Fatalf("响应 PoolID = %d, want %d: %s", got, poolID, body)
 	}
-	if gjson.Get(body, "data.Groups.0.InlineKeys.0.ID").Uint() == 0 {
-		t.Fatalf("InlineKeys item missing ID: %s", body)
-	}
-	if strings.Contains(body, "sk-test-AAAA1111") {
-		t.Fatalf("detail response leaked plaintext inline key: %s", body)
+	// 供应商表单不再持有凭据：Source / InlineKeys 两键必须彻底消失，
+	// 否则前端仍会按内联语义渲染出一块永不回填的凭据区。
+	for _, key := range []string{"Source", "InlineKeys"} {
+		if gjson.Get(body, "data.Groups.0."+key).Exists() {
+			t.Fatalf("响应分组不应含 %s 键（内联凭据已删除）: %s", key, body)
+		}
 	}
 }
 
-func TestStructured_UpdatePoolToInlineClearsPoolID(t *testing.T) {
+// TestStructured_UpdateSwitchesPoolID 锁「换号池引用」这条路径：分组带 id 提交时走就地
+// 更新，pool_id 从 A 改写到 B（原语义是「池 ↔ 内联互切」，内联删除后只剩换池引用，
+// 走的仍是同一条 UpdateFields 写路径），同一次保存里的端点开关同步落库。
+func TestStructured_UpdateSwitchesPoolID(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupProviderCrypto(t)
 
-	ctx := t.Context()
-	pool := &models.Pool{Name: "pool-for-provider"}
-	if err := repository.Default().Pool.Create(ctx, pool); err != nil {
-		t.Fatalf("create pool: %v", err)
-	}
+	poolA := seedPool(t, "pool-switch-a")
+	poolB := seedPool(t, "pool-switch-b")
 
-	createBody := `{
-		"name":"p-pool",
-		"type":"openai",
-		"config":"{\"base_url\":\"https://api.example.com\"}",
-		"console":"",
-		"proxy":"",
-		"protocols":["openai"],
-		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"池组","weight":2,"source":"pool","pool_id":` + strconv.FormatUint(uint64(pool.ID), 10) + `}]
-	}`
-	created := createProviderViaHandler(t, createBody)
+	created := createProviderViaHandler(t, structuredCreateBody("p-switch", poolA))
 	id := uint(gjson.Get(created, "data.ID").Uint())
-	if gjson.Get(created, "data.Groups.0.PoolID").Type == gjson.Null {
-		t.Fatalf("expected PoolID set on create: %s", created)
+	if id == 0 {
+		t.Fatalf("missing ID: %s", created)
 	}
+	ctx := t.Context()
+	groups, err := repository.Default().KeyGroup.ListByProvider(ctx, id)
+	if err != nil || len(groups) != 1 {
+		t.Fatalf("groups = %+v err=%v", groups, err)
+	}
+	gid := groups[0].ID
 
-	updateBody := `{
-		"name":"p-pool",
+	updated := updateProviderViaHandler(t, id, `{
+		"name":"p-switch",
 		"type":"openai",
 		"config":"{\"base_url\":\"https://api.example.com\"}",
-		"console":"",
-		"proxy":"",
+		"console":"","proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":false}],
-		"groups":[{"name":"内联组","weight":1,"source":"inline","inline_keys":[{"id":0,"key":"sk-inline-BBBB2222"}]}]
-	}`
-	updated := updateProviderViaHandler(t, id, updateBody)
-	code := gjson.Get(updated, "code")
-	if !code.Exists() || code.Int() != 200 {
-		t.Fatalf("update envelope code=%v body=%s", code.Raw, updated)
-	}
-	poolID := gjson.Get(updated, "data.Groups.0.PoolID")
-	if !poolID.Exists() {
-		t.Fatalf("PoolID key missing: %s", updated)
-	}
-	if poolID.Type != gjson.Null {
-		t.Fatalf("PoolID = %s, want null", poolID.Raw)
-	}
-	if gjson.Get(updated, "data.Groups.0.Source").String() != "inline" {
-		t.Fatalf("Source = %s", gjson.Get(updated, "data.Groups.0.Source").Raw)
-	}
-	if gjson.Get(updated, "data.Endpoints.0.Enabled").Bool() {
-		t.Fatalf("Enabled should be false after update")
+		"groups":[{"id":`+strconv.FormatUint(uint64(gid), 10)+`,"name":"换池组","weight":1,"pool_id":`+strconv.FormatUint(uint64(poolB), 10)+`}]
+	}`)
+	if code := gjson.Get(updated, "code").Int(); code != 200 {
+		t.Fatalf("update code = %d, body=%s", code, updated)
 	}
 
-	groups, _ := repository.Default().KeyGroup.ListByProvider(ctx, id)
-	if len(groups) != 1 || groups[0].PoolID != nil {
-		t.Fatalf("db group PoolID = %+v", groups[0].PoolID)
+	after, err := repository.Default().KeyGroup.ListByProvider(ctx, id)
+	if err != nil || len(after) != 1 {
+		t.Fatalf("groups after = %+v err=%v", after, err)
+	}
+	if after[0].ID != gid {
+		t.Fatalf("group ID = %d, want %d（换池必须就地更新，不得删光重建）", after[0].ID, gid)
+	}
+	if after[0].PoolID == nil || *after[0].PoolID != poolB {
+		t.Fatalf("group PoolID = %v, want %d", after[0].PoolID, poolB)
+	}
+	if got := gjson.Get(updated, "data.Groups.0.PoolID").Uint(); got != uint64(poolB) {
+		t.Fatalf("响应 PoolID = %d, want %d: %s", got, poolB, updated)
+	}
+	eps, err := repository.Default().Endpoint.ListByProvider(ctx, id)
+	if err != nil || len(eps) != 1 {
+		t.Fatalf("endpoints after = %+v err=%v", eps, err)
+	}
+	if eps[0].Enabled {
+		t.Fatalf("endpoint enabled 落库为 true，want false")
+	}
+	if gjson.Get(updated, "data.Endpoints.0.Enabled").Bool() {
+		t.Fatalf("响应 endpoint enabled 应为 false: %s", updated)
 	}
 }
 
@@ -204,33 +242,6 @@ func TestStructured_CreateRejectsMissingSchedule(t *testing.T) {
 	}
 }
 
-// TestStructured_CreateInlineWithoutCipher_Returns400 锁定哨兵错误：加密未配置且提交
-// inline 组时回 400（客户端可修复的配置缺失），而非 500（服务器故障）。防止 RunInTx
-// 把业务校验错统一吞成 InternalServerError。
-func TestStructured_CreateInlineWithoutCipher_Returns400(t *testing.T) {
-	testsupport.InitTestDB(t)
-	credentialcrypto.SetDefault(nil)
-	t.Cleanup(func() { credentialcrypto.SetDefault(nil) })
-
-	gin.SetMode(gin.TestMode)
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest("POST", "/providers", strings.NewReader(structuredCreateBody("p-nocipher", "sk-ctest-EEEE5555")))
-	c.Request.Header.Set("Content-Type", "application/json")
-	CreateProvider(c)
-
-	if w.Code != 200 {
-		t.Fatalf("status = %d（应为 200 信封内含 400）, body=%s", w.Code, w.Body.String())
-	}
-	var payload testsupport.APIEnvelope[any]
-	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("unmarshal: %v, body=%s", err, w.Body.String())
-	}
-	if payload.Code != 400 {
-		t.Fatalf("code = %d, want 400, body=%s", payload.Code, w.Body.String())
-	}
-}
-
 // TestStructured_CreateZeroValuesPersistCorrectly 锁定 GORM default 零值陷阱：
 // Endpoint.Enabled gorm:"default:true" / KeyGroup.Weight gorm:"default:1" 在 struct
 // Create 时会跳过零值（false / 0）走 DB default。创建 enabled:false 端点、weight:0 分组
@@ -239,15 +250,15 @@ func TestStructured_CreateZeroValuesPersistCorrectly(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupProviderCrypto(t)
 
+	poolID := seedPool(t, "pool-zeroval")
 	body := `{
 		"name":"p-zeroval",
 		"type":"openai",
 		"config":"{\"base_url\":\"https://api.example.com\"}",
-		"console":"",
-		"proxy":"",
+		"console":"","proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":false}],
-		"groups":[{"name":"零价组","weight":0,"source":"inline","inline_keys":[{"id":0,"key":"sk-zeroval-FFFF6666"}]}]
+		"groups":[{"name":"零价组","weight":0,"pool_id":` + strconv.FormatUint(uint64(poolID), 10) + `}]
 	}`
 	created := createProviderViaHandler(t, body)
 	id := uint(gjson.Get(created, "data.ID").Uint())
@@ -270,6 +281,9 @@ func TestStructured_CreateZeroValuesPersistCorrectly(t *testing.T) {
 	if groups[0].Weight != 0 {
 		t.Fatalf("group weight = %d, want 0（GORM default:1 零值陷阱未修）", groups[0].Weight)
 	}
+	if groups[0].PoolID == nil || *groups[0].PoolID != poolID {
+		t.Fatalf("group PoolID = %v, want %d", groups[0].PoolID, poolID)
+	}
 
 	// 响应体也必须反映真实值（enabled=false、weight=0）
 	if gjson.Get(created, "data.Endpoints.0.Enabled").Bool() {
@@ -281,15 +295,17 @@ func TestStructured_CreateZeroValuesPersistCorrectly(t *testing.T) {
 }
 
 // TestStructured_UpdatePartialKeepsChildren 锁定 partial-update：PUT 只带顶层标量
-// （无 endpoints/groups 键）时，仅更新 provider 标量字段，子表（endpoints/groups/
-// credentials）与 Protocols 原样保留。开关类动作（模型端点/过滤/拉黑切换）通过此语义
-// 复用 PUT 而无需重提完整结构。防止 partial 请求被强制校验拒绝或误清空 children。
+// （无 endpoints/groups 键）时，仅更新 provider 标量字段，子表（endpoints/groups）
+// 与 Protocols 原样保留，所引用号池内的凭据也不受牵连。开关类动作（模型端点/过滤/
+// 拉黑切换）通过此语义复用 PUT 而无需重提完整结构。
 func TestStructured_UpdatePartialKeepsChildren(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupProviderCrypto(t)
 
-	ctx := t.Context()
-	created := createProviderViaHandler(t, structuredCreateBody("p-partial", "sk-partial-DDDD9999"))
+	poolID := seedPool(t, "pool-partial")
+	seedPoolCredential(t, poolID, "sk-partial-DDDD9999")
+
+	created := createProviderViaHandler(t, structuredCreateBody("p-partial", poolID))
 	id := uint(gjson.Get(created, "data.ID").Uint())
 	if id == 0 {
 		t.Fatalf("missing ID: %s", created)
@@ -300,8 +316,7 @@ func TestStructured_UpdatePartialKeepsChildren(t *testing.T) {
 		"name":"p-partial-renamed",
 		"type":"openai",
 		"config":"{\"base_url\":\"https://api.example.com\"}",
-		"console":"",
-		"proxy":"",
+		"console":"","proxy":"",
 		"model_endpoint":false,
 		"model_filter_enabled":true,
 		"blacklisted":true
@@ -328,7 +343,8 @@ func TestStructured_UpdatePartialKeepsChildren(t *testing.T) {
 		t.Fatalf("Protocols wiped by partial update: %s", updated)
 	}
 
-	// 子表保留：1 端点 + 1 分组 + 1 内联凭据原样
+	// 子表保留：1 端点 + 1 分组，且分组仍指向同一个池
+	ctx := t.Context()
 	eps, err := repository.Default().Endpoint.ListByProvider(ctx, id)
 	if err != nil || len(eps) != 1 {
 		t.Fatalf("endpoints after partial = %+v err=%v", eps, err)
@@ -337,18 +353,15 @@ func TestStructured_UpdatePartialKeepsChildren(t *testing.T) {
 	if err != nil || len(groups) != 1 {
 		t.Fatalf("groups after partial = %+v err=%v", groups, err)
 	}
-	creds, err := repository.Default().Credential.ListByGroups(ctx, []uint{groups[0].ID}, nil)
-	if err != nil || len(creds) != 1 {
-		t.Fatalf("creds after partial = %+v err=%v", creds, err)
+	if groups[0].PoolID == nil || *groups[0].PoolID != poolID {
+		t.Fatalf("partial update 改动了分组池引用 = %v, want %d", groups[0].PoolID, poolID)
 	}
-
-	// 安全不变量：响应里 partial 后仍保留同一条内联 key 的掩码项（未被清空/覆盖），
-	// 且明文绝不出现在响应里
-	if got := gjson.Get(updated, "data.Groups.0.InlineKeys.0.KeyMasked").String(); got != "sk-****9999" {
-		t.Fatalf("InlineKeys item masked after partial update = %q, want sk-****9999: %s", got, updated)
+	if got := gjson.Get(updated, "data.Groups.0.PoolID").Uint(); got != uint64(poolID) {
+		t.Fatalf("响应 PoolID = %d, want %d: %s", got, poolID, updated)
 	}
-	if strings.Contains(updated, "sk-partial-DDDD9999") {
-		t.Fatalf("partial update response leaked plaintext inline key: %s", updated)
+	// 安全不变量：供应商响应不含任何凭据明文或掩码项
+	if gjson.Get(updated, "data.Groups.0.InlineKeys").Exists() {
+		t.Fatalf("partial update 响应不应展开凭据项: %s", updated)
 	}
 }
 
@@ -380,7 +393,8 @@ func TestStructured_UpdatePartialWithoutConfigKeepsConfig(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupProviderCrypto(t)
 
-	created := createProviderViaHandler(t, structuredCreateBody("p-partial-cfg", "sk-cfg-AAAA1111"))
+	poolID := seedPool(t, "pool-cfg")
+	created := createProviderViaHandler(t, structuredCreateBody("p-partial-cfg", poolID))
 	id := uint(gjson.Get(created, "data.ID").Uint())
 	if id == 0 {
 		t.Fatalf("missing ID: %s", created)
@@ -404,6 +418,8 @@ func TestStructured_UpdateFullClearsProxyAndConsole(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupProviderCrypto(t)
 
+	poolID := seedPool(t, "pool-full-clear")
+	poolStr := strconv.FormatUint(uint64(poolID), 10)
 	createBody := `{
 		"name":"p-full-clear",
 		"type":"openai",
@@ -412,7 +428,7 @@ func TestStructured_UpdateFullClearsProxyAndConsole(t *testing.T) {
 		"proxy":"http://127.0.0.1:7890",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[{"id":0,"key":"sk-clear-BBBB2222"}]}]
+		"groups":[{"name":"默认组","weight":1,"pool_id":` + poolStr + `}]
 	}`
 	created := createProviderViaHandler(t, createBody)
 	id := uint(gjson.Get(created, "data.ID").Uint())
@@ -429,7 +445,7 @@ func TestStructured_UpdateFullClearsProxyAndConsole(t *testing.T) {
 		"proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[{"id":0,"key":"sk-clear-BBBB2222"}]}]
+		"groups":[{"name":"默认组","weight":1,"pool_id":` + poolStr + `}]
 	}`
 	updated := updateProviderViaHandler(t, id, updateBody)
 	if code := gjson.Get(updated, "code").Int(); code != 200 {
@@ -450,7 +466,8 @@ func TestStructured_UpdateRejectsHalfChildren(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupProviderCrypto(t)
 
-	created := createProviderViaHandler(t, structuredCreateBody("p-half", "sk-half-CCCC3333"))
+	poolID := seedPool(t, "pool-half")
+	created := createProviderViaHandler(t, structuredCreateBody("p-half", poolID))
 	id := uint(gjson.Get(created, "data.ID").Uint())
 	if id == 0 {
 		t.Fatalf("missing ID: %s", created)
@@ -477,7 +494,7 @@ func TestStructured_UpdateRejectsHalfChildren(t *testing.T) {
 				"name":"p-half",
 				"type":"openai",
 				"protocols":["openai"],
-				"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[{"id":0,"key":"sk-half-CCCC3333"}]}]
+				"groups":[{"name":"默认组","weight":1,"pool_id":` + strconv.FormatUint(uint64(poolID), 10) + `}]
 			}`,
 			wantMsg: "协议端点",
 		},
@@ -495,64 +512,168 @@ func TestStructured_UpdateRejectsHalfChildren(t *testing.T) {
 	}
 }
 
-// getGroupInlineKeysRawRecorder 返回完整 recorder：明文端点除 body/code 外还要断言响应头
-func getGroupInlineKeysRawRecorder(t *testing.T, providerID, groupID uint) *httptest.ResponseRecorder {
-	t.Helper()
-	gin.SetMode(gin.TestMode)
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Params = gin.Params{
-		{Key: "id", Value: strconv.FormatUint(uint64(providerID), 10)},
-		{Key: "groupId", Value: strconv.FormatUint(uint64(groupID), 10)},
-	}
-	c.Request = httptest.NewRequest("GET", "/providers/:id/groups/:groupId/inline-keys/raw", nil)
-	GetGroupInlineKeys(c)
-	return w
-}
-
-func getGroupInlineKeysRawViaHandler(t *testing.T, providerID, groupID uint) (string, int) {
-	t.Helper()
-	w := getGroupInlineKeysRawRecorder(t, providerID, groupID)
-	return w.Body.String(), w.Code
-}
-
-// TestStructured_GroupRawRevealsPlaintext 锁定受控明文端点：详情只出掩码，raw 显式
-// 拉取才返回明文 keys（顺序与详情一致，按凭据 id ASC）；明文不出常规响应；响应禁缓存。
-func TestStructured_GroupRawRevealsPlaintext(t *testing.T) {
+// TestStructured_UpdateGroupRequiresPoolID_400 锁分组必填号池引用：内联凭据删除后分组
+// 只能挂在号池上，pool_id 缺失或为 0 一律 400。漏校验会造出「有分组、无凭据来源」的
+// 僵尸分组，运行时表现为该组永远选不出凭据。
+func TestStructured_UpdateGroupRequiresPoolID_400(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupProviderCrypto(t)
 
-	created := createProviderViaHandler(t, structuredCreateBody("p-raw", "sk-raw-AAAA1111"))
+	poolID := seedPool(t, "pool-required")
+	created := createProviderViaHandler(t, structuredCreateBody("p-poolreq", poolID))
 	id := uint(gjson.Get(created, "data.ID").Uint())
 	if id == 0 {
 		t.Fatalf("missing ID: %s", created)
 	}
-	groupID := uint(gjson.Get(created, "data.Groups.0.ID").Uint())
 
-	// 详情及其二次 GET 均不得含明文
-	for _, body := range []string{created, getProviderViaHandler(t, id)} {
-		if got := gjson.Get(body, "data.Groups.0.InlineKeys.0.KeyMasked").String(); got != "sk-****1111" {
-			t.Fatalf("KeyMasked=%q want sk-****1111, body=%s", got, body)
-		}
-		if strings.Contains(body, "sk-raw-AAAA1111") {
-			t.Fatalf("detail leaked plaintext: %s", body)
-		}
+	cases := []struct {
+		name  string
+		group string
+	}{
+		{name: "pool_id key missing", group: `{"name":"默认组","weight":1}`},
+		{name: "pool_id zero", group: `{"name":"默认组","weight":1,"pool_id":0}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			updated := updateProviderViaHandler(t, id, `{
+				"name":"p-poolreq",
+				"type":"openai",
+				"config":"{\"base_url\":\"https://api.example.com\"}",
+				"console":"","proxy":"",
+				"protocols":["openai"],
+				"endpoints":[{"protocol":"openai","url":"","enabled":true}],
+				"groups":[`+tc.group+`]
+			}`)
+			if code := gjson.Get(updated, "code").Int(); code != 400 {
+				t.Fatalf("缺号池引用应 400, got %d body=%s", code, updated)
+			}
+			if msg := gjson.Get(updated, "message").String(); !strings.Contains(msg, "pool_id is required") {
+				t.Fatalf("错误文案应说明 pool_id 必填, got %q", msg)
+			}
+		})
 	}
 
-	w := getGroupInlineKeysRawRecorder(t, id, groupID)
-	body, code := w.Body.String(), w.Code
-	if code != 200 {
-		t.Fatalf("raw status=%d body=%s", code, body)
+	// 校验在进事务前完成：两次拒绝不得动到既有分组
+	groups, err := repository.Default().KeyGroup.ListByProvider(t.Context(), id)
+	if err != nil || len(groups) != 1 {
+		t.Fatalf("被拒请求改动了分组: %+v err=%v", groups, err)
 	}
-	if got := gjson.Get(body, "data.keys.0.key").String(); got != "sk-raw-AAAA1111" {
-		t.Fatalf("raw keys[0].key=%q want sk-raw-AAAA1111, body=%s", got, body)
+}
+
+// TestStructured_UpdateGroupRejectsUnknownPool_400 锁号池存在性校验：引用已删除/幻觉的
+// pool_id 必须 400，不允许挂一个查不到凭据的池——那会让分组静默退化、空跑到期。
+func TestStructured_UpdateGroupRejectsUnknownPool_400(t *testing.T) {
+	testsupport.InitTestDB(t)
+	setupProviderCrypto(t)
+
+	poolID := seedPool(t, "pool-unknown-guard")
+	created := createProviderViaHandler(t, structuredCreateBody("p-poolmiss", poolID))
+	id := uint(gjson.Get(created, "data.ID").Uint())
+	if id == 0 {
+		t.Fatalf("missing ID: %s", created)
 	}
-	if gjson.Get(body, "data.keys.0.id").Uint() == 0 {
-		t.Fatalf("raw item missing credential id (前端按 id 归位依赖它): %s", body)
+
+	updated := updateProviderViaHandler(t, id, `{
+		"name":"p-poolmiss",
+		"type":"openai",
+		"config":"{\"base_url\":\"https://api.example.com\"}",
+		"console":"","proxy":"",
+		"protocols":["openai"],
+		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
+		"groups":[{"name":"默认组","weight":1,"pool_id":999999}]
+	}`)
+	if code := gjson.Get(updated, "code").Int(); code != 400 {
+		t.Fatalf("引用不存在的号池应 400, got %d body=%s", code, updated)
 	}
-	// 明文响应禁缓存：落进浏览器磁盘缓存或中间代理，前端的明文生命周期守卫就形同虚设
-	if got := w.Header().Get("Cache-Control"); got != "no-store" {
-		t.Fatalf("Cache-Control=%q want no-store, body=%s", got, body)
+	if msg := gjson.Get(updated, "message").String(); !strings.Contains(msg, "not found") {
+		t.Fatalf("错误文案应说明号池不存在, got %q", msg)
+	}
+
+	groups, err := repository.Default().KeyGroup.ListByProvider(t.Context(), id)
+	if err != nil || len(groups) != 1 || groups[0].PoolID == nil || *groups[0].PoolID != poolID {
+		t.Fatalf("被拒请求改动了分组: %+v err=%v", groups, err)
+	}
+}
+
+// TestStructured_DeletingGroupKeepsPoolCredentials 锁本次模型变更的核心不变量：
+// 凭据归号池所有，分组只是引用者。保存时删掉一个分组不得级联删掉号池本身或池内凭据——
+// 同一个池常被多个供应商的分组复用，误删会连带打断别的供应商（表现为它们的分组集体空跑）。
+func TestStructured_DeletingGroupKeepsPoolCredentials(t *testing.T) {
+	testsupport.InitTestDB(t)
+	setupProviderCrypto(t)
+
+	poolID := seedPool(t, "pool-shared")
+	cred := seedPoolCredential(t, poolID, "sk-keep-AAAA1111")
+	poolStr := strconv.FormatUint(uint64(poolID), 10)
+
+	created := createProviderViaHandler(t, `{
+		"name":"p-keepcred",
+		"type":"openai",
+		"config":"{\"base_url\":\"https://api.example.com\"}",
+		"console":"","proxy":"",
+		"protocols":["openai"],
+		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
+		"groups":[
+			{"name":"组A","weight":1,"pool_id":`+poolStr+`},
+			{"name":"组B","weight":1,"pool_id":`+poolStr+`}
+		]
+	}`)
+	id := uint(gjson.Get(created, "data.ID").Uint())
+	if id == 0 {
+		t.Fatalf("missing ID: %s", created)
+	}
+
+	ctx := t.Context()
+	repo := repository.Default()
+	groups, err := repo.KeyGroup.ListByProvider(ctx, id)
+	if err != nil || len(groups) != 2 {
+		t.Fatalf("groups = %+v err=%v", groups, err)
+	}
+	byName := map[string]models.KeyGroup{}
+	for _, g := range groups {
+		byName[g.Name] = g
+	}
+	groupA, ok := byName["组A"]
+	if !ok {
+		t.Fatalf("组A missing: %+v", groups)
+	}
+	dropID := byName["组B"].ID
+
+	// 只提交组A（带 id 就地更新）→ 组B 被删除
+	updated := updateProviderViaHandler(t, id, `{
+		"name":"p-keepcred",
+		"type":"openai",
+		"config":"{\"base_url\":\"https://api.example.com\"}",
+		"console":"","proxy":"",
+		"protocols":["openai"],
+		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
+		"groups":[{"id":`+strconv.FormatUint(uint64(groupA.ID), 10)+`,"name":"组A","weight":1,"pool_id":`+poolStr+`}]
+	}`)
+	if code := gjson.Get(updated, "code").Int(); code != 200 {
+		t.Fatalf("update code = %d, body=%s", code, updated)
+	}
+
+	after, err := repo.KeyGroup.ListByProvider(ctx, id)
+	if err != nil || len(after) != 1 {
+		t.Fatalf("groups after = %+v err=%v", after, err)
+	}
+	if after[0].ID != groupA.ID {
+		t.Fatalf("保留组 ID = %d, want %d", after[0].ID, groupA.ID)
+	}
+	if after[0].ID == dropID {
+		t.Fatalf("组B 未被删除，删除语义失效")
+	}
+
+	// 号池与池内凭据必须原封不动
+	if _, err := repo.Pool.Get(ctx, poolID); err != nil {
+		t.Fatalf("删分组连带删了号池: %v", err)
+	}
+	creds, err := repo.Credential.ListByPools(ctx, []uint{poolID})
+	if err != nil || len(creds) != 1 {
+		t.Fatalf("删分组连带删了池内凭据: creds=%+v err=%v", creds, err)
+	}
+	if creds[0].ID != cred.ID {
+		t.Fatalf("凭据 ID = %d, want %d（不得被重建）", creds[0].ID, cred.ID)
 	}
 }
 
@@ -564,7 +685,9 @@ func TestStructured_GroupSync_PreservesWhitelistAndIdentity(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupProviderCrypto(t)
 
-	created := createProviderViaHandler(t, structuredCreateBody("p-whitelist", "sk-a-AAAA1111"))
+	poolA := seedPool(t, "pool-wl-a")
+	poolB := seedPool(t, "pool-wl-b")
+	created := createProviderViaHandler(t, structuredCreateBody("p-whitelist", poolA))
 	providerID := uint(gjson.Get(created, "data.ID").Uint())
 	if providerID == 0 {
 		t.Fatalf("missing ID: %s", created)
@@ -581,10 +704,6 @@ func TestStructured_GroupSync_PreservesWhitelistAndIdentity(t *testing.T) {
 	if _, err := repo.KeyGroup.UpdateFields(ctx, gid, map[string]any{"models": "up-a,up-b"}); err != nil {
 		t.Fatalf("seed whitelist: %v", err)
 	}
-	creds, err := repo.Credential.ListByGroups(ctx, []uint{gid}, nil)
-	if err != nil || len(creds) != 1 {
-		t.Fatalf("creds=%+v err=%v", creds, err)
-	}
 
 	updated := updateProviderViaHandler(t, providerID, `{
 		"name":"p-whitelist",
@@ -593,9 +712,7 @@ func TestStructured_GroupSync_PreservesWhitelistAndIdentity(t *testing.T) {
 		"console":"","proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"id":`+strconv.FormatUint(uint64(gid), 10)+`,"name":"改名组","weight":3,"source":"inline","inline_keys":[
-			{"id":`+strconv.FormatUint(uint64(creds[0].ID), 10)+`,"key":""}
-		]}]
+		"groups":[{"id":`+strconv.FormatUint(uint64(gid), 10)+`,"name":"改名组","weight":3,"pool_id":`+strconv.FormatUint(uint64(poolB), 10)+`}]
 	}`)
 	if code := gjson.Get(updated, "code").Int(); code != 200 {
 		t.Fatalf("update code=%d body=%s", code, updated)
@@ -614,6 +731,9 @@ func TestStructured_GroupSync_PreservesWhitelistAndIdentity(t *testing.T) {
 	if after[0].Name != "改名组" || after[0].Weight != 3 {
 		t.Fatalf("name/weight = %q/%d, want 改名组/3", after[0].Name, after[0].Weight)
 	}
+	if after[0].PoolID == nil || *after[0].PoolID != poolB {
+		t.Fatalf("PoolID = %v, want %d", after[0].PoolID, poolB)
+	}
 }
 
 // TestStructured_GroupSync_NewGroupWithoutID 锁「组 id=0/缺失 = 新建」：新建组白名单为空
@@ -622,7 +742,9 @@ func TestStructured_GroupSync_NewGroupWithoutID(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupProviderCrypto(t)
 
-	created := createProviderViaHandler(t, structuredCreateBody("p-mixed", "sk-a-AAAA1111"))
+	poolA := seedPool(t, "pool-mixed-a")
+	poolB := seedPool(t, "pool-mixed-b")
+	created := createProviderViaHandler(t, structuredCreateBody("p-mixed", poolA))
 	providerID := uint(gjson.Get(created, "data.ID").Uint())
 	ctx := t.Context()
 	repo := repository.Default()
@@ -634,10 +756,6 @@ func TestStructured_GroupSync_NewGroupWithoutID(t *testing.T) {
 	if _, err := repo.KeyGroup.UpdateFields(ctx, gid, map[string]any{"models": "up-a"}); err != nil {
 		t.Fatalf("seed whitelist: %v", err)
 	}
-	creds, err := repo.Credential.ListByGroups(ctx, []uint{gid}, nil)
-	if err != nil || len(creds) != 1 {
-		t.Fatalf("creds=%+v err=%v", creds, err)
-	}
 
 	updated := updateProviderViaHandler(t, providerID, `{
 		"name":"p-mixed",
@@ -647,10 +765,8 @@ func TestStructured_GroupSync_NewGroupWithoutID(t *testing.T) {
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
 		"groups":[
-			{"id":`+strconv.FormatUint(uint64(gid), 10)+`,"name":"既有组","weight":1,"source":"inline","inline_keys":[
-				{"id":`+strconv.FormatUint(uint64(creds[0].ID), 10)+`,"key":""}
-			]},
-			{"name":"新组","weight":2,"source":"inline","inline_keys":[{"id":0,"key":"sk-new-BBBB2222"}]}
+			{"id":`+strconv.FormatUint(uint64(gid), 10)+`,"name":"既有组","weight":1,"pool_id":`+strconv.FormatUint(uint64(poolB), 10)+`},
+			{"name":"新组","weight":2,"pool_id":`+strconv.FormatUint(uint64(poolA), 10)+`}
 		]
 	}`)
 	if code := gjson.Get(updated, "code").Int(); code != 200 {
@@ -672,6 +788,9 @@ func TestStructured_GroupSync_NewGroupWithoutID(t *testing.T) {
 	if old.ID != gid || old.Models != "up-a" {
 		t.Fatalf("既有组 ID/Models = %d/%q, want %d/up-a（就地更新且白名单不动）", old.ID, old.Models, gid)
 	}
+	if old.PoolID == nil || *old.PoolID != poolB {
+		t.Fatalf("既有组 PoolID = %v, want %d", old.PoolID, poolB)
+	}
 	fresh, ok := byName["新组"]
 	if !ok {
 		t.Fatalf("新组 missing: %+v", after)
@@ -682,6 +801,9 @@ func TestStructured_GroupSync_NewGroupWithoutID(t *testing.T) {
 	if fresh.Models != "" {
 		t.Fatalf("新组 Models = %q, want 空（未同步 = 不限）", fresh.Models)
 	}
+	if fresh.PoolID == nil || *fresh.PoolID != poolA {
+		t.Fatalf("新组 PoolID = %v, want %d", fresh.PoolID, poolA)
+	}
 }
 
 // TestStructured_GroupSync_RejectsUnknownOrDuplicateGroupID 锁写入闸：组 id 引用
@@ -690,7 +812,9 @@ func TestStructured_GroupSync_RejectsUnknownOrDuplicateGroupID(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupProviderCrypto(t)
 
-	created := createProviderViaHandler(t, structuredCreateBody("p-idcheck", "sk-a-AAAA1111"))
+	poolID := seedPool(t, "pool-idcheck")
+	poolStr := strconv.FormatUint(uint64(poolID), 10)
+	created := createProviderViaHandler(t, structuredCreateBody("p-idcheck", poolID))
 	providerID := uint(gjson.Get(created, "data.ID").Uint())
 	ctx := t.Context()
 	groups, err := repository.Default().KeyGroup.ListByProvider(ctx, providerID)
@@ -701,8 +825,8 @@ func TestStructured_GroupSync_RejectsUnknownOrDuplicateGroupID(t *testing.T) {
 	gidStr := strconv.FormatUint(uint64(gid), 10)
 
 	for name, groupJSON := range map[string]string{
-		"unknown id":   `{"id":999999,"name":"g","weight":1,"source":"inline","inline_keys":[{"id":0,"key":"sk-x-CCCC3333"}]}`,
-		"duplicate id": `{"id":` + gidStr + `,"name":"g1","weight":1,"source":"inline","inline_keys":[{"id":0,"key":"sk-x-CCCC3333"}]},{"id":` + gidStr + `,"name":"g2","weight":1,"source":"inline","inline_keys":[{"id":0,"key":"sk-y-DDDD4444"}]}`,
+		"unknown id":   `{"id":999999,"name":"g","weight":1,"pool_id":` + poolStr + `}`,
+		"duplicate id": `{"id":` + gidStr + `,"name":"g1","weight":1,"pool_id":` + poolStr + `},{"id":` + gidStr + `,"name":"g2","weight":1,"pool_id":` + poolStr + `}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			w := httptest.NewRecorder()
@@ -727,352 +851,92 @@ func TestStructured_GroupSync_RejectsUnknownOrDuplicateGroupID(t *testing.T) {
 	}
 }
 
-// TestStructured_UpdateByIDKeepsAndReplaces 锁定写路径 id 语义（掩码回填的保存形态）：
-// 按 id 保留（key 空）/ 替换（key 非空且 hash 变）/ 新增（id=0）/ 未提交 = 删除。
-// 明文永不出响应，含明文 key 的请求体不因事务失败等路径泄漏。
-func TestStructured_UpdateByIDKeepsAndReplaces(t *testing.T) {
+// TestStructured_GroupSync_UpdatesPoolAndKeepsGroupID 锁一次保存里多个分组的就地更新：
+// 两组各带自己的 id 提交，name 与 pool_id 都要落到同一行上（ID 不漂移）——这是前端
+// 弹窗按组 id 归位的依赖。同时守住 map 更新的显式语义：weight=0 也得真写成 0。
+func TestStructured_GroupSync_UpdatesPoolAndKeepsGroupID(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupProviderCrypto(t)
 
+	poolA := seedPool(t, "pool-multi-a")
+	poolB := seedPool(t, "pool-multi-b")
+	poolC := seedPool(t, "pool-multi-c")
+	aStr := strconv.FormatUint(uint64(poolA), 10)
+
 	created := createProviderViaHandler(t, `{
-		"name":"p-idref",
+		"name":"p-multi",
 		"type":"openai",
 		"config":"{\"base_url\":\"https://api.example.com\"}",
 		"console":"","proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[
-			{"id":0,"key":"sk-keep-AAAA1111"},
-			{"id":0,"key":"sk-drop-BBBB2222"}
-		]}]
+		"groups":[
+			{"name":"组一","weight":1,"pool_id":`+aStr+`},
+			{"name":"组二","weight":1,"pool_id":`+aStr+`}
+		]
 	}`)
-	id := uint(gjson.Get(created, "data.ID").Uint())
-	if id == 0 {
+	providerID := uint(gjson.Get(created, "data.ID").Uint())
+	if providerID == 0 {
 		t.Fatalf("missing ID: %s", created)
 	}
 
-	// 读取两条既有凭据的 id
 	ctx := t.Context()
-	groups, err := repository.Default().KeyGroup.ListByProvider(ctx, id)
-	if err != nil || len(groups) != 1 {
+	repo := repository.Default()
+	groups, err := repo.KeyGroup.ListByProvider(ctx, providerID)
+	if err != nil || len(groups) != 2 {
 		t.Fatalf("groups=%+v err=%v", groups, err)
 	}
-	creds, err := repository.Default().Credential.ListByGroups(ctx, []uint{groups[0].ID}, nil)
-	if err != nil || len(creds) != 2 {
-		t.Fatalf("creds=%+v err=%v", creds, err)
+	orig := map[string]uint{}
+	for _, g := range groups {
+		orig[g.Name] = g.ID
 	}
-	// ListByGroups 按 id ASC：先提交的 sk-keep 为 creds[0]，sk-drop 为 creds[1]
-	keepID, dropID := creds[0].ID, creds[1].ID
 
-	// 保存形态：keep 原样保留（key 空）、drop 不提交（删除）、新增一条、keep 也可替换
-	updated := updateProviderViaHandler(t, id, `{
-		"name":"p-idref",
+	updated := updateProviderViaHandler(t, providerID, `{
+		"name":"p-multi",
 		"type":"openai",
 		"config":"{\"base_url\":\"https://api.example.com\"}",
 		"console":"","proxy":"",
 		"protocols":["openai"],
 		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[
-			{"id":`+strconv.FormatUint(uint64(keepID), 10)+`,"key":""},
-			{"id":0,"key":"sk-add-CCCC3333"}
-		]}]
+		"groups":[
+			{"id":`+strconv.FormatUint(uint64(orig["组一"]), 10)+`,"name":"改名一","weight":0,"pool_id":`+strconv.FormatUint(uint64(poolB), 10)+`},
+			{"id":`+strconv.FormatUint(uint64(orig["组二"]), 10)+`,"name":"改名二","weight":5,"pool_id":`+strconv.FormatUint(uint64(poolC), 10)+`}
+		]
 	}`)
 	if code := gjson.Get(updated, "code").Int(); code != 200 {
 		t.Fatalf("update code=%d body=%s", code, updated)
 	}
 
-	// 全量同步会重建分组：重新读取新组 ID（旧 group 已软删，凭据已迁移到新组）
-	groupsAfter, err := repository.Default().KeyGroup.ListByProvider(ctx, id)
-	if err != nil || len(groupsAfter) != 1 {
-		t.Fatalf("groups after=%+v err=%v", groupsAfter, err)
+	after, err := repo.KeyGroup.ListByProvider(ctx, providerID)
+	if err != nil || len(after) != 2 {
+		t.Fatalf("groups after=%+v err=%v", after, err)
 	}
-	newGroupID := groupsAfter[0].ID
-
-	// DB 侧：保留 + 新增 = 2 条，drop 已删；raw 明文顺序 = [keep, add]（id ASC）
-	credsAfter, err := repository.Default().Credential.ListByGroups(ctx, []uint{newGroupID}, nil)
-	if err != nil || len(credsAfter) != 2 {
-		t.Fatalf("creds after=%+v err=%v", credsAfter, err)
+	want := map[string]struct {
+		id     uint
+		weight int
+		pool   uint
+	}{
+		"改名一": {id: orig["组一"], weight: 0, pool: poolB},
+		"改名二": {id: orig["组二"], weight: 5, pool: poolC},
 	}
-	for _, c := range credsAfter {
-		if c.ID == dropID {
-			t.Fatalf("dropped credential %d still exists", dropID)
+	seen := 0
+	for _, g := range after {
+		w, ok := want[g.Name]
+		if !ok {
+			t.Fatalf("unexpected group %q: %+v", g.Name, g)
+		}
+		seen++
+		if g.ID != w.id {
+			t.Fatalf("组 %q ID = %d, want %d（就地更新不得换 id）", g.Name, g.ID, w.id)
+		}
+		if g.Weight != w.weight {
+			t.Fatalf("组 %q weight = %d, want %d", g.Name, g.Weight, w.weight)
+		}
+		if g.PoolID == nil || *g.PoolID != w.pool {
+			t.Fatalf("组 %q PoolID = %v, want %d", g.Name, g.PoolID, w.pool)
 		}
 	}
-	raw, code := getGroupInlineKeysRawViaHandler(t, id, newGroupID)
-	if code != 200 {
-		t.Fatalf("raw status=%d body=%s", code, raw)
-	}
-	if got := gjson.Get(raw, "data.keys.0.key").String(); got != "sk-keep-AAAA1111" {
-		t.Fatalf("raw keys[0].key=%q want sk-keep-AAAA1111（保留语义失效）", got)
-	}
-	if got := gjson.Get(raw, "data.keys.1.key").String(); got != "sk-add-CCCC3333" {
-		t.Fatalf("raw keys[1].key=%q want sk-add-CCCC3333, body=%s", got, raw)
-	}
-
-	// 替换语义：对 keep 那条提交新明文（hash 变 → 更新密文），旧明文消失
-	updated2 := updateProviderViaHandler(t, id, `{
-		"name":"p-idref",
-		"type":"openai",
-		"config":"{\"base_url\":\"https://api.example.com\"}",
-		"console":"","proxy":"",
-		"protocols":["openai"],
-		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[
-			{"id":`+strconv.FormatUint(uint64(keepID), 10)+`,"key":"sk-replaced-DDDD4444"},
-			{"id":0,"key":"sk-add-CCCC3333"}
-		]}]
-	}`)
-	if code := gjson.Get(updated2, "code").Int(); code != 200 {
-		t.Fatalf("update2 code=%d body=%s", code, updated2)
-	}
-	// 全量同步再次重建分组：用最新组 ID 拉 raw
-	groupsAfter2, err := repository.Default().KeyGroup.ListByProvider(ctx, id)
-	if err != nil || len(groupsAfter2) != 1 {
-		t.Fatalf("groups after2=%+v err=%v", groupsAfter2, err)
-	}
-	raw2, code := getGroupInlineKeysRawViaHandler(t, id, groupsAfter2[0].ID)
-	if code != 200 {
-		t.Fatalf("raw2 status=%d body=%s", code, raw2)
-	}
-	if got := gjson.Get(raw2, "data.keys.0.key").String(); got != "sk-replaced-DDDD4444" {
-		t.Fatalf("raw2 keys[0].key=%q want sk-replaced-DDDD4444（替换语义失效）", got)
-	}
-	if got := gjson.Get(raw2, "data.keys.1.key").String(); got != "sk-add-CCCC3333" {
-		t.Fatalf("raw2 keys[1].key=%q want sk-add-CCCC3333, body=%s", got, raw2)
-	}
-	if strings.Contains(raw2, "sk-keep-AAAA1111") || strings.Contains(updated2, "sk-keep-AAAA1111") {
-		t.Fatalf("替换后旧明文泄漏: %s", raw2)
-	}
-}
-
-// TestStructured_UpdateReferencesMissingCredential_400 锁定 id 引用守卫：提交引用
-// 本供应商不存在的凭据 id 必须 400（防越权/幻觉引用写入空凭证）。
-func TestStructured_UpdateReferencesMissingCredential_400(t *testing.T) {
-	testsupport.InitTestDB(t)
-	setupProviderCrypto(t)
-
-	created := createProviderViaHandler(t, structuredCreateBody("p-badref", "sk-badref-AAAA1111"))
-	id := uint(gjson.Get(created, "data.ID").Uint())
-	if id == 0 {
-		t.Fatalf("missing ID: %s", created)
-	}
-
-	updated := updateProviderViaHandler(t, id, `{
-		"name":"p-badref",
-		"type":"openai",
-		"config":"{\"base_url\":\"https://api.example.com\"}",
-		"console":"","proxy":"",
-		"protocols":["openai"],
-		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[
-			{"id":999999,"key":""}
-		]}]
-	}`)
-	if code := gjson.Get(updated, "code").Int(); code != 400 {
-		t.Fatalf("boss reference should be rejected with 400, got %d body=%s", code, updated)
-	}
-}
-
-// TestStructured_GroupRaw_PoolGroupAndCrossProvider 锁定 raw 端点边界：
-// pool 来源分组无内联明文（400）、越组访问不暴露存在性（404）。
-func TestStructured_GroupRaw_PoolGroupAndCrossProvider(t *testing.T) {
-	testsupport.InitTestDB(t)
-	setupProviderCrypto(t)
-
-	ctx := t.Context()
-	pool := &models.Pool{Name: "pool-for-raw"}
-	if err := repository.Default().Pool.Create(ctx, pool); err != nil {
-		t.Fatalf("create pool: %v", err)
-	}
-	created := createProviderViaHandler(t, `{
-		"name":"p-rawpool",
-		"type":"openai",
-		"config":"{\"base_url\":\"https://api.example.com\"}",
-		"console":"","proxy":"",
-		"protocols":["openai"],
-		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"池组","weight":1,"source":"pool","pool_id":`+strconv.FormatUint(uint64(pool.ID), 10)+`}]
-	}`)
-	id := uint(gjson.Get(created, "data.ID").Uint())
-	poolGroupID := uint(gjson.Get(created, "data.Groups.0.ID").Uint())
-
-	// pool 来源分组：无内联明文，raw 400
-	body, code := getGroupInlineKeysRawViaHandler(t, id, poolGroupID)
-	if code != 200 || gjson.Get(body, "code").Int() != 400 {
-		t.Fatalf("pool group raw should be 400, status=%d body=%s", code, body)
-	}
-
-	// 另一个无该分组的 provider：raw 404（不暴露分组存在性）
-	created2 := createProviderViaHandler(t, structuredCreateBody("p-raw2", "sk-raw2-AAAA1111"))
-	id2 := uint(gjson.Get(created2, "data.ID").Uint())
-	body2, code2 := getGroupInlineKeysRawViaHandler(t, id2, poolGroupID)
-	if code2 != 200 || gjson.Get(body2, "code").Int() != 404 {
-		t.Fatalf("cross-provider raw should be 404, status=%d body=%s", code2, body2)
-	}
-}
-
-// TestStructured_GroupRaw_ProviderNotFound_404 锁定供应商不存在时 raw 走 404 信封
-// （先校验供应商再校验分组，不给「分组存在但供应商不存在」的旁路探测）。
-func TestStructured_GroupRaw_ProviderNotFound_404(t *testing.T) {
-	testsupport.InitTestDB(t)
-	setupProviderCrypto(t)
-
-	created := createProviderViaHandler(t, structuredCreateBody("p-raw404", "sk-raw404-AAAA1111"))
-	groupID := uint(gjson.Get(created, "data.Groups.0.ID").Uint())
-
-	body, code := getGroupInlineKeysRawViaHandler(t, 999999, groupID)
-	if code != 200 || gjson.Get(body, "code").Int() != 404 {
-		t.Fatalf("provider 不存在 raw 应 404 信封, status=%d body=%s", code, body)
-	}
-}
-
-// TestStructured_GroupRaw_CipherNotConfigured_500 锁定加密未配置时 raw 直接 HTTP 500：
-// 明文拉取没有降级路径，绝不能回退成掩码或空数组让前端误判「该组无 key」。
-func TestStructured_GroupRaw_CipherNotConfigured_500(t *testing.T) {
-	testsupport.InitTestDB(t)
-	setupProviderCrypto(t)
-
-	created := createProviderViaHandler(t, structuredCreateBody("p-rawnocipher", "sk-rawnocipher-AAAA1111"))
-	id := uint(gjson.Get(created, "data.ID").Uint())
-	groupID := uint(gjson.Get(created, "data.Groups.0.ID").Uint())
-
-	credentialcrypto.SetDefault(nil)
-	body, code := getGroupInlineKeysRawViaHandler(t, id, groupID)
-	if code != 500 {
-		t.Fatalf("cipher 未配置 raw 应 HTTP 500, got %d body=%s", code, body)
-	}
-	if strings.Contains(body, "sk-rawnocipher-AAAA1111") {
-		t.Fatalf("500 响应泄漏明文: %s", body)
-	}
-}
-
-// TestStructured_GroupRaw_DecryptFailure_500 锁定「任一条解密失败整组拒绝」：明文替换是
-// 覆盖动作，部分成功会让前端把无法显示的条目静默替换掉。同时验证分工——详情路径对
-// 损坏密文退化为 **** 掩码（仍 200 可用、可按 id 保留），只有 raw 拒绝。
-func TestStructured_GroupRaw_DecryptFailure_500(t *testing.T) {
-	testsupport.InitTestDB(t)
-	setupProviderCrypto(t)
-
-	created := createProviderViaHandler(t, `{
-		"name":"p-rawfail",
-		"type":"openai",
-		"config":"{\"base_url\":\"https://api.example.com\"}",
-		"console":"","proxy":"",
-		"protocols":["openai"],
-		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[
-			{"id":0,"key":"sk-rawfail-AAAA1111"},
-			{"id":0,"key":"sk-rawfail-BBBB2222"}
-		]}]
-	}`)
-	id := uint(gjson.Get(created, "data.ID").Uint())
-	groupID := uint(gjson.Get(created, "data.Groups.0.ID").Uint())
-
-	// 损坏第一条密文（非 hex(nonce‖ciphertext)，GCM 解不开）
-	ctx := t.Context()
-	creds, err := repository.Default().Credential.ListByGroups(ctx, []uint{groupID}, nil)
-	if err != nil || len(creds) != 2 {
-		t.Fatalf("creds=%+v err=%v", creds, err)
-	}
-	if _, err := repository.Default().Credential.UpdateFields(ctx, creds[0].ID, map[string]any{"key": "not-a-valid-ciphertext"}); err != nil {
-		t.Fatalf("corrupt credential: %v", err)
-	}
-
-	body, code := getGroupInlineKeysRawViaHandler(t, id, groupID)
-	if code != 500 {
-		t.Fatalf("解密失败 raw 应 HTTP 500（整组拒绝）, got %d body=%s", code, body)
-	}
-	// 整组拒绝：另一条能解开的明文也不得出现在响应里
-	if strings.Contains(body, "sk-rawfail-BBBB2222") || strings.Contains(body, "sk-rawfail-AAAA1111") {
-		t.Fatalf("整组拒绝却返回了部分明文: %s", body)
-	}
-
-	// 详情路径不受影响：损坏条退化 **** 掩码，正常条照常掩码，仍 200
-	detailBody := getProviderViaHandler(t, id)
-	if gjson.Get(detailBody, "code").Int() != 200 {
-		t.Fatalf("详情应仍 200: %s", detailBody)
-	}
-	if got := gjson.Get(detailBody, "data.Groups.0.InlineKeys.0.KeyMasked").String(); got != "****" {
-		t.Fatalf("损坏密文应退化 ****，got %q body=%s", got, detailBody)
-	}
-	if got := gjson.Get(detailBody, "data.Groups.0.InlineKeys.1.KeyMasked").String(); got != "sk-****2222" {
-		t.Fatalf("正常条掩码应不受影响，got %q body=%s", got, detailBody)
-	}
-}
-
-// TestStructured_RejectsDuplicateReferenceID_400 锁定同一凭据被引用两次必须 400：
-// 一条凭据只能归属一个分组位置，重复引用会让保留/替换语义二义。
-func TestStructured_RejectsDuplicateReferenceID_400(t *testing.T) {
-	testsupport.InitTestDB(t)
-	setupProviderCrypto(t)
-
-	created := createProviderViaHandler(t, structuredCreateBody("p-dupref", "sk-dupref-AAAA1111"))
-	id := uint(gjson.Get(created, "data.ID").Uint())
-	ctx := t.Context()
-	groups, err := repository.Default().KeyGroup.ListByProvider(ctx, id)
-	if err != nil || len(groups) != 1 {
-		t.Fatalf("groups=%+v err=%v", groups, err)
-	}
-	creds, err := repository.Default().Credential.ListByGroups(ctx, []uint{groups[0].ID}, nil)
-	if err != nil || len(creds) != 1 {
-		t.Fatalf("creds=%+v err=%v", creds, err)
-	}
-	credID := strconv.FormatUint(uint64(creds[0].ID), 10)
-
-	updated := updateProviderViaHandler(t, id, `{
-		"name":"p-dupref",
-		"type":"openai",
-		"config":"{\"base_url\":\"https://api.example.com\"}",
-		"console":"","proxy":"",
-		"protocols":["openai"],
-		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[
-			{"id":`+credID+`,"key":""},
-			{"id":`+credID+`,"key":""}
-		]}]
-	}`)
-	if code := gjson.Get(updated, "code").Int(); code != 400 {
-		t.Fatalf("重复引用应 400, got %d body=%s", code, updated)
-	}
-	if msg := gjson.Get(updated, "message").String(); !strings.Contains(msg, "重复引用") {
-		t.Fatalf("错误文案应说明重复引用, got %q", msg)
-	}
-}
-
-// TestStructured_RejectsDuplicatePlaintext_400 锁定同组重复明文 400（对齐号池「同池重复
-// KeyHash 400」）：静默落两条同 KeyHash 凭据会让组内轮询给同一 key 双份流量权重。
-// 错误文案不得回显明文 key（防敏感值经 message 外泄到浏览器/日志）。
-func TestStructured_RejectsDuplicatePlaintext_400(t *testing.T) {
-	testsupport.InitTestDB(t)
-	setupProviderCrypto(t)
-
-	gin.SetMode(gin.TestMode)
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest("POST", "/providers", strings.NewReader(`{
-		"name":"p-dupplain",
-		"type":"openai",
-		"config":"{\"base_url\":\"https://api.example.com\"}",
-		"console":"","proxy":"",
-		"protocols":["openai"],
-		"endpoints":[{"protocol":"openai","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[
-			{"id":0,"key":"sk-dupplain-AAAA1111"},
-			{"id":0,"key":" sk-dupplain-AAAA1111 "}
-		]}]
-	}`))
-	c.Request.Header.Set("Content-Type", "application/json")
-	CreateProvider(c)
-
-	body := w.Body.String()
-	if code := gjson.Get(body, "code").Int(); code != 400 {
-		t.Fatalf("重复明文应 400, got %d body=%s", code, body)
-	}
-	if strings.Contains(body, "sk-dupplain-AAAA1111") {
-		t.Fatalf("错误响应不得回显明文 key: %s", body)
-	}
-	// 未落库：供应商不存在（校验在事务前拦截）
-	if exists, err := repository.Default().Provider.ExistsByName(t.Context(), "p-dupplain"); err != nil || exists {
-		t.Fatalf("重复明文被拒后不应创建供应商: exists=%v err=%v", exists, err)
+	if seen != 2 {
+		t.Fatalf("匹配到 %d 个组, want 2", seen)
 	}
 }

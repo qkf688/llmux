@@ -37,10 +37,7 @@ func newStatsFixture(t *testing.T, handler http.Handler) (*httptest.Server, func
 	if err := models.DB.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	grp := models.KeyGroup{ProviderID: providerRow.ID, Name: "g1", Weight: 1}
-	if err := models.DB.Create(&grp).Error; err != nil {
-		t.Fatalf("create key group: %v", err)
-	}
+	grp, poolID := seedPooledGroup(t, providerRow.ID, "g1", 1, "")
 	mwp := models.ModelWithProvider{ProviderID: providerRow.ID, ProviderModel: "pm1"}
 	if err := models.DB.Create(&mwp).Error; err != nil {
 		t.Fatalf("create model-provider: %v", err)
@@ -48,7 +45,7 @@ func newStatsFixture(t *testing.T, handler http.Handler) (*httptest.Server, func
 
 	plain := "sk-stats"
 	makeInput := func(note string) singleProviderAttemptInput {
-		cred := models.Credential{GroupID: &grp.ID, Key: mustEncrypt(t, cipher, plain), KeyHash: cipher.Hash(plain), Note: note}
+		cred := models.Credential{PoolID: poolID, Key: mustEncrypt(t, cipher, plain), KeyHash: cipher.Hash(plain), Note: note}
 		if err := models.DB.Create(&cred).Error; err != nil {
 			t.Fatalf("create credential: %v", err)
 		}

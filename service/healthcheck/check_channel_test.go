@@ -74,23 +74,12 @@ func seedEndpoint(t *testing.T, providerID uint, protocol, url string) models.En
 	return ep
 }
 
-// seedInlineGroup 建一个内联凭据分组；plainKeys 为空则建无凭据的组（模拟「组内全空」）。
-func seedInlineGroup(t *testing.T, cipher *credentialcrypto.Cipher, providerID uint, name string, plainKeys ...string) models.KeyGroup {
+// seedPoolGroup 建「号池 + 引用该池的分组」——凭据只存在于池内（内联凭据概念已删除：
+// 分组一律经 KeyGroup.PoolID 取池内凭据）。池名由组名派生，同一测试内多组不撞名。
+// plainKeys 为空则建池内无凭据的组（模拟「组内全空」）。
+func seedPoolGroup(t *testing.T, cipher *credentialcrypto.Cipher, providerID uint, groupName string, plainKeys ...string) (models.Pool, models.KeyGroup) {
 	t.Helper()
-	g := models.KeyGroup{ProviderID: providerID, Name: name, Weight: 1}
-	if err := models.DB.Create(&g).Error; err != nil {
-		t.Fatalf("create group %s: %v", name, err)
-	}
-	for _, k := range plainKeys {
-		seedCredential(t, cipher, &g.ID, nil, k)
-	}
-	return g
-}
-
-// seedPoolGroup 建「号池 + 引用该池的分组」——用户实际形态：凭据只存在于池内。
-func seedPoolGroup(t *testing.T, cipher *credentialcrypto.Cipher, providerID uint, groupName, poolName string, plainKeys ...string) (models.Pool, models.KeyGroup) {
-	t.Helper()
-	pool := models.Pool{Name: poolName}
+	pool := models.Pool{Name: "pool-" + groupName}
 	if err := models.DB.Create(&pool).Error; err != nil {
 		t.Fatalf("create pool: %v", err)
 	}
@@ -99,20 +88,19 @@ func seedPoolGroup(t *testing.T, cipher *credentialcrypto.Cipher, providerID uin
 		t.Fatalf("create group: %v", err)
 	}
 	for _, k := range plainKeys {
-		seedCredential(t, cipher, nil, &pool.ID, k)
+		seedCredential(t, cipher, pool.ID, k)
 	}
 	return pool, g
 }
 
-func seedCredential(t *testing.T, cipher *credentialcrypto.Cipher, groupID, poolID *uint, plain string) models.Credential {
+func seedCredential(t *testing.T, cipher *credentialcrypto.Cipher, poolID uint, plain string) models.Credential {
 	t.Helper()
-	return seedCredentialStatus(t, cipher, groupID, poolID, plain, models.CredentialStatusActive)
+	return seedCredentialStatus(t, cipher, poolID, plain, models.CredentialStatusActive)
 }
 
-func seedCredentialStatus(t *testing.T, cipher *credentialcrypto.Cipher, groupID, poolID *uint, plain, status string) models.Credential {
+func seedCredentialStatus(t *testing.T, cipher *credentialcrypto.Cipher, poolID uint, plain, status string) models.Credential {
 	t.Helper()
 	cred := models.Credential{
-		GroupID: groupID,
 		PoolID:  poolID,
 		Key:     mustEncrypt(t, cipher, plain),
 		KeyHash: cipher.Hash(plain),
@@ -154,7 +142,7 @@ func TestDoCheck_UsesEndpointURLAndPoolCredential(t *testing.T) {
 		t.Fatalf("create provider: %v", err)
 	}
 	seedEndpoint(t, provider.ID, "openai", srv.URL)
-	seedPoolGroup(t, cipher, provider.ID, "池组", "pool-1", "sk-pool-1")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "池组", "sk-pool-1")
 
 	if err := (&HealthChecker{}).doCheck(context.Background(), &provider, &models.ModelWithProvider{ProviderModel: "gpt-4.1"}); err != nil {
 		t.Fatalf("doCheck: %v（号池凭据未被使用即为 #21 缺陷）", err)
@@ -183,7 +171,7 @@ func TestDoCheck_AnthropicEndpointUsesAPIKeyHeader(t *testing.T) {
 		t.Fatalf("create provider: %v", err)
 	}
 	seedEndpoint(t, provider.ID, "anthropic", srv.URL)
-	seedInlineGroup(t, cipher, provider.ID, "g1", "sk-anthropic")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "g1", "sk-anthropic")
 
 	if err := (&HealthChecker{}).doCheck(context.Background(), &provider, &models.ModelWithProvider{ProviderModel: "claude-sonnet-4-5"}); err != nil {
 		t.Fatalf("doCheck: %v", err)
@@ -214,8 +202,8 @@ func TestDoCheck_FallsBackToNextGroupOnUpstreamFailure(t *testing.T) {
 		t.Fatalf("create provider: %v", err)
 	}
 	seedEndpoint(t, provider.ID, "openai", srv.URL)
-	seedInlineGroup(t, cipher, provider.ID, "坏key组", "sk-dead")
-	seedInlineGroup(t, cipher, provider.ID, "好key组", "sk-good")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "坏key组", "sk-dead")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "好key组", "sk-good")
 
 	if err := (&HealthChecker{}).doCheck(context.Background(), &provider, &models.ModelWithProvider{ProviderModel: "gpt-4.1"}); err != nil {
 		t.Fatalf("doCheck: %v（首个分组失败后应继续尝试其余分组）", err)
@@ -244,9 +232,9 @@ func TestDoCheck_SkipsGroupWithoutUsableCredential(t *testing.T) {
 		t.Fatalf("create provider: %v", err)
 	}
 	seedEndpoint(t, provider.ID, "openai", srv.URL)
-	dead := seedInlineGroup(t, cipher, provider.ID, "停用组")
-	seedCredentialStatus(t, cipher, &dead.ID, nil, "sk-disabled", models.CredentialStatusDisabled)
-	seedInlineGroup(t, cipher, provider.ID, "可用组", "sk-live")
+	deadPool, _ := seedPoolGroup(t, cipher, provider.ID, "停用组")
+	seedCredentialStatus(t, cipher, deadPool.ID, "sk-disabled", models.CredentialStatusDisabled)
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "可用组", "sk-live")
 
 	if err := (&HealthChecker{}).doCheck(context.Background(), &provider, &models.ModelWithProvider{ProviderModel: "gpt-4.1"}); err != nil {
 		t.Fatalf("doCheck: %v", err)
@@ -274,8 +262,8 @@ func TestDoCheck_NoUsableCredentialFailsWithoutHittingUpstream(t *testing.T) {
 		t.Fatalf("create provider: %v", err)
 	}
 	seedEndpoint(t, provider.ID, "openai", srv.URL)
-	g := seedInlineGroup(t, cipher, provider.ID, "全停用组")
-	seedCredentialStatus(t, cipher, &g.ID, nil, "sk-off", models.CredentialStatusDisabled)
+	offPool, _ := seedPoolGroup(t, cipher, provider.ID, "全停用组")
+	seedCredentialStatus(t, cipher, offPool.ID, "sk-off", models.CredentialStatusDisabled)
 
 	err := (&HealthChecker{}).doCheck(context.Background(), &provider, &models.ModelWithProvider{ProviderModel: "gpt-4.1"})
 	if err == nil {
@@ -304,7 +292,7 @@ func TestDoCheck_UpstreamFailureSurfacesStatusCode(t *testing.T) {
 		t.Fatalf("create provider: %v", err)
 	}
 	seedEndpoint(t, provider.ID, "openai", srv.URL)
-	seedInlineGroup(t, cipher, provider.ID, "g1", "sk-invalid")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "g1", "sk-invalid")
 
 	err := (&HealthChecker{}).doCheck(context.Background(), &provider, &models.ModelWithProvider{ProviderModel: "gpt-4.1"})
 	if err == nil {
@@ -334,7 +322,7 @@ func TestDoCheck_NoPrimaryEndpoint(t *testing.T) {
 	}
 	// 只有 anthropic 端点：openai 主协议端点缺失
 	seedEndpoint(t, provider.ID, "anthropic", srv.URL)
-	seedInlineGroup(t, cipher, provider.ID, "g1", "sk-1")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "g1", "sk-1")
 
 	err := (&HealthChecker{}).doCheck(context.Background(), &provider, &models.ModelWithProvider{ProviderModel: "gpt-4.1"})
 	if err == nil || !strings.Contains(err.Error(), "endpoint") {
@@ -387,7 +375,7 @@ func TestCheckSingleWithBatch_PoolCredentialLogsSuccess(t *testing.T) {
 		t.Fatalf("create provider: %v", err)
 	}
 	seedEndpoint(t, provider.ID, "openai", srv.URL)
-	_, _ = seedPoolGroup(t, cipher, provider.ID, "e2e组", "pool-e2e", "sk-e2e")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "e2e组", "sk-e2e")
 
 	model := models.Model{Name: "gpt-4.1"}
 	if err := models.DB.Create(&model).Error; err != nil {

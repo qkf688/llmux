@@ -51,7 +51,7 @@ func getCredentialInPool(c *gin.Context, ctx context.Context, poolID, credID uin
 		httpresp.InternalServerError(c, err)
 		return nil, nil, false
 	}
-	if cred.PoolID == nil || *cred.PoolID != poolID {
+	if cred.PoolID != poolID {
 		httpresp.NotFound(c, "Credential not found")
 		return nil, nil, false
 	}

@@ -13,38 +13,35 @@ import (
 )
 
 // TestListCredentials_FilterByOwnership 锁「归属只是列表过滤条件」这条域边界：
-// 号池凭据与分组内联凭据是同一类资源，pool_id / group_id 只是两个视图切口，
-// 不带过滤即全量。
+// 凭据一律归属号池，pool_id 是唯一的归属切口，不带过滤即全量。
 func TestListCredentials_FilterByOwnership(t *testing.T) {
 	initCredentialsTestDB(t)
-	poolID, _ := seedPoolCredential(t, "列表池", "sk-pool-ABCD1234", models.CredentialStatusActive)
-	_, groupID, _ := seedInlineCredential(t, "列表组", "sk-inline-ABCD1234", models.CredentialStatusActive, 0, "")
+	poolA, _ := seedPoolCredential(t, "列表池A", "sk-poolA-ABCD1234", models.CredentialStatusActive)
+	poolB, _ := seedPoolCredential(t, "列表池B", "sk-poolB-ABCD1234", models.CredentialStatusActive)
 
 	all, code := invoke(t, "GET", "/credentials", nil, "", ListCredentials)
 	if code != 200 || gjson.Get(all, "data.total").Int() != 2 {
 		t.Fatalf("不带过滤应回全量 2 条 body=%s", all)
 	}
 
-	byPool, _ := invoke(t, "GET", "/credentials?pool_id="+itoa(poolID), nil, "", ListCredentials)
+	byPool, _ := invoke(t, "GET", "/credentials?pool_id="+itoa(poolA), nil, "", ListCredentials)
 	if gjson.Get(byPool, "data.total").Int() != 1 {
 		t.Fatalf("pool_id 过滤 total=%d want 1 body=%s", gjson.Get(byPool, "data.total").Int(), byPool)
 	}
-	if got := gjson.Get(byPool, "data.items.0.PoolID").Uint(); got != uint64(poolID) {
+	if got := gjson.Get(byPool, "data.items.0.PoolID").Uint(); got != uint64(poolA) {
 		t.Fatalf("pool_id 过滤回错行 PoolID=%d body=%s", got, byPool)
 	}
 
-	byGroup, _ := invoke(t, "GET", "/credentials?group_id="+itoa(groupID), nil, "", ListCredentials)
-	if gjson.Get(byGroup, "data.total").Int() != 1 {
-		t.Fatalf("group_id 过滤 total=%d want 1 body=%s", gjson.Get(byGroup, "data.total").Int(), byGroup)
+	// 另一个池的凭据不得泄漏进过滤结果
+	if strings.Contains(byPool, "sk-poolB") {
+		t.Fatalf("pool_id 过滤泄漏他池凭据: %s", byPool)
 	}
-	if got := gjson.Get(byGroup, "data.items.0.GroupID").Uint(); got != uint64(groupID) {
-		t.Fatalf("group_id 过滤回错行 GroupID=%d body=%s", got, byGroup)
+	// PoolID 是普通 uint，响应恒为数值且键必存在（不再是可空指针）
+	poolKey := gjson.Get(byPool, "data.items.0.PoolID")
+	if !poolKey.Exists() || poolKey.Type != gjson.Number {
+		t.Fatalf("PoolID 应为数值且键存在, got %s", poolKey.Raw)
 	}
-	// 内联凭据的 PoolID 必须是 JSON null（前端据此判定归属；同时锁「三态键存在」）
-	poolKey := gjson.Get(byGroup, "data.items.0.PoolID")
-	if !poolKey.Exists() || poolKey.Type != gjson.Null {
-		t.Fatalf("内联凭据 PoolID 应为 null, got %s", poolKey.Raw)
-	}
+	_ = poolB
 }
 
 // TestListCredentials_StatusSearchPaginationMask 覆盖状态筛选、备注搜索、分页与掩码不泄漏。
@@ -97,7 +94,7 @@ func TestListCredentials_StatusSearchPaginationMask(t *testing.T) {
 // TestListCredentials_InvalidFilters 非法状态/非法归属过滤值一律 400（不静默按不过滤处理）。
 func TestListCredentials_InvalidFilters(t *testing.T) {
 	initCredentialsTestDB(t)
-	for _, query := range []string{"?status=bogus", "?pool_id=abc", "?group_id=0"} {
+	for _, query := range []string{"?status=bogus", "?pool_id=abc"} {
 		t.Run(query, func(t *testing.T) {
 			body, _ := invoke(t, "GET", "/credentials"+query, nil, "", ListCredentials)
 			if gjson.Get(body, "code").Int() != 400 {
@@ -131,7 +128,7 @@ func TestCreateCredential_Success_MaskNoLeak(t *testing.T) {
 	}
 
 	getBody, _ := invoke(t, "GET", "/credentials/"+itoa(credID), credentialParams(credID), "", GetCredential)
-	for _, k := range []string{"ID", "PoolID", "GroupID", "Status", "Note", "KeyMasked", "CooldownUntil",
+	for _, k := range []string{"ID", "PoolID", "Status", "Note", "KeyMasked", "CooldownUntil",
 		"CooldownReason", "FailCount", "LastUsedAt", "LastProbeAt", "TotalRequests", "TotalErrors",
 		"TotalTokens", "CreatedAt", "UpdatedAt"} {
 		if createV, getV := gjson.Get(body, "data."+k).Raw, gjson.Get(getBody, "data."+k).Raw; createV != getV {
@@ -171,11 +168,12 @@ func TestCreateCredential_Validation(t *testing.T) {
 	}
 }
 
-// TestUpdateCredential_RecoversInlineCredential 本域存在的意义：分组内联凭据被判停
+// TestUpdateCredential_RecoversStopsCredential 本域存在的意义：凭据被判停
 // （连续鉴权失败 → temp_unsched）后能人工恢复——切回 active 并清掉连败计数与判停原因。
-func TestUpdateCredential_RecoversInlineCredential(t *testing.T) {
+func TestUpdateCredential_RecoversStopsCredential(t *testing.T) {
 	initCredentialsTestDB(t)
-	_, _, credID := seedInlineCredential(t, "恢复组", "sk-recover-ABCD1234",
+	poolID := seedPool(t, "恢复池")
+	credID := seedCredential(t, poolID, "sk-recover-ABCD1234",
 		models.CredentialStatusTempUnsched, 3, "auth_fail")
 
 	body, _ := invoke(t, "PATCH", "/credentials/"+itoa(credID), credentialParams(credID),
@@ -215,7 +213,7 @@ func TestUpdateCredential_NoteAndValidation(t *testing.T) {
 	if got := gjson.Get(clearBody, "data.Note").String(); got != "" {
 		t.Fatalf("Note 应可清空 got=%q body=%s", got, clearBody)
 	}
-	if stored := reloadCredential(t, credID); stored.PoolID == nil || *stored.PoolID != poolID {
+	if stored := reloadCredential(t, credID); stored.PoolID != poolID {
 		t.Fatalf("更新备注不应改动归属: %+v", stored)
 	}
 
@@ -235,7 +233,7 @@ func TestUpdateCredential_NoteAndValidation(t *testing.T) {
 // （明文进浏览器缓存就绕过了前端的生命周期守卫）。
 func TestGetCredentialRaw_PlaintextNoStore(t *testing.T) {
 	initCredentialsTestDB(t)
-	_, _, credID := seedInlineCredential(t, "明文组", "sk-raw-ABCD1234", models.CredentialStatusActive, 0, "")
+	_, credID := seedPoolCredential(t, "明文池", "sk-raw-ABCD1234", models.CredentialStatusActive)
 
 	rec := rawRecorder(t, credID)
 	if rec.Code != 200 {
@@ -252,7 +250,7 @@ func TestGetCredentialRaw_PlaintextNoStore(t *testing.T) {
 // TestGetCredentialRaw_Failures 解密失败与 cipher 未配置都回 500，且不泄漏明文。
 func TestGetCredentialRaw_Failures(t *testing.T) {
 	initCredentialsTestDB(t)
-	_, _, credID := seedInlineCredential(t, "损坏组", "sk-tamper-ABCD1234", models.CredentialStatusActive, 0, "")
+	_, credID := seedPoolCredential(t, "损坏池", "sk-tamper-ABCD1234", models.CredentialStatusActive)
 
 	stored := reloadCredential(t, credID)
 	if _, err := repository.Default().Credential.UpdateFields(t.Context(), credID,

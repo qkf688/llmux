@@ -14,7 +14,7 @@ import (
 )
 
 // migrateLegacyProviders 把存量 Provider 的折叠形态展开为
-// 「1 端点 + 1 分组 + 1 内联凭据」，并清空 Config 中的明文 api_key（设计定案第 2 节「凭据加密」）。
+// 「1 端点 + 1 分组 + 1 号池 + 1 凭据」，并清空 Config 中的明文 api_key（设计定案第 2 节「凭据加密」）。
 //
 // 幂等：按 provider 查 endpoints/key_groups 存在性，已有则跳过；
 // 整体一个事务，任一步失败回滚——Config 只在凭据搬移成功后才被改写。
@@ -43,7 +43,7 @@ func migrateLegacyProviders(ctx context.Context, db *gorm.DB, cipher *credential
 }
 
 // migrateLegacyProvider 展开单个 Provider。
-// 分组已存在时直接返回：新表单（S6）写入的内联 key 走 credentials，不会碰 Config.api_key，
+// 分组已存在时直接返回：新表单（S6）写入的分组走号池引用，不会碰 Config.api_key，
 // 无需对「已有分组却仍带明文 api_key」的假设场景做防御性清理。
 func migrateLegacyProvider(tx *gorm.DB, p *Provider, cipher *credentialcrypto.Cipher) error {
 	protocol := string(consts.ProtocolOfType(p.Type))
@@ -87,11 +87,20 @@ func migrateLegacyProvider(tx *gorm.DB, p *Provider, cipher *credentialcrypto.Ci
 	if err != nil {
 		return fmt.Errorf("encrypt api_key for provider %d: %w", p.ID, err)
 	}
-	groupID := group.ID
+	// 凭据一律归属号池（内联凭据概念已删除）：为该 provider 建专属池，
+	// 分组引用它。池名带 provider id 避免同名冲突（Pool.Name 唯一索引）。
+	pool := &Pool{Name: fmt.Sprintf("legacy-%s-%d", p.Type, p.ID)}
+	if err := tx.Create(pool).Error; err != nil {
+		return fmt.Errorf("create pool for provider %d: %w", p.ID, err)
+	}
+	group.PoolID = &pool.ID
+	if err := tx.Model(group).Update("pool_id", pool.ID).Error; err != nil {
+		return fmt.Errorf("link pool to group for provider %d: %w", p.ID, err)
+	}
 	if err := tx.Create(&Credential{
 		Key:     encrypted,
 		KeyHash: cipher.Hash(apiKey),
-		GroupID: &groupID,
+		PoolID:  pool.ID,
 		Status:  CredentialStatusActive,
 	}).Error; err != nil {
 		return fmt.Errorf("create credential for provider %d: %w", p.ID, err)

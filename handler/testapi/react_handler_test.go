@@ -236,7 +236,7 @@ func TestTestReactHandler_NonSSEUpstreamEmitsErrorEvent(t *testing.T) {
 
 	provider := seedProviderRow(t, "p-react-nonsse", "openai")
 	seedEndpointRow(t, provider.ID, "openai", srv.URL)
-	seedPoolGroup(t, cipher, provider.ID, "react 池组", "pool-react-nonsse", "sk-react-nonsse")
+	_, _ = seedPoolGroup(t, cipher, provider.ID, "react 池组", "", "sk-react-nonsse")
 	mwp := seedAssociation(t, provider.ID, 1, "gpt-4.1")
 
 	// 兜底缺失时库内 panic 从这里直穿上抛，测试进程挂 = 用例红（改前实测）。

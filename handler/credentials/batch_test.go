@@ -10,13 +10,14 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// TestBatchUpdateCredentialStatus_AcrossOwners 批量启停按 ID 生效，不分归属：
-// 号池凭据与分组内联凭据混在一批里一次恢复——这是「凭据是第一等资源」的直接后果，
-// 也是内联 key 被判停后最省事的人工恢复路径。
-func TestBatchUpdateCredentialStatus_AcrossOwners(t *testing.T) {
+// TestBatchUpdateCredentialStatus_AcrossPools 批量启停按 ID 生效，不分归属：
+// 不同号池的凭据混在一批里一次恢复——这是「凭据是第一等资源」的直接后果，
+// 也是被判停后最省事的人工恢复路径。
+func TestBatchUpdateCredentialStatus_AcrossPools(t *testing.T) {
 	initCredentialsTestDB(t)
 	_, poolCred := seedPoolCredential(t, "批量池", "sk-batch-pool-ABCD1234", models.CredentialStatusTempUnsched)
-	_, _, inlineCred := seedInlineCredential(t, "批量组", "sk-batch-inline-ABCD1234",
+	poolB := seedPool(t, "批量池B")
+	otherCred := seedCredential(t, poolB, "sk-batch-other-ABCD1234",
 		models.CredentialStatusTempUnsched, 3, "auth_fail")
 	// 池凭据也补上连败痕迹（恢复须一并清掉）
 	if _, err := repository.Default().Credential.UpdateFields(t.Context(), poolCred,
@@ -24,7 +25,7 @@ func TestBatchUpdateCredentialStatus_AcrossOwners(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	payload := `{"ids":[` + itoa(poolCred) + `,` + itoa(inlineCred) + `],"status":"active"}`
+	payload := `{"ids":[` + itoa(poolCred) + `,` + itoa(otherCred) + `],"status":"active"}`
 	body, _ := invoke(t, "PATCH", "/credentials/status", nil, payload, BatchUpdateCredentialStatus)
 	if gjson.Get(body, "code").Int() != 200 {
 		t.Fatalf("批量恢复应 200 body=%s", body)
@@ -32,7 +33,7 @@ func TestBatchUpdateCredentialStatus_AcrossOwners(t *testing.T) {
 	if got := gjson.Get(body, "data.updated").Int(); got != 2 {
 		t.Fatalf("updated=%d want 2 body=%s", got, body)
 	}
-	for _, id := range []uint{poolCred, inlineCred} {
+	for _, id := range []uint{poolCred, otherCred} {
 		stored := reloadCredential(t, id)
 		if stored.Status != models.CredentialStatusActive || stored.FailCount != 0 || stored.CooldownReason != "" {
 			t.Fatalf("凭据 %d 恢复不完整: %+v", id, stored)
@@ -71,19 +72,20 @@ func TestBatchUpdateCredentialStatus_RowsAffectedCountsHits(t *testing.T) {
 	}
 }
 
-// TestBatchDeleteCredentials_ByIDs 批量软删按 ID 生效，跨归属一并删；空 ids 400。
+// TestBatchDeleteCredentials_ByIDs 批量软删按 ID 生效，跨池一并删；空 ids 400。
 func TestBatchDeleteCredentials_ByIDs(t *testing.T) {
 	initCredentialsTestDB(t)
 	poolID, poolCred := seedPoolCredential(t, "批量删除池", "sk-bdel-pool-ABCD1234", models.CredentialStatusActive)
-	_, _, inlineCred := seedInlineCredential(t, "批量删除组", "sk-bdel-inline-ABCD1234", models.CredentialStatusActive, 0, "")
+	poolB := seedPool(t, "批量删除池B")
+	otherCred := seedPoolMember(t, poolB, "sk-bdel-other-ABCD1234", models.CredentialStatusActive)
 	survivor := seedPoolMember(t, poolID, "sk-bdel-survivor-ABCD1234", models.CredentialStatusActive)
 
 	body, _ := invoke(t, "DELETE", "/credentials/batch", nil,
-		`{"ids":[`+itoa(poolCred)+`,`+itoa(inlineCred)+`]}`, BatchDeleteCredentials)
+		`{"ids":[`+itoa(poolCred)+`,`+itoa(otherCred)+`]}`, BatchDeleteCredentials)
 	if got := gjson.Get(body, "data.deleted").Int(); got != 2 {
 		t.Fatalf("deleted=%d want 2 body=%s", got, body)
 	}
-	for _, id := range []uint{poolCred, inlineCred} {
+	for _, id := range []uint{poolCred, otherCred} {
 		if after, _ := invoke(t, "GET", "/credentials/"+itoa(id), credentialParams(id), "", GetCredential); gjson.Get(after, "code").Int() != 404 {
 			t.Fatalf("凭据 %d 未被软删 body=%s", id, after)
 		}

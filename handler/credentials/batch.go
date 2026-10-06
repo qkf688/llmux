@@ -8,7 +8,7 @@ import (
 )
 
 // BatchUpdateCredentialStatus 批量启停凭据（按 ID，不设归属限界）。
-// 内联凭据被判停后的人工恢复走这里（或单条 PATCH）——这是它唯一的状态写入口。
+// 被判停后的人工恢复走这里（或单条 PATCH）——这是它唯一的状态写入口。
 // PATCH /api/credentials/status
 func BatchUpdateCredentialStatus(c *gin.Context) {
 	var req BatchCredentialStatusRequest

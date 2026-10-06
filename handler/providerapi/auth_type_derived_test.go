@@ -20,7 +20,8 @@ import (
 
 // authDeriveBody 构造指定 type/config 的全量结构化写入体。config 经 json.Marshal +
 // strconv.Quote 两层正规转义进外层 JSON，不手写反斜杠（嵌套 JSON 手写转义必错）。
-func authDeriveBody(name, providerType string, config map[string]any) string {
+// 分组必填号池引用（内联凭据已删除），故带 poolID 参数。
+func authDeriveBody(name, providerType string, config map[string]any, poolID uint) string {
 	cfg, err := json.Marshal(config)
 	if err != nil {
 		panic(err)
@@ -33,14 +34,15 @@ func authDeriveBody(name, providerType string, config map[string]any) string {
 		"proxy":"",
 		"protocols":["` + providerType + `"],
 		"endpoints":[{"protocol":"` + providerType + `","url":"","enabled":true}],
-		"groups":[{"name":"默认组","weight":1,"source":"inline","inline_keys":[{"id":0,"key":"sk-test-ABCD1234"}]}]
+		"groups":[{"name":"默认组","weight":1,"pool_id":` + strconv.FormatUint(uint64(poolID), 10) + `}]
 	}`
 }
 
 // createAndGetAuthType 建供应商后 GET 详情，返回详情响应体与新建 ID。
+// 池名由供应商名派生，保证同一测试库内池名唯一（Pool.Name 有 uniqueIndex）。
 func createAndGetAuthType(t *testing.T, name, providerType string, config map[string]any) (string, uint) {
 	t.Helper()
-	createBody := createProviderViaHandler(t, authDeriveBody(name, providerType, config))
+	createBody := createProviderViaHandler(t, authDeriveBody(name, providerType, config, seedPool(t, name+"-池")))
 	id := uint(gjson.Get(createBody, "data.ID").Uint())
 	if id == 0 {
 		t.Fatalf("create missing ID: %s", createBody)
@@ -61,7 +63,7 @@ func TestProviderAuthType_DerivedRejectsDrift(t *testing.T) {
 		t.Fatalf("创建后 AuthType = %q, want %q（派生自 config.auth_type）。body=%s", got, "x-api-key", body)
 	}
 
-	driftBody := strings.Replace(authDeriveBody("p-auth-drift", "anthropic", cfg),
+	driftBody := strings.Replace(authDeriveBody("p-auth-drift", "anthropic", cfg, seedPool(t, "p-auth-drift-池2")),
 		`"proxy":"",`, `"proxy":"","auth_type":"bearer",`, 1)
 	updateProviderViaHandler(t, id, driftBody)
 
@@ -118,7 +120,7 @@ func TestProviderAuthType_NotPersisted(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 	c.Params = gin.Params{{Key: "id", Value: strconv.FormatUint(uint64(id), 10)}}
 	c.Request = httptest.NewRequest("PUT", "/providers/"+strconv.FormatUint(uint64(id), 10),
-		strings.NewReader(authDeriveBody("p-auth-nopersist", "anthropic", cfg)))
+		strings.NewReader(authDeriveBody("p-auth-nopersist", "anthropic", cfg, seedPool(t, "p-auth-nopersist-池2"))))
 	c.Request.Header.Set("Content-Type", "application/json")
 	UpdateProvider(c)
 	if w.Code != 200 {

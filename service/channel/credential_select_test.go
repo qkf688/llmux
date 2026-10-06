@@ -158,6 +158,7 @@ func TestRetryCredential_SkipsCooldown_LocksGroupAndEndpoint(t *testing.T) {
 
 	groupID := uint(3)
 	endpointID := uint(5)
+	poolID := uint(7)
 	enc1, err := cipher.Encrypt("sk-key1")
 	if err != nil {
 		t.Fatalf("encrypt key1: %v", err)
@@ -179,13 +180,13 @@ func TestRetryCredential_SkipsCooldown_LocksGroupAndEndpoint(t *testing.T) {
 				{Model: gorm.Model{ID: endpointID}, ProviderID: 1, Protocol: "openai", URL: "https://ep.example/claude/v1", Enabled: true},
 			},
 			Groups: []models.KeyGroup{
-				{Model: gorm.Model{ID: groupID}, ProviderID: 1, Name: "g1", Weight: 1},
+				{Model: gorm.Model{ID: groupID}, ProviderID: 1, Name: "g1", Weight: 1, PoolID: &poolID},
 			},
 			CredentialsByGroup: map[uint][]models.Credential{
 				groupID: {
 					// 按 ID ASC 候选顺序：key1 在前，轮询首现命中 key1
-					{Model: gorm.Model{ID: 11}, GroupID: &groupID, Key: enc1, KeyHash: cipher.Hash("sk-key1"), CooldownUntil: cooldown[11]},
-					{Model: gorm.Model{ID: 12}, GroupID: &groupID, Key: enc2, KeyHash: cipher.Hash("sk-key2"), CooldownUntil: cooldown[12]},
+					{Model: gorm.Model{ID: 11}, PoolID: poolID, Key: enc1, KeyHash: cipher.Hash("sk-key1"), CooldownUntil: cooldown[11]},
+					{Model: gorm.Model{ID: 12}, PoolID: poolID, Key: enc2, KeyHash: cipher.Hash("sk-key2"), CooldownUntil: cooldown[12]},
 				},
 			},
 		}

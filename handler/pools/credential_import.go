@@ -142,7 +142,7 @@ func importCredentialRows(ctx context.Context, repo repository.CredentialRepo, p
 			data.Rows = append(data.Rows, BatchImportRow{Index: i, Key: credentialcrypto.MaskKey(trimmed), Status: importStatusFailed, Reason: importReasonEncryptFailed})
 			continue
 		}
-		if err := repo.Create(ctx, &models.Credential{Key: enc, KeyHash: h, PoolID: &poolID, Status: models.CredentialStatusActive}); err != nil {
+		if err := repo.Create(ctx, &models.Credential{Key: enc, KeyHash: h, PoolID: poolID, Status: models.CredentialStatusActive}); err != nil {
 			data.Failed++
 			data.Rows = append(data.Rows, BatchImportRow{Index: i, Key: credentialcrypto.MaskKey(trimmed), Status: importStatusFailed, Reason: importReasonDBFailed})
 			continue

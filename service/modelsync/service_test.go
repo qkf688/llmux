@@ -85,16 +85,22 @@ func seedOpenAIChannel(t *testing.T, db *gorm.DB, cipher *credentialcrypto.Ciphe
 
 	groups := make([]models.KeyGroup, 0, len(groupCreds))
 	for i, plain := range groupCreds {
+		// 内联凭据已删除：分组一律引用号池，凭据落池内。
+		pool := models.Pool{Name: fmt.Sprintf("pool-g%d", i+1)}
+		if err := db.Create(&pool).Error; err != nil {
+			t.Fatalf("create pool: %v", err)
+		}
 		g := models.KeyGroup{
 			ProviderID: provider.ID,
 			Name:       fmt.Sprintf("g%d", i+1),
 			Weight:     1,
+			PoolID:     &pool.ID,
 		}
 		if err := db.Create(&g).Error; err != nil {
 			t.Fatalf("create group: %v", err)
 		}
 		cred := models.Credential{
-			GroupID: &g.ID,
+			PoolID:  pool.ID,
 			Key:     mustEncryptKey(t, cipher, plain),
 			KeyHash: cipher.Hash(plain),
 			Status:  models.CredentialStatusActive,

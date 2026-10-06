@@ -15,23 +15,18 @@ import (
 	"gorm.io/gorm"
 )
 
-// 凭据域（`/api/credentials`）：凭据是第一等资源，归属（pool_id / group_id）只是它的
+// 凭据域（`/api/credentials`）：凭据是第一等资源，归属（pool_id）只是它的
 // 字段与列表过滤条件。为什么独立成域：启停、备注、掩码、以后的凭据级设置（如重试次数）
-// 只在这里实现一次，号池页与供应商分组弹窗共用——按归属各写一份必然漂移
+// 只在这里实现一次，号池页与供应商分组页共用——按归属各写一份必然漂移
 // （原先内联凭据就因为「启停只在号池域」而无法人工恢复，见设计定案第 5 节状态机出口）。
 
-// ListCredentials 凭据列表：归属过滤（pool_id / group_id，可都不带 = 全量）、状态筛选、
+// ListCredentials 凭据列表：归属过滤（pool_id，可不带 = 全量）、状态筛选、
 // 备注关键词 + 分页。归属过滤只存在于读路径。
-// GET /api/credentials?pool_id=&group_id=&status=&q=&page=&page_size=
+// GET /api/credentials?pool_id=&status=&q=&page=&page_size=
 func ListCredentials(c *gin.Context) {
 	poolID, ok := parseUintQuery(c, "pool_id")
 	if !ok {
 		httpresp.BadRequest(c, "Invalid pool_id")
-		return
-	}
-	groupID, ok := parseUintQuery(c, "group_id")
-	if !ok {
-		httpresp.BadRequest(c, "Invalid group_id")
 		return
 	}
 	page, pageSize, ok := httpx.ParsePaginationStrict(c)
@@ -50,10 +45,9 @@ func ListCredentials(c *gin.Context) {
 	}
 
 	creds, total, err := repos().Credential.ListPaged(c.Request.Context(), repository.CredentialFilter{
-		PoolID:  poolID,
-		GroupID: groupID,
-		Status:  status,
-		Q:       c.Query("q"),
+		PoolID: poolID,
+		Status: status,
+		Q:      c.Query("q"),
 	}, page, pageSize)
 	if err != nil {
 		httpresp.InternalServerError(c, err)
@@ -83,7 +77,6 @@ func GetCredential(c *gin.Context) {
 }
 
 // CreateCredential 往号池新增一条凭据（池内 KeyHash 去重 + AES-GCM 加密落库）。
-// 分组内联凭据不走这里（见 CreateCredentialRequest.PoolID 注释）。
 // POST /api/credentials
 func CreateCredential(c *gin.Context) {
 	var req CreateCredentialRequest
@@ -137,7 +130,7 @@ func CreateCredential(c *gin.Context) {
 	cred := &models.Credential{
 		Key:     enc,
 		KeyHash: hash,
-		PoolID:  &req.PoolID,
+		PoolID:  req.PoolID,
 		Status:  models.CredentialStatusActive,
 		Note:    req.Note,
 	}
@@ -232,9 +225,8 @@ func UpdateCredential(c *gin.Context) {
 	httpresp.Success(c, credview.ViewOf(*updated))
 }
 
-// DeleteCredential 删除单条凭据（软删）。内联凭据的删除走供应商表单（syncGroups 清理
-// 未提交条目）——此处删除同样有效，但那样会与表单下一次保存的「按 hash 复用」产生
-// 语义交叉，管理端 UI 不提供该入口。
+// DeleteCredential 删除单条凭据（软删）。凭据只归属号池，供应商表单不持有凭据，
+// 故此入口是凭据删除的唯一写路径（管理端 UI 在号池页提供）。
 // DELETE /api/credentials/:id
 func DeleteCredential(c *gin.Context) {
 	id, ok := httpx.ParseUintParamAllowZero(c, "id")
@@ -253,7 +245,7 @@ func DeleteCredential(c *gin.Context) {
 
 // requireCredential 按 ID 取凭据：不存在写 404（返回 false，响应已写出）。
 // 凭据是第一等资源后，读路径不再有「越池/越组」概念——ID 就是资源标识，
-// 归属校验只在列表过滤与分组级聚合端点（providerapi 内联明文）里需要。
+// 归属校验只在列表过滤（pool_id）里需要。
 func requireCredential(c *gin.Context, id uint) (*models.Credential, bool) {
 	cred, err := repos().Credential.Get(c.Request.Context(), id)
 	if err != nil {

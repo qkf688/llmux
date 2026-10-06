@@ -50,13 +50,10 @@ func TestProbeRecoverInGroup_RestoresAndSelectable(t *testing.T) {
 	if err := models.DB.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	grp := models.KeyGroup{ProviderID: provider.ID, Name: "g1", Weight: 1}
-	if err := models.DB.Create(&grp).Error; err != nil {
-		t.Fatalf("create group: %v", err)
-	}
+	grp, poolID := seedPooledGroup(t, provider.ID, "g1", 1, "")
 	plain := "sk-recover"
 	cred := models.Credential{
-		GroupID:        &grp.ID,
+		PoolID:         poolID,
 		Key:            mustEncrypt(t, cipher, plain),
 		KeyHash:        cipher.Hash(plain),
 		Status:         models.CredentialStatusTempUnsched,
@@ -141,21 +138,15 @@ func TestProbeRecoverInGroup_LocksExhaustedGroup(t *testing.T) {
 	if err := models.DB.Create(&ep).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	g1 := models.KeyGroup{ProviderID: provider.ID, Name: "exhausted", Weight: 1}
-	g2 := models.KeyGroup{ProviderID: provider.ID, Name: "healthy", Weight: 1}
-	if err := models.DB.Create(&g1).Error; err != nil {
-		t.Fatalf("create g1: %v", err)
-	}
-	if err := models.DB.Create(&g2).Error; err != nil {
-		t.Fatalf("create g2: %v", err)
-	}
+	g1, g1Pool := seedPooledGroup(t, provider.ID, "exhausted", 1, "")
+	_, g2Pool := seedPooledGroup(t, provider.ID, "healthy", 1, "")
 	// g1 仅 temp_unsched；g2 有 active——若二次 SelectGroup 切到 g2，探活会跳过（无 temp_unsched）
 	c1 := models.Credential{
-		GroupID: &g1.ID, Key: mustEncrypt(t, cipher, "sk-g1"), KeyHash: cipher.Hash("sk-g1"),
+		PoolID: g1Pool, Key: mustEncrypt(t, cipher, "sk-g1"), KeyHash: cipher.Hash("sk-g1"),
 		Status: models.CredentialStatusTempUnsched, CooldownReason: "auth_fail", FailCount: 3,
 	}
 	c2 := models.Credential{
-		GroupID: &g2.ID, Key: mustEncrypt(t, cipher, "sk-g2"), KeyHash: cipher.Hash("sk-g2"),
+		PoolID: g2Pool, Key: mustEncrypt(t, cipher, "sk-g2"), KeyHash: cipher.Hash("sk-g2"),
 		Status: models.CredentialStatusActive,
 	}
 	if err := models.DB.Create(&c1).Error; err != nil {

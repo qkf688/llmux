@@ -182,19 +182,21 @@ export function AssociationFilterPanel({
       placeholder="搜索提供商、模型名称或ID..."
       value={searchKeyword}
       onChange={onSearchKeywordChange}
-      className="hidden sm:block"
     />
   );
 
   return (
     <>
-      <PageToolbar>
+      {/* 桌面端卡片 1：缩小范围（4 个筛选 + 搜索）。与卡片 2 的操作区拆开，
+          避免 9 个控件挤在同一条线上、无从分辨哪几个是筛选哪几个是动作。
+          显隐由本卡片自己接管（hidden sm:flex），子项不必再逐个标 hidden——
+          否则窄屏下空卡片仍是一个 flex 项、被 gap 撑出多余间距。 */}
+      <PageToolbar className="hidden sm:flex">
         <ToolbarFilter
           label="关联模型"
           value={selectedModelId?.toString() || ""}
           onValueChange={onModelChange}
           placeholder="选择模型"
-          className="hidden sm:flex"
         >
           {modelOptions}
         </ToolbarFilter>
@@ -204,7 +206,6 @@ export function AssociationFilterPanel({
           value={selectedProviderType}
           onValueChange={onSelectedProviderTypeChange}
           placeholder="按类型筛选"
-          className="hidden sm:flex"
         >
           <SelectItem value="all">全部类型</SelectItem>
           {providerTypes.map((type) => (
@@ -219,7 +220,6 @@ export function AssociationFilterPanel({
           value={selectedProviderFilter}
           onValueChange={onSelectedProviderFilterChange}
           placeholder="按提供商筛选"
-          className="hidden sm:flex"
         >
           <SelectItem value="all">全部提供商</SelectItem>
           {providerOptions}
@@ -230,16 +230,22 @@ export function AssociationFilterPanel({
           value={selectedStatusFilter}
           onValueChange={onSelectedStatusFilterChange}
           placeholder="按状态筛选"
-          className="hidden sm:flex"
         >
           <SelectItem value="all">全部状态</SelectItem>
           <SelectItem value="enabled">已启用</SelectItem>
           <SelectItem value="disabled">未启用</SelectItem>
         </ToolbarFilter>
+      </PageToolbar>
 
+      {/* 卡片 2：对当前结果做什么（操作 / 维护 / 批量 / 新建）。
+          justify-end 让按钮靠右；flex-wrap 保证窄屏时在卡内换行而不是溢出。
+          与卡片 1 分开而不是塞进同一张卡：批量操作的破坏性动作与筛选条件混排时，
+          调整筛选会顺带把「批量删除」挪到眼前，误点成本比少一次点击高。 */}
+      <PageToolbar className="hidden sm:flex flex-row items-center justify-between">
+        {/* 搜索框占满左侧剩余空间，按钮组保持自身宽度贴右 */}
         {desktopSearch}
-
-        <div className="hidden sm:flex gap-2 flex-shrink-0">
+        {/* 桌面端按钮组 */}
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button
             variant="outline"
             className="h-8 text-xs"
@@ -274,7 +280,7 @@ export function AssociationFilterPanel({
               </Button>
             </DropdownMenuTrigger>
 
-            <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuItem
                 disabled={selectedAssociationCount === 0}
                 onSelect={() => {
@@ -410,9 +416,15 @@ export function AssociationFilterPanel({
             添加关联
           </Button>
         </div>
+      </PageToolbar>
 
-        {/* 移动端：模型选择器 + 筛选按钮合并一行 */}
-        <div className="flex w-full gap-2 sm:hidden">
+      {/* 移动端：单卡，完整保留拆卡前的排布（模型选择器 + 筛选按钮 / 激活条件芯片 /
+          搜索框 + 图标按钮组）。拆卡只针对桌面端——窄屏一行放不下 9 个控件，
+          再拆成两张卡会让筛选与动作被卡片边界切成两半，反而更难扫。
+          显隐由本卡片自己接管，与上面两张桌面卡互斥。 */}
+      <PageToolbar className="sm:hidden">
+        {/* 模型选择器 + 筛选按钮合并一行 */}
+        <div className="flex w-full gap-2">
           <div className="flex-1 min-w-0">{mobileModelSelect}</div>
           <Button
             variant="outline"
@@ -432,9 +444,9 @@ export function AssociationFilterPanel({
           </Button>
         </div>
 
-        {/* 移动端：筛选激活条件芯片行 */}
+        {/* 筛选激活条件芯片行 */}
         {activeFilterCount > 0 && (
-          <div className="flex w-full flex-wrap gap-1.5 sm:hidden">
+          <div className="flex w-full flex-wrap gap-1.5">
             {selectedProviderType !== "all" && (
               <FilterChip
                 label="类型"
@@ -463,8 +475,8 @@ export function AssociationFilterPanel({
           </div>
         )}
 
-        {/* 移动端：搜索框 + 图标按钮组 */}
-        <div className="flex w-full flex-col gap-2 sm:hidden">
+        {/* 搜索框 + 图标按钮组 */}
+        <div className="flex w-full flex-col gap-2">
           <ToolbarSearch
             ariaLabel="搜索关联"
             placeholder="搜索提供商、模型名称或ID..."

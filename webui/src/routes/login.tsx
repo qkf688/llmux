@@ -21,7 +21,7 @@ const MoonIcon = (
 const SunIcon = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="size-[18px]">
     <circle cx="12" cy="12" r="4" />
-    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l1.41 1.41" />
   </svg>
 );
 
@@ -49,10 +49,19 @@ const Logo = ({ size = 36 }: { size?: number }) => (
   </svg>
 );
 
+/** 登录失败提示文案：静态常量，不取后端 message。登录失败对用户只有一个可执行动作（重试），
+ *  后端回的是英文技术文案（500 路径还带 [req=xxx] 内部编号），原样上屏既不本地化也漏内部信息。
+ *  与过期提示同源：UI 文案由前端出，后端 message 不当信息通道。 */
+const LOGIN_ERROR_TEXT = "登录失败，请重试";
+
+/** 提示节点 id：供输入框 aria-describedby 绑定（视觉位置之外再给读屏一条通路）。 */
+const LOGIN_ERROR_ID = "login-error";
+
 export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
+  // 只记「是否失败」不记文案：文案是常量，存内容等于多一份会与常量漂移的真值
+  const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(false);
   // 一次性过期提示（401 掉线跳转写入）：渲染期只做非破坏性读取（渲染要保持纯净，
   // 被中断重建的渲染丢不了提示），挂载后统一清除 = 只展示一次；文案渲染侧取常量，
@@ -73,14 +82,15 @@ export default function LoginPage() {
     e.preventDefault();
     if (!trimmed || loading) return;
 
-    setError("");
+    setFailed(false);
     setLoading(true);
     try {
       const res = await loginApi(trimmed);
       setSession(res.token, res.user);
       navigate("/");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "登录失败");
+    } catch {
+      // 只标失败态，不带 err 内容进渲染——文案是上面的常量
+      setFailed(true);
     } finally {
       setLoading(false);
     }
@@ -109,61 +119,66 @@ export default function LoginPage() {
             <span className="text-xl font-semibold tracking-tight text-foreground">LLMux</span>
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground mb-1.5">登录</h1>
-            <p className="text-sm text-muted-foreground mb-6">输入管理员密码以访问系统</p>
+          <p className="text-sm text-muted-foreground mb-6">输入管理员密码以访问系统</p>
 
-            {showExpiryNotice && (
-              <p
-                className="text-[13px] text-foreground border border-border bg-card rounded-md px-3 py-2 mb-4"
-                role="status"
-              >
-                {LOGIN_EXPIRY_NOTICE_TEXT}
-              </p>
-            )}
+          {showExpiryNotice && (
+            <p
+              className="text-[13px] text-foreground border border-border bg-card rounded-md px-3 py-2 mb-4"
+              role="status"
+            >
+              {LOGIN_EXPIRY_NOTICE_TEXT}
+            </p>
+          )}
 
-            <form onSubmit={handleLogin} noValidate>
-              <div className="mb-4">
-                <Label htmlFor="password" className="block text-[13px] font-medium text-foreground mb-1.5">
-                  密码
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      if (error) setError("");
-                    }}
-                    placeholder="请输入密码"
-                    autoComplete="current-password"
-                    autoFocus
-                    disabled={loading}
-                    className="h-11 pr-11"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    aria-label={showPassword ? "隐藏密码" : "显示密码"}
-                    className="absolute top-1/2 right-2.5 -translate-y-1/2 flex items-center justify-center size-7 text-muted-foreground hover:text-foreground transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                  >
-                    {showPassword ? EyeOffIcon : EyeIcon}
-                  </button>
-                </div>
+          <form onSubmit={handleLogin} noValidate>
+            <div className="mb-4">
+              <Label htmlFor="password" className="block text-[13px] font-medium text-foreground mb-1.5">
+                密码
+              </Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (failed) setFailed(false);
+                  }}
+                  placeholder="请输入密码"
+                  autoComplete="current-password"
+                  autoFocus
+                  disabled={loading}
+                  aria-invalid={failed || undefined}
+                  aria-describedby={failed ? LOGIN_ERROR_ID : undefined}
+                  className="h-11 pr-11"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "隐藏密码" : "显示密码"}
+                  className="absolute top-1/2 right-2.5 -translate-y-1/2 flex items-center justify-center size-7 text-muted-foreground hover:text-foreground transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                >
+                  {showPassword ? EyeOffIcon : EyeIcon}
+                </button>
               </div>
-
-              {error && (
-                <p className="text-[13px] text-destructive -mt-2 mb-4" role="alert">{error}</p>
+              {/* 错误提示归入密码字段组：它是这个字段的校验结果，不是漂浮在表单里的独立段落。
+                  mt-1.5 与 Label 的 mb-1.5 同一节奏，下方间距由本组 mb-4 统一收口。 */}
+              {failed && (
+                <p id={LOGIN_ERROR_ID} className="mt-1.5 text-[13px] text-destructive" role="alert">
+                  {LOGIN_ERROR_TEXT}
+                </p>
               )}
+            </div>
 
-              <Button
-                type="submit"
-                disabled={loading || !trimmed}
-                className="w-full h-11 text-[15px] font-semibold tracking-wide"
-              >
-                {loading ? "登录中..." : "登录"}
-              </Button>
-            </form>
+            <Button
+              type="submit"
+              disabled={loading || !trimmed}
+              className="w-full h-11 text-[15px] font-semibold tracking-wide"
+            >
+              {loading ? "登录中..." : "登录"}
+            </Button>
+          </form>
         </main>
       </div>
     </div>

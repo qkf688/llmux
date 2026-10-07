@@ -93,9 +93,10 @@ func TestModelWithProviderResponse_KeysPresent_WhenSet(t *testing.T) {
 // 走 KeyStateUnset：三态键在空值态下必须为 null——被悄悄赋上值（继承语义写成显式值）
 // 也要红，那正是前端会把「继承」误判成 override 的形态。
 //
-// 记录经 repository 直造而非 handler：Create / Update 会把 ToolCall /
-// StructuredOutput / Image / WithHeader 一律赋成非 nil 指针（请求 DTO 用的是 bool），
-// 走 handler 构造不出「全继承」这一行。本用例只测序列化层形状，与写入路径无关。
+// 空值态这一行经 repository 直造而非 handler：Create / Update 写不出「全继承」行——
+// `WithHeader` 必被赋 `&req.WithHeader`、`CustomerHeaders` 兜底成非 nil map、Create 还会把
+// `Status` 写成 `&true`（能力三项与 SupportsThinking / ThinkingLevels / MaxTokens 都是原样
+// 透传的指针，本身可以构造 nil）。本用例只测序列化层形状，与写入路径无关。
 func TestModelWithProviderResponse_KeysPresent_WhenUnset(t *testing.T) {
 	testsupport.InitTestDB(t)
 

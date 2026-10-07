@@ -45,6 +45,8 @@ func TestAPIResponseKeysErr(t *testing.T) {
 		// （否则空值态会顺带变成「类型也不查」的后门）。
 		{name: "空值态非 nilable 类型漂移仍红", body: `{"id":"1","flag":null}`, state: KeyStateUnset, want: want,
 			wantErr: "type = String, want Number"},
+		// 未知态必须报错：静默退化成「不校验方向」等于方向校验整体 fail-open。
+		{name: "未知态红", body: body, state: KeyState(7), want: want, wantErr: "未知 KeyState"},
 	}
 
 	for _, tc := range cases {
@@ -71,11 +73,9 @@ func TestAssertAPIResponseKeysInState_AnyMatchesLegacy(t *testing.T) {
 		{Key: "id", WantSetType: gjson.Number},
 		{Key: "flag", WantSetType: gjson.True, Nilable: true},
 	}
-	// 三态键为 null：默认态通过（既有语义），有值态红、空值态也通过。
+	// 三态键为 null：默认态（KeyStateAny —— 即 AssertAPIResponseKeys 与既有 3 个
+	// 调用点走的语义）通过，有值态红、空值态也通过。
 	body := `{"id":1,"flag":null}`
-	if err := apiResponseKeysErr(body, "", want); err != nil {
-		t.Fatalf("默认态入口应通过，err = %v", err)
-	}
 	if err := apiResponseKeysErrInState(body, "", want, KeyStateAny); err != nil {
 		t.Fatalf("KeyStateAny 应通过，err = %v", err)
 	}

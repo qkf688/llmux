@@ -119,10 +119,15 @@ func serveModels(t *testing.T) string {
 // TestGetModels_ResponseShapeLocked 锁 /api/models 信封与实体两级键集合：
 // 缺键、多键、改名都红。此前该端点的测试只覆盖字段值，不锁响应键集合——
 // 实体增删字段/改 json tag 时前端 interface 断层不会被任何测试抓到。
+//
+// 两条实体断言各自带三态方向（有值态 / 空值态）：`m-full` 行的三个 Nilable 键
+// （IOLog / IsUpstream / auto_associate）必须真有值、`m-nulls` 行必须为 null。
+// 只断键集合时，把它们在有值行里悄悄写成 null 也是绿的——与 Stage 41 给
+// model-providers 修掉的是同一类假绿，此处一并关掉。
 func TestGetModels_ResponseShapeLocked(t *testing.T) {
 	body := serveModels(t)
 
 	testutil.AssertAPIResponseKeys(t, body, "", realModelsEnvelopeKeys)
-	testutil.AssertAPIResponseKeys(t, body, `data.#(Name=="m-full")`, realModelKeysWithLevels)
-	testutil.AssertAPIResponseKeys(t, body, `data.#(Name=="m-nulls")`, realModelKeysWithoutLevels)
+	testutil.AssertAPIResponseKeysInState(t, body, `data.#(Name=="m-full")`, realModelKeysWithLevels, testutil.KeyStateSet)
+	testutil.AssertAPIResponseKeysInState(t, body, `data.#(Name=="m-nulls")`, realModelKeysWithoutLevels, testutil.KeyStateUnset)
 }

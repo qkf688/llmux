@@ -11,9 +11,11 @@ import (
 
 // APIResponseKey 是「响应键契约」表的一行：字面量键名 + 有值态 JSON 类型 + 可空标记。
 //
-// 键名必须与前端 webui/src/lib/api/modules/** 的 interface 字段名逐字一致（前端不消费
-// 的 ORM 托管键除外，见 AlwaysNull）——键名失配不会报错，前端只会静默读到 undefined，
-// 这类断层唯一可见的地方是响应体 JSON，故契约测试必须打在响应体上
+// 表覆盖**响应全键**（键集合逐字相等要求如此），不只是前端会读的键：键名与前端
+// webui/src/lib/api/modules/** 的 interface 字段名逐字一致，但前端不消费的键
+// （ORM 托管键如 CreatedAt/UpdatedAt/DeletedAt、后端专用计数键如 ConsecutiveFailures）
+// 同样必须列行，否则集合同等断言会报「多键」。键名失配不会报错，前端只会静默读到
+// undefined，这类断层唯一可见的地方是响应体 JSON，故契约测试必须打在响应体上
 // （AGENTS §5「直返实体 JSON 形状两侧同源」）。
 type APIResponseKey struct {
 	// Key 响应体里的键名（字面量，禁止从结构体反射推导——结构体一改断言跟着改，
@@ -29,6 +31,10 @@ type APIResponseKey struct {
 	// 软删标记位，未软删行恒 null）。列进表是为了让键集合逐字相等成立；它不参与
 	// 三态方向校验——恒 null 是 ORM 托管形态，不是「继承 / 未设置」的有效语义，
 	// 没有「有值态」可言。标 AlwaysNull 必须同时标 Nilable（表自相矛盾会被判红）。
+	//
+	// **误标代价**：把一条真三态键误标 AlwaysNull（例如从 DeletedAt 行复制），该键的
+	// 方向校验就被永久豁免——它在两态用例里都恰好为 null 时全绿，方向漂移无人发现。
+	// 无反射推导就无法机械闭合，标之前先确认「该键在任何存活行上都不可能非 null」。
 	AlwaysNull bool
 }
 
@@ -80,14 +86,16 @@ func AssertAPIResponseKeysInState(t *testing.T, body, path string, want []APIRes
 	}
 }
 
-// apiResponseKeysErr 是判据本体的默认态入口（不校验三态方向）：签名与加方向校验之前
-// 保持一致，门自身的冒烟用例与既有调用方无需改动；带方向的实现在 apiResponseKeysErrInState。
-func apiResponseKeysErr(body, path string, want []APIResponseKey) error {
-	return apiResponseKeysErrInState(body, path, want, KeyStateAny)
-}
-
 // apiResponseKeysErrInState 是断言判据本体（返回 error 以便对门本身做冒烟覆盖）。
 func apiResponseKeysErrInState(body, path string, want []APIResponseKey, state KeyState) error {
+	// 未知态必须当场报错，不得静默退化成「不校验方向」：否则将来新增或误算的 KeyState
+	// 值会让方向校验整体 fail-open，正是本门要消灭的「该红却绿」形态。
+	switch state {
+	case KeyStateAny, KeyStateSet, KeyStateUnset:
+	default:
+		return fmt.Errorf("未知 KeyState(%d)：拒绝静默降级为「不校验三态方向」", int(state))
+	}
+
 	var obj gjson.Result
 	if strings.TrimSpace(path) == "" {
 		// gjson.Get(body, "") 取不到根：根对象直接 Parse。

@@ -27,8 +27,8 @@ webui/src/
 │   ├── providers|models|virtual-models|model-providers|...
 │   └── settings/
 ├── components/             # ui/、charts/、credentials/、page-header.tsx、page-toolbar.tsx、table-card.tsx、stat-card.tsx
-│   ├── credentials/        # 凭据展示共享（credential-status 词汇/色板 + credential-status-badge：号池页与供应商内联 key 行共用）
-│   └── number-pools/       # 号池域跨路由共享（pool-detail-dialog / credential-key-cell / use-credential-key-reveal / 删除确认弹窗）
+│   ├── credentials/        # 凭据展示共享（credential-status 词汇/色板 + credential-status-badge：号池页凭据行用；供应商侧 2026-10-07 起不再有凭据行）
+│   └── number-pools/       # 号池域跨路由共享（pool-detail-dialog / pool-form-dialog / credential-key-cell / use-credential-key-reveal / 删除确认弹窗 / import-credentials-dialog）
 ├── lib/animations/         # 动效 token 单一来源（EASING / NUMBER_ANIMATION_MS）
 ├── lib/api/                # core client + modules（auth/catalog/logs/system；auth 走全路径 import 不进 index 桶）
 ├── lib/clipboard.ts        # 剪贴板写入跨域单源（三级降级 + 普通/机密两个提示入口）
@@ -56,7 +56,7 @@ routes/<page>/
 - `lib/animations/`：动效 token 单一来源（缓动曲线/动画时长）；新增动效优先引用，禁止组件散落魔法缓动值
 - `lib/api/`：HTTP 客户端与领域 API 函数。测试类 API（`testModelProvider*` / `testProviderModel`）接受**可选** `signal`，调用方从 `AbortController` 透传——取消要真正生效必须一路传到 `fetch`，只在前端把 loading 置否不会停止上游会话计费
 - `lib/concurrent-batch.ts`：批量并发调度**跨域单一来源**（providers 页两套批量 + model-providers 页批量）。`runItem` 回 `"success" | "failed" | "cancelled"` 三态并被单独计数。两条硬约束：① **调用方必须把 signal 透传到真正的请求上**——只判 `signal.aborted` 就返回会让「取消」停在调度层（不再派新项，但在飞的那项照跑完并计费）；② 中止异常用 `lib/errors.isAbortError` 判为 `"cancelled"`，与 `"failed"` 分开计——取消不证明供应商不可用，混进失败会污染「选择失败项」这类下游动作
-- `lib/clipboard.ts`：剪贴板写入**跨域单一来源**（providers 模型名、号池凭据 key、供应商内联 key、model-providers 测试结果四处共用）。降级链 = 安全上下文走 Clipboard API → 非安全上下文（`http://<ip>:7070`）直接走同步 `execCommand`（保住点击手势有效期）→ 再失败弹手动复制 prompt，逐级回传 `method`；`copyTextDetailed` 是唯一的结构化入口（不依赖 toast，非 UI 场景复用它）。两个带提示的入口按内容敏感度二选一：普通文本用 `copyTextWithToast`（保留 prompt 兜底），**明文 key 等机密必须用 `copySecretWithToast`**（禁 prompt——`window.prompt` 的默认值参数会把机密整条弹上屏：模态、可被肩窥/录屏捕获、且不受前端任何生命周期守卫管辖）。成功提示只传掩码或行号：机密不得写进任何用户可见文案（toast / prompt / `title` / `aria-label`）。任何新的复制入口都必须走此处，禁止在页面里直接调 `navigator.clipboard`
+- `lib/clipboard.ts`：剪贴板写入**跨域单一来源**（providers 模型名、号池凭据 key、api-keys、model-providers 测试结果共用）。降级链 = 安全上下文走 Clipboard API → 非安全上下文（`http://<ip>:7070`）直接走同步 `execCommand`（保住点击手势有效期）→ 再失败弹手动复制 prompt，逐级回传 `method`；`copyTextDetailed` 是唯一的结构化入口（不依赖 toast，非 UI 场景复用它）。两个带提示的入口按内容敏感度二选一：普通文本用 `copyTextWithToast`（保留 prompt 兜底），**明文 key 等机密必须用 `copySecretWithToast`**（禁 prompt——`window.prompt` 的默认值参数会把机密整条弹上屏：模态、可被肩窥/录屏捕获、且不受前端任何生命周期守卫管辖）。成功提示只传掩码或行号：机密不得写进任何用户可见文案（toast / prompt / `title` / `aria-label`）。任何新的复制入口都必须走此处，禁止在页面里直接调 `navigator.clipboard`
 - 复制「屏幕上的东西」时，被复制文本的段名/取值必须与展示同源：`routes/model-providers/components/dialogs/test-result-report.ts` 是该弹窗的段落定义与复制文本拼装的单一来源（结果区展示与剪贴板都从这里取）。另写一份拼装逻辑时，「屏幕改了排版、剪贴板还留着旧格式」这类漂移没有任何检查会红
 - `vite.config.ts`（Vite 8，Rolldown 打包 + Oxc 转换）：三条已踩过的约束——① Vite 8 是**纯 ESM**（`type: module`），配置文件里没有 `__dirname`，路径一律用 `fileURLToPath(new URL('./src', import.meta.url))`；② 手动分包用 `build.rolldownOptions.output.codeSplitting.groups`（`test` 正则 + `name`），**`output.manualChunks` 的对象形式已被官方移除**，写回去会构建失败；③ esbuild 已是可选依赖，转换/压缩由 Oxc 与 Lightning CSS 承担，**Vite 7 时代「产物过大时 esbuild 写临时文件删不掉导致 Windows 上 build 必失败」的问题随之消失**（这正是升 Vite 8 的动因）
 - `stores/`：客户端状态；`Updater` / `Setter` 统一更新模式。`stores/auth/login-expiry-notice.ts` 是「登录已过期」一次性提示的**载体单一来源**（sessionStorage 单键 `loginExpiryNotice`，值 = 写入时间戳，兼任「失效处置已触发」的去重标记与「过期提示待展示」标记：`markLoginExpiredOnce` 在 10s 去重窗口内仅首次返回 true、`hasLoginExpiryNotice` 非破坏性读取且 60s 后视为陈旧、`consumeLoginExpiryNotice` 读后即焚；sessionStorage 写失败退内存兜底）。展示文案渲染侧取常量 `LOGIN_EXPIRY_NOTICE_TEXT`（不取存储值，结构性保证不携带内部错误文本），其余处禁止直读写该键

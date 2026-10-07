@@ -31,8 +31,7 @@ providers/
 handler/providerapi/     # CRUD、templates、upstream models、blacklist、model-catalog
   model_catalog.go       # GET /api/providers/model-catalog（聚合目录薄层，逻辑在 service/modelsync）
   models_upstream.go     # GET /api/providers/models/:id（HTTP 薄层，选路+拉取在 service/modelsync.ListUpstreamModels）
-  structured.go         # S6 结构化读写：loadProviderDetail（详情含掩码项）/ syncProviderChildren（四表事务同步）
-  inline_keys.go        # GET /api/providers/:id/groups/:groupId/inline-keys/raw（受控明文拉取）
+  structured.go         # S6 结构化读写：loadProviderDetail（详情含分组的 PoolID 引用）/ syncProviderChildren（四表事务同步，分组只写 PoolID）
 repository/provider.go
 service/modelsync/config.go  # ProviderModelCatalog 类型 + GetProviderModelCatalogs 批量聚合
 ```
@@ -50,12 +49,10 @@ service/modelsync/config.go  # ProviderModelCatalog 类型 + GetProviderModelCat
 | `Metadata` | 配置模板与探测 body | `providers/meta.go` | `RegisterMetadata` |
 | `ProviderRepo` | 供应商持久化 | `repository/provider.go` | GORM 实现 |
 | `models.Provider` | 供应商实体（`AuthType` 为 **config 派生只读展示值**，`gorm:"-"` 不落库，Stage 20 消灭双写——见上「认证方式单源」行） | `models/model.go` | GORM |
-| 内联凭据视图回填 | 详情 `GroupDetail.InlineKeys` 为 `[]credview.View`（凭据视图单源，与 `/api/credentials` 列表同一形状）——掩码 + 状态/冷却/连败；明文永不出常规响应，保存时按 `id` 引用（key 空 = 保留、key 非空 = 替换，id=0 = 新增） | `handler/providerapi/types.go` + `structured.go` | `loadProviderDetail`（`credview.ViewsOf`）/ `syncGroups` |
-| 内联 key 状态与人工恢复 | 编辑弹窗的内联 key 行显示状态徽标（`CredentialStatusBadge`），非健康行带「启用」、健康行带「停用」，组头另有「全部启用 N 条」；动作走凭据域 `PATCH /api/credentials/status`（`batchUpdateCredentialStatus`，单条也是它），成功后按**最新表单行**回写状态（重拉详情会覆盖未保存的表单编辑）。**保存表单不会清判停状态**（`syncGroups` 只写 key/归属，不碰 status/fail_count）——所以「换 key」后仍需点一次「启用」或等组内惰性探活成功。状态字段不参与提交 | `webui/src/routes/providers/components/dialogs/inline-keys-field.tsx` + `webui/src/components/credentials/credential-status-badge.tsx` | `handler/credentials`（状态读写）/ `handler/providerapi`（视图） |
-| `GET /api/providers/:id/groups/:groupId/inline-keys/raw` | 受控明文拉取：解密返回 `[{id,key}]`（按凭据 id 归位，前端不依赖数组顺序）；池来源分组 400、供应商/分组不存在或越组 404（不暴露存在性）、cipher 未配置或**任一条解密失败 → 整组 500**（明文替换是覆盖动作，部分成功会静默丢条目）；响应 `Cache-Control: no-store`（走 `httpresp.SuccessNoStore`，明文不得进浏览器/代理缓存） | `handler/providerapi/inline_keys.go` | 同文件 |
-| 内联 key 单条复制 | 明文行（`masked=false`）带复制按钮，走 `lib/clipboard.ts` 的 `copySecretWithToast`（机密专用：禁 `window.prompt` 兜底，prompt 的默认值参数会把明文整条弹上屏）；**掩码行刻意无复制入口**——供应商侧只有整组 raw 端点、没有单条明文出口（单条明文在凭据域 `GET /api/credentials/:id/raw`，弹窗不为此多引一处明文通道），要复制必须先点「显示」。成功提示只回显行号：前端不重建掩码（掩码单源在后端 `KeyMasked`），更不能把明文写进任何用户可见文案 | `webui/src/routes/providers/components/dialogs/inline-keys-field.tsx` | `lib/clipboard.ts` |
+| 分组的号池引用 | 分组不再持有凭据，只经 `KeyGroup.PoolID` 引用号池（2026-10-07 删内联凭据概念）；详情 `GroupDetail.PoolID` 原样回显供表单回填，一个池可被同供应商多个分组引用。**本模块不读、不写、不校验凭据**——凭据的增删改与状态管理全在号池页（`handler/pools`），保存供应商只改引用关系 | `handler/providerapi/types.go` + `structured.go` | `loadProviderDetail` / `syncGroups` |
+| 前端分组只留号池下拉 | 供应商弹窗的分组卡片只有名称 / 价格权重 / 号池下拉 + 「新建号池」（就地建空池并自动回填，`PoolFormDialog` 已在 `components/number-pools/` 与号池页共用）+ 「查看详情」（复用 `PoolDetailDialog`）。表单**不写入任何 key**：`ProviderGroupInput` 恒四键 `{id?, name, weight, pool_id}`，前端 `config` JSON 不含凭据。`pool_id` 在 zod 层必填，未选池即就地报错不出网 | `webui/src/routes/providers/components/dialogs/provider-schedule-fields.tsx` + `provider-form-dialog.tsx` | `handler/providerapi`（`structured.go` `validateStructuredRequest`：必须给 `pool_id` 且池存在，否则 400） |
 | `GET /api/providers/models/:id` | 拉真实上游模型列表（供应商「上游模型」弹窗）：**无 query 参数**（`source` 分支已删——本端点唯一语义就是打上游，本地自定义模型走 `model-catalog` 的 `Custom`）；选路与落库同步同源（协议端点 + 分组凭据），多分组返回并集去重；供应商不存在 → `code=404 "Provider not found"`，选路/上游失败 → `code=404 "Failed to get models: <原因>"`（HTTP 恒 200，前端 `apiRequest` 按 `code!=200` 抛 message 并 toast） | `handler/providerapi/models_upstream.go`（HTTP 薄层） | `service/modelsync.ListUpstreamModels` |
-| `GroupInput`（结构化分组写入体，2026-09-28） | `{id, name, weight, source, inline_keys, pool_id}`：`id>0` = 就地更新既有分组（未知/重复 id → 400，先全校验再落写），`id=0`/缺失 = 新建；**无 `models` 字段**——`KeyGroup.Models` 是模型同步专属数据，表单保存不得触碰（删光重建会把同步快照冲成空 = 不限、组织级目录缩水连累自动关联清理），未提交的既有组删除。前端分组行携带 `groupId` 回传作就地更新键 | `handler/providerapi/types.go` + `structured.go`（`syncGroups`） | 同文件 |
+| `GroupInput`（结构化分组写入体，2026-09-28；2026-10-07 收敛为四键） | `{id, name, weight, pool_id}`：**无 `source`、无 `inline_keys`**——凭据只归属号池，分组表达的是引用。`id>0` = 就地更新既有分组（未知/重复 id → 400，先全校验再落写），`id=0`/缺失 = 新建；`pool_id` **必填且必须指向存在的池**（否则 400）；**无 `models` 字段**——`KeyGroup.Models` 是模型同步专属数据，表单保存不得触碰（删光重建会把同步快照冲成空 = 不限、组织级目录缩水连累自动关联清理），未提交的既有组删除（**删分组只解除引用，不级联删池内凭据**）。前端分组行携带 `groupId` 回传作就地更新键 | `handler/providerapi/types.go` + `structured.go`（`syncGroups`） | 同文件 |
 | `GET /api/providers/model-catalog` | 组织级模型目录聚合：每供应商 `{ProviderID, Upstream(分组白名单并集), Custom(=config.custom_models)}`，PascalCase 无 json tag，空值显式空数组（非 null）；前端三页目录与 all-models 弹窗的**唯一目录数据源**（替代 `Config.upstream_models` 客户端解析，该键为死键）；路由固定段 `model-catalog` 声明在 `/:id` 之前防参数段捕获 | `handler/providerapi/routes.go` + `model_catalog.go`（HTTP 薄层） | `service/modelsync.GetProviderModelCatalogs`（聚合逻辑，SRP） |
 
 ## 5. 特殊约定

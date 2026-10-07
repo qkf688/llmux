@@ -9,26 +9,28 @@
 |------|-----|
 | 业务领域 | 凭据资源管理：列表（按归属过滤）/ 详情 / 创建（号池）/ 启停 / 备注 / 明文查看 / 删除 |
 | 目录位置 | `handler/credentials/`；`repository/credential.go`；`models/channel.go`（`Credential` 表）；对外视图 `service/credview/` |
-| 主要职责 | 提供「凭据 ID 即资源标识」的单一读写面，让号池凭据（`pool_id`）与分组内联凭据（`group_id`）共用同一套属性、动作与视图 |
+| 主要职责 | 提供「凭据 ID 即资源标识」的单一读写面：凭据按 `pool_id` 归属号池（内联凭据概念已于 2026-10-07 删除），但属性、动作与视图对所有凭据一视同仁，不按归属分叉 |
 
 ## 2. 职责与边界
 
 - **对外暴露**：REST `/api/credentials…`（无归属限界：ID 就是资源标识）；`CredentialRepo`（`repository/credential.go`，仓储层不解密）；`credview.View` 视图类型
 - **依赖谁**：`repository`（经 `repos()`）、`models`（`Credential` 实体 + `CredentialRecoveryFields` 状态机约定）、`common/credentialcrypto`（加解密 / 掩码单源）、`service/credview`（对外视图单源）、`handler/httpx` + `httpresp`
-- **不负责什么**：号池容器（`handler/pools`）、供应商分组与内联 key 的表单同步（`handler/providerapi.syncGroups`）、上游选路与健康状态机判定（`service/channel`、`service/chat`）、探活与按凭据测试（`service/credprobe`、`handler/pools` 的池作用域端点）
+- **不负责什么**：号池容器（`handler/pools`）、供应商分组的号池引用（`handler/providerapi.syncGroups` 只写 `KeyGroup.PoolID`，不碰凭据）、上游选路与健康状态机判定（`service/channel`、`service/chat`）、探活与按凭据测试（`service/credprobe`、`handler/pools` 的池作用域端点）
 
 ## 3. 为什么独立成域（历史动因）
 
 凭据原先只作为号池的子资源存在（`/api/pools/:id/credentials…`），所有写接口都带池限界校验。后果：**分组内联凭据（`group_id` 归属、`pool_id` 为空）拿不到任何按凭据 ID 的属性与动作**——被状态机判停（`temp_unsched`）后无法人工恢复，而设计定案第 5 节的状态机出口明确写了「人工恢复 / 探活成功」。同时，「凭据视图」被拼了两份（号池 `CredentialListItem` 与供应商掩码项 `InlineKeyItem`），加字段必漏一处。
 
-改为第一等资源后：启停 / 备注 / 明文 / 以后的凭据级设置（如重试次数）只实现一次，号池页与供应商弹窗共用；归属只作为**列表过滤条件**与聚合端点的校验维度。
+改为第一等资源后：启停 / 备注 / 明文 / 以后的凭据级设置（如重试次数）只实现一次；归属只作为**列表过滤条件**与聚合端点的校验维度。
+
+> 历史收尾（2026-10-07）：内联凭据概念整体删除，`Credential.GroupID` 与供应商侧的明文拉取端点一并退场——凭据只归属号池，分组经 `KeyGroup.PoolID` 引用。上文「内联凭据」只作历史动因记录，当前代码无此形态。本域「第一等资源」的判断不受影响，反而更纯粹：凭据不再有两套归属。
 
 ## 4. 内部结构
 
 ```
 handler/credentials/     # 凭据域 API（第一等资源）
   routes.go              # Register：/credentials GET/POST、/credentials/status PATCH、/credentials/batch DELETE、/:id GET/PATCH/DELETE、/:id/raw GET（固定段先于 :id）
-  crud.go                # ListCredentials（pool_id/group_id/status/q 过滤 + 分页）/ GetCredential / CreateCredential / GetCredentialRaw / UpdateCredential / DeleteCredential + requireCredential + parseUintQuery
+  crud.go                # ListCredentials（pool_id/status/q 过滤 + 分页）/ GetCredential / CreateCredential / GetCredentialRaw / UpdateCredential / DeleteCredential + requireCredential + parseUintQuery
   batch.go               # BatchUpdateCredentialStatus（含恢复重置字段）/ BatchDeleteCredentials
   types.go               # CredentialListData / CreateCredentialRequest / UpdateCredentialRequest / 批量 DTO / CredentialRawData
   repos.go               # repos() → repository.Default()
@@ -41,12 +43,12 @@ repository/credential.go # CredentialRepo：ListPaged/Get/Create/UpdateFields/Up
 
 | 契约 | 职责 | 定义位置 | 实现方 |
 |------|------|----------|--------|
-| `GET /api/credentials` | 列表：`pool_id` / `group_id` 归属过滤（可都不带 = 全量）+ `status`（`all`/空 = 不过滤）+ `q`（备注子串）+ 分页；非法状态或非法归属 ID → 400 | `handler/credentials/crud.go` `ListCredentials` | 同文件 |
-| `POST /api/credentials` | 创建：`pool_id` **必填**（分组内联凭据的唯一写入口是供应商表单同步 `syncGroups`，两条写路径会让归属/去重语义漂移）；池不存在 404、空 key 400、池内 `KeyHash` 重复 400（跨池同 key 允许） | `handler/credentials/crud.go` `CreateCredential` | 同文件 |
+| `GET /api/credentials` | 列表：`pool_id` 归属过滤（不带 = 全量）+ `status`（`all`/空 = 不过滤）+ `q`（备注子串）+ 分页；非法状态或非法归属 ID → 400。**`group_id` 过滤已随内联凭据概念删除**（凭据必属号池，分组只是引用方） | `handler/credentials/crud.go` `ListCredentials` | 同文件 |
+| `POST /api/credentials` | 创建：`pool_id` **必填**（凭据只归属号池，别无写入口）；池不存在 404、空 key 400、池内 `KeyHash` 重复 400（跨池同 key 允许） | `handler/credentials/crud.go` `CreateCredential` | 同文件 |
 | `PATCH /api/credentials/:id` | 更新：`note` 可清空、`status` 可切；**切回 `active` 即人工恢复**，连同清 `fail_count`/`cooldown_reason`（单一来源 `models.CredentialRecoveryFields`）；无字段 400、非法状态 400、凭据不存在 404 | `handler/credentials/crud.go` `UpdateCredential` | 同文件 |
-| `PATCH /api/credentials/status` | 批量启停（`{ids, status}`）：**不分归属**，一次调用可同时启停号池凭据与分组内联凭据（内联 key 的恢复路径）；空 ids 400、非法状态 400 | `handler/credentials/batch.go` | `CredentialRepo.UpdateFieldsByIDs` |
+| `PATCH /api/credentials/status` | 批量启停（`{ids, status}`）：**不分归属**，一次调用可同时启停任意池的凭据；空 ids 400、非法状态 400 | `handler/credentials/batch.go` | `CredentialRepo.UpdateFieldsByIDs` |
 | `GET /api/credentials/:id/raw` | 明文受控端点：`SuccessNoStore`（禁缓存）+ 解密失败 500（不回退密文） | `handler/credentials/crud.go` `GetCredentialRaw` | `httpresp.SuccessNoStore` |
-| `credview.View` / `ViewOf` / `ViewsOf` | 凭据对外形状单源（掩码 + 状态 + 冷却 + 连败 + 统计 + 时间；三态指针禁 omitempty）；`ViewsOf(nil)` 回非 nil 空切片（JSON `[]`） | `service/credview/view.go` | `handler/credentials`（列表/详情/更新）与 `handler/providerapi`（分组内联 key 项）共用 |
+| `credview.View` / `ViewOf` / `ViewsOf` | 凭据对外形状单源（掩码 + 状态 + 冷却 + 连败 + 统计 + 时间；三态指针禁 omitempty）；`ViewsOf(nil)` 回非 nil 空切片（JSON `[]`） | `service/credview/view.go` | `handler/credentials`（列表/详情/更新）独家使用——供应商侧已无凭据视图（2026-10-07） |
 | 路由注册顺序 | `/credentials/status` 与 `/credentials/batch` 固定段先于 `/credentials/:id`，避免 `status`/`batch` 被当成凭据 ID（测试 `TestRegisterRouteOrder_StaticSegmentsBeforeID`） | `handler/credentials/routes.go` | 同文件 |
 
 ## 6. 特殊约定

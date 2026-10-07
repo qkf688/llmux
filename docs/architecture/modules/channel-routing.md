@@ -22,7 +22,7 @@
 ```
 service/channel/
   types.go                # Snapshot（装配产出）/ SelectionResult（命中+动态 config）/ Prefer（缓存亲和钉定偏好）/ 三层 sentinel errors
-  assemble.go             # Assembler: repository → Snapshot（凭据经 ListByGroups 按分组/号池收敛，三路数据 ID ASC 稳定）
+  assemble.go             # Assembler: repository → Snapshot（凭据经 ListByPools 按分组引用的号池集合收敛，三路数据 ID ASC 稳定）
   selector.go             # Select / RetryCredential 编排门面（三层 + 解密 + config 尾部复用）+ DefaultSelector 单例
                           # selectCredentialWithPrefer：钉定凭据须在可调度候选内、命中不推进轮询；失效回退常规轮询（可调度集由分组层一次算出向下传，miss 不重算）
   endpoint_select.go      # SelectEndpoint：入站 wire ∈ enabled 端点协议 → 透传路径；否则主协议端点（转换路径）
@@ -48,7 +48,7 @@ consts/protocol.go        # Protocol* 常量 + ProtocolOfType（type→protocol�
 
 | 契约 | 职责 | 定义位置 | 实现方 |
 |------|------|----------|--------|
-| `Assembler.Assemble(ctx, provider) → *Snapshot` | 一次拉取端点/分组/凭据归并成快照；端点/分组/凭据统一按 ID ASC 排序（轮询取模基线）；凭据按本供应商分组与号池的 ID 集合收敛（`CredentialRepo.ListByGroups`），内联与号池两侧归入同一分组 | `service/channel/assemble.go` | `repository.Endpoint/KeyGroup/Credential` |
+| `Assembler.Assemble(ctx, provider) → *Snapshot` | 一次拉取端点/分组/凭据归并成快照；端点/分组/凭据统一按 ID ASC 排序（轮询取模基线）；凭据按本供应商分组引用的号池 ID 集合收敛（`CredentialRepo.ListByPools`，空集合返回 nil 不产生 SQL），再按分组归并（组 ID → 其 PoolID 池内凭据）。**凭据只归属号池**（2026-10-07 删内联凭据概念，分组经 `KeyGroup.PoolID` 引用号池）：同一池被多个分组引用时凭据在两侧各计一次，这是归属共享而非重复计数 | `service/channel/assemble.go` | `repository.Endpoint/KeyGroup/Credential` |
 | `Selector.Select(snapshot, clientWire, upstreamModel, now, prefer) → SelectionResult` | 三层编排：端点 → 分组 → 凭据 → 解密 → config；每层错误携带 sentinel。`prefer`（缓存亲和，2026-09-23）是**偏好覆盖**：分组/凭据两层命中可用即直选且不推进轮询指针，失效静默逐层回退常规选择，不改成败判定；端点层无偏好（对同一 wire 恒确定，见 §5）；`upstreamModel` 是**上游模型名**（= `ModelWithProvider.ProviderModel`，白名单命名空间，见 §5） | `service/channel/selector.go` | 同包三层函数 |
 | `Selector.RetryCredential(snapshot, groupID, endpoint, now) → SelectionResult` | 组内重选凭据（#13 故障转移）：锁**原分组/原端点**重选下一条可用凭据（冷却中的被剔除、轮询指针推进）；返回新的 `SelectionResult`（含按新凭据重建的 `Config`/`UpstreamURL`）；组内无可用 → `ErrNoCredentialAvailable` 上抛，由 chat 链路做组织级淘汰（设计定案「分组失败 → 供应商整体失败」，本层不换组） | `service/channel/selector.go` | 复用 `SelectCredential` + `DecryptCredentialKey` + `BuildConfig`（与 `Select` 同 tail） |
 | `SelectEndpoint` | 同协议 wire 匹配选端点（透传）；无匹配回落主协议端点（`ProtocolOfType(Provider.Type)`，转换路径）；disabled 与未知协议端点不参与；无可用 → `ErrEndpointUnavailable` | `service/channel/endpoint_select.go` | 同文件 |

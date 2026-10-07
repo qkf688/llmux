@@ -8,6 +8,7 @@ import {
   type ModelWithProvider,
 } from "@/lib/api";
 import { isAbortError } from "@/lib/errors";
+import { UnauthorizedError } from "@/lib/api/core/client";
 import { runConcurrentBatch, type BatchItemOutcome } from "@/lib/concurrent-batch";
 import type { Updater } from "@/stores/core/updater";
 import type { AssociationBatchTestResult, BatchTestProgress } from "../types";
@@ -186,7 +187,7 @@ export function useModelProvidersBatch({
     ]
   );
 
-  // 单项执行单元：结果落表 + 中止与失败分流（中止标 cancelled、不进失败计数）。
+  // 单项执行单元：结果落表 + 中止/掉线与失败分流（非失败终止标 cancelled、不进失败计数）。
   // 调度交给共享的 runConcurrentBatch，这里只负责「跑一项并回一个结果」。
   const testSingleAssociation = useCallback(
     async (associationId: number, signal: AbortSignal): Promise<BatchItemOutcome> => {
@@ -201,7 +202,10 @@ export function useModelProvidersBatch({
         setAssociationTestResults((prev) => ({ ...prev, [associationId]: { loading: false, success: true } }));
         return "success";
       } catch (error) {
-        if (isAbortError(error)) {
+        // 登录过期与中止同收场：失效出口已处置（标记过期/清会话/跳登录页），这一项根本没测成，
+        // 记成「失败」等于告诉用户「这些关联坏了」——而它们一句请求都没发出去。与单测、
+        // JSON 型能力测试、SSE 三路同口径（见 docs/architecture/modules/webui.md 401 处置节）。
+        if (isAbortError(error) || error instanceof UnauthorizedError) {
           setAssociationTestResults((prev) => ({
             ...prev,
             [associationId]: { loading: false, success: null, cancelled: true },
@@ -262,8 +266,13 @@ export function useModelProvidersBatch({
         });
 
         // 取消路径由 handleCancelBatchTest 即时 toast，这里不再重复；被取消项数在进度卡上可见。
+        // 已取消数也要进汇总：登录过期整批收场时，若只报「失败 0 个」等于没交代去向。
         if (!summary.aborted) {
-          toast.success(`批量测试完成：成功 ${summary.success} 个，失败 ${summary.failed} 个`, { duration: 5000 });
+          const cancelledNote = summary.cancelled > 0 ? `，已取消 ${summary.cancelled} 个` : "";
+          toast.success(
+            `批量测试完成：成功 ${summary.success} 个，失败 ${summary.failed} 个${cancelledNote}`,
+            { duration: 5000 },
+          );
         }
       } finally {
         setBatchTesting(false);

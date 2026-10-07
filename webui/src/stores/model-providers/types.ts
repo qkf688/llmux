@@ -35,7 +35,7 @@ export type AssociationBatchTestResult = {
   loading: boolean;
   success: boolean | null;
   error?: string;
-  /** 用户主动中止（批量取消 / 切页面）。与「失败」分开：中止不证明该关联不可用。 */
+  /** 用户主动中止（批量取消 / 切页面）或登录过期。与「失败」分开：两者都不证明该关联不可用。 */
   cancelled?: boolean;
 };
 

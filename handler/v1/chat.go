@@ -264,10 +264,11 @@ func attachLogRecord(ctx context.Context, in service.RecordLogInput, resBody io.
 //
 // 为什么必须收口而不是裸拷上游头：上游回的每个头都会进调用方看到的响应，供应商
 // 内部的节点名、内部追踪号、调试头一并外流；供应商换一家或改实现，它们就跟着变，
-// 而调用方可能已经依赖上了。Content-Length / Content-Encoding 同样在剔除之列：
-// 网关自身从不请求压缩（出站 Accept-Encoding 在 chatcore.BuildHeaders 统一剥除，
-// 由传输层透明解压，故上游响应本就不带这两个头），正文长度交给 net/http 自己算；
-// 照抄上游值在正文被改写（协议转换）时会截断响应。
+// 而调用方可能已经依赖上了。Content-Length / Content-Encoding 同样在剔除之列，但理由
+// 是分开的两条：网关自身从不请求压缩（出站 Accept-Encoding 在 chatcore.BuildHeaders
+// 统一剥除、由传输层透明解压），故 Content-Encoding 本就不会出现；而 Content-Length
+// 是「上游即便给了也不能照抄」——正文经协议转换改写后长度会变，照抄会截断响应（identity
+// 响应上游确实会带此头，漏掉它恰恰是踩坑处），长度交给 net/http 自己算。
 var upstreamResponseHeadersAllowed = map[string]bool{
 	"Content-Type": true,
 	"Retry-After":  true,

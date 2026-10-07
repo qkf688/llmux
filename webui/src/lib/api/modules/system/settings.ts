@@ -35,10 +35,6 @@ export interface Settings {
   disable_all_logs: boolean;
   count_health_check_as_success: boolean;
   count_health_check_as_failure: boolean;
-  disable_performance_tracking: boolean;
-  disable_token_counting: boolean;
-  enable_request_trace: boolean;
-  strip_response_headers: boolean;
   enable_format_conversion: boolean;
   model_sync_enabled: boolean;
   model_sync_interval: number;

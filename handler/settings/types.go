@@ -46,12 +46,8 @@ type Settings struct {
 	DisableAllLogs            bool `json:"disable_all_logs"`
 	CountHealthCheckAsSuccess bool `json:"count_health_check_as_success"`
 	CountHealthCheckAsFailure bool `json:"count_health_check_as_failure"`
-	// 性能优化相关设置
-	DisablePerformanceTracking bool `json:"disable_performance_tracking"`
-	DisableTokenCounting       bool `json:"disable_token_counting"`
-	EnableRequestTrace         bool `json:"enable_request_trace"`
-	StripResponseHeaders       bool `json:"strip_response_headers"`
-	EnableFormatConversion     bool `json:"enable_format_conversion"`
+	// 格式转换（原「性能优化」组只剩它：另四个设置项只用纳秒级开销换观测数据，已删除）
+	EnableFormatConversion bool `json:"enable_format_conversion"`
 	// 模型同步相关设置
 	ModelSyncEnabled           bool     `json:"model_sync_enabled"`
 	ModelSyncInterval          int      `json:"model_sync_interval"`

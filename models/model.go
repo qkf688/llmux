@@ -645,12 +645,9 @@ const (
 	SettingKeyHealthCheckCountAsFailure        = "health_check_count_as_failure"        // 健康检测失败是否计入失败调用（触发衰减）
 	SettingKeyHealthCheckCheckDisabledOnly     = "health_check_check_disabled_only"     // 是否只检测停用的模型
 
-	// 性能优化相关设置
-	SettingKeyDisablePerformanceTracking = "disable_performance_tracking" // 关闭性能追踪（首包时间、TPS）
-	SettingKeyDisableTokenCounting       = "disable_token_counting"       // 关闭 token 统计
-	SettingKeyEnableRequestTrace         = "enable_request_trace"         // 启用请求追踪（httptrace）
-	SettingKeyStripResponseHeaders       = "strip_response_headers"       // 移除不必要的响应头
-	SettingKeyEnableFormatConversion     = "enable_format_conversion"     // 允许格式转换（关闭则只能直连）
+	// 格式转换（原与已删除的几个「性能开关」同组：它们省的是纳秒级开销、
+	// 代价是观测数据，已整体移除；格式转换是真实的路由能力，故保留）
+	SettingKeyEnableFormatConversion = "enable_format_conversion" // 允许格式转换（关闭则只能直连）
 
 	// 模型同步相关设置
 	SettingKeyModelSyncEnabled           = "model_sync_enabled"             // 自动同步模型开关

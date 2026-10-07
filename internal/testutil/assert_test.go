@@ -49,7 +49,7 @@ func TestAPIResponseKeysErr(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := apiResponseKeysErr(tc.body, tc.path, tc.want, tc.state)
+			err := apiResponseKeysErrInState(tc.body, tc.path, tc.want, tc.state)
 			if tc.wantErr == "" {
 				if err != nil {
 					t.Fatalf("err = %v, want nil", err)
@@ -73,13 +73,16 @@ func TestAssertAPIResponseKeysInState_AnyMatchesLegacy(t *testing.T) {
 	}
 	// 三态键为 null：默认态通过（既有语义），有值态红、空值态也通过。
 	body := `{"id":1,"flag":null}`
-	if err := apiResponseKeysErr(body, "", want, KeyStateAny); err != nil {
+	if err := apiResponseKeysErr(body, "", want); err != nil {
+		t.Fatalf("默认态入口应通过，err = %v", err)
+	}
+	if err := apiResponseKeysErrInState(body, "", want, KeyStateAny); err != nil {
 		t.Fatalf("KeyStateAny 应通过，err = %v", err)
 	}
-	if err := apiResponseKeysErr(body, "", want, KeyStateUnset); err != nil {
+	if err := apiResponseKeysErrInState(body, "", want, KeyStateUnset); err != nil {
 		t.Fatalf("KeyStateUnset 应通过，err = %v", err)
 	}
-	if err := apiResponseKeysErr(body, "", want, KeyStateSet); err == nil {
+	if err := apiResponseKeysErrInState(body, "", want, KeyStateSet); err == nil {
 		t.Fatal("KeyStateSet 应报红")
 	}
 }
@@ -96,18 +99,18 @@ func TestAPIResponseKeysErr_AlwaysNull(t *testing.T) {
 	valuedBody := `{"id":1,"deleted_at":"2026-10-08T00:00:00+08:00"}`
 
 	for _, state := range []KeyState{KeyStateAny, KeyStateSet, KeyStateUnset} {
-		if err := apiResponseKeysErr(nullBody, "", want, state); err != nil {
+		if err := apiResponseKeysErrInState(nullBody, "", want, state); err != nil {
 			t.Fatalf("state=%v 下恒 null 键应通过，err = %v", state, err)
 		}
 		// 恒 null 键有值 = ORM 托管形态变了：任何态下都该红
 		// （尤其 KeyStateUnset——它不是被漏掉的空值态三态键，豁免不能把它变成哑巴）。
-		if err := apiResponseKeysErr(valuedBody, "", want, state); err == nil {
+		if err := apiResponseKeysErrInState(valuedBody, "", want, state); err == nil {
 			t.Fatalf("state=%v 下恒 null 键有值应报红", state)
 		}
 	}
 
 	bad := []APIResponseKey{{Key: "deleted_at", WantSetType: gjson.String, AlwaysNull: true}}
-	err := apiResponseKeysErr(nullBody, "", bad, KeyStateAny)
+	err := apiResponseKeysErrInState(nullBody, "", bad, KeyStateAny)
 	if err == nil || !strings.Contains(err.Error(), "自相矛盾") {
 		t.Fatalf("err = %v, want 含「自相矛盾」", err)
 	}

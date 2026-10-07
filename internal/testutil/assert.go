@@ -75,13 +75,19 @@ func AssertAPIResponseKeys(t *testing.T, body, path string, want []APIResponseKe
 // 两个方向都钉死。传 KeyStateAny 时行为与 AssertAPIResponseKeys 完全一致。
 func AssertAPIResponseKeysInState(t *testing.T, body, path string, want []APIResponseKey, state KeyState) {
 	t.Helper()
-	if err := apiResponseKeysErr(body, path, want, state); err != nil {
+	if err := apiResponseKeysErrInState(body, path, want, state); err != nil {
 		t.Fatalf("AssertAPIResponseKeys: %v", err)
 	}
 }
 
-// apiResponseKeysErr 是断言判据本体（返回 error 以便对门本身做冒烟覆盖）。
-func apiResponseKeysErr(body, path string, want []APIResponseKey, state KeyState) error {
+// apiResponseKeysErr 是判据本体的默认态入口（不校验三态方向）：签名与加方向校验之前
+// 保持一致，门自身的冒烟用例与既有调用方无需改动；带方向的实现在 apiResponseKeysErrInState。
+func apiResponseKeysErr(body, path string, want []APIResponseKey) error {
+	return apiResponseKeysErrInState(body, path, want, KeyStateAny)
+}
+
+// apiResponseKeysErrInState 是断言判据本体（返回 error 以便对门本身做冒烟覆盖）。
+func apiResponseKeysErrInState(body, path string, want []APIResponseKey, state KeyState) error {
 	var obj gjson.Result
 	if strings.TrimSpace(path) == "" {
 		// gjson.Get(body, "") 取不到根：根对象直接 Parse。

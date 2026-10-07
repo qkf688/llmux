@@ -60,7 +60,7 @@ models.ModelWithProvider
 
 ### 响应键契约（`/api/model-providers`）
 
-`handler/associations` 的 Create / Update / List 直接序列化 `models.ModelWithProvider`，对外键名为 **PascalCase**（实体多数字段无 json tag），前端按同名 interface 消费（`webui/src/lib/api/modules/catalog/model-providers.ts`）。三态字段（`ToolCall` / `StructuredOutput` / `Image` / `WithHeader` / `Status` / `CustomerHeaders` / `MaxTokens` / `SupportsThinking` / `ThinkingLevels`）的 nil 必须序列化成 JSON `null` 且键保留——键缺失会让前端把「继承」误判成 override 并回写错误值。前端 `ModelWithProvider` interface 对这批键**禁 `?` 可选标记**（optional 会放行消费方漏配）。该契约由 `crud_response_shape_test.go` 的 `modelWithProviderResponseKeys` 表在响应体 JSON 上断言（gjson `Exists()` + 类型），实体增删字段时同步加/删一行即可。
+`handler/associations` 的 Create / Update / List 直接序列化 `models.ModelWithProvider`，对外键名为 **PascalCase**（实体多数字段无 json tag），前端按同名 interface 消费（`webui/src/lib/api/modules/catalog/model-providers.ts`）。三态字段（`ToolCall` / `StructuredOutput` / `Image` / `WithHeader` / `Status` / `CustomerHeaders` / `MaxTokens` / `SupportsThinking` / `ThinkingLevels`）的 nil 必须序列化成 JSON `null` 且键保留——键缺失会让前端把「继承」误判成 override 并回写错误值。前端 `ModelWithProvider` interface 对这批键**禁 `?` 可选标记**（optional 会放行消费方漏配）。该契约由 `crud_response_shape_test.go` 的 `modelWithProviderResponseKeys` 表在响应体 JSON 上断言：走 `testutil.AssertAPIResponseKeysInState` 断**键集合逐字相等**（少键与多键都红——实体新增字段导致的响应多键必须改表才放行，这正是「只逐键断存在」防不住的方向），Create / Update / List 三路径各断一次，三态字段再按有值态（`KeyStateSet`：`nil` 即红）/ 空值态（`KeyStateUnset`：有值即红）两个方向各断一次。表内已含 `gorm.Model` 的 `CreatedAt` / `UpdatedAt` / `DeletedAt` 三键（本实体嵌 `gorm.Model`，`models.Model` 则没有 `DeletedAt`）；`DeletedAt` 标 `AlwaysNull`（存活行恒 null，不参与方向校验，有值即红）。实体增删业务字段时同步加/删一行即可。
 
 > ⚠️ **同名能力语义在两个实体上键名相反**：`ModelWithProvider.ToolCall` 是 PascalCase（无 tag），`Model.tool_call` 是 snake_case（显式 tag）。跨实体复制字段时逐一核对，前端 interface 亦然。
 

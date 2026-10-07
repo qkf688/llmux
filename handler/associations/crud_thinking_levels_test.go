@@ -192,13 +192,22 @@ func TestModelProviderResponse_ThinkingLevelsShape(t *testing.T) {
 	}
 }
 
-// assertThinkingLevelsShape 在通用键形状契约（assertResponseKeyShape，负责"键必须存在
-// 且类型正确"）之上额外断原始值，用于区分 ThinkingLevels 三态的具体取值：
+// assertThinkingLevelsShape 断 ThinkingLevels 三态的具体取值：
 // null=继承 / []=显式不约束 / 非空数组=override。
+//
+// 先断「键存在且类型正确」再比原始值：键缺失时 gjson 的 Raw 是空串，
+// 只比 Raw 会把「键没了」误诊成「值不对」。整个契约表的键集合断言在
+// crud_response_shape_test.go（走 testutil），此处只管这一个键的取值。
 func assertThinkingLevelsShape(t *testing.T, body, path string, wantType gjson.Type, wantRaw string) {
 	t.Helper()
-	assertResponseKeyShape(t, body, path, wantType)
-	if got := gjson.Get(body, path); got.Raw != wantRaw {
+	got := gjson.Get(body, path)
+	if !got.Exists() {
+		t.Fatalf("%s 键缺失（三态字段禁 omitempty，nil 必须序列化为 null）。body=%s", path, body)
+	}
+	if got.Type != wantType {
+		t.Fatalf("%s type = %v, want %v, raw=%s", path, got.Type, wantType, got.Raw)
+	}
+	if got.Raw != wantRaw {
 		t.Fatalf("%s raw = %s, want %s", path, got.Raw, wantRaw)
 	}
 }

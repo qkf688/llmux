@@ -63,7 +63,7 @@
 | 仓储方法命名 | `List*`/`Get*`/`Exists*`/`Count*`/`Create`/`Update*`/`Delete*`；硬删以 `Unscoped` 结尾或在注释标明 | `ListEnabledByModelID`, `DeleteByModelIDAndNameUnscoped` |
 | 测试中的仓储绑定 | `models.Init` 后必须 `repository.SetDefault(repository.New(models.DB))`，清理时置 `nil` | `handler/testsupport.InitTestDB` |
 | 测试建库 / 建行 | 测试库统一走 `internal/testutil`（`New` 唯一名内存库 / `NewWithConfig` 自定义 gorm.Config / `NewFile` TempDir 文件库 / `OpenExisting` 打开既有库文件），禁止测试内手写 `gorm.Open`；夹具建行统一 `NewRow`（泛型 Create + t.Fatal）。handler 全装配（`models.Init` + 仓储/设置默认）仍走 `handler/testsupport.InitTestDB` | `internal/testutil/db.go`、`internal/testutil/row.go` |
-| 响应键契约断言 | 直返实体 / 协议响应的键集合用 `testutil.AssertAPIResponseKeys` 打字面量表（缺键/多键/改名都红，gjson 打在响应体 JSON 上） | `internal/testutil/assert.go` |
+| 响应键契约断言 | 直返实体 / 协议响应的键集合用 `testutil.AssertAPIResponseKeys` 打字面量表（缺键/多键/改名都红，gjson 打在响应体 JSON 上）；三态字段的当前态另用 `AssertAPIResponseKeysInState` 按有值态（`KeyStateSet`）/ 空值态（`KeyStateUnset`）各断一次，存活行恒 null 的 ORM 托管键（`gorm.Model.DeletedAt`）标 `AlwaysNull` 豁免方向校验 | `internal/testutil/assert.go` |
 
 ---
 

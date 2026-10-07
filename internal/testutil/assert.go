@@ -9,11 +9,12 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// APIResponseKey 是「响应键契约」表的一行：字面量键名 + 有值态 JSON 类型 + 三态可空标记。
+// APIResponseKey 是「响应键契约」表的一行：字面量键名 + 有值态 JSON 类型 + 可空标记。
 //
-// 键名必须与前端 webui/src/lib/api/modules/** 的 interface 字段名逐字一致——键名
-// 失配不会报错，前端只会静默读到 undefined，这类断层唯一可见的地方是响应体 JSON，
-// 故契约测试必须打在响应体上（AGENTS §5「直返实体 JSON 形状两侧同源」）。
+// 键名必须与前端 webui/src/lib/api/modules/** 的 interface 字段名逐字一致（前端不消费
+// 的 ORM 托管键除外，见 AlwaysNull）——键名失配不会报错，前端只会静默读到 undefined，
+// 这类断层唯一可见的地方是响应体 JSON，故契约测试必须打在响应体上
+// （AGENTS §5「直返实体 JSON 形状两侧同源」）。
 type APIResponseKey struct {
 	// Key 响应体里的键名（字面量，禁止从结构体反射推导——结构体一改断言跟着改，
 	// 恰好放过要抓的「形状变了没同步前端」）。
@@ -24,7 +25,32 @@ type APIResponseKey struct {
 	// JSON null 且键仍存在，禁止 omitempty 省略整键（省略会让前端把继承误判成
 	// override 并在保存时回写错误值）。
 	Nilable bool
+	// AlwaysNull 标记该键在存活行上**恒为 JSON null**（`gorm.Model` 的 DeletedAt：
+	// 软删标记位，未软删行恒 null）。列进表是为了让键集合逐字相等成立；它不参与
+	// 三态方向校验——恒 null 是 ORM 托管形态，不是「继承 / 未设置」的有效语义，
+	// 没有「有值态」可言。标 AlwaysNull 必须同时标 Nilable（表自相矛盾会被判红）。
+	AlwaysNull bool
 }
+
+// KeyState 指定本次断言观测的是「有值态」还是「空值态」，把三态字段的两个方向
+// 都钉死——同一张契约表按两种态各断言一次。
+//
+// 为什么是调用级参数而不是表里的 flag：态是**用例（前置数据）**的属性，不是键的属性。
+// 同一个键在有值态用例里必须非 null、在空值态用例里必须为 null——写进表里就说不通。
+type KeyState int
+
+const (
+	// KeyStateAny 不校验三态方向：键为 null 时只要求该键在表里标了 Nilable。
+	// 这是既有调用方的语义（它们按「有值 / 空值」两张字面量表各断言一次键集合）。
+	KeyStateAny KeyState = iota
+	// KeyStateSet 有值态：Nilable 键必须有值（为 null 即红），且类型 == WantSetType。
+	// 缺了它，把该键的值写成 null 也能全绿——「有值」这个前提就没人守。
+	// 恒 null 键（AlwaysNull）不受这一向约束。
+	KeyStateSet
+	// KeyStateUnset 空值态：Nilable 键必须为 JSON null（非 null 即红）。
+	// 缺了它，该键悄悄被赋上值（继承语义被破坏）也能全绿。恒 null 键不受这一向约束。
+	KeyStateUnset
+)
 
 // AssertAPIResponseKeys 断言 body 在 path 处对象的键集合与 want 表**逐字相等**：
 // 缺键、多键、改名都红。响应形状的任何变化必须先改表、再改代码，不允许静默漂移。
@@ -36,15 +62,26 @@ type APIResponseKey struct {
 //     不进本工具的可选态——有值态与空值态各一张字面量表分别断言，工具只认
 //     「键集合逐字相等」，让「键到底出不出现」显式写在测试里而不是藏在 flag 里。
 //   - path 用 gjson 路径：根对象传 ""，数组元素传 "data.0" 这类形式。
+//
+// 三态字段（Nilable）的当前态由 AssertAPIResponseKeysInState 指定；本函数等价于
+// 传 KeyStateAny（不校验方向），既有调用方语义与结论都不变。
 func AssertAPIResponseKeys(t *testing.T, body, path string, want []APIResponseKey) {
 	t.Helper()
-	if err := apiResponseKeysErr(body, path, want); err != nil {
+	AssertAPIResponseKeysInState(t, body, path, want, KeyStateAny)
+}
+
+// AssertAPIResponseKeysInState 是 AssertAPIResponseKeys 加三态方向校验的版本：
+// 同一张契约表在有值态用例里传 KeyStateSet、在空值态用例里传 KeyStateUnset，
+// 两个方向都钉死。传 KeyStateAny 时行为与 AssertAPIResponseKeys 完全一致。
+func AssertAPIResponseKeysInState(t *testing.T, body, path string, want []APIResponseKey, state KeyState) {
+	t.Helper()
+	if err := apiResponseKeysErr(body, path, want, state); err != nil {
 		t.Fatalf("AssertAPIResponseKeys: %v", err)
 	}
 }
 
 // apiResponseKeysErr 是断言判据本体（返回 error 以便对门本身做冒烟覆盖）。
-func apiResponseKeysErr(body, path string, want []APIResponseKey) error {
+func apiResponseKeysErr(body, path string, want []APIResponseKey, state KeyState) error {
 	var obj gjson.Result
 	if strings.TrimSpace(path) == "" {
 		// gjson.Get(body, "") 取不到根：根对象直接 Parse。
@@ -67,6 +104,11 @@ func apiResponseKeysErr(body, path string, want []APIResponseKey) error {
 	for _, k := range want {
 		if _, dup := wantByKey[k.Key]; dup {
 			return fmt.Errorf("契约表键 %q 重复", k.Key)
+		}
+		// 恒 null 键不给「null 是否合法」留后门：没标 Nilable 就等于要工具放行一次
+		// 未声明的 null，而这正是本工具要抓的那类静默漂移。
+		if k.AlwaysNull && !k.Nilable {
+			return fmt.Errorf("契约表键 %q 标了 AlwaysNull 却未标 Nilable（自相矛盾：恒 null 的键必须允许 null）", k.Key)
 		}
 		wantByKey[k.Key] = k
 		wantKeys = append(wantKeys, k.Key)
@@ -97,7 +139,22 @@ func apiResponseKeysErr(body, path string, want []APIResponseKey) error {
 				return fmt.Errorf("%s.%s 为 null，但契约表未标记 Nilable（三态字段才允许 null；"+
 					"键必须始终在、null 与缺键是两回事），body=%s", pathLabel(path), kc.Key, body)
 			}
+			if state == KeyStateSet && !kc.AlwaysNull {
+				return fmt.Errorf("%s.%s 为 null，但本用例观测有值态（KeyStateSet）：三态键在有值态下必须有值，"+
+					"否则「有值」这个前提没人守、键类型漂移会从这条出口漏过，body=%s", pathLabel(path), kc.Key, body)
+			}
 			continue
+		}
+		if kc.Nilable && !kc.AlwaysNull && state == KeyStateUnset {
+			return fmt.Errorf("%s.%s 有值（type = %v），但本用例观测空值态（KeyStateUnset）：三态键在空值态下"+
+				"必须为 JSON null（继承语义被悄悄写成显式值会让前端误判 override），body=%s",
+				pathLabel(path), kc.Key, gotType, body)
+		}
+		if kc.AlwaysNull {
+			// 恒 null 键突然有值 = ORM 托管形态变了（软删位被写值，或被换成了别的字段），
+			// 与键集合漂移一样该红——表里写着恒 null，就不许悄悄变成有值。
+			return fmt.Errorf("%s.%s 有值（type = %v），但契约表标了 AlwaysNull（恒为 null 的 ORM 托管键）；"+
+				"形态变了就先改表再说，body=%s", pathLabel(path), kc.Key, gotType, body)
 		}
 		if gotType != kc.WantSetType {
 			return fmt.Errorf("%s.%s type = %v, want %v, body=%s",

@@ -37,9 +37,15 @@ func ExportDatabase(c *gin.Context) {
 	}
 
 	// 临时快照放主库同目录：跨盘 rename 无关（此处不 rename），但同目录保证同文件
-	// 系统语义；路径含时间戳防并发导出互踩。写失败即收口 500，不带 raw err。
-	timestamp := time.Now().Format("20060102_150405")
-	snapshotPath := dbPath + fmt.Sprintf(".export-%s.tmp", timestamp)
+	// 系统语义。写失败即收口 500，不带 raw err。
+	//
+	// 命名只由 exportSnapshotPath 单点产出：清理回归断言要锚住「实现的真实命名」，
+	// 命名散在实现与测试两处时，实现改名会让断言静默失效（Stage 41 修的正是这个形态）。
+	// 注意时间戳只到**秒**：同秒并发导出会算出同一条路径、后到者 VACUUM INTO 必失败
+	//（既有缺陷，已随导出族登记 find-issues），此处不顺手改口径。
+	now := time.Now()
+	timestamp := now.Format("20060102_150405")
+	snapshotPath := exportSnapshotPath(dbPath, now)
 	defer func() {
 		if err := os.Remove(snapshotPath); err != nil && !os.IsNotExist(err) {
 			slog.Warn("清理导出临时快照失败", "path", snapshotPath, "error", err)
@@ -66,4 +72,13 @@ func ExportDatabase(c *gin.Context) {
 
 	slog.Info("数据库导出", "filename", filename, "size", snapshotInfo.Size(), "source", filepath.Base(dbPath))
 	c.File(snapshotPath)
+}
+
+// exportSnapshotPath 返回一次导出的临时快照路径：<库路径>.export-<时间戳>.tmp。
+//
+// 命名收成单点，是为了让「导出后快照不残留」的回归断言能锚在**实现真实产出的名字**上
+// （export_test.go 的控制表第一行由本函数产出）。命名一旦散成实现与测试两份字面量，
+// 实现改名时断言不吭声、目录扫描恒绿，那就是 Stage 41 修掉的假绿形态。
+func exportSnapshotPath(dbPath string, ts time.Time) string {
+	return dbPath + fmt.Sprintf(".export-%s.tmp", ts.Format("20060102_150405"))
 }

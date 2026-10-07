@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/internal/testutil"
@@ -104,12 +105,17 @@ func TestExportDatabase_TempSnapshotCleanedUp(t *testing.T) {
 	db, dbPath := openExportFixtureDB(t)
 	swapDBPath(t, dbPath, db)
 
-	// 控制表：真实命名（两种库名形态）必须命中；历史错配形态必须不命中。
+	// 控制表：判据必须命中「实现真实产出的命名」，且不命中历史错配形态。
+	//
+	// 第一行由实现侧构造器 exportSnapshotPath 产出——实现改名而判据没跟上时这一行立刻红。
+	// 缺了它，期望值全部出自测试自己的字面量，改名后判据与期望一起错、目录扫描恒绿，
+	// 假绿原样复活（这正是 Stage 41 修的形态；第一版控制表只锚了自己的期望，没锁住它）。
 	base := filepath.Base(dbPath)
 	controls := []struct {
 		name string
 		want bool
 	}{
+		{name: filepath.Base(exportSnapshotPath(dbPath, time.Now())), want: true},
 		{name: base + ".export-20261008_061500.tmp", want: true},
 		{name: "llmux.db.export-20261008_061500.tmp", want: true},
 		{name: base + "-export", want: false}, // 原断言的过滤形态：对真实命名永不命中

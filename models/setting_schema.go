@@ -124,9 +124,8 @@ func buildSettingSchemas() map[string]SettingSchema {
 		{Key: SettingKeyHealthCheckCountAsSuccess, Field: "CountHealthCheckAsSuccess", Type: SettingTypeBool, Default: true, Category: "health"},
 		{Key: SettingKeyHealthCheckCountAsFailure, Field: "CountHealthCheckAsFailure", Type: SettingTypeBool, Default: false, Category: "health"},
 
-		// 格式转换（Category 沿用 performance：该键就是原「性能优化」组里唯一的
-		// 真实能力开关，另四个只用纳秒级开销换观测数据的已删除）
-		{Key: SettingKeyEnableFormatConversion, Field: "EnableFormatConversion", Type: SettingTypeBool, Default: true, Category: "performance"},
+		// 格式转换是路由能力开关（设置页在「通用设置」，故 Category=routing）
+		{Key: SettingKeyEnableFormatConversion, Field: "EnableFormatConversion", Type: SettingTypeBool, Default: true, Category: "routing"},
 
 		// 模型关联
 		{Key: SettingKeyAutoAssociateOnAdd, Field: "AutoAssociateOnAdd", Type: SettingTypeBool, Default: false, Category: "association"},

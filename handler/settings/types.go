@@ -46,7 +46,7 @@ type Settings struct {
 	DisableAllLogs            bool `json:"disable_all_logs"`
 	CountHealthCheckAsSuccess bool `json:"count_health_check_as_success"`
 	CountHealthCheckAsFailure bool `json:"count_health_check_as_failure"`
-	// 格式转换（原「性能优化」组只剩它：另四个设置项只用纳秒级开销换观测数据，已删除）
+	// 格式转换是路由能力开关，不是性能取舍
 	EnableFormatConversion bool `json:"enable_format_conversion"`
 	// 模型同步相关设置
 	ModelSyncEnabled           bool     `json:"model_sync_enabled"`

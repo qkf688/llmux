@@ -645,9 +645,8 @@ const (
 	SettingKeyHealthCheckCountAsFailure        = "health_check_count_as_failure"        // 健康检测失败是否计入失败调用（触发衰减）
 	SettingKeyHealthCheckCheckDisabledOnly     = "health_check_check_disabled_only"     // 是否只检测停用的模型
 
-	// 格式转换（原与已删除的几个「性能开关」同组：它们省的是纳秒级开销、
-	// 代价是观测数据，已整体移除；格式转换是真实的路由能力，故保留）
-	SettingKeyEnableFormatConversion = "enable_format_conversion" // 允许格式转换（关闭则只能直连）
+	// 格式转换是路由能力开关，不是性能取舍（关闭则只能直连）
+	SettingKeyEnableFormatConversion = "enable_format_conversion"
 
 	// 模型同步相关设置
 	SettingKeyModelSyncEnabled           = "model_sync_enabled"             // 自动同步模型开关

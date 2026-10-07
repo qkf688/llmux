@@ -41,5 +41,12 @@ func BuildHeaders(source http.Header, withHeader bool, keyHeaders, customHeaders
 		header.Set(key, value)
 	}
 
+	// 传输层头是「显式通道不设限」的唯一例外（与 service/credprobe 的探针同款 Del）：
+	// Accept-Encoding 一旦由调用方设定，Go Transport 就**不再透明解压**（gzip 上游会被
+	// 读流侧误判死），且上游响应会带上 Content-Encoding——而网关的响应头允许清单恰好
+	// 剔除该头，客户端将拿到「压缩字节 + 无编码标记」的不可解码正文。删掉它，把
+	// 「网关从不请求压缩」立成不变量，解压统一交给 Transport 透明完成。
+	header.Del("Accept-Encoding")
+
 	return header
 }

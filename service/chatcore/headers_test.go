@@ -183,3 +183,27 @@ func TestBuildHeaders_KeyHeadersBypassWhitelistAndOrthogonalToWithHeader(t *test
 		t.Errorf("Cookie = %q, want key 级显式配置送达（不受 with_header/白名单限制）", got.Get("Cookie"))
 	}
 }
+
+// TestBuildHeaders_StripsAcceptEncodingEvenWhenExplicitlyConfigured 钉「显式通道不设限」
+// 的唯一例外——传输层头 Accept-Encoding：
+//
+//   - 自设它会让 Go Transport 放弃透明解压（判据：transport 只在调用方未设此头时才自动
+//     加 gzip 并解压），gzip 上游会被读流侧误判死；
+//   - 且上游响应会保留 Content-Encoding，而响应头允许清单（handler/v1）恰好剔除该头，
+//     客户端因此拿到「压缩字节 + 无编码标记」——不可解码。
+//
+// 故三层（入站透传 / key 级 / 关联级）任一路径设了它都要在出口删掉，与 service/credprobe
+// 的探针同款；这条是刻意区别于 Cookie/Authorization 等「管理员显式通道照放」的头。
+func TestBuildHeaders_StripsAcceptEncodingEvenWhenExplicitlyConfigured(t *testing.T) {
+	source := http.Header{}
+	source.Set("Accept-Encoding", "gzip")
+
+	got := BuildHeaders(source, true,
+		map[string]string{"Accept-Encoding": "br"},
+		map[string]string{"Accept-Encoding": "gzip, deflate"},
+		false)
+
+	if v := got.Get("Accept-Encoding"); v != "" {
+		t.Fatalf("Accept-Encoding = %q, want 空（传输层头不得外发，解压交给 Transport 透明完成）", v)
+	}
+}

@@ -1,5 +1,4 @@
 import type { ErrorType } from "@/lib/errors";
-import type { CredentialView } from "./credentials";
 import { apiRequest } from "../../core/client";
 
 export interface Provider {
@@ -29,22 +28,14 @@ export interface ProviderEndpoint {
   Enabled: boolean;
 }
 
-/** 内联凭据项：与号池页共用同一凭据视图（掩码 + 状态/冷却/连败）——编辑弹窗口据此显示
- *  状态徽标与「启用/停用」（内联 key 判停后的人工恢复）。 */
-export type ProviderInlineKeyItem = CredentialView;
-
-/** 凭据分组（详情路径；Source/InlineKeys/PoolID 为派生字段） */
+/** 凭据分组（详情路径；PoolID 为派生字段） */
 export interface ProviderGroupDetail {
   ID: number;
   ProviderID: number;
   Name: string;
   Weight: number;
   Models: string;
-  /** 凭据来源二选一：inline / pool */
-  Source: string;
-  /** 内联凭据掩码项（仅 inline 来源非空；明文不受控返回） */
-  InlineKeys: ProviderInlineKeyItem[];
-  /** 关联号池 ID；pool 来源非空，inline 来源为 null（三态禁 omitempty） */
+  /** 关联号池 ID；凭据一律归属号池（内联凭据概念已删除） */
   PoolID: number | null;
 }
 
@@ -61,21 +52,12 @@ export interface ProviderEndpointInput {
   enabled: boolean;
 }
 
-/** 内联凭据写入项：ID>0 引用既有凭据（key 空 = 原样保留；key 非空 = 替换该条），
- *  ID=0 表示以 key 命名新增。掩码回填的条目提交时 key 传空串由 ID 保留。 */
-export interface ProviderInlineKeyInput {
-  id: number;
-  key: string;
-}
-
-/** 凭据分组写入体（后端 GroupInput；凭据来源二选一：inline_keys / pool_id）。
+/** 凭据分组写入体（后端 GroupInput；凭据只归属号池，pool_id 必填）。
  *  id>0 = 就地更新既有分组（模型白名单是同步专属数据，不在写入体里）；id 缺省/0 = 新建。 */
 export interface ProviderGroupInput {
   id?: number;
   name: string;
   weight: number;
-  source: "inline" | "pool";
-  inline_keys: ProviderInlineKeyInput[];
   pool_id: number | null;
 }
 
@@ -158,25 +140,6 @@ export async function getProviders(filters: { name?: string; type?: string } = {
 
 export async function getProvider(id: number): Promise<ProviderDetail> {
   return apiRequest<ProviderDetail>(`/providers/${id}`);
-}
-
-/** 受控明文端点返回项：按凭据 id 归位，前端替换掩码行时不依赖数组顺序 */
-export interface ProviderInlineKeyRawItem {
-  id: number;
-  key: string;
-}
-
-/** 内联组明文拉取（受控端点）：「显示」动作才触发；按 id 归位（删掩码行未保存也能显示剩余）。
- *  `cache: "no-store"` 与服务端同名响应头构成纵深防御：明文不得进浏览器 HTTP 缓存——
- *  前端 state 清得再干净，缓存文件里的响应体仍然在。 */
-export async function getProviderGroupInlineKeysRaw(
-  providerId: number,
-  groupId: number,
-): Promise<{ keys: ProviderInlineKeyRawItem[] }> {
-  return apiRequest<{ keys: ProviderInlineKeyRawItem[] }>(
-    `/providers/${providerId}/groups/${groupId}/inline-keys/raw`,
-    { cache: "no-store" },
-  );
 }
 
 export async function createProvider(provider: ProviderWritePayload): Promise<ProviderDetail> {

@@ -240,14 +240,11 @@ export function ProviderFormDialog({
                 <div className="space-y-1">
                   <h3 className="text-sm font-semibold">协议端点与凭据分组</h3>
                   <p className="text-xs text-muted-foreground">
-                    协议端点（URL 继承/覆盖）与凭据分组（价格权重 / 白名单 / 凭据来源）
+                    协议端点（URL 继承/覆盖）与凭据分组（价格权重 / 白名单 / 关联号池）
                   </p>
                 </div>
                 <EndpointsSection />
-                <GroupsSection
-                  providerId={editingProvider?.ID}
-                  onViewPoolDetail={(poolId) => setPoolDetail({ open: true, poolId })}
-                />
+                <GroupsSection onViewPoolDetail={(poolId) => setPoolDetail({ open: true, poolId })} />
               </div>
             </DialogBody>
 

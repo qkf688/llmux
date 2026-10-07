@@ -25,38 +25,15 @@ export const providerFormEndpointSchema = z.object({
 
 export type ProviderFormEndpoint = z.infer<typeof providerFormEndpointSchema>;
 
-/** 内联 key 表单行：掩码态（回填）/ 明文态（已显示或新增）二选一。
- * - masked=true：服务端掩码文本（只读），保存时按 id 保留，key 不提交；
- * - masked=false：明文（可编辑），保存时 key 原样提交（新增 id 缺省）。
- * 既有凭据同时携带状态信息（详情回填），供状态徽标与「启用/停用」使用——新增行无此信息。
- * 状态是**凭据属性**、不属于表单提交内容：保存只写 key 与归属（见 buildProviderPayload）。 */
-export const providerFormInlineKeyRowSchema = z.object({
-  /** 既有凭据 ID：详情回填的掩码行有值；新增行缺省（提交时按 0 处理） */
-  id: z.number().optional(),
-  key: z.string(),
-  masked: z.boolean(),
-  /** 凭据状态（active/disabled/error/temp_unsched）；新增行缺省 */
-  status: z.string().optional(),
-  /** 冷却截止时间（ISO），在冷却窗口内徽标额外显示「冷却」 */
-  cooldownUntil: z.string().nullable().optional(),
-  /** 鉴权连败计数（判停后非 0；启停动作会清掉它） */
-  failCount: z.number().optional(),
-});
-
-export type ProviderFormInlineKeyRow = z.infer<typeof providerFormInlineKeyRowSchema>;
-
-/** 凭据分组：名称 × 价格权重 × 凭据来源（内联 Key / 关联号池二选一） */
+/** 凭据分组：名称 × 价格权重 × 关联号池（凭据只存在于号池） */
 export const providerFormGroupSchema = z.object({
   name: z.string().min(1, { message: "分组名称不能为空" }),
   /** 价格导向权重：便宜的分组权重高 → 加权随机命中概率大 */
   weight: z.number().int().min(0).max(100),
-  source: z.enum(["inline", "pool"]),
-  /** 内联 key 行（掩码/明文混合态）；pool 来源恒为空数组 */
-  inlineKeys: z.array(providerFormInlineKeyRowSchema),
-  /** 回填的既有分组 ID：① 编辑「显示」明文拉取（raw 端点）的定位用；② 保存时按 id
-   * 就地更新该组（模型白名单是同步专属数据，就地更新才不会被保存冲掉）。新建组缺省 */
+  /** 回填的既有分组 ID：保存时按 id 就地更新该组（模型白名单是同步专属数据，
+   *  就地更新才不会被保存冲掉）。新建组缺省 */
   groupId: z.number().optional(),
-  poolId: z.string(),
+  poolId: z.string().min(1, { message: "请选择关联号池" }),
 });
 
 export type ProviderFormGroup = z.infer<typeof providerFormGroupSchema>;
@@ -65,7 +42,7 @@ export const providerFormSchema = z.object({
   name: z.string().min(1, { message: "提供商名称不能为空" }),
   type: z.string().min(1, { message: "提供商类型不能为空" }),
   base_url: z.string().min(1, { message: "Base URL 不能为空" }),
-  // 顶层 api_key 已废除（S6）：凭据只存在于分组内联 keys / 关联号池，config 不再承载明文 key
+  // 顶层 api_key 已废除（S6）：凭据只存在于号池，config 不再承载明文 key
   beta: z.string().optional(),
   version: z.string().optional(),
   auth_type: z.string().optional(),
@@ -116,5 +93,5 @@ export const defaultProviderFormValues: ProviderFormValues = {
   model_filter_enabled: false,
   protocols: ["openai"],
   endpoints: [{ protocol: "openai", url: "", enabled: true }],
-  groups: [{ name: "默认组", weight: 1, source: "inline", inlineKeys: [], poolId: "" }],
+  groups: [{ name: "默认组", weight: 1, poolId: "" }],
 };

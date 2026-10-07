@@ -24,7 +24,7 @@ export function parseCustomModelsInput(input?: string): string[] {
 
 /**
  * 由表单构建 config JSON（仅 adapter 字段 + custom_models）。
- * S6 起不含 api_key / _schedule：凭据走分组内联/号池、协议/端点/分组走独立 DTO 字段。
+ * S6 起不含 api_key / _schedule：凭据走号池、协议/端点/分组走独立 DTO 字段。
  * 语法上不写两者，避免把明文 key 或已废弃的调度结构落进 config。
  */
 export function buildConfigFromForm(values: ProviderFormValues): string {
@@ -45,8 +45,7 @@ export function buildConfigFromForm(values: ProviderFormValues): string {
 /**
  * 由表单构建 ProviderWritePayload：config + 顶层标量 + 结构化 children。
  * 表单提交（创建/编辑保存）全量携带 protocols/endpoints/groups，走后端结构化四表同步。
- * inline 组的 keys 以行形态提交：掩码行按 id 保留（key 空串）、明文行 key 原样（后端按 hash
- * 识别替换/新增），空新建行剔除；pool 组只带 pool_id。
+ * 分组只带 pool_id——凭据一律归属号池，本表单不再写入任何 key。
  */
 export function buildProviderPayload(values: ProviderFormValues, provider: ProviderWritePayload = {}): ProviderWritePayload {
   const endpoints = (values.endpoints ?? []).map((e) => ({
@@ -55,30 +54,12 @@ export function buildProviderPayload(values: ProviderFormValues, provider: Provi
     enabled: e.enabled,
   }));
 
-  const groups = (values.groups ?? []).map((g) =>
-    g.source === "pool"
-      ? {
-          id: g.groupId ?? 0,
-          name: g.name,
-          weight: g.weight,
-          source: "pool" as const,
-          inline_keys: [],
-          pool_id: g.poolId ? Number(g.poolId) : null,
-        }
-      : {
-          id: g.groupId ?? 0,
-          name: g.name,
-          weight: g.weight,
-          source: "inline" as const,
-          // 行 → InlineKeyInput：空文本行一律剔除——新增占位行忽略、清空已显示行视为删除该凭据
-          // （旧明文数组语义的等价物）；掩码行按 id 保留（key 空串，掩码文本永不上行）；
-          // 明文行 key 原样提交（后端按 hash 变化识别替换/新增）。
-          inline_keys: (g.inlineKeys ?? [])
-            .filter((r) => r.key.trim() !== "")
-            .map((r) => ({ id: r.id ?? 0, key: r.masked ? "" : r.key.trim() })),
-          pool_id: null,
-        }
-  );
+  const groups = (values.groups ?? []).map((g) => ({
+    id: g.groupId ?? 0,
+    name: g.name,
+    weight: g.weight,
+    pool_id: g.poolId ? Number(g.poolId) : null,
+  }));
 
   return {
     ...provider,
@@ -143,28 +124,12 @@ export function detailToFormValues(detail: ProviderDetail): ProviderFormValues {
     model_filter_enabled: detail.ModelFilterEnabled ?? false,
     protocols: detail.Protocols?.length ? detail.Protocols : [],
     endpoints: (detail.Endpoints ?? []).map((e) => ({ protocol: e.Protocol, url: e.URL, enabled: e.Enabled })),
-    groups: (detail.Groups ?? []).map((g) => {
-      if (g.Source === "pool") {
-        return { name: g.Name, weight: g.Weight, source: "pool" as const, inlineKeys: [], groupId: g.ID, poolId: g.PoolID != null ? String(g.PoolID) : "" };
-      }
-      // 掩码回填：每条掩码行携带既有凭据 ID（「显示」拉明文的引用、未拉取时按 id 保留保存）
-      // 与凭据状态（状态徽标 / 启停按钮的数据源）。掩码行 key 恒为服务端掩码文本——
-      // 明文永不出常规响应，前端不再自行拼装。
-      return {
-        name: g.Name,
-        weight: g.Weight,
-        source: "inline" as const,
-        inlineKeys: (g.InlineKeys ?? []).map((k) => ({
-          id: k.ID,
-          key: k.KeyMasked,
-          masked: true,
-          status: k.Status,
-          cooldownUntil: k.CooldownUntil,
-          failCount: k.FailCount,
-        })),
-        groupId: g.ID,
-        poolId: "",
-      };
-    }),
+    // 分组回填：凭据一律归属号池，只回填 poolId（空 = 存量异常数据，前端仍要求用户重选）。
+    groups: (detail.Groups ?? []).map((g) => ({
+      name: g.Name,
+      weight: g.Weight,
+      groupId: g.ID,
+      poolId: g.PoolID != null ? String(g.PoolID) : "",
+    })),
   };
 }

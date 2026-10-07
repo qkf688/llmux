@@ -1,7 +1,7 @@
 /**
  * 供应商表单「协议与调度」分区（S0 原型）：
  * 主类型（○ 单选）× 支持类型勾选（= 出站协议）/ 协议端点区（跟随勾选，URL 继承/覆盖）/
- * 凭据分组区（价格权重 + 凭据来源二选一；关联号池可就地打开号池详情弹窗）。
+ * 凭据分组区（价格权重 + 关联号池下拉，可就地打开号池详情弹窗）。
  * 依赖 ProviderFormDialog 的 <Form> context（useFormContext）。
  * 正式实现（S6）时这些字段改为独立 DTO 提交，本组件结构保留。
  */
@@ -21,12 +21,9 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePoolOptions } from "../../hooks/use-pool-options";
-import { InlineKeysField } from "./inline-keys-field";
 import { PROTOCOL_LABEL, SUPPORTED_TYPE_OPTIONS, type ProviderFormGroup, type ProviderFormValues } from "../../form-schema";
 
 /**
@@ -252,24 +249,19 @@ export function EndpointsSection() {
 }
 
 function defaultGroup(): ProviderFormGroup {
-  return { name: "", weight: 1, source: "inline", inlineKeys: [], poolId: "" };
+  return { name: "", weight: 1, poolId: "" };
 }
 
-/** 单个分组卡片：名称/价格权重/凭据来源二选一；关联号池时可查看池详情 */
+/** 单个分组卡片：名称/价格权重/关联号池；凭据只存在于号池，可查看池详情 */
 function GroupCard({
   index,
-  providerId,
   onViewPoolDetail,
 }: {
   index: number;
-  /** 供应商 ID：既有分组「显示」明文拉取（raw 端点）定位用；新建为空 */
-  providerId?: number;
   /** 打开号池详情弹窗（由 ProviderFormDialog 持 state 并渲染共享 PoolDetailDialog） */
   onViewPoolDetail?: (poolId: string) => void;
 }) {
   const { control } = useFormContext<ProviderFormValues>();
-  const source = useWatch({ control, name: `groups.${index}.source` });
-  const groupId = useWatch({ control, name: `groups.${index}.groupId` });
   const pools = usePoolOptions();
 
   return (
@@ -320,104 +312,56 @@ function GroupCard({
 
       <FormField
         control={control}
-        name={`groups.${index}.source`}
+        name={`groups.${index}.poolId`}
         render={({ field }) => (
           <FormItem className="space-y-1">
-            <FormLabel>凭据来源</FormLabel>
-            <FormControl>
-              <RadioGroup value={field.value} onValueChange={field.onChange} className="flex gap-4">
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="inline" id={`source-inline-${index}`} />
-                  <Label htmlFor={`source-inline-${index}`} className="text-sm">
-                    内联 Key
-                  </Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="pool" id={`source-pool-${index}`} />
-                  <Label htmlFor={`source-pool-${index}`} className="text-sm">
-                    关联号池
-                  </Label>
-                </div>
-              </RadioGroup>
-            </FormControl>
+            <FormLabel>关联号池</FormLabel>
+            <div className="flex items-center gap-2">
+              <FormControl>
+                <Select value={field.value || undefined} onValueChange={field.onChange}>
+                  <SelectTrigger className="min-w-0 flex-1">
+                    <SelectValue placeholder="选择号池（凭据在号池页管理）" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pools.map((pool) => (
+                      <SelectItem key={pool.id} value={String(pool.id)}>
+                        {pool.name}（{pool.keyCount} keys）
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormControl>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 shrink-0 px-2.5 text-xs"
+                      disabled={!field.value}
+                      onClick={() => onViewPoolDetail?.(field.value)}
+                    >
+                      <Eye className="size-3.5" />
+                      查看详情
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>查看号池详情（凭据列表 / 状态分布）</TooltipContent>
+              </Tooltip>
+            </div>
             <FormMessage />
           </FormItem>
         )}
       />
-
-      {source === "inline" ? (
-        <FormField
-          control={control}
-          name={`groups.${index}.inlineKeys`}
-          render={({ field }) => (
-            <FormItem className="space-y-1">
-              <InlineKeysField
-                value={field.value ?? []}
-                onChange={field.onChange}
-                providerId={providerId}
-                groupId={groupId}
-              />
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-      ) : (
-        <FormField
-          control={control}
-          name={`groups.${index}.poolId`}
-          render={({ field }) => (
-            <FormItem className="space-y-1">
-              <FormLabel>关联号池</FormLabel>
-              <div className="flex items-center gap-2">
-                <FormControl>
-                  <Select value={field.value || undefined} onValueChange={field.onChange}>
-                    <SelectTrigger className="min-w-0 flex-1">
-                      <SelectValue placeholder="选择号池（可在号池页管理凭据）" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {pools.map((pool) => (
-                        <SelectItem key={pool.id} value={String(pool.id)}>
-                          {pool.name}（{pool.keyCount} keys）
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FormControl>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="inline-flex">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-9 shrink-0 px-2.5 text-xs"
-                        disabled={!field.value}
-                        onClick={() => onViewPoolDetail?.(field.value)}
-                      >
-                        <Eye className="size-3.5" />
-                        查看详情
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>查看号池详情（凭据列表 / 状态分布）</TooltipContent>
-                </Tooltip>
-              </div>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-      )}
     </div>
   );
 }
 
 /** 凭据分组区：分组列表 + 添加分组 */
 export function GroupsSection({
-  providerId,
   onViewPoolDetail,
 }: {
-  /** 供应商 ID：既有分组「显示」明文拉取（raw 端点）定位用；新建为空 */
-  providerId?: number;
   /** 透传给各分组卡片：关联号池时打开该池的详情弹窗 */
   onViewPoolDetail?: (poolId: string) => void;
 }) {
@@ -429,12 +373,12 @@ export function GroupsSection({
       <div>
         <FormLabel>凭据分组</FormLabel>
         <p className="text-xs text-muted-foreground">
-          请求按模型可用性（分组白名单由同步维护）+ 价格权重加权随机；分组内凭据轮询 + 冷却剔除
+          请求按模型可用性（分组白名单由同步维护）+ 价格权重加权随机；号池内凭据轮询 + 冷却剔除
         </p>
       </div>
       {fields.map((field, index) => (
         <div key={field.id} className="space-y-2">
-          <GroupCard index={index} providerId={providerId} onViewPoolDetail={onViewPoolDetail} />
+          <GroupCard index={index} onViewPoolDetail={onViewPoolDetail} />
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="inline-flex">

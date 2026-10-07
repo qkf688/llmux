@@ -1,29 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { CredentialView, ProviderDetail } from "@/lib/api";
+import type { ProviderDetail } from "@/lib/api";
 import { buildConfigFromForm, buildProviderPayload, detailToFormValues } from "./config";
 import { defaultProviderFormValues, type ProviderFormValues } from "../form-schema";
-
-/** 凭据视图工厂（后端 service/credview.View）：用例只关心 ID/掩码/状态，其余字段由基座补齐。
- *  用 Partial 工厂而非 `as CredentialView`——新增字段时 tsc 会在这里报错，不会静默放过。 */
-function credentialView(p: Partial<CredentialView> & { ID: number; KeyMasked: string }): CredentialView {
-  return {
-    PoolID: null,
-    GroupID: 1,
-    Status: "active",
-    Note: "",
-    CooldownUntil: null,
-    CooldownReason: "",
-    FailCount: 0,
-    LastUsedAt: null,
-    LastProbeAt: null,
-    TotalRequests: 0,
-    TotalErrors: 0,
-    TotalTokens: 0,
-    CreatedAt: "2026-09-28T00:00:00Z",
-    UpdatedAt: "2026-09-28T00:00:00Z",
-    ...p,
-  };
-}
 
 function formValues(overrides: Partial<ProviderFormValues> = {}): ProviderFormValues {
   return {
@@ -32,18 +10,7 @@ function formValues(overrides: Partial<ProviderFormValues> = {}): ProviderFormVa
     base_url: "https://api.example.com/v1",
     protocols: ["openai"],
     endpoints: [{ protocol: "openai", url: "", enabled: true }],
-    groups: [
-      {
-        name: "默认组",
-        weight: 1,
-        source: "inline",
-        inlineKeys: [
-          { id: 0, key: "sk-a", masked: false },
-          { id: 0, key: "sk-b", masked: false },
-        ],
-        poolId: "",
-      },
-    ],
+    groups: [{ name: "默认组", weight: 1, poolId: "7" }],
     ...overrides,
   };
 }
@@ -65,12 +32,7 @@ function detail(overrides: Partial<ProviderDetail> = {}): ProviderDetail {
         Name: "默认组",
         Weight: 1,
         Models: "",
-        Source: "inline",
-        InlineKeys: [
-          credentialView({ ID: 101, KeyMasked: "sk-****-1" }),
-          credentialView({ ID: 102, KeyMasked: "sk-****-2" }),
-        ],
-        PoolID: null,
+        PoolID: 9,
       },
     ],
     ...overrides,
@@ -78,7 +40,7 @@ function detail(overrides: Partial<ProviderDetail> = {}): ProviderDetail {
 }
 
 describe("buildConfigFromForm - api_key 治理（AC-2）", () => {
-  it("config 不含 api_key 键（凭据只走分组内联/号池）", () => {
+  it("config 不含 api_key 键（凭据只走号池）", () => {
     const config = JSON.parse(buildConfigFromForm(formValues()));
     expect(config).not.toHaveProperty("api_key");
   });
@@ -146,7 +108,7 @@ describe("buildConfigFromForm - 协议驱动的 adapter 字段", () => {
   });
 });
 
-describe("buildProviderPayload - 行形态 → InlineKeyInput（掩码保留/明文提交）", () => {
+describe("buildProviderPayload - 分组只引用号池", () => {
   it("payload 携带 protocols/endpoints/groups，config 内嵌无 api_key", () => {
     const payload = buildProviderPayload(formValues(), { name: "p", type: "openai" });
 
@@ -159,139 +121,43 @@ describe("buildProviderPayload - 行形态 → InlineKeyInput（掩码保留/明
     expect(config).not.toHaveProperty("_schedule");
   });
 
-  it("明文纯新增行：按 id=0 + key 提交，pool_id 为 null", () => {
+  it("分组恒输出 {id,name,weight,pool_id}，poolId 字符串转数字", () => {
     const payload = buildProviderPayload(formValues());
     expect(payload.groups).toEqual([
-      {
-        id: 0,
-        name: "默认组",
-        weight: 1,
-        source: "inline",
-        inline_keys: [
-          { id: 0, key: "sk-a" },
-          { id: 0, key: "sk-b" },
-        ],
-        pool_id: null,
-      },
+      { id: 0, name: "默认组", weight: 1, pool_id: 7 },
     ]);
   });
 
-  it("掩码行提交 key 空串按 id 保留；明文行 key 原样提交", () => {
-    const payload = buildProviderPayload(
-      formValues({
-        groups: [
-          {
-            name: "默认组",
-            weight: 1,
-            source: "inline",
-            inlineKeys: [
-              { id: 101, key: "sk-****-1", masked: true },
-              { id: 102, key: "sk-plain-1", masked: false },
-            ],
-            poolId: "",
-          },
-        ],
-      })
-    );
-    expect(payload.groups?.[0]).toMatchObject({
-      inline_keys: [
-        { id: 101, key: "" },
-        { id: 102, key: "sk-plain-1" },
-      ],
-    });
+  it("分组不携带任何 key 字段（内联凭据已删除）：payload 分组键集合恒为四项", () => {
+    const payload = buildProviderPayload(formValues());
+    for (const group of payload.groups ?? []) {
+      expect(Object.keys(group).sort()).toEqual(["id", "name", "pool_id", "weight"]);
+    }
   });
 
-  it("新加的空占位/空白明文行被剔除（对齐后端 normalizeInlineKeys 空条目兜底）", () => {
+  it("组 id 随行回传（就地更新键），保证模型白名单不被保存冲掉", () => {
     const payload = buildProviderPayload(
       formValues({
-        groups: [
-          {
-            name: "默认组",
-            weight: 1,
-            source: "inline",
-            inlineKeys: [
-              { id: 101, key: "sk-****-1", masked: true },
-              { id: undefined, key: "", masked: false },
-              { id: undefined, key: "  ", masked: false },
-            ],
-            poolId: "",
-          },
-        ],
-      })
-    );
-    expect(payload.groups?.[0]).toMatchObject({ inline_keys: [{ id: 101, key: "" }] });
-  });
-
-  it("清空已显示行（明文态 + 空文本）= 删除该凭据，不带 id 提交；掩码行仍按 id 保留", () => {
-    const payload = buildProviderPayload(
-      formValues({
-        groups: [
-          {
-            name: "默认组",
-            weight: 1,
-            source: "inline",
-            inlineKeys: [
-              { id: 101, key: "", masked: false },
-              { id: 102, key: "sk-****-2", masked: true },
-            ],
-            poolId: "",
-          },
-        ],
-      })
-    );
-    expect(payload.groups?.[0]).toMatchObject({ inline_keys: [{ id: 102, key: "" }] });
-  });
-
-  it("pool 组：只带 pool_id（数字），inline_keys 为空数组；组 id 随行回传（就地更新键）", () => {
-    const payload = buildProviderPayload(
-      formValues({
-        groups: [{ name: "池组", weight: 2, source: "pool", inlineKeys: [], groupId: 22, poolId: "7" }],
+        groups: [{ name: "池组", weight: 2, groupId: 22, poolId: "9" }],
       })
     );
     expect(payload.groups).toEqual([
-      { id: 22, name: "池组", weight: 2, source: "pool", inline_keys: [], pool_id: 7 },
+      { id: 22, name: "池组", weight: 2, pool_id: 9 },
     ]);
   });
 
-  it("明文重复行原样提交（重复提示在 UI，去重语义由后端 hash 复用/新建兜底）", () => {
+  it("poolId 为空串时提交 null（schema 已拦必填，这里是绕过校验时的兜底形状）", () => {
     const payload = buildProviderPayload(
-      formValues({
-        groups: [
-          {
-            name: "默认组",
-            weight: 1,
-            source: "inline",
-            inlineKeys: [
-              { id: 0, key: "sk-a", masked: false },
-              { id: 0, key: "sk-a", masked: false },
-            ],
-            poolId: "",
-          },
-        ],
-      })
+      formValues({ groups: [{ name: "未选池", weight: 1, poolId: "" }] })
     );
-    expect(payload.groups?.[0]).toMatchObject({
-      inline_keys: [
-        { id: 0, key: "sk-a" },
-        { id: 0, key: "sk-a" },
-      ],
-    });
-  });
-
-  it("inline 空组（无任何行）提交空数组（后端「至少保留一个 key 或引用」兜底校验）", () => {
-    const payload = buildProviderPayload(
-      formValues({
-        groups: [
-          { name: "空组", weight: 1, source: "inline", inlineKeys: [], poolId: "" },
-        ],
-      })
-    );
-    expect(payload.groups?.[0]).toMatchObject({ source: "inline", inline_keys: [] });
+    expect(payload.groups).toEqual([
+      { id: 0, name: "未选池", weight: 1, pool_id: null },
+    ]);
   });
 });
 
-describe("detailToFormValues - 详情掩码回填（对齐号池 KeyMasked）", () => {
-  it("inline 组回填掩码行（服务端掩码 + 凭据 ID，masked=true），组 ID 带入供显示拉取", () => {
+describe("detailToFormValues - 详情回填", () => {
+  it("分组只回填 {name,weight,groupId,poolId}，不携带任何凭据行", () => {
     const values = detailToFormValues(detail());
 
     expect(values.name).toBe("p-detail");
@@ -299,75 +165,25 @@ describe("detailToFormValues - 详情掩码回填（对齐号池 KeyMasked）", 
     expect(values.protocols).toEqual(["openai"]);
     expect(values.endpoints).toEqual([{ protocol: "openai", url: "", enabled: true }]);
     expect(values.groups).toEqual([
-      {
-        name: "默认组",
-        weight: 1,
-        source: "inline",
-        inlineKeys: [
-          { id: 101, key: "sk-****-1", masked: true, status: "active", cooldownUntil: null, failCount: 0 },
-          { id: 102, key: "sk-****-2", masked: true, status: "active", cooldownUntil: null, failCount: 0 },
-        ],
-        groupId: 21,
-        poolId: "",
-      },
+      { name: "默认组", weight: 1, groupId: 21, poolId: "9" },
     ]);
     // 顶层 api_key 已废除：表单值不得再出现该键（防止回写明文进 config）
     expect("api_key" in values).toBe(false);
   });
 
-  it("pool 组回填 poolId（字符串）+ groupId，inlineKeys 置空", () => {
+  it("存量脏数据 PoolID 为 null：回填空串（前端校验要求用户重选号池）", () => {
     const values = detailToFormValues(
       detail({
         Groups: [
-          {
-            ID: 22,
-            ProviderID: 1,
-            Name: "池组",
-            Weight: 3,
-            Models: "gpt-4o",
-            Source: "pool",
-            InlineKeys: [],
-            PoolID: 9,
-          },
+          { ID: 23, ProviderID: 1, Name: "无池组", Weight: 1, Models: "", PoolID: null },
         ],
       })
     );
-
-    expect(values.groups?.[0]).toMatchObject({
-      name: "池组",
-      weight: 3,
-      source: "pool",
-      inlineKeys: [],
-      groupId: 22,
-      poolId: "9",
-    });
-  });
-
-  it("解密失败组：掩码退化 **** 回填（保留引用、保存按 id 原样保留，不再丢凭据）", () => {
-    const values = detailToFormValues(
-      detail({
-        Groups: [
-          {
-            ID: 23,
-            ProviderID: 1,
-            Name: "失败组",
-            Weight: 1,
-            Models: "",
-            Source: "inline",
-            InlineKeys: [
-              credentialView({ ID: 103, KeyMasked: "****", Status: "temp_unsched", FailCount: 3 }),
-            ],
-            PoolID: null,
-          },
-        ],
-      })
-    );
-
-    expect(values.groups?.[0]).toMatchObject({
-      source: "inline",
-      // 状态随掩码一起回填：编辑弹窗据此显示状态徽标与「启用」（判停 key 的人工恢复入口）
-      inlineKeys: [{ id: 103, key: "****", masked: true, status: "temp_unsched", failCount: 3 }],
+    expect(values.groups?.[0]).toEqual({
+      name: "无池组",
+      weight: 1,
       groupId: 23,
+      poolId: "",
     });
   });
 

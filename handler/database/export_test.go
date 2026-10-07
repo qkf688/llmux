@@ -83,11 +83,44 @@ func TestExportDatabase_ContainsUncheckpointedWALWrites(t *testing.T) {
 	}
 }
 
+// isExportSnapshot 判定目录项是不是实现产出的导出临时快照。
+//
+// 实现命名（export.go 的 snapshotPath）= <库路径>.export-<时间戳>.tmp，例如
+// /tmp/x/testutil.db.export-20261008_061500.tmp。抽成函数是为了让「判据能不能命中
+// 真实命名」有一条机械控制（见用例内的控制表）——原断言用 `HasSuffix("-export")`，
+// 与真实命名的 `.tmp` 后缀永不相等、`HasPrefix("llmux.db")` 在库名归 testutil 唯一名后
+// 也一并失效，断言恒真：把清理整个删掉仍全绿（Stage 41 修的就是这个假绿）。
+func isExportSnapshot(name string) bool {
+	return strings.Contains(name, ".export-") && strings.HasSuffix(name, ".tmp")
+}
+
 // TestExportDatabase_TempSnapshotCleanedUp 导出后临时快照文件不残留。
+//
+// 判据二层：① 控制表锁「判据本身能命中实现真实命名、且不再依赖已失效的库名字面量」；
+// ② 目录扫描断无残留（把 export.go 的 defer os.Remove 注释掉必须变红——这正是本用例
+// 存在的意义，改前它是恒真的假绿）。
 func TestExportDatabase_TempSnapshotCleanedUp(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, dbPath := openExportFixtureDB(t)
 	swapDBPath(t, dbPath, db)
+
+	// 控制表：真实命名（两种库名形态）必须命中；历史错配形态必须不命中。
+	base := filepath.Base(dbPath)
+	controls := []struct {
+		name string
+		want bool
+	}{
+		{name: base + ".export-20261008_061500.tmp", want: true},
+		{name: "llmux.db.export-20261008_061500.tmp", want: true},
+		{name: base + "-export", want: false}, // 原断言的过滤形态：对真实命名永不命中
+		{name: base, want: false},
+		{name: base + "-wal", want: false},
+	}
+	for _, tc := range controls {
+		if got := isExportSnapshot(tc.name); got != tc.want {
+			t.Fatalf("isExportSnapshot(%q) = %v, want %v", tc.name, got, tc.want)
+		}
+	}
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
@@ -103,7 +136,7 @@ func TestExportDatabase_TempSnapshotCleanedUp(t *testing.T) {
 		t.Fatalf("read dir: %v", err)
 	}
 	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), "llmux.db") && strings.HasSuffix(e.Name(), "-export") {
+		if isExportSnapshot(e.Name()) {
 			t.Fatalf("temp export snapshot left behind: %s", e.Name())
 		}
 	}

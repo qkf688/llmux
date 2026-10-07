@@ -37,6 +37,7 @@
 - 认证：管理后台 `/api/*` 用 JWT（`Authorization: Bearer <JWT>`，登录走 `POST /api/auth/login`）；代理 `/v1/*` 用调用方 API key（`api_keys` 表多 key hash 点查，`Authorization: Bearer <key>` 或 `x-api-key: <key>`，Anthropic 兼容）。
 - 流式：SSE；转换与 process 路径分流行/非流，**禁止**混用缓冲假设。
 - 两层 LB：虚拟→真实（virtualmodel）+ 真实→供应商（chatcore/balancer）；改一层时**禁止**破坏另一层的候选过滤（如黑名单在候选池）。
+- 上游响应头回传走**允许清单**（`handler/v1/writeHeader`）：只发 `Content-Type`、上游 `X-Request-Id`（改名 `X-Upstream-Request-Id`，Stage 3）、`Retry-After` 与 `x-ratelimit-*` / `anthropic-ratelimit-*`（限流族头名开放，按前缀放行）；其余一律不发。原来「裸拷上游头」的做法把供应商内部标记（节点名、内部追踪号、调试头）一并交给调用方，且随供应商更换而漂移；`Content-Length` / `Content-Encoding` 也必须在剔除之列——网关不做压缩转发（发往上游的 `Accept-Encoding` 已被剥掉、由传输层透明解压），正文经协议转换改写后照抄上游长度会截断响应，长度交给 `net/http` 自算。回归 `handler/v1/write_header_test.go`（含「未知上游头必须不发」与流式分帧头恒在两条反向断言）。
 
 ## 4. 请求/响应体大小资源防御（Stage 2 质量门，2026-09-17）
 

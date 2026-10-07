@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -200,7 +201,7 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 		RealModelName:              balanced.RealModelName,
 	}, res.Body)
 
-	writeHeader(c, ctx, before.Stream, res.Header)
+	writeHeader(c, before.Stream, res.Header)
 	// 响应头已提交后任何失败都不能再走 httpresp 收口（JSON 会污染已开始的流），
 	// 收尾口径统一在 writeResponseBody：流式写协议内 error 事件，非流式静默截断。
 	// 「头后无数据」类失败已在 service 提交门（commit-before-write）被拦下换下家，
@@ -249,28 +250,53 @@ func attachLogRecord(ctx context.Context, in service.RecordLogInput, resBody io.
 	return resBody, func(error) {}
 }
 
-func writeHeader(c *gin.Context, ctx context.Context, stream bool, header http.Header) {
-	// 检查是否需要移除不必要的响应头
-	stripHeaders := service.GetStripResponseHeaders(ctx)
+// upstreamResponseHeadersAllowed 是回给客户端的上游响应头允许清单（单源）。
+// 网关只承诺三类：① Content-Type——协议形状，客户端靠它判 JSON / SSE；
+// ② X-Upstream-Request-Id——上游 X-Request-Id 改名后的报障编号（见 writeHeader）；
+// ③ Retry-After——「多久后再来」，客户端靠它退避。限流族头名开放，按前缀放行，
+// 见 upstreamRateLimitHeaderPrefixes。
+//
+// 为什么必须收口而不是裸拷上游头：上游回的每个头都会进调用方看到的响应，供应商
+// 内部的节点名、内部追踪号、调试头一并外流；供应商换一家或改实现，它们就跟着变，
+// 而调用方可能已经依赖上了。Content-Length / Content-Encoding 同样在剔除之列——
+// 网关不做压缩转发（发往上游的 Accept-Encoding 已被剥掉、由传输层透明解压），
+// 正文长度交给 net/http 自己算；照抄上游值在正文被改写（协议转换）时会截断响应。
+var upstreamResponseHeadersAllowed = map[string]bool{
+	"Content-Type":          true,
+	"X-Upstream-Request-Id": true,
+	"Retry-After":           true,
+}
 
-	// 需要保留的核心响应头
-	essentialHeaders := map[string]bool{
-		"Content-Type":      true,
-		"X-Request-Id":      true,
-		"X-Ratelimit-Limit": true,
+// upstreamRateLimitHeaderPrefixes 限流族前缀（canonical 形态）：OpenAI 风格的
+// x-ratelimit-* 与 anthropic-ratelimit-*。这类头名是开放的（remaining / reset /
+// limit-requests…），逐个列举必然漏，故按前缀放行。
+var upstreamRateLimitHeaderPrefixes = []string{"X-Ratelimit-", "Anthropic-Ratelimit-"}
+
+// upstreamHeaderAllowed 判断一个上游响应头（canonical 名）能否回给客户端。
+func upstreamHeaderAllowed(canonical string) bool {
+	if upstreamResponseHeadersAllowed[canonical] {
+		return true
 	}
-
-	for k, values := range header {
-		// 如果开启了移除响应头选项，只保留必要的头
-		if stripHeaders && !essentialHeaders[k] {
-			continue
+	for _, prefix := range upstreamRateLimitHeaderPrefixes {
+		if strings.HasPrefix(canonical, prefix) {
+			return true
 		}
+	}
+	return false
+}
+
+func writeHeader(c *gin.Context, stream bool, header http.Header) {
+	for k, values := range header {
+		canonical := http.CanonicalHeaderKey(k)
+		out := canonical
 		// 响应头 X-Request-Id 唯一归属网关（Stage 3：报障编号不允许双语义）。
 		// 上游常自带同名头（Azure/OpenAI），Add 会让客户端看到 [网关号, 供应商号]
 		// 两值、取哪个全凭 SDK 实现——上游值改名回传，向供应商报障时仍拿得到原号。
-		out := k
-		if http.CanonicalHeaderKey(k) == consts.HeaderRequestID {
+		// 改名分支同时就是它的放行判据：原名（X-Request-Id）永不作为上游值发出去。
+		if canonical == consts.HeaderRequestID {
 			out = "X-Upstream-Request-Id"
+		} else if !upstreamHeaderAllowed(canonical) {
+			continue
 		}
 		for _, value := range values {
 			c.Writer.Header().Add(out, value)

@@ -42,18 +42,19 @@ type CredentialRepo interface {
 	// 显式降级形态（Stage 33）——计数照记，停用决策跳过，不拿编造阈值执行判停。
 	IncrementFailCountNoStop(ctx context.Context, id uint) (int64, error)
 	// RecordCredentialSuccess 原子自增 total_requests 并刷新 last_used_at=at
-	// （凭据终身统计，chat 成功尝试记账；软删行不写，RowsAffected=0）。
+	// （凭据终身统计，chat 成功尝试记账；行已删则不写，RowsAffected=0）。
 	RecordCredentialSuccess(ctx context.Context, id uint, at time.Time) (int64, error)
 	// RecordCredentialError 原子自增 total_errors（凭据级失败尝试记账；
-	// 失败不刷新 last_used_at——「最近使用」语义为上次成功，软删行不写）。
+	// 失败不刷新 last_used_at——「最近使用」语义为上次成功，行已删则不写）。
 	RecordCredentialError(ctx context.Context, id uint) (int64, error)
 	// ClaimLastProbeAt 探活前 CAS：仅当 last_probe_at 为空或早于 cutoff 时写入 now。
 	// RowsAffected==0 表示他路已 claim 或仍在间隔内——调用方不得打上游（#6-4-2）。
 	ClaimLastProbeAt(ctx context.Context, id uint, now, cutoff time.Time) (int64, error)
-	// Delete 根据 ID 删除凭据，返回受影响行数。
+	// Delete 根据 ID 硬删凭据，返回受影响行数。
+	// 硬删而非软删（与 virtual_models / api_keys 口径统一）：凭据是第一等资源，
+	// 删除即终止，保留行只会在库里攒下没人看、没人清的残留。
 	Delete(ctx context.Context, id uint) (int64, error)
-	// DeleteByPoolID 删除指定号池下的全部凭据（软删），返回受影响行数。
-	// 号池删除时的级联清理用。
+	// DeleteByPoolID 硬删指定号池下的全部凭据，返回受影响行数。号池删除时的级联清理用。
 	DeleteByPoolID(ctx context.Context, poolID uint) (int64, error)
 	// UpdateFieldsByIDs 按字段 map 批量更新指定 IDs 的凭据（map 可显式写 NULL/零值）。
 	// 凭据是第一等资源后按 ID 直改，不再带号池限界——归属过滤只用于列表查询，
@@ -61,15 +62,17 @@ type CredentialRepo interface {
 	// fail_count/cooldown_reason，字段由调用方经 models.CredentialRecoveryFields
 	// 构造，本层不掺状态机语义）。
 	UpdateFieldsByIDs(ctx context.Context, ids []uint, fields map[string]any) (int64, error)
-	// DeleteByIDs 批量软删指定 IDs 的凭据。
+	// DeleteByIDs 批量硬删指定 IDs 的凭据（口径同 Delete）。
 	DeleteByIDs(ctx context.Context, ids []uint) (int64, error)
-	// ExistingHashes 返回指定号池下现存（未软删）凭据中命中的 KeyHash 集合，
+	// ExistingHashes 返回指定号池下现存凭据中命中的 KeyHash 集合，
 	// 供批量导入一次查询完成池内查重（防逐条 N+1）。KeyHash 非 unique，去重是
 	// 应用层语义；跨池同 key 复用合法，不在此处做全局拦截。
 	ExistingHashes(ctx context.Context, poolID uint, hashes []string) (map[string]bool, error)
-	// DeleteLegacyEmptyKeyCredentials 存量清洗（Stage 27）：软删「解密成功但明文为空
+	// DeleteLegacyEmptyKeyCredentials 不变量清洗（Stage 27）：硬删「解密成功但明文为空
 	// （含全空白）」的凭据行，返回删除行数。判据复用 channel 同款解密语义（cipher nil
 	// 或行解密失败 = 不可判定，跳过不删——清洗只删可判定为空的行，损坏行留给人工）。
+	// 这类行任何时刻写入都可能产生（凭据随时可写），故是常驻清洗而非历史包袱；
+	// 硬删与其他删除路径同口径，免得「标了但还在」等下次启动才消失。
 	// 幂等（已删行不再命中）；游标分批防启动内存尖峰（同 chat_logs 清洗骨架）。
 	DeleteLegacyEmptyKeyCredentials(ctx context.Context) (int, error)
 }
@@ -255,12 +258,12 @@ func (r *credentialRepo) ClaimLastProbeAt(ctx context.Context, id uint, now, cut
 }
 
 func (r *credentialRepo) Delete(ctx context.Context, id uint) (int64, error) {
-	result := r.db.WithContext(ctx).Delete(&models.Credential{}, id)
+	result := r.db.WithContext(ctx).Unscoped().Delete(&models.Credential{}, id)
 	return result.RowsAffected, result.Error
 }
 
 func (r *credentialRepo) DeleteByPoolID(ctx context.Context, poolID uint) (int64, error) {
-	result := r.db.WithContext(ctx).Where("pool_id = ?", poolID).Delete(&models.Credential{})
+	result := r.db.WithContext(ctx).Unscoped().Where("pool_id = ?", poolID).Delete(&models.Credential{})
 	return result.RowsAffected, result.Error
 }
 
@@ -276,7 +279,7 @@ func (r *credentialRepo) DeleteByIDs(ctx context.Context, ids []uint) (int64, er
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	result := r.db.WithContext(ctx).Where("id IN ?", ids).Delete(&models.Credential{})
+	result := r.db.WithContext(ctx).Unscoped().Where("id IN ?", ids).Delete(&models.Credential{})
 	return result.RowsAffected, result.Error
 }
 
@@ -334,7 +337,7 @@ func (r *credentialRepo) DeleteLegacyEmptyKeyCredentials(ctx context.Context) (i
 			}
 		}
 		if len(emptyIDs) > 0 {
-			result := r.db.WithContext(ctx).Where("id IN ?", emptyIDs).Delete(&models.Credential{})
+			result := r.db.WithContext(ctx).Unscoped().Where("id IN ?", emptyIDs).Delete(&models.Credential{})
 			if result.Error != nil {
 				return deleted, result.Error
 			}

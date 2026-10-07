@@ -253,7 +253,7 @@ func TestDeletePool_ReferencedGuard(t *testing.T) {
 }
 
 // TestDeletePool_CascadeCredentials 覆盖 AC-4 后半：未引用时删除号池
-// 并级联删除其下凭据（软删），响应成功。
+// 并级联删除其下凭据（硬删），响应成功。
 func TestDeletePool_CascadeCredentials(t *testing.T) {
 	testsupport.InitTestDB(t)
 	id := seedPoolWithCredential(t, "待删池", models.CredentialStatusActive)
@@ -272,6 +272,37 @@ func TestDeletePool_CascadeCredentials(t *testing.T) {
 	}
 	if len(creds) != 0 {
 		t.Fatalf("级联删除后凭据数 = %d, want 0", len(creds))
+	}
+}
+
+// TestDeletePool_NameReusableAfterDelete 钉「删池后同名可重建」。
+//
+// 回归背景：pools.name 有唯一索引且不含 deleted_at，而删除原先走软删——
+// 残留行不可见却仍占着名字。CreatePool 的 ExistsByName 预检用软删作用域查不到，
+// 放行后 INSERT 撞唯一索引，回 500「Failed to create pool」，报错方向完全错
+// （本该是 400「name already exists」）。号池是全库唯一「有唯一索引却软删」的表，
+// 已与 virtual_models / api_keys 的硬删口径统一。
+func TestDeletePool_NameReusableAfterDelete(t *testing.T) {
+	testsupport.InitTestDB(t)
+	id := seedPoolWithCredential(t, "重建池", models.CredentialStatusActive)
+
+	if _, code := deletePoolViaHandler(t, id); code != 200 {
+		t.Fatalf("删除 status = %d, want 200", code)
+	}
+
+	// 同名重建必须成功（而不是撞唯一索引回 500）
+	body := createPoolViaHandler(t, `{"name":"重建池"}`)
+	if got := gjson.Get(body, "data.ID").Uint(); got == 0 {
+		t.Fatalf("同名重建失败, body=%s", body)
+	}
+
+	// 名字的占用随删除即时释放：预检与唯一索引口径一致
+	exists, err := repository.Default().Pool.ExistsByName(t.Context(), "重建池")
+	if err != nil {
+		t.Fatalf("ExistsByName: %v", err)
+	}
+	if !exists {
+		t.Fatal("重建成功后 ExistsByName 应为 true")
 	}
 }
 

@@ -94,13 +94,18 @@ func (r *poolRepo) UpdateFields(ctx context.Context, id uint, fields map[string]
 	return result.RowsAffected, result.Error
 }
 
+// Delete 硬删号池。硬删而非软删（与 virtual_models / api_keys 口径统一）：
+// pools.name 有唯一索引且不含 deleted_at，软删行不可见却仍占着名字——
+// 「先删后用同名重建」会先过 ExistsByName 预检、再撞唯一索引，回 500
+// 「Failed to create pool」，报错方向全错。号池删除另有引用守卫兜底
+// （KeyGroupRepo.CountByPoolIDs > 0 直接 400），误删面已收窄。
 func (r *poolRepo) Delete(ctx context.Context, id uint) (int64, error) {
-	result := r.db.WithContext(ctx).Delete(&models.Pool{}, id)
+	result := r.db.WithContext(ctx).Unscoped().Delete(&models.Pool{}, id)
 	return result.RowsAffected, result.Error
 }
 
 // StatsByIDs 用一条 GROUP BY 聚合返回指定号池的凭据统计（key 数与状态分布），
-// 避免号池列表逐池查凭据的 N+1。软删行不计入（gorm.Model 软删）。
+// 避免号池列表逐池查凭据的 N+1。
 // ids 为空或某号池无凭据时不产生对应条目。
 func (r *poolRepo) StatsByIDs(ctx context.Context, ids []uint) (map[uint]PoolStats, error) {
 	if len(ids) == 0 {

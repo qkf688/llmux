@@ -184,7 +184,7 @@ func UpdatePool(c *gin.Context) {
 }
 
 // DeletePool 删除号池。被分组引用（key_groups.PoolID）时禁止删除；
-// 未引用时在单事务中级联删除其下全部凭据 + 号池本体（软删）。
+// 未引用时在单事务中级联硬删其下全部凭据 + 号池本体。
 func DeletePool(c *gin.Context) {
 	id, ok := httpx.ParseUintParamAllowZero(c, "id")
 	if !ok {

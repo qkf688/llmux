@@ -253,10 +253,11 @@ func attachLogRecord(ctx context.Context, in service.RecordLogInput, resBody io.
 // upstreamResponseHeadersAllowed 是回给客户端的上游响应头允许清单（单源），按**上游侧**
 // 头名判定。网关只承诺两类：① Content-Type——协议形状，客户端靠它判 JSON / SSE；
 // ② Retry-After——「多久后再来」。限流族头名开放，按前缀放行（见
-// upstreamRateLimitHeaderPrefixes）；上游 X-Request-Id 由 writeHeader 的改名分支单独
-// 放行、**不查本表**——改名后的输出名（consts.HeaderUpstreamRequestID）只由那个分支
-// 产生，上游自称同名头一律丢弃：否则客户端分不清「网关改名的供应商号」与「上游自写
-// 值」，上游同时发两个头时还会看到两个值（Stage 3 治的就是这种双语义）。
+// upstreamRateLimitHeaderPrefixes）；上游的报障编号（`X-Request-Id` 与 Anthropic 系的
+// `request-id`）由 writeHeader 择一改名单独放行、**不查本表**——改名后的输出名
+// （consts.HeaderUpstreamRequestID）只由那个分支产生，上游自称同名头一律丢弃：否则客户端
+// 分不清「网关改名的供应商号」与「上游自写值」，上游同时发两个头时还会看到两个值（Stage 3
+// 治的就是这种双语义）。
 //
 // 单消费方（全仓只有 writeHeader 把上游头写进客户端响应），故留在本包；一旦出现第二个
 // 消费方，按请求方向那份名单的同款理由（common.PassthroughAllowedHeader 注释：两份
@@ -293,22 +294,35 @@ func upstreamHeaderAllowed(canonical string) bool {
 }
 
 func writeHeader(c *gin.Context, stream bool, header http.Header) {
+	// 响应头 X-Request-Id 唯一归属网关（Stage 3：报障编号不允许双语义）。上游常自带报障编号
+	// （Azure/OpenAI 系 `X-Request-Id`，Anthropic 系 `request-id`），直接 Add 会让客户端看到
+	// [网关号, 供应商号] 两值、取哪个全凭 SDK 实现——故上游值一律改名回传，向供应商报障时仍
+	// 拿得到原号。
+	//
+	// 先择一、再由本函数单独用 Set 写出（而非在循环里 Add）：两种上游拼法若同时出现，Add 会让
+	// 同一个输出名带上两个值——那正是本条要治的双语义，只换了个头名。X-Request-Id 优先。
+	vendorRequestID := header.Get(consts.HeaderRequestID)
+	if vendorRequestID == "" {
+		vendorRequestID = header.Get(consts.HeaderVendorRequestID)
+	}
+
 	for k, values := range header {
 		canonical := http.CanonicalHeaderKey(k)
-		out := canonical
-		// 响应头 X-Request-Id 唯一归属网关（Stage 3：报障编号不允许双语义）。
-		// 上游常自带同名头（Azure/OpenAI），Add 会让客户端看到 [网关号, 供应商号]
-		// 两值、取哪个全凭 SDK 实现——上游值改名回传，向供应商报障时仍拿得到原号。
-		// 改名分支同时就是它的放行判据：原名（X-Request-Id）永不作为上游值发出去，
-		// 输出名（X-Upstream-Request-Id）也不接受上游自称——它只由本分支产生。
-		if canonical == consts.HeaderRequestID {
-			out = consts.HeaderUpstreamRequestID
-		} else if !upstreamHeaderAllowed(canonical) {
+		// 两种上游拼法都已在上面择一，不再进循环；原名永不作为上游值发出去，输出名
+		// （X-Upstream-Request-Id）也不接受上游自称——它只由本函数产生。
+		if canonical == consts.HeaderRequestID || canonical == consts.HeaderVendorRequestID {
+			continue
+		}
+		if !upstreamHeaderAllowed(canonical) {
 			continue
 		}
 		for _, value := range values {
-			c.Writer.Header().Add(out, value)
+			c.Writer.Header().Add(canonical, value)
 		}
+	}
+
+	if vendorRequestID != "" {
+		c.Writer.Header().Set(consts.HeaderUpstreamRequestID, vendorRequestID)
 	}
 
 	if stream {

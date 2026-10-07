@@ -74,6 +74,49 @@ func TestWriteHeader_UpstreamCannotSpoofGatewayRequestID(t *testing.T) {
 	}
 }
 
+// TestWriteHeader_AnthropicRequestIDRenamed 上游报障编号的两种拼法归一到同一个输出名：
+// OpenAI/Azure 系 `X-Request-Id`、Anthropic 系 `request-id`（canonical `Request-Id`）。
+// 客户端只认 `X-Upstream-Request-Id` 一个头，向供应商报障时拿到的仍是原号；原始拼法本身
+// 不发（否则同一个供应商编号会以两个名字出现，客户端不知道该用哪个去报障）。
+func TestWriteHeader_AnthropicRequestIDRenamed(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	up := http.Header{}
+	up.Set("request-id", "req_anthropic_1")
+
+	writeHeader(c, false, up)
+
+	if got := w.Header().Get(consts.HeaderUpstreamRequestID); got != "req_anthropic_1" {
+		t.Errorf("%s = %q, want %q（Anthropic 系拼法必须同样改名回传）",
+			consts.HeaderUpstreamRequestID, got, "req_anthropic_1")
+	}
+	if got := w.Header().Values(consts.HeaderVendorRequestID); len(got) != 0 {
+		t.Errorf("%s = %v, want 不发（原始拼法只作为改名来源，不单独外发）",
+			consts.HeaderVendorRequestID, got)
+	}
+}
+
+// TestWriteHeader_BothRequestIDSpellingsYieldSingleValue 两种拼法同时出现时只能有一个值：
+// 输出名由本函数择一（X-Request-Id 优先）后 Set 写出，两值并存会让「网关号 / 供应商号」
+// 的双语义只换个头名重演。
+func TestWriteHeader_BothRequestIDSpellingsYieldSingleValue(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	up := http.Header{}
+	up.Set(consts.HeaderVendorRequestID, "req_anthropic_1")
+	up.Set(consts.HeaderRequestID, "req_openai_1")
+
+	writeHeader(c, false, up)
+
+	got := w.Header().Values(consts.HeaderUpstreamRequestID)
+	if len(got) != 1 || got[0] != "req_openai_1" {
+		t.Errorf("%s = %v, want 单值 [req_openai_1]（X-Request-Id 优先，两种拼法不得并发出两个值）",
+			consts.HeaderUpstreamRequestID, got)
+	}
+}
+
 // TestWriteHeader_OnlyWhitelistedUpstreamHeaders 锁响应头允许清单（AC-4）：
 // 网关只把「客户端真的用得上的头」发出去——协议形状（Content-Type）、有实际用途的
 // 节奏信息（多久后重试、还剩多少额度）；其余（上游内部标记、长度、编码）一律不发。

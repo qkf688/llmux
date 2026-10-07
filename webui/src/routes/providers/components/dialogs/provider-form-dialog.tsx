@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { UseFormReturn } from "react-hook-form";
 import { PoolDetailDialog } from "@/components/number-pools/pool-detail-dialog";
-import { usePools } from "@/hooks/api";
+import { PoolFormDialog } from "@/components/number-pools/pool-form-dialog";
+import { usePools, useCreatePool } from "@/hooks/api";
+import { toErrorMessage } from "@/lib/errors";
 import {
   Dialog,
   DialogBody,
@@ -61,7 +64,10 @@ export function ProviderFormDialog({
     open: false,
     poolId: null,
   });
+  // 就地新建号池：记住是给哪个分组建的，建完把新池 id 回填进该组 poolId
+  const [creatingPoolForIndex, setCreatingPoolForIndex] = useState<number | null>(null);
   const { data: pools = [] } = usePools();
+  const createPool = useCreatePool();
   const poolDetailTarget = poolDetail.poolId
     ? (pools.find((p) => String(p.ID) === poolDetail.poolId) ?? null)
     : null;
@@ -69,8 +75,27 @@ export function ProviderFormDialog({
   useEffect(() => {
     if (!open) {
       setPoolDetail({ open: false, poolId: null });
+      setCreatingPoolForIndex(null);
     }
   }, [open]);
+
+  /**
+   * 就地新建号池的保存处理：写入成功后把新池回填进发起该操作的分组。
+   * 新池建出来是空的（凭据去号池页导入），这里只负责「建池 + 选中」。
+   */
+  const handlePoolCreated = async (values: { name: string; note?: string; test_model?: string }) => {
+    const targetIndex = creatingPoolForIndex;
+    try {
+      const created = await createPool.mutateAsync(values);
+      if (targetIndex != null) {
+        form.setValue(`groups.${targetIndex}.poolId`, String(created.ID), { shouldDirty: true });
+      }
+      toast.success("号池已创建并关联到该分组（凭据请在号池页导入）");
+      setCreatingPoolForIndex(null);
+    } catch (err) {
+      toast.error(`创建号池失败: ${toErrorMessage(err)}`);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -244,7 +269,10 @@ export function ProviderFormDialog({
                   </p>
                 </div>
                 <EndpointsSection />
-                <GroupsSection onViewPoolDetail={(poolId) => setPoolDetail({ open: true, poolId })} />
+                <GroupsSection
+                  onViewPoolDetail={(poolId) => setPoolDetail({ open: true, poolId })}
+                  onCreatePool={(groupIndex) => setCreatingPoolForIndex(groupIndex)}
+                />
               </div>
             </DialogBody>
 
@@ -263,6 +291,16 @@ export function ProviderFormDialog({
         open={poolDetail.open}
         onOpenChange={(next) => setPoolDetail((prev) => ({ ...prev, open: next }))}
         pool={poolDetailTarget}
+      />
+      {/* 就地新建号池子弹窗：pool 恒 null（新建态）；建池失败的弹窗不关，留给用户改名字重试 */}
+      <PoolFormDialog
+        open={creatingPoolForIndex != null}
+        onOpenChange={(next) => {
+          if (!next) setCreatingPoolForIndex(null);
+        }}
+        pool={null}
+        onSaved={handlePoolCreated}
+        isSaving={createPool.isPending}
       />
     </Dialog>
   );

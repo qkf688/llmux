@@ -1,7 +1,7 @@
 import { useNumberPoolsPage } from "./hooks/use-number-pools-page";
 import { PoolsHeader } from "./components/sections/pools-header";
 import { PoolsListSection } from "./components/sections/pools-list-section";
-import { PoolFormDialog } from "./components/dialogs/pool-form-dialog";
+import { PoolFormDialog } from "@/components/number-pools/pool-form-dialog";
 import { PoolDeleteDialog } from "./components/dialogs/pool-delete-dialog";
 import { PoolDetailDialog } from "@/components/number-pools/pool-detail-dialog";
 

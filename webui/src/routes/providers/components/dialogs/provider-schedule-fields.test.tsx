@@ -9,7 +9,7 @@ vi.mock("@/hooks/api", () => ({
   usePools: () => ({ data: [] }),
 }));
 
-import { SupportTypesField, EndpointsSection } from "./provider-schedule-fields";
+import { SupportTypesField, EndpointsSection, GroupsSection } from "./provider-schedule-fields";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   defaultProviderFormValues,
@@ -118,5 +118,59 @@ describe("支持类型勾选 → 协议端点同步（添加供应商弹窗）",
     fireEvent.click(screen.getByRole("checkbox", { name: /OpenAI Responses/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: /OpenAI Responses/ }));
     expect(endpointRowCount()).toBe(2);
+  });
+});
+
+/** 分组区 Harness：探针额外 watch groups[].poolId，供断言回填后的表单真实值 */
+function GroupsHarness({ onCreatePool }: { onCreatePool?: (index: number) => void }) {
+  const form = useForm<ProviderFormValues>({
+    resolver: zodResolver(providerFormSchema),
+    defaultValues: {
+      ...defaultProviderFormValues,
+      type: "openai",
+      groups: [
+        { name: "组一", weight: 1, poolId: "" },
+        { name: "组二", weight: 2, poolId: "" },
+      ],
+    },
+  });
+  const { control } = form;
+  const pools = useWatch({ control, name: "groups" }) ?? [];
+  return (
+    <TooltipProvider>
+      <FormProvider {...form}>
+        <GroupsSection onCreatePool={onCreatePool} />
+        <span data-testid="probe-pool-ids">{JSON.stringify(pools.map((g) => g?.poolId ?? ""))}</span>
+      </FormProvider>
+    </TooltipProvider>
+  );
+}
+
+describe("凭据分组区 - 就地新建号池", () => {
+  it("点「新建号池」带上该组的下标回调（回填要按组定位，不能默认落到第一组）", () => {
+    const onCreatePool = vi.fn();
+    render(<GroupsHarness onCreatePool={onCreatePool} />);
+
+    const buttons = screen.getAllByRole("button", { name: /新建号池/ });
+    expect(buttons).toHaveLength(2);
+
+    fireEvent.click(buttons[1]);
+
+    expect(onCreatePool).toHaveBeenCalledTimes(1);
+    expect(onCreatePool).toHaveBeenCalledWith(1);
+  });
+
+  it("未传 onCreatePool 时按钮仍渲染但点击不抛错（回调是可选注入）", () => {
+    render(<GroupsHarness />);
+    fireEvent.click(screen.getAllByRole("button", { name: /新建号池/ })[0]);
+    expect(screen.getByTestId("probe-pool-ids").textContent).toBe('["",""]');
+  });
+
+  it("分组无内联 key 入口：只有号池下拉与两个池操作按钮", () => {
+    render(<GroupsHarness />);
+    expect(screen.queryByText("凭据来源")).toBeNull();
+    expect(screen.queryByText("内联 Key")).toBeNull();
+    // 每个分组一个「关联号池」标签（本用例两分组 = 两个）
+    expect(screen.getAllByText("关联号池", { exact: true })).toHaveLength(2);
   });
 });

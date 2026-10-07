@@ -6,7 +6,7 @@
  * 正式实现（S6）时这些字段改为独立 DTO 提交，本组件结构保留。
  */
 import type { ProviderTemplate } from "@/lib/api";
-import { Eye, Trash2 } from "lucide-react";
+import { Eye, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useFieldArray, useFormContext, useWatch } from "react-hook-form";
 import { applyProviderTemplateDefaults } from "../../utils/template-defaults";
@@ -252,14 +252,17 @@ function defaultGroup(): ProviderFormGroup {
   return { name: "", weight: 1, poolId: "" };
 }
 
-/** 单个分组卡片：名称/价格权重/关联号池；凭据只存在于号池，可查看池详情 */
+/** 单个分组卡片：名称/价格权重/关联号池；凭据只存在于号池，可查看池详情或就地新建号池 */
 function GroupCard({
   index,
   onViewPoolDetail,
+  onCreatePool,
 }: {
   index: number;
   /** 打开号池详情弹窗（由 ProviderFormDialog 持 state 并渲染共享 PoolDetailDialog） */
   onViewPoolDetail?: (poolId: string) => void;
+  /** 就地新建号池（由 ProviderFormDialog 持 state 并渲染共享 PoolFormDialog，建完自动回填本组） */
+  onCreatePool?: (groupIndex: number) => void;
 }) {
   const { control } = useFormContext<ProviderFormValues>();
   const pools = usePoolOptions();
@@ -349,6 +352,21 @@ function GroupCard({
                 </TooltipTrigger>
                 <TooltipContent>查看号池详情（凭据列表 / 状态分布）</TooltipContent>
               </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 shrink-0 px-2.5 text-xs"
+                    onClick={() => onCreatePool?.(index)}
+                  >
+                    <Plus className="size-3.5" />
+                    新建号池
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>就地建空号池并自动关联到本分组（凭据稍后在号池页导入）</TooltipContent>
+              </Tooltip>
             </div>
             <FormMessage />
           </FormItem>
@@ -361,9 +379,12 @@ function GroupCard({
 /** 凭据分组区：分组列表 + 添加分组 */
 export function GroupsSection({
   onViewPoolDetail,
+  onCreatePool,
 }: {
   /** 透传给各分组卡片：关联号池时打开该池的详情弹窗 */
   onViewPoolDetail?: (poolId: string) => void;
+  /** 透传给各分组卡片：就地新建号池，参数为分组下标 */
+  onCreatePool?: (groupIndex: number) => void;
 }) {
   const { control } = useFormContext<ProviderFormValues>();
   const { fields, append, remove } = useFieldArray({ control, name: "groups" });
@@ -378,7 +399,11 @@ export function GroupsSection({
       </div>
       {fields.map((field, index) => (
         <div key={field.id} className="space-y-2">
-          <GroupCard index={index} onViewPoolDetail={onViewPoolDetail} />
+          <GroupCard
+            index={index}
+            onViewPoolDetail={onViewPoolDetail}
+            onCreatePool={onCreatePool}
+          />
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="inline-flex">

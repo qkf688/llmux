@@ -36,6 +36,8 @@ type PoolFormDialogProps = {
   onOpenChange: (open: boolean) => void;
   /** null = 新建 */
   pool: PoolListItem | null;
+  /** 由调用方执行写入并负责关闭弹窗；返回值不参与流程（新建后需要新池 ID 的调用方自行从
+   *  createPool 的返回值取，不靠这里回传——弹窗只收集表单值，不持有写库结果）。 */
   onSaved: (values: { name: string; note?: string; test_model?: string }) => void | Promise<void>;
   isSaving?: boolean;
 };

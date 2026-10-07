@@ -49,6 +49,25 @@ export function isCredentialInCooldown(cooldownUntil: string | null | undefined)
   return !Number.isNaN(t) && t > Date.now();
 }
 
+/**
+ * 启停按钮的唯一判据：按「现在能不能用」决定显示什么、点下去切到哪个状态。
+ *
+ * 为什么不按「是不是人工关的」判：系统判停与冷却中的凭据本来就归人管，
+ * 页面上给它们写「停用」会把一条还能自己恢复的东西钉成人工终态（后台不再管）。
+ * 用户点了「启用」就是要它立刻能用，所以切回 active 一律走 models 那侧的
+ * 恢复定义（连带清失败计数与冷却窗口），本页只管显示与去向。
+ *
+ * 空状态串按可用处理，与后端选路 `service/channel/credential_select.go`
+ * 「status 非 active 才剔除」一致——否则空串会被本页说成不可用而后端照用。
+ */
+export function credentialToggleAction(
+  status: string,
+  cooldownUntil: string | null | undefined,
+): { label: "启用" | "停用"; next: CredentialStatus } {
+  const usable = (status === "" || status === "active") && !isCredentialInCooldown(cooldownUntil);
+  return usable ? { label: "停用", next: "disabled" } : { label: "启用", next: "active" };
+}
+
 export function formatCredentialLastUsed(iso: string | null | undefined): string {
   // 统计格专用相对时间：null = 从未成功用过（坏 key 停格可读），紧凑无空格。
   // 与旧 formatCredentialTime 的区别只在 null/非法语义与空格——旧函数无消费方后删除，

@@ -52,6 +52,7 @@ import {
   CREDENTIAL_STATUS_DOT_CLS,
   CREDENTIAL_STATUS_LABEL,
   CREDENTIAL_STATUS_ORDER,
+  credentialToggleAction,
 } from "@/components/credentials/credential-status";
 import { CredentialStats } from "./credential-stats-cell";
 
@@ -387,11 +388,11 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
                               onClick={() =>
                                 void setCredentialStatus(
                                   cred.ID,
-                                  cred.Status === "disabled" ? "active" : "disabled",
+                                  credentialToggleAction(cred.Status, cred.CooldownUntil).next,
                                 )
                               }
                             >
-                              {cred.Status === "disabled" ? "启用" : "停用"}
+                              {credentialToggleAction(cred.Status, cred.CooldownUntil).label}
                             </Button>
                             <Button
                               variant="ghost"
@@ -450,11 +451,11 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
                           onClick={() =>
                             void setCredentialStatus(
                               cred.ID,
-                              cred.Status === "disabled" ? "active" : "disabled",
+                              credentialToggleAction(cred.Status, cred.CooldownUntil).next,
                             )
                           }
                         >
-                          {cred.Status === "disabled" ? "启用" : "停用"}
+                          {credentialToggleAction(cred.Status, cred.CooldownUntil).label}
                         </Button>
                         <Button
                           variant="ghost"

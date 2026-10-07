@@ -399,6 +399,35 @@ describe("SSE 流 401 处置", () => {
     expect(state.success).toBeNull();
     expect(state.loading).toBe(false);
   });
+
+  it("ReAct 失败保留后台给的具体原因，不被「测试失败」四个字盖掉", async () => {
+    fetchMock.mockRejectedValue(new Error("upstream stream timeout (30s)"));
+    const { setReactTestResult, getState } = createReactTestResultSetter();
+    const { result } = renderReactTest(setReactTestResult);
+
+    await act(async () => {
+      result.current.executeTestNow();
+    });
+
+    const state = getState();
+    expect(state.success).toBe(false);
+    expect(state.error).toBe("upstream stream timeout (30s)");
+  });
+
+  it("具体原因为空时退兜底词：既不留空白，也不写回「测试失败」", async () => {
+    fetchMock.mockRejectedValue(new Error(""));
+    const { setReactTestResult, getState } = createReactTestResultSetter();
+    const { result } = renderReactTest(setReactTestResult);
+
+    await act(async () => {
+      result.current.executeTestNow();
+    });
+
+    const state = getState();
+    expect(state.success).toBe(false);
+    expect(state.error).toBeTruthy();
+    expect(state.error).not.toBe("测试失败");
+  });
 });
 
 describe("ReAct 流取消收场", () => {

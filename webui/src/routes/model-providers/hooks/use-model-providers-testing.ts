@@ -13,6 +13,14 @@ import type { Setter } from "@/stores/core/updater";
 import type { ReactTestResultState } from "@/stores/model-providers/types";
 import type { CapabilityTestKey, TestMode, TestType } from "../types";
 
+/**
+ * ReAct 流失败的兜底文案：只有取不到任何具体原因时才用。
+ * 两个收场分支（`onerror` 与 `catch`）共用同一取法，禁止任一处再写死「测试失败」——
+ * 那会把已写进面板的具体原因（超时/断连/上游报错）抹成一句无区分度的话，
+ * 排查时只能翻 console。
+ */
+const REACT_TEST_FALLBACK_ERROR = "测试过程中发生错误";
+
 // 结果格三态（进行中/通过/失败）之外多一个「已取消」：它既不是失败（不证明供应商不行）
 // 也不是未测（用户明确停过），所以在 entry 上单独标记，不复用空 result 表达。
 type CapabilityTestEntry = {
@@ -265,7 +273,7 @@ export function useModelProvidersTesting({
               applyIfCurrent((prev) => ({
                 ...prev,
                 loading: false,
-                error: err.message || "测试过程中发生错误",
+                error: toErrorMessage(err, REACT_TEST_FALLBACK_ERROR),
                 success: false,
               }));
             }
@@ -292,7 +300,14 @@ export function useModelProvidersTesting({
           return;
         }
         // 失败结论按当前性写：旧流的迟到失败不得覆写已接管的新流（同 applyIfCurrent 口径）。
-        applyIfCurrent((prev) => ({ ...prev, loading: false, error: "测试失败", success: false }));
+        // 结论取具体原因（与 onerror 分支同款），不再用字面量「测试失败」盖掉——面板靠
+        // ExpandableError 自己按原文推断类别，写死一句通用话会让失败原因不可见。
+        applyIfCurrent((prev) => ({
+          ...prev,
+          loading: false,
+          error: toErrorMessage(err, REACT_TEST_FALLBACK_ERROR),
+          success: false,
+        }));
         console.error(err);
       } finally {
         // 仅当这条流仍被认作当前流时才解绑，避免把已交接给新流的 ref 清空。

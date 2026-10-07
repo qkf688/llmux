@@ -158,10 +158,12 @@ export function useModelSyncLogsActions({
 
   const syncing = syncAllMutation.isPending;
   const clearingErrors = clearErrorsMutation.isPending;
+  const deleting = deleteLogsMutation.isPending;
 
   return {
     syncing,
     clearingErrors,
+    deleting,
     handleSyncNow,
     handleDeleteSelected,
     handleClearAll,

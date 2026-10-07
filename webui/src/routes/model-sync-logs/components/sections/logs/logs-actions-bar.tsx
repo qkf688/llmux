@@ -1,4 +1,15 @@
 import { PageToolbar } from "@/components/page-toolbar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { CheckSquare2, Trash2 } from "lucide-react";
@@ -8,6 +19,7 @@ type LogsActionsBarProps = {
   selectedCount: number;
   allSelected: boolean;
   showUnchanged: boolean;
+  deleting: boolean;
   onToggleSelectAll: () => void;
   onDeleteSelected: () => void;
   onOpenClearDialog: () => void;
@@ -19,6 +31,7 @@ export function LogsActionsBar({
   selectedCount,
   allSelected,
   showUnchanged,
+  deleting,
   onToggleSelectAll,
   onDeleteSelected,
   onOpenClearDialog,
@@ -38,17 +51,34 @@ export function LogsActionsBar({
           <span className="hidden sm:inline">{allSelected && logsCount > 0 ? "取消全选" : "全选"}</span>
           <span className="sm:hidden">{allSelected && logsCount > 0 ? "取消" : "全选"}</span>
         </Button>
-        <Button
-          variant="destructive"
-          size="sm"
-          className="sm:h-9 h-7 sm:px-4 px-2 sm:text-sm text-xs"
-          onClick={onDeleteSelected}
-          disabled={selectedCount === 0}
-        >
-          <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
-          <span className="hidden sm:inline">删除所选 ({selectedCount})</span>
-          <span className="sm:hidden">删除({selectedCount})</span>
-        </Button>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="sm:h-9 h-7 sm:px-4 px-2 sm:text-sm text-xs"
+              disabled={selectedCount === 0 || deleting}
+            >
+              <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
+              <span className="hidden sm:inline">删除所选 ({selectedCount})</span>
+              <span className="sm:hidden">删除({selectedCount})</span>
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>删除所选日志？</AlertDialogTitle>
+              <AlertDialogDescription>
+                将永久删除所选 {selectedCount} 条模型同步日志，无法撤销。
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>取消</AlertDialogCancel>
+              <AlertDialogAction onClick={onDeleteSelected} disabled={deleting}>
+                {deleting ? "删除中..." : "确认删除"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         <Button
           variant="destructive"
           size="sm"

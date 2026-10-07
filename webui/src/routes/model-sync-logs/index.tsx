@@ -33,6 +33,7 @@ export default function ModelSyncLogsPage() {
             selectedCount={page.selectedCount}
             allSelected={page.allSelected}
             showUnchanged={page.showUnchanged}
+            deleting={page.deleting}
             onToggleSelectAll={page.handleToggleSelectAll}
             onDeleteSelected={() => {
               void page.handleDeleteSelected();

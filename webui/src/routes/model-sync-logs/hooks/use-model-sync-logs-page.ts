@@ -112,6 +112,7 @@ export function useModelSyncLogsPage() {
   const {
     syncing,
     clearingErrors,
+    deleting,
     handleSyncNow,
     handleDeleteSelected,
     handleClearAll,
@@ -166,6 +167,7 @@ export function useModelSyncLogsPage() {
     selectedErrorProvidersCount,
     allErrorProvidersSelected,
     clearingErrors,
+    deleting,
     page,
     totalPages,
     showUnchanged,

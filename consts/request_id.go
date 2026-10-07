@@ -7,6 +7,11 @@ const (
 	// 调用方自带的编号会被规范化沿用（见 middleware.RequestID）。
 	HeaderRequestID = "X-Request-Id"
 
+	// HeaderUpstreamRequestID 上游响应自带 X-Request-Id 的**改名回传名**（Stage 3）：
+	// 网关命名空间唯一，报障编号无双义。只由 handler/v1 的 writeHeader 产生——
+	// 上游自称该名一律丢弃，否则客户端分不清「网关改名的供应商号」与「上游自写值」。
+	HeaderUpstreamRequestID = "X-Upstream-Request-Id"
+
 	// ContextKeyRequestID gin.Context 中存放请求编号的键（字符串值）。
 	ContextKeyRequestID = "request_id"
 

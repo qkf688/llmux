@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/consts"
 )
 
@@ -47,8 +48,29 @@ func TestWriteHeader_UpstreamRequestIDRenamedNotAppended(t *testing.T) {
 	if got := w.Header().Values(consts.HeaderRequestID); len(got) != 0 {
 		t.Errorf("网关命名空间被上游值占用: %v", got)
 	}
-	if got := w.Header().Get("X-Upstream-Request-Id"); got != "vendor-xyz" {
-		t.Errorf("上游编号应改名为 X-Upstream-Request-Id, got %q", got)
+	if got := w.Header().Get(consts.HeaderUpstreamRequestID); got != "vendor-xyz" {
+		t.Errorf("上游编号应改名为 %s, got %q", consts.HeaderUpstreamRequestID, got)
+	}
+}
+
+// TestWriteHeader_UpstreamCannotSpoofGatewayRequestID 上游自称网关的改名头、或两个头一起
+// 发时，客户端只能看到网关改名后的那一个值：输出名（X-Upstream-Request-Id）只由改名分支
+// 产生，上游自写值一律丢弃。否则客户端分不清「网关改名的供应商号」与「上游自写值」，且同
+// 一头名出现两个值时取哪个全凭 SDK 实现——那正是 Stage 3 要治的双语义（只换了个头名）。
+func TestWriteHeader_UpstreamCannotSpoofGatewayRequestID(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	up := http.Header{}
+	up.Set(consts.HeaderRequestID, "vendor-real")
+	up.Set(consts.HeaderUpstreamRequestID, "upstream-claimed")
+
+	writeHeader(c, false, up)
+
+	got := w.Header().Values(consts.HeaderUpstreamRequestID)
+	if len(got) != 1 || got[0] != "vendor-real" {
+		t.Errorf("%s = %v, want 单值 [vendor-real]（上游自称的同名头必须丢弃）",
+			consts.HeaderUpstreamRequestID, got)
 	}
 }
 
@@ -76,6 +98,7 @@ func TestWriteHeader_OnlyWhitelistedUpstreamHeaders(t *testing.T) {
 		{name: "内容编码剔除", upstreamKey: "Content-Encoding", upstreamValue: "gzip", wantKept: false},
 		{name: "供应商内部节点名剔除", upstreamKey: "X-Internal-Node", upstreamValue: "hz-03", wantKept: false},
 		{name: "供应商内部调试号剔除", upstreamKey: "X-Upstream-Debug-Trace", upstreamValue: "abc", wantKept: false},
+		{name: "上游自称网关改名头剔除", upstreamKey: consts.HeaderUpstreamRequestID, upstreamValue: "spoof", wantKept: false},
 	}
 
 	for _, tc := range cases {
@@ -107,11 +130,16 @@ func TestWriteHeader_StreamKeepsGatewayFramingHeaders(t *testing.T) {
 
 	up := http.Header{}
 	up.Set("X-Internal-Node", "hz-03")
-	up.Set("Content-Type", "text/event-stream")
+	// 上游声明的媒体类型刻意与网关的流式值不同：锁住「Content-Type 由网关覆写」，
+	// 而不是两者恰好同值造成的恒真断言（同值 fixture 下把覆写整块删掉也不会红）。
+	up.Set("Content-Type", "application/json")
 
 	writeHeader(c, true, up)
 
-	for _, key := range []string{"Content-Type", "Cache-Control", "Connection", "X-Accel-Buffering"} {
+	if got := w.Header().Values("Content-Type"); len(got) != 1 || got[0] != common.SSEContentType {
+		t.Errorf("Content-Type = %v, want 单值 %q（上游声明的媒体类型不得参与）", got, common.SSEContentType)
+	}
+	for _, key := range []string{"Cache-Control", "Connection", "X-Accel-Buffering"} {
 		if got := w.Header().Get(key); got == "" {
 			t.Errorf("%s 缺失，want 流式分帧头恒在", key)
 		}

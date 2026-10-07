@@ -250,21 +250,27 @@ func attachLogRecord(ctx context.Context, in service.RecordLogInput, resBody io.
 	return resBody, func(error) {}
 }
 
-// upstreamResponseHeadersAllowed 是回给客户端的上游响应头允许清单（单源）。
-// 网关只承诺三类：① Content-Type——协议形状，客户端靠它判 JSON / SSE；
-// ② X-Upstream-Request-Id——上游 X-Request-Id 改名后的报障编号（见 writeHeader）；
-// ③ Retry-After——「多久后再来」，客户端靠它退避。限流族头名开放，按前缀放行，
-// 见 upstreamRateLimitHeaderPrefixes。
+// upstreamResponseHeadersAllowed 是回给客户端的上游响应头允许清单（单源），按**上游侧**
+// 头名判定。网关只承诺两类：① Content-Type——协议形状，客户端靠它判 JSON / SSE；
+// ② Retry-After——「多久后再来」。限流族头名开放，按前缀放行（见
+// upstreamRateLimitHeaderPrefixes）；上游 X-Request-Id 由 writeHeader 的改名分支单独
+// 放行、**不查本表**——改名后的输出名（consts.HeaderUpstreamRequestID）只由那个分支
+// 产生，上游自称同名头一律丢弃：否则客户端分不清「网关改名的供应商号」与「上游自写
+// 值」，上游同时发两个头时还会看到两个值（Stage 3 治的就是这种双语义）。
+//
+// 单消费方（全仓只有 writeHeader 把上游头写进客户端响应），故留在本包；一旦出现第二个
+// 消费方，按请求方向那份名单的同款理由（common.PassthroughAllowedHeader 注释：两份
+// 名单必然漂移）下沉 common/，不要复制一份。
 //
 // 为什么必须收口而不是裸拷上游头：上游回的每个头都会进调用方看到的响应，供应商
 // 内部的节点名、内部追踪号、调试头一并外流；供应商换一家或改实现，它们就跟着变，
-// 而调用方可能已经依赖上了。Content-Length / Content-Encoding 同样在剔除之列——
-// 网关不做压缩转发（发往上游的 Accept-Encoding 已被剥掉、由传输层透明解压），
-// 正文长度交给 net/http 自己算；照抄上游值在正文被改写（协议转换）时会截断响应。
+// 而调用方可能已经依赖上了。Content-Length / Content-Encoding 同样在剔除之列：
+// 网关自身从不请求压缩（出站 Accept-Encoding 在 chatcore.BuildHeaders 统一剥除，
+// 由传输层透明解压，故上游响应本就不带这两个头），正文长度交给 net/http 自己算；
+// 照抄上游值在正文被改写（协议转换）时会截断响应。
 var upstreamResponseHeadersAllowed = map[string]bool{
-	"Content-Type":          true,
-	"X-Upstream-Request-Id": true,
-	"Retry-After":           true,
+	"Content-Type": true,
+	"Retry-After":  true,
 }
 
 // upstreamRateLimitHeaderPrefixes 限流族前缀（canonical 形态）：OpenAI 风格的
@@ -292,9 +298,10 @@ func writeHeader(c *gin.Context, stream bool, header http.Header) {
 		// 响应头 X-Request-Id 唯一归属网关（Stage 3：报障编号不允许双语义）。
 		// 上游常自带同名头（Azure/OpenAI），Add 会让客户端看到 [网关号, 供应商号]
 		// 两值、取哪个全凭 SDK 实现——上游值改名回传，向供应商报障时仍拿得到原号。
-		// 改名分支同时就是它的放行判据：原名（X-Request-Id）永不作为上游值发出去。
+		// 改名分支同时就是它的放行判据：原名（X-Request-Id）永不作为上游值发出去，
+		// 输出名（X-Upstream-Request-Id）也不接受上游自称——它只由本分支产生。
 		if canonical == consts.HeaderRequestID {
-			out = "X-Upstream-Request-Id"
+			out = consts.HeaderUpstreamRequestID
 		} else if !upstreamHeaderAllowed(canonical) {
 			continue
 		}

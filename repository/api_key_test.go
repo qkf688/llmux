@@ -170,8 +170,8 @@ func TestApiKeyRepo_UpdateFields(t *testing.T) {
 }
 
 // TestApiKeyRepo_DeleteUnscopesHard 锁 AC-5 删侧 + 唯一索引坑：
-// 软删残留会挡住同值重建（purgeSoftDeleted 同款教训），Delete 必须硬删——
-// 删除后同明文 Create 应成功。
+// 软删残留会挡住同值重建（有唯一索引的表必须硬删，同款见 TestDeletePool_NameReusableAfterDelete），
+// Delete 必须硬删——删除后同明文 Create 应成功。
 func TestApiKeyRepo_DeleteUnscopesHard(t *testing.T) {
 	ctx := context.Background()
 	repo := NewApiKeyRepo(newApiKeyTestDB(t))

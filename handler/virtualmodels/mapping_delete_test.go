@@ -1,10 +1,8 @@
 package virtualmodels
 
 import (
-	"context"
 	"encoding/json"
 	"net/http/httptest"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -111,70 +109,6 @@ func TestDeleteVirtualModelMapping_HardDeleteAllowsRecreate(t *testing.T) {
 		if payload.Code != 200 {
 			t.Fatalf("recreate payload code = %d, want 200, body=%s", payload.Code, w.Body.String())
 		}
-	}
-}
-
-func TestModelsInit_CleansSoftDeletedVirtualModelMappings(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "llmux-test.db")
-
-	models.Init(context.Background(), dbPath)
-	{
-		sqlDB, err := models.DB.DB()
-		if err != nil {
-			t.Fatalf("get sql db: %v", err)
-		}
-		t.Cleanup(func() { _ = sqlDB.Close() })
-	}
-
-	realModel := models.Model{Name: "mimo-v2-flash"}
-	if err := models.DB.Create(&realModel).Error; err != nil {
-		t.Fatalf("create real model: %v", err)
-	}
-	virtualModel := models.VirtualModel{Name: "vm1"}
-	if err := models.DB.Create(&virtualModel).Error; err != nil {
-		t.Fatalf("create virtual model: %v", err)
-	}
-	mapping := models.VirtualModelMapping{VirtualModelID: virtualModel.ID, RealModelID: realModel.ID}
-	if err := models.DB.Create(&mapping).Error; err != nil {
-		t.Fatalf("create mapping: %v", err)
-	}
-	if err := models.DB.Delete(&mapping).Error; err != nil {
-		t.Fatalf("soft delete mapping: %v", err)
-	}
-
-	// Close and re-init to simulate server restart with legacy soft-deleted rows present.
-	{
-		sqlDB, err := models.DB.DB()
-		if err != nil {
-			t.Fatalf("get sql db: %v", err)
-		}
-		_ = sqlDB.Close()
-	}
-
-	models.Init(context.Background(), dbPath)
-	{
-		sqlDB, err := models.DB.DB()
-		if err != nil {
-			t.Fatalf("get sql db: %v", err)
-		}
-		t.Cleanup(func() { _ = sqlDB.Close() })
-	}
-
-	var deletedCount int64
-	if err := models.DB.Unscoped().
-		Model(&models.VirtualModelMapping{}).
-		Where("deleted_at IS NOT NULL").
-		Count(&deletedCount).Error; err != nil {
-		t.Fatalf("count soft-deleted mappings: %v", err)
-	}
-	if deletedCount != 0 {
-		t.Fatalf("soft-deleted mappings count = %d, want 0", deletedCount)
-	}
-
-	// Recreate should succeed after cleanup.
-	if err := models.DB.Create(&models.VirtualModelMapping{VirtualModelID: virtualModel.ID, RealModelID: realModel.ID}).Error; err != nil {
-		t.Fatalf("recreate mapping after cleanup: %v", err)
 	}
 }
 

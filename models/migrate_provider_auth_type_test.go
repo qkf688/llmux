@@ -4,7 +4,7 @@ import "testing"
 
 // TestDropLegacyProviderAuthType 锁 Stage 20 派生化的 schema 收口：providers.auth_type
 // 展示副本列在启动迁移中被物理删除（AutoMigrate 只加不删，gorm:"-" 不会自动清列，
-// 不删则历史漂移值永久残留——原则 0.1 删到位，先例 cleanupSoftDeletedModels）。
+// 不删则历史漂移值永久残留——原则 0.1 删到位，同款见 dropLegacyStatsModelTable）。
 func TestDropLegacyProviderAuthType(t *testing.T) {
 	db := testChannelDB(t)
 

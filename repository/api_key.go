@@ -34,7 +34,8 @@ type ApiKeyRepo interface {
 	// 零值跳过语义）。返回受影响行数。
 	UpdateFields(ctx context.Context, id uint, fields map[string]any) (int64, error)
 	// Delete 按 ID **硬删**（Unscoped）：api_keys 的 uniqueIndex 不含 deleted_at，
-	// 软删残留会无声挡死「删后重建同值 key」——purgeSoftDeleted 同款教训。
+	// 软删残留会无声挡死「删后重建同值 key」。有唯一索引的表一律硬删，
+	// 回归见 TestApiKeyRepo_DeleteUnscopesHard / TestDeletePool_NameReusableAfterDelete。
 	Delete(ctx context.Context, id uint) (int64, error)
 }
 

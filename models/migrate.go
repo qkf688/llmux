@@ -41,8 +41,6 @@ func migrate(ctx context.Context) {
 	}
 	migrateLegacyProviders(ctx, DB, credentialcrypto.Default())
 	purgeLegacyUpstreamModels(ctx, DB)
-	purgeSoftDeleted(ctx, &VirtualModelMapping{}, &ModelTemplateItem{}, &VirtualModel{}, &Setting{})
-	cleanupSoftDeletedModels(ctx)
 	dropLegacyProviderAuthType(DB)
 	dropLegacyStatsModelTable(DB)
 	// 兼容性考虑
@@ -84,65 +82,6 @@ func purgeLegacyUpstreamModels(ctx context.Context, db *gorm.DB) {
 		if err := db.WithContext(ctx).Model(&providers[i]).Update("config", cleaned).Error; err != nil {
 			panic(fmt.Errorf("update config for provider %d: %w", providers[i].ID, err))
 		}
-	}
-}
-
-// purgeSoftDeleted 物理清除历史软删残留行。
-// 这些表的唯一索引不含 deleted_at，残留行不可见却会挡住同 key 重建；
-// 其级联清理已改为 Unscoped 硬删，此处只负责抹掉改动前遗留的数据。
-func purgeSoftDeleted(ctx context.Context, dests ...any) {
-	for _, dest := range dests {
-		if err := DB.WithContext(ctx).
-			Unscoped().
-			Where("deleted_at IS NOT NULL").
-			Delete(dest).Error; err != nil {
-			panic(err)
-		}
-	}
-}
-
-func cleanupSoftDeletedModels(ctx context.Context) {
-	if !DB.Migrator().HasColumn(&Model{}, "deleted_at") {
-		return
-	}
-
-	var softDeletedModels []Model
-	if err := DB.WithContext(ctx).
-		Unscoped().
-		Where("deleted_at IS NOT NULL").
-		Find(&softDeletedModels).Error; err != nil {
-		panic(err)
-	}
-
-	for _, m := range softDeletedModels {
-		if err := DB.WithContext(ctx).
-			Unscoped().
-			Where("model_id = ?", m.ID).
-			Delete(&ModelWithProvider{}).Error; err != nil {
-			panic(err)
-		}
-		if err := DB.WithContext(ctx).
-			Unscoped().
-			Where("model_id = ?", m.ID).
-			Delete(&ModelTemplateItem{}).Error; err != nil {
-			panic(err)
-		}
-		if err := DB.WithContext(ctx).
-			Unscoped().
-			Where("real_model_id = ?", m.ID).
-			Delete(&VirtualModelMapping{}).Error; err != nil {
-			panic(err)
-		}
-		if err := DB.WithContext(ctx).
-			Unscoped().
-			Where("id = ?", m.ID).
-			Delete(&Model{}).Error; err != nil {
-			panic(err)
-		}
-	}
-
-	if err := DB.Migrator().DropColumn(&Model{}, "deleted_at"); err != nil {
-		panic(err)
 	}
 }
 

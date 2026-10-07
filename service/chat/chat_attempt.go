@@ -53,8 +53,6 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 	}
 	header := chatcore.BuildHeaders(input.ReqMeta.Header, withHeader, input.ReqMeta.Headers, input.ModelWithProvider.CustomerHeaders, input.Before.Stream)
 
-	reqCtx := withOptionalRequestTrace(input.Ctx)
-
 	// 构建思考档位钳制配置：supportsThinking=false 时 ThinkingClamp 为 nil
 	// （stripThinkingFields 已整体剥离 thinking，钳制无意义）。
 	var thinkingClamp *transform.ThinkingClampConfig
@@ -100,7 +98,7 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 	})
 	logSnapshot := captureRequestLogSnapshot(logRawOptions, input.ReqMeta.Header, requestBody, input.Before.raw, rawLogFieldLimit, customCredentialHeaderKeys(input))
 
-	req, err := input.ChatModel.BuildReq(reqCtx, header, input.ModelWithProvider.ProviderModel, requestBody)
+	req, err := input.ChatModel.BuildReq(input.Ctx, header, input.ModelWithProvider.ProviderModel, requestBody)
 	if err != nil {
 		logEntry.ProxyTime = time.Since(input.Start) // 写通道前回填，终值随 Create 落库
 		retryLog <- logEntry.WithError(err)

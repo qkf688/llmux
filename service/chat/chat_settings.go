@@ -63,26 +63,6 @@ func getDisableAllLogs(ctx context.Context) bool {
 	return settingsReader.Bool(ctx, models.SettingKeyDisableAllLogs, false)
 }
 
-// getDisablePerformanceTracking 获取是否关闭性能追踪
-func getDisablePerformanceTracking(ctx context.Context) bool {
-	return settingsReader.Bool(ctx, models.SettingKeyDisablePerformanceTracking, false)
-}
-
-// getDisableTokenCounting 获取是否关闭 token 统计
-func getDisableTokenCounting(ctx context.Context) bool {
-	return settingsReader.Bool(ctx, models.SettingKeyDisableTokenCounting, false)
-}
-
-// getEnableRequestTrace 获取是否启用请求追踪
-func getEnableRequestTrace(ctx context.Context) bool {
-	return settingsReader.Bool(ctx, models.SettingKeyEnableRequestTrace, true)
-}
-
-// GetStripResponseHeaders 获取是否移除不必要的响应头（导出供 handler 使用）
-func GetStripResponseHeaders(ctx context.Context) bool {
-	return settingsReader.Bool(ctx, models.SettingKeyStripResponseHeaders, false)
-}
-
 // getEnableFormatConversion 获取是否启用格式转换
 func getEnableFormatConversion(ctx context.Context) bool {
 	return settingsReader.Bool(ctx, models.SettingKeyEnableFormatConversion, true)

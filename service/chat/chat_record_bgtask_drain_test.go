@@ -24,7 +24,7 @@ func TestRecordLog_BgtaskShutdownDrainsWriteback(t *testing.T) {
 
 	// processer 阻塞到放行：让 Shutdown 撞上「正在写」状态，验证排空等待而非甩手。
 	release := make(chan struct{})
-	proc := func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
+	proc := func(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
 		<-release
 		return nil, nil, errors.New("parse boom") // 走失败留痕写库路径（updateChatLogByID）
 	}

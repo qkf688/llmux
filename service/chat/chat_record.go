@@ -50,11 +50,7 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 	recordFunc := func() error {
 		defer in.Reader.Close()
 
-		// 配置开关经 chat_settings getter → 包级 settingsReader（默认 ModelsReader）。
-		disablePerformanceTracking := getDisablePerformanceTracking(ctx)
-		disableTokenCounting := getDisableTokenCounting(ctx)
-
-		log, output, err := in.Processer(ctx, in.Reader, in.Before.Stream, in.ReqStart, disablePerformanceTracking, disableTokenCounting)
+		log, output, err := in.Processer(ctx, in.Reader, in.Before.Stream, in.ReqStart)
 		if err != nil {
 			// 失败留痕归口外层收口恰一条（Stage 18 口径）：此处禁自记——内层+外层双份
 			// 会把一次故障算成两次；细节经错误链进外层留痕、并落 chat_logs Error 字段。

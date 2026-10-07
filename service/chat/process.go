@@ -24,7 +24,7 @@ const (
 	DefaultChunkArrayCapacity = 128              // 预分配chunk数组容量，减少扩容
 )
 
-type Processer func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error)
+type Processer func(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error)
 
 // SSEEvent 流式事件的日志侧名字；分帧判据单源于 common.ScanSSEFrames，
 // 此别名保住 processerConfig.streamUsageExtract 的既有签名。
@@ -65,11 +65,13 @@ func parseUsageJSON(usageStr string) (models.Usage, error) {
 }
 
 // createProcesser 根据配置创建一个 Processer，统一 stream/non-stream、首包时间、TPS 逻辑。
+// 首包时间与 usage 解析无条件执行：它们分别喂日志页的性能列与真实模型/供应商的 token
+// 计量，曾被两个设置项做成可关，收益在纳秒级、代价是把计量打成 0（已删除那两个开关）。
 func createProcesser(cfg processerConfig) Processer {
 	if cfg.nonStreamUsagePath == "" {
 		cfg.nonStreamUsagePath = "usage"
 	}
-	return func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
+	return func(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
 		var firstChunkTime time.Duration
 		var once sync.Once
 
@@ -91,16 +93,12 @@ func createProcesser(cfg processerConfig) Processer {
 			scanner := bufio.NewScanner(pr)
 			scanner.Buffer(make([]byte, 0, InitScannerBufferSize), MaxScannerBufferSize)
 			for chunk := range ScannerToken(scanner) {
-				if !disablePerformanceTracking {
-					once.Do(func() {
-						firstChunkTime = time.Since(start)
-					})
-				}
+				once.Do(func() {
+					firstChunkTime = time.Since(start)
+				})
 
 				output.OfString = chunk
-				if !disableTokenCounting {
-					usageStr = gjson.Get(chunk, cfg.nonStreamUsagePath).String()
-				}
+				usageStr = gjson.Get(chunk, cfg.nonStreamUsagePath).String()
 				break
 			}
 			if err := scanner.Err(); err != nil {
@@ -112,11 +110,9 @@ func createProcesser(cfg processerConfig) Processer {
 			streamDone := errors.New("sse stream done")
 			_, scanErr := common.ScanSSEFrames(pr, common.SSEScanConfig{MaxLineBytes: MaxScannerBufferSize},
 				func(ev SSEEvent, _ common.SSEScanStats) error {
-					if !disablePerformanceTracking {
-						once.Do(func() {
-							firstChunkTime = time.Since(start)
-						})
-					}
+					once.Do(func() {
+						firstChunkTime = time.Since(start)
+					})
 
 					chunk := ev.Data
 					if cfg.streamDoneTerminator != "" && chunk == cfg.streamDoneTerminator {
@@ -137,7 +133,7 @@ func createProcesser(cfg processerConfig) Processer {
 						outputAcc.write(chunk)
 					}
 
-					if !disableTokenCounting && usageStr == "" && cfg.streamUsageExtract != nil {
+					if usageStr == "" && cfg.streamUsageExtract != nil {
 						usageStr = cfg.streamUsageExtract(ev)
 					}
 					return nil
@@ -152,22 +148,15 @@ func createProcesser(cfg processerConfig) Processer {
 			output.OfStringArray = chunks
 		}
 
-		var usage models.Usage
-		if !disableTokenCounting {
-			u, err := parseUsageJSON(usageStr)
-			if err != nil {
-				return nil, nil, err
-			}
-			usage = u
+		usage, err := parseUsageJSON(usageStr)
+		if err != nil {
+			return nil, nil, err
 		}
 
-		var chunkTime time.Duration
+		chunkTime := time.Since(start) - firstChunkTime
 		var tps float64
-		if !disablePerformanceTracking {
-			chunkTime = time.Since(start) - firstChunkTime
-			if chunkTime.Seconds() > 0 {
-				tps = float64(usage.TotalTokens) / chunkTime.Seconds()
-			}
+		if chunkTime.Seconds() > 0 {
+			tps = float64(usage.TotalTokens) / chunkTime.Seconds()
 		}
 
 		return &models.ChatLog{
@@ -179,8 +168,8 @@ func createProcesser(cfg processerConfig) Processer {
 	}
 }
 
-func ProcesserOpenAI(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
-	return processerOpenAI(ctx, pr, stream, start, disablePerformanceTracking, disableTokenCounting)
+func ProcesserOpenAI(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
+	return processerOpenAI(ctx, pr, stream, start)
 }
 
 var processerOpenAI = createProcesser(processerConfig{
@@ -196,8 +185,8 @@ var processerOpenAI = createProcesser(processerConfig{
 	},
 })
 
-func ProcesserOpenAiRes(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
-	return processerOpenAiRes(ctx, pr, stream, start, disablePerformanceTracking, disableTokenCounting)
+func ProcesserOpenAiRes(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
+	return processerOpenAiRes(ctx, pr, stream, start)
 }
 
 var processerOpenAiRes = createProcesser(processerConfig{
@@ -210,8 +199,8 @@ var processerOpenAiRes = createProcesser(processerConfig{
 	},
 })
 
-func ProcesserAnthropic(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
-	return processerAnthropic(ctx, pr, stream, start, disablePerformanceTracking, disableTokenCounting)
+func ProcesserAnthropic(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
+	return processerAnthropic(ctx, pr, stream, start)
 }
 
 var processerAnthropic = createProcesser(processerConfig{

@@ -28,7 +28,7 @@ func TestRecordLog_ProcesserFailure_LogsExactlyOnce(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	proc := func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
+	proc := func(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
 		return nil, nil, errors.New("parse boom")
 	}
 
@@ -73,7 +73,7 @@ func TestRecordLog_ClientDisconnect_LogsWarn(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	proc := func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
+	proc := func(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
 		// 模拟写客户端断连经日志管道传回的失败链（writeResponseBody 的包装形态）。
 		return nil, nil, fmt.Errorf("write response body failed: %w", io.ErrClosedPipe)
 	}

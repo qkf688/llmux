@@ -14,6 +14,28 @@ import (
 	"github.com/qkf688/llmux/service/credwrite"
 )
 
+// discardResponseProcesser 是「只把响应体读完、不解析 usage / 计时」的 processer 占位：
+// 本文件两个用例只验证 raw 字段的清理策略，不关心解析结果，用它把 RecordLog 的入参填齐。
+// 单一定义：两处原先各写一份逐字相同的闭包，被重复率门判为新增重复块。
+var discardResponseProcesser Processer = func(_ context.Context, pr io.Reader, _ bool, _ time.Time) (*models.ChatLog, *models.OutputUnion, error) {
+	_, _ = io.ReadAll(pr)
+	return &models.ChatLog{}, &models.OutputUnion{OfString: `{"ok":true}`}, nil
+}
+
+// runRawClearRecordLog 用占位 processer 对给定日志行跑一次后处理：本文件两个用例的
+// 入参逐字相同，收成一个入口——重复率门会把两处逐字块判为新增重复。
+func runRawClearRecordLog(t *testing.T, logID uint) {
+	t.Helper()
+	RecordLog(context.Background(), RecordLogInput{
+		ReqStart:     time.Now(),
+		Reader:       io.NopCloser(strings.NewReader("x")),
+		Processer:    discardResponseProcesser,
+		LogID:        logID,
+		Before:       Before{Stream: false, raw: []byte(`{}`)},
+		ProviderName: "p",
+	})
+}
+
 func initChatRecordTestDB(t *testing.T) {
 	t.Helper()
 	credwrite.EnableTestSyncMode(true)
@@ -60,19 +82,7 @@ func TestRecordLog_ErrorsOnly_ClearsRawFieldsOnSuccess(t *testing.T) {
 		RawResponseBody: `{"raw":"be cleared"}`,
 	})
 
-	proc := func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
-		_, _ = io.ReadAll(pr)
-		return &models.ChatLog{}, &models.OutputUnion{OfString: `{"ok":true}`}, nil
-	}
-
-	RecordLog(context.Background(), RecordLogInput{
-		ReqStart:     time.Now(),
-		Reader:       io.NopCloser(strings.NewReader("x")),
-		Processer:    proc,
-		LogID:        log.ID,
-		Before:       Before{Stream: false, raw: []byte(`{}`)},
-		ProviderName: "p",
-	})
+	runRawClearRecordLog(t, log.ID)
 
 	var got models.ChatLog
 	if err := models.DB.First(&got, log.ID).Error; err != nil {
@@ -113,19 +123,7 @@ func TestRecordLog_ErrorsOnly_DoesNotClearRawFieldsOnErrorStatus(t *testing.T) {
 		RawResponseBody: `{"raw":"keep"}`,
 	})
 
-	proc := func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
-		_, _ = io.ReadAll(pr)
-		return &models.ChatLog{}, &models.OutputUnion{OfString: `{"ok":true}`}, nil
-	}
-
-	RecordLog(context.Background(), RecordLogInput{
-		ReqStart:     time.Now(),
-		Reader:       io.NopCloser(strings.NewReader("x")),
-		Processer:    proc,
-		LogID:        log.ID,
-		Before:       Before{Stream: false, raw: []byte(`{}`)},
-		ProviderName: "p",
-	})
+	runRawClearRecordLog(t, log.ID)
 
 	var got models.ChatLog
 	if err := models.DB.First(&got, log.ID).Error; err != nil {

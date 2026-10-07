@@ -61,7 +61,7 @@ func TestDisableAllLogs_StillUpdatesStats(t *testing.T) {
 		t.Fatalf("realModelTotal.calls = %d, want 1", realModelTotal.Calls)
 	}
 
-	proc := func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
+	proc := func(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
 		_, _ = io.ReadAll(pr)
 		return &models.ChatLog{Usage: models.Usage{TotalTokens: 123}}, &models.OutputUnion{OfString: `{"ok":true}`}, nil
 	}
@@ -147,7 +147,7 @@ func TestRealModelTokenStats_KeyFallsBackToRequestedModel(t *testing.T) {
 				t.Fatalf("SaveChatLog: %v", err)
 			}
 
-			proc := func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
+			proc := func(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
 				_, _ = io.ReadAll(pr)
 				return &models.ChatLog{Usage: models.Usage{TotalTokens: 7}}, &models.OutputUnion{}, nil
 			}

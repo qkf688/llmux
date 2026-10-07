@@ -63,8 +63,6 @@ func TestProcesserAnthropic_ParseUsageFallsBackToOpenAICompatFields(t *testing.T
 				strings.NewReader(tt.body),
 				false, // 非流式
 				time.Now(),
-				true, // disablePerformanceTracking
-				false,
 			)
 			if err != nil {
 				t.Fatalf("ProcesserAnthropic: %v", err)

@@ -20,16 +20,16 @@ func GetBeforer(style string) (Beforer, error) { return chat.GetBeforer(style) }
 
 type Processer = chat.Processer
 
-func ProcesserOpenAI(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
-	return chat.ProcesserOpenAI(ctx, pr, stream, start, disablePerformanceTracking, disableTokenCounting)
+func ProcesserOpenAI(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
+	return chat.ProcesserOpenAI(ctx, pr, stream, start)
 }
 
-func ProcesserOpenAiRes(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
-	return chat.ProcesserOpenAiRes(ctx, pr, stream, start, disablePerformanceTracking, disableTokenCounting)
+func ProcesserOpenAiRes(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
+	return chat.ProcesserOpenAiRes(ctx, pr, stream, start)
 }
 
-func ProcesserAnthropic(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
-	return chat.ProcesserAnthropic(ctx, pr, stream, start, disablePerformanceTracking, disableTokenCounting)
+func ProcesserAnthropic(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
+	return chat.ProcesserAnthropic(ctx, pr, stream, start)
 }
 
 func GetProcesser(style string) (Processer, error) { return chat.GetProcesser(style) }
@@ -90,5 +90,3 @@ func IsClientWriteError(err error) bool { return chat.IsClientWriteErr(err) }
 func MarkLogUnfinished(ctx context.Context, logID uint, reqStart time.Time) {
 	chat.MarkLogUnfinished(ctx, logID, reqStart)
 }
-
-func GetStripResponseHeaders(ctx context.Context) bool { return chat.GetStripResponseHeaders(ctx) }

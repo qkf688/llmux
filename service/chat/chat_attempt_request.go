@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/http/httptrace"
-	"time"
 
 	"github.com/qkf688/llmux/consts"
 	preprocessanthropic "github.com/qkf688/llmux/service/chat/preprocess/anthropic"
@@ -31,20 +29,6 @@ type ProviderRequestCaps struct {
 	// 来源：上游 provider 是否启用了 Anthropic interleaved thinking beta——该 beta 下
 	// 「budget 必须小于 max_tokens」的硬约束整体不成立（见 anthropic.BetaInterleavedThinking）。
 	AllowBudgetExceedMaxTokens bool
-}
-
-func withOptionalRequestTrace(ctx context.Context) context.Context {
-	if !getEnableRequestTrace(ctx) {
-		return ctx
-	}
-
-	reqStart := time.Now()
-	trace := &httptrace.ClientTrace{
-		GotFirstResponseByte: func() {
-			slog.Debug("first response byte received", "response_time", time.Since(reqStart))
-		},
-	}
-	return httptrace.WithClientTrace(ctx, trace)
 }
 
 // buildRequestBodyForProvider 聚合两条路径（真实/虚拟模型）的全部请求体改写。

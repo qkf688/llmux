@@ -58,8 +58,6 @@ func TestProcesserOpenAiRes_ParsesReasoningAndCacheDetails(t *testing.T) {
 				strings.NewReader(tt.body),
 				false, // 非流式
 				time.Now(),
-				true, // disablePerformanceTracking
-				false,
 			)
 			if err != nil {
 				t.Fatalf("ProcesserOpenAiRes: %v", err)

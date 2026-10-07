@@ -57,7 +57,7 @@ func TestAttachLogRecord_DiscardedBypassesPipeAndMarksUnfinished(t *testing.T) {
 		t.Fatalf("Shutdown() = %v, want nil", err)
 	}
 
-	proc := func(context.Context, io.Reader, bool, time.Time, bool, bool) (*models.ChatLog, *models.OutputUnion, error) {
+	proc := func(context.Context, io.Reader, bool, time.Time) (*models.ChatLog, *models.OutputUnion, error) {
 		t.Error("被丢弃的任务不得执行 RecordLog")
 		return nil, nil, nil
 	}
@@ -89,7 +89,7 @@ func TestAttachLogRecord_RegisteredTeesBodyToLogPipe(t *testing.T) {
 	testsupport.InitTestDB(t)
 
 	saw := make(chan string, 1)
-	proc := func(_ context.Context, pr io.Reader, _ bool, _ time.Time, _, _ bool) (*models.ChatLog, *models.OutputUnion, error) {
+	proc := func(_ context.Context, pr io.Reader, _ bool, _ time.Time) (*models.ChatLog, *models.OutputUnion, error) {
 		b, _ := io.ReadAll(pr)
 		saw <- string(b)
 		return &models.ChatLog{}, &models.OutputUnion{}, nil

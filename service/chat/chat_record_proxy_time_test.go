@@ -28,7 +28,7 @@ func TestRecordLog_Success_BackfillsProxyTime(t *testing.T) {
 	// 必然已过毫秒级时间；回拨让断言有可测阈值，不必在测试里真实 sleep。
 	reqStart := time.Now().Add(-300 * time.Millisecond)
 
-	proc := func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
+	proc := func(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
 		_, _ = io.ReadAll(pr)
 		return &models.ChatLog{Usage: models.Usage{TotalTokens: 1}}, &models.OutputUnion{}, nil
 	}
@@ -70,7 +70,7 @@ func TestRecordLog_ProcesserError_BackfillsProxyTime(t *testing.T) {
 
 	reqStart := time.Now().Add(-300 * time.Millisecond)
 
-	proc := func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking bool, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
+	proc := func(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
 		_, _ = io.ReadAll(pr)
 		// 212 场景：客户端断开，流读取在超时后被取消。
 		return nil, nil, context.Canceled

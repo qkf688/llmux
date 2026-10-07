@@ -217,7 +217,7 @@ func depinPinned(t *testing.T, key string) bool {
 }
 
 func failingProcesser(err error) Processer {
-	return func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
+	return func(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
 		return nil, nil, err
 	}
 }
@@ -319,7 +319,7 @@ func TestRecordLog_PersistFailure_KeepsSticky(t *testing.T) {
 	before := depinFixture(t, "k1")
 	logRow := testutil.NewRow(t, models.DB, models.ChatLog{Name: "m", ProviderModel: "pm", ProviderName: "p", Status: "success"})
 
-	procOK := func(ctx context.Context, pr io.Reader, stream bool, start time.Time, disablePerformanceTracking, disableTokenCounting bool) (*models.ChatLog, *models.OutputUnion, error) {
+	procOK := func(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
 		return &models.ChatLog{Usage: models.Usage{TotalTokens: 1}}, &models.OutputUnion{OfString: "ok"}, nil
 	}
 

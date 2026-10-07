@@ -165,19 +165,25 @@ func TestIsValidCredentialStatus(t *testing.T) {
 	}
 }
 
-// TestCredentialRecoveryFields 锁「恢复 active = 鉴权失败窗口重新开始」的状态机
-// 约定（#6-2）：切回 active 连带清 fail_count/cooldown_reason；切往其他状态
-// 不带重置语义。人工 CRUD 单条/批量与探活恢复（#6-3）共用此单一来源。
+// TestCredentialRecoveryFields 锁「恢复 active = 这条凭据立刻能用」的状态机
+// 约定（#6-2 起，2026-10-08 扩到冷却）：切回 active 连带清
+// fail_count/cooldown_reason/cooldown_until；切往其他状态不带重置语义。
+// 人工 CRUD 单条/批量与探活恢复（#6-3）共用此单一来源。
 func TestCredentialRecoveryFields(t *testing.T) {
 	fields := CredentialRecoveryFields(CredentialStatusActive)
-	if len(fields) != 2 {
-		t.Fatalf("active 恢复字段 = %v, want fail_count+cooldown_reason 两键", fields)
+	if len(fields) != 3 {
+		t.Fatalf("active 恢复字段 = %v, want fail_count+cooldown_reason+cooldown_until 三键", fields)
 	}
 	if v, ok := fields["fail_count"].(int); !ok || v != 0 {
 		t.Fatalf("fail_count = %v, want 0", fields["fail_count"])
 	}
 	if v, ok := fields["cooldown_reason"].(string); !ok || v != "" {
 		t.Fatalf("cooldown_reason = %v, want 空串（清 auth_fail 残留）", fields["cooldown_reason"])
+	}
+	// 冷却窗口必须清：人点了「启用」就是要它现在能用，而选路按 CooldownUntil 剔除，
+	// 只清 fail_count 会留下「状态是启用、实际仍被跳过」的假象。
+	if v, ok := fields["cooldown_until"]; !ok || v != nil {
+		t.Fatalf("cooldown_until = %v (存在=%v), want 键存在且值为 nil（解除冷却）", fields["cooldown_until"], ok)
 	}
 	for _, status := range []string{CredentialStatusDisabled, CredentialStatusError, CredentialStatusTempUnsched, "", "bogus"} {
 		if got := CredentialRecoveryFields(status); got != nil {

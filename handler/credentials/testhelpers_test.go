@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/common/credentialcrypto"
@@ -112,6 +113,19 @@ func reloadCredential(t *testing.T, id uint) models.Credential {
 		t.Fatalf("reload credential %d: %v", id, err)
 	}
 	return *cred
+}
+
+// markCredentialCooling 给既有凭据写冷却截止时间（status 保持 active，贴合
+// 「冷却不占状态位」的状态机）。走 UpdateFields 而非 struct Update——三态指针字段
+// 清/写都得用 map 显式给值，与生产写路径同款（见 pools.md 三态字段约定）。
+func markCredentialCooling(t *testing.T, credID uint, until time.Time) {
+	t.Helper()
+	if _, err := repository.Default().Credential.UpdateFields(t.Context(), credID, map[string]any{
+		"cooldown_until":  until,
+		"cooldown_reason": "http_429",
+	}); err != nil {
+		t.Fatalf("mark credential %d cooling: %v", credID, err)
+	}
 }
 
 // initCredentialsTestDB 凭据域测试统一前置：独立 DB + cipher。

@@ -4,6 +4,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/common/credentialcrypto"
@@ -194,6 +195,31 @@ func TestUpdateCredential_RecoversStopsCredential(t *testing.T) {
 	stored := reloadCredential(t, credID)
 	if stored.Status != models.CredentialStatusActive || stored.FailCount != 0 || stored.CooldownReason != "" {
 		t.Fatalf("落库字段未按状态机约定重置: %+v", stored)
+	}
+}
+
+// TestUpdateCredential_RecoveryClearsCooldown 锁「恢复 = 立刻可用」（Stage 40）：
+// 冷却中的凭据点启用必须连 cooldown_until 一起清——选路按 CooldownUntil 剔除，
+// 只清失败计数会留下「状态是启用、实际仍用不了」的假象。
+func TestUpdateCredential_RecoveryClearsCooldown(t *testing.T) {
+	initCredentialsTestDB(t)
+	poolID := seedPool(t, "冷却恢复池")
+	credID := seedCredential(t, poolID, "sk-cool-recover-ABCD1234",
+		models.CredentialStatusActive, 2, "http_429")
+	markCredentialCooling(t, credID, time.Now().Add(10*time.Minute))
+
+	body, _ := invoke(t, "PATCH", "/credentials/"+itoa(credID), credentialParams(credID),
+		`{"status":"active"}`, UpdateCredential)
+	if gjson.Get(body, "code").Int() != 200 {
+		t.Fatalf("恢复应 200 body=%s", body)
+	}
+	// Exists() 区分「键存在且为 null」与「键缺失」——三态指针禁 omitempty，
+	// 键必须在且显式为 null（前端据此判恢复是否生效）。
+	if v := gjson.Get(body, "data.CooldownUntil"); !v.Exists() || v.Type != gjson.Null {
+		t.Fatalf("CooldownUntil=%v (exists=%v) want 键存在且为 null body=%s", v.Value(), v.Exists(), body)
+	}
+	if stored := reloadCredential(t, credID); stored.CooldownUntil != nil {
+		t.Fatalf("落库 CooldownUntil=%v want nil（恢复须解除冷却）", stored.CooldownUntil)
 	}
 }
 

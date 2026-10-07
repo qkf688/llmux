@@ -3,6 +3,7 @@ package credentials
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/models"
@@ -12,7 +13,8 @@ import (
 
 // TestBatchUpdateCredentialStatus_AcrossPools 批量启停按 ID 生效，不分归属：
 // 不同号池的凭据混在一批里一次恢复——这是「凭据是第一等资源」的直接后果，
-// 也是被判停后最省事的人工恢复路径。
+// 也是被判停后最省事的人工恢复路径。恢复 = 立刻可用：连败痕迹与冷却窗口一并清
+// （Stage 40；批量路径与单条 PATCH 共用 models.CredentialRecoveryFields）。
 func TestBatchUpdateCredentialStatus_AcrossPools(t *testing.T) {
 	initCredentialsTestDB(t)
 	_, poolCred := seedPoolCredential(t, "批量池", "sk-batch-pool-ABCD1234", models.CredentialStatusTempUnsched)
@@ -24,6 +26,9 @@ func TestBatchUpdateCredentialStatus_AcrossPools(t *testing.T) {
 		map[string]any{"fail_count": 2, "cooldown_reason": "auth_fail"}); err != nil {
 		t.Fatal(err)
 	}
+	// 两条都给上冷却窗口：恢复不清它的话，状态是 active 但选路仍按冷却剔除。
+	markCredentialCooling(t, poolCred, time.Now().Add(10*time.Minute))
+	markCredentialCooling(t, otherCred, time.Now().Add(10*time.Minute))
 
 	payload := `{"ids":[` + itoa(poolCred) + `,` + itoa(otherCred) + `],"status":"active"}`
 	body, _ := invoke(t, "PATCH", "/credentials/status", nil, payload, BatchUpdateCredentialStatus)
@@ -35,8 +40,9 @@ func TestBatchUpdateCredentialStatus_AcrossPools(t *testing.T) {
 	}
 	for _, id := range []uint{poolCred, otherCred} {
 		stored := reloadCredential(t, id)
-		if stored.Status != models.CredentialStatusActive || stored.FailCount != 0 || stored.CooldownReason != "" {
-			t.Fatalf("凭据 %d 恢复不完整: %+v", id, stored)
+		if stored.Status != models.CredentialStatusActive || stored.FailCount != 0 ||
+			stored.CooldownReason != "" || stored.CooldownUntil != nil {
+			t.Fatalf("凭据 %d 恢复不完整（须含解除冷却）: %+v", id, stored)
 		}
 	}
 }

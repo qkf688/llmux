@@ -47,7 +47,9 @@ func isProviderBlacklisted(provider models.Provider) bool {
 	return provider.Blacklisted != nil && *provider.Blacklisted
 }
 
-// allowsAutoAssociate 模型级开关：nil 或 true 允许；显式 false 跳过。
+// allowsAutoAssociate 模型级开关：true 允许，显式 false 跳过。
+// Model.AutoAssociate 是二态 bool——曾声明的「nil=未设置」三态从未可表达（UI 只有勾选框，
+// nil 与 true 行为又一致），已收回二态，见 models.Model 字段注释。
 func allowsAutoAssociate(model models.Model) bool {
-	return model.AutoAssociate == nil || *model.AutoAssociate
+	return model.AutoAssociate
 }

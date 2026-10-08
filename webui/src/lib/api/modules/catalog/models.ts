@@ -5,7 +5,8 @@ export interface Model {
   Name: string;
   Remark: string;
   IOLog: boolean;
-  auto_associate?: boolean;
+  // 二态开关：后端是普通 bool，「未设置」不是可表达状态（曾声明的三态已收回）。
+  auto_associate: boolean;
   supports_thinking: boolean;
   thinking_levels?: string[];
   // 模型固有能力真值（关联侧默认继承这三项）：

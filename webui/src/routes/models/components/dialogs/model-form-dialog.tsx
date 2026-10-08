@@ -166,7 +166,7 @@ export function ModelFormDialog({
                     <FormItem className="flex flex-row items-center gap-2 space-y-0">
                       <FormControl>
                         <Checkbox
-                          checked={field.value !== false}
+                          checked={field.value}
                           onCheckedChange={(checked) => field.onChange(checked)}
                         />
                       </FormControl>

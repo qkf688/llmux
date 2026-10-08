@@ -39,7 +39,7 @@ var realModelKeysWithLevels = []testutil.APIResponseKey{
 	{Key: "Remark", WantSetType: gjson.String},
 	{Key: "IOLog", WantSetType: gjson.True, Nilable: true},
 	{Key: "IsUpstream", WantSetType: gjson.True, Nilable: true},
-	{Key: "auto_associate", WantSetType: gjson.True, Nilable: true},
+	{Key: "auto_associate", WantSetType: gjson.True},
 	{Key: "supports_thinking", WantSetType: gjson.True},
 	{Key: "thinking_levels", WantSetType: gjson.JSON},
 	// 能力真值三项：Model 层为二态 bool（无三态语义），键名走 snake_case tag。
@@ -64,7 +64,7 @@ func withoutKey(keys []testutil.APIResponseKey, drop string) []testutil.APIRespo
 	return out
 }
 
-// serveModels 建「全字段置值 + 三态字段全 nil、白名单空」两行夹具并打一遍 GetModels。
+// serveModels 建「全字段置值 + 真三态字段全 nil、白名单空」两行夹具并打一遍 GetModels。
 // 两行分别覆盖 thinking_levels 的有值态（键在）与空值态（键不出现）。
 func serveModels(t *testing.T) string {
 	t.Helper()
@@ -77,7 +77,7 @@ func serveModels(t *testing.T) string {
 		Remark:           "r",
 		IOLog:            &on,
 		IsUpstream:       &on,
-		AutoAssociate:    &on,
+		AutoAssociate:    true,
 		SupportsThinking: true,
 		ThinkingLevels:   []string{"low", "high"},
 		ToolCall:         true,
@@ -87,11 +87,13 @@ func serveModels(t *testing.T) string {
 	if err := repository.Default().Model.Create(t.Context(), &full); err != nil {
 		t.Fatalf("create full model: %v", err)
 	}
-	// 三态字段全 nil：IOLog / IsUpstream / auto_associate 必须序列化成 null 且键仍在
-	//（禁 omitempty 类断层），thinking_levels 空切片整键不出现。
-	// 能力真值三项在 Model 上是二态 bool（非三态，无 null 语义），按表头约定统一置 true。
+	// 三态字段全 nil：IOLog / IsUpstream 必须序列化成 null 且键仍在（禁 omitempty 类断层），
+	// thinking_levels 空切片整键不出现。
+	// 能力真值三项在 Model 上是二态 bool（非三态，无 null 语义），按表头约定统一置 true；
+	// auto_associate 同为二态（假三态已收回），按表头约定置 true。
 	nulls := models.Model{
 		Name:             "m-nulls",
+		AutoAssociate:    true,
 		SupportsThinking: true,
 		ToolCall:         true,
 		StructuredOutput: true,
@@ -99,11 +101,6 @@ func serveModels(t *testing.T) string {
 	}
 	if err := repository.Default().Model.Create(t.Context(), &nulls); err != nil {
 		t.Fatalf("create nulls model: %v", err)
-	}
-	// auto_associate 列带 gorm default:true：建行时 nil 会被数据库默认值回填成 true，
-	// 构造不出「未设置」态——必须显式写 NULL 才能覆盖到 nil 序列化成 null 的契约面。
-	if _, err := repository.Default().Model.UpdateFields(t.Context(), nulls.ID, map[string]any{"auto_associate": nil}); err != nil {
-		t.Fatalf("null out auto_associate: %v", err)
 	}
 
 	w := httptest.NewRecorder()
@@ -120,8 +117,9 @@ func serveModels(t *testing.T) string {
 // 缺键、多键、改名都红。此前该端点的测试只覆盖字段值，不锁响应键集合——
 // 实体增删字段/改 json tag 时前端 interface 断层不会被任何测试抓到。
 //
-// 两条实体断言各自带三态方向（有值态 / 空值态）：`m-full` 行的三个 Nilable 键
-// （IOLog / IsUpstream / auto_associate）必须真有值、`m-nulls` 行必须为 null。
+// 两条实体断言各自带三态方向（有值态 / 空值态）：`m-full` 行的两个 Nilable 键
+// （IOLog / IsUpstream）必须真有值、`m-nulls` 行必须为 null；auto_associate 与能力
+// 真值三项同为二态，标 Nilable 会被方向校验放过 null（假三态已收回，见表内键定义）。
 // 只断键集合时，把它们在有值行里悄悄写成 null 也是绿的——与 Stage 41 给
 // model-providers 修掉的是同一类假绿，此处一并关掉。
 func TestGetModels_ResponseShapeLocked(t *testing.T) {

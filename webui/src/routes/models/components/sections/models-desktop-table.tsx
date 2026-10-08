@@ -91,7 +91,7 @@ export function ModelsDesktopTable({
               </TableCell>
               <TableCell>
                 <Switch
-                  checked={model.auto_associate !== false}
+                  checked={model.auto_associate}
                   onCheckedChange={(checked) => onToggleAutoAssociate(model, checked)}
                   disabled={togglingAutoAssociate[model.ID]}
                 />

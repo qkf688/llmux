@@ -72,10 +72,10 @@ func TestSharedHelpers(t *testing.T) {
 	if !isProviderBlacklisted(models.Provider{Blacklisted: boolPtr(true)}) {
 		t.Fatal("true blacklisted")
 	}
-	if !allowsAutoAssociate(models.Model{}) {
-		t.Fatal("nil AutoAssociate should allow")
+	if !allowsAutoAssociate(models.Model{AutoAssociate: true}) {
+		t.Fatal("true should allow")
 	}
-	if allowsAutoAssociate(models.Model{AutoAssociate: boolPtr(false)}) {
+	if allowsAutoAssociate(models.Model{AutoAssociate: false}) {
 		t.Fatal("false should deny")
 	}
 }

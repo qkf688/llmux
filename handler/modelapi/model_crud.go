@@ -39,10 +39,12 @@ func CreateModel(c *gin.Context) {
 	}
 
 	model := models.Model{
-		Name:             req.Name,
-		Remark:           req.Remark,
-		IOLog:            &req.IOLog,
-		AutoAssociate:    req.AutoAssociate,
+		Name:   req.Name,
+		Remark: req.Remark,
+		IOLog:  &req.IOLog,
+		// DTO *bool 缺省 = true（与前端表单默认值一致，也是原 gorm default tag 的口径）。
+		// 显式 false 必须存得住，故不能反过来依赖 default tag 兜底。
+		AutoAssociate:    req.AutoAssociate == nil || *req.AutoAssociate,
 		SupportsThinking: req.SupportsThinking != nil && *req.SupportsThinking,
 		ThinkingLevels:   req.ThinkingLevels,
 		// 能力真值：DTO *bool 缺省 = false（与 SupportsThinking 同口径）

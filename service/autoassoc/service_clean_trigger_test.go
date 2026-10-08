@@ -89,7 +89,9 @@ func TestTriggerAssociateIfEnabled_RespectsSetting(t *testing.T) {
 	db := newTestDB(t)
 	// settings now read via repos.Setting; no models.DB required
 	repos := repository.New(db)
-	if err := repos.Model.Create(ctx, &models.Model{ID: 1, Name: "gpt-4o"}); err != nil {
+	// AutoAssociate 必须显式置 true：字段是二态 bool，零值 false = 「该模型不参与自动关联」，
+	// 用例断言的是全局开关生效与否，前提是模型本身允许参与。
+	if err := repos.Model.Create(ctx, &models.Model{ID: 1, Name: "gpt-4o", AutoAssociate: true}); err != nil {
 		t.Fatalf("create model: %v", err)
 	}
 	if err := repos.Provider.Create(ctx, &models.Provider{

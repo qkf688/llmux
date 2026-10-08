@@ -36,14 +36,19 @@ type Provider struct {
 
 // Model 模型目录主表：真实模型行（IsUpstream）与自定义模型行共用。
 type Model struct {
-	ID            uint `gorm:"primarykey"`
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	Name          string
-	Remark        string
-	IOLog         *bool // 是否记录IO
-	IsUpstream    *bool // 是否是上游模型（true=上游，false=自定义）
-	AutoAssociate *bool `gorm:"default:true" json:"auto_associate"` // 是否允许自动关联触发
+	ID         uint `gorm:"primarykey"`
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	Name       string
+	Remark     string
+	IOLog      *bool // 是否记录IO
+	IsUpstream *bool // 是否是上游模型（true=上游，false=自定义）
+	// AutoAssociate 二态开关（是否允许自动关联触发），与 SupportsThinking 同范式：
+	// bool 而非 *bool——UI 与批量操作都只有勾选/不勾两态，「未设置」从来不是可表达的
+	// 状态，且 nil 与 true 在 allowsAutoAssociate 里行为一致（都=允许），三态是假抽象。
+	// Create 缺省口径由 handler 兜底为 true（与前端表单默认值一致），不靠 gorm default
+	// tag——default tag 会把显式 false 也当零值吞掉，与 SupportsThinking 同理故不用。
+	AutoAssociate bool `json:"auto_associate"`
 	// SupportsThinking 是否支持 thinking（推理）能力。
 	// 用 bool 而非 *bool：Model 层是能力真实值的 single source of truth，无继承对象，
 	// nil 与 false 业务上等价；三态语义（nil=继承）只属于 ModelWithProvider 的 override 字段。

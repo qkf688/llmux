@@ -35,10 +35,10 @@ func TestAssociate_SkipsExistingBlacklistAndDisabledModel(t *testing.T) {
 	db := newTestDB(t)
 	repos := repository.New(db)
 
-	if err := repos.Model.Create(ctx, &models.Model{ID: 1, Name: "gpt-4o", AutoAssociate: boolPtr(true)}); err != nil {
+	if err := repos.Model.Create(ctx, &models.Model{ID: 1, Name: "gpt-4o", AutoAssociate: true}); err != nil {
 		t.Fatalf("create model1: %v", err)
 	}
-	if err := repos.Model.Create(ctx, &models.Model{ID: 2, Name: "blocked", AutoAssociate: boolPtr(false)}); err != nil {
+	if err := repos.Model.Create(ctx, &models.Model{ID: 2, Name: "blocked", AutoAssociate: false}); err != nil {
 		t.Fatalf("create model2: %v", err)
 	}
 
@@ -140,7 +140,8 @@ func TestAssociate_UsesPrioritySetting(t *testing.T) {
 	db := newTestDB(t)
 	repos := repository.New(db)
 
-	if err := repos.Model.Create(ctx, &models.Model{ID: 1, Name: "gpt-4o"}); err != nil {
+	// AutoAssociate 必须显式置 true：字段是二态 bool，零值 false = 「该模型不参与自动关联」。
+	if err := repos.Model.Create(ctx, &models.Model{ID: 1, Name: "gpt-4o", AutoAssociate: true}); err != nil {
 		t.Fatalf("create model: %v", err)
 	}
 	if err := repos.Provider.Create(ctx, &models.Provider{
@@ -183,7 +184,8 @@ func TestAssociate_UsesWeightSetting(t *testing.T) {
 	db := newTestDB(t)
 	repos := repository.New(db)
 
-	if err := repos.Model.Create(ctx, &models.Model{ID: 1, Name: "gpt-4o"}); err != nil {
+	// AutoAssociate 必须显式置 true：字段是二态 bool，零值 false = 「该模型不参与自动关联」。
+	if err := repos.Model.Create(ctx, &models.Model{ID: 1, Name: "gpt-4o", AutoAssociate: true}); err != nil {
 		t.Fatalf("create model: %v", err)
 	}
 	if err := repos.Provider.Create(ctx, &models.Provider{
@@ -225,7 +227,7 @@ func TestAssociateAll_BypassesModelSwitch(t *testing.T) {
 	repos := repository.New(db)
 
 	// model with AutoAssociate=false
-	if err := repos.Model.Create(ctx, &models.Model{ID: 1, Name: "gpt-4o", AutoAssociate: boolPtr(false)}); err != nil {
+	if err := repos.Model.Create(ctx, &models.Model{ID: 1, Name: "gpt-4o", AutoAssociate: false}); err != nil {
 		t.Fatalf("create model: %v", err)
 	}
 	if err := repos.Provider.Create(ctx, &models.Provider{
@@ -267,7 +269,8 @@ func TestAssociate_PartialFailureReturnsCountNoError(t *testing.T) {
 	db := newTestDB(t)
 	repos := repository.New(db)
 
-	if err := repos.Model.Create(ctx, &models.Model{ID: 1, Name: "gpt-4o"}); err != nil {
+	// AutoAssociate 必须显式置 true：字段是二态 bool，零值 false = 「该模型不参与自动关联」。
+	if err := repos.Model.Create(ctx, &models.Model{ID: 1, Name: "gpt-4o", AutoAssociate: true}); err != nil {
 		t.Fatalf("create model: %v", err)
 	}
 	// 两个 provider 都 serve "gpt-4o"，匹配同一 model → 两次 Create 都会失败

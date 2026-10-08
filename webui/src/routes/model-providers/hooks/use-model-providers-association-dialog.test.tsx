@@ -14,6 +14,7 @@ const MODELS_WITH_CAPS: Model[] = [
     Name: "cap-model",
     Remark: "",
     IOLog: false,
+    auto_associate: true,
     supports_thinking: false,
     tool_call: true,
     structured_output: false,

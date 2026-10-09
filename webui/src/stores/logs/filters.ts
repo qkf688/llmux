@@ -1,3 +1,4 @@
+import { getLogStatusLabel } from "@/lib/log-status";
 import type { LogsFilters } from "@/stores/logs/types";
 
 export type ApiLogsFilters = {
@@ -25,8 +26,7 @@ export function hasActiveLogsFilters(filters: LogsFilters): boolean {
 export function buildLogsFiltersSummary(filters: LogsFilters): string {
   const parts: string[] = [];
   if (filters.status !== "all") {
-    const label = filters.status === "success" ? "成功" : filters.status === "error" ? "错误" : filters.status;
-    parts.push(`状态=${label}`);
+    parts.push(`状态=${getLogStatusLabel(filters.status)}`);
   }
   if (filters.style !== "all") {
     parts.push(`类型=${filters.style}`);

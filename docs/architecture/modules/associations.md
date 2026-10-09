@@ -43,7 +43,7 @@ models.ModelWithProvider
 | `models.ModelWithProvider` | 关联实体（路由与健康检查的核心行） | `models/model.go` | GORM |
 | `autoassoc.Service` | 预览/执行自动关联与清理；带开关的 Trigger* | `service/autoassoc/` | 同包 |
 | HTTP associate/clean | 绑定 JSON 与 `httpresp` | `handler/autoassoc/` | 调 `GetAutoAssocService` |
-| `GET /model-providers/status` | 该关联最近 10 次**已收尾**请求的成败布尔数组（按时间升序）。**排除 `status = processing` 的在途行**：在途请求既非成也非败，占名额并画成失败会在长流式请求期间给出假结论（状态取值见 `models.ChatLogStatus*`）。回归 `handler/associations/provider_status_contract_test.go` | `handler/associations/health.go` | 同文件（ChatLog 只读聚合直读） |
+| `GET /model-providers/status` | 该关联最近 10 次**有成败结论**请求的成败布尔数组（按时间升序）。口径是**白名单**：只统计 `success` 与 `error`，`processing`（在途）、`canceled`（用户主动撤走）、`interrupted`（进程先走了）三态既排除出名额也不画成失败——它们都非成非败，占名额会把真实成败挤出窗口，画成失败则给出「这家供应商在失败」的假结论而供应商没做错任何事（状态取值见 `models.ChatLogStatus*`）。白名单而非逐个排除，是为了让状态机再加新态时自动落到「不统计」一侧。**返回形状仍是两态布尔**（对外契约，前端 `status-bars` 只认成败两格），故非结论态靠排除而非新增第三格——与 `health-status` 的三态字符串是两条不同的路，不要合并。回归 `handler/associations/provider_status_contract_test.go` | `handler/associations/health.go` | 同文件（ChatLog 只读聚合直读） |
 | `GET /model-providers/health-status` | 最近 limit 次健康检测的状态字符串数组（三态 `success`/`error`/`not_measured`，按时间升序） | `handler/associations/health.go` | 同文件（`HealthCheckLog` 只读聚合直读） |
 
 ### `ModelWithProvider` 字段约定（路由相关）

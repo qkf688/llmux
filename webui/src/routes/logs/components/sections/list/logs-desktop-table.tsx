@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { ChatLog } from "@/lib/api";
+import { getLogStatusHint, getLogStatusLabel, getLogStatusTextClass } from "@/lib/log-status";
 import { Trash2 } from "lucide-react";
 import { LogScheduleCell, StreamBadge } from "../../shared";
 import { formatTime } from "../../../utils/formatters";
@@ -101,11 +102,10 @@ export function LogsDesktopTable({
               </TableCell>
               <TableCell>
                 <span
-                  className={`inline-flex items-center px-2 py-1 ${
-                    log.status === "success" ? "text-success" : "text-destructive"
-                  }`}
+                  className={`inline-flex items-center px-2 py-1 ${getLogStatusTextClass(log.status)}`}
+                  title={getLogStatusHint(log.status)}
                 >
-                  {log.status}
+                  {getLogStatusLabel(log.status)}
                 </span>
               </TableCell>
               <TableCell>{formatTime(log.chunk_time)}</TableCell>

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { StaggerItem, StaggerList } from "@/components/ui/stagger-list";
 import type { ChatLog } from "@/lib/api";
+import { getLogStatusBadgeClass, getLogStatusHint, getLogStatusLabel } from "@/lib/log-status";
 import { Trash2 } from "lucide-react";
 import { LogScheduleCell, StreamBadge } from "../../shared";
 import { formatByteLength, formatTime } from "../../../utils/formatters";
@@ -69,13 +70,12 @@ export function LogsMobileList({
                     {formatDateTime(log.created_at)}
                   </p>
                   <span
-                    className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                      log.status === "success"
-                        ? "bg-success-tint text-success-foreground"
-                        : "bg-destructive-tint text-destructive-tint-foreground"
-                    }`}
+                    className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${getLogStatusBadgeClass(
+                      log.status
+                    )}`}
+                    title={getLogStatusHint(log.status)}
                   >
-                    {log.status}
+                    {getLogStatusLabel(log.status)}
                   </span>
                 </div>
               </div>

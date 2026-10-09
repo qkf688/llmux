@@ -35,6 +35,7 @@ webui/src/
 ├── lib/concurrent-batch.ts # 批量并发调度跨域单源（按项回 成功/失败/已取消 三态；providers 两套 + model-providers 一处批量共用）
 ├── lib/header-rows.ts      # 出站自定义头「行 ↔ Record」折叠与预设互斥单源（api-keys 与关联两弹窗共用，4a；语法权威在服务端 common/outboundheaders.go）
 ├── lib/health-check-status.ts # 健康检测三态文案/配色跨域单源（日志页与批量结果弹窗共用；状态值域与后端 models.HealthCheckStatus* 同源）
+├── lib/log-status.ts         # 请求日志五态文案/配色/悬停说明单源（状态筛选、桌面表格、移动列表、详情弹窗与筛选摘要共用；值域与后端 models.ChatLogStatus* 同源。**散落的 `status === "success" ? 绿 : 红` 会把 canceled/interrupted 画成红色失败**——冤枉上游且不报错，故按整张 Record 取用，新增第六态会让各展示面一起编译报错）
 ├── hooks/                  # 含 hooks/api 查询封装
 ├── stores/                 # Zustand（含 core/updater）
 └── test/                   # vitest setup + 跨 components/routes 的共用测试夹具（health-check-fixtures.ts）

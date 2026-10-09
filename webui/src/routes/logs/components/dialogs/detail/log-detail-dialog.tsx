@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getLogDetail, type ChatLog } from "@/lib/api";
+import { getLogStatusHint, getLogStatusLabel, getLogStatusTextClass } from "@/lib/log-status";
 import { toErrorMessage } from "@/lib/errors";
 import { splitLogSchedule } from "../../../utils/log-schedule";
 import {
@@ -101,8 +102,11 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDet
               </div>
               <div className="text-sm">
                 <span className="text-muted-foreground">状态：</span>
-                <span className={detailLog.status === "success" ? "text-success" : "text-destructive"}>
-                  {detailLog.status}
+                <span
+                  className={getLogStatusTextClass(detailLog.status)}
+                  title={getLogStatusHint(detailLog.status)}
+                >
+                  {getLogStatusLabel(detailLog.status)}
                 </span>
               </div>
             </div>

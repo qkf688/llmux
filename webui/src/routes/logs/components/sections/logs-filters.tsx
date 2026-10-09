@@ -2,6 +2,7 @@ import { PageToolbar, ToolbarFilter } from "@/components/page-toolbar";
 import { Button } from "@/components/ui/button";
 import { SelectItem } from "@/components/ui/select";
 import type { Model, Provider } from "@/lib/api";
+import { LOG_STATUSES, getLogStatusLabel } from "@/lib/log-status";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronUp, Filter } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -79,8 +80,11 @@ export function LogsFiltersSection({
       placeholder="状态"
     >
       <SelectItem value="all">全部</SelectItem>
-      <SelectItem value="success">成功</SelectItem>
-      <SelectItem value="error">错误</SelectItem>
+      {LOG_STATUSES.map((status) => (
+        <SelectItem key={status} value={status}>
+          {getLogStatusLabel(status)}
+        </SelectItem>
+      ))}
     </ToolbarFilter>
   );
 

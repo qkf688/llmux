@@ -55,6 +55,9 @@ export function useLogsActions({
   const clearAllMutation = useClearAllLogs();
   const clearFilteredMutation = useClearFilteredLogs();
 
+  // 判据认 success 而非「非 processing 都算」：ChatIO 只在 RecordLog 的成功分支写
+  // （service/chat 的 persistChatLog 只被该分支调用），error / canceled /
+  // interrupted 的行根本没有问答记录，Boolean(log.chat_io) 只是兜底。
   const canViewChatIO = (log: ChatLog) => log.status === "success" && Boolean(log.chat_io);
 
   const handleViewChatIO = (log: ChatLog) => {

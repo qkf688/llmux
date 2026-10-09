@@ -10,10 +10,17 @@ import (
 	"gorm.io/gorm"
 )
 
-// GetModelProviderStatus 获取提供商状态信息（最近 10 次**已收尾**请求的成败）。
-// 刻意排除 processing 行：在途请求既非成也非败，画成失败会在长流式请求期间给出
-// 假结论（状态常量见 models.ChatLogStatus*）。ChatLog 只读聚合：日志 repo 在
-// T3.0b，此处暂留 query 辅助。
+// GetModelProviderStatus 获取提供商状态信息（最近 10 次**有成败结论**的请求）。
+//
+// 口径是白名单「只统计 success 与 error」，而非黑名单逐个排除：在途（processing）、
+// 用户主动撤走（canceled）、进程先走了（interrupted）三行既非成也非败，画成失败会
+// 给出「这家供应商在失败」的假结论，而供应商没做错任何事；它们同时还会占掉 10 格的
+// 名额、把真实成败挤出窗口。白名单写法让状态机再加新态时自动落到「不统计」一侧，
+// 不必回来补一行排除（状态常量见 models.ChatLogStatus*）。
+//
+// 布尔返回形状是既有对外契约（前端 status-bars 只认成败两格），故非结论态是**排除**
+// 而非新增第三格——这与 HealthCheckLog 侧的三态字符串（见 GetModelProviderHealthStatus）
+// 是两条不同的路，不要合并。ChatLog 只读聚合：日志 repo 在 T3.0b，此处暂留 query 辅助。
 func GetModelProviderStatus(c *gin.Context) {
 	providerIDStr := c.Query("provider_id")
 	modelName := c.Query("model_name")
@@ -41,7 +48,7 @@ func GetModelProviderStatus(c *gin.Context) {
 		Where("provider_name = ?", provider.Name).
 		Where("provider_model = ?", providerModel).
 		Where("name = ?", modelName).
-		Where("status <> ?", models.ChatLogStatusProcessing).
+		Where("status IN ?", []string{models.ChatLogStatusSuccess, models.ChatLogStatusError}).
 		Limit(10).
 		Order("created_at DESC").
 		Find(ctx)

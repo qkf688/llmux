@@ -13,18 +13,22 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// TestGetModelProviderStatus_SkipsInFlightRows 锁「最近 10 次请求成败」的口径（状态机）：
-// processing（在途）行既不是成也不是败，不得占名额、更不得画成失败——否则长流式请求期间
-// 该关联会持续显示一次并不存在的失败。
+// TestGetModelProviderStatus_SkipsNonOutcomeRows 锁「最近 10 次请求成败」的口径（状态机）：
+// 只有 success 与 error 进窗口——processing（在途）、canceled（用户点停止/断开）、
+// interrupted（进程先走了）三行既不是成也不是败，既不得占名额、更不得画成失败，
+// 否则会在长流式请求期间、在用户自己撤走时给出「这家供应商在失败」的假结论。
 //
-// 夹具把**最新**一条造成 processing、最早一条造成 error，两条断言各自独立地钉住新口径：
-//   - `data.0 = false`：列表按时间升序，最早那条 error 必须在场。老实现（不过滤在途行）
-//     会让在途行顶掉这条，data.0 变成 true。
-//   - `data.9 = true`：最新一条是成功行。老实现里 data.9 就是在途行（false）。
-//   - false 条数恒为 1：只有那条 error。
+// 夹具把**最新**一条造成 processing、倒数第二条造成 canceled、倒数第三条造成
+// interrupted、最早一条造成 error，四条断言各自独立地钉住新口径：
+//   - `data.0 = false`：列表按时间升序，最早那条 error 必须在场。老实现（不过滤
+//     非结论行）会让三条非结论行顶掉它，data.0 变成 true。
+//   - `data.9 = true`：最新一条是成功行。老实现里 data.9 就是那条 processing。
+//   - false 条数恒为 1：只有那条 error。三条非结论行若被画成失败会多出 3 条。
+//   - 长度恒为 10：13 行里只有 10 行是结论，非结论行不得占名额。
 //
-// 响应体 JSON 上断言（不读 Go 值）：这条契约就是「布尔数组 + 顺序」，绕开序列化层测不出形状。
-func TestGetModelProviderStatus_SkipsInFlightRows(t *testing.T) {
+// 响应体 JSON 上断言（不读 Go 值）：这条契约就是「布尔数组 + 顺序 + 长度」，绕开
+// 序列化层测不出形状。
+func TestGetModelProviderStatus_SkipsNonOutcomeRows(t *testing.T) {
 	testsupport.InitTestDB(t)
 
 	provider := models.Provider{Name: "p-status-read"}
@@ -52,7 +56,9 @@ func TestGetModelProviderStatus_SkipsInFlightRows(t *testing.T) {
 	for i := 1; i <= 9; i++ {
 		newRow(i, models.ChatLogStatusSuccess)
 	}
-	newRow(10, models.ChatLogStatusProcessing)
+	newRow(10, models.ChatLogStatusCanceled)
+	newRow(11, models.ChatLogStatusInterrupted)
+	newRow(12, models.ChatLogStatusProcessing)
 
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -64,13 +70,13 @@ func TestGetModelProviderStatus_SkipsInFlightRows(t *testing.T) {
 
 	body := w.Body.String()
 	if got := gjson.Get(body, "data.#").Int(); got != 10 {
-		t.Fatalf("data 长度 = %d, want 10（11 行里在途行必须被排除，不得占名额）:\n%s", got, body)
+		t.Fatalf("data 长度 = %d, want 10（13 行里非结论行必须被排除，不得占名额）:\n%s", got, body)
 	}
 	if gjson.Get(body, "data.0").Bool() {
-		t.Errorf("data.0 = true, want false（最早那条是 error 行；老实现会让在途行顶掉它）:\n%s", body)
+		t.Errorf("data.0 = true, want false（最早那条是 error 行；老实现会让非结论行顶掉它）:\n%s", body)
 	}
 	if !gjson.Get(body, "data.9").Bool() {
-		t.Errorf("data.9 = false, want true（最新那条是成功行，在途行不得出现在列表里）:\n%s", body)
+		t.Errorf("data.9 = false, want true（最新那条是成功行，非结论行不得出现在列表里）:\n%s", body)
 	}
 	falseCount := 0
 	for i := 0; i < 10; i++ {
@@ -79,6 +85,6 @@ func TestGetModelProviderStatus_SkipsInFlightRows(t *testing.T) {
 		}
 	}
 	if falseCount != 1 {
-		t.Errorf("false 条数 = %d, want 1（只有那条 error 行）:\n%s", falseCount, body)
+		t.Errorf("false 条数 = %d, want 1（只有那条 error 行；canceled/interrupted/processing 被画成失败会多出 3 条）:\n%s", falseCount, body)
 	}
 }

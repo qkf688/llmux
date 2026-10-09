@@ -71,6 +71,21 @@ type ChatLogRepo interface {
 	// 不上抛（启动不得被日志卫生问题阻断）。返回实际改写行数（行级去重：同一行两列
 	// 都命中只算 1）。
 	SanitizeLegacyLogSnapshots(ctx context.Context, extraKeys []string) (int, error)
+	// MarkUnfinishedLogsInterrupted 状态机启动兜底（分片 #3）：把仍停在建行值
+	// processing 的行改写为 interrupted，返回改写行数。
+	//
+	// **为什么它是常驻清洗而不是历史包袱**（AGENTS §0 判据）：建行（executeSingleProviderAttempt
+	// 的 logEntry）写 processing，终态由各出口落库；进程被 kill / 断电时出口一个都跑不到，
+	// 行就永久停在建行值。当前代码仍持续产生这种行，故必须每次启动清扫。
+	//
+	// **判据零误判的前提**：必须在接任何流量与后台任务**之前**调用（main.go 的装配序，
+	// 由 main_startup_interrupted_log_gate_test.go 锁），此刻库里的 processing 行必然来自
+	// 上一次进程。不设时间阈值是刻意的——单进程部署下加阈值只会漏掉「刚崩的进程留下的行」。
+	//
+	// 只改 status 单列：其余字段（含 raw 快照）原样保留，不删行。幂等（已改写的行不再是
+	// processing，二次执行零改写）。返回 RowsAffected 而非逐行结果：调用方据此决定要不要
+	// 打「中断 N 行」的日志，空表是常态而非异常。
+	MarkUnfinishedLogsInterrupted(ctx context.Context) (int64, error)
 	// List 分页筛选列表。
 	List(ctx context.Context, opts ChatLogListOptions) (*ChatLogListResult, error)
 	// DistinctUserAgents 返回非空去重 user_agent。
@@ -323,6 +338,20 @@ func sanitizeColumnTracking(ctx context.Context, db *gorm.DB, column string, mas
 		}
 	}
 	return updated, nil
+}
+
+// MarkUnfinishedLogsInterrupted 状态机启动兜底（分片 #3）。接口注释已说明判据与前提，
+// 这里只讲实现取舍：**一条 UPDATE 而非游标分批**——另两处清洗（头快照脱敏 / 空明文凭据）
+// 必须逐行读入内存做判定才被迫分批，本方法只按 status 列做等值改写，条件命中索引
+// （ChatLog.Status 带 gorm:"index"），不进内存、无启动尖峰。
+func (r *chatLogRepo) MarkUnfinishedLogsInterrupted(ctx context.Context) (int64, error) {
+	result := r.db.WithContext(ctx).Model(&models.ChatLog{}).
+		Where("status = ?", models.ChatLogStatusProcessing).
+		Update("status", models.ChatLogStatusInterrupted)
+	if result.Error != nil {
+		return 0, fmt.Errorf("repository: 中断态启动兜底改写 chat_logs 失败: %w", result.Error)
+	}
+	return result.RowsAffected, nil
 }
 
 func (r *chatLogRepo) List(ctx context.Context, opts ChatLogListOptions) (*ChatLogListResult, error) {

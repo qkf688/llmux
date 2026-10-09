@@ -118,6 +118,17 @@ func main() {
 		slog.Info("legacy empty-plain credentials deleted", "rows", deleted)
 	}
 
+	// 中断态启动兜底（状态机分片 #3）：把仍停在建行值 processing 的行改写为
+	// interrupted——那些行属于上一个非正常退出的进程，终态出口一个都没跑到。
+	// 同样必须早于 startBackgroundServices 与流量（此刻库里的 processing 行必然来自上次
+	// 进程，挪到之后会把本进程的在途请求误判成中断）。只改 status、不删行；失败不阻断
+	// 启动但 Error 留痕（与另两处清洗同姿势）。
+	if updated, err := repository.Default().ChatLog.MarkUnfinishedLogsInterrupted(ctx); err != nil {
+		slog.Error("mark unfinished chat logs interrupted", "error", err)
+	} else if updated > 0 {
+		slog.Info("unfinished chat logs marked interrupted", "rows", updated)
+	}
+
 	// 引擎装配先于后台服务启动：信任边界（TRUSTED_PROXIES）配置错误要 fail fast，
 	// 此时还没有可能在写库的后台任务，可安全 os.Exit；挪到之后则必须走 cancel 关闭路径。
 	router, err := newRouter(handler.Deps{JWTSecret: jwtSecret}, parseTrustedProxies(os.Getenv("TRUSTED_PROXIES")))

@@ -187,9 +187,12 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 	}
 }
 
-// MarkLogUnfinished 给「日志后处理任务被关机丢弃」的行写「未能写完」失败留痕
-// （Stage 35 丢弃窗口）。丢弃时日志正文随任务一起丢是共识代价，但行不能停在
-// 建行值 processing——那会让「这行日志没记全」伪装成一条成功记录。
+// MarkLogUnfinished 给「日志后处理任务被关机丢弃」的行写中断留痕（分片 #3：
+// 状态从 error 改写 interrupted）。丢弃时日志正文随任务一起丢是共识代价，但行不能停在
+// 建行值 processing——那会让「这行日志没记全」伪装成一条成功记录；也不能记 error：
+// 关机收尾是本机行为，与供应商无关，记 error 会冤枉上游。同一语义在启动兜底里由
+// repository.MarkUnfinishedLogsInterrupted 覆盖上一次进程遗留的行，两个写入点合起来
+// 才是完整的「进程先走了」口径。
 //
 // 走 updateChatLogByID 单源收口（detached ctx）：丢弃只发生在关机收尾段，请求
 // ctx 与 bgtask 都在关，不陪葬的写才落得下去。刻意不走 RecordLog 的错误分支——
@@ -197,7 +200,7 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 // 丢的只是日志正文），误记失败会冤枉供应商。
 func MarkLogUnfinished(ctx context.Context, logID uint, reqStart time.Time) {
 	updateChatLogByID(ctx, logID, models.ChatLog{
-		Status:    models.ChatLogStatusError,
+		Status:    models.ChatLogStatusInterrupted,
 		Error:     "log record task discarded at shutdown: response body not recorded",
 		ProxyTime: time.Since(reqStart),
 	}, "failed to mark log unfinished")
@@ -252,9 +255,9 @@ func clientSideFailure(err error) bool {
 //
 // **覆盖面边界**（新增失败出口时先看这里）：另三类状态写入点刻意不走本判定，因为它们的
 // 失败原因与请求 ctx 无关，判据不成立——非通过状态码（`handleNonOKProviderResponse`，
-// cause 就是上游状态码文本）、关机丢弃（`MarkLogUnfinished`，分片 #3 会改写 interrupted）、
-// 构建期失败（`savePreProviderFailureLog` / `ChatLog.WithError` 走的 retryLog 通道行）。
-// 只有「失败原因可能由调用方撤走引发」的出口才该接本判定。
+// cause 就是上游状态码文本）、关机丢弃（`MarkLogUnfinished`，按「进程先走了」独立记
+// interrupted）、构建期失败（`savePreProviderFailureLog` / `ChatLog.WithError` 走的
+// retryLog 通道行）。只有「失败原因可能由调用方撤走引发」的出口才该接本判定。
 func failureLogStatus(err error) string {
 	if errors.Is(err, context.Canceled) {
 		return models.ChatLogStatusCanceled

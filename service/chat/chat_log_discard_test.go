@@ -10,10 +10,11 @@ import (
 	"github.com/qkf688/llmux/models"
 )
 
-// TestMarkLogUnfinished_WritesFailureTrace 锁丢弃窗口的留痕契约（Stage 35）：
-// 日志后处理任务被丢弃时，行不得停在建行值 processing——正文丢失是关机窄窗口的
-// 共识代价，但「没记全」不能伪装成一条成功记录。痕迹文案要说清「任务被丢」，
-// 与 processer 解析失败的 "processer error" 区分开。
+// TestMarkLogUnfinished_WritesFailureTrace 锁丢弃窗口的留痕契约（Stage 35，分片 #3 改写
+// 终态）：日志后处理任务被丢弃时，行不得停在建行值 processing——正文丢失是关机窄窗口的
+// 共识代价，但「没记全」不能伪装成一条成功记录。终态是 interrupted 而非 error：关机是
+// 本机行为、供应商已把响应完整产出，记 error 会给出「上游故障」的错误归因。
+// 痕迹文案要说清「任务被丢」，与 processer 解析失败的 "processer error" 区分开。
 func TestMarkLogUnfinished_WritesFailureTrace(t *testing.T) {
 	initChatRecordTestDB(t)
 
@@ -24,8 +25,8 @@ func TestMarkLogUnfinished_WritesFailureTrace(t *testing.T) {
 	if err := models.DB.First(&got, logRow.ID).Error; err != nil {
 		t.Fatalf("reload log: %v", err)
 	}
-	if got.Status != "error" {
-		t.Fatalf("Status = %q, want error（未能写完必须显式留痕）", got.Status)
+	if got.Status != models.ChatLogStatusInterrupted {
+		t.Fatalf("Status = %q, want interrupted（未能写完必须显式留痕，且不得归因到供应商）", got.Status)
 	}
 	if !strings.Contains(got.Error, "discarded") {
 		t.Fatalf("Error = %q, want 含 discarded（说清是任务被丢而非解析失败）", got.Error)

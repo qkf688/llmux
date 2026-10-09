@@ -40,9 +40,10 @@ func readBodyWithTimeout(t *testing.T, r io.Reader) string {
 	}
 }
 
-// TestAttachLogRecord_DiscardedBypassesPipeAndMarksUnfinished 丢弃窗口回归（Stage 35）：
-// bgtask 拒绝登记时必须当场放手——响应体直通客户端（不得 tee 进无人消费的管道，
-// 那会把请求挂死到进程退出）、管道关闭、该行日志留「未能写完」失败痕迹。
+// TestAttachLogRecord_DiscardedBypassesPipeAndMarksUnfinished 丢弃窗口回归（Stage 35，
+// 分片 #3 改终态）：bgtask 拒绝登记时必须当场放手——响应体直通客户端（不得 tee 进无人
+// 消费的管道，那会把请求挂死到进程退出）、管道关闭、该行日志留「未能写完」痕迹且终态为
+// interrupted（关机是本机行为，不是供应商故障）。
 func TestAttachLogRecord_DiscardedBypassesPipeAndMarksUnfinished(t *testing.T) {
 	testsupport.InitTestDB(t)
 
@@ -77,8 +78,8 @@ func TestAttachLogRecord_DiscardedBypassesPipeAndMarksUnfinished(t *testing.T) {
 	if err := models.DB.First(&row, logRow.ID).Error; err != nil {
 		t.Fatalf("reload log: %v", err)
 	}
-	if row.Status != "error" || !strings.Contains(row.Error, "discarded") {
-		t.Fatalf("日志行 = %q/%q, want error/含 discarded（未能写完必须显式留痕）", row.Status, row.Error)
+	if row.Status != models.ChatLogStatusInterrupted || !strings.Contains(row.Error, "discarded") {
+		t.Fatalf("日志行 = %q/%q, want interrupted/含 discarded（未能写完必须显式留痕，且不归因到供应商）", row.Status, row.Error)
 	}
 }
 

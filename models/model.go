@@ -372,7 +372,7 @@ type ChatLog struct {
 	RealModelName string `gorm:"index"`
 	ProviderModel string `gorm:"index"`
 	ProviderName  string `gorm:"index"`
-	Status        string `gorm:"index"` // 状态机取值见 ChatLogStatus* 常量（processing 建行 / success 成功出口显式写 / error 与 canceled 失败出口，写法见 service/chat 的 failureLogStatus）
+	Status        string `gorm:"index"` // 状态机取值见 ChatLogStatus* 常量（processing 建行 / success 成功出口显式写 / error 与 canceled 失败出口 / interrupted 关机丢弃与启动兜底，写法见 service/chat 的 failureLogStatus）
 	// Stream 入站 stream 标记快照：true = 流式 / false = 非流式。
 	// 建行时由 service/chat/chat_attempt 从 Before.Stream 拷贝（落点同 ApiKeyID 等快照字段）。
 	// 用 bool 而非 *bool：不引入「未设置」三态语义。
@@ -452,6 +452,16 @@ const (
 	// 分支共用）。刻意不扩到 clientSideFailure 全族：写回被写上限掐断（Stage 39）与
 	// 坏管道是「客户端不收结果」，供应商已把响应完整产出，不算「主动取消」。
 	ChatLogStatusCanceled = "canceled"
+	// ChatLogStatusInterrupted：中断——请求没收尾，进程先走了。**产生路径**：建行写
+	// processing 后终态要靠各出口落库，而进程被 kill / 断电时这些出口一个都跑不到，
+	// 行就永久停在建行值（本状态因此仍由当前代码持续产生，故配启动兜底清洗，
+	// 见 ChatLogRepo.MarkUnfinishedLogsInterrupted）。
+	// 两个写入点：关机丢弃（service/chat.MarkLogUnfinished：bgtask 排空后仍未写完）
+	// 与启动兜底扫描（把上次进程遗留的 processing 行改写过来）。
+	// **刻意与 error 分开**：中断不是供应商的错——它既可能是上游迟迟不回导致调用方
+	// 等不下去，也可能只是本机被强杀。混进 error 会让面板给出「这家供应商在失败」的
+	// 错误归因；独立成态也让「只统计 success 与 error」的读点能把它精确剔出统计窗口。
+	ChatLogStatusInterrupted = "interrupted"
 )
 
 // ChatLog.UsageSource 的取值。

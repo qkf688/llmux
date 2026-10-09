@@ -42,6 +42,9 @@ func handleNonOKProviderResponse(
 	withDetachedLogCtx(ctx, func(dctx context.Context) { fieldLimit = getRawLogFieldMaxBytes(dctx) })
 	rawBody := common.TruncateUTF8(string(byteBody), fieldLimit)
 
+	// 刻意不走 failureLogStatus（canceled 判定）：本出口的失败原因就是上游状态码本身
+	// （上游已回完整响应，与请求 ctx 是否被取消无关），链上不可能带 context.Canceled。
+	// 写成 error 是判据而非默认值——将来若给本出口挂了带 ctx 的错误，须同时改走判定。
 	errorUpdate := models.ChatLog{
 		Status: models.ChatLogStatusError,
 		Error:  fmt.Sprintf("status: %d, body: %s", res.StatusCode, rawBody),

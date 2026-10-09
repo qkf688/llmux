@@ -22,7 +22,8 @@ const streamInterruptMessage = "upstream stream interrupted before completion"
 //   - 非流式：静默截断（残缺 JSON 本身就是失败信号，再拼任何字节都是污染）。
 //
 // 两者都不在 handler 留痕：返回的首个错误经日志管道（pw.CloseWithError → RecordLog）
-// 写 chat_logs Status=error，并留该次失败的**唯一一条**留痕（断连类 Warn、其余 ERROR，
+// 写 chat_logs 失败终态（error / canceled，判据在 service/chat 的 failureLogStatus），
+// 并留该次失败的**唯一一条**留痕（断连类 Warn、其余 ERROR，
 // 级别判定在 RecordLog 收口）——handler 再自记即双份，按行计数的告警会把一次故障
 // 算成两次（framework-conventions §5 边界③，2026-09-23 双份留痕回批）。
 // 写回错误打上「来自客户端」方向标记（service.MarkResponseWriteError）：读上游失败

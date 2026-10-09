@@ -249,6 +249,12 @@ func clientSideFailure(err error) bool {
 // 单点判定的理由同 clientSideFailure：状态写入有两处（attempt 层的
 // buildAttemptFailureUpdate 覆盖提交前五个失败出口、RecordLog 的 processer 错误分支覆盖
 // 提交后失败），各判一次会随新增失败类型漂移。
+//
+// **覆盖面边界**（新增失败出口时先看这里）：另三类状态写入点刻意不走本判定，因为它们的
+// 失败原因与请求 ctx 无关，判据不成立——非通过状态码（`handleNonOKProviderResponse`，
+// cause 就是上游状态码文本）、关机丢弃（`MarkLogUnfinished`，分片 #3 会改写 interrupted）、
+// 构建期失败（`savePreProviderFailureLog` / `ChatLog.WithError` 走的 retryLog 通道行）。
+// 只有「失败原因可能由调用方撤走引发」的出口才该接本判定。
 func failureLogStatus(err error) string {
 	if errors.Is(err, context.Canceled) {
 		return models.ChatLogStatusCanceled

@@ -372,7 +372,7 @@ type ChatLog struct {
 	RealModelName string `gorm:"index"`
 	ProviderModel string `gorm:"index"`
 	ProviderName  string `gorm:"index"`
-	Status        string `gorm:"index"` // 状态机取值见 ChatLogStatus* 常量（processing 建行 / success 成功出口显式写 / error 各失败出口）
+	Status        string `gorm:"index"` // 状态机取值见 ChatLogStatus* 常量（processing 建行 / success 成功出口显式写 / error 与 canceled 失败出口，写法见 service/chat 的 failureLogStatus）
 	// Stream 入站 stream 标记快照：true = 流式 / false = 非流式。
 	// 建行时由 service/chat/chat_attempt 从 Before.Stream 拷贝（落点同 ApiKeyID 等快照字段）。
 	// 用 bool 而非 *bool：不引入「未设置」三态语义。
@@ -439,7 +439,8 @@ type ChatLog struct {
 // 曾用过方向相反的判据。
 const (
 	// ChatLogStatusProcessing：处理中——行已建、上游请求已发出、尚未收尾。
-	// 建行值；终态由成功出口（RecordLog 显式写 ChatLogStatusSuccess）与各失败出口落库。
+	// 建行值；终态由成功出口（RecordLog 显式写 ChatLogStatusSuccess）与各失败出口落库
+	// （error 与 canceled 的分工见 ChatLogStatusCanceled）。
 	ChatLogStatusProcessing = "processing"
 	// ChatLogStatusSuccess：已完成。
 	ChatLogStatusSuccess = "success"

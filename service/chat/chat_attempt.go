@@ -22,7 +22,8 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		ProviderModel: input.ModelWithProvider.ProviderModel,
 		ProviderName:  input.Provider.Name,
 		// 状态机建行值 = processing：此刻上游请求尚未发出，终态由成功出口
-		// （RecordLog 显式写 success）与各失败出口（写 error）落库。建行值与
+		// （RecordLog 显式写 success）与各失败出口（写 error / canceled，判据见
+		// failureLogStatus）落库。建行值与
 		// 终态分离后「进行中」与「已完成」才分得开；进程被 kill / 断电时行停在
 		// processing，如实反映「这行没记完」，不再把「没记完」伪装成一条成功记录。
 		Status:     models.ChatLogStatusProcessing,

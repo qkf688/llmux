@@ -18,6 +18,11 @@ import (
 //
 // 判据单源 failureLogStatus（errors.Is(err, context.Canceled)）：写上限掐断与坏管道同属
 // 客户端侧、却不是「主动取消」，混进来会让该状态失去语义，故逐条列为反例。
+//
+// 本文件与 chat_settlement_test.go 的断连用例有交叠（同一 fixture、同一链路），此处仍
+// 独立成例是有意的：那边的主张是「调用方撤走不结算」，状态只是顺带断言；这边是状态判定
+// 的专属落点，判据坏掉时不必先读完结算用例才定位。后两条分别断不同失败出口——
+// Do 失败与读体失败——共处一个判定函数但走不同调用点，缺一条则该出口退回硬编码时无人发现。
 func TestRecordLog_CanceledStatusMatrix(t *testing.T) {
 	cases := []struct {
 		name       string

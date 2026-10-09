@@ -445,6 +445,12 @@ const (
 	ChatLogStatusSuccess = "success"
 	// ChatLogStatusError：失败（上游故障 / 协议错误 / 体积闸 / 读体错误等）。
 	ChatLogStatusError = "error"
+	// ChatLogStatusCanceled：已取消——调用方主动撤走（客户端断开 / 点停止）。
+	// 判据唯一：失败原因链上带 context.Canceled，由 service/chat 的 failureLogStatus
+	// 单点判定（attempt 层的 buildAttemptFailureUpdate 与 RecordLog 的 processer 错误
+	// 分支共用）。刻意不扩到 clientSideFailure 全族：写回被写上限掐断（Stage 39）与
+	// 坏管道是「客户端不收结果」，供应商已把响应完整产出，不算「主动取消」。
+	ChatLogStatusCanceled = "canceled"
 )
 
 // ChatLog.UsageSource 的取值。

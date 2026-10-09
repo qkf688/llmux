@@ -60,7 +60,7 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 			// ProxyTime 回填语义不变：错误日志同样反映「请求进入网关到失败判定」
 			// 的真实时长（struct Updates 跳零值，毫秒级真实耗时非零可安全写入）。
 			updateChatLogByID(ctx, in.LogID, models.ChatLog{
-				Status:    models.ChatLogStatusError,
+				Status:    failureLogStatus(err),
 				Error:     fmt.Sprintf("processer error: %v", err),
 				ProxyTime: time.Since(in.ReqStart),
 			}, "failed to update log status on processer error")
@@ -235,6 +235,25 @@ func isClientDisconnectErr(err error) bool {
 // isClientDisconnectErr。
 func clientSideFailure(err error) bool {
 	return isClientDisconnectErr(err) || IsClientWriteErr(err)
+}
+
+// failureLogStatus 决定客户端侧失败出口给 chat_logs 行落哪个终态（状态机）：调用方
+// 主动撤走记 canceled，其余一律 error。
+//
+// 判据只认 errors.Is(err, context.Canceled)，**刻意不扩到 clientSideFailure 全族**：
+// context.Canceled 在请求路径上精确对应「调用方撤走」这一个事实——本仓请求路径不
+// 自造 WithCancel（只有 WithTimeout，超时落 DeadlineExceeded 而非 Canceled），而写回
+// 被写上限掐断（Stage 39）与坏管道是「客户端不收结果」、不是「客户端主动取消」，混进来
+// 会让该状态失去语义。
+//
+// 单点判定的理由同 clientSideFailure：状态写入有两处（attempt 层的
+// buildAttemptFailureUpdate 覆盖提交前五个失败出口、RecordLog 的 processer 错误分支覆盖
+// 提交后失败），各判一次会随新增失败类型漂移。
+func failureLogStatus(err error) string {
+	if errors.Is(err, context.Canceled) {
+		return models.ChatLogStatusCanceled
+	}
+	return models.ChatLogStatusError
 }
 
 // resolveUsageSource 决定最终写入的 usage 并打上来源标记。

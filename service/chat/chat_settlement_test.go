@@ -227,13 +227,15 @@ func TestExecuteSingleProviderAttempt_CallerDisconnect_NoCredentialSettlement(t 
 	}
 	assertNoCredentialSettlement(t, input.Selection.Credential.ID)
 
-	// 留痕仍然写：失败终态不得陪葬请求 ctx（Stage 17 口径）。
+	// 留痕仍然写：终态不得陪葬请求 ctx（Stage 17 口径）。状态机落地后这条断连的终态是
+	// canceled（调用方主动撤走），不再是 error——状态判定的专属用例见
+	// chat_log_status_canceled_test.go，此处只盯「留痕没丢」。
 	var row models.ChatLog
 	if err := models.DB.Where("provider_name = ?", "p1").First(&row).Error; err != nil {
 		t.Fatalf("reload chat log: %v", err)
 	}
-	if row.Status != "error" {
-		t.Fatalf("日志行终态 = %q, want error（失败留痕照写）", row.Status)
+	if row.Status != models.ChatLogStatusCanceled {
+		t.Fatalf("日志行终态 = %q, want canceled（失败留痕照写，且断连如实记已取消）", row.Status)
 	}
 }
 

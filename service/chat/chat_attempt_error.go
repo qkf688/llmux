@@ -129,13 +129,14 @@ func wrapTransformError(stage string, err error) error {
 	return fmt.Errorf("transform %s error: %w", stage, err)
 }
 
-// buildAttemptFailureUpdate 组装「尝试失败」日志更新（Status=error + 原因 + 终值耗时 +
-// 可选采集字段）。全部失败出口共用此处的字段选择逻辑（DRY：此前 Client.Do 错误 /
-// 转换失败 / 读体超限 / 读体失败 / 提交门拒绝五处各写一份近似块，改一处漏四处）。
+// buildAttemptFailureUpdate 组装「尝试失败」日志更新（Status=error/canceled + 原因 +
+// 终值耗时 + 可选采集字段）。全部失败出口共用此处的字段选择逻辑（DRY：此前 Client.Do
+// 错误 / 转换失败 / 读体超限 / 读体失败 / 提交门拒绝五处各写一份近似块，改一处漏四处）。
+// Status 由 failureLogStatus 判（调用方撤走 → canceled），同样不在各出口各判一次。
 // res 为 nil 时跳过响应头采集；rawResponseBodyStr 非空且开启采集时落 RawResponseBody。
 func buildAttemptFailureUpdate(cause error, proxyTime time.Duration, logRawOptions models.RawLogOptions, logSnapshot requestLogSnapshot, res *http.Response, rawResponseBodyStr string) models.ChatLog {
 	errorUpdate := models.ChatLog{
-		Status:    models.ChatLogStatusError,
+		Status:    failureLogStatus(cause),
 		Error:     cause.Error(),
 		ProxyTime: proxyTime,
 	}

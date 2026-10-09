@@ -89,8 +89,11 @@ func TestRecordLog_ProcesserError_BackfillsProxyTime(t *testing.T) {
 	if err := models.DB.First(&got, log.ID).Error; err != nil {
 		t.Fatalf("reload log: %v", err)
 	}
-	if got.Status != "error" {
-		t.Fatalf("Status = %q, want error", got.Status)
+	if got.Status != models.ChatLogStatusCanceled {
+		// 状态机（2026-10-10）落地后，本用例这条 212 现场的输入（客户端断开 →
+		// context.Canceled）落 canceled 而非 error，判据与反例见
+		// chat_log_status_canceled_test.go；本用例的主张仍是 ProxyTime 回填。
+		t.Fatalf("Status = %q, want canceled（客户端断开属已取消，不归供应商故障）", got.Status)
 	}
 	if got.ProxyTime < 250*time.Millisecond {
 		t.Fatalf("ProxyTime = %v, want ≈ 300ms（错误路径端到端耗时回填），当前仍是建行近零快照", got.ProxyTime)

@@ -15,9 +15,10 @@ import (
 	"github.com/qkf688/llmux/providers"
 )
 
-// runAttemptAgainstURL 以 OpenAI 协议直通形态对指定上游跑一次 attempt（Stage 2-C/D 测试共用）。
-// reqRaw 为入站原始请求体（原始采集截断测试需要超大 raw）。
-func runAttemptAgainstURL(t *testing.T, providerName, url string, client *http.Client, ctx context.Context, reqRaw string) singleProviderAttemptResult {
+// buildAttemptInputAgainstURL 建一次 attempt 所需的供应商/关联/模型夹具并组装入参。
+// 与 runAttemptAgainstURL 拆开，是因为「上游阻塞期间行停在 processing」类用例要在
+// goroutine 里跑 attempt、而 t.Fatalf 只能出现在测试 goroutine——夹具在这里先用 t 建好。
+func buildAttemptInputAgainstURL(t *testing.T, providerName, url string, client *http.Client, ctx context.Context, reqRaw string) singleProviderAttemptInput {
 	t.Helper()
 	providerRow := models.Provider{Name: providerName, Type: providers.TypeOpenAI}
 	if err := models.DB.Create(&providerRow).Error; err != nil {
@@ -32,7 +33,7 @@ func runAttemptAgainstURL(t *testing.T, providerName, url string, client *http.C
 	if err != nil {
 		t.Fatalf("new provider: %v", err)
 	}
-	return executeSingleProviderAttempt(singleProviderAttemptInput{
+	return singleProviderAttemptInput{
 		Ctx:           ctx,
 		Start:         time.Now(),
 		Style:         string(consts.StyleOpenAI),
@@ -45,7 +46,14 @@ func runAttemptAgainstURL(t *testing.T, providerName, url string, client *http.C
 		Selection:         selectionForEndpoint(string(consts.ProtocolOpenAI)),
 		ChatModel:         chatModel,
 		Client:            client,
-	}, make(chan models.ChatLog, 8))
+	}
+}
+
+// runAttemptAgainstURL 以 OpenAI 协议直通形态对指定上游跑一次 attempt（Stage 2-C/D 测试共用）。
+// reqRaw 为入站原始请求体（原始采集截断测试需要超大 raw）。
+func runAttemptAgainstURL(t *testing.T, providerName, url string, client *http.Client, ctx context.Context, reqRaw string) singleProviderAttemptResult {
+	t.Helper()
+	return executeSingleProviderAttempt(buildAttemptInputAgainstURL(t, providerName, url, client, ctx, reqRaw), make(chan models.ChatLog, 8))
 }
 
 const smallReqRaw = `{"model":"m1","messages":[{"role":"user","content":"hi"}]}`

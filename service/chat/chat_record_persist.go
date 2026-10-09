@@ -161,8 +161,10 @@ func createChatIO(ctx context.Context, logID uint, input []byte, output *models.
 
 // maybeClearRawOnSuccess 实现「仅保留错误日志的原始请求响应」策略：
 // 若 errorsOnly=true 且 rawLogEnabled，则查询该日志当前状态；
-// 状态非 error（即成功）时清空 raw 字段，避免成功日志长期占用存储。
-// 错误状态下保留 raw 字段以便排查。
+// 状态**是 success**（即终态已确认为成功）时才清空 raw 字段，避免成功日志长期占用存储。
+// 判据刻意取「是 success」而非「不是 error」（状态机契约）：建行值是 processing，
+// 凡未走到成功出口的行（processing / error）都保留 raw——「还没记完」与「记完了但失败」
+// 的原文对排查同等关键，按「非 error 即清」会把仍在途的行当成成功行清掉。
 func maybeClearRawOnSuccess(ctx context.Context, logID uint, errorsOnly bool, rawLogEnabled bool) {
 	if !errorsOnly || !rawLogEnabled || logID == 0 {
 		return
@@ -173,7 +175,7 @@ func maybeClearRawOnSuccess(ctx context.Context, logID uint, errorsOnly bool, ra
 	defer cancel()
 
 	status, err := repos().ChatLog.GetStatus(writeCtx, logID)
-	if err != nil || status == "error" {
+	if err != nil || status != models.ChatLogStatusSuccess {
 		return
 	}
 

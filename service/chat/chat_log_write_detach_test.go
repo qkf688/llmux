@@ -11,7 +11,7 @@ import (
 
 // Stage 17 收口（AC-7/AC-8）：chat_logs 全部写库点（失败出口回写 + 建行）不得
 // 陪葬请求 ctx——最需要留痕的失败（超时、客户端断连）恰恰发生在请求 ctx 已死
-// 的时刻，陪葬会让行停在建行占位的 success（审计与指标双双失真）或干脆无行。
+// 的时刻，陪葬会让行停在建行值 processing（审计与指标双双失真）或干脆无行。
 // 判据：ctx 已取消时写库仍成功（context.WithoutCancel + 独立短超时派生）。
 
 func TestUpdateChatLogByID_DeadCtxStillWrites(t *testing.T) {

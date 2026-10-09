@@ -44,7 +44,8 @@ func TestExecuteSingleProviderAttempt_FailsOn204EmptyBody(t *testing.T) {
 // TestExecuteSingleProviderAttempt_PassesOn201 锁真实聊天主路径的通过口径（Stage 5）。
 // 放宽前这条路径对 201 走 handleNonOKProviderResponse：日志记 error、按状态码归类冷却
 // 凭据/衰减权重、再换下一家重试。放宽后回 201 的兼容网关必须与回 200 完全同路。
-// 断言分两层：attempt 结果（Success/Response 状态码）+ 落库行（status=success、error 为空），
+// 断言分两层：attempt 结果（Success/Response 状态码）+ 落库行（status=processing、error 为空；
+// 状态机里 attempt 只到「响应已拿到」，success 由后处理 RecordLog 显式写），
 // 只断其一测不出「走错分支但结果凑巧对」。
 func TestExecuteSingleProviderAttempt_PassesOn201(t *testing.T) {
 	initChatRecordTestDB(t)
@@ -75,7 +76,9 @@ func TestExecuteSingleProviderAttempt_PassesOn201(t *testing.T) {
 	if err := models.DB.Where("provider_name = ?", "p-201").First(&row).Error; err != nil {
 		t.Fatalf("reload chat log: %v", err)
 	}
-	if row.Status != "success" || row.Error != "" {
-		t.Fatalf("日志行 = %q/%q, want success/空（走非 OK 分支会被改成 error + 状态码原文）", row.Status, row.Error)
+	// 状态机：成功出口的终态（success）由后处理 RecordLog 写，attempt 出参只到「响应已拿到」，
+	// 故此处行仍是建行值 processing。判别力不变——走非 OK 分支会把它改成 error + 状态码原文。
+	if row.Status != "processing" || row.Error != "" {
+		t.Fatalf("日志行 = %q/%q, want processing/空（走非 OK 分支会被改成 error + 状态码原文；success 归 RecordLog）", row.Status, row.Error)
 	}
 }

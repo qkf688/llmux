@@ -60,7 +60,7 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 			// ProxyTime 回填语义不变：错误日志同样反映「请求进入网关到失败判定」
 			// 的真实时长（struct Updates 跳零值，毫秒级真实耗时非零可安全写入）。
 			updateChatLogByID(ctx, in.LogID, models.ChatLog{
-				Status:    "error",
+				Status:    models.ChatLogStatusError,
 				Error:     fmt.Sprintf("processer error: %v", err),
 				ProxyTime: time.Since(in.ReqStart),
 			}, "failed to update log status on processer error")
@@ -106,6 +106,12 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 		}
 
 		logUpdate := *log
+
+		// 成功出口**显式**写终态（状态机）：建行值是 processing，而 struct Updates
+		// 跳零值——processer 返回值不含 Status（空串）时上面这行改动会被静默丢弃，
+		// 行就永远停在 processing、看板把它算成「进行中」。同时它让下方
+		// maybeClearRawOnSuccess 能按「是不是 success」判定，而不是按「是不是 error」。
+		logUpdate.Status = models.ChatLogStatusSuccess
 
 		// 回填端到端「代理耗时」：建行时的 ProxyTime 快照取在 `Client.Do` 之前
 		// （见 executeSingleProviderAttempt），不包含任何上游耗时。此处 processer
@@ -183,7 +189,7 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 
 // MarkLogUnfinished 给「日志后处理任务被关机丢弃」的行写「未能写完」失败留痕
 // （Stage 35 丢弃窗口）。丢弃时日志正文随任务一起丢是共识代价，但行不能停在
-// 建行占位的 success——那会让「这行日志没记全」伪装成一条成功记录。
+// 建行值 processing——那会让「这行日志没记全」伪装成一条成功记录。
 //
 // 走 updateChatLogByID 单源收口（detached ctx）：丢弃只发生在关机收尾段，请求
 // ctx 与 bgtask 都在关，不陪葬的写才落得下去。刻意不走 RecordLog 的错误分支——
@@ -191,7 +197,7 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 // 丢的只是日志正文），误记失败会冤枉供应商。
 func MarkLogUnfinished(ctx context.Context, logID uint, reqStart time.Time) {
 	updateChatLogByID(ctx, logID, models.ChatLog{
-		Status:    "error",
+		Status:    models.ChatLogStatusError,
 		Error:     "log record task discarded at shutdown: response body not recorded",
 		ProxyTime: time.Since(reqStart),
 	}, "failed to mark log unfinished")

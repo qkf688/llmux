@@ -86,7 +86,7 @@ func MarkResponseWriteError(ctx context.Context, err error) error {
 func IsClientWriteError(err error) bool { return chat.IsClientWriteErr(err) }
 
 // MarkLogUnfinished 给「日志后处理任务被关机丢弃」的日志行写「未能写完」失败痕迹
-// （bgtask 丢弃窗口的收尾动作，Stage 35）。丢正文、留痕迹，行不得停在建行占位 success。
+// （bgtask 丢弃窗口的收尾动作，Stage 35）。丢正文、留痕迹，行不得停在建行值 processing。
 func MarkLogUnfinished(ctx context.Context, logID uint, reqStart time.Time) {
 	chat.MarkLogUnfinished(ctx, logID, reqStart)
 }

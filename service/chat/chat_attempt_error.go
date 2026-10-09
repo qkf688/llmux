@@ -43,7 +43,7 @@ func handleNonOKProviderResponse(
 	rawBody := common.TruncateUTF8(string(byteBody), fieldLimit)
 
 	errorUpdate := models.ChatLog{
-		Status: "error",
+		Status: models.ChatLogStatusError,
 		Error:  fmt.Sprintf("status: %d, body: %s", res.StatusCode, rawBody),
 		// 回填端到端耗时：上游已返回完整错误响应，建行快照不含上游耗时。
 		ProxyTime: time.Since(start),
@@ -135,7 +135,7 @@ func wrapTransformError(stage string, err error) error {
 // res 为 nil 时跳过响应头采集；rawResponseBodyStr 非空且开启采集时落 RawResponseBody。
 func buildAttemptFailureUpdate(cause error, proxyTime time.Duration, logRawOptions models.RawLogOptions, logSnapshot requestLogSnapshot, res *http.Response, rawResponseBodyStr string) models.ChatLog {
 	errorUpdate := models.ChatLog{
-		Status:    "error",
+		Status:    models.ChatLogStatusError,
 		Error:     cause.Error(),
 		ProxyTime: proxyTime,
 	}

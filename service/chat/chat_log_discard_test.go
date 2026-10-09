@@ -11,7 +11,7 @@ import (
 )
 
 // TestMarkLogUnfinished_WritesFailureTrace 锁丢弃窗口的留痕契约（Stage 35）：
-// 日志后处理任务被丢弃时，行不得停在建行占位的 success——正文丢失是关机窄窗口的
+// 日志后处理任务被丢弃时，行不得停在建行值 processing——正文丢失是关机窄窗口的
 // 共识代价，但「没记全」不能伪装成一条成功记录。痕迹文案要说清「任务被丢」，
 // 与 processer 解析失败的 "processer error" 区分开。
 func TestMarkLogUnfinished_WritesFailureTrace(t *testing.T) {

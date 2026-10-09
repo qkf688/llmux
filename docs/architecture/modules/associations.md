@@ -43,6 +43,8 @@ models.ModelWithProvider
 | `models.ModelWithProvider` | 关联实体（路由与健康检查的核心行） | `models/model.go` | GORM |
 | `autoassoc.Service` | 预览/执行自动关联与清理；带开关的 Trigger* | `service/autoassoc/` | 同包 |
 | HTTP associate/clean | 绑定 JSON 与 `httpresp` | `handler/autoassoc/` | 调 `GetAutoAssocService` |
+| `GET /model-providers/status` | 该关联最近 10 次**已收尾**请求的成败布尔数组（按时间升序）。**排除 `status = processing` 的在途行**：在途请求既非成也非败，占名额并画成失败会在长流式请求期间给出假结论（状态取值见 `models.ChatLogStatus*`）。回归 `handler/associations/provider_status_contract_test.go` | `handler/associations/health.go` | 同文件（ChatLog 只读聚合直读） |
+| `GET /model-providers/health-status` | 最近 limit 次健康检测的状态字符串数组（三态 `success`/`error`/`not_measured`，按时间升序） | `handler/associations/health.go` | 同文件（`HealthCheckLog` 只读聚合直读） |
 
 ### `ModelWithProvider` 字段约定（路由相关）
 

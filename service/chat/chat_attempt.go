@@ -21,16 +21,20 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		RealModelName: input.RealModelName,
 		ProviderModel: input.ModelWithProvider.ProviderModel,
 		ProviderName:  input.Provider.Name,
-		Status:        "success",
-		Stream:        input.Before.Stream,
-		Style:         input.Style,
-		UserAgent:     input.ReqMeta.UserAgent,
-		RemoteIP:      input.ReqMeta.RemoteIP,
-		ApiKeyID:      input.ReqMeta.ApiKeyID,
-		ApiKeyName:    input.ReqMeta.ApiKeyName,
-		RequestID:     input.ReqMeta.RequestID,
-		ChatIO:        input.IOLog,
-		Retry:         input.Retry,
+		// 状态机建行值 = processing：此刻上游请求尚未发出，终态由成功出口
+		// （RecordLog 显式写 success）与各失败出口（写 error）落库。建行值与
+		// 终态分离后「进行中」与「已完成」才分得开；进程被 kill / 断电时行停在
+		// processing，如实反映「这行没记完」，不再把「没记完」伪装成一条成功记录。
+		Status:     models.ChatLogStatusProcessing,
+		Stream:     input.Before.Stream,
+		Style:      input.Style,
+		UserAgent:  input.ReqMeta.UserAgent,
+		RemoteIP:   input.ReqMeta.RemoteIP,
+		ApiKeyID:   input.ReqMeta.ApiKeyID,
+		ApiKeyName: input.ReqMeta.ApiKeyName,
+		RequestID:  input.ReqMeta.RequestID,
+		ChatIO:     input.IOLog,
+		Retry:      input.Retry,
 		// 仅作占位快照：此刻上游请求尚未发出，取到的只是准备阶段耗时。
 		// 终值由各出口回填（成功在 RecordLog，失败在各 errorUpdate / 写 retryLog 前），
 		// 否则所有日志的「代理耗时」恒为近零。

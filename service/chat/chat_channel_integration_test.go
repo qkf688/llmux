@@ -605,7 +605,9 @@ func TestBalanceChat_CredentialFailover_SwapKeyWithinGroup(t *testing.T) {
 		t.Fatalf("key2 CooldownUntil = %v, want nil（成功凭据不应被冷却）", key2Reload.CooldownUntil)
 	}
 
-	// 两次 attempt 各建一条日志：失败行带 key1-note，成功行带 key2-note——排查可追踪
+	// 两次 attempt 各建一条日志：失败行带 key1-note，成功行带 key2-note——排查可追踪。
+	// 状态机：BalanceChat 只跑 attempt，成功行的终态（success）由后处理 RecordLog 写，
+	// 故此处成功行仍是建行值 processing（失败行则由失败出口写死 error）。
 	var logs []models.ChatLog
 	if err := models.DB.Order("id ASC").Limit(2).Find(&logs).Error; err != nil {
 		t.Fatalf("query chat logs: %v", err)
@@ -616,8 +618,8 @@ func TestBalanceChat_CredentialFailover_SwapKeyWithinGroup(t *testing.T) {
 	if logs[0].CredentialNote != "key1-note" || logs[0].Status != "error" {
 		t.Fatalf("first log CredentialNote=%q Status=%q, want key1-note/error", logs[0].CredentialNote, logs[0].Status)
 	}
-	if logs[1].CredentialNote != "key2-note" || logs[1].Status != "success" {
-		t.Fatalf("second log CredentialNote=%q Status=%q, want key2-note/success", logs[1].CredentialNote, logs[1].Status)
+	if logs[1].CredentialNote != "key2-note" || logs[1].Status != "processing" {
+		t.Fatalf("second log CredentialNote=%q Status=%q, want key2-note/processing（success 归 RecordLog）", logs[1].CredentialNote, logs[1].Status)
 	}
 }
 

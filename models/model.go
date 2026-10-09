@@ -372,7 +372,7 @@ type ChatLog struct {
 	RealModelName string `gorm:"index"`
 	ProviderModel string `gorm:"index"`
 	ProviderName  string `gorm:"index"`
-	Status        string `gorm:"index"` // error or success
+	Status        string `gorm:"index"` // 状态机取值见 ChatLogStatus* 常量（processing 建行 / success 成功出口显式写 / error 各失败出口）
 	// Stream 入站 stream 标记快照：true = 流式 / false = 非流式。
 	// 建行时由 service/chat/chat_attempt 从 Before.Stream 拷贝（落点同 ApiKeyID 等快照字段）。
 	// 用 bool 而非 *bool：不引入「未设置」三态语义。
@@ -433,6 +433,20 @@ type ChatLog struct {
 	RawResponseBody string // 原始响应体（转换前）
 }
 
+// ChatLog.Status 的取值（单源：建行值、成功/失败出口、raw 清理判据、关联面板的
+// 请求成败判定共用一个口径，禁散落字面量）。状态数已从两态扩到多态，各处按字面量
+// 各自对齐必然漏改——`maybeClearRawOnSuccess` 与「最近 10 次请求成败」两处读点就
+// 曾用过方向相反的判据。
+const (
+	// ChatLogStatusProcessing：处理中——行已建、上游请求已发出、尚未收尾。
+	// 建行值；终态由成功出口（RecordLog 显式写 ChatLogStatusSuccess）与各失败出口落库。
+	ChatLogStatusProcessing = "processing"
+	// ChatLogStatusSuccess：已完成。
+	ChatLogStatusSuccess = "success"
+	// ChatLogStatusError：失败（上游故障 / 协议错误 / 体积闸 / 读体错误等）。
+	ChatLogStatusError = "error"
+)
+
 // ChatLog.UsageSource 的取值。
 const (
 	// UsageSourceUpstream：转换层旁路交出的上游原始 usage，最可信。
@@ -449,7 +463,7 @@ const (
 
 func (l ChatLog) WithError(err error) ChatLog {
 	l.Error = err.Error()
-	l.Status = "error"
+	l.Status = ChatLogStatusError
 	return l
 }
 

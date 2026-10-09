@@ -222,7 +222,7 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 //   - 登记被丢弃（bgtask 已置 shutdown，只在关机收尾段可达）：当场放手——关掉无人
 //     消费的管道（不关则 tee 写端挂死在无读端的 io.Pipe 上，请求拖到进程退出）、
 //     响应体直通客户端让请求马上收尾放行，并给该行日志留「未能写完」失败痕迹。
-//     正文随任务丢弃是丢弃窗口的共识代价，行停在建行占位 success 才是失真。
+//     正文随任务丢弃是丢弃窗口的共识代价，行停在建行值 processing 才是失真。
 //
 // finishLog 必须在响应写完后恰好调用一次；丢弃路径的 finishLog 是空操作（管道已关），
 // 调用方收尾姿势不分支。

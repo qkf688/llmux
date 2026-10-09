@@ -13,7 +13,7 @@ import (
 // chatLogWriteTimeout chat_logs 全部写库点的独立写超时（Stage 17）：建行与
 // 失败出口回写统一经 context.WithoutCancel + 本超时派生 ctx——最需要留痕的
 // 失败（超时、客户端断连）恰恰发生在请求 ctx 已死的时刻，陪葬请求 ctx 会让
-// 这些行静默丢失（停在建行占位的 success，审计与指标双双失真）。
+// 这些行静默丢失（停在建行值 processing，审计与指标双双失真）。
 const chatLogWriteTimeout = 5 * time.Second
 
 // chatLogDetachedCtx 派生「日志路径」用 ctx（Stage 17 + 审查回批，派生表达式单源）：
@@ -114,7 +114,7 @@ func savePreProviderFailureLog(ctx context.Context, reqMeta models.ReqMeta, styl
 		Name:          f.RequestedModel,
 		RealModelName: f.RealModelName,
 		ProviderModel: f.ProviderModel,
-		Status:        "error",
+		Status:        models.ChatLogStatusError,
 		Style:         style,
 		Error:         f.Error,
 		ApiKeyID:      reqMeta.ApiKeyID,

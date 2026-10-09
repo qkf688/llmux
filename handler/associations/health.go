@@ -10,8 +10,10 @@ import (
 	"gorm.io/gorm"
 )
 
-// GetModelProviderStatus 获取提供商状态信息（最近 10 次请求成败）。
-// ChatLog 只读聚合：日志 repo 在 T3.0b，此处暂留 query 辅助。
+// GetModelProviderStatus 获取提供商状态信息（最近 10 次**已收尾**请求的成败）。
+// 刻意排除 processing 行：在途请求既非成也非败，画成失败会在长流式请求期间给出
+// 假结论（状态常量见 models.ChatLogStatus*）。ChatLog 只读聚合：日志 repo 在
+// T3.0b，此处暂留 query 辅助。
 func GetModelProviderStatus(c *gin.Context) {
 	providerIDStr := c.Query("provider_id")
 	modelName := c.Query("model_name")
@@ -39,6 +41,7 @@ func GetModelProviderStatus(c *gin.Context) {
 		Where("provider_name = ?", provider.Name).
 		Where("provider_model = ?", providerModel).
 		Where("name = ?", modelName).
+		Where("status <> ?", models.ChatLogStatusProcessing).
 		Limit(10).
 		Order("created_at DESC").
 		Find(ctx)
@@ -49,7 +52,7 @@ func GetModelProviderStatus(c *gin.Context) {
 
 	status := make([]bool, 0)
 	for _, log := range logs {
-		status = append(status, log.Status == "success")
+		status = append(status, log.Status == models.ChatLogStatusSuccess)
 	}
 	slices.Reverse(status)
 	httpresp.Success(c, status)

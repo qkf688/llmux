@@ -47,10 +47,10 @@ func initChatRecordTestDB(t *testing.T) {
 	// 与 models.DB 同步默认 Repositories，避免 Default 缓存上一个用例的连接
 	repository.SetDefault(repository.New(models.DB))
 	t.Cleanup(func() {
-		// 顺序硬约束：先排空后台任务，再清默认 repository / 关库。
-		// 后台任务经 repos() 读默认 repository、经 models.GetSettingIntE 读 models.DB，
-		// 反序会让在飞任务撞上「库已关闭」，或读到下一个用例的库（-race 记为 data race）。
-		drainBgTasks(t)
+		// 顺序硬约束：先排空后台工作（凭据写队列 + bgtask），再清默认 repository / 关库。
+		// 它们经 repos() 读默认 repository、经 models.GetSettingIntE 读 models.DB，
+		// 反序会让在飞工作撞上「库已关闭」，或读到下一个用例的库（-race 记为 data race）。
+		drainBackgroundWork(t)
 		// 测试基线保持 sync=true，避免后续用例误入异步队列写已关库。
 		credwrite.EnableTestSyncMode(true)
 		credwrite.ResetDroppedForTest()

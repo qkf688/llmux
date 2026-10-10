@@ -34,11 +34,14 @@ func TestApplyCredentialWrites_NonBlockingEnqueue(t *testing.T) {
 	var unblock sync.Once
 	unblockWorker := func() { unblock.Do(func() { close(block) }) }
 	t.Cleanup(func() {
+		// 顺序硬约束：放行 worker → 排空队列（此时仍是本用例的 stub handler，遗留任务
+		// 不读库）→ 再还原真 handler 与同步模式。
+		unblockWorker()
+		drainBackgroundWork(t)
 		credwrite.SetHandlers(credwrite.Handlers{
 			Cooldown: persistCredentialCooldown,
 			AuthFail: persistCredentialAuthFailure,
 		})
-		unblockWorker()
 		credwrite.EnableTestSyncMode(true)
 	})
 
@@ -75,6 +78,9 @@ func TestApplyCredentialCooldown_AsyncEventuallyPersists(t *testing.T) {
 	// 再复位 settingsReader」发生在下面这段自己的关库收尾之前。
 	installChatTestSettings(t, credCooldownSettingsReader{Cooldown429Sec: 60, CooldownServerSec: 60})
 	t.Cleanup(func() {
+		// 顺序硬约束：先排空凭据写队列（必须仍在异步模式下，Flush 才有效），再切回
+		// 同步模式 / 清默认 repository / 关库。
+		drainBackgroundWork(t)
 		repository.SetDefault(nil)
 		credwrite.EnableTestSyncMode(true)
 		closeChatTestDB(t)
@@ -121,6 +127,9 @@ func TestApplyCredentialAuthFailure_AsyncEventuallyPersists(t *testing.T) {
 	// 再复位 settingsReader」发生在下面这段自己的关库收尾之前。
 	installChatTestSettings(t, credCooldownSettingsReader{AuthFailThreshold: 3})
 	t.Cleanup(func() {
+		// 顺序硬约束：先排空凭据写队列（必须仍在异步模式下，Flush 才有效），再切回
+		// 同步模式 / 清默认 repository / 关库。
+		drainBackgroundWork(t)
 		repository.SetDefault(nil)
 		credwrite.EnableTestSyncMode(true)
 		closeChatTestDB(t)
@@ -160,7 +169,10 @@ func TestApplyCredentialWrites_WriteStormNonBlocking(t *testing.T) {
 	var unblock sync.Once
 	unblockWorker := func() { unblock.Do(func() { close(block) }) }
 	t.Cleanup(func() {
+		// 顺序硬约束：放行 worker → 排空队列（仍是本用例的 stub handler，遗留任务不读库）
+		// → 再还原真 handler 与同步模式。
 		unblockWorker()
+		drainBackgroundWork(t)
 		credwrite.SetHandlers(credwrite.Handlers{
 			Cooldown: persistCredentialCooldown,
 			AuthFail: persistCredentialAuthFailure,

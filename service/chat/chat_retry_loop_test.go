@@ -205,10 +205,9 @@ func TestRunProviderRetryLoop_CredentialsExhausted_ProbeRecoverInGroup(t *testin
 	cipher := setupChatChannelCipher(t)
 	channel.ResetDefaultSelectorForTest()
 	t.Cleanup(channel.ResetDefaultSelectorForTest)
-	SetSettingsReader(credCooldownSettingsReader{
+	installChatTestSettings(t, credCooldownSettingsReader{
 		Cooldown429Sec: 60, CooldownServerSec: 60, AuthFailThreshold: 1, ProbeIntervalSec: 60,
 	})
-	t.Cleanup(func() { SetSettingsReader(nil) })
 
 	var mu sync.Mutex
 	var chatAuths, probeAuths []string
@@ -303,10 +302,9 @@ func TestRunProviderRetryLoop_OuterSelectProbeReselect_WhitelistMatchesUpstreamM
 	cipher := setupChatChannelCipher(t)
 	channel.ResetDefaultSelectorForTest()
 	t.Cleanup(channel.ResetDefaultSelectorForTest)
-	SetSettingsReader(credCooldownSettingsReader{
+	installChatTestSettings(t, credCooldownSettingsReader{
 		Cooldown429Sec: 60, CooldownServerSec: 60, AuthFailThreshold: 1, ProbeIntervalSec: 60,
 	})
-	t.Cleanup(func() { SetSettingsReader(nil) })
 
 	var mu sync.Mutex
 	var chatAuths, probeAuths []string
@@ -374,10 +372,9 @@ func TestRunProviderRetryLoop_CredentialsExhausted_ProbeFailsOrganizationFailure
 	cipher := setupChatChannelCipher(t)
 	channel.ResetDefaultSelectorForTest()
 	t.Cleanup(channel.ResetDefaultSelectorForTest)
-	SetSettingsReader(credCooldownSettingsReader{
+	installChatTestSettings(t, credCooldownSettingsReader{
 		Cooldown429Sec: 60, CooldownServerSec: 60, AuthFailThreshold: 1, ProbeIntervalSec: 60,
 	})
-	t.Cleanup(func() { SetSettingsReader(nil) })
 
 	var mu sync.Mutex
 	var chatAuths, probeAuths []string

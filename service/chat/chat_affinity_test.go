@@ -204,8 +204,7 @@ func depinFixture(t *testing.T, key string) Before {
 	t.Helper()
 	balancer.DefaultAffinity().Reset()
 	t.Cleanup(balancer.ResetDefaultAffinityForTest)
-	SetSettingsReader(affinityGateStub{enabled: true})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, affinityGateStub{enabled: true})
 	balancer.DefaultAffinity().Put(key, balancer.Target{ModelWithProviderID: depinPinnedMWP, CredentialID: 5}, time.Now())
 	return Before{Model: "m", affinityKey: key}
 }
@@ -429,8 +428,7 @@ func TestClearStickyTarget_Gate(t *testing.T) {
 	balancer.DefaultAffinity().Reset()
 	t.Cleanup(balancer.ResetDefaultAffinityForTest)
 
-	SetSettingsReader(affinityGateStub{enabled: true})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, affinityGateStub{enabled: true})
 	balancer.DefaultAffinity().Put("k1", balancer.Target{ModelWithProviderID: depinPinnedMWP, CredentialID: 5}, time.Now())
 
 	if clearStickyTarget(context.Background(), Before{Model: "m", affinityKey: ""}, depinPinnedMWP) {
@@ -617,8 +615,7 @@ func TestBalanceChat_ExhaustedKeepsSticky(t *testing.T) {
 func TestAffinityKeyFor_Gate(t *testing.T) {
 	before := Before{Model: "m", affinityKey: "k1"}
 
-	SetSettingsReader(affinityGateStub{enabled: true})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, affinityGateStub{enabled: true})
 	if got := affinityKeyFor(context.Background(), before); got != "k1" {
 		t.Fatalf("开启时 affinityKeyFor = %q, want k1", got)
 	}

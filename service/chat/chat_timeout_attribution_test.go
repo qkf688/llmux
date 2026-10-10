@@ -152,8 +152,7 @@ func TestBalanceChat_DeadlineCtx_SettlesAsProviderFailure(t *testing.T) {
 // 桩必须**显式**给总超时键：Stage 38 起该桩是「字段 0 就回退生产默认值」的参数化桩
 // （此前是固定值桩，total 键恒 3），漏填会静默取 600 让本用例失去判据。
 func TestWithRequestTotalTimeout_DerivesDeadline(t *testing.T) {
-	SetSettingsReader(timeoutSettingsReader{streamWindowSec: 1, nonStreamWindowSec: 1, totalTimeoutSec: 3, maxRetry: 2})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, timeoutSettingsReader{streamWindowSec: 1, nonStreamWindowSec: 1, totalTimeoutSec: 3, maxRetry: 2})
 
 	ctx, cancel := WithRequestTotalTimeout(context.Background())
 	defer cancel()
@@ -233,8 +232,7 @@ func (r singleRetrySettingsReader) IntE(ctx context.Context, key string, def, mi
 // 会让监控把网关超时当成上游故障。
 func TestBalanceChat_LastAttemptHitsDeadline_ExhaustedMapsTo504(t *testing.T) {
 	pool, model := setupTimeoutProbeProvider(t, 3*time.Second)
-	SetSettingsReader(singleRetrySettingsReader{})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, singleRetrySettingsReader{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()

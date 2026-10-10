@@ -67,11 +67,14 @@ func TestApplyCredentialCooldown_AsyncEventuallyPersists(t *testing.T) {
 		AuthFail: persistCredentialAuthFailure,
 	})
 
+	// 本用例专属 Manager：收尾必须能排空后台任务（见 chat_testenv_test.go）。
+	testEnvManager(t)
 	models.Init(context.Background(), filepath.Join(t.TempDir(), "llmux-async-cooldown.db"))
 	repository.SetDefault(repository.New(models.DB))
-	SetSettingsReader(credCooldownSettingsReader{Cooldown429Sec: 60, CooldownServerSec: 60})
+	// settings 走统一入口：它注册在最后 → 逆序最先执行，保证「先排空后台任务、
+	// 再复位 settingsReader」发生在下面这段自己的关库收尾之前。
+	installChatTestSettings(t, credCooldownSettingsReader{Cooldown429Sec: 60, CooldownServerSec: 60})
 	t.Cleanup(func() {
-		SetSettingsReader(nil)
 		repository.SetDefault(nil)
 		credwrite.EnableTestSyncMode(true)
 		closeChatTestDB(t)
@@ -110,11 +113,14 @@ func TestApplyCredentialAuthFailure_AsyncEventuallyPersists(t *testing.T) {
 		AuthFail: persistCredentialAuthFailure,
 	})
 
+	// 本用例专属 Manager：收尾必须能排空后台任务（见 chat_testenv_test.go）。
+	testEnvManager(t)
 	models.Init(context.Background(), filepath.Join(t.TempDir(), "llmux-async-auth.db"))
 	repository.SetDefault(repository.New(models.DB))
-	SetSettingsReader(credCooldownSettingsReader{AuthFailThreshold: 3})
+	// settings 走统一入口：它注册在最后 → 逆序最先执行，保证「先排空后台任务、
+	// 再复位 settingsReader」发生在下面这段自己的关库收尾之前。
+	installChatTestSettings(t, credCooldownSettingsReader{AuthFailThreshold: 3})
 	t.Cleanup(func() {
-		SetSettingsReader(nil)
 		repository.SetDefault(nil)
 		credwrite.EnableTestSyncMode(true)
 		closeChatTestDB(t)

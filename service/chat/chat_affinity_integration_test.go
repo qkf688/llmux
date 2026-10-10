@@ -167,8 +167,7 @@ func TestBalanceChat_CacheAffinity_CoolingFailsOverAndRepins(t *testing.T) {
 // 完全一致——同一对话两次请求仍按轮询逐请求推进，不发生钉定。
 func TestBalanceChat_CacheAffinity_DisabledKeepsRoundRobin(t *testing.T) {
 	runReq, auths, _ := setupAffinityFixture(t)
-	SetSettingsReader(affinityGateStub{enabled: false})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, affinityGateStub{enabled: false})
 
 	runReq(`{"model":"m1","messages":[{"role":"system","content":"sys-D"},{"role":"user","content":"hi-D"}]}`)
 	runReq(`{"model":"m1","messages":[{"role":"system","content":"sys-D"},{"role":"user","content":"hi-D"},{"role":"assistant","content":"hello"},{"role":"user","content":"more-D"}]}`)

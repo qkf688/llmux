@@ -85,8 +85,7 @@ func TestBalanceChat_HeaderTimeout_CandidateHasFullWindow(t *testing.T) {
 	cipher := setupChatChannelCipher(t)
 	// 两键同为 1s：本用例入站为非流式，分流后取「整段预算」键（Stage 38）——
 	// 两键都给 1s 才能继续表达「窗口到点后候选 2 仍有完整预算」。
-	SetSettingsReader(timeoutSettingsReader{streamWindowSec: 1, nonStreamWindowSec: 1, totalTimeoutSec: 3, maxRetry: 2})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, timeoutSettingsReader{streamWindowSec: 1, nonStreamWindowSec: 1, totalTimeoutSec: 3, maxRetry: 2})
 
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(1500 * time.Millisecond) // 不回响应头：超过 1s 的尝试窗口
@@ -155,8 +154,7 @@ func TestBalanceChat_HeaderTimeout_CandidateHasFullWindow(t *testing.T) {
 // 「新建库种入的值」与「读失败时回退的值」不一致——Stage 38 的 getNonStreamResponseTimeout
 // 就曾把 90 写成 30（生产靠 seed 落库掩盖，只有读失败路径才暴露）。
 func TestRequestParamReaders_FallbackMatchesSchemaDefault(t *testing.T) {
-	SetSettingsReader(timeoutSettingsReader{fallbackToSchemaDefault: true})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, timeoutSettingsReader{fallbackToSchemaDefault: true})
 
 	schemas := models.SettingSchemas()
 	ctx := context.Background()

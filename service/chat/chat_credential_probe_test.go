@@ -20,10 +20,9 @@ func TestProbeRecoverInGroup_RestoresAndSelectable(t *testing.T) {
 	initChatRecordTestDB(t)
 	cipher := setupChatChannelCipher(t)
 	channel.ResetDefaultSelectorForTest()
-	SetSettingsReader(credCooldownSettingsReader{
+	installChatTestSettings(t, credCooldownSettingsReader{
 		Cooldown429Sec: 60, CooldownServerSec: 60, AuthFailThreshold: 3, ProbeIntervalSec: 60,
 	})
-	t.Cleanup(func() { SetSettingsReader(nil) })
 
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -113,8 +112,7 @@ func TestProbeRecoverInGroup_LocksExhaustedGroup(t *testing.T) {
 	initChatRecordTestDB(t)
 	cipher := setupChatChannelCipher(t)
 	channel.ResetDefaultSelectorForTest()
-	SetSettingsReader(credCooldownSettingsReader{ProbeIntervalSec: 60})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, credCooldownSettingsReader{ProbeIntervalSec: 60})
 
 	var hits atomic.Int32
 	var probedKey string
@@ -194,8 +192,7 @@ func TestProbeRecoverInGroup_LocksExhaustedGroup(t *testing.T) {
 func TestProbeRecoverInGroup_RateLimited(t *testing.T) {
 	initChatRecordTestDB(t)
 	cipher := setupChatChannelCipher(t)
-	SetSettingsReader(credCooldownSettingsReader{ProbeIntervalSec: 120})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, credCooldownSettingsReader{ProbeIntervalSec: 120})
 
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

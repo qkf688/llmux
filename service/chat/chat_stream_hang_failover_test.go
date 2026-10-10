@@ -42,8 +42,7 @@ func (r gateHangSettingsReader) IntE(ctx context.Context, key string, def, min i
 func TestBalanceChat_Stream_HangAfterHeaders_FailsOver(t *testing.T) {
 	initChatRecordTestDB(t)
 	cipher := setupChatChannelCipher(t)
-	SetSettingsReader(gateHangSettingsReader{})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, gateHangSettingsReader{})
 	channel.ResetDefaultSelectorForTest()
 	t.Cleanup(channel.ResetDefaultSelectorForTest)
 

@@ -44,8 +44,7 @@ var _ settings.Reader = responseCapSettingsReader{}
 
 func setResponseLogMaxKiB(t *testing.T, kib int) {
 	t.Helper()
-	SetSettingsReader(responseCapSettingsReader{MaxKiB: kib})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, responseCapSettingsReader{MaxKiB: kib})
 }
 
 // TestApplyResponseBodyToLog_ResponseBodyCappedHeadTail 非流式 OfString 超限存头尾+标记。

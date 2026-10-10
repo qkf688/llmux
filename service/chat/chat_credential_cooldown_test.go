@@ -43,8 +43,7 @@ func TestClassifyCredentialFailure(t *testing.T) {
 
 func TestApplyCredentialCooldown(t *testing.T) {
 	initChatRecordTestDB(t)
-	SetSettingsReader(credCooldownSettingsReader{Cooldown429Sec: 60, CooldownServerSec: 60})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, credCooldownSettingsReader{Cooldown429Sec: 60, CooldownServerSec: 60})
 
 	_, poolID := seedPooledGroup(t, 1, "g1", 1, "")
 	cred := models.Credential{PoolID: poolID, Key: "enc", KeyHash: "hash"}
@@ -140,8 +139,7 @@ func (r credCooldownSettingsReader) IntE(ctx context.Context, key string, def, m
 // 401/403 不在本表：#6-2 起走鉴权判停路径（不写冷却），见 chat_credential_auth_fail_test.go。
 func TestApplyCredentialCooldown_ConfigurableWindows(t *testing.T) {
 	initChatRecordTestDB(t)
-	SetSettingsReader(credCooldownSettingsReader{Cooldown429Sec: 10, CooldownServerSec: 120})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, credCooldownSettingsReader{Cooldown429Sec: 10, CooldownServerSec: 120})
 
 	cases := []struct {
 		name    string

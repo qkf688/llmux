@@ -46,8 +46,7 @@ var _ settings.Reader = rawFieldCapSettingsReader{}
 
 func setRawLogFieldMaxKiB(t *testing.T, kib int) {
 	t.Helper()
-	SetSettingsReader(rawFieldCapSettingsReader{MaxKiB: kib})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, rawFieldCapSettingsReader{MaxKiB: kib})
 }
 
 func TestCreateChatIO_InputCappedHeadTail(t *testing.T) {

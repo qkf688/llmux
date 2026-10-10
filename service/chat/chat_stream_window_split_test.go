@@ -27,8 +27,7 @@ import (
 // 各自分支，下次加入第三种入站形态时会静默印错类别）。
 // 变异：resolver 忽略 stream 参数、恒取响应头键 → 两条断言都红。
 func TestResolveUpstreamWindow_SplitsByStream(t *testing.T) {
-	SetSettingsReader(timeoutSettingsReader{streamWindowSec: 30, nonStreamWindowSec: 90, maxRetry: 1})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, timeoutSettingsReader{streamWindowSec: 30, nonStreamWindowSec: 90, maxRetry: 1})
 
 	stream := resolveUpstreamWindow(context.Background(), true)
 	if stream.Kind != upstreamWindowStream || stream.Window != 30*time.Second {
@@ -112,8 +111,7 @@ func balanceOnce(t *testing.T, pool CandidatePool, modelName string, stream bool
 // 变异：非流式也走流式的 1s 等头窗口（改动前的单一窗口语义）→ 本条红。
 func TestBalanceChat_NonStream_SlowUpstreamInsideNonStreamWindow_Succeeds(t *testing.T) {
 	pool, model := setupWindowSplitSlowProvider(t, 1600*time.Millisecond)
-	SetSettingsReader(timeoutSettingsReader{streamWindowSec: 1, nonStreamWindowSec: 3, maxRetry: 1})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, timeoutSettingsReader{streamWindowSec: 1, nonStreamWindowSec: 3, maxRetry: 1})
 
 	result, err := balanceOnce(t, pool, model.Name, false)
 	if err != nil {
@@ -129,8 +127,7 @@ func TestBalanceChat_NonStream_SlowUpstreamInsideNonStreamWindow_Succeeds(t *tes
 // 对外仍是 502「上游全挂」口径（Stage 38 拍板不改调用方可见状态码）。
 func TestBalanceChat_Stream_SlowUpstreamBeyondStreamWindow_StillFails(t *testing.T) {
 	pool, model := setupWindowSplitSlowProvider(t, 1600*time.Millisecond)
-	SetSettingsReader(timeoutSettingsReader{streamWindowSec: 1, nonStreamWindowSec: 3, maxRetry: 1})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, timeoutSettingsReader{streamWindowSec: 1, nonStreamWindowSec: 3, maxRetry: 1})
 
 	_, err := balanceOnce(t, pool, model.Name, true)
 	if err == nil {
@@ -162,8 +159,7 @@ func windowFailureLogError(t *testing.T) string {
 func TestBalanceChat_WindowTimeout_FailureTextCarriesCategoryAndWindow(t *testing.T) {
 	t.Run("流式等头窗口", func(t *testing.T) {
 		pool, model := setupWindowSplitSlowProvider(t, 1600*time.Millisecond)
-		SetSettingsReader(timeoutSettingsReader{streamWindowSec: 1, nonStreamWindowSec: 3, maxRetry: 1})
-		t.Cleanup(func() { SetSettingsReader(nil) })
+		installChatTestSettings(t, timeoutSettingsReader{streamWindowSec: 1, nonStreamWindowSec: 3, maxRetry: 1})
 
 		if _, err := balanceOnce(t, pool, model.Name, true); err == nil {
 			t.Fatal("err = nil, want 窗口超时失败")
@@ -176,8 +172,7 @@ func TestBalanceChat_WindowTimeout_FailureTextCarriesCategoryAndWindow(t *testin
 
 	t.Run("非流式整段预算窗口", func(t *testing.T) {
 		pool, model := setupWindowSplitSlowProvider(t, 1600*time.Millisecond)
-		SetSettingsReader(timeoutSettingsReader{streamWindowSec: 3, nonStreamWindowSec: 1, maxRetry: 1})
-		t.Cleanup(func() { SetSettingsReader(nil) })
+		installChatTestSettings(t, timeoutSettingsReader{streamWindowSec: 3, nonStreamWindowSec: 1, maxRetry: 1})
 
 		if _, err := balanceOnce(t, pool, model.Name, false); err == nil {
 			t.Fatal("err = nil, want 窗口超时失败")

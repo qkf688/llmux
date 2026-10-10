@@ -23,8 +23,7 @@ func newStatsFixture(t *testing.T, handler http.Handler) (*httptest.Server, func
 	t.Helper()
 	initChatRecordTestDB(t)
 	cipher := setupChatChannelCipher(t)
-	SetSettingsReader(credCooldownSettingsReader{Cooldown429Sec: 60, CooldownServerSec: 60, AuthFailThreshold: 99})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, credCooldownSettingsReader{Cooldown429Sec: 60, CooldownServerSec: 60, AuthFailThreshold: 99})
 
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)

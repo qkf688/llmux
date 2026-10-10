@@ -78,8 +78,7 @@ func TestGetRequestTotalTimeout_ReadFailure_FallsBackTo60sAndLogsSkip(t *testing
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			logs := captureFallbackLogs(t)
-			SetSettingsReader(fallingTotalTimeoutReader{err: tc.err})
-			t.Cleanup(func() { SetSettingsReader(nil) })
+			installChatTestSettings(t, fallingTotalTimeoutReader{err: tc.err})
 
 			got := getRequestTotalTimeout(context.Background())
 
@@ -108,8 +107,7 @@ func TestGetRequestTotalTimeout_ReadFailure_FallsBackTo60sAndLogsSkip(t *testing
 //     明 AC-3 与 AC-1/AC-2 互不污染：失败路径改坏不影响成功路径测试）
 func TestGetRequestTotalTimeout_ReadSuccess_UsesSchemaDefault(t *testing.T) {
 	logs := captureFallbackLogs(t)
-	SetSettingsReader(fallingTotalTimeoutReader{err: nil}) // 不触发失败
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, fallingTotalTimeoutReader{err: nil}) // 不触发失败
 
 	got := getRequestTotalTimeout(context.Background())
 

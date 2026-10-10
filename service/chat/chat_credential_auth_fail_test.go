@@ -42,8 +42,7 @@ func TestClassifyAuthFailure(t *testing.T) {
 // 连续失败达阈值 N → temp_unsched + reason=auth_fail + 清 cooldown_until。
 func TestApplyCredentialAuthFailure_CountsThenStops(t *testing.T) {
 	initChatRecordTestDB(t)
-	SetSettingsReader(credCooldownSettingsReader{Cooldown429Sec: 60, CooldownServerSec: 60, AuthFailThreshold: 3})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, credCooldownSettingsReader{Cooldown429Sec: 60, CooldownServerSec: 60, AuthFailThreshold: 3})
 
 	_, poolID := seedPooledGroup(t, 1, "g1", 1, "")
 	cred := models.Credential{PoolID: poolID, Key: "enc", KeyHash: "hash"}
@@ -95,8 +94,7 @@ func TestApplyCredentialAuthFailure_ConfigurableThreshold(t *testing.T) {
 	for _, n := range []int{1, 2, 5} {
 		t.Run(fmt.Sprintf("threshold=%d", n), func(t *testing.T) {
 			initChatRecordTestDB(t)
-			SetSettingsReader(credCooldownSettingsReader{AuthFailThreshold: n})
-			t.Cleanup(func() { SetSettingsReader(nil) })
+			installChatTestSettings(t, credCooldownSettingsReader{AuthFailThreshold: n})
 
 			cred := models.Credential{Key: "enc", KeyHash: "hash"}
 			if err := models.DB.Create(&cred).Error; err != nil {
@@ -130,8 +128,7 @@ func TestApplyCredentialAuthFailure_ConfigurableThreshold(t *testing.T) {
 func TestExecuteSingleProviderAttempt_NonOK401_AuthFailStopsCredential(t *testing.T) {
 	initChatRecordTestDB(t)
 	cipher := setupChatChannelCipher(t)
-	SetSettingsReader(credCooldownSettingsReader{Cooldown429Sec: 60, CooldownServerSec: 60, AuthFailThreshold: 3})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, credCooldownSettingsReader{Cooldown429Sec: 60, CooldownServerSec: 60, AuthFailThreshold: 3})
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -226,8 +223,7 @@ func TestExecuteSingleProviderAttempt_NonOK401_AuthFailStopsCredential(t *testin
 // CooldownUntil，但不清会让 UI 误显示冷却态——判停写必须三字段同落。
 func TestApplyCredentialAuthFailure_ClearsResidualCooldown(t *testing.T) {
 	initChatRecordTestDB(t)
-	SetSettingsReader(credCooldownSettingsReader{Cooldown429Sec: 60, CooldownServerSec: 60, AuthFailThreshold: 3})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, credCooldownSettingsReader{Cooldown429Sec: 60, CooldownServerSec: 60, AuthFailThreshold: 3})
 
 	residual := time.Now().Add(5 * time.Minute)
 	cred := models.Credential{Key: "enc", KeyHash: "hash", FailCount: 2, CooldownUntil: &residual, CooldownReason: "http_429"}
@@ -256,8 +252,7 @@ func TestApplyCredentialAuthFailure_ClearsResidualCooldown(t *testing.T) {
 // 401×2 后穿插一次 429 冷却，计数保留——只有成功请求才重置「连续」判据。
 func TestApplyCredentialAuthFailure_CooldownDoesNotResetCount(t *testing.T) {
 	initChatRecordTestDB(t)
-	SetSettingsReader(credCooldownSettingsReader{Cooldown429Sec: 60, CooldownServerSec: 60, AuthFailThreshold: 3})
-	t.Cleanup(func() { SetSettingsReader(nil) })
+	installChatTestSettings(t, credCooldownSettingsReader{Cooldown429Sec: 60, CooldownServerSec: 60, AuthFailThreshold: 3})
 
 	cred := models.Credential{Key: "enc", KeyHash: "hash", FailCount: 2}
 	if err := models.DB.Create(&cred).Error; err != nil {
@@ -298,8 +293,7 @@ func TestApplyCredentialAuthFailure_SkipsNonActiveCredential(t *testing.T) {
 	for _, status := range []string{models.CredentialStatusDisabled, models.CredentialStatusError} {
 		t.Run(status, func(t *testing.T) {
 			initChatRecordTestDB(t)
-			SetSettingsReader(credCooldownSettingsReader{AuthFailThreshold: 3})
-			t.Cleanup(func() { SetSettingsReader(nil) })
+			installChatTestSettings(t, credCooldownSettingsReader{AuthFailThreshold: 3})
 
 			cred := models.Credential{Key: "enc", KeyHash: "hash", FailCount: 2, Status: status}
 			if err := models.DB.Create(&cred).Error; err != nil {

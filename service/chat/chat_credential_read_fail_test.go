@@ -14,13 +14,12 @@ import (
 // → 只计数不判停（不拿默认阈值 3/覆写阈值 1 执行 temp_unsched）。
 func TestPersistCredentialAuthFailure_ThresholdReadFail_CountsWithoutStop(t *testing.T) {
 	initChatRecordTestDB(t)
-	SetSettingsReader(credCooldownSettingsReader{
+	installChatTestSettings(t, credCooldownSettingsReader{
 		AuthFailThreshold: 1, // 裸变体的危险值：旧代码会拿它首败即判停
 		failKeys: map[string]bool{
 			models.SettingKeyCredHealthAuthFailThreshold: true,
 		},
 	})
-	t.Cleanup(func() { SetSettingsReader(nil) })
 
 	cred := models.Credential{Key: "enc", KeyHash: "hash"}
 	if err := models.DB.Create(&cred).Error; err != nil {
@@ -49,13 +48,12 @@ func TestPersistCredentialAuthFailure_ThresholdReadFail_CountsWithoutStop(t *tes
 // → 冷却写整体跳过（Ruling 4：不用默认窗口兜底），不写 CooldownUntil。
 func TestPersistCredentialCooldown_WindowReadFail_SkipsCooldown(t *testing.T) {
 	initChatRecordTestDB(t)
-	SetSettingsReader(credCooldownSettingsReader{
+	installChatTestSettings(t, credCooldownSettingsReader{
 		Cooldown429Sec: 60, // 危险覆写值：读不到时若退它，就会写出一段编造的冷却
 		failKeys: map[string]bool{
 			models.SettingKeyCredHealthCooldown429Sec: true,
 		},
 	})
-	t.Cleanup(func() { SetSettingsReader(nil) })
 
 	cred := models.Credential{Key: "enc", KeyHash: "hash"}
 	if err := models.DB.Create(&cred).Error; err != nil {
@@ -80,13 +78,12 @@ func TestPersistCredentialCooldown_WindowReadFail_SkipsCooldown(t *testing.T) {
 // 分支此前没有读失败用例——同构代码不等于已覆盖，须同样跳过冷却写、不得退默认窗口。
 func TestPersistCredentialCooldown_ServerWindowReadFail_SkipsCooldown(t *testing.T) {
 	initChatRecordTestDB(t)
-	SetSettingsReader(credCooldownSettingsReader{
+	installChatTestSettings(t, credCooldownSettingsReader{
 		CooldownServerSec: 120, // 危险覆写值：读不到时若退它，就会写出一段编造的冷却
 		failKeys: map[string]bool{
 			models.SettingKeyCredHealthCooldownServerSec: true,
 		},
 	})
-	t.Cleanup(func() { SetSettingsReader(nil) })
 
 	cred := models.Credential{Key: "enc", KeyHash: "hash"}
 	if err := models.DB.Create(&cred).Error; err != nil {

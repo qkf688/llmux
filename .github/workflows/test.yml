@@ -14,9 +14,12 @@ name: test
 # （刻意取舍：保证纯 push 直推的分支也被门住，而不是只在开 PR 时才拦）。嫌吵可收敛成
 # push: branches: [main] + pull_request。
 #
-# ⚠️ handler/pools 有个已知偶发 flaky（观测中）：本 job 设成 required check 之前必须先消掉它，
-# 否则 push/PR 双跑会让同一 SHA 上出现两个同名 check `test`，required 按名字取值时随机卡合并。
-# flaky 复现时按观测文档口径用 `-race -count=50` 定位，不许跳过用例或改期望值。
+# ⚠️ 已知 flaky 一条（保持观测、刻意不排期；至今未在 CI 上红过）：handler/pools 的
+# TestGetCredentialRaw_DecryptFailure_500 偶发红——账本在本地未入库的
+# `.local/find-issues/2026-09-20-handler-pools-解密失败500用例偶发flaky.md`。
+# 红时按 `-race -count=50` 定位，不许跳过用例或改期望值。
+# required check 排期：设成 required 前必须先消掉这条 flaky，否则 push/PR 双跑会让同一 SHA
+# 出现两个同名 check `test`，required 按名字取值时随机卡合并。
 on:
   workflow_dispatch:
   push:
@@ -104,8 +107,10 @@ jobs:
   # 的反馈——主 job 保持无 race 快速反馈，本 job 专抓竞态，两者可并行跑。
   # 步骤序列与主 job 的 go 侧同序：必须先 build webui 喂 //go:embed webui/dist，
   # 否则干净 checkout 下包 main 编译不过（gate_*.go 机械门都在包 main，详见主 job 注释）。
-  # ⚠️ handler/pools 已知 flaky 在本 job 下偶发红 = 定位机会，按 Stage 13 观测文档口径
-  # 用 `-race -count=50` 定位，不 skip 用例、不改期望值。
+  # ⚠️ 本 job 已红过两轮，两轮都是 service/chat 的测试期 data race：用例收尾（还原包级单例、
+  # 关库）与 credwrite worker / bgtask 清理任务读同一批单例之间缺 happens-before，只在 -race 下现形。
+  # 已由 81b3830 的测试侧收尾入口修掉（顺序约束：先排空后台工作，再还原单例 / 关库），此后 race 绿。
+  # 再红时按 `-race -count=50` 定位，不 skip 用例、不改期望值。
   # 版本号与主 job 同步改（pnpm / node 两处 job 各一份）。
   race:
     runs-on: ubuntu-latest

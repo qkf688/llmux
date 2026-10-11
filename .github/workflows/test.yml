@@ -107,10 +107,13 @@ jobs:
   # 的反馈——主 job 保持无 race 快速反馈，本 job 专抓竞态，两者可并行跑。
   # 步骤序列与主 job 的 go 侧同序：必须先 build webui 喂 //go:embed webui/dist，
   # 否则干净 checkout 下包 main 编译不过（gate_*.go 机械门都在包 main，详见主 job 注释）。
-  # ⚠️ 本 job 已红过两轮，两轮都是 service/chat 的测试期 data race：用例收尾（还原包级单例、
-  # 关库）与 credwrite worker / bgtask 清理任务读同一批单例之间缺 happens-before，只在 -race 下现形。
-  # 已由 81b3830 的测试侧收尾入口修掉（顺序约束：先排空后台工作，再还原单例 / 关库），此后 race 绿。
-  # 再红时按 `-race -count=50` 定位，不 skip 用例、不改期望值。
+  # ⚠️ 本 job 红过的两类（都已处置；红时按 `-race -count=50` 定位，不 skip 用例、不改期望值）：
+  # ① service/chat 的测试期 data race（两轮）：用例收尾（还原包级单例、关库）与 credwrite worker /
+  #    bgtask 清理任务读同一批单例之间缺 happens-before，只在 -race 下现形；已由 81b3830 的测试侧收尾
+  #    入口修掉（顺序约束：先排空后台工作，再还原单例 / 关库）。
+  # ② handler/v1 两条写上限用例的时序 flaky（一轮，run 38084398445，纯注释提交触发）：一条是「到点
+  #    判据读 ctx.Err() 与 socket deadline 抢时机」（生产归因判据，旧写法负载下会漏豁免、把预算烧完算成
+  #    客户端不收），一条是「第二次请求自身上限 + 16 MiB body 在慢环境写不完」；已由 ba59caf / 7105ee9 处置。
   # 版本号与主 job 同步改（pnpm / node 两处 job 各一份）。
   race:
     runs-on: ubuntu-latest

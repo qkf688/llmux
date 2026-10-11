@@ -2,7 +2,6 @@ package v1
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -161,24 +160,29 @@ func TestWriteResponseBody_ClientDisconnect_MarkedAsClientSide(t *testing.T) {
 }
 
 // TestWriteResponseBody_KeepAliveConnUsableAfterDeadlineRequest 锁 keep-alive 复用：
-// 一次带写上限的请求走完后，同一条连接还能正常服务下一个请求。写上限落在**连接**上，
-// 若请求收尾时没人清，同连接的下一个请求会带着一个已过期的写上限发不出去（socket
-// deadline 一旦过期不可再延长）。
+// 一次带写上限的请求走完后，同一条连接服务下一个请求时**不带着任何残留上限**。
 //
-// 这里断言的不是「我们自己清了」——net/http 在每个请求收尾自己清（server.go 的
-// `conn.serve`：`w.finishRequest()` 紧跟 `c.rwc.SetWriteDeadline(time.Time{})`），
-// 本项目曾为此写了一段手动清理，是多余实现、已删。本用例改为守住**这个行为**：谁哪天
-// 换掉 server 实现或改走 HTTP/2 而库不再清，它会红。
+// 关键设计：第二个请求的 handler 刻意不挂总时限（其 ctx 无 deadline → 不设上限），于是
+// 它的写能否成功只取决于连接上有没有残留的过期上限——这正是本用例要锁的对象。若哪天
+// net/http 的 server 实现不再在请求收尾清上限，残留的过期上限会让第二次的写立即失败
+// （实测：过期上限下连 5 字节的写都直接 i/o timeout），本用例即红。
 //
-// 第二次的响应体必须大到能把 socket 发送缓冲填满，否则测不出。跨平台取 16 MiB 这个
-// 两侧都成立的值：Unix 上 socket deadline 只在操作**会阻塞**时才生效（写得进缓冲就
-// 立刻成功），小响应即使上限早已过期也照样发得出去；Windows 上实测已过期即失败。
-// 曾据此写出过一版「第二次请求拿到 200」的假绿用例，变异检验时没咬住。
+// 响应体刻意取**小** body：过期上限对写的作用发生在进入 syscall 之前（netpoll 先判
+// deadline，与写多少字节、会不会阻塞无关），不需要把 16 MiB 写满发送缓冲。早先那版把
+// 两次请求绑同一个短上限 + 16 MiB body，制造了两条假前提（「小响应测不出」「上限要用大
+// body 才显形」）并让**第二次请求自己的上限**在慢环境里到点——CI 上那条偶发
+// `unexpected EOF` 与「上限没清干净」无关，是它自己超时。
+//
+// 变异自检验证（区分度）：把第二个请求的 handler 改成挂一个**已过期**的 deadline
+// （等价于连接上带着过期上限），本用例红。
+// 边界须知：单独去掉生产侧 `applyClientWriteDeadline` 的 `SetWriteDeadline`，本用例
+// **不会**红——此时 server 收尾的清理仍兜着，复用行为没有真坏；它锁的是两侧同时退步。
 func TestWriteResponseBody_KeepAliveConnUsableAfterDeadlineRequest(t *testing.T) {
 	const limit = 300 * time.Millisecond
-	// 16 MiB：必须超过系统可能自动调大的 socket 发送缓冲（Linux tcp_wmem 封顶 4 MiB），
-	// 写才会真的阻塞、已过期的上限才会显形。
-	bigBody := bytes.Repeat([]byte("x"), 16<<20)
+	// 第一次的响应体：小到不会阻塞写，只用来构成「一次带上限的真实请求」。
+	const firstBody = "ok"
+	// 第二次的响应体：中等大小，覆盖 io.Copy 的分块写路径，又远小于任何合理上限。
+	secondBody := strings.Repeat("y", 64<<10)
 
 	// 写回错误经通道回测试 goroutine 再断言：testing 规定测试结束后再 Log 会 panic。
 	// 写上限真没清干净时 handler 会报错，而此刻下面的主断言往往已先 t.Fatalf 收场，
@@ -198,12 +202,18 @@ func TestWriteResponseBody_KeepAliveConnUsableAfterDeadlineRequest(t *testing.T)
 	var callCount atomic.Int32
 	router := gin.New()
 	router.POST("/probe", func(c *gin.Context) {
-		ctx, cancel := context.WithTimeout(c.Request.Context(), limit)
-		defer cancel()
-		src := io.Reader(strings.NewReader("ok"))
-		if callCount.Add(1) > 1 {
-			src = bytes.NewReader(bigBody) // 第二次：大到填满发送缓冲
+		// 第一次：模拟生产入口（总时限挂在请求 ctx 上）；第二次：刻意不带总时限，
+		// 让「连接上是否残留过期上限」成为唯一的成败因素（见用例注释「关键设计」）。
+		nth := callCount.Add(1)
+		ctx := c.Request.Context()
+		cancel := func() {}
+		src := io.Reader(strings.NewReader(firstBody))
+		if nth > 1 {
+			src = strings.NewReader(secondBody)
+		} else {
+			ctx, cancel = context.WithTimeout(c.Request.Context(), limit)
 		}
+		defer cancel()
 		if err := writeResponseBody(ctx, c, string(consts.StyleOpenAI), false, src); err != nil {
 			handlerErrs <- err
 		}
@@ -231,22 +241,22 @@ func TestWriteResponseBody_KeepAliveConnUsableAfterDeadlineRequest(t *testing.T)
 		_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 		resp, err := http.ReadResponse(reader, req)
 		if err != nil {
-			t.Fatalf("第 %d 次请求读不到响应（写上限没清干净?）: %v", i, err)
+			t.Fatalf("第 %d 次请求读不到响应（连接上残留了过期写上限?）: %v", i, err)
 		}
 		got, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		if err != nil {
-			t.Fatalf("第 %d 次响应体读失败（写上限没清干净?）: %v", i, err)
+			t.Fatalf("第 %d 次响应体读失败（连接上残留了过期写上限?）: %v", i, err)
 		}
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("第 %d 次请求状态码 = %d, want 200", i, resp.StatusCode)
 		}
-		wantLen := 2
+		wantLen := len(firstBody)
 		if i == 2 {
-			wantLen = len(bigBody)
+			wantLen = len(secondBody)
 		}
 		if len(got) != wantLen {
-			t.Fatalf("第 %d 次响应体 = %d 字节, want %d（截断说明写上限没清干净）", i, len(got), wantLen)
+			t.Fatalf("第 %d 次响应体 = %d 字节, want %d（截断说明连接上残留了过期写上限）", i, len(got), wantLen)
 		}
 	}
 }

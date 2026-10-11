@@ -59,11 +59,13 @@ func writeResponseBody(ctx context.Context, c *gin.Context, style string, stream
 // 与 request_total_timeout 同源——总时限调小，写上限跟着调小。gin 的 responseWriter
 // 实现了 Unwrap，ResponseController 能穿透到真实的 ResponseWriter。
 //
-// 刻意**不在写完时清零**（曾写过一段手动清理，是多余的）：net/http 在每个请求收尾
-// 自己清——server.go 的 `conn.serve` 请求循环里 `w.finishRequest()` 紧跟
-// `c.rwc.SetWriteDeadline(time.Time{})`。故同一 keep-alive 连接的下一次请求不会带着
-// 已过期的写上限（过期不可再延长）。若将来改走 HTTP/2 或换掉 net/http 的 server
-// 实现，须重新核对那一行是否仍在。
+// 刻意**不在写完时清零**（曾写过一段手动清理，是多余的）：keep-alive 复用安全性有两道
+// 独立保障——①本函数每次调用都用该请求的 deadline 重设上限，旧值即被覆盖（实测：已过期的
+// 上限能被后续 SetWriteDeadline 改到未来时刻、写恢复正常，故「过期不可延长」的说法不成立）；
+// ②net/http 也在每个请求收尾清一次（server.go 的 `conn.serve` 里 `w.finishRequest()` 紧跟
+// `c.rwc.SetWriteDeadline(time.Time{})`，Go 1.25 实测在该文件 2117 行）。两道都在，上限不会
+// 残留到下一次请求；真正会显形残留的是「把本函数改成仅部分请求设上限」——那时须重新核对
+// server 实现是否仍清。
 func applyClientWriteDeadline(c *gin.Context, ctx context.Context) {
 	deadline, ok := ctx.Deadline()
 	if !ok {

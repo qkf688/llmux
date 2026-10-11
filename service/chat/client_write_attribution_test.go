@@ -105,10 +105,12 @@ func TestMarkResponseWriteError_UpstreamPassthrough(t *testing.T) {
 // 同时触发。若不加这一条判据，「预算被烧完」会一律被当成「客户端不收」而不记供应商
 // 失败——与手册「等上游答到点而超时 = 慢供应商，照常结算」直接矛盾。
 //
-// 只认 DeadlineExceeded、**不认 Canceled**：客户端中途断开是 ctx 被取消，那确实是
-// 客户端侧，仍须打标（否则供应商要为客户端跑路背锅）。
+// 只认「到点」、**不认 Canceled**：客户端中途断开（预算未到）的 ctx 被取消，那确实是
+// 客户端侧，仍须打标（否则供应商要为客户端跑路背锅）；取消与到点并存时按到点算，与
+// chat_settlement.requestAbandoned 同一口径。到点判据取时刻比较（deadlineElapsed），
+// 不读 ctx.Err()——标志可观测时机见 TestMarkResponseWriteError_DeadlineElapsedBeforeCancelFlag。
 //
-// 变异自检验证——删掉 ctx.Err() 这条判据：本用例两条断言全红。
+// 变异自检验证——删掉到点判据（连 Err() 兜底一起）：本用例两条断言全红。
 func TestMarkResponseWriteError_BudgetExhausted_NotMarked(t *testing.T) {
 	exhausted := expiredCtx(t)
 	// 用同一个哨兵实例比对：*net.OpError 按指针身份比 errors.Is，每次 new 一个比不了。
@@ -133,6 +135,63 @@ func TestMarkResponseWriteError_BudgetExhausted_NotMarked(t *testing.T) {
 	cancel2()
 	if !IsClientWriteErr(MarkResponseWriteError(cancelled, newWriteCutoffErr())) {
 		t.Fatal("客户端断开（ctx=Canceled）被当成了非客户端侧")
+	}
+}
+
+// stubDeadlineCtx 把「deadline」与「取消标志」解耦，用来构造真 ctx 无法稳定复现的两种
+// 组合：
+//   - Err()==nil + deadline 已过：写上限到点那一刻、取消标志还没被独立 goroutine 写上；
+//   - Err()==Canceled + deadline 已过：客户端断开与预算到点同刻并存。
+//
+// 两个信号的写入时机在生产由调度决定（socket deadline 走 netpoll 计时器，取消标志走
+// time.AfterFunc 的 goroutine），真 ctx 上「到点但标志未写」只是概率出现，单测用桩把它
+// 钉死才能稳定覆盖。
+type stubDeadlineCtx struct {
+	context.Context
+	deadline time.Time
+	err      error
+}
+
+func (c stubDeadlineCtx) Deadline() (time.Time, bool) { return c.deadline, true }
+func (c stubDeadlineCtx) Err() error                  { return c.err }
+
+// TestMarkResponseWriteError_DeadlineElapsedBeforeCancelFlag 锁「到点判据不依赖取消标志的
+// 可观测时机」：deadline 已到点而 ctx.Err() 仍为 nil 时必须豁免（归供应商），否则负载下
+// 同一现场会出现两种归属——实测约 1/120 漏豁免，被误判成客户端侧后不记供应商失败统计、
+// 不清粘性钉定（该格按 2026-10-04 拍板归供应商）。
+//
+// 变异自检验证——把判据换回只读 ctx.Err()（= 改动前）：本用例红。
+func TestMarkResponseWriteError_DeadlineElapsedBeforeCancelFlag(t *testing.T) {
+	ctx := stubDeadlineCtx{Context: context.Background(), deadline: time.Now().Add(-time.Second)}
+	if !deadlineElapsed(ctx) {
+		t.Fatal("前置条件不成立：桩 ctx 的 deadline 未被判为已到点")
+	}
+
+	cutoff := newWriteCutoffErr()
+	got := MarkResponseWriteError(ctx, cutoff)
+	if IsClientWriteErr(got) {
+		t.Fatal("总时限已到点（取消标志尚未可观测）仍被打上写侧标记（会把预算烧完算成客户端不收）")
+	}
+	if got != cutoff {
+		t.Fatalf("不盖标记时必须原样返回同一个错误，实际 %v（want %v）", got, cutoff)
+	}
+}
+
+// TestMarkResponseWriteError_CancelledAtDeadline_NotMarked 锁「取消与到点并存按到点算」：
+// 客户端断开与预算到点同刻出现在同一现场时按超时归供应商——与结算侧口径
+// （chat_settlement.requestAbandoned 用同一个 deadlineElapsed）一致，两处对该现场不再给出
+// 相反归属；预算未到的纯断连仍是客户端侧（见 BudgetExhausted 用例的 cancelled 断言）。
+func TestMarkResponseWriteError_CancelledAtDeadline_NotMarked(t *testing.T) {
+	ctx := stubDeadlineCtx{
+		Context:  context.Background(),
+		deadline: time.Now().Add(-time.Second),
+		err:      context.Canceled,
+	}
+	if !errors.Is(ctx.Err(), context.Canceled) || !deadlineElapsed(ctx) {
+		t.Fatal("前置条件不成立：want 取消与到点并存")
+	}
+	if IsClientWriteErr(MarkResponseWriteError(ctx, newWriteCutoffErr())) {
+		t.Fatal("取消与到点并存被打上写侧标记（结算侧按超时算，此处必须同口径）")
 	}
 }
 

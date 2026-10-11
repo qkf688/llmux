@@ -72,10 +72,21 @@ func requestAbandoned(ctx context.Context) bool {
 	if !errors.Is(ctx.Err(), context.Canceled) {
 		return false
 	}
-	if dl, ok := ctx.Deadline(); ok && !time.Now().Before(dl) {
-		return false
-	}
-	return true
+	return !deadlineElapsed(ctx)
+}
+
+// deadlineElapsed 判定请求总时限是否已到点。
+//
+// 判据取时机无关的「时刻比较」而不是 ctx.Err()：取消标志由 time.AfterFunc 的独立
+// goroutine 写入，与 netpoll 的 socket deadline 同刻触发时，写/读错误可能先返回而标志
+// 仍为 nil——读标志会让同一现场出现两种归属（写侧标记与失败结算各判一次，见
+// client_write_error.go 与 requestAbandoned）。
+//
+// 无 deadline 视为未到点。依赖 deadline 带单调读数（context.WithTimeout 满足）；若传入
+// 只有墙上钟时刻的 deadline（如 time.Unix 构造），会退化为墙上钟比较。
+func deadlineElapsed(ctx context.Context) bool {
+	dl, ok := ctx.Deadline()
+	return ok && !time.Now().Before(dl)
 }
 
 // requestAbandonedResult 调用方放弃后的终态：留痕（失败日志行）已写，随即中止本次

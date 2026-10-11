@@ -42,11 +42,16 @@ func IsClientWriteErr(err error) bool {
 // 1. 读侧错误已带 upstreamReadErr 标记，原样放过：io.Copy 返回的错误既可能是读 src 失败
 // 也可能是写 dst 失败，两者在错误链里都只是一枚 err，此时**不能**盖上写侧标记——
 // 覆盖会把「上游腰斩」误判成「客户端不收」，粘性钉定该清的不清、供应商白背锅。
-//  2. 总时限已耗尽（ctx.Err()==DeadlineExceeded）不盖：写上限钉的就是 ctx 的 deadline，
-//     预算到点那一刻 socket deadline 与 ctx deadline 同时触发，第一次写立刻失败——那是
-//     「预算烧完」，不是「客户端不收」，须保留既有的「超时归供应商」记账（2026-10-04
-//     拍板）。**只认 DeadlineExceeded、不认 Canceled**：客户端中途断开是 ctx 被取消，
-//     那确实是客户端侧，仍须打标。
+//  2. 总时限已到点不盖：写上限钉的就是 ctx 的 deadline，预算到点那一刻 socket deadline
+//     与 ctx deadline 同时触发，第一次写立刻失败——那是「预算烧完」，不是「客户端不收」，
+//     须保留既有的「超时归供应商」记账（2026-10-04 拍板）。判据以 deadlineElapsed 的**时刻
+//     比较**为准，不读 ctx.Err()==DeadlineExceeded：取消标志由 time.AfterFunc 的独立
+//     goroutine 写入，同刻触发时写错误可能先返回而标志仍为 nil，读标志会让同一现场出现
+//     两种归属（负载下实测约 1/120 漏豁免；被误判成客户端侧后不记供应商失败统计、不清
+//     粘性钉定）。读标志保留作兜底——「有 DeadlineExceeded 但无 deadline」的 ctx 本仓无
+//     构造，纯保险。
+//     **只认到点、不认 Canceled**：客户端中途断开（预算未到）确实是客户端侧，仍须打标；
+//     取消与到点并存按超时算，与 chat_settlement.requestAbandoned 同一口径。
 //  3. io.ErrClosedPipe 不盖：handler/v1/chat.go 的 io.TeeReader 刻意在方向标记**之外**
 //     （管道写失败不是上游腰斩），故日志侧提前收尾时 pw.Write 的失败是**没有方向标记的
 //     第三种失败源**，默认会被兜成「客户端」；但它的诱因通常是上游吐了让解析器提前退出
@@ -61,7 +66,7 @@ func MarkResponseWriteError(ctx context.Context, err error) error {
 	if IsUpstreamReadErr(err) {
 		return err
 	}
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) || deadlineElapsed(ctx) {
 		return err
 	}
 	if errors.Is(err, io.ErrClosedPipe) {

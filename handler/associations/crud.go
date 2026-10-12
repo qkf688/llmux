@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/common"
@@ -45,6 +46,15 @@ func CreateModelProvider(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+
+	// 写入闸：上游模型名是关联的定义性字段，直接进出站 body 的 model，空必被上游 400
+	// （失败记在供应商头上、极端情况自动停用该关联），故不给「不指定上游名」兜底。
+	// 故意不用 binding:"required"：它只认空串，`"   "` 能过——而空格恰恰是 Update 侧
+	// 唯一能真正写进库的形态（见 types.go 的三态说明）。
+	if req.ProviderModel == nil || strings.TrimSpace(*req.ProviderModel) == "" {
+		httpresp.BadRequest(c, "provider_model is required")
+		return
+	}
 
 	// 校验 model 存在（手动关联始终允许，与现网一致）。
 	if _, err := repos().Model.Get(ctx, req.ModelID); err != nil {
@@ -88,7 +98,7 @@ func CreateModelProvider(c *gin.Context) {
 
 	modelProvider := models.ModelWithProvider{
 		ModelID:       req.ModelID,
-		ProviderModel: req.ProviderModel,
+		ProviderModel: *req.ProviderModel,
 		ProviderID:    req.ProviderID,
 		// 能力三态：nil 落库为 NULL = 继承 Model 能力真值（新建关联的默认态）。
 		ToolCall:         req.ToolCall,
@@ -151,6 +161,15 @@ func UpdateModelProvider(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+
+	// 写入闸（与 Create 同一口径，差别只在缺省）：传了就不得为空，判 TrimSpace
+	// ——全空格非零值会被 struct Updates 真正写进库，只判空串会漏掉这条路径。
+	// 缺省（nil）=不改：部分更新语义，原值保留（与其余字段一致）。
+	if req.ProviderModel != nil && strings.TrimSpace(*req.ProviderModel) == "" {
+		httpresp.BadRequest(c, "provider_model is required")
+		return
+	}
+
 	if _, err := repos().ModelWithProvider.Get(ctx, uint(id)); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			httpresp.NotFound(c, "Model-provider association not found")
@@ -189,12 +208,16 @@ func UpdateModelProvider(c *gin.Context) {
 	updates := models.ModelWithProvider{
 		ModelID:         req.ModelID,
 		ProviderID:      req.ProviderID,
-		ProviderModel:   req.ProviderModel,
 		WithHeader:      &req.WithHeader,
 		CustomerHeaders: customerHeaders,
 		Weight:          req.Weight,
 		Priority:        req.Priority,
 		MaxTokens:       req.MaxTokens,
+	}
+	// provider_model 是 *string 三态，不能直接进 struct（Updates 期待 string）：nil 时
+	// 保持零值让 GORM 跳过（缺省=不改），非 nil 时取解引用值（上面已判过非空）。
+	if req.ProviderModel != nil {
+		updates.ProviderModel = *req.ProviderModel
 	}
 
 	if err := repos().RunInTx(ctx, func(txRepos *repository.Repositories) error {

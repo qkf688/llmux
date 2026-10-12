@@ -66,6 +66,14 @@ models.ModelWithProvider
 
 > ⚠️ **同名能力语义在两个实体上键名相反**：`ModelWithProvider.ToolCall` 是 PascalCase（无 tag），`Model.tool_call` 是 snake_case（显式 tag）。跨实体复制字段时逐一核对，前端 interface 亦然。
 
+### `provider_model` 写入闸（上游模型名非空）
+
+`provider_model` 是关联的**定义性字段**——它直接进出站 body 的 `model`，空值必被上游 400，而该 400 不被 `classifyCredentialFailure` 认作凭据级失败，会落组织级失败分支：候选淘汰 + 衰减 + 失败记在供应商头上（极端情况自动停用该关联），真因却是本地表单留空。`BuildReq` 无任何兜底路径，「不指定上游名」不是合法配置形态，故**不给兜底，直接拒**。
+
+闸的判据是 **`TrimSpace` 后为空**，不是 `binding:"required"`——后者只认空串，`"   "` 能过；而**全空格恰恰是 Update 侧唯一能真正写进库的形态**（struct `Updates` 跳过空串零值=原值保留，全空格非零值照写）。两路径语义按 DTO 的三态 (`ProviderModel *string`) 分流：**Create 必填**（nil 或 trim 后为空 → 400），**Update 缺省 (nil) = 不改**（部分更新语义，与其余字段一致），传了但 trim 后为空 → 400。闸必须落在后端：Create 的空串只被前端 toast 拦了一道，直接调接口与 `handler/importexport`（整批写零值行，不映射该字段）都绕得开。
+
+拒绝经 `httpresp.BadRequest`（HTTP 200 + 信封 code=400），被拒不落库、不改旧值。契约测试：`crud_provider_model_guard_test.go`（Create 空串/全空格/键缺失三态、Update 全空格拒 + 省略保留 + 部分更新仍生效）。存量脏行按开发阶段原则直接修数据，**禁止**为兼容写发送侧适配层。
+
 ### `customer_headers` 写入闸（4a，与 api-keys 同源）
 
 Create / Update 对 `req.CustomerHeaders` 走 `common.SanitizeOutboundHeaders`（`common/outboundheaders.go`），与 api-keys key 级头**同一份净化器**、两域口径禁止分叉：① 名规范化为 MIME Title-Case（存储/回显/发送一套样子）；② 值拒 CR/LF/NUL 等控制字符；③ 规范化后撞名整体拒绝（Go map 迭代序随机，「后者赢」对 map 输入不可确定，唯一确定语义是拒）。这是语法关不是头名黑名单——Cookie / Authorization 等合法名照放，但凭据头最终由 auth_type 单源执法（见 chat-gateway.md / providers.md），配置压不动。拒绝经 `httpresp.BadRequest`（HTTP 200 + 信封 code=400，message 指明哪条头与原因），被拒不落库、不改旧值。存量脏行按开发阶段原则直接修数据，**禁止**为兼容写发送侧适配层。前端两弹窗折叠共用 `@/lib/header-rows`（`rowsToHeaders` / `headersToRows`），只校验到形状层（空名行跳过不打断输入），语法权威在服务端。契约测试：`customer_headers_guard_test.go`（HTTP 层断 400、不落库、规范化回显）。

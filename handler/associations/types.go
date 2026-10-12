@@ -6,8 +6,14 @@ type ModelWithProviderRequest struct {
 	// ProviderModel 是上游模型名（供应商侧的 model 标识），不是供应商名称。
 	// json 键与字段名对齐为 provider_model：旧键名 provider_name 与字段语义错位，
 	// 极易被误读成 Provider.Name（本仓其余域的 provider_name 确实都指供应商名称）。
-	ProviderModel string `json:"provider_model"`
-	ProviderID    uint   `json:"provider_id"`
+	//
+	// 为什么是 *string 三态而非 string：Create 与 Update 共享本 DTO，且缺省语义相反——
+	// Create 必填（建关联没有上游名等于建一条注定 400 的关联），Update 缺省=不改（部分更新）。
+	// 二态 string 分不出「键缺失」与「显式传空串」，会在 Update 上把「不改」误判成「清了」。
+	// 判空一律判 TrimSpace 后为空：Update 走 struct Updates，空串被 GORM 当零值跳过、
+	// 只有全空格能被真写进去，只判空串会漏掉这条真实可达路径。
+	ProviderModel *string `json:"provider_model"` // 三态：nil 由 handler 按 Create/Update 分别解释
+	ProviderID    uint    `json:"provider_id"`
 	// 能力三态（与 supports_thinking 同范式）：nil=继承 Model 的能力真值，true/false=override。
 	// 用 *bool 而非 bool：bool 无法区分「显式关闭」与「未传」，会把继承态静默改写成 override。
 	ToolCall         *bool             `json:"tool_call"`

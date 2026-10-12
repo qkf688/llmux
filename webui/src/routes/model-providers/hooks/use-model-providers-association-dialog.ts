@@ -71,7 +71,6 @@ export function useModelProvidersAssociationDialog({
 
     form.reset({
       model_id: association.ModelID,
-      provider_model: association.ProviderModel,
       provider_id: association.ProviderID,
       capabilities_mode: allInherit ? "inherit" : "custom",
       tool_call: capValues.tool_call,
@@ -107,7 +106,6 @@ export function useModelProvidersAssociationDialog({
 
     form.reset({
       model_id: selectedModelId || 0,
-      provider_model: "",
       provider_id: 0,
       capabilities_mode: "inherit", // 默认三项全部继承模型真值
       tool_call: capValues.tool_call,

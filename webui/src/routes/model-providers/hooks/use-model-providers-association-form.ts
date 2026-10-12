@@ -7,7 +7,6 @@ export function useModelProvidersAssociationForm() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       model_id: 0,
-      provider_model: "",
       provider_id: 0,
       // 能力默认全继承；勾选初值 false 只是占位——openEdit/openCreate 会用
       // 模型真值重填，避免用户切到「自定义」时看到与生效能力不符的空勾选。

@@ -9,8 +9,10 @@ export const headerPairSchema = z.object({
 
 export const formSchema = z.object({
   model_id: z.number().positive({ message: "模型ID必须大于0" }),
-  // 上游模型名（供应商侧的 model 标识），非供应商名称——与后端 provider_model 键同名
-  provider_model: z.string().default(""),
+  // 上游模型名（provider_model）不在此表中：它只来自「模型列表」弹窗的选择，由 Create 的
+  // overrides 传入。原先的「手动输入模型名称」输入框已删（影子路——它能产出的「目录里没有
+  // 的名字」正规入口已覆盖，且会被 autoassoc 的清理判为无效），编辑态也不再改该字段
+  // （后端 Update 缺省=不改，见 associations.md 的 provider_model 写入闸）。
   provider_id: z.number().min(0, { message: "提供商ID必须大于等于0" }),
   // 能力总控：inherit=三项全部跟随模型真值（不提交，后端写 NULL）；
   // custom=三项按下面的勾选显式指定。

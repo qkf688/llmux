@@ -6,7 +6,6 @@ export const buildAssociationPayload = (
   values: FormValues,
   overrides?: {
     providerId?: number;
-    providerModel?: string;
   }
 ) => {
   // 折叠语义与 api-keys 弹窗共用单源（@/lib/header-rows）；语法/撞名的最终判定
@@ -19,7 +18,9 @@ export const buildAssociationPayload = (
 
   return {
     model_id: values.model_id,
-    provider_model: (overrides?.providerModel ?? values.provider_model) || "",
+    // provider_model 不在此处产生：它只来自「模型列表」弹窗的选择，由 Create 调用点显式
+    // 加上（见 use-model-providers-association-mutations.ts 的 handleCreate）。Update 路径
+    // 刻意不带该键——后端契约是缺省=不改，显式发空串会被写入闸 400。
     provider_id: overrides?.providerId ?? values.provider_id,
     tool_call: capsInherit ? undefined : values.tool_call,
     structured_output: capsInherit ? undefined : values.structured_output,

@@ -5,7 +5,6 @@ import { buildAssociationPayload } from "./payload";
 function valuesWithHeaders(headers: { key: string; value: string }[]): FormValues {
   return {
     model_id: 1,
-    provider_model: "pm",
     provider_id: 1,
     capabilities_mode: "custom",
     tool_call: true,
@@ -47,6 +46,21 @@ describe("buildAssociationPayload customer_headers 折叠（与 api-keys 共用 
     expect(payload.supports_thinking).toBeUndefined();
     expect(payload.thinking_levels).toBeUndefined();
     expect(payload.customer_headers).toEqual({});
+  });
+});
+
+// buildPayload 刻意不产出 provider_model：Create 由调用点逐条注入（每条选中模型的
+// 上游名各不同），Update 则完全不发——后端契约是「缺省=不改」，显式发空串会被
+// 写入闸 400（见 docs/architecture/modules/associations.md 的 provider_model 写入闸）。
+describe("buildAssociationPayload 不产出 provider_model", () => {
+  it("Create 路径的 payload 里没有该键，由调用点补", () => {
+    expect(buildAssociationPayload(valuesWithHeaders([]))).not.toHaveProperty("provider_model");
+  });
+
+  it("带 providerId 覆盖时同样不产出（模型名不来自表单）", () => {
+    const payload = buildAssociationPayload(valuesWithHeaders([]), { providerId: 7 });
+    expect(payload).not.toHaveProperty("provider_model");
+    expect(payload.provider_id).toBe(7);
   });
 });
 

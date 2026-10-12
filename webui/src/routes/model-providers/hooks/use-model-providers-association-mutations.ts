@@ -13,10 +13,13 @@ import type { ProviderModelSelection } from "../types";
 
 type Setter<T> = (value: Updater<T>) => void;
 type CreatePayload = Parameters<typeof createModelProvider>[0];
+// buildPayload 不再产出 provider_model（它只来自模型列表选择，由 handleCreate 在调用点
+// 逐条注入），故其返回类型是 CreatePayload 去掉该键。
+type AssociationPayload = Omit<CreatePayload, "provider_model">;
 
 type UseModelProvidersAssociationMutationsInput = {
   form: UseFormReturn<FormValues>;
-  buildPayload: (values: FormValues, overrides?: { providerId?: number; providerModel?: string }) => CreatePayload;
+  buildPayload: (values: FormValues, overrides?: { providerId?: number }) => AssociationPayload;
 
   selectedModelId: number | null;
   settings: Settings | null;
@@ -57,40 +60,26 @@ export function useModelProvidersAssociationMutations({
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      if (selectedProviderModels.length > 0) {
-        const promises = selectedProviderModels.map(({ providerId, modelId }) =>
-          createModelProvider(
-            buildPayload(values, {
-              providerId,
-              providerModel: modelId,
-            })
-          )
-        );
-        await Promise.all(promises);
-        toast.success(`成功创建 ${selectedProviderModels.length} 个模型提供商关联`);
-      } else {
-        const modelName = values.provider_model?.trim();
-        if (!modelName) {
-          toast.error("请选择模型或手动输入模型名称");
-          return;
-        }
-        if (!values.provider_id || values.provider_id <= 0) {
-          toast.error("请选择具体的提供商");
-          return;
-        }
-        await createModelProvider(
-          buildPayload(values, {
-            providerId: values.provider_id,
-            providerModel: modelName,
-          })
-        );
-        toast.success("模型提供商关联创建成功");
+      // 上游模型名一律来自「模型列表」弹窗的选择：手动输入框已删（影子路，它能产出的
+      // 「目录里没有的名字」正规入口已覆盖且会被 autoassoc 清理判无效），故此处不再有
+      // 「没选模型时退回手输名」这条分支——没选就是没得建。
+      if (selectedProviderModels.length === 0) {
+        toast.error("请先在模型列表中选择模型");
+        return;
       }
+      const promises = selectedProviderModels.map(({ providerId, modelId }) =>
+        createModelProvider({
+          ...buildPayload(values, { providerId }),
+          // 每条选中模型的 provider_model 各自不同，故在调用点注入而非进 buildPayload。
+          provider_model: modelId,
+        })
+      );
+      await Promise.all(promises);
+      toast.success(`成功创建 ${selectedProviderModels.length} 个模型提供商关联`);
 
       setOpen(false);
       form.reset({
         model_id: selectedModelId || 0,
-        provider_model: "",
         provider_id: 0,
         capabilities_mode: "inherit",
         tool_call: false,
@@ -129,7 +118,6 @@ export function useModelProvidersAssociationMutations({
       setEditingAssociation(null);
       form.reset({
         model_id: 0,
-        provider_model: "",
         provider_id: 0,
         capabilities_mode: "inherit",
         tool_call: false,

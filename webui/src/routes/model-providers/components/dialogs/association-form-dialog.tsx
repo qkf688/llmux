@@ -301,19 +301,9 @@ export function AssociationFormDialog({
               </FormItem>
 
               {selectedProviderModels.length === 0 && (
-                <FormField
-                  control={form.control}
-                  name="provider_model"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>手动输入模型名称</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="输入提供商模型名称" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <p className="text-sm text-muted-foreground">
+                  请点上方「模型列表」选择模型。目录里没有的名字，请先到供应商页的「全部模型」里「添加模型」。
+                </p>
               )}
 
               <FormLabel>模型能力</FormLabel>

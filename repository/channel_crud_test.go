@@ -210,6 +210,63 @@ func TestKeyGroupRepo_CRUD(t *testing.T) {
 	}
 }
 
+// TestKeyGroupRepo_DeleteIsHard 钉分组删除是硬删（原先只打 deleted_at 标记）。
+// 判据打在 Unscoped 物理行数上——软删行的不可见正是它的伪装，普通计数改前改后都是 0。
+func TestKeyGroupRepo_DeleteIsHard(t *testing.T) {
+	ctx := context.Background()
+	db := newChannelTestDB(t)
+	repo := NewKeyGroupRepo(db)
+
+	group := &models.KeyGroup{ProviderID: 7, Name: "低价组"}
+	if err := repo.Create(ctx, group); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	affected, err := repo.Delete(ctx, group.ID)
+	if err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if affected != 1 {
+		t.Errorf("受影响行数 = %d, want 1", affected)
+	}
+
+	var leftover int64
+	if err := db.Unscoped().Model(&models.KeyGroup{}).Where("id = ?", group.ID).Count(&leftover).Error; err != nil {
+		t.Fatalf("unscoped count: %v", err)
+	}
+	if leftover != 0 {
+		t.Fatalf("删除后物理行数 = %d, want 0（仍为 1 = 走了软删）", leftover)
+	}
+}
+
+// TestEndpointRepo_DeleteIsHard 钉端点删除是硬删。理由同 TestKeyGroupRepo_DeleteIsHard。
+func TestEndpointRepo_DeleteIsHard(t *testing.T) {
+	ctx := context.Background()
+	db := newChannelTestDB(t)
+	repo := NewEndpointRepo(db)
+
+	endpoint := &models.Endpoint{ProviderID: 7, Protocol: "openai", Enabled: true}
+	if err := repo.Create(ctx, endpoint); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	affected, err := repo.Delete(ctx, endpoint.ID)
+	if err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if affected != 1 {
+		t.Errorf("受影响行数 = %d, want 1", affected)
+	}
+
+	var leftover int64
+	if err := db.Unscoped().Model(&models.Endpoint{}).Where("id = ?", endpoint.ID).Count(&leftover).Error; err != nil {
+		t.Fatalf("unscoped count: %v", err)
+	}
+	if leftover != 0 {
+		t.Fatalf("删除后物理行数 = %d, want 0（仍为 1 = 走了软删）", leftover)
+	}
+}
+
 // TestEndpointRepo_CountByProviderIDs 锁定按供应商聚合端点计数（列表徽标防 N+1）。
 func TestEndpointRepo_CountByProviderIDs(t *testing.T) {
 	ctx := context.Background()

@@ -270,3 +270,117 @@ func TestDefault_LazyFromModelsDB(t *testing.T) {
 		t.Error("SetDefault should replace Default instance")
 	}
 }
+
+// TestModelWithProviderRepo_DeleteIsHard 钉关联的四个删除方法都是硬删。
+//
+// 回归背景：本表四个删除方法原先走软删（只打 deleted_at 标记、行永远留在库里）。
+// 本表无唯一索引，残留不会挡重建，但它没有任何读取面（无恢复入口、无回收站、
+// 统计页与列表页均走软删作用域，健康检测与请求日志存的是名称快照而非回查 ID），
+// 唯一效果是每删一次就累积一行看不见的数据。已与 pools / credentials /
+// virtual_models / api_keys 的硬删口径统一。
+//
+// 判据必须打在 **Unscoped 计数**上：软删行的「看不见」正是它的伪装，用普通查询
+// 计数在改前改后都是 0，锁不住这条契约。四个方法各断一次——同构调用点互不覆盖。
+func TestModelWithProviderRepo_DeleteIsHard(t *testing.T) {
+	ctx := context.Background()
+
+	// hardCount 用 Unscoped 数物理行数（软删行也计入），这是区分硬删/软删的唯一观测点。
+	hardCount := func(t *testing.T, db *gorm.DB) int64 {
+		t.Helper()
+		var n int64
+		if err := db.Unscoped().Model(&models.ModelWithProvider{}).Count(&n).Error; err != nil {
+			t.Fatalf("unscoped count: %v", err)
+		}
+		return n
+	}
+
+	// seed 造两条关联：一条归 (model 1, provider 10)，另一条归 (model 2, provider 20)。
+	seed := func(t *testing.T, db *gorm.DB) (uint, uint) {
+		t.Helper()
+		repo := NewModelWithProviderRepo(db)
+		trueVal := true
+		a := &models.ModelWithProvider{ModelID: 1, ProviderID: 10, ProviderModel: "gpt-4", Status: &trueVal}
+		b := &models.ModelWithProvider{ModelID: 2, ProviderID: 20, ProviderModel: "claude", Status: &trueVal}
+		for _, row := range []*models.ModelWithProvider{a, b} {
+			if err := repo.Create(ctx, row); err != nil {
+				t.Fatalf("seed Create: %v", err)
+			}
+		}
+		return a.ID, b.ID
+	}
+
+	tests := []struct {
+		name string
+		// del 执行被测删除方法，返回它报告的受影响行数。
+		del func(t *testing.T, repo ModelWithProviderRepo, aID, bID uint) int64
+		// wantLeft 删除后应剩的物理行数。
+		wantLeft int64
+	}{
+		{
+			name: "Delete 按 ID",
+			del: func(t *testing.T, repo ModelWithProviderRepo, aID, _ uint) int64 {
+				n, err := repo.Delete(ctx, aID)
+				if err != nil {
+					t.Fatalf("Delete: %v", err)
+				}
+				return n
+			},
+			wantLeft: 1,
+		},
+		{
+			name: "DeleteByIDs 批量",
+			del: func(t *testing.T, repo ModelWithProviderRepo, aID, bID uint) int64 {
+				n, err := repo.DeleteByIDs(ctx, []uint{aID, bID})
+				if err != nil {
+					t.Fatalf("DeleteByIDs: %v", err)
+				}
+				return n
+			},
+			wantLeft: 0,
+		},
+		{
+			name: "DeleteByProviderID 级联供应商",
+			del: func(t *testing.T, repo ModelWithProviderRepo, _, _ uint) int64 {
+				n, err := repo.DeleteByProviderID(ctx, 10)
+				if err != nil {
+					t.Fatalf("DeleteByProviderID: %v", err)
+				}
+				return n
+			},
+			wantLeft: 1,
+		},
+		{
+			name: "DeleteByModelID 级联模型",
+			del: func(t *testing.T, repo ModelWithProviderRepo, _, _ uint) int64 {
+				n, err := repo.DeleteByModelID(ctx, 1)
+				if err != nil {
+					t.Fatalf("DeleteByModelID: %v", err)
+				}
+				return n
+			},
+			wantLeft: 1,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			db := newAssocTestDB(t)
+			repo := NewModelWithProviderRepo(db)
+			aID, bID := seed(t, db)
+
+			if got := hardCount(t, db); got != 2 {
+				t.Fatalf("seed 物理行数 = %d, want 2", got)
+			}
+
+			affected := tc.del(t, repo, aID, bID)
+			if want := int64(2 - tc.wantLeft); affected != want {
+				t.Errorf("%s 受影响行数 = %d, want %d", tc.name, affected, want)
+			}
+
+			// 关键断言：物理行数下降。软删实现下这一步恒为 2（行还在，只是被标记）。
+			if got := hardCount(t, db); got != tc.wantLeft {
+				t.Fatalf("删除后物理行数 = %d, want %d（仍为原值 = 走了软删）", got, tc.wantLeft)
+			}
+		})
+	}
+}

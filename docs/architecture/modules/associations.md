@@ -74,6 +74,14 @@ models.ModelWithProvider
 
 拒绝经 `httpresp.BadRequest`（HTTP 200 + 信封 code=400），被拒不落库、不改旧值。契约测试：`crud_provider_model_guard_test.go`（Create 空串/全空格/键缺失三态、Update 全空格拒 + 省略保留 + 部分更新仍生效）。存量脏行按开发阶段原则直接修数据，**禁止**为兼容写发送侧适配层。
 
+### 删除语义（硬删，2026-10-12）
+
+`ModelWithProviderRepo` 的四个删除方法（`Delete` / `DeleteByIDs` / `DeleteByProviderID` / `DeleteByModelID`）一律 `Unscoped()` **硬删**，与 `pools` / `credentials` / `virtual_models` / `api_keys` 口径统一。
+
+与号池那张表不同，**本表无唯一索引**，软删残留不会挡同名重建——所以这条改动治的不是 bug，是**纯包袱**：软删只打 `deleted_at` 标记、行永远留在库里，而本表没有任何读取面能看见它们（无恢复入口、无回收站、`handler/database` 统计页与列表页均走软删作用域，健康检测日志与请求日志存的是**名称快照**而非回查 ID，也无外键指向本表），唯一效果是每删一次累积一行看不见的数据。回归 `TestModelWithProviderRepo_DeleteIsHard`（四个方法各断一次，判据打在 `Unscoped` 物理行数上——软删行的「不可见」正是它的伪装，普通计数改前改后都是 0）。
+
+> 同批改动的还有 `KeyGroupRepo.Delete` 与 `EndpointRepo.Delete`（同理由，见 [channel-routing.md](channel-routing.md)）。
+
 ### `customer_headers` 写入闸（4a，与 api-keys 同源）
 
 Create / Update 对 `req.CustomerHeaders` 走 `common.SanitizeOutboundHeaders`（`common/outboundheaders.go`），与 api-keys key 级头**同一份净化器**、两域口径禁止分叉：① 名规范化为 MIME Title-Case（存储/回显/发送一套样子）；② 值拒 CR/LF/NUL 等控制字符；③ 规范化后撞名整体拒绝（Go map 迭代序随机，「后者赢」对 map 输入不可确定，唯一确定语义是拒）。这是语法关不是头名黑名单——Cookie / Authorization 等合法名照放，但凭据头最终由 auth_type 单源执法（见 chat-gateway.md / providers.md），配置压不动。拒绝经 `httpresp.BadRequest`（HTTP 200 + 信封 code=400，message 指明哪条头与原因），被拒不落库、不改旧值。存量脏行按开发阶段原则直接修数据，**禁止**为兼容写发送侧适配层。前端两弹窗折叠共用 `@/lib/header-rows`（`rowsToHeaders` / `headersToRows`），只校验到形状层（空名行跳过不打断输入），语法权威在服务端。契约测试：`customer_headers_guard_test.go`（HTTP 层断 400、不落库、规范化回显）。

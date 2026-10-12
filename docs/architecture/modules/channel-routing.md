@@ -66,6 +66,7 @@ consts/protocol.go        # Protocol* 常量 + ProtocolOfType（type→protocol�
 | `DropCustomModels(config) → string` | 剥 `custom_models` 使 `Models()` 真打上游（不剥则 openai/anthropic 本地短路返回自定义列表 → 管理端浏览拿不到上游授权集、探活把失效 key 误判成功并误恢复 active）。空串/无该键原样返回（不重跑 marshal 改键序） | `service/channel/probe.go` | 同文件 |
 | `consts.TypeOfProtocol` / `WireFormatOfProtocol` | 端点协议 → provider 注册类型 / wire format（responses ↔ openai-res；未知协议不兜底）；与 `ProtocolOfType` 反向 | `consts/protocol.go` | 同文件 |
 | 轮询指针语义 | 进程内内存态 + `sync.Mutex`；选择即推进单轨（无成功后回调——凭据层失败转移本就跳选）；多实例部署不同步可接受 | `service/channel/rrstate.go` | 同文件 |
+| 端点/分组删除语义 | `EndpointRepo.Delete` 与 `KeyGroupRepo.Delete` 一律 `Unscoped()` **硬删**（2026-10-12，与 pools / credentials / virtual_models / api_keys 统一）。两张表都**无唯一索引**，软删残留不挡重建，但它没有任何读取面（无恢复入口、统计页与列表页走软删作用域、请求日志存名称快照而非回查 ID），留着只是每删一次累积一行看不见的数据。调用点：端点/分组在 `handler/providerapi/structured.go` 的表单同步里按差集删除。回归 `TestEndpointRepo_DeleteIsHard` / `TestKeyGroupRepo_DeleteIsHard`（判据打在 `Unscoped` 物理行数上） | `repository/endpoint.go` / `repository/key_group.go` | `handler/providerapi` |
 
 ## 5. 特殊约定
 

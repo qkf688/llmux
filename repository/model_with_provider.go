@@ -49,17 +49,17 @@ type ModelWithProviderRepo interface {
 	DecayWeight(ctx context.Context, id uint, step, floor int) (int64, error)
 	// DecayPriority 原子自减 priority（带下限钳制：已在下限则不变，否则 MAX(priority-step, floor)），返回受影响行数。
 	DecayPriority(ctx context.Context, id uint, step, floor int) (int64, error)
-	// Delete 根据 ID 删除关联，返回受影响行数。
+	// Delete 根据 ID 硬删关联，返回受影响行数。
 	Delete(ctx context.Context, id uint) (int64, error)
-	// DeleteByIDs 批量删除关联，返回受影响行数。
+	// DeleteByIDs 批量硬删关联，返回受影响行数。
 	DeleteByIDs(ctx context.Context, ids []uint) (int64, error)
 	// UpdateByIDs 批量更新关联字段（GORM Updates：结构体零值字段不写入），返回受影响行数。
 	UpdateByIDs(ctx context.Context, ids []uint, updates models.ModelWithProvider) (int64, error)
 	// UpdateFieldsByIDs 按列名批量更新关联（可写入零值），返回受影响行数。
 	UpdateFieldsByIDs(ctx context.Context, ids []uint, fields map[string]any) (int64, error)
-	// DeleteByProviderID 删除指定供应商下的全部关联，返回受影响行数。
+	// DeleteByProviderID 硬删指定供应商下的全部关联，返回受影响行数。
 	DeleteByProviderID(ctx context.Context, providerID uint) (int64, error)
-	// DeleteByModelID 删除指定模型下的全部关联，返回受影响行数。
+	// DeleteByModelID 硬删指定模型下的全部关联，返回受影响行数。
 	DeleteByModelID(ctx context.Context, modelID uint) (int64, error)
 }
 
@@ -195,8 +195,12 @@ func (r *modelWithProviderRepo) DecayPriority(ctx context.Context, id uint, step
 	return result.RowsAffected, result.Error
 }
 
+// 删除类方法一律 Unscoped 硬删（与 pools / credentials / virtual_models / api_keys 口径统一）。
+// 本表无唯一索引，软删残留不会挡重建，但「删除只打标记、行永远留在库里」是纯包袱：
+// 无任何读取面能看见它们（无恢复入口、无回收站、统计页与列表页均走软删作用域，
+// 健康检测与请求日志存的是名称快照而非回查 ID），只会随每次删除累积。
 func (r *modelWithProviderRepo) Delete(ctx context.Context, id uint) (int64, error) {
-	result := r.db.WithContext(ctx).Where("id = ?", id).Delete(&models.ModelWithProvider{})
+	result := r.db.WithContext(ctx).Unscoped().Delete(&models.ModelWithProvider{}, id)
 	return result.RowsAffected, result.Error
 }
 
@@ -204,7 +208,7 @@ func (r *modelWithProviderRepo) DeleteByIDs(ctx context.Context, ids []uint) (in
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	result := r.db.WithContext(ctx).Where("id IN ?", ids).Delete(&models.ModelWithProvider{})
+	result := r.db.WithContext(ctx).Unscoped().Where("id IN ?", ids).Delete(&models.ModelWithProvider{})
 	return result.RowsAffected, result.Error
 }
 
@@ -225,11 +229,11 @@ func (r *modelWithProviderRepo) UpdateFieldsByIDs(ctx context.Context, ids []uin
 }
 
 func (r *modelWithProviderRepo) DeleteByProviderID(ctx context.Context, providerID uint) (int64, error) {
-	result := r.db.WithContext(ctx).Where("provider_id = ?", providerID).Delete(&models.ModelWithProvider{})
+	result := r.db.WithContext(ctx).Unscoped().Where("provider_id = ?", providerID).Delete(&models.ModelWithProvider{})
 	return result.RowsAffected, result.Error
 }
 
 func (r *modelWithProviderRepo) DeleteByModelID(ctx context.Context, modelID uint) (int64, error) {
-	result := r.db.WithContext(ctx).Where("model_id = ?", modelID).Delete(&models.ModelWithProvider{})
+	result := r.db.WithContext(ctx).Unscoped().Where("model_id = ?", modelID).Delete(&models.ModelWithProvider{})
 	return result.RowsAffected, result.Error
 }

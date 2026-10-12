@@ -23,7 +23,7 @@ type KeyGroupRepo interface {
 	Update(ctx context.Context, id uint, group *models.KeyGroup) error
 	// UpdateFields 按字段 map 更新（map 可显式写 NULL，绕过 struct 零值跳过语义）。
 	UpdateFields(ctx context.Context, id uint, fields map[string]any) (int64, error)
-	// Delete 根据 ID 删除分组，返回受影响行数。
+	// Delete 根据 ID 硬删分组，返回受影响行数。
 	Delete(ctx context.Context, id uint) (int64, error)
 	// CountByPoolIDs 返回每个号池被分组引用的次数（key_groups.PoolID 指向该号池）。
 	// 号池删除守卫用：被引用（>0）时禁止删除。无引用的号池不产生条目。
@@ -85,8 +85,11 @@ func (r *keyGroupRepo) UpdateFields(ctx context.Context, id uint, fields map[str
 	return result.RowsAffected, result.Error
 }
 
+// Delete 硬删分组（与 pools / credentials / virtual_models / api_keys 口径统一）。
+// 本表无唯一索引，软删残留不会挡重建，但它同样没有任何读取面（无恢复入口、
+// 统计页与列表页均走软删作用域），留着只会随每次删除累积。
 func (r *keyGroupRepo) Delete(ctx context.Context, id uint) (int64, error) {
-	result := r.db.WithContext(ctx).Delete(&models.KeyGroup{}, id)
+	result := r.db.WithContext(ctx).Unscoped().Delete(&models.KeyGroup{}, id)
 	return result.RowsAffected, result.Error
 }
 

@@ -20,7 +20,7 @@ type EndpointRepo interface {
 	Update(ctx context.Context, id uint, endpoint *models.Endpoint) error
 	// UpdateFields 按字段 map 更新（map 可显式写空串/false）。
 	UpdateFields(ctx context.Context, id uint, fields map[string]any) (int64, error)
-	// Delete 根据 ID 删除端点，返回受影响行数。
+	// Delete 根据 ID 硬删端点，返回受影响行数。
 	Delete(ctx context.Context, id uint) (int64, error)
 	// CountByProviderIDs 返回每个供应商的端点数量（供应商列表徽标用）。
 	// 无端点的供应商不产生条目（调用方对缺失键按 0 处理）。
@@ -68,8 +68,11 @@ func (r *endpointRepo) UpdateFields(ctx context.Context, id uint, fields map[str
 	return result.RowsAffected, result.Error
 }
 
+// Delete 硬删端点（与 pools / credentials / virtual_models / api_keys 口径统一）。
+// 本表无唯一索引，软删残留不会挡重建，但它同样没有任何读取面（无恢复入口、
+// 统计页与列表页均走软删作用域），留着只会随每次删除累积。
 func (r *endpointRepo) Delete(ctx context.Context, id uint) (int64, error) {
-	result := r.db.WithContext(ctx).Delete(&models.Endpoint{}, id)
+	result := r.db.WithContext(ctx).Unscoped().Delete(&models.Endpoint{}, id)
 	return result.RowsAffected, result.Error
 }
 

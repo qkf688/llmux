@@ -129,3 +129,45 @@ func TestGetModels_ResponseShapeLocked(t *testing.T) {
 	testutil.AssertAPIResponseKeysInState(t, body, `data.#(Name=="m-full")`, realModelKeysWithLevels, testutil.KeyStateSet)
 	testutil.AssertAPIResponseKeysInState(t, body, `data.#(Name=="m-nulls")`, realModelKeysWithoutLevels, testutil.KeyStateUnset)
 }
+
+// TestGetModels_EmptyListKeepsDataKey 锁「空列表时 data 键仍在且是数组」。
+//
+// 背景（2026-10-12，线 B #2）：find-issues `2026-09-29-httpresp-Data-omitempty空列表缺data键.md`
+// 声称空列表会让 `data` 键整个消失（前端读到 undefined、`.map()` 炸）。**实测是误报**——
+// 该文档把「类型化 nil 切片」与「untyped nil」当成一回事。三层取证：
+//  1. `Data any` 上的 omitempty 判的是**接口是否为 nil**，不是底层值：类型化 nil 切片
+//     序列化成 `"data":null`（键在），只有「从未赋值」才省略键；
+//  2. GORM `Find` 零结果返回**非 nil 空切片**（`rows == nil` 为 false）→ `"data":[]`；
+//  3. 本用例即端到端实测：空库打 GetModels，`data` 键在且是数组。
+//
+// 键缺失只发生在 Data 从未赋值的错误响应上（BadRequest / NotFound / Unauthorized /
+// InternalErrorMessage 都不写 Data），那是**有意**契约（成功带 data、失败带 error）。
+//
+// 所以本用例不修任何生产代码，而是把这个既成形状**锁住**：将来若有人给 Response 改标签、
+// 或用 `c.JSON(200, gin.H{...})` 绕开 httpresp 手搓，空列表形状先在这里变红。
+// 断言同时要 `Exists()` 与 `IsArray()`：前者防键缺失，后者防退化成 `null`。
+func TestGetModels_EmptyListKeepsDataKey(t *testing.T) {
+	testsupport.InitTestDB(t) // 建空库，不插任何模型
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/models", nil)
+	GetModels(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+
+	data := gjson.Get(body, "data")
+	if !data.Exists() {
+		t.Fatalf("空列表响应缺 data 键（前端会读到 undefined）: %s", body)
+	}
+	if !data.IsArray() {
+		t.Fatalf("空列表的 data 不是数组（应为 [] 而非 null）: type=%v body=%s", data.Type, body)
+	}
+	if n := len(data.Array()); n != 0 {
+		t.Fatalf("空库列表长度 = %d, want 0; body=%s", n, body)
+	}
+}

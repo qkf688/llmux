@@ -153,10 +153,18 @@ func createProcesser(cfg processerConfig) Processer {
 			return nil, nil, err
 		}
 
+		// 分子取 completion_tokens（TPS 语义 = 生成速度），不用 TotalTokens：后者含
+		// prompt，长上下文下算出来的不是速度而是「输入有多少」的假象——现场一条
+		// prompt 48 万 / 生成 234 的请求，用 total 做分子把数值放大了约 2000 倍。
+		//
+		// 注意分母仍不可信：chunkTime 是「首帧到达 → 流读完」窗口，上游成批下发
+		// （或对 stream 请求回整体 body）时该窗口塌到亚毫秒级，商照样爆表；此处的
+		// `> 0` 只防除零、不表达「窗口小到测不出速度」。窗口的可测性判据另案，别把
+		// 本行读成「TPS 已经准了」。
 		chunkTime := time.Since(start) - firstChunkTime
 		var tps float64
 		if chunkTime.Seconds() > 0 {
-			tps = float64(usage.TotalTokens) / chunkTime.Seconds()
+			tps = float64(usage.CompletionTokens) / chunkTime.Seconds()
 		}
 
 		return &models.ChatLog{

@@ -153,18 +153,26 @@ func createProcesser(cfg processerConfig) Processer {
 			return nil, nil, err
 		}
 
-		// 分子取 completion_tokens（TPS 语义 = 生成速度），不用 TotalTokens：后者含
-		// prompt，长上下文下算出来的不是速度而是「输入有多少」的假象——现场一条
-		// prompt 48 万 / 生成 234 的请求，用 total 做分子把数值放大了约 2000 倍。
+		// TPS = completion_tokens / 整段耗时。
 		//
-		// 注意分母仍不可信：chunkTime 是「首帧到达 → 流读完」窗口，上游成批下发
-		// （或对 stream 请求回整体 body）时该窗口塌到亚毫秒级，商照样爆表；此处的
-		// `> 0` 只防除零、不表达「窗口小到测不出速度」。窗口的可测性判据另案，别把
-		// 本行读成「TPS 已经准了」。
-		chunkTime := time.Since(start) - firstChunkTime
+		// 分子不用 TotalTokens：它含 prompt，长上下文下算出来的不是速度而是「输入有
+		// 多少」的假象——现场一条 prompt 48 万 / 生成 234 的请求，用 total 做分子把
+		// 数值放大了约 2000 倍。
+		//
+		// 分母不用 chunkTime（首帧 → 末帧）：上游把响应成批下发时该窗口会塌到亚毫秒级，
+		// 商随之爆表——同一条请求曾算出 7.8 亿。整段耗时没有这个失效形态，且与面板
+		// 「代理耗时」同源（都以 ReqStart 为零点），两格相除即得本值、语义可直接核对。
+		// 代价：首包等待计入分母，故本值答的是「这次请求多快」而非「模型吐字多快」；
+		// 想比较两个模型的吐字速度，它答不了（四个参考项目在这点上做法各不相同，
+		// 没有公认口径，别照本行反推）。
+		//
+		// 上游未给 completion_tokens 时分子为 0，落库即 0——与 usage 各处的
+		// 「没拿到即 0」一致（面板「Token 使用」栏的输出格同时为 0，两格并看不会误读）。
+		elapsed := time.Since(start)
+		chunkTime := elapsed - firstChunkTime
 		var tps float64
-		if chunkTime.Seconds() > 0 {
-			tps = float64(usage.CompletionTokens) / chunkTime.Seconds()
+		if elapsed > 0 {
+			tps = float64(usage.CompletionTokens) / elapsed.Seconds()
 		}
 
 		return &models.ChatLog{

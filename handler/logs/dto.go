@@ -39,7 +39,14 @@ type chatLogResponse struct {
 	ProxyTime      time.Duration `json:"proxy_time"`
 	FirstChunkTime time.Duration `json:"first_chunk_time"`
 	ChunkTime      time.Duration `json:"chunk_time"`
-	Tps            float64       `json:"tps"`
+	// Tps 口径 = completion_tokens / proxy_time（整段耗时），单源于 service/chat
+	// 的 processer。**不要改回「首帧→末帧」**：上游成批下发时那个窗口会塌到
+	// 亚毫秒级、商爆炸（现场曾算出 7.8 亿）。
+	//
+	// 口径含义要如实转述给使用者：首包等待计入分母，故它答的是「这次请求多快」，
+	// 不是「模型吐字多快」——想比较两个模型的吐字速度，本字段答不了。
+	// 上游未给 completion_tokens 时本值为 0（与 usage 各处「没拿到即 0」一致）。
+	Tps float64 `json:"tps"`
 
 	// details 两个子结构直接复用 models 侧的值对象：它们已是 snake_case
 	// 且无持久化语义，再复制一份定义只会产生两处需要同步的真相。

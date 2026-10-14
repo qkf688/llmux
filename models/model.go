@@ -392,7 +392,9 @@ type ChatLog struct {
 	ProxyTime      time.Duration // 代理耗时
 	FirstChunkTime time.Duration // 首个chunk耗时
 	ChunkTime      time.Duration // chunk耗时
-	Tps            float64
+	// Tps = completion_tokens / 整段耗时（秒）。口径单源见 service/chat 的
+	// createProcesser（含「为什么不用首帧→末帧窗口」的理由），此处只落库不自算。
+	Tps float64
 	Usage
 
 	// UsageSource 标记本条 usage 的来源，用于排查「token 全为 0」是上游没给

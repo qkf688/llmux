@@ -92,6 +92,11 @@ models/retention.go
 
   侧信道 / processer 落库（经 `models.UsageFromMap`）与流式客户端写出点（三处统一走 `streaming/usage_wire.go` 的 `usageWireFromModel`：`responses_to_openai.go` 的 usage 尾包、`openai_to_responses.go` 与 `anthropic_to_responses.go` 的 `response.completed`）共用这一判据——此前写出点直写上游原值、缺失时写出 0（anthropic 出站更是硬算 `input+output`），与落库侧分叉，造成同一次请求「客户端看到的 total 与 DB 记录不一致」。**已知缺口**：非流入站的两处 DTO→unified 映射（`service/responses/response_parse.go`、`service/transform/openai/response.go`）仍直取上游原值未过该函数
 - 各 style processer 认的字段不同：openai 取根级 `usage`（不解析 `choices`，故天然免疫 OpenAI 的 `choices:[]` usage 尾包）、anthropic 取 `message_delta.usage`、openai-res 取 `response.completed` 内的 usage。这些只在 `downstream` / `passthrough` 路径生效
+- **`ChatLog.Tps` 的口径是 `completion_tokens / 整段耗时`（2026-10-14 定案）**，计算单源在 `service/chat/process.go` 的 `createProcesser`（三个 processer 共用一个闭包，改一处即全改）。两条都要记住，否则会改回去：
+  - **分子必须是 completion**：用 `total_tokens` 会把 prompt 算进「每秒生成」，长上下文下数值被放大数千倍（现场一条 prompt 48 万 / 生成 234 的请求算出 7.8 亿）。
+  - **分母必须是整段耗时**（`elapsed = time.Since(start)`，与面板「代理耗时」同源，都以 `ReqStart` 为零点）。**不要改回「首帧 → 末帧」的 `chunkTime`**：上游成批下发（憋到最后一次性 flush，或对 stream 请求回整体 body）时该窗口塌到亚毫秒级、商爆炸；且那类请求不分供应商、不分流式与否地偶发存在，没有可靠阈值可切。四个参考项目（new-api / axonhub / octopus 二开）分子一致用 completion，分母是否用生成窗口则各家不同且四种兜底互不相同——**无公认口径**，别照其中一家反推。
+  - **语义如实转述**：首包等待计入分母，故本值答「这次请求多快」，**不是**「模型吐字多快」；比较两个模型的生成速度时它答不了。上游未给 completion 时本值为 0（与 usage 各处「没拿到即 0」一致，面板「Token 使用」栏的输出格同时为 0）。
+  - 回归：`service/chat/process_tps_test.go`（判据拿 `FirstChunkTime + ChunkTime` 反算整段耗时，两条口径差一个 `FirstChunkTime` 即被检出）。存量行重算脚本：`restore-tps.ps1`（需停机，由使用者执行）
 
 
 ---

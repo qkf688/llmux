@@ -113,3 +113,29 @@ func settleRequestBuildFailureDecay(input singleProviderAttemptInput) {
 	adjustment.ApplyWeightDecayByModelProviderID(settlement.Ctx, input.ModelWithProvider.ID, input.Provider.Name, input.ModelWithProvider.ProviderModel)
 	adjustment.ApplyPriorityDecayByModelProviderID(settlement.Ctx, input.ModelWithProvider.ID, input.Provider.Name, input.ModelWithProvider.ProviderModel)
 }
+
+// settlePostCommitFailure 把「响应已开写之后的供应商侧失败」计入调度账（Stage 44 拍板，
+// 2026-10-16）：累计关联连续失败 + 权重/优先级衰减（后两者按设置项，默认关闭）。
+//
+// 只到组织级、不碰凭据：本分支在日志侧事后跑，拿不到「服务这次请求的那把 key」，而且
+// 中途腰斩的成因常在链路（库里可见 read tcp 网络读错），冷却单个 key 会误伤同组其它
+// key——拍板取「只降权不冷却」。须知代价：默认设置下自动衰减是关的，故实际后果是
+// 「连败达阈值（默认 3）自动停用该关联」，而停用原因不入库、后台只见「已停用」（缺口
+// 已登记 find-issues）。
+//
+// 入参 ctx 是日志侧的任务 ctx（bgtask），不是请求 ctx——提交后失败时请求 ctx 往往已经
+// 死了，故「这次该不该记供应商账」由错误方向判据（providerAtFault，调用方据它决定是否
+// 调用本函数）给出，而不是 requestAbandoned；这里仍走 beginFailureSettlement 只为走
+// 单源派生出不陪葬的写库 ctx（结算写库 ctx 只此一处派生，OCP）。
+func settlePostCommitFailure(ctx context.Context, in RecordLogInput) {
+	if in.ServingModelWithProviderID == 0 {
+		return // 没落到具体关联（0 = 无可比对对象）：没有可记的账
+	}
+	settlement := beginFailureSettlement(ctx)
+	defer settlement.Close()
+	if !settlement.Active {
+		return
+	}
+	// 日志标签用真实模型名：本分支拿不到上游模型名（RecordLogInput 不带 ProviderModel）。
+	applyProviderFailureAdjustments(settlement.Ctx, in.ServingModelWithProviderID, in.ProviderName, in.RealModelName)
+}

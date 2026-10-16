@@ -57,8 +57,10 @@ func IsClientWriteErr(err error) bool {
 //     第三种失败源**，默认会被兜成「客户端」；但它的诱因通常是上游吐了让解析器提前退出
 //     的内容，账该记在上游（2026-10-04 拍板）。注意这**只**改统计面：清钉与留痕级别
 //     两处走 clientSideFailure，其中 isClientDisconnectErr 自 Stage 24（commit 4d1264a
-//     「断连类降 Warn」）起就把 io.ErrClosedPipe 直接算断连，与本标记是两条独立判据，
-//     改那一行属动既有口径，待拍板。
+//     「断连类降 Warn」）起就把 io.ErrClosedPipe 直接算断连，与本标记是两条独立判据。
+//     Stage 44（2026-10-16）拍板：这一格**先取证再定**——该形态是否真能走到记账点尚无
+//     样本（全库 5 周零命中，且日志侧收工时本标记的写入路径已结束），故暂时维持现状，
+//     插桩在 handler/v1/chat.go 的提交后写失败分支，见 .local/find-issues/2026-10-04-tee收尾…md。
 func MarkResponseWriteError(ctx context.Context, err error) error {
 	if err == nil {
 		return nil

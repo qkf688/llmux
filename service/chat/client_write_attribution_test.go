@@ -215,13 +215,17 @@ func TestMarkResponseWriteError_LogPipeTeardown_NotMarked(t *testing.T) {
 	}
 }
 
-// TestRecordLog_ClientWriteCutoff_SkipsProviderFailureStat 锁 Stage 39 R3 的统计面：
-// 带**写侧标记**的错误不记供应商失败；上游腰斩、客户端断连、以及 2026-10-04 拍板的
-// 两格（总时限已耗尽 / 日志管道提前收尾）照旧记。
+// TestRecordLog_PostCommitFailure_ProviderFailureStat 锁提交后失败在**统计面**的归属
+// （单源判据 providerAtFault，Stage 44 拍板 2026-10-16）：供应商侧真故障记一次失败；
+// 调用方撤走整族（写回被掐 / 客户端点停止断连）都不记——供应商把内容吐了一半是调用方
+// 自己不要了，记它会让面板上的成功率跟着调用方的操作习惯波动。
 //
-// 变异自检验证——去掉 `if !IsClientWriteErr(err)` 这一层（= 改动前）：
-// 第一条用例 failure_count 由 0 变 1 → 红。
-func TestRecordLog_ClientWriteCutoff_SkipsProviderFailureStat(t *testing.T) {
+// 2026-10-04 拍板的两格（总时限已耗尽 / 日志管道提前收尾）在此口径下仍记供应商侧：
+// 前者是「预算烧完算慢供应商」，后者归属待取样结论（见 tee 那格的待办）。
+//
+// 变异自检验证——把守卫改回 `!IsClientWriteErr(err)`（= 改动前）：
+// 「客户端撤走」一条 failure_count 由 0 变 1 → 红。
+func TestRecordLog_PostCommitFailure_ProviderFailureStat(t *testing.T) {
 	// 标记的判定只在 MarkResponseWriteError 内部，故此处都用「总时限未到」的活 ctx 造
 	// 标记（写侧标记要成立得过打标函数这一关，两格例外见后两条用例）。
 	live := context.Background()
@@ -247,10 +251,10 @@ func TestRecordLog_ClientWriteCutoff_SkipsProviderFailureStat(t *testing.T) {
 			why:         "供应商侧真故障，既有口径",
 		},
 		{
-			name:        "客户端断连→照旧记一次失败",
+			name:        "客户端撤走(点停止/关页面)→不记供应商失败",
 			procErr:     fmt.Errorf("write response body failed: %w", context.Canceled),
-			wantFailure: 1,
-			why:         "既有口径（Stage 24/33），本次刻意不动；与写被掐的差异已登记 find-issues",
+			wantFailure: 0,
+			why:         "2026-10-16 拍板：与写回被掐同族，同一个「调用方不要了」不再按代码路径分两种归属",
 		},
 		{
 			name:        "总时限已耗尽→照旧记一次失败",
@@ -280,6 +284,90 @@ func TestRecordLog_ClientWriteCutoff_SkipsProviderFailureStat(t *testing.T) {
 
 			if got := providerFailureCount(t, "p"); got != tc.wantFailure {
 				t.Fatalf("供应商失败计数 = %d, want %d（%s）", got, tc.wantFailure, tc.why)
+			}
+		})
+	}
+}
+
+// consecutiveFailures 读该关联的连续失败计数（行不存在时 FATAL：本矩阵的每一格都必须
+// 打在真实写出的行上，读不到行说明夹具没了，不能静默当 0 放过）。
+func consecutiveFailures(t *testing.T, mwpID uint) int {
+	t.Helper()
+	var row models.ModelWithProvider
+	if err := models.DB.First(&row, mwpID).Error; err != nil {
+		t.Fatalf("读关联连续失败计数失败（id=%d）: %v", mwpID, err)
+	}
+	return row.ConsecutiveFailures
+}
+
+// TestRecordLog_PostCommitFailure_SettlesConsecutiveFailures 锁 Stage 44 拍板（2026-10-16）：
+// 响应已开写后的**供应商侧**失败要计入调度账——关联连续失败 +1（它也是「连败达阈值自动
+// 停用该关联」的输入），而调用方撤走整族（客户端点停止 / 写回被掐）不记。与上面的统计面
+// 矩阵共用同一判据（providerAtFault），两本账不再对同一现场给出相反归属。
+//
+// 该分支此前是全仓唯一「没有结算调用点」的失败出口，于是「稳定腰斩的供应商永不被降权」
+// （.local/find-issues/2026-10-01-提交后断流不进结算腰斩供应商永不被降权.md）。
+//
+// 变异自检验证：去掉 settlePostCommitFailure 调用 → 供应商侧三格由 1 变 0 红；把守卫换回
+// `!IsClientWriteErr(err)`（= 改动前）→ 客户端撤走一格由 0 变 1 红。
+func TestRecordLog_PostCommitFailure_SettlesConsecutiveFailures(t *testing.T) {
+	live := context.Background()
+
+	cases := []struct {
+		name        string
+		procErr     error
+		wantSettled int
+		why         string
+	}{
+		{
+			name:        "上游腰斩→计一次连败",
+			procErr:     fmt.Errorf("write response body failed: %w", io.ErrUnexpectedEOF),
+			wantSettled: 1,
+			why:         "上游开了流又截断是供应商侧真故障，稳定这样做的家该被降权/停用",
+		},
+		{
+			name:        "上游RST(读侧已打标)→计一次连败",
+			procErr:     fmt.Errorf("write response body failed: %w", upstreamReadErr{err: rstLikeError()}),
+			wantSettled: 1,
+			why:         "RST 是非超时 net.Error，类型反推会误判成客户端撤走；读侧标记是错误产生处记下的方向事实，优先",
+		},
+		{
+			name:        "客户端撤走(点停止/关页面)→不结算",
+			procErr:     fmt.Errorf("write response body failed: %w", context.Canceled),
+			wantSettled: 0,
+			why:         "调用方自己不要了，不该让供应商离自动停用更近一步（连点三次停止不该停掉一家）",
+		},
+		{
+			name:        "写回被掐(客户端不收结果)→不结算",
+			procErr:     fmt.Errorf("write response body failed: %w", MarkResponseWriteError(live, newWriteCutoffErr())),
+			wantSettled: 0,
+			why:         "与客户端撤走同族；两本账的口径必须一致，否则同一现场统计记、调度不记",
+		},
+		{
+			name:        "日志管道提前收尾→计一次连败（与统计面同源，待取样后再定归属）",
+			procErr:     fmt.Errorf("write response body failed: %w", MarkResponseWriteError(live, io.ErrClosedPipe)),
+			wantSettled: 1,
+			why:         "2026-10-04 拍板归供应商侧；该形态是否真能走到记账点尚待取样，故此处只锁「两本账一致」",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			initChatRecordTestDB(t)
+			providerRow, mwp := createAttributionFixtureProvider(t, "p-settle")
+
+			RecordLog(context.Background(), RecordLogInput{
+				ReqStart:                   time.Now(),
+				Reader:                     io.NopCloser(strings.NewReader("x")),
+				Processer:                  failingProcesser(tc.procErr),
+				LogID:                      0,
+				ProviderName:               providerRow.Name,
+				RealModelName:              "m1",
+				ServingModelWithProviderID: mwp.ID,
+			})
+
+			if got := consecutiveFailures(t, mwp.ID); got != tc.wantSettled {
+				t.Fatalf("关联连续失败计数 = %d, want %d（%s）", got, tc.wantSettled, tc.why)
 			}
 		})
 	}
@@ -328,12 +416,14 @@ func TestRecordLog_ClientWriteCutoff_LogsAtWarn(t *testing.T) {
 		},
 		{
 			// 这一格的状态是**半实现**：写侧标记已按 2026-10-04 拍板不打（故上面
-			// SkipsProviderFailureStat 矩阵里它记到了供应商失败），但清钉与留痕级别两处
+			// ProviderFailureStat 矩阵里它记到了供应商失败），但清钉与留痕级别两处
 			// 仍落客户端侧——chat_record.go 的 isClientDisconnectErr 自 Stage 24
 			// （commit 4d1264a「断连类降 Warn」）起就把 io.ErrClosedPipe 直接算断连，
-			// 与本 Stage 的标记是两条独立判据。改那一行等于动 Stage 24 的既有口径，
-			// 待用户拍板，登记在 .local/find-issues。
-			name:      "日志管道提前收尾→当前仍 Warn（待拍板）",
+			// 与写侧标记是两条独立判据（`callerWithdrawn` 刻意不含它，见该函数注释）。
+			// 该形态是否真能走到这个出口尚待线上取样（Stage 44，2026-10-16 起在
+			// handler/v1 插了临时取样日志），取样结论出来前维持现状；
+			// 登记在 .local/find-issues/2026-10-04-tee收尾…md。
+			name:      "日志管道提前收尾→当前仍 Warn（待取样）",
 			procErr:   fmt.Errorf("write response body failed: %w", MarkResponseWriteError(live, io.ErrClosedPipe)),
 			wantLevel: "level=WARN",
 		},

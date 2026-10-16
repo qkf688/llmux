@@ -92,15 +92,15 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 				clearStickyTarget(ctx, in.Before, in.ServingModelWithProviderID)
 			}
 
-			// 写回被掐断不记供应商失败统计（Stage 39，R3）：供应商把响应完整产出了，是
-			// 客户端不收，记进去会污染面板上的供应商成功率、并让「谁的问题」在统计面
-			// 失真。刻意只排这一类：客户端主动断连（点停止按钮）仍照旧计数，那是既有
-			// 口径（Stage 24/33）不在本次改动内，两者在这张统计表上的差异已登记
-			// find-issues。
-			if !IsClientWriteErr(err) {
+			// 提交后失败的归属单源（Stage 44 拍板，2026-10-16）：**调用方撤走**不记供应商账，
+			// 其余记。统计面与调度面共用它——此前统计面只排除了「写回被掐」一类、调度面则
+			// 完全不记，于是同一个「客户端点停止」按错误走的代码路径分到两种归属，而稳定
+			// 腰斩的供应商永不被降权。
+			if providerAtFault(err) {
 				if statErr := chatstats.RecordProviderStats(ctx, in.ProviderName, false, 0, 0); statErr != nil {
 					slog.Warn("failed to record provider stats on processer error", "error", statErr)
 				}
+				settlePostCommitFailure(ctx, in)
 			}
 			return fmt.Errorf("processer error: %w", err)
 		}
@@ -212,14 +212,31 @@ func MarkLogUnfinished(ctx context.Context, logID uint, reqStart time.Time) {
 // 超时**不是**断连（Stage 33）：deadline / 网络超时归「服务端或上游掐断」，按断连
 // 降级会把超时吞成「调用方撤走」的同形留痕——net.Error 家族里 context.DeadlineExceeded
 // 与 http 客户端超时都带 Timeout()=true，必须先于断连判定排除。
+//
+// 与 callerWithdrawn 的差别只有 io.ErrClosedPipe 一条（见后者注释）。
 func isClientDisconnectErr(err error) bool {
+	if errors.Is(err, io.ErrClosedPipe) {
+		return true
+	}
+	return callerWithdrawn(err)
+}
+
+// callerWithdrawn 判定「调用方撤走」：请求 ctx 被取消（点停止 / 关页面）或连接被重置
+// （非超时 net.Error）。超时**不算**——慢上游与「预算烧完」都是供应商侧的责任
+// （Stage 33 / Stage 39 拍板），归它记失败。
+//
+// 与 isClientDisconnectErr 的差别只有 io.ErrClosedPipe：那个错误来自日志管道提前收尾
+// （handler 的 TeeReader 刻意打在方向标记之外），成因通常在链路或上游内容、不在调用方，
+// 归属待 Stage 44 的线上取样结论，故暂由 isClientDisconnectErr 单独叠加那一条。取样
+// 结论明确后两条判据合并成单一判据（届时 providerAtFault 与 clientSideFailure 互为否定）。
+func callerWithdrawn(err error) bool {
 	if err == nil {
 		return false
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, io.ErrClosedPipe) {
+	if errors.Is(err, context.Canceled) {
 		return true
 	}
 	var netErr net.Error
@@ -238,6 +255,22 @@ func isClientDisconnectErr(err error) bool {
 // isClientDisconnectErr。
 func clientSideFailure(err error) bool {
 	return isClientDisconnectErr(err) || IsClientWriteErr(err)
+}
+
+// providerAtFault 判「这次提交后失败该不该记在供应商头上」：统计面与调度面共用的单源
+// 判据（Stage 44 拍板，2026-10-16）——调用方撤走不记，其余记。
+//
+// 判据优先级与清钉一致：读侧标记是**错误产生处记下的方向事实**，优先于类型反推——
+// 上游 RST（非超时 net.Error）会被 callerWithdrawn 误判成客户端撤走（真机实测过），
+// 若不给标记优先，稳定截断的家反而免账。
+//
+// 它与 clientSideFailure **不是**互补关系：唯一差集是 io.ErrClosedPipe（日志管道提前
+// 收尾那格），该格归属待线上取样结论，故刻意留在「记供应商账」一侧、两处暂不同步。
+func providerAtFault(err error) bool {
+	if IsUpstreamReadErr(err) {
+		return true
+	}
+	return !IsClientWriteErr(err) && !callerWithdrawn(err)
 }
 
 // failureLogStatus 决定客户端侧失败出口给 chat_logs 行落哪个终态（状态机）：调用方

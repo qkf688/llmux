@@ -9,7 +9,6 @@ import (
 	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
-	"github.com/qkf688/llmux/service/adjustment"
 	"github.com/qkf688/llmux/service/chatcore"
 	"github.com/qkf688/llmux/service/chatstats"
 	"github.com/qkf688/llmux/service/transform"
@@ -231,12 +230,16 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 
 	updateRequestAndResponseLog(input.Ctx, logID, logRawOptions, logSnapshot, res.Header, rawResponseBodyStr)
 
-	// 成功结算：上游已经成功是既成事实，成功记账与失败计数清零不因调用方恰在此刻断开
-	// 而作废（Stage 24 成功侧：与失败侧相反，这里不需要判断谁造成的）。
+	// 成功侧结算（Stage 24）：这一段的语义是「**上游这次通话成功**」——凭据确实通了、成功
+	// 记账不因调用方恰在此刻断开而作废。
+	//
+	// 但**关联级**的「连败清零 + 成功加权」不在这里（2026-10-17 Stage 44 补拍后移）：上游交出
+	// 响应 ≠ 正文交付完整。留在这一层会让「提交成功即清零」必然先于提交后失败的 +1（日志侧
+	// 事后跑），稳定腰斩的家连败永远攒不到阈值、永不被停用。两者的唯一时点改在
+	// service/chat/chat_record.go 的成功出口（processer 读到 EOF/终止符正常收尾）。凭据级
+	// 记账（鉴权失败清零、终身统计）留在原地：那把 key 确实通了。
 	successCtx, cancelSuccess := successWriteCtx(input.Ctx)
 	defer cancelSuccess()
-	adjustment.ResetConsecutiveFailures(successCtx, input.ModelWithProvider.ID)
-	adjustment.ApplySuccessAdjustments(successCtx, input.ModelWithProvider.ID)
 	// 成功重置鉴权失败计数（#6-2）：FailCount>0 才写，常态成功请求零凭据写。
 	resetCredentialAuthFailCount(successCtx, input.Selection.Credential)
 	// 终身统计与状态机正交：每成功尝试必记（经 credwrite 异步，不占请求路径）。

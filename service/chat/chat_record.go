@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/adjustment"
 	"github.com/qkf688/llmux/service/chatstats"
 )
 
@@ -146,6 +147,20 @@ func RecordLog(ctx context.Context, in RecordLogInput) {
 		responseTimeMs := int64(logUpdate.FirstChunkTime.Milliseconds())
 		if statErr := chatstats.RecordProviderStats(ctx, in.ProviderName, true, responseTimeMs, logUpdate.Usage.TotalTokens); statErr != nil {
 			slog.Warn("failed to record provider stats", "error", statErr)
+		}
+
+		// 关联级「这次算成功」的**唯一时点**（Stage 44 补拍，2026-10-17）：走到本出口即
+		// processer 已读到流收尾（EOF / 终止符正常收尾），正文真的交付完了——上游只是「交出
+		// 响应头」不算成功。此前清零与成功加权在 executeSingleProviderAttempt 的「上游交出
+		// 响应」处执行，于是同一个请求里「提交成功即清零」必然先于提交后失败的 +1（日志侧
+		// 事后跑）：稳定腰斩的家连败永远攒不到阈值，永不被停用。
+		// 清零与成功加权同批后移：两者都是「这次算不算成功」的后果，拆开会出现「加权重却不清零」
+		// 的半套语义。必须留在下面的 LogID==0 早退之前——成功结算不随关闭日志而停。
+		if in.ServingModelWithProviderID != 0 {
+			successCtx, cancelSuccess := successWriteCtx(ctx)
+			adjustment.ResetConsecutiveFailures(successCtx, in.ServingModelWithProviderID)
+			adjustment.ApplySuccessAdjustments(successCtx, in.ServingModelWithProviderID)
+			cancelSuccess()
 		}
 
 		// 若未记录 ChatLog（例如 disable_all_logs=true），这里不再进行任何日志表更新/写入。

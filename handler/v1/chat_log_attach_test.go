@@ -83,6 +83,53 @@ func TestAttachLogRecord_DiscardedBypassesPipeAndMarksUnfinished(t *testing.T) {
 	}
 }
 
+// TestAttachLogRecord_DiscardedReaderKeepsUpstreamDirection 丢弃窗口的响应体必须与登记
+// 分支**同形**：上游读错要带读侧方向标记，否则 writeResponseBody 的 MarkResponseWriteError
+// 会把它兜成「客户端不收结果」，方向整个反过来（2026-10-05 code-review S2 提出的正是这
+// 一行）。本用例直接复现那个兜底：读丢弃分支返回的 reader 拿到上游读错，再喂给
+// MarkResponseWriteError，断言它**不**被盖上写侧标记。
+//
+// 现实边界（别误读本用例的强度）：丢弃分支的 finishLog 是空操作、且 RecordLog 任务根本
+// 没建，所以这个错误当前**没有消费者**——标记的作用是把「两侧同形」这条不变量钉住，将来
+// 该错误获得消费者（例如丢弃窗口的失败也要留痕）时方向即刻是对的，而不是等那时再发现反了。
+//
+// 变异自检验证——把丢弃分支改回直接 `return resBody`：本用例红。
+func TestAttachLogRecord_DiscardedReaderKeepsUpstreamDirection(t *testing.T) {
+	testsupport.InitTestDB(t)
+
+	logRow := testutil.NewRow(t, models.DB, models.ChatLog{Name: "m", Status: "success"})
+
+	mgr := bgtask.NewManager()
+	bgtask.SetDefault(mgr)
+	t.Cleanup(func() { bgtask.SetDefault(bgtask.NewManager()) })
+	shutCtx, cancelShut := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelShut()
+	if err := mgr.Shutdown(shutCtx); err != nil {
+		t.Fatalf("Shutdown() = %v, want nil", err)
+	}
+
+	proc := func(context.Context, io.Reader, bool, time.Time) (*models.ChatLog, *models.OutputUnion, error) {
+		t.Error("被丢弃的任务不得执行 RecordLog")
+		return nil, nil, nil
+	}
+	// 上游中途截断的真实形态（读侧打标只对「非身份 EOF」生效，故用 ErrUnexpectedEOF 而不是 EOF）。
+	body, finishLog := attachLogRecord(t.Context(), service.RecordLogInput{
+		ReqStart:  time.Now(),
+		Processer: proc,
+		LogID:     logRow.ID,
+	}, errReader{err: io.ErrUnexpectedEOF})
+
+	_, readErr := io.ReadAll(body)
+	if readErr == nil {
+		t.Fatal("丢弃窗口的响应体没有把上游读错透出来，本用例失去意义")
+	}
+	finishLog(readErr) // 丢弃路径是空操作：调用方收尾姿势不分支
+
+	if service.IsClientWriteError(service.MarkResponseWriteError(t.Context(), readErr)) {
+		t.Fatalf("丢弃窗口的上游读错被兜成「客户端不收结果」：%v（方向反了——该清的钉会不清、供应商失败会被漏记）", readErr)
+	}
+}
+
 // TestAttachLogRecord_RegisteredTeesBodyToLogPipe 正常路径回归：登记成功时响应体
 // 同时流向客户端与日志管道（tee），finishLog(nil) 以 EOF 收尾、finishLog(err) 把
 // 断流错误传给日志侧。两条路径的收尾姿势必须一致（同一 finishLog 出口）。

@@ -263,7 +263,13 @@ func attachLogRecord(ctx context.Context, in service.RecordLogInput, resBody io.
 	pr.Close()
 	pw.Close()
 	service.MarkLogUnfinished(ctx, in.LogID, in.ReqStart)
-	return resBody, func(error) {}
+	// 与登记分支**同形**地打读侧标记（只打标、不加 tee——tee 会让写端挂死在无人消费的
+	// 管道上）：上游读错不带方向时，writeResponseBody 的 MarkResponseWriteError 会把它
+	// 兜成「客户端不收结果」，方向整个反了（2026-10-05 code-review S2）。
+	// 现实边界：本分支的 finishLog 是空操作、RecordLog 任务也没建，故该标记**当前没有
+	// 消费者**——它锁的是「两条路径同形」这条不变量，将来丢弃窗口的失败获得消费者时方向
+	// 即刻是对的，而不是等那时才发现反了。回归见 chat_log_attach_test.go 的方向用例。
+	return service.MarkUpstreamReader(resBody), func(error) {}
 }
 
 // upstreamResponseHeadersAllowed 是回给客户端的上游响应头允许清单（单源），按**上游侧**

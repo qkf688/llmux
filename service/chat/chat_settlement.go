@@ -126,7 +126,14 @@ func settleRequestBuildFailureDecay(input singleProviderAttemptInput) {
 // 入参 ctx 是日志侧的任务 ctx（bgtask），不是请求 ctx——提交后失败时请求 ctx 往往已经
 // 死了，故「这次该不该记供应商账」由错误方向判据（providerAtFault，调用方据它决定是否
 // 调用本函数）给出，而不是 requestAbandoned；这里仍走 beginFailureSettlement 只为走
-// 单源派生出不陪葬的写库 ctx（结算写库 ctx 只此一处派生，OCP）。
+// 单源派生出不陪葬的写库 ctx（结算写库 ctx 只此一处派生，OCP）。附带须知：bgtask 的任务
+// ctx **永不取消**（`common/bgtask` 的 Manager.taskCtx 是 Background），故这里的
+// `settlement.Active` 恒为 true——别改成传请求 ctx，那会让归属从「错误方向」静默漂移成
+// 「ctx 信号」。
+//
+// 代价（别把它当「只写日志」的轻任务再挂活）：本函数在日志侧 goroutine 内多跑 3~5 条
+// 语句、并派生 15s 的写库预算，最坏会把 `bgtask.Shutdown` 的排空窗口拖长 `settlementWriteTimeout`
+// 那一段。
 func settlePostCommitFailure(ctx context.Context, in RecordLogInput) {
 	if in.ServingModelWithProviderID == 0 {
 		return // 没落到具体关联（0 = 无可比对对象）：没有可记的账

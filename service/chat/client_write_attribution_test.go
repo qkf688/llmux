@@ -497,3 +497,68 @@ func TestRecordLog_ClientWriteCutoff_LogsAtWarn(t *testing.T) {
 		})
 	}
 }
+
+// TestPostCommitAttributionPredicates_NotComplements 结构锁：把「提交后失败」两个判据在
+// 各错误形态下的取值**逐格写死**。它防的是最容易被顺手做掉的一种「简化」——把
+// `providerAtFault` 当成 `!clientSideFailure`（或反之），因为两判据**不是**互补关系，
+// 有两格同时为真（读侧已打标的上游 RST、日志管道收尾的 io.ErrClosedPipe），各有归属理由：
+// 前者是「读侧标记 vs Unwrap 后的非超时 net.Error」之争，后者归属待线上取样（Stage 44）。
+// 谁把两者对齐，本表立刻红——比注释更硬。
+//
+// 变异自检验证：把 providerAtFault 改成 `!clientSideFailure(err)` → RST 与 ErrClosedPipe
+// 两行的 providerAtFault 期望翻面，本用例红。
+func TestPostCommitAttributionPredicates_NotComplements(t *testing.T) {
+	live := context.Background()
+	exhausted, cancelExhausted := context.WithDeadline(live, time.Now().Add(-time.Second))
+	defer cancelExhausted()
+
+	cases := []struct {
+		name           string
+		err            error
+		wantProvider   bool
+		wantClientSide bool
+		why            string
+	}{
+		{
+			name: "上游腰斩(无标记)", err: io.ErrUnexpectedEOF,
+			wantProvider: true, wantClientSide: false,
+			why: "互补格：供应商侧真故障",
+		},
+		{
+			name: "上游RST(读侧已打标)", err: upstreamReadErr{err: rstLikeError()},
+			wantProvider: true, wantClientSide: true,
+			why: "**非互补格**：读侧标记让归属判供应商，而 Unwrap 后的非超时 net.Error 让 clientSideFailure 判调用方撤走（留痕因此落 Warn，缺口已登记 find-issues）",
+		},
+		{
+			name: "写回被掐(写侧标记)", err: MarkResponseWriteError(live, newWriteCutoffErr()),
+			wantProvider: false, wantClientSide: true,
+			why: "互补格：客户端不收结果（Stage 39 R3）",
+		},
+		{
+			name: "客户端撤走(Canceled)", err: context.Canceled,
+			wantProvider: false, wantClientSide: true,
+			why: "互补格：点停止/关页面（Stage 44 拍板后不再记供应商失败）",
+		},
+		{
+			name: "总时限已耗尽", err: MarkResponseWriteError(exhausted, newWriteCutoffErr()),
+			wantProvider: true, wantClientSide: false,
+			why: "互补格：预算烧完算供应商（2026-10-04 拍板）",
+		},
+		{
+			name: "日志管道提前收尾", err: io.ErrClosedPipe,
+			wantProvider: true, wantClientSide: true,
+			why: "**非互补格**：归属待线上取样（Stage 44 第 3 项），取样期间刻意两处不同步",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := providerAtFault(tc.err); got != tc.wantProvider {
+				t.Fatalf("providerAtFault = %v, want %v（%s）", got, tc.wantProvider, tc.why)
+			}
+			if got := clientSideFailure(tc.err); got != tc.wantClientSide {
+				t.Fatalf("clientSideFailure = %v, want %v（%s）", got, tc.wantClientSide, tc.why)
+			}
+		})
+	}
+}

@@ -227,8 +227,13 @@ func isClientDisconnectErr(err error) bool {
 //
 // 与 isClientDisconnectErr 的差别只有 io.ErrClosedPipe：那个错误来自日志管道提前收尾
 // （handler 的 TeeReader 刻意打在方向标记之外），成因通常在链路或上游内容、不在调用方，
-// 归属待 Stage 44 的线上取样结论，故暂由 isClientDisconnectErr 单独叠加那一条。取样
-// 结论明确后两条判据合并成单一判据（届时 providerAtFault 与 clientSideFailure 互为否定）。
+// 归属待 Stage 44 的线上取样结论，故暂由 isClientDisconnectErr 单独叠加那一条。
+//
+// 注意别把「取样结论出来后两条判据就互补」当结论（本注释 2026-10-17 订正过一次错误
+// 断言）：取样只解决 io.ErrClosedPipe 那一格。**即使它闭合，本函数与 providerAtFault
+// 仍不互补**——读侧已打标的上游 RST 会经 Unwrap 被本函数摸到内层 `*net.OpError`
+// （`Timeout()==false`）而判成「调用方撤走」，而 providerAtFault 看读侧标记判供应商。
+// 两格差集都是刻意的，不能靠「合并成单一判据」消除。
 func callerWithdrawn(err error) bool {
 	if err == nil {
 		return false
@@ -264,8 +269,14 @@ func clientSideFailure(err error) bool {
 // 上游 RST（非超时 net.Error）会被 callerWithdrawn 误判成客户端撤走（真机实测过），
 // 若不给标记优先，稳定截断的家反而免账。
 //
-// 它与 clientSideFailure **不是**互补关系：唯一差集是 io.ErrClosedPipe（日志管道提前
-// 收尾那格），该格归属待线上取样结论，故刻意留在「记供应商账」一侧、两处暂不同步。
+// 它与 clientSideFailure **不是**互补关系（差集有两格，都是刻意的，见下），故两处
+// 归属刻意不同步：
+//  1. io.ErrClosedPipe（日志管道提前收尾）：该格归属待线上取样结论，暂留在「记供应商账」
+//     一侧；
+//  2. **读侧已打标的上游 RST**：本判据看标记判供应商，而 clientSideFailure 经 Unwrap 摸到
+//     内层 `*net.OpError`（Timeout()==false）仍把它算调用方撤走——于是一个真上游故障在留痕
+//     级别上落 Warn（§5 的「ERROR = 服务器/供应商故障」在这格不一致，属既有口径，已登记
+//     find-issues；欲修须同时决定 io.ErrClosedPipe 那格，两者共用同一个终判函数）。
 func providerAtFault(err error) bool {
 	if IsUpstreamReadErr(err) {
 		return true

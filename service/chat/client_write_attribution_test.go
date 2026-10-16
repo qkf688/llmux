@@ -300,6 +300,26 @@ func consecutiveFailures(t *testing.T, mwpID uint) int {
 	return row.ConsecutiveFailures
 }
 
+// credentialsAccountingSnapshot 把 credentials 表的账务列拍成一份可比对的文本快照
+// （状态 / 冷却窗口 / 鉴权失败计数 / 终身统计）。用于断言「某条失败路径没碰凭据」——
+// 只断连败列的用例挡不住将来有人在该出口顺手加冷却（Stage 44 验收明确要求两处都断）。
+func credentialsAccountingSnapshot(t *testing.T) string {
+	t.Helper()
+	var rows []models.Credential
+	if err := models.DB.Order("id").Find(&rows).Error; err != nil {
+		t.Fatalf("读 credentials 失败: %v", err)
+	}
+	var b strings.Builder
+	for _, r := range rows {
+		cooldown := "nil"
+		if r.CooldownUntil != nil {
+			cooldown = r.CooldownUntil.UTC().Format(time.RFC3339Nano)
+		}
+		fmt.Fprintf(&b, "%d|%s|%s|%d|%d|%d|%d\n", r.ID, r.Status, cooldown, r.FailCount, r.TotalRequests, r.TotalErrors, r.TotalTokens)
+	}
+	return b.String()
+}
+
 // TestRecordLog_PostCommitFailure_SettlesConsecutiveFailures 锁 Stage 44 拍板（2026-10-16）：
 // 响应已开写后的**供应商侧**失败要计入调度账——关联连续失败 +1（它也是「连败达阈值自动
 // 停用该关联」的输入），而调用方撤走整族（客户端点停止 / 写回被掐）不记。与上面的统计面
@@ -355,6 +375,15 @@ func TestRecordLog_PostCommitFailure_SettlesConsecutiveFailures(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			initChatRecordTestDB(t)
 			providerRow, mwp := createAttributionFixtureProvider(t, "p-settle")
+			// 带非零失败计数/冷却原因的凭据：本出口拿不到 credential，任何凭据写都属越界，
+			// 且这样造让「顺手加冷却」必然改变快照（Stage 44 验收要求连凭据面一起断）。
+			if err := models.DB.Create(&models.Credential{
+				Key: "k-settle", KeyHash: "h-settle", Note: "settle-fixture",
+				FailCount: 2, TotalErrors: 7, CooldownReason: "server_error",
+			}).Error; err != nil {
+				t.Fatalf("create credential: %v", err)
+			}
+			credentialsBefore := credentialsAccountingSnapshot(t)
 
 			RecordLog(context.Background(), RecordLogInput{
 				ReqStart:                   time.Now(),
@@ -368,6 +397,9 @@ func TestRecordLog_PostCommitFailure_SettlesConsecutiveFailures(t *testing.T) {
 
 			if got := consecutiveFailures(t, mwp.ID); got != tc.wantSettled {
 				t.Fatalf("关联连续失败计数 = %d, want %d（%s）", got, tc.wantSettled, tc.why)
+			}
+			if after := credentialsAccountingSnapshot(t); after != credentialsBefore {
+				t.Fatalf("提交后失败出口动了凭据账务（该出口拿不到 credential，写凭据即越界——拍板明确「不进凭据冷却」）：\nbefore=%s\nafter=%s", credentialsBefore, after)
 			}
 		})
 	}
@@ -415,13 +447,24 @@ func TestRecordLog_ClientWriteCutoff_LogsAtWarn(t *testing.T) {
 			wantLevel: "level=ERROR",
 		},
 		{
+			// 这一格是**既有口径的不一致**（2026-10-17 独立审查提出，已登记 find-issues）：
+			// 上游 RST 带读侧标记，统计面与调度面都按供应商记（`providerAtFault` 看标记），
+			// 但留痕级别走 `clientSideFailure`——它经 `upstreamReadErr.Unwrap` 摸到内层非超时
+			// `net.Error`，判成「调用方撤走」→ 落 Warn，而 §5 约定 ERROR = 服务器/供应商故障。
+			// 锁现状不是认可它，是让「想把三格统一」的人看见代价：改这格必须同时决定
+			// `io.ErrClosedPipe` 那一格（两者共用同一个终判函数），不可单方面改。
+			name:      "上游RST(读侧已打标)→当前仍 Warn（既有口径，待与 tee 那格一并决策）",
+			procErr:   fmt.Errorf("write response body failed: %w", upstreamReadErr{err: rstLikeError()}),
+			wantLevel: "level=WARN",
+		},
+		{
 			// 这一格的状态是**半实现**：写侧标记已按 2026-10-04 拍板不打（故上面
 			// ProviderFailureStat 矩阵里它记到了供应商失败），但清钉与留痕级别两处
 			// 仍落客户端侧——chat_record.go 的 isClientDisconnectErr 自 Stage 24
 			// （commit 4d1264a「断连类降 Warn」）起就把 io.ErrClosedPipe 直接算断连，
 			// 与写侧标记是两条独立判据（`callerWithdrawn` 刻意不含它，见该函数注释）。
 			// 该形态是否真能走到这个出口尚待线上取样（Stage 44，2026-10-16 起在
-			// handler/v1 插了临时取样日志），取样结论出来前维持现状；
+			// handler/v1 插了临时取样日志，只对 ErrClosedPipe 打），取样结论出来前维持现状；
 			// 登记在 .local/find-issues/2026-10-04-tee收尾…md。
 			name:      "日志管道提前收尾→当前仍 Warn（待取样）",
 			procErr:   fmt.Errorf("write response body failed: %w", MarkResponseWriteError(live, io.ErrClosedPipe)),

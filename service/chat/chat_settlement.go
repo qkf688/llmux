@@ -136,6 +136,9 @@ func settlePostCommitFailure(ctx context.Context, in RecordLogInput) {
 	if !settlement.Active {
 		return
 	}
-	// 日志标签用真实模型名：本分支拿不到上游模型名（RecordLogInput 不带 ProviderModel）。
+	// 日志标签用**真实模型名**：本分支拿不到上游模型名（RecordLogInput 不带 ProviderModel），
+	// 而 applyProviderFailureAdjustments 的兄弟调用点传的都是 ModelWithProvider.ProviderModel
+	// ——同名日志行（weight decay applied / auto disabled 等）的「model=」在这条路径上是真实
+	// 模型名，排查时别当成两个字段。该参数只进 slog，无功能差异。
 	applyProviderFailureAdjustments(settlement.Ctx, in.ServingModelWithProviderID, in.ProviderName, in.RealModelName)
 }

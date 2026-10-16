@@ -208,21 +208,23 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 	// 「头后无数据」类失败已在 service 提交门（commit-before-write）被拦下换下家，
 	// 走到这里的中断都是提交后的残余窗口（上游断流/写客户端失败）。
 	if copyErr := writeResponseBody(ctx, c, style, before.Stream, body); copyErr != nil {
-		// 【临时取样 · Stage 44 · 取样结束即删】「日志管道提前收尾」（io.ErrClosedPipe）这一格
-		// 在本仓**没有任何既有留痕**：handler 依 framework-conventions §5 边界③ 刻意不自记，
+		// 【临时取样 · Stage 44 · 取样结束即删】只对「日志管道提前收尾」（io.ErrClosedPipe）这一格
+		// 打：取样要答的问题只关于它，而按行计数的告警经不起「每次提交后写失败都多算一份」。
+		// 这格在本仓**没有任何既有留痕**：handler 依 framework-conventions §5 边界③ 刻意不自记，
 		// 而日志侧此刻已经收工、该错误只被回灌给无人读的管道——故无法从库里反推它到底发生过
 		// 没有（全库 29,226 行日志里含 closed pipe 的 0 行）。带 log_id 是为了事后回 chat_logs
 		// 对照该行的终态（success = 日志侧先收工），据此定这一格该记供应商还是记调用方
 		// （见 .local/find-issues/2026-10-04-tee收尾只改了统计面清钉与留痕级别仍走Stage24的断连判据.md）。
-		slog.Warn("post-commit write failure (Stage 44 sampling)",
-			"log_id", balanced.LogID,
-			"request_id", reqMeta.RequestID,
-			"style", style,
-			"stream", before.Stream,
-			"closed_pipe", errors.Is(copyErr, io.ErrClosedPipe),
-			"ctx_err", ctx.Err(),
-			"error", copyErr,
-		)
+		if errors.Is(copyErr, io.ErrClosedPipe) {
+			slog.Warn("post-commit pipe teardown observed (Stage 44 sampling)",
+				"log_id", balanced.LogID,
+				"request_id", reqMeta.RequestID,
+				"style", style,
+				"stream", before.Stream,
+				"ctx_err", ctx.Err(),
+				"error", copyErr,
+			)
+		}
 		finishLog(copyErr)
 		return
 	}

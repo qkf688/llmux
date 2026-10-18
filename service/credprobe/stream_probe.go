@@ -85,6 +85,9 @@ type StreamProbeResult struct {
 	RawOutput    string
 	FirstFrameMS int64 // 发出请求 → 首个 SSE 帧交付（含连接与 TTFB；探针不认协议，故不是「首个内容增量」）
 	DurationMS   int64
+	// Headers 是上游响应头（与 CompletionProbeResult 同口径，供协议支持检测取原生厂商头
+	// 作直通证据）。连接阶段就失败时为 nil。
+	Headers http.Header
 }
 
 // RunStreamProbe 打一次真实流式 completion 并按统一口径归类：注入 stream → BuildReq →
@@ -144,6 +147,7 @@ func RunStreamProbe(req StreamProbeRequest) (out StreamProbeResult) {
 				ErrorType:  classifyStreamDoError(readErr),
 				Summary:    ProbeSummaryReadResponse,
 				Detail:     readErr.Error(),
+				Headers:    res.Header,
 			}
 		}
 		return StreamProbeResult{
@@ -152,6 +156,7 @@ func RunStreamProbe(req StreamProbeRequest) (out StreamProbeResult) {
 			Summary:    ProbeSummaryUpstreamError,
 			Detail:     common.UpstreamErrorDetail(res.StatusCode, bodyBytes),
 			RawOutput:  string(bodyBytes),
+			Headers:    res.Header,
 		}
 	}
 
@@ -175,6 +180,7 @@ func RunStreamProbe(req StreamProbeRequest) (out StreamProbeResult) {
 			Summary:    ProbeSummaryStreamUnsupported,
 			Detail:     detail,
 			RawOutput:  string(bodyBytes),
+			Headers:    res.Header,
 		}
 	}
 
@@ -205,6 +211,7 @@ func RunStreamProbe(req StreamProbeRequest) (out StreamProbeResult) {
 			RawOutput:    renderSSEText(frames, streamProbeRawHeadBytes, streamProbeRawTailBytes),
 			Framed:       true,
 			FirstFrameMS: firstFrameMS,
+			Headers:      res.Header,
 		}
 	case scanErr != nil:
 		return StreamProbeResult{
@@ -215,6 +222,7 @@ func RunStreamProbe(req StreamProbeRequest) (out StreamProbeResult) {
 			RawOutput:    renderSSEText(frames, streamProbeRawHeadBytes, streamProbeRawTailBytes),
 			Framed:       true,
 			FirstFrameMS: firstFrameMS,
+			Headers:      res.Header,
 		}
 	}
 
@@ -225,6 +233,7 @@ func RunStreamProbe(req StreamProbeRequest) (out StreamProbeResult) {
 		RawOutput:    renderSSEText(frames, streamProbeRawHeadBytes, streamProbeRawTailBytes),
 		Framed:       true,
 		FirstFrameMS: firstFrameMS,
+		Headers:      res.Header,
 	}
 }
 

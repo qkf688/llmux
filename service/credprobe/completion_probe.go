@@ -50,18 +50,28 @@ type CompletionProbeResult struct {
 	Summary    string
 	Detail     string
 	Body       []byte
+	// Headers 是上游响应头（协议支持的诊断族用：原生厂商响应头是「这条路径是否直通」
+	// 的强证据，见 service/protocolprobe）。未打到上游时为 nil。
+	Headers http.Header
+	// DurationMS 从发请求到读完 body 的耗时，单次样本、只作展示不作排名。
+	DurationMS int64
 }
 
 // RunCompletionProbe 打一次真实最小 completion 并按统一口径归类结果。
 // 通过判定 = 200/201，判据单源 common.IsPassingStatus（Stage 5：健康检查/诊断/真实链路
 // 共用同一条口径；带上 201 是因为部分兼容网关会回 201 而非严格 200）。
-func RunCompletionProbe(req CompletionProbeRequest) CompletionProbeResult {
+func RunCompletionProbe(req CompletionProbeRequest) (out CompletionProbeResult) {
 	if req.Ctx == nil {
 		req.Ctx = context.Background()
 	}
 	if req.Timeout <= 0 {
 		req.Timeout = common.DiagnosticCompletionTimeout
 	}
+
+	// 命名返回值 + defer：DurationMS 在每条返回路径上都要填，逐处手写必漏一处
+	// （同 stream_probe 的 RunStreamProbe 姿势）。
+	start := time.Now()
+	defer func() { out.DurationMS = time.Since(start).Milliseconds() }()
 
 	probeCtx, cancel := context.WithTimeout(req.Ctx, req.Timeout)
 	defer cancel()
@@ -107,6 +117,7 @@ func RunCompletionProbe(req CompletionProbeRequest) CompletionProbeResult {
 			ErrorType:  errType,
 			Summary:    ProbeSummaryReadResponse,
 			Detail:     readErr.Error(),
+			Headers:    res.Header,
 		}
 	}
 
@@ -117,8 +128,9 @@ func RunCompletionProbe(req CompletionProbeRequest) CompletionProbeResult {
 			Summary:    ProbeSummaryUpstreamError,
 			Detail:     common.UpstreamErrorDetail(res.StatusCode, bodyBytes),
 			Body:       bodyBytes,
+			Headers:    res.Header,
 		}
 	}
 
-	return CompletionProbeResult{Passed: true, StatusCode: res.StatusCode, Body: bodyBytes}
+	return CompletionProbeResult{Passed: true, StatusCode: res.StatusCode, Body: bodyBytes, Headers: res.Header}
 }

@@ -40,6 +40,7 @@ var diagTimeoutDirs = []string{
 	"common",
 	"service/healthcheck",
 	"service/credprobe",
+	"service/protocolprobe",
 	"providers",
 	"handler/testapi",
 	"handler/pools",
@@ -60,6 +61,7 @@ var diagTimeoutConstants = []string{
 	"DiagnosticCredentialProbeTimeout",
 	"DiagnosticConnectivityTestTimeout",
 	"DiagnosticReactHeaderTimeout",
+	"DiagnosticProtocolProbeTimeout",
 }
 
 // diagTimeoutLineStatus 判单行。返回：ok / violation（裸写）/ reasonless（标记缺理由）/

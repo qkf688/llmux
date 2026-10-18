@@ -42,4 +42,10 @@ const (
 	// DiagnosticReactHeaderTimeout testapi ReAct 流式长任务的 transport（响应头）超时：
 	// 刻意大于诊断默认（30s），兼容慢启动的流式上游。
 	DiagnosticReactHeaderTimeout = 60 * time.Second
+
+	// DiagnosticProtocolProbeTimeout testapi 协议支持检测的单条探针超时。一次检测要并发
+	// 打 3 条协议 × 3 类探针（非流式 / 流式 / 无效模型指纹），沿用连通测试的 60s 会让
+	// 串行段最坏拖到数分钟；每条只求「这条路通不通」而非生成质量，故刻意压到 30s。
+	// 超时只判该协议本次不可用，不改任何配置、无副作用。
+	DiagnosticProtocolProbeTimeout = 30 * time.Second
 )

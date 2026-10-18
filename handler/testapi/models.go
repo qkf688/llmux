@@ -73,19 +73,7 @@ var errInvalidGroup = errors.New("testapi: group does not belong to provider")
 // 等于给出假信号。健康检查（service/healthcheck）刻意不过滤——它失败的代价是禁用关联，
 // 宁可宽松也不能误禁，两条口径的差别记在 channel.GroupCandidatesForModel 的注释里。
 func ResolveAssociationLink(ctx context.Context, id string) (*testLink, error) {
-	mpID, err := strconv.ParseUint(id, 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %q", errInvalidID, id)
-	}
-	mp, err := repos().ModelWithProvider.Get(ctx, uint(mpID))
-	if err != nil {
-		return nil, err
-	}
-	provider, err := repos().Provider.Get(ctx, mp.ProviderID)
-	if err != nil {
-		return nil, err
-	}
-	snapshot, err := channel.NewAssembler(repos()).Assemble(ctx, *provider)
+	mp, provider, snapshot, err := resolveAssociationSnapshot(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +91,31 @@ func ResolveAssociationLink(ctx context.Context, id string) (*testLink, error) {
 	}
 
 	return buildLink(snapshot, mp.ProviderModel, candidates, mp.WithHeader, mp.CustomerHeaders)
+}
+
+// resolveAssociationSnapshot 解析「关联 id → 关联行 → 供应商行 → 选路快照」这段公共前缀。
+//
+// 单列成函数是因为协议支持检测（ResolveProtocolTargets）与关联级测试（ResolveAssociationLink）
+// 都要走这四步，且「非法 ID / 记录不存在」的错误口径必须完全一致——各自抄一份的下场是
+// 某天只在一处把 404 文案改掉，前端就按两个端点的不同措辞分叉（重复率门也会拦）。
+func resolveAssociationSnapshot(ctx context.Context, id string) (*models.ModelWithProvider, models.Provider, *channel.Snapshot, error) {
+	mpID, err := strconv.ParseUint(id, 10, 64)
+	if err != nil {
+		return nil, models.Provider{}, nil, fmt.Errorf("%w: %q", errInvalidID, id)
+	}
+	mp, err := repos().ModelWithProvider.Get(ctx, uint(mpID))
+	if err != nil {
+		return nil, models.Provider{}, nil, err
+	}
+	provider, err := repos().Provider.Get(ctx, mp.ProviderID)
+	if err != nil {
+		return nil, models.Provider{}, nil, err
+	}
+	snapshot, err := channel.NewAssembler(repos()).Assemble(ctx, *provider)
+	if err != nil {
+		return nil, models.Provider{}, nil, err
+	}
+	return mp, *provider, snapshot, nil
 }
 
 // ResolveProviderLink 解析供应商级测试链路（POST /api/providers/:id/test），model 为

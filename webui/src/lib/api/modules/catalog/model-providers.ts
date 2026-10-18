@@ -225,6 +225,80 @@ export async function testModelProviderVision(
   return apiRequest<ModelProviderTestResult>(`/test/vision/${id}${streamModeSuffix(mode)}`, { signal });
 }
 
+/* ---------- 协议支持检测（第六类测试，只读） ---------- */
+
+/** 单条探针腿的判定。noncompliant = 回了 SSE 但缺终止事件/无内容增量（实现不规范），
+ *  与 failed（压根不按流式回 / 连不上）是两类问题，处置不同，故单列。 */
+export type ProtocolLegStatus = "passed" | "failed" | "noncompliant";
+
+export interface ProtocolLegResult {
+  status: ProtocolLegStatus;
+  passed: boolean;
+  status_code: number;
+  duration_ms: number;
+  first_frame_ms?: number;
+  terminated_by?: string;
+  error_type?: string;
+  summary?: string;
+  detail?: string;
+}
+
+/** 无效模型请求采到的错误信封证据：家族是否与自身协议同族 = 是否像原样直通。 */
+export interface ProtocolFingerprint {
+  attempted: boolean;
+  probe_model: string;
+  status_code: number;
+  family: string;
+  same_family: boolean;
+  error_type?: string;
+  message?: string;
+  native_headers: string[];
+}
+
+export interface ProtocolProbeEntry {
+  protocol: string;
+  provider_type: string;
+  /** 完整请求 URL（含协议路径段），展示用。 */
+  request_url: string;
+  url_source: "endpoint" | "inherited";
+  endpoint_configured: boolean;
+  verdict: "usable" | "partial" | "unusable";
+  non_stream: ProtocolLegResult;
+  stream: ProtocolLegResult;
+  fingerprint: ProtocolFingerprint;
+  /** 该协议「应有」的原生特征命中情况（跨协议不比数量，只看各自完整度）。 */
+  fields: { hit: string[]; miss: string[] };
+  id_prefix: string;
+  recommended: boolean;
+}
+
+export interface ProtocolProbeRecommendation {
+  /** 空串 = 不点名任何协议（证据不足时的「无法区分」，后端刻意如此）。 */
+  protocol: string;
+  confidence: "high" | "medium" | "low";
+  summary: string;
+  reason: string;
+  actions: string[];
+  notes: string[];
+}
+
+export interface ProtocolProbeResult {
+  passed?: boolean;
+  group_id?: number;
+  group_name?: string;
+  provider?: string;
+  model?: string;
+  main_protocol?: string;
+  protocols?: ProtocolProbeEntry[];
+  recommendation?: ProtocolProbeRecommendation;
+}
+
+// 协议检测**没有模式轴**：一次调用内部已经把非流式与流式都跑完，
+// 前端不再提供模式开关（后端端点也没有 ?stream= 参数）。
+export async function testModelProviderProtocols(id: number, signal?: AbortSignal): Promise<ProtocolProbeResult> {
+  return apiRequest<ProtocolProbeResult>(`/test/protocols/${id}`, { signal });
+}
+
 export async function previewAutoAssociate(): Promise<AssociationPreview[]> {
   return apiRequest<AssociationPreview[]>("/model-providers/auto-associate/preview");
 }

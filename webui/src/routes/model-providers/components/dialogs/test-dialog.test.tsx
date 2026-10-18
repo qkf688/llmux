@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ModelProviderTestResult } from "@/lib/api";
+import type { ModelProviderTestResult, ProtocolProbeEntry, ProtocolProbeResult } from "@/lib/api";
 import type { ReactTestResultState } from "@/stores/model-providers/types";
+import type { ProtocolTestResults } from "../../hooks/use-model-providers-testing";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { capabilityTestKey, type CapabilityTestResults } from "../../hooks/use-model-providers-testing";
@@ -44,9 +45,10 @@ const resultsOf = (value: CapabilityTestEntry): CapabilityTestResults => ({
 function renderDialog(props: {
   testType: TestType;
   testResults?: CapabilityTestResults;
+  protocolTestResults?: ProtocolTestResults;
   reactTestResult?: ReactTestResultState;
 }) {
-  const { testType, testResults = {}, reactTestResult = REACT_IDLE } = props;
+  const { testType, testResults = {}, protocolTestResults = {}, reactTestResult = REACT_IDLE } = props;
   return render(
     <TooltipProvider>
       <TestDialog
@@ -61,6 +63,7 @@ function renderDialog(props: {
         structuredTestResults={testResults}
         thinkingTestResults={testResults}
         visionTestResults={testResults}
+        protocolTestResults={protocolTestResults}
         reactTestResult={reactTestResult}
         onClose={vi.fn()}
         onExecute={vi.fn()}
@@ -196,4 +199,138 @@ describe("模型测试：复制整份结果", () => {
 
     expect(await copyOut()).toBe("测试结论：通过");
   });
+
+  it("协议检测：矩阵逐行展示判定与证据，总评写明置信度", () => {
+    renderDialog({
+      testType: "protocol",
+      protocolTestResults: { [TEST_ID]: { loading: false, result: protocolFixture() } },
+    });
+
+    // 三条协议都在（协议名来自 lib/protocols 的单一来源）。
+    expect(screen.getByText("OpenAI")).toBeInTheDocument();
+    expect(screen.getByText("OpenAI Responses")).toBeInTheDocument();
+    expect(screen.getByText("Anthropic ★")).toBeInTheDocument();
+    // 部分支持与不可用是两种结论，必须都在屏幕上可见。
+    expect(screen.getByText("部分支持")).toBeInTheDocument();
+    expect(screen.getByText("不可用")).toBeInTheDocument();
+    // 总评带置信度，且证据不足/证据够硬由后端给（前端只展示，不自己算）。
+    expect(screen.getByText(/建议主协议：Anthropic/)).toBeInTheDocument();
+    expect(screen.getByText(/置信度 高/)).toBeInTheDocument();
+    expect(screen.getAllByText(/错误信封与自身协议同族/).length).toBeGreaterThan(0);
+  });
+
+  it("协议检测：复制文本包含逐协议结论与总评（与屏幕同一份拼装）", async () => {
+    renderDialog({
+      testType: "protocol",
+      protocolTestResults: { [TEST_ID]: { loading: false, result: protocolFixture() } },
+    });
+
+    const report = await copyOut();
+    expect(report).toContain("测试结论：通过");
+    expect(report).toContain("【Anthropic ★】");
+    expect(report).toContain("非流式 ✓ 812 ms");
+    expect(report).toContain("流式 ✓ 640 ms");
+    expect(report).toContain("【总评：建议主协议：Anthropic（置信度 高）】");
+    expect(report).toContain("建议把主类型从 OpenAI 改为 Anthropic");
+  });
+
+  it("协议检测：未执行时复制按钮置灰", () => {
+    renderDialog({ testType: "protocol", protocolTestResults: {} });
+
+    const button = copyButton();
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(copyTextWithToastMock).not.toHaveBeenCalled();
+  });
+});
+
+// 协议矩阵测试夹具：一条可用（被点名）、一条部分支持（流式不合规）、一条不可用。
+// 用返回注解工厂，字段拼错会被 tsc 抓住。
+const protocolLeg = (over: Partial<ProtocolProbeEntry["non_stream"]> = {}): ProtocolProbeEntry["non_stream"] => ({
+  status: "passed",
+  passed: true,
+  status_code: 200,
+  duration_ms: 812,
+  ...over,
+});
+
+const protocolEntryFixture = (over: Partial<ProtocolProbeEntry>): ProtocolProbeEntry => ({
+  protocol: "openai",
+  provider_type: "openai",
+  request_url: "https://up.example/v1/chat/completions",
+  url_source: "endpoint",
+  endpoint_configured: true,
+  verdict: "usable",
+  non_stream: protocolLeg(),
+  stream: protocolLeg({ duration_ms: 640 }),
+  fingerprint: {
+    attempted: true,
+    probe_model: "llmux-protocol-probe-nonexistent",
+    status_code: 404,
+    family: "openai",
+    same_family: true,
+    native_headers: [],
+  },
+  fields: { hit: ["object"], miss: ["service_tier"] },
+  id_prefix: "chatcmpl",
+  recommended: false,
+  ...over,
+});
+
+const protocolFixture = (): ProtocolProbeResult => ({
+  passed: true,
+  model: "gpt-4.1",
+  provider: "p",
+  main_protocol: "openai",
+  protocols: [
+    protocolEntryFixture({
+      verdict: "unusable",
+      non_stream: protocolLeg({ status: "failed", passed: false, status_code: 404, summary: "上游返回错误" }),
+      stream: protocolLeg({ status: "failed", passed: false, status_code: 404, summary: "上游返回错误" }),
+    }),
+    protocolEntryFixture({
+      protocol: "responses",
+      provider_type: "openai-res",
+      request_url: "https://up.example/v1/responses",
+      url_source: "inherited",
+      endpoint_configured: false,
+      verdict: "partial",
+      stream: protocolLeg({ status: "noncompliant", passed: false, summary: "流式响应不合规" }),
+      fingerprint: {
+        attempted: true,
+        probe_model: "llmux-protocol-probe-nonexistent",
+        status_code: 404,
+        family: "anthropic",
+        same_family: false,
+        native_headers: [],
+        message: "上游回的不是客户端错误",
+      },
+    }),
+    protocolEntryFixture({
+      protocol: "anthropic",
+      provider_type: "anthropic",
+      request_url: "https://up.example/v1/messages",
+      url_source: "inherited",
+      endpoint_configured: false,
+      recommended: true,
+      fingerprint: {
+        attempted: true,
+        probe_model: "llmux-protocol-probe-nonexistent",
+        status_code: 404,
+        family: "anthropic",
+        same_family: true,
+        native_headers: ["anthropic-ratelimit-requests-limit"],
+      },
+      fields: { hit: ["type", "stop_reason"], miss: [] },
+      id_prefix: "msg",
+    }),
+  ],
+  recommendation: {
+    protocol: "anthropic",
+    confidence: "high",
+    summary: "建议主协议：Anthropic",
+    reason: "只有它的错误信封是自身协议形状。",
+    actions: ["建议把主类型从 OpenAI 改为 Anthropic"],
+    notes: ["耗时是单次样本，只作展示，不参与排名"],
+  },
 });

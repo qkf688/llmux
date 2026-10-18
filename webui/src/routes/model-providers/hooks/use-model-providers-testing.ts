@@ -3,10 +3,12 @@ import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { isAbortError, toErrorMessage } from "@/lib/errors";
 import {
   testModelProvider,
+  testModelProviderProtocols,
   testModelProviderStructuredOutput,
   testModelProviderThinking,
   testModelProviderVision,
   type ModelProviderTestResult,
+  type ProtocolProbeResult,
 } from "@/lib/api";
 import { requireAuthTokenOrRedirect, fetchHandlingUnauthorized, UnauthorizedError } from "@/lib/api/core/client";
 import type { Setter } from "@/stores/core/updater";
@@ -31,7 +33,75 @@ type CapabilityTestEntry = {
 
 export type CapabilityTestResults = Record<CapabilityTestKey, CapabilityTestEntry>;
 
+/** 协议检测结果按「关联 id」存一格：它没有模式轴（后端一次调用已把流式/非流式都跑完），
+ *  再套一层 mode 会把同一份结论散成两格、还会读出上一模式的不存在值。 */
+export type ProtocolTestEntry = {
+  loading: boolean;
+  result: ProtocolProbeResult | null;
+  cancelled?: boolean;
+};
+
+export type ProtocolTestResults = Record<number, ProtocolTestEntry>;
+
 type CapabilityTestApi = (id: number, mode: TestMode, signal?: AbortSignal) => Promise<ModelProviderTestResult>;
+
+/** 协议检测执行单元：与 useCapabilityTest 同款三态与取消语义，只是键从
+ *  「关联:模式」降为「关联」、结果类型换成协议矩阵。刻意不并进 useCapabilityTest：
+ *  键形态与回包形状都不同，强行统一只会逼出一堆条件分支。 */
+function useProtocolTest() {
+  const [results, setResults] = useState<ProtocolTestResults>({});
+  const controllersRef = useRef<Map<number, AbortController>>(new Map());
+
+  const run = useCallback(async (id: number): Promise<ProtocolProbeResult | null> => {
+    controllersRef.current.get(id)?.abort();
+    const controller = new AbortController();
+    controllersRef.current.set(id, controller);
+    // 只有仍代表该格「当前请求」的那一次才允许写结果（同 useCapabilityTest 口径）。
+    const isCurrent = () => controllersRef.current.get(id) === controller;
+
+    try {
+      setResults((prev) => ({ ...prev, [id]: { loading: true, result: null } }));
+      const result = await testModelProviderProtocols(id, controller.signal);
+      if (isCurrent()) {
+        setResults((prev) => ({ ...prev, [id]: { loading: false, result } }));
+      }
+      return result;
+    } catch (err) {
+      if (isAbortError(err)) {
+        if (isCurrent()) {
+          setResults((prev) => ({ ...prev, [id]: { loading: false, result: null, cancelled: true } }));
+        }
+        return null;
+      }
+      // 登录过期不是「检测失败」：失效出口已处置，格子回到「没测过」，不写失败结论。
+      if (err instanceof UnauthorizedError) {
+        if (isCurrent()) {
+          setResults((prev) => ({ ...prev, [id]: { loading: false, result: null } }));
+        }
+        return null;
+      }
+      const message = `协议检测失败: ${toErrorMessage(err)}`;
+      if (isCurrent()) {
+        setResults((prev) => ({ ...prev, [id]: { loading: false, result: { passed: false, protocols: [], recommendation: { protocol: "", confidence: "low", summary: message, reason: "", actions: [], notes: [] } } } }));
+      }
+      console.error(err);
+      return { passed: false, protocols: [], recommendation: { protocol: "", confidence: "low", summary: message, reason: "", actions: [], notes: [] } };
+    } finally {
+      if (isCurrent()) {
+        controllersRef.current.delete(id);
+      }
+    }
+  }, []);
+
+  const abortAll = useCallback(() => {
+    // 不 clear：各请求自行判定「是否仍是该格当前请求」再清理（同 useCapabilityTest）。
+    for (const controller of controllersRef.current.values()) {
+      controller.abort();
+    }
+  }, []);
+
+  return { results, run, abortAll };
+}
 
 type UseModelProvidersTestingInput = {
   setTestDialogOpen: (open: boolean) => void;
@@ -136,12 +206,14 @@ export function useModelProvidersTesting({
   const structuredTest = useCapabilityTest(testModelProviderStructuredOutput);
   const thinkingTest = useCapabilityTest(testModelProviderThinking);
   const visionTest = useCapabilityTest(testModelProviderVision);
+  const protocolTest = useProtocolTest();
 
   // abortAll 是 useCallback([]) 的稳定引用，解构出来做依赖，避免因 hook 返回对象每次新建而重建回调。
   const { abortAll: abortConnectivity } = connectivityTest;
   const { abortAll: abortStructured } = structuredTest;
   const { abortAll: abortThinking } = thinkingTest;
   const { abortAll: abortVision } = visionTest;
+  const { abortAll: abortProtocol } = protocolTest;
 
   const currentControllerRef = useRef<AbortController | null>(null);
 
@@ -151,7 +223,8 @@ export function useModelProvidersTesting({
     abortStructured();
     abortThinking();
     abortVision();
-  }, [abortConnectivity, abortStructured, abortThinking, abortVision]);
+    abortProtocol();
+  }, [abortConnectivity, abortStructured, abortThinking, abortVision, abortProtocol]);
 
   const abortAllTests = useCallback(() => {
     abortAllCapabilityTests();
@@ -332,6 +405,9 @@ export function useModelProvidersTesting({
       structured_output: structuredTest.run,
       thinking: thinkingTest.run,
       vision: visionTest.run,
+      // 协议检测同样忽略 mode：它没有模式轴，一次调用内部已把两种模式都跑完
+      // （签名只取 id，多余实参被忽略，故直接引用而不套一层箭头）。
+      protocol: protocolTest.run,
     };
     await testRunnerByType[testType](selectedTestId, testMode);
   }, [
@@ -340,6 +416,7 @@ export function useModelProvidersTesting({
     structuredTest.run,
     thinkingTest.run,
     visionTest.run,
+    protocolTest.run,
     selectedTestId,
     testType,
     testMode,
@@ -354,6 +431,7 @@ export function useModelProvidersTesting({
     structuredTestResults: structuredTest.results,
     thinkingTestResults: thinkingTest.results,
     visionTestResults: visionTest.results,
+    protocolTestResults: protocolTest.results,
     handleTest,
     dialogClose,
     executeTestNow,

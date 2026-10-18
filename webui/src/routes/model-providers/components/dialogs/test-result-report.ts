@@ -6,13 +6,14 @@
  * 段名、流式诊断四项数、各段取值都只在这里定一次，展示（LogBlock / StreamStatsSection）
  * 与复制（build*Report）都从这里取。
  */
-import type { ModelProviderTestResult } from "@/lib/api";
+import type { ModelProviderTestResult, ProtocolProbeEntry, ProtocolProbeResult } from "@/lib/api";
+import { protocolLabel } from "@/lib/protocols";
 import type { ReactTestResultState } from "@/stores/model-providers/types";
 import type { TestType } from "../../types";
 
 /** 走「能力测试」形状（按关联+模式存一格 + 结论 + 可选类型专属段）的测试类型。
- *  ReAct 自持一条 SSE 流、结果状态形状不同，不在此列。 */
-export type CapabilityTestType = Exclude<TestType, "react">;
+ *  ReAct 自持一条 SSE 流、协议检测回一张协议矩阵，两者结果形状都不同，均不在此列。 */
+export type CapabilityTestType = Exclude<TestType, "react" | "protocol">;
 
 /** 一类能力测试的展示 + 复制描述。段名与取值为单一来源，UI 与剪贴板共用；
  *  新增能力测试类型只需在调用方那张表里加一行，本模块不动（OCP）。 */
@@ -112,4 +113,107 @@ export function buildReactReport(state: ReactTestResultState): string | null {
   const head = [passed ? PASS_HEAD : FAIL_HEAD, reasonLine].filter((line) => line !== "").join("\n");
   const log = state.messages.trim();
   return log ? joinSections(head, [{ label: "测试日志", body: log }]) : head;
+}
+
+/* ---------- 协议支持检测 ---------- */
+
+/** 协议可用性判定的人读名。noncompliant 刻意与 failed 分开：前者是「实现了但不合规」
+ *  （缺终止事件/无内容增量），后者是「压根不按流式回」，处置完全不同。 */
+const PROTOCOL_VERDICT_LABEL: Record<string, string> = {
+  usable: "可用",
+  partial: "部分支持",
+  unusable: "不可用",
+};
+
+const PROTOCOL_CONFIDENCE_LABEL: Record<string, string> = {
+  high: "高",
+  medium: "中",
+  low: "低",
+};
+
+/** 判定/置信度的人读名：结果区与复制文本共用同一份（两边各写一份必漂移）。 */
+export function protocolVerdictLabel(verdict: string): string {
+  return PROTOCOL_VERDICT_LABEL[verdict] ?? verdict;
+}
+
+export function protocolConfidenceLabel(confidence: string): string {
+  return PROTOCOL_CONFIDENCE_LABEL[confidence] ?? confidence;
+}
+
+/** 协议名（推荐的那条加星号标记）——展示与复制共用。 */
+export function protocolName(entry: ProtocolProbeEntry): string {
+  const name = protocolLabel(entry.protocol);
+  return entry.recommended ? `${name} ★` : name;
+}
+
+/** 单条协议的一行摘要：判定 + 非流式/流式耗时（失败时带原因短语）。展示与复制共用，
+ *  否则屏幕上写「流式不合规」、剪贴板里只剩「failed」这类漂移没有任何检查会红。 */
+export function protocolSummaryLine(entry: ProtocolProbeEntry): string {
+  const leg = (label: string, result: ProtocolProbeEntry["non_stream"]) => {
+    const mark = result.status === "passed" ? "✓" : result.status === "noncompliant" ? "⚠" : "✗";
+    const timing =
+      result.status === "passed"
+        ? `${result.duration_ms} ms`
+        : result.summary || result.detail || result.error_type || "未通过";
+    return `${label} ${mark} ${timing}`;
+  };
+  const verdict = PROTOCOL_VERDICT_LABEL[entry.verdict] ?? entry.verdict;  return [verdict, leg("非流式", entry.non_stream), leg("流式", entry.stream)].join(" · ");
+}
+
+/** 证据摘要：指纹同族 / 原生响应头 / 原生字段命中。展示与复制共用。 */
+export function protocolEvidenceLine(entry: ProtocolProbeEntry): string {
+  const parts: string[] = [];
+  if (entry.fingerprint.same_family) {
+    parts.push(`错误信封与自身协议同族（${entry.fingerprint.family}）`);
+  } else if (entry.fingerprint.message) {
+    parts.push(entry.fingerprint.message);
+  }
+  if (entry.fingerprint.native_headers.length > 0) {
+    parts.push(`原生响应头 ${entry.fingerprint.native_headers.join(", ")}`);
+  }
+  if (entry.id_prefix) {
+    parts.push(`响应 id 前缀 ${entry.id_prefix}`);
+  }
+  const total = entry.fields.hit.length + entry.fields.miss.length;
+  if (total > 0) {
+    const miss = entry.fields.miss.length > 0 ? `（缺 ${entry.fields.miss.join(", ")}）` : "";
+    parts.push(`原生字段 ${entry.fields.hit.length}/${total} 命中${miss}`);
+  }
+  return parts.join(" · ");
+}
+
+/** 协议检测的整份复制文本：结论 → 逐协议（判定/耗时/地址/证据）→ 总评。
+ *  返回 null = 本状态没有可复制的结论（未执行 / 执行中 / 已取消）。 */
+export function buildProtocolReport(result: ProtocolProbeResult | null): string | null {
+  if (!result) return null;
+  const recommendation = result.recommendation;
+  const passed = result.passed === true;
+  const head = [
+    passed ? PASS_HEAD : FAIL_HEAD,
+    `模型：${result.model ?? "—"}${result.provider ? `（供应商 ${result.provider}）` : ""}`,
+  ].join("\n");
+  const sections: { label: string; body: string }[] = (result.protocols ?? []).map((entry) => ({
+    label: protocolName(entry),
+    body: [
+      protocolSummaryLine(entry),
+      `地址：${entry.request_url}（${entry.url_source === "endpoint" ? "已配置端点" : "继承 Base URL"}）`,
+      protocolEvidenceLine(entry),
+    ]
+      .filter((line) => line !== "")
+      .join("\n"),
+  }));
+  if (recommendation) {
+    const confidence = protocolConfidenceLabel(recommendation.confidence);
+    sections.push({
+      label: `总评：${recommendation.summary}（置信度 ${confidence}）`,
+      body: [
+        recommendation.reason,
+        ...recommendation.actions.map((action) => `· ${action}`),
+        ...recommendation.notes.map((note) => `· ${note}`),
+      ]
+        .filter((line) => line !== "")
+        .join("\n"),
+    });
+  }
+  return joinSections(head, sections);
 }

@@ -2,6 +2,7 @@ import { Copy } from "lucide-react";
 import type { CapabilityTestKey, TestMode, TestType } from "../../types";
 import type { ModelProviderTestResult } from "@/lib/api";
 import type { ReactTestResultState } from "@/stores/model-providers/types";
+import type { ProtocolTestEntry, ProtocolTestResults } from "../../hooks/use-model-providers-testing";
 import { copyTextWithToast } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,13 @@ import { capabilityTestKey, type CapabilityTestResults } from "../../hooks/use-m
 // 段名 / 流式诊断四项数 / 复制文本拼装都在本模块定：结果区展示与剪贴板共用同一份。
 import {
   buildCapabilityReport,
+  buildProtocolReport,
   buildReactReport,
+  protocolConfidenceLabel,
+  protocolEvidenceLine,
+  protocolName,
+  protocolSummaryLine,
+  protocolVerdictLabel,
   rawOutputLabel,
   streamStatsItems,
   type CapabilityTestSpec,
@@ -49,6 +56,7 @@ type TestDialogProps = {
   structuredTestResults: CapabilityTestResults;
   thinkingTestResults: CapabilityTestResults;
   visionTestResults: CapabilityTestResults;
+  protocolTestResults: ProtocolTestResults;
   reactTestResult: ReactTestResultState;
   onClose: () => void;
   onExecute: () => void;
@@ -73,6 +81,12 @@ const TEST_OPTIONS: { value: TestType; label: string; description: string }[] = 
     label: "图片识别能力测试",
     description:
       "测试模型是否支持视觉输入：内嵌 64×64 纯红色测试图并提问颜色，回答须识别出红色。可作为开启关联视觉能力的依据。",
+  },
+  {
+    value: "protocol",
+    label: "协议支持检测",
+    description:
+      "同一模型分别按 OpenAI / Responses / Anthropic 三种协议打上游：各协议的可用性、像不像原样直通的证据、原生字段完整度，并给出带置信度的建议。只读，不改任何配置。",
   },
 ];
 
@@ -201,6 +215,79 @@ function CapabilityResultSection({
   );
 }
 
+// 协议矩阵结果区：每条协议一张小卡（判定 + 两模式结论 + 地址 + 证据），末尾是总评。
+// 协议名 / 判定名 / 证据行都取自 test-result-report 的单一来源——屏幕上看到的与复制出去的
+// 是同一份拼装（两边各写一份必漂移）。
+function ProtocolResultSection({ entry }: { entry: ProtocolTestEntry | undefined }) {
+  if (entry?.loading) {
+    return <LoadingState text="检测中...（两段并发，最坏约 1 分钟）" />;
+  }
+  if (entry?.cancelled) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-1 text-sm text-muted-foreground">
+        <span>已取消</span>
+        <span className="text-xs">本次检测被中止，未产出结论</span>
+      </div>
+    );
+  }
+  const result = entry?.result;
+  if (!result) {
+    return <ResultPlaceholder />;
+  }
+  const protocols = result.protocols ?? [];
+  const recommendation = result.recommendation;
+  return (
+    <div className="space-y-2">
+      {protocols.length === 0 && (
+        <p className="text-xs text-muted-foreground">{recommendation?.summary ?? "没有探测到任何协议"}</p>
+      )}
+      {protocols.map((protocol) => (
+        <div
+          key={protocol.protocol}
+          className={cn("space-y-1 rounded-md border p-2", protocol.recommended && "border-primary/60 bg-primary/5")}
+        >
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span className="font-medium">{protocolName(protocol)}</span>
+            <span
+              className={cn(
+                "rounded px-1.5 py-0.5 text-xs",
+                protocol.verdict === "usable"
+                  ? "bg-emerald-500/10 text-emerald-600"
+                  : protocol.verdict === "partial"
+                    ? "bg-amber-500/10 text-amber-600"
+                    : "bg-destructive/10 text-destructive"
+              )}
+            >
+              {protocolVerdictLabel(protocol.verdict)}
+            </span>
+          </div>
+          <p className="break-all font-mono text-[11px] text-muted-foreground">
+            {protocol.request_url}（{protocol.url_source === "endpoint" ? "已配置端点" : "继承 Base URL"}）
+          </p>
+          <p className="text-xs">{protocolSummaryLine(protocol)}</p>
+          <p className="text-xs text-muted-foreground">{protocolEvidenceLine(protocol)}</p>
+        </div>
+      ))}
+      {recommendation && (
+        <div className="space-y-1 rounded-md border bg-background/40 p-2 text-xs">
+          <p className="font-medium">
+            {recommendation.summary}（置信度 {protocolConfidenceLabel(recommendation.confidence)}）
+          </p>
+          {recommendation.reason && <p className="text-muted-foreground">{recommendation.reason}</p>}
+          {recommendation.actions.map((action) => (
+            <p key={action}>· {action}</p>
+          ))}
+          {recommendation.notes.map((note) => (
+            <p key={note} className="text-muted-foreground">
+              · {note}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // 复制整份测试结果：与内容同处一个结果框，按钮和它复制的东西不隔框。
 // report 为 null = 本状态无结论可带走（未执行 / 已取消 / 测试中），置灰点不动；
 // 置灰时不再挂 Tooltip——disabled 按钮收不到鼠标事件，悬停说明本来就弹不出来。
@@ -243,6 +330,7 @@ export function TestDialog({
   structuredTestResults,
   thinkingTestResults,
   visionTestResults,
+  protocolTestResults,
   reactTestResult,
   onClose,
   onExecute,
@@ -257,6 +345,9 @@ export function TestDialog({
     vision: entryOf(visionTestResults),
   };
 
+  // 协议检测没有模式轴：结果按关联 id 存一格，直接取。
+  const protocolEntry = selectedTestId ? protocolTestResults[selectedTestId] : undefined;
+
   // 测试类型 → 是否执行中。Record 穷尽性保证新增 TestType 时这里被类型系统强制补一行，
   // 不再用嵌套三元（旧链的 else 分支会把未知类型误当 structured 的 loading）。
   const loadingByTestType: Record<TestType, boolean> = {
@@ -265,12 +356,14 @@ export function TestDialog({
     structured_output: !!entryByCapabilityType.structured_output?.loading,
     thinking: !!entryByCapabilityType.thinking?.loading,
     vision: !!entryByCapabilityType.vision?.loading,
+    protocol: !!protocolEntry?.loading,
   };
   const executeDisabled = loadingByTestType[testType];
 
   // ReAct 端点自己发流（第三方 agent 库），模式开关对它没有意义——禁用而不是隐藏，
   // 是为了让「为什么这里不能选」有地方写说明，而不是留个凭空消失的控件。
-  const modeSelectionDisabled = testType === "react" || executeDisabled;
+  // 协议检测同样没有模式轴：一次调用内部已把非流式与流式都跑完。
+  const modeSelectionDisabled = testType === "react" || testType === "protocol" || executeDisabled;
 
   // 当前测试类型的整份复制文本（结论 + 逐段正文 + 流式诊断）。能力测试按格有无 result 判：
   // 该格没有 result 就是「未执行 / 执行中 / 已取消」三态，与结果区渲染占位的判据同源。
@@ -284,6 +377,7 @@ export function TestDialog({
     structured_output: () => capabilityReportOf("structured_output"),
     thinking: () => capabilityReportOf("thinking"),
     vision: () => capabilityReportOf("vision"),
+    protocol: () => buildProtocolReport(protocolEntry?.result ?? null),
   };
   const copyableReport = reportByTestType[testType]();
 
@@ -347,6 +441,11 @@ export function TestDialog({
               ))}
             </RadioGroup>
             {testType === "react" && <p className="text-xs text-muted-foreground">React 测试本身即流式，模式对其无影响。</p>}
+            {testType === "protocol" && (
+              <p className="text-xs text-muted-foreground">
+                协议检测一次调用内部已把非流式与流式都跑完（共 9 条探针，最坏约 1 分钟），模式对它无影响。
+              </p>
+            )}
           </div>
 
           {/* vision 测试图预览：常量前端自内嵌（不经 API 回显），选中测试类型时即可看到「会给模型看什么图」 */}
@@ -371,12 +470,14 @@ export function TestDialog({
               <CopyResultButton report={copyableReport} />
             </div>
 
-            {testType !== "react" && (
+            {testType !== "react" && testType !== "protocol" && (
               <CapabilityResultSection
                 spec={CAPABILITY_SPECS[testType]}
                 entry={entryByCapabilityType[testType]}
               />
             )}
+
+            {testType === "protocol" && <ProtocolResultSection entry={protocolEntry} />}
 
             {testType === "react" &&
               (reactTestResult.loading ? (

@@ -8,12 +8,9 @@ export const SUPPORTED_TYPE_OPTIONS = [
   { type: "anthropic", protocol: "anthropic", label: "Anthropic" },
 ] as const;
 
-/** 协议 → 展示名（端点行 / 主类型展示） */
-export const PROTOCOL_LABEL: Record<string, string> = {
-  openai: "OpenAI",
-  anthropic: "Anthropic",
-  responses: "OpenAI Responses",
-};
+/** 协议 → 展示名（端点行 / 主类型展示）。单一来源在 lib/protocols：
+ *  模型测试的协议矩阵读同一张表，避免两处各写一份随协议新增而漂移。 */
+export { PROTOCOL_LABEL, protocolLabel } from "@/lib/protocols";
 
 /** 协议端点：protocol × url × enabled（同协议多 URL = 多条记录，启停由用户配置决定） */
 export const providerFormEndpointSchema = z.object({

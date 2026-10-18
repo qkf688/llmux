@@ -15,7 +15,9 @@ export type ProviderModelSelection = {
 
 export type BlacklistFilter = "all" | "blacklisted" | "not-blacklisted";
 
-export type TestType = "connectivity" | "react" | "structured_output" | "thinking" | "vision";
+// 「protocol」是唯一没有模式轴的一类：一次调用内部已把非流式与流式都跑完（后端端点无
+// ?stream= 参数），弹窗对它禁用模式开关。
+export type TestType = "connectivity" | "react" | "structured_output" | "thinking" | "vision" | "protocol";
 
 // 能力测试结果的存储键：关联 id + 模式。分开存是因为「非流式通过、流式失败」是两个
 // 都成立且都要看见的结论，共用一格会让切换模式后读到上一个模式的旧结果。

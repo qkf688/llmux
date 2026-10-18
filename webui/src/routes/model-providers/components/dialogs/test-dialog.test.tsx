@@ -242,6 +242,50 @@ describe("模型测试：复制整份结果", () => {
     fireEvent.click(button);
     expect(copyTextWithToastMock).not.toHaveBeenCalled();
   });
+
+  // 防「双层滚动」回归：协议矩阵曾被写死高度 + 自带 overflow，外框又固定，于是必须在
+  // 小窗里滚半屏才看得全三条协议。滚动只剩外框一层（DialogBody），结果区随内容生长。
+  it("结果区不再自带固定高度与滚动（避免外框之外再滚一层）", () => {
+    renderDialog({
+      testType: "protocol",
+      protocolTestResults: { [TEST_ID]: { loading: false, result: protocolFixture() } },
+    });
+
+    // 弹窗渲染进 portal（不在 RTL 的 container 里），故按 data-slot 从 document 取。
+    const area = document.querySelector('[data-slot="test-result-area"]');
+    expect(area).not.toBeNull();
+    expect(area?.className).not.toContain("h-64");
+    expect(area?.className).not.toContain("overflow-y-auto");
+  });
+
+  // 协议检测没有模式轴：整块不渲染（不是「禁用 + 一行解释」）——既省高度，也避免让人以为漏了开关。
+  it("协议检测不渲染执行模式，其余测试类型照常渲染", () => {
+    const protocol = renderDialog({
+      testType: "protocol",
+      protocolTestResults: { [TEST_ID]: { loading: false, result: protocolFixture() } },
+    });
+    expect(protocol.queryByText("执行模式")).toBeNull();
+    protocol.unmount();
+
+    renderDialog({ testType: "connectivity", testResults: resultsOf(entry({ result: capabilityResult() })) });
+    expect(screen.getByText("执行模式")).toBeInTheDocument();
+  });
+
+  // 矩阵必须是「三行表格」而非三张卡：协议的读法是横向比较，卡片把同一条信息拆成三块上下堆叠。
+  it("协议矩阵渲染成表格行，每行带可展开明细", () => {
+    renderDialog({
+      testType: "protocol",
+      protocolTestResults: { [TEST_ID]: { loading: false, result: protocolFixture() } },
+    });
+
+    const rows = screen.getAllByRole("row");
+    // 表头 1 行 + 三条协议各 1 行
+    expect(rows).toHaveLength(4);
+    expect(screen.getAllByText("明细")).toHaveLength(3);
+    // 明细默认收起但内容已在 DOM：URL 与来源是判断「测的是哪条路」的唯一依据
+    expect(screen.getByText(/https:\/\/up\.example\/v1\/messages/)).toBeInTheDocument();
+    expect(screen.getAllByText(/缺失字段：service_tier/).length).toBeGreaterThan(0);
+  });
 });
 
 // 协议矩阵测试夹具：一条可用（被点名）、一条部分支持（流式不合规）、一条不可用。

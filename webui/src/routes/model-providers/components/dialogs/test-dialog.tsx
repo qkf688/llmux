@@ -1,6 +1,6 @@
 import { Copy } from "lucide-react";
 import type { CapabilityTestKey, TestMode, TestType } from "../../types";
-import type { ModelProviderTestResult } from "@/lib/api";
+import type { ModelProviderTestResult, ProtocolProbeEntry } from "@/lib/api";
 import type { ReactTestResultState } from "@/stores/model-providers/types";
 import type { ProtocolTestEntry, ProtocolTestResults } from "../../hooks/use-model-providers-testing";
 import { copyTextWithToast } from "@/lib/clipboard";
@@ -31,7 +31,6 @@ import {
   protocolConfidenceLabel,
   protocolEvidenceLine,
   protocolName,
-  protocolSummaryLine,
   protocolVerdictLabel,
   rawOutputLabel,
   streamStatsItems,
@@ -215,9 +214,13 @@ function CapabilityResultSection({
   );
 }
 
-// 协议矩阵结果区：每条协议一张小卡（判定 + 两模式结论 + 地址 + 证据），末尾是总评。
-// 协议名 / 判定名 / 证据行都取自 test-result-report 的单一来源——屏幕上看到的与复制出去的
-// 是同一份拼装（两边各写一份必漂移）。
+// 协议矩阵结果区：三行表格（协议 / 判定 / 非流式 / 流式 / 证据）+ 下方总评。
+//
+// 为什么是表格而不是卡片：协议检测的读法是「横向比较三条路」，卡片把同一条信息拆成三块
+// 上下堆叠，三行就得滚半屏才看得全；表格一行一条协议，首屏就能比。
+// 细节（URL、字段命中清单、失败原因、原生响应头）收进可展开区，默认不占地方。
+//
+// 协议名 / 判定名 / 证据行仍取自 test-result-report 的单一来源——屏幕与剪贴板同一份拼装。
 function ProtocolResultSection({ entry }: { entry: ProtocolTestEntry | undefined }) {
   if (entry?.loading) {
     return <LoadingState text="检测中...（两段并发，最坏约 1 分钟）" />;
@@ -237,37 +240,50 @@ function ProtocolResultSection({ entry }: { entry: ProtocolTestEntry | undefined
   const protocols = result.protocols ?? [];
   const recommendation = result.recommendation;
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {protocols.length === 0 && (
         <p className="text-xs text-muted-foreground">{recommendation?.summary ?? "没有探测到任何协议"}</p>
       )}
-      {protocols.map((protocol) => (
-        <div
-          key={protocol.protocol}
-          className={cn("space-y-1 rounded-md border p-2", protocol.recommended && "border-primary/60 bg-primary/5")}
-        >
-          <div className="flex items-center justify-between gap-2 text-sm">
-            <span className="font-medium">{protocolName(protocol)}</span>
-            <span
-              className={cn(
-                "rounded px-1.5 py-0.5 text-xs",
-                protocol.verdict === "usable"
-                  ? "bg-emerald-500/10 text-emerald-600"
-                  : protocol.verdict === "partial"
-                    ? "bg-amber-500/10 text-amber-600"
-                    : "bg-destructive/10 text-destructive"
-              )}
-            >
-              {protocolVerdictLabel(protocol.verdict)}
-            </span>
-          </div>
-          <p className="break-all font-mono text-[11px] text-muted-foreground">
-            {protocol.request_url}（{protocol.url_source === "endpoint" ? "已配置端点" : "继承 Base URL"}）
-          </p>
-          <p className="text-xs">{protocolSummaryLine(protocol)}</p>
-          <p className="text-xs text-muted-foreground">{protocolEvidenceLine(protocol)}</p>
-        </div>
-      ))}
+      {protocols.length > 0 && (
+        <table className="w-full table-fixed text-xs">
+          <thead>
+            <tr className="border-b text-left text-muted-foreground">
+              <th className="w-28 py-1 font-medium">协议</th>
+              <th className="w-16 py-1 font-medium">判定</th>
+              <th className="w-28 py-1 font-medium">非流式</th>
+              <th className="w-28 py-1 font-medium">流式</th>
+              <th className="py-1 font-medium">证据</th>
+            </tr>
+          </thead>
+          <tbody>
+            {protocols.map((protocol) => (
+              <tr key={protocol.protocol} className={cn("border-b align-top", protocol.recommended && "bg-primary/5")}>
+                <td className="py-1.5 pr-2 font-medium">{protocolName(protocol)}</td>
+                <td className="py-1.5 pr-2">
+                  <span
+                    className={cn(
+                      "rounded px-1.5 py-0.5",
+                      protocol.verdict === "usable"
+                        ? "bg-emerald-500/10 text-emerald-600"
+                        : protocol.verdict === "partial"
+                          ? "bg-amber-500/10 text-amber-600"
+                          : "bg-destructive/10 text-destructive"
+                    )}
+                  >
+                    {protocolVerdictLabel(protocol.verdict)}
+                  </span>
+                </td>
+                <td className="py-1.5 pr-2">{protocolLegCell(protocol.non_stream)}</td>
+                <td className="py-1.5 pr-2">{protocolLegCell(protocol.stream)}</td>
+                <td className="py-1.5">
+                  <p className="text-muted-foreground">{protocolEvidenceLine(protocol)}</p>
+                  <ProtocolDetail protocol={protocol} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       {recommendation && (
         <div className="space-y-1 rounded-md border bg-background/40 p-2 text-xs">
           <p className="font-medium">
@@ -285,6 +301,50 @@ function ProtocolResultSection({ entry }: { entry: ProtocolTestEntry | undefined
         </div>
       )}
     </div>
+  );
+}
+
+// 单条探针腿的单元格：过=耗时，不过=失败原因短语（合规与否用符号区分，不靠颜色单独承载信息）。
+function protocolLegCell(leg: ProtocolProbeEntry["non_stream"]) {
+  const mark = leg.status === "passed" ? "✓" : leg.status === "noncompliant" ? "⚠" : "✗";
+  const timing =
+    leg.status === "passed" ? `${leg.duration_ms} ms` : leg.summary || leg.detail || leg.error_type || "未通过";
+  return (
+    <span className="font-mono">
+      {mark} {timing}
+    </span>
+  );
+}
+
+// 展开明细：URL 与来源、字段命中清单、两条腿的失败细节、原生响应头。
+// 用原生 <details> 而非自造折叠控件：省一份状态与无障碍实现，键盘也能用。
+function ProtocolDetail({ protocol }: { protocol: ProtocolProbeEntry }) {
+  const legDetail = (label: string, leg: ProtocolProbeEntry["non_stream"]) => {
+    if (leg.status === "passed") return null;
+    return (
+      <p className="text-muted-foreground">
+        {label}：{leg.summary || "未通过"}
+        {leg.detail ? ` — ${leg.detail}` : ""}
+        {leg.terminated_by ? `（终止事件 ${leg.terminated_by}）` : ""}
+      </p>
+    );
+  };
+  return (
+    <details className="mt-1">
+      <summary className="cursor-pointer text-[11px] text-muted-foreground">明细</summary>
+      <div className="mt-1 space-y-0.5 font-mono text-[11px]">
+        <p className="break-all">
+          {protocol.request_url}（{protocol.url_source === "endpoint" ? "已配置端点" : "继承 Base URL"}）
+        </p>
+        {protocol.fields.hit.length > 0 && <p>原生字段命中：{protocol.fields.hit.join(", ")}</p>}
+        {protocol.fields.miss.length > 0 && <p>缺失字段：{protocol.fields.miss.join(", ")}</p>}
+        {protocol.fingerprint.native_headers.length > 0 && (
+          <p>原生响应头：{protocol.fingerprint.native_headers.join(", ")}</p>
+        )}
+        {legDetail("非流式", protocol.non_stream)}
+        {legDetail("流式", protocol.stream)}
+      </div>
+    </details>
   );
 }
 
@@ -389,7 +449,10 @@ export function TestDialog({
           <DialogDescription>选择要执行的测试类型</DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="space-y-4">
+        {/* flex 列 + gap：结果区随内容增长，超出部分统一由 DialogBody（外框唯一滚动容器）消化。
+            此前结果区写死 h-64 并自带滚动，形成「外框固定 + 小窗再滚」的双层滚动，
+            三条协议的矩阵必须滚半屏才看得全。 */}
+        <DialogBody className="flex flex-col gap-4">
           <RadioGroup
             value={testType}
             onValueChange={(value: string) => onTestTypeChange(value as TestType)}
@@ -414,39 +477,40 @@ export function TestDialog({
             ))}
           </RadioGroup>
 
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">执行模式</p>
-            <RadioGroup
-              value={testMode}
-              onValueChange={(value: string) => onTestModeChange(value as TestMode)}
-              className="grid grid-cols-2 gap-2"
-              disabled={modeSelectionDisabled}
-            >
-              {TEST_MODE_OPTIONS.map((opt) => (
-                <label
-                  key={opt.value}
-                  htmlFor={`mode-${opt.value}`}
-                  className={cn(
-                    "flex cursor-pointer items-start gap-2 rounded-md border p-2 transition-colors",
-                    testMode === opt.value ? "border-primary bg-primary/5" : "hover:bg-muted/50",
-                    modeSelectionDisabled && "cursor-not-allowed opacity-60",
-                  )}
-                >
-                  <RadioGroupItem value={opt.value} id={`mode-${opt.value}`} className="mt-0.5" />
-                  <div className="space-y-0.5">
-                    <span className="text-sm font-medium leading-none">{opt.label}</span>
-                    <p className="text-xs text-muted-foreground">{opt.description}</p>
-                  </div>
-                </label>
-              ))}
-            </RadioGroup>
-            {testType === "react" && <p className="text-xs text-muted-foreground">React 测试本身即流式，模式对其无影响。</p>}
-            {testType === "protocol" && (
-              <p className="text-xs text-muted-foreground">
-                协议检测一次调用内部已把非流式与流式都跑完（共 9 条探针，最坏约 1 分钟），模式对它无影响。
-              </p>
-            )}
-          </div>
+          {/* 执行模式：协议检测**整块不渲染**（它没有模式轴，一次调用内部已把两种模式都跑完）。
+              此前是「禁用 + 一行解释」，白白占掉约 120px 高度，还让人以为漏了开关。 */}
+          {testType !== "protocol" && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">执行模式</p>
+              <RadioGroup
+                value={testMode}
+                onValueChange={(value: string) => onTestModeChange(value as TestMode)}
+                className="grid grid-cols-2 gap-2"
+                disabled={modeSelectionDisabled}
+              >
+                {TEST_MODE_OPTIONS.map((opt) => (
+                  <label
+                    key={opt.value}
+                    htmlFor={`mode-${opt.value}`}
+                    className={cn(
+                      "flex cursor-pointer items-start gap-2 rounded-md border p-2 transition-colors",
+                      testMode === opt.value ? "border-primary bg-primary/5" : "hover:bg-muted/50",
+                      modeSelectionDisabled && "cursor-not-allowed opacity-60",
+                    )}
+                  >
+                    <RadioGroupItem value={opt.value} id={`mode-${opt.value}`} className="mt-0.5" />
+                    <div className="space-y-0.5">
+                      <span className="text-sm font-medium leading-none">{opt.label}</span>
+                      <p className="text-xs text-muted-foreground">{opt.description}</p>
+                    </div>
+                  </label>
+                ))}
+              </RadioGroup>
+              {testType === "react" && (
+                <p className="text-xs text-muted-foreground">React 测试本身即流式，模式对其无影响。</p>
+              )}
+            </div>
+          )}
 
           {/* vision 测试图预览：常量前端自内嵌（不经 API 回显），选中测试类型时即可看到「会给模型看什么图」 */}
           {testType === "vision" && (
@@ -464,8 +528,10 @@ export function TestDialog({
             </div>
           )}
 
-          {/* 固定高度结果区：切换测试类型 / 展开错误 / 追加日志时，dialog 外框尺寸恒定，仅此处内部滚动 */}
-          <div className="h-64 overflow-y-auto rounded-md border bg-muted/20 p-3">
+          {/* 结果区：不写死高度、不自带滚动——内容多长它就长多长，超出外框上限时由 DialogBody 统一滚。
+              data-slot 只给回归用例锚点：双层滚动正是「容器带固定高度 + 自带 overflow」造成的，
+              没有任何行为断言能测到它，只能结构性盯住。 */}
+          <div data-slot="test-result-area" className="rounded-md border bg-muted/20 p-3">
             <div className="mb-2 flex justify-end">
               <CopyResultButton report={copyableReport} />
             </div>

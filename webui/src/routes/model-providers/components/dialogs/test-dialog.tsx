@@ -29,7 +29,7 @@ import {
   buildProtocolReport,
   buildReactReport,
   protocolConfidenceLabel,
-  protocolEvidenceLine,
+  protocolEvidenceChips,
   protocolName,
   protocolVerdictLabel,
   rawOutputLabel,
@@ -245,20 +245,21 @@ function ProtocolResultSection({ entry }: { entry: ProtocolTestEntry | undefined
         <p className="text-xs text-muted-foreground">{recommendation?.summary ?? "没有探测到任何协议"}</p>
       )}
       {protocols.length > 0 && (
-        <table className="w-full table-fixed text-xs">
+        <table className="w-full text-xs">
           <thead>
             <tr className="border-b text-left text-muted-foreground">
-              <th className="w-28 py-1 font-medium">协议</th>
-              <th className="w-16 py-1 font-medium">判定</th>
-              <th className="w-28 py-1 font-medium">非流式</th>
-              <th className="w-28 py-1 font-medium">流式</th>
-              <th className="py-1 font-medium">证据</th>
+              <th className="py-1 pr-2 font-medium">协议</th>
+              <th className="py-1 pr-2 font-medium">判定</th>
+              <th className="py-1 pr-2 font-medium">非流式</th>
+              <th className="py-1 font-medium">流式</th>
             </tr>
           </thead>
-          <tbody>
-            {protocols.map((protocol) => (
-              <tr key={protocol.protocol} className={cn("border-b align-top", protocol.recommended && "bg-primary/5")}>
-                <td className="py-1.5 pr-2 font-medium">{protocolName(protocol)}</td>
+          {protocols.map((protocol) => (
+            // 每条协议两行：第一行横向比较（协议/判定/两模式），第二行整行放证据短标签。
+            // 证据不再单独占一列——窄弹窗里给它 60px 会挤成一字一行，行高比内容还高。
+            <tbody key={protocol.protocol} className={cn(protocol.recommended && "bg-primary/5")}>
+              <tr className="align-top">
+                <td className="py-1.5 pr-2 whitespace-nowrap font-medium">{protocolName(protocol)}</td>
                 <td className="py-1.5 pr-2">
                   <span
                     className={cn(
@@ -273,15 +274,23 @@ function ProtocolResultSection({ entry }: { entry: ProtocolTestEntry | undefined
                     {protocolVerdictLabel(protocol.verdict)}
                   </span>
                 </td>
-                <td className="py-1.5 pr-2">{protocolLegCell(protocol.non_stream)}</td>
-                <td className="py-1.5 pr-2">{protocolLegCell(protocol.stream)}</td>
-                <td className="py-1.5">
-                  <p className="text-muted-foreground">{protocolEvidenceLine(protocol)}</p>
-                  <ProtocolDetail protocol={protocol} />
+                <td className="py-1.5 pr-2 whitespace-nowrap">{protocolLegCell(protocol.non_stream)}</td>
+                <td className="py-1.5 whitespace-nowrap">{protocolLegCell(protocol.stream)}</td>
+              </tr>
+              <tr className="border-b">
+                <td colSpan={4} className="pb-1.5">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
+                    {protocolEvidenceChips(protocol).map((chip) => (
+                      <span key={chip} className="rounded bg-muted px-1 py-0.5 text-[11px]">
+                        {chip}
+                      </span>
+                    ))}
+                    <ProtocolDetail protocol={protocol} />
+                  </div>
                 </td>
               </tr>
-            ))}
-          </tbody>
+            </tbody>
+          ))}
         </table>
       )}
       {recommendation && (
@@ -329,13 +338,24 @@ function ProtocolDetail({ protocol }: { protocol: ProtocolProbeEntry }) {
       </p>
     );
   };
+  // 收起时与证据标签同排（只占一个标签宽），展开时才独占一行，避免长句把标签行撑开。
   return (
-    <details className="mt-1">
-      <summary className="cursor-pointer text-[11px] text-muted-foreground">明细</summary>
+    <details className="mt-1 [&[open]]:w-full">
+      {/* 与证据短标签同款外观：它本质是「多一条可选信息」，不该看起来像另一种控件。 */}
+      <summary className="w-fit cursor-pointer list-none rounded bg-muted px-1 py-0.5 text-[11px] [&::-webkit-details-marker]:hidden">
+        明细
+      </summary>
       <div className="mt-1 space-y-0.5 font-mono text-[11px]">
         <p className="break-all">
           {protocol.request_url}（{protocol.url_source === "endpoint" ? "已配置端点" : "继承 Base URL"}）
         </p>
+        {/* 指纹请求本身的结论也要露出来：只说「指纹未采到」而不给状态码，用户没法判断
+            是上游拒了假模型（正常）还是网关自己 5xx（本轮证据作废）。 */}
+        <p>
+          指纹请求：HTTP {protocol.fingerprint.status_code}
+          {protocol.fingerprint.error_type ? `（${protocol.fingerprint.error_type}）` : ""}
+        </p>
+        {!protocol.fingerprint.same_family && protocol.fingerprint.message && <p>{protocol.fingerprint.message}</p>}
         {protocol.fields.hit.length > 0 && <p>原生字段命中：{protocol.fields.hit.join(", ")}</p>}
         {protocol.fields.miss.length > 0 && <p>缺失字段：{protocol.fields.miss.join(", ")}</p>}
         {protocol.fingerprint.native_headers.length > 0 && (

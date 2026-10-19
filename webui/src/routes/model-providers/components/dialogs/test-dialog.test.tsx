@@ -216,7 +216,9 @@ describe("模型测试：复制整份结果", () => {
     // 总评带置信度，且证据不足/证据够硬由后端给（前端只展示，不自己算）。
     expect(screen.getByText(/建议主协议：Anthropic/)).toBeInTheDocument();
     expect(screen.getByText(/置信度 高/)).toBeInTheDocument();
-    expect(screen.getAllByText(/错误信封与自身协议同族/).length).toBeGreaterThan(0);
+    // 证据在结果区是短标签（完整句子留给复制文本）：同族与异族都必须能一眼区分。
+    expect(screen.getAllByText("指纹同族").length).toBeGreaterThan(0);
+    expect(screen.getByText("指纹异族 anthropic")).toBeInTheDocument();
   });
 
   it("协议检测：复制文本包含逐协议结论与总评（与屏幕同一份拼装）", async () => {
@@ -279,12 +281,14 @@ describe("模型测试：复制整份结果", () => {
     });
 
     const rows = screen.getAllByRole("row");
-    // 表头 1 行 + 三条协议各 1 行
-    expect(rows).toHaveLength(4);
+    // 表头 1 行 + 三条协议各 2 行（横向比较行 + 整行证据行）
+    expect(rows).toHaveLength(7);
     expect(screen.getAllByText("明细")).toHaveLength(3);
     // 明细默认收起但内容已在 DOM：URL 与来源是判断「测的是哪条路」的唯一依据
     expect(screen.getByText(/https:\/\/up\.example\/v1\/messages/)).toBeInTheDocument();
     expect(screen.getAllByText(/缺失字段：service_tier/).length).toBeGreaterThan(0);
+    // 指纹请求的状态码也要在 DOM 里（只说「未采到」不给状态码，用户判不出是正常拒绝还是网关故障）
+    expect(screen.getAllByText(/指纹请求：HTTP 404/).length).toBeGreaterThan(0);
   });
 });
 

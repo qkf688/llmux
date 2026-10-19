@@ -182,6 +182,28 @@ export function protocolEvidenceLine(entry: ProtocolProbeEntry): string {
   return parts.join(" · ");
 }
 
+/** 协议证据的**短标签**（结果区表格用）：指纹结论 / 字段命中 / 原生头数。
+ *  为什么不能让表格直接渲染 protocolEvidenceLine：那是给复制文本的完整句子（含缺失清单），
+ *  在窄弹窗里会挤成一字一行。两处都放在本模块，屏幕与剪贴板仍只有这一份语义定义。 */
+export function protocolEvidenceChips(entry: ProtocolProbeEntry): string[] {
+  const chips: string[] = [];
+  if (entry.fingerprint.same_family) {
+    chips.push("指纹同族");
+  } else if (entry.fingerprint.family === "unknown") {
+    chips.push("指纹未采到");
+  } else {
+    chips.push(`指纹异族 ${entry.fingerprint.family}`);
+  }
+  const total = entry.fields.hit.length + entry.fields.miss.length;
+  if (total > 0) {
+    chips.push(`字段 ${entry.fields.hit.length}/${total}`);
+  }
+  if (entry.fingerprint.native_headers.length > 0) {
+    chips.push(`原生头 ${entry.fingerprint.native_headers.length}`);
+  }
+  return chips;
+}
+
 /** 协议检测的整份复制文本：结论 → 逐协议（判定/耗时/地址/证据）→ 总评。
  *  返回 null = 本状态没有可复制的结论（未执行 / 执行中 / 已取消）。 */
 export function buildProtocolReport(result: ProtocolProbeResult | null): string | null {

@@ -36,6 +36,10 @@ export const buildAssociationPayload = (
     // custom → 传数组（空数组=不约束，非空=override 白名单）
     thinking_levels:
       values.thinking_levels_mode === "inherit" ? undefined : values.thinking_levels_custom ?? [],
+    // 协议三态：inherit → 两项都不传（后端写 NULL=继承）；custom → 传集合。
+    // 主格式独立三态："" 表示不传（继承供应商主格式），与集合是否自定义无关。
+    protocols: values.protocols_mode === "inherit" ? undefined : values.protocols,
+    primary_protocol: values.primary_protocol === "" ? undefined : values.primary_protocol,
   };
 };
 

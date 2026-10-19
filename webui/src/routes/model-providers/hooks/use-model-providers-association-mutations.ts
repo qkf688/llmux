@@ -4,6 +4,7 @@ import {
   createModelProvider,
   deleteModelProvider,
   updateModelProvider,
+  updateModelProviderProtocols,
   type Settings,
   type ModelWithProvider,
 } from "@/lib/api";
@@ -94,6 +95,9 @@ export function useModelProvidersAssociationMutations({
         supports_thinking: "inherit", // 默认继承 model
         thinking_levels_mode: "inherit", // 默认继承 model
         thinking_levels_custom: [],
+        protocols_mode: "inherit",
+        protocols: [],
+        primary_protocol: "",
       });
       setSelectedProviderModels([]);
       if (selectedModelId) {
@@ -131,6 +135,9 @@ export function useModelProvidersAssociationMutations({
         supports_thinking: "inherit", // 默认继承 model
         thinking_levels_mode: "inherit", // 默认继承 model
         thinking_levels_custom: [],
+        protocols_mode: "inherit",
+        protocols: [],
+        primary_protocol: "",
       });
       if (selectedModelId) {
         void fetchModelProviders(selectedModelId);
@@ -138,6 +145,24 @@ export function useModelProvidersAssociationMutations({
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast.error(`更新模型提供商关联失败: ${message}`);
+      console.error(err);
+    }
+  };
+
+  // 协议检测的一键落地：推荐协议**整项覆盖**该关联的协议设置（集合 + 主格式）。
+  // 覆盖而非合并：检测是按这个模型实测的结论，留着「检测说不通」的协议等于让请求继续
+  // 打到坏路上；要保留别的协议，用户可以在关联弹窗里手动勾。
+  // 走窄端点（只写协议两列）：全量 PUT 会把能力/thinking/请求头透传一起清掉。
+  const applyProtocolRecommendation = async (id: number, protocol: string) => {
+    try {
+      await updateModelProviderProtocols(id, { protocols: [protocol], primary_protocol: protocol });
+      toast.success(`已把该模型设为只走 ${protocol}（替换了原有协议设置）`);
+      if (selectedModelId) {
+        void fetchModelProviders(selectedModelId);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`写入协议设置失败: ${message}`);
       console.error(err);
     }
   };
@@ -158,5 +183,5 @@ export function useModelProvidersAssociationMutations({
     }
   };
 
-  return { handleCreate, handleUpdate, handleDelete };
+  return { handleCreate, handleUpdate, handleDelete, applyProtocolRecommendation };
 }

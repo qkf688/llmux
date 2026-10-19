@@ -30,6 +30,9 @@ export function createMockAssociation(
     MaxTokens: null,
     SupportsThinking: null,
     ThinkingLevels: null,
+    // 协议覆盖三态：继承态为 null（键始终存在，与后端序列化契约一致）。
+    Protocols: null,
+    PrimaryProtocol: null,
     ...overrides,
   };
 }

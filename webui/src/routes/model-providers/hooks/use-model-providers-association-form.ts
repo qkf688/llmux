@@ -22,6 +22,9 @@ export function useModelProvidersAssociationForm() {
       supports_thinking: "inherit", // 默认继承 model
       thinking_levels_mode: "inherit", // 默认继承 model
       thinking_levels_custom: [],
+      protocols_mode: "inherit", // 默认继承供应商那层（协议集合 + 主格式）
+      protocols: [],
+      primary_protocol: "",
     },
   });
 

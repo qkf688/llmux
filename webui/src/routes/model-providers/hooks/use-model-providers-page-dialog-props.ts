@@ -72,6 +72,7 @@ export function useModelProvidersPageDialogProps(ctx: DialogPropsContext) {
     reactTestResult: store.reactTestResult,
     onClose: testing.dialogClose,
     onExecute: testing.executeTestNow,
+    onApplyProtocol: mutations.applyProtocolRecommendation,
   };
 
   const modelListDialogProps = {

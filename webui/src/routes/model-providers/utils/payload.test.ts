@@ -17,8 +17,46 @@ function valuesWithHeaders(headers: { key: string; value: string }[]): FormValue
     supports_thinking: "inherit",
     thinking_levels_mode: "inherit",
     thinking_levels_custom: [],
+    protocols_mode: "inherit",
+    protocols: [],
+    primary_protocol: "",
   };
 }
+
+describe("buildAssociationPayload 协议三态", () => {
+  it("集合继承时不提交集合字段（后端写 NULL=继承）", () => {
+    const payload = buildAssociationPayload({
+      ...valuesWithHeaders([]),
+      protocols_mode: "inherit",
+      protocols: ["anthropic"],
+      primary_protocol: "",
+    });
+    expect(payload.protocols).toBeUndefined();
+    expect(payload.primary_protocol).toBeUndefined();
+  });
+
+  it("集合继承但单独指定主格式时只提交主格式（两项是独立三态）", () => {
+    const payload = buildAssociationPayload({
+      ...valuesWithHeaders([]),
+      protocols_mode: "inherit",
+      protocols: [],
+      primary_protocol: "anthropic",
+    });
+    expect(payload.protocols).toBeUndefined();
+    expect(payload.primary_protocol).toBe("anthropic");
+  });
+
+  it("自定义时集合与主格式都提交", () => {
+    const payload = buildAssociationPayload({
+      ...valuesWithHeaders([]),
+      protocols_mode: "custom",
+      protocols: ["responses", "anthropic"],
+      primary_protocol: "anthropic",
+    });
+    expect(payload.protocols).toEqual(["responses", "anthropic"]);
+    expect(payload.primary_protocol).toBe("anthropic");
+  });
+});
 
 describe("buildAssociationPayload customer_headers 折叠（与 api-keys 共用 @/lib/header-rows 单源）", () => {
   it("只差大小写的同名行按后填者赢合并（键名取后者）", () => {

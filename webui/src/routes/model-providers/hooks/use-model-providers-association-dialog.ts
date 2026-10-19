@@ -89,6 +89,10 @@ export function useModelProvidersAssociationDialog({
       // 宽松判等把这类契约故障降级为"显示继承"而非写坏数据。
       thinking_levels_mode: association.ThinkingLevels == null ? "inherit" : "custom",
       thinking_levels_custom: association.ThinkingLevels ?? [],
+      // 协议两项各自三态：== null 判继承（宽松判等，契约键漂移时降级为「显示继承」而非写坏数据）。
+      protocols_mode: association.Protocols == null ? "inherit" : "custom",
+      protocols: association.Protocols ?? [],
+      primary_protocol: association.PrimaryProtocol ?? "",
     });
     setOpen(true);
   };
@@ -119,6 +123,9 @@ export function useModelProvidersAssociationDialog({
       supports_thinking: "inherit", // 默认继承 model
       thinking_levels_mode: "inherit", // 默认继承 model
       thinking_levels_custom: [],
+      protocols_mode: "inherit",
+      protocols: [],
+      primary_protocol: "",
     });
     setOpen(true);
   };

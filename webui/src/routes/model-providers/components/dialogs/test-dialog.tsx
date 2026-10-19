@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Copy } from "lucide-react";
 import type { CapabilityTestKey, TestMode, TestType } from "../../types";
 import type { ModelProviderTestResult, ProtocolProbeEntry } from "@/lib/api";
+import { protocolLabel } from "@/lib/protocols";
 import type { ReactTestResultState } from "@/stores/model-providers/types";
 import type { ProtocolTestEntry, ProtocolTestResults } from "../../hooks/use-model-providers-testing";
 import { copyTextWithToast } from "@/lib/clipboard";
@@ -60,6 +62,9 @@ type TestDialogProps = {
   reactTestResult: ReactTestResultState;
   onClose: () => void;
   onExecute: () => void;
+  // 协议检测的一键落地：用推荐协议整项覆盖该关联的协议设置（集合+主格式）。
+  // 由页面层持有写操作与列表刷新，弹窗只负责触发（不在这里直连 API）。
+  onApplyProtocol?: (id: number, protocol: string) => Promise<void> | void;
 };
 
 const TEST_OPTIONS: { value: TestType; label: string; description: string }[] = [
@@ -222,7 +227,17 @@ function CapabilityResultSection({
 // 细节（URL、字段命中清单、失败原因、原生响应头）收进可展开区，默认不占地方。
 //
 // 协议名 / 判定名 / 证据行仍取自 test-result-report 的单一来源——屏幕与剪贴板同一份拼装。
-function ProtocolResultSection({ entry }: { entry: ProtocolTestEntry | undefined }) {
+function ProtocolResultSection({
+  entry,
+  associationId,
+  onApply,
+}: {
+  entry: ProtocolTestEntry | undefined;
+  associationId: number | null;
+  onApply?: (id: number, protocol: string) => Promise<void> | void;
+}) {
+  // 写操作在本组件内只持有「进行中」这一瞬时态；成败由页面层 toast 反馈。
+  const [applying, setApplying] = useState(false);
   if (entry?.loading) {
     return <LoadingState text="检测中...（两段并发，最坏约 1.5 分钟）" />;
   }
@@ -303,6 +318,27 @@ function ProtocolResultSection({ entry }: { entry: ProtocolTestEntry | undefined
           {recommendation.actions.map((action) => (
             <p key={action}>· {action}</p>
           ))}
+          {/* 一键落地的条件：检测点名了协议（「无法区分」时刻意不点名，见后端 Recommend），
+              且页面层提供了写入口。覆盖语义写在按钮旁边——它会替换该模型已有的协议设置。 */}
+          {recommendation.protocol && associationId !== null && onApply && (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Button
+                size="sm"
+                disabled={applying}
+                onClick={() => {
+                  setApplying(true);
+                  // 先包一层 Promise 再调回调：回调若**同步抛错**，finally 仍会复位 loading。
+                  // 失败提示由页面层（写操作 owner）负责，这里不重复 toast。
+                  void Promise.resolve()
+                    .then(() => onApply(associationId, recommendation.protocol))
+                    .finally(() => setApplying(false));
+                }}
+              >
+                {applying ? "写入中..." : `一键设为只走 ${protocolLabel(recommendation.protocol)}`}
+              </Button>
+              <span className="text-muted-foreground">会替换该模型当前的协议设置</span>
+            </div>
+          )}
           {/* 三句免责是固定不变的同一段话，默认收起：它们在每次检测里都一样长，
               摊开会把「这次该怎么做」压到看不见；需要时点开仍在。 */}
           {recommendation.notes.length > 0 && (
@@ -427,6 +463,7 @@ export function TestDialog({
   reactTestResult,
   onClose,
   onExecute,
+  onApplyProtocol,
 }: TestDialogProps) {
   // 结果格按「关联:模式」定位：切换模式就是换一个格子，不会读到上一模式的结论。
   const entryOf = (map: CapabilityTestResults) =>
@@ -576,7 +613,14 @@ export function TestDialog({
               />
             )}
 
-            {testType === "protocol" && <ProtocolResultSection entry={protocolEntry} />}
+            {testType === "protocol" && (
+              <ProtocolResultSection
+                key={selectedTestId ?? "none"}
+                entry={protocolEntry}
+                associationId={selectedTestId}
+                onApply={onApplyProtocol}
+              />
+            )}
 
             {testType === "react" &&
               (reactTestResult.loading ? (

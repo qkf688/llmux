@@ -27,6 +27,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { THINKING_LEVEL_OPTIONS } from "@/lib/constants/thinking-levels";
+import { PROTOCOL_OPTIONS } from "@/lib/protocols";
 
 type AssociationFormDialogProps = {
   open: boolean;
@@ -134,6 +135,162 @@ function CapabilitySection({
           </FormControl>
         </FormItem>
       )}
+    </>
+  );
+}
+
+// 勾选组（value/label 列表）：协议与思考档位两处共用同一段 map JSX，
+// 避免「同一组件抄两遍」——两处的增删逻辑曾是各写一份，改动时容易只改一处。
+function CheckboxOptionList({
+  options,
+  value,
+  onChange,
+  onUncheck,
+}: {
+  options: { value: string; label: string }[];
+  value: string[];
+  onChange: (next: string[]) => void;
+  onUncheck?: (unchecked: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-3 pt-1">
+      {options.map((opt) => {
+        const checked = value.includes(opt.value);
+        return (
+          <label key={opt.value} className="flex items-center gap-2 cursor-pointer text-sm">
+            <Checkbox
+              checked={checked}
+              onCheckedChange={(c) => {
+                const current = [...value];
+                const idx = current.indexOf(opt.value);
+                if (c) {
+                  if (idx < 0) current.push(opt.value);
+                } else {
+                  if (idx >= 0) current.splice(idx, 1);
+                  onUncheck?.(opt.value);
+                }
+                onChange(current);
+              }}
+            />
+            {opt.label}
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+// 协议覆盖（集合 + 主格式）。
+//
+// 为什么两项分开：集合表达「这个模型能走哪几条」（客户端发这些格式就直通），主格式表达
+// 「需要转换时落哪条」。合成一个下拉会让「两条都支持、但改写优先用第二条」无法表达。
+// 默认整块继承供应商：绝大多数模型与供应商一致，只有混合协议网关才需要单独收窄。
+function ProtocolSection({ form }: { form: UseFormReturn<FormValues> }) {
+  const mode = useWatch({ control: form.control, name: "protocols_mode" });
+  const selected = useWatch({ control: form.control, name: "protocols" }) ?? [];
+
+  return (
+    <>
+      <FormField
+        control={form.control}
+        name="protocols_mode"
+        render={({ field }) => (
+          <FormItem className="rounded-md border p-4 space-y-3">
+            <div className="space-y-1">
+              <FormLabel>协议</FormLabel>
+              <div className="text-sm text-muted-foreground">
+                默认跟随供应商（供应商已启用的协议都可走）。仅当这个模型支持的协议与供应商不同时才自定义。
+              </div>
+            </div>
+            <FormControl>
+              <Select value={field.value} onValueChange={field.onChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="inherit">继承（跟随供应商）</SelectItem>
+                  <SelectItem value="custom">自定义</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      {mode === "custom" && (
+        <FormField
+          control={form.control}
+          name="protocols"
+          render={({ field }) => (
+            <FormItem className="rounded-md border p-4 space-y-3">
+              <div className="space-y-1">
+                <FormLabel>允许走的协议</FormLabel>
+                <div className="text-sm text-muted-foreground">
+                  勾选这个模型实际支持的协议；客户端发来不在勾选里的格式，会被转换成主格式。
+                  供应商没配过的协议也能勾——地址按供应商的 Base URL 拼出来。
+                  <span className="block pt-1">
+                    这里勾选的协议不受供应商页端点启停影响（那是供应商级默认，被关联覆盖）。
+                  </span>
+                </div>
+              </div>
+              <FormControl>
+                <CheckboxOptionList
+                  options={PROTOCOL_OPTIONS}
+                  value={field.value ?? []}
+                  onChange={field.onChange}
+                  // 主格式被取消勾选时清回继承：否则提交一个必然被后端拒绝的组合。
+                  onUncheck={(unchecked) => {
+                    if (form.getValues("primary_protocol") === unchecked) {
+                      form.setValue("primary_protocol", "");
+                    }
+                  }}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
+
+      {/* 主格式独立于集合：集合继承时也能单独指定（后端要求它落在供应商已启用的协议里）。
+          始终渲染是为了不把「只设了主格式」的存量配置藏起来——藏起来等于下次保存时静默清掉。 */}
+      <FormField
+        control={form.control}
+        name="primary_protocol"
+        render={({ field }) => (
+          <FormItem className="rounded-md border p-4 space-y-3">
+            <div className="space-y-1">
+              <FormLabel>主格式</FormLabel>
+              <div className="text-sm text-muted-foreground">
+                客户端格式不在勾选里时转成这条。「继承」用供应商的主格式（它不在勾选里时取固定先后第一条）。
+              </div>
+            </div>
+            <FormControl>
+              <Select
+                value={field.value === "" ? "inherit" : field.value}
+                onValueChange={(value) => field.onChange(value === "inherit" ? "" : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="选择" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="inherit">继承供应商主格式</SelectItem>
+                  {(mode === "custom"
+                    ? PROTOCOL_OPTIONS.filter((opt) => selected.includes(opt.value))
+                    : PROTOCOL_OPTIONS
+                  ).map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
     </>
   );
 }
@@ -316,6 +473,9 @@ export function AssociationFormDialog({
                 }}
               />
 
+              <FormLabel>协议</FormLabel>
+              <ProtocolSection form={form} />
+
               <FormLabel>参数配置</FormLabel>
               <FormField
                 control={form.control}
@@ -396,32 +556,11 @@ export function AssociationFormDialog({
                         </div>
                       </div>
                       <FormControl>
-                        <div className="flex flex-wrap gap-3 pt-1">
-                          {THINKING_LEVEL_OPTIONS.map((opt) => {
-                            const checked = (field.value ?? []).includes(opt.value);
-                            return (
-                              <label
-                                key={opt.value}
-                                className="flex items-center gap-2 cursor-pointer text-sm"
-                              >
-                                <Checkbox
-                                  checked={checked}
-                                  onCheckedChange={(c) => {
-                                    const current = field.value ? [...field.value] : [];
-                                    if (c) {
-                                      current.push(opt.value);
-                                    } else {
-                                      const idx = current.indexOf(opt.value);
-                                      if (idx >= 0) current.splice(idx, 1);
-                                    }
-                                    field.onChange(current);
-                                  }}
-                                />
-                                {opt.label}
-                              </label>
-                            );
-                          })}
-                        </div>
+                        <CheckboxOptionList
+                          options={THINKING_LEVEL_OPTIONS}
+                          value={field.value ?? []}
+                          onChange={field.onChange}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

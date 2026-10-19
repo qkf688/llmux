@@ -47,8 +47,9 @@ function renderDialog(props: {
   testResults?: CapabilityTestResults;
   protocolTestResults?: ProtocolTestResults;
   reactTestResult?: ReactTestResultState;
+  onApplyProtocol?: (id: number, protocol: string) => Promise<void> | void;
 }) {
-  const { testType, testResults = {}, protocolTestResults = {}, reactTestResult = REACT_IDLE } = props;
+  const { testType, testResults = {}, protocolTestResults = {}, reactTestResult = REACT_IDLE, onApplyProtocol } = props;
   return render(
     <TooltipProvider>
       <TestDialog
@@ -67,6 +68,7 @@ function renderDialog(props: {
         reactTestResult={reactTestResult}
         onClose={vi.fn()}
         onExecute={vi.fn()}
+        onApplyProtocol={onApplyProtocol}
       />
     </TooltipProvider>
   );
@@ -235,8 +237,34 @@ describe("模型测试：复制整份结果", () => {
     expect(report).toContain("流式 ✓ 0.6 s");
     expect(report).toContain("【总评：建议主协议：Anthropic（置信度 高）】");
     expect(report).toContain("建议把主类型从 OpenAI 改为 Anthropic");
-    // 总评必须给出「该模型勾哪条端点」的落地动作（按模型覆盖端点的前置话术）
-    expect(report).toContain("建议该模型勾选 Anthropic 协议端点");
+    // 总评必须给出「该模型该怎么配」的落地动作（一键写入的前置话术）
+    expect(report).toContain("建议把该模型的协议设置为只走 Anthropic");
+  });
+
+  // 一键落地：点名的协议才给按钮，且覆盖语义必须写明（它会替换该模型已有的协议设置）。
+  it("协议检测：点名协议时给出一键写入按钮，点击回调带上关联 id 与协议", async () => {
+    const onApplyProtocol = vi.fn().mockResolvedValue(undefined);
+    renderDialog({
+      testType: "protocol",
+      protocolTestResults: { [TEST_ID]: { loading: false, result: protocolFixture() } },
+      onApplyProtocol,
+    });
+
+    expect(screen.getByText("会替换该模型当前的协议设置")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /一键设为只走 Anthropic/ }));
+    await waitFor(() => expect(onApplyProtocol).toHaveBeenCalledWith(TEST_ID, "anthropic"));
+  });
+
+  it("协议检测：没点名协议（无法区分）时不给一键按钮", () => {
+    const result = protocolFixture();
+    const undecided = { ...result, recommendation: { ...result.recommendation!, protocol: "" } };
+    renderDialog({
+      testType: "protocol",
+      protocolTestResults: { [TEST_ID]: { loading: false, result: undecided } },
+      onApplyProtocol: vi.fn(),
+    });
+
+    expect(screen.queryByRole("button", { name: /一键设为只走/ })).toBeNull();
   });
 
   it("协议检测：未执行时复制按钮置灰", () => {
@@ -395,11 +423,11 @@ const protocolFixture = (): ProtocolProbeResult => ({
     confidence: "high",
     summary: "建议主协议：Anthropic",
     reason: "只有它的错误信封是自身协议形状。",
-    actions: ["建议把主类型从 OpenAI 改为 Anthropic", "建议该模型勾选 Anthropic 协议端点"],
+    actions: ["建议把主类型从 OpenAI 改为 Anthropic", "建议把该模型的协议设置为只走 Anthropic（可一键写入，只影响这个模型）"],
     notes: [
       "字段「有」才算证据，「没有」只算弱证据——很多字段是否出现取决于模型与请求",
       "耗时是单次样本，只作展示，不参与排名",
-      "结论按本模型测出，协议端点开关在供应商级，改动会影响该供应商下所有模型",
+      "结论只对这个模型有效——写入的是该模型的关联设置，不影响同供应商下的其他模型",
     ],
   },
 });

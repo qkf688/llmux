@@ -34,6 +34,30 @@ export const formSchema = z.object({
   // custom 模式下 thinking_levels_custom 数组为白名单内容
   thinking_levels_mode: z.enum(["inherit", "custom"]),
   thinking_levels_custom: z.array(z.string()).default([]),
+  // 协议三态（与 capabilities_mode 同范式）：
+  // inherit=继承供应商那层（两项都不提交，后端写 NULL）；custom=自定义允许集合。
+  // 主格式与集合分开：集合表达「能走哪几条」，主格式表达「需要转换时转成哪条」。
+  protocols_mode: z.enum(["inherit", "custom"]),
+  protocols: z.array(z.string()).default([]),
+  // "" = 继承供应商主格式（不复用 inherit 字面量：提交时要映射成「不传该字段」）。
+  primary_protocol: z.string(),
+}).superRefine((values, ctx) => {
+  if (values.protocols_mode !== "custom") return;
+  if (values.protocols.length === 0) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["protocols"],
+      message: "至少勾选一条协议（要跟随供应商请选「继承」）",
+    });
+    return;
+  }
+  if (values.primary_protocol && !values.protocols.includes(values.primary_protocol)) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["primary_protocol"],
+      message: "主格式必须落在已勾选的协议里",
+    });
+  }
 });
 
 export type FormValues = z.input<typeof formSchema>;

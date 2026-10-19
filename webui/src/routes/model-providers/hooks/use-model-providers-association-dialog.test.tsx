@@ -167,3 +167,65 @@ describe("useModelProvidersAssociationDialog 的能力回填", () => {
     expect(result.current.form.getValues("image")).toBe(true);
   });
 });
+
+describe("useModelProvidersAssociationDialog 的协议覆盖回填", () => {
+  it("两项都继承（null）→ 总控 inherit、勾选空、主格式继承", () => {
+    const { result } = renderDialogHook();
+
+    act(() => {
+      result.current.openEditDialog(
+        createMockAssociation(1, 10, { Protocols: null, PrimaryProtocol: null }),
+      );
+    });
+
+    expect(result.current.form.getValues("protocols_mode")).toBe("inherit");
+    expect(result.current.form.getValues("protocols")).toEqual([]);
+    expect(result.current.form.getValues("primary_protocol")).toBe("");
+  });
+
+  it("覆盖态原样回显集合与主格式", () => {
+    const { result } = renderDialogHook();
+
+    act(() => {
+      result.current.openEditDialog(
+        createMockAssociation(1, 10, {
+          Protocols: ["responses", "anthropic"],
+          PrimaryProtocol: "anthropic",
+        }),
+      );
+    });
+
+    expect(result.current.form.getValues("protocols_mode")).toBe("custom");
+    expect(result.current.form.getValues("protocols")).toEqual(["responses", "anthropic"]);
+    expect(result.current.form.getValues("primary_protocol")).toBe("anthropic");
+  });
+
+  // 只设了主格式（集合仍继承）是合法状态：藏起来会让下次保存把主格式静默清掉。
+  it("集合继承但单独设了主格式 → 主格式仍回显，模式保持 inherit", () => {
+    const { result } = renderDialogHook();
+
+    act(() => {
+      result.current.openEditDialog(
+        createMockAssociation(1, 10, { Protocols: null, PrimaryProtocol: "anthropic" }),
+      );
+    });
+
+    expect(result.current.form.getValues("protocols_mode")).toBe("inherit");
+    expect(result.current.form.getValues("primary_protocol")).toBe("anthropic");
+  });
+
+  // 契约漂移兜底：键名失配/被 omitempty 省略时读到 undefined，宽松判等降级为"继承"，
+  // 而不是判成 custom 再在保存时把用户已有的覆盖清空。
+  it("键缺失（undefined）时兜底为 inherit", () => {
+    const { result } = renderDialogHook();
+
+    act(() => {
+      result.current.openEditDialog(
+        createMockAssociation(1, 10, { Protocols: undefined, PrimaryProtocol: undefined }),
+      );
+    });
+
+    expect(result.current.form.getValues("protocols_mode")).toBe("inherit");
+    expect(result.current.form.getValues("primary_protocol")).toBe("");
+  });
+});

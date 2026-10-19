@@ -18,3 +18,18 @@ export const PROTOCOL_LABEL: Record<string, string> = {
 export function protocolLabel(protocol: string): string {
   return PROTOCOL_LABEL[protocol] ?? protocol;
 }
+
+/**
+ * 协议键的固定先后。与后端 `consts.AllProtocols` 同序（主格式兜底、解析收敛都用这份顺序）——
+ * 前端只用来渲染选项的顺序，不参与任何选路判定。
+ */
+export const PROTOCOL_ORDER = ["openai", "responses", "anthropic"] as const;
+
+/**
+ * 供选择器直接渲染的有序选项。**不要在页面里另写一份**：标签必须与协议检测矩阵、
+ * 供应商表单同一张表，否则同一个协议会出现三种叫法（审查实锤过）。
+ */
+export const PROTOCOL_OPTIONS: { value: string; label: string }[] = PROTOCOL_ORDER.map((value) => ({
+  value,
+  label: protocolLabel(value),
+}));

@@ -36,6 +36,12 @@ export interface ModelWithProvider {
   // 键名为 PascalCase 且后端保证**始终存在**（`models.ModelWithProvider` 直返，禁 omitempty）；
   // 若此处键名与后端 tag 失配，读到的会是 undefined，编辑弹窗会把继承误判成自定义。
   ThinkingLevels: string[] | null;
+  // 协议覆盖三态：null=继承供应商那层（=供应商已启用的协议端点集）。
+  // 键名为 PascalCase 且后端保证**始终存在**（`models.ModelWithProvider` 直返，禁 omitempty）；
+  // 若键名失配读到的会是 undefined，编辑弹窗会把「继承」误判成覆盖并清掉其他协议的可用性。
+  Protocols: string[] | null;
+  // 主格式三态：null=继承供应商主格式（由供应商类型决定）；非 null=需要转换时的落点。
+  PrimaryProtocol: string | null;
 }
 
 export interface AssociationPreview {
@@ -111,6 +117,10 @@ export async function createModelProvider(association: {
   max_tokens?: number;
   supports_thinking?: boolean;
   thinking_levels?: string[] | null;
+  // 协议覆盖三态：null/不传 = 继承供应商那层；数组 = 该模型允许走的协议（可含供应商未配置的）。
+  protocols?: string[] | null;
+  // 主格式三态：null/不传 = 继承供应商主格式。
+  primary_protocol?: string | null;
 }): Promise<ModelWithProvider> {
   return apiRequest<ModelWithProvider>("/model-providers", {
     method: "POST",
@@ -135,6 +145,9 @@ export async function updateModelProvider(
     max_tokens?: number;
     supports_thinking?: boolean;
     thinking_levels?: string[] | null;
+    // 协议覆盖三态：null/缺省 = 显式清回继承（后端写 NULL）。
+    protocols?: string[] | null;
+    primary_protocol?: string | null;
   }
 ): Promise<ModelWithProvider> {
   return apiRequest<ModelWithProvider>(`/model-providers/${id}`, {
@@ -147,6 +160,23 @@ export async function updateModelProviderStatus(id: number, status: boolean): Pr
   return apiRequest<ModelWithProvider>(`/model-providers/${id}/status`, {
     method: "PATCH",
     body: JSON.stringify({ status }),
+  });
+}
+
+/**
+ * 只写协议覆盖两项（`PATCH /model-providers/:id/protocols`）。
+ *
+ * 为什么不用 `updateModelProvider`：全量 PUT 的契约是「三态字段缺省 = 清回继承」+
+ * `with_header` 二态无条件写，只发两个键会把能力/thinking/请求头透传一起静默改掉。
+ * 窄端点只碰协议两列，任何新调用方都不可能误伤其它配置。
+ */
+export async function updateModelProviderProtocols(
+  id: number,
+  protocolOverride: { protocols: string[] | null; primary_protocol: string | null }
+): Promise<ModelWithProvider> {
+  return apiRequest<ModelWithProvider>(`/model-providers/${id}/protocols`, {
+    method: "PATCH",
+    body: JSON.stringify(protocolOverride),
   });
 }
 

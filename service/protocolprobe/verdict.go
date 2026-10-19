@@ -97,7 +97,7 @@ func fixedNotes() []string {
 	return []string{
 		"字段「有」才算证据，「没有」只算弱证据——很多字段是否出现取决于模型与请求",
 		"耗时是单次样本，只作展示，不参与排名",
-		"结论按本模型测出，协议端点开关在供应商级，改动会影响该供应商下所有模型",
+		"协议结论只对这个模型有效：一键写入写的是该模型的关联设置；改供应商主类型则会影响该供应商下所有模型",
 	}
 }
 
@@ -131,9 +131,9 @@ func Recommend(main consts.Protocol, inputs []Input) Recommendation {
 		rec.Summary = "没有一条协议同时通过非流式与流式"
 		rec.Reason = "本模型当前不能通过任何一条已配置协议提供完整服务；先修凭据或端点 URL 再复测。"
 		if len(partial) > 0 {
-			rec.Reason = "只有协议处于「部分支持」状态（单模式可用、双模式不通），不建议开启端点。"
+			rec.Reason = "只有协议处于「部分支持」状态（单模式可用、双模式不通），不建议把该模型限制到这条协议。"
 		}
-		rec.Actions = append(rec.Actions, "本轮没有可勾选的协议端点（两种模式都没通过）")
+		rec.Actions = append(rec.Actions, "本轮没有可用的协议（两种模式都没通过）")
 		return rec
 	case len(usable) == 1:
 		only := usable[0]
@@ -218,11 +218,11 @@ func mainTypeAction(p, main consts.Protocol) string {
 	return fmt.Sprintf("建议把主类型从 %s 改为 %s", displayName(main), displayName(p))
 }
 
-// endpointAction 给出「给这个模型勾哪条协议端点」的落地动作。主类型是供应商级配置，
-// 端点勾选才是按模型生效的那一层（next-do #1 的能力）；不写成同一句话，是因为
-// 「主类型该设成谁」与「这个模型该勾哪条端点」是两件事，前者改的是全部模型的兜底路径。
+// endpointAction 给出「这个模型该走哪条协议」的落地动作。可一键写入该关联的协议设置
+// （next-do #1 的能力），只影响这一个模型；与 mainTypeAction 刻意分开，是因为
+// 「供应商主类型该设成谁」与「这个模型该走哪条协议」是两个粒度，前者改的是全部模型的兜底路径。
 func endpointAction(p consts.Protocol) string {
-	return fmt.Sprintf("建议该模型勾选 %s 协议端点", displayName(p))
+	return fmt.Sprintf("建议把该模型的协议设置为只走 %s（可一键写入，只影响这个模型）", displayName(p))
 }
 
 // endpointListAction 用于「无法区分谁更原生」的分支：可用协议都列出来，但不替用户拍板。
@@ -232,7 +232,7 @@ func endpointListAction(usable []Input) string {
 	for _, in := range usable {
 		names = append(names, displayName(in.Protocol))
 	}
-	return fmt.Sprintf("该模型可勾选这些协议端点：%s（本次无法判断哪个最原生，勾选前建议先按该协议实测一次真实请求）",
+	return fmt.Sprintf("该模型可以走这些协议：%s（本次无法判断哪个最原生，配置前建议先按该协议实测一次真实请求）",
 		strings.Join(names, "、"))
 }
 
@@ -246,13 +246,13 @@ func translatedActions(usable []Input, winner consts.Protocol) []string {
 		family := FamilyOfProtocol(in.Protocol)
 		if in.Family != FamilyUnknown && in.Family != family {
 			out = append(out, fmt.Sprintf(
-				"%s 可用但错误信封是 %s 家族的形状，像转译路径；不建议为它开端点（要走这条路时由 LLMux 自己转更可控）",
+				"%s 可用但错误信封是 %s 家族的形状，像转译路径；不建议把该模型限制到这条协议（要走这条路时由 LLMux 自己转更可控）",
 				displayName(in.Protocol), in.Family))
 			continue
 		}
 		if len(in.Fields.Miss) > 0 {
 			out = append(out, fmt.Sprintf(
-				"%s 可用但缺 %d 项原生字段（%v），不确定字段是否被上游丢弃；开端点前建议先按该协议实测一次真实请求",
+				"%s 可用但缺 %d 项原生字段（%v），不确定字段是否被上游丢弃；配置前建议先按该协议实测一次真实请求",
 				displayName(in.Protocol), len(in.Fields.Miss), in.Fields.Miss))
 		}
 	}
@@ -270,7 +270,7 @@ func partialActions(partial []Input) []string {
 		if in.Stream == LegNonCompliant {
 			reason = "流式回了 SSE 但不合规（缺终止事件或无内容增量）"
 		}
-		out = append(out, fmt.Sprintf("%s 只支持 %s（%s），属于部分支持，不建议开启端点",
+		out = append(out, fmt.Sprintf("%s 只支持 %s（%s），属于部分支持，不建议把该模型限制到这条协议",
 			displayName(in.Protocol), mode, reason))
 	}
 	return out
@@ -279,7 +279,7 @@ func partialActions(partial []Input) []string {
 func unusableActions(unusable []Input) []string {
 	var out []string
 	for _, in := range unusable {
-		out = append(out, fmt.Sprintf("%s 本次两种模式都不通，不要开启端点", displayName(in.Protocol)))
+		out = append(out, fmt.Sprintf("%s 本次两种模式都不通，不要把这个模型限制到这条协议", displayName(in.Protocol)))
 	}
 	return out
 }

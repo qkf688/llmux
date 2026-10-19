@@ -44,6 +44,9 @@ var modelWithProviderResponseKeys = []testutil.APIResponseKey{
 	{Key: "ConsecutiveFailures", WantSetType: gjson.Number},
 	{Key: "SupportsThinking", WantSetType: gjson.True, Nilable: true},
 	{Key: "ThinkingLevels", WantSetType: gjson.JSON, Nilable: true},
+	// 协议覆盖三态：nil=继承供应商那层。键恒在是前端区分「继承」与「键缺失」的唯一依据。
+	{Key: "Protocols", WantSetType: gjson.JSON, Nilable: true},
+	{Key: "PrimaryProtocol", WantSetType: gjson.String, Nilable: true},
 }
 
 // setAllFieldsBody 是把所有可写字段都置为非零/非 nil 的请求体，
@@ -51,7 +54,8 @@ var modelWithProviderResponseKeys = []testutil.APIResponseKey{
 const setAllFieldsBody = `{"model_id":1,"provider_id":1,"provider_model":"pm-set",` +
 	`"tool_call":true,"structured_output":true,"image":true,"with_header":true,` +
 	`"customer_headers":{"X-Test":"1"},"weight":10,"priority":10,"max_tokens":8192,` +
-	`"supports_thinking":true,"thinking_levels":["low","high"]}`
+	`"supports_thinking":true,"thinking_levels":["low","high"],` +
+	`"protocols":["openai","anthropic"],"primary_protocol":"anthropic"}`
 
 // TestModelWithProviderResponse_KeysPresent_WhenSet 覆盖 Create / Update / List
 // 三条响应路径：前端这三处读的是同一个 interface，键名契约必须三处一致。

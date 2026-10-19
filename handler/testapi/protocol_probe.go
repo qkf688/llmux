@@ -33,8 +33,8 @@ const (
 )
 
 // protocolOrder 探测顺序固定为 OpenAI → Responses → Anthropic：回包数组顺序与前端展示
-// 顺序、测试断言顺序三者必须一致，故显式写死而不依赖 map 遍历。
-var protocolOrder = []consts.Protocol{consts.ProtocolOpenAI, consts.ProtocolResponses, consts.ProtocolAnthropic}
+// 顺序、测试断言顺序三者必须一致。单源在 consts.AllProtocols（与 channel 的解析顺序同一份）。
+var protocolOrder = consts.AllProtocols()
 
 // protocolTargetSet 一次检测的全部目标与链路上下文。
 type protocolTargetSet struct {
@@ -100,7 +100,12 @@ func buildProtocolTarget(ctx context.Context, provider models.Provider, endpoint
 		return protocolprobe.Target{}, fmt.Errorf("供应商类型 %q 未注册连通性测试体，无法探测该协议", providerType)
 	}
 
-	endpoint, configured := endpointOfProtocol(endpoints, protocol)
+	endpoint, configured := channel.EndpointOfProtocol(endpoints, protocol, true)
+	if !configured {
+		// 未配置该协议：合成空 URL 端点走供应商 base_url。与关联显式勾选未配协议时的
+		// 运行侧取端点规则同源（见 channel.EndpointFor）。
+		endpoint = models.Endpoint{Protocol: string(protocol), Enabled: true}
+	}
 	client, err := channel.NewClientFromSelection(provider, endpoint, cred)
 	if err != nil {
 		return protocolprobe.Target{}, err
@@ -126,18 +131,6 @@ func buildProtocolTarget(ctx context.Context, provider models.Provider, endpoint
 	}
 	target.RequestURL = req.URL.String()
 	return target, nil
-}
-
-// endpointOfProtocol 取该协议已启用的端点（快照按 ID ASC，故取首个即确定性最小者）；
-// 没有则合成一条空 URL 的启用端点——channel.BuildConfig 会按继承链回落到 Provider
-// 的 Base URL，与「在供应商表单里勾上这个协议、URL 留空继承」完全等价。
-func endpointOfProtocol(endpoints []models.Endpoint, protocol consts.Protocol) (models.Endpoint, bool) {
-	for _, ep := range endpoints {
-		if ep.Enabled && ep.Protocol == string(protocol) {
-			return ep, true
-		}
-	}
-	return models.Endpoint{Protocol: string(protocol), Enabled: true}, false
 }
 
 // firstUsableGroup 在候选组里取第一个有可用凭据的组（与 buildLink 的挑组口径一致：

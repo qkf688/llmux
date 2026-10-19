@@ -30,6 +30,19 @@ type ModelWithProviderRequest struct {
 	// 自定义 → 前端发 ["low","medium"] → 后端 *[]string 指向非空切片
 	// 不约束 → 前端发 [] → 后端 *[]string 指向空切片
 	ThinkingLevels *[]string `json:"thinking_levels,omitempty"`
+	// Protocols / PrimaryProtocol 协议覆盖（三态），语义见 models.ModelWithProvider 同名字段：
+	// nil=继承供应商那层；非 nil=覆盖。**缺省（nil）=显式清回继承**（与 supports_thinking 同族，
+	// 走 UpdateFields 写 NULL）——前端总是显式提交这两项，不会出现「不想改却被清」的场景。
+	// 空切片归一为 nil（一条协议都不许走没有业务含义）。
+	Protocols       *[]string `json:"protocols,omitempty"`
+	PrimaryProtocol *string   `json:"primary_protocol,omitempty"`
+}
+
+// ModelWithProviderProtocolsRequest 是窄更新端点（`PATCH /model-providers/:id/protocols`）
+// 的请求体。只承载协议两项；两项都按**显式提交**解释（nil = 写 NULL = 继承），不做部分更新。
+type ModelWithProviderProtocolsRequest struct {
+	Protocols       *[]string `json:"protocols"`
+	PrimaryProtocol *string   `json:"primary_protocol"`
 }
 
 // ModelProviderStatusRequest represents the request body for updating provider status.

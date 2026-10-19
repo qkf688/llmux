@@ -12,6 +12,15 @@ const (
 	ProtocolAnthropic Protocol = "anthropic"
 )
 
+// protocolOrder 协议的固定先后：范围解析收敛、主格式兜底、前端选项顺序都以它为准。
+// 顺序不含「谁更优先」的业务含义，只提供确定性——但**改它会改变「只设了集合」时的主格式落点**。
+var protocolOrder = []Protocol{ProtocolOpenAI, ProtocolResponses, ProtocolAnthropic}
+
+// AllProtocols 返回全部协议（按固定先后）。返回副本，调用方不得依赖其可写性。
+// 新增协议 = 这里加一项 + protocolMetaTable 加一行；漏改会被 TestAllProtocols_CoversMetaTable
+// 拦住（漏改的表现是保存 200、运行时恒 ErrEndpointUnavailable，最难查）。
+func AllProtocols() []Protocol { return append([]Protocol(nil), protocolOrder...) }
+
 // ProtocolOfType 给出 provider type 的默认出站协议（存量迁移与新建缺省时用）。
 // 与前端 SUPPORTED_TYPE_OPTIONS 同构（webui/src/routes/providers/components/dialogs/provider-schedule-fields.tsx，
 // type→protocol 映射），两侧改动必须同步（直返实体两侧同源）。

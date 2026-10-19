@@ -75,9 +75,9 @@ func TestRecommend_Branches(t *testing.T) {
 		if !containsSubstring(rec.Actions, "部分支持") {
 			t.Fatalf("actions 未提示部分支持: %v", rec.Actions)
 		}
-		// 没有可用协议时也要把「无从勾选端点」说清，别让用户以为漏了建议。
-		if !containsSubstring(rec.Actions, "没有可勾选的协议端点") {
-			t.Fatalf("actions 未说明无可勾选端点: %v", rec.Actions)
+		// 没有可用协议时也要把「无从配置协议」说清，别让用户以为漏了建议。
+		if !containsSubstring(rec.Actions, "没有可用的协议") {
+			t.Fatalf("actions 未说明无可用协议: %v", rec.Actions)
 		}
 	})
 
@@ -97,7 +97,7 @@ func TestRecommend_Branches(t *testing.T) {
 		if !containsSubstring(rec.Actions, "改为 Anthropic") {
 			t.Fatalf("actions 未给出改主类型的建议: %v", rec.Actions)
 		}
-		if !containsSubstring(rec.Actions, "建议该模型勾选 Anthropic 协议端点") {
+		if !containsSubstring(rec.Actions, "建议把该模型的协议设置为只走 Anthropic") {
 			t.Fatalf("actions 未给出按模型勾选端点的动作: %v", rec.Actions)
 		}
 	})
@@ -126,7 +126,7 @@ func TestRecommend_Branches(t *testing.T) {
 		if !containsSubstring(rec.Actions, "转译路径") {
 			t.Fatalf("actions 未提示转译路径不建议开端点: %v", rec.Actions)
 		}
-		if !containsSubstring(rec.Actions, "建议该模型勾选 Anthropic 协议端点") {
+		if !containsSubstring(rec.Actions, "建议把该模型的协议设置为只走 Anthropic") {
 			t.Fatalf("actions 未给出按模型勾选端点的动作: %v", rec.Actions)
 		}
 	})
@@ -170,7 +170,7 @@ func TestRecommend_Branches(t *testing.T) {
 		if rec.Confidence != ConfidenceMedium {
 			t.Fatalf("confidence = %q, want medium", rec.Confidence)
 		}
-		if !containsSubstring(rec.Actions, "建议该模型勾选 OpenAI Responses 协议端点") {
+		if !containsSubstring(rec.Actions, "建议把该模型的协议设置为只走 OpenAI Responses") {
 			t.Fatalf("actions 未按排序结果给出勾选动作: %v", rec.Actions)
 		}
 	})
@@ -203,8 +203,8 @@ func TestRecommend_Branches(t *testing.T) {
 		}
 		// 分不出谁更原生时，仍要给出「这个模型可勾哪些端点」的候选（附实测提示），
 		// 而不是一句「无法区分」就把人卡住。
-		if !containsSubstring(rec.Actions, "可勾选这些协议端点") {
-			t.Fatalf("actions 未列出可勾选端点: %v", rec.Actions)
+		if !containsSubstring(rec.Actions, "可以走这些协议") {
+			t.Fatalf("actions 未列出可用协议: %v", rec.Actions)
 		}
 	})
 
@@ -274,7 +274,7 @@ func TestRecommend_AlwaysCarriesFixedNotes(t *testing.T) {
 		t.Fatalf("notes = %v, want 3 条固定免责", rec.Notes)
 	}
 	joined := strings.Join(rec.Notes, "|")
-	for _, must := range []string{"单次样本", "供应商级"} {
+	for _, must := range []string{"单次样本", "只对这个模型有效"} {
 		if !strings.Contains(joined, must) {
 			t.Fatalf("notes 缺少 %q: %v", must, rec.Notes)
 		}

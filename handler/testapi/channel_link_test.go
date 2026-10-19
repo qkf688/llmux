@@ -582,8 +582,8 @@ func TestTestStructuredOutputHandler_NoEndpointFailsAsProviderError(t *testing.T
 	if got := gjson.Get(w.Body.String(), "data.error_type").String(); got != "provider" {
 		t.Fatalf("error_type = %q, want provider", got)
 	}
-	if got := gjson.Get(w.Body.String(), "data.error").String(); !strings.Contains(got, "无启用的 openai 协议端点") {
-		t.Fatalf("error = %q, want 含「无启用的 openai 协议端点」", got)
+	if got := gjson.Get(w.Body.String(), "data.error").String(); !strings.Contains(got, "无可用协议端点") {
+		t.Fatalf("error = %q, want 含「无可用协议端点」", got)
 	}
 }
 

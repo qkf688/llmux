@@ -154,7 +154,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 		// 分层处置（组内换 key、冷却）在下面内层循环，此处不区分 sentinel。
 		// probedThisCandidate：#6-3 每候选每请求最多探活一次，防恢复后再次耗尽死循环。
 		probedThisCandidate := false
-		snapshot, err := channel.NewAssembler(repos()).Assemble(in.Ctx, provider)
+		snapshot, err := channel.NewAssembler(repos()).Assemble(in.Ctx, provider, &modelWithProvider)
 		if err != nil {
 			slog.Error("failed to assemble channel snapshot", retryLogAttrs(in.LogAttrs, "provider", provider.Name, "error", err)...)
 			delete(in.Pool.WeightItems, *id)
@@ -170,7 +170,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 			if errors.Is(err, channel.ErrNoCredentialAvailable) && !probedThisCandidate && selection.Group.ID != 0 {
 				probedThisCandidate = true
 				if probeRecoverInGroup(in.Ctx, provider, selection.Endpoint, snapshot.CredentialsByGroup[selection.Group.ID]) {
-					refreshed, refreshErr := channel.NewAssembler(repos()).Assemble(in.Ctx, provider)
+					refreshed, refreshErr := channel.NewAssembler(repos()).Assemble(in.Ctx, provider, &modelWithProvider)
 					if refreshErr == nil {
 						if sel2, selErr := channel.DefaultSelector().Select(refreshed, clientWire, upstreamModel, time.Now(), iterPrefer); selErr == nil {
 							selection = sel2
@@ -305,7 +305,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 			// 凭据级失败：组内换 key。冷却已由 attempt 写库，刷新快照后锁组重选
 			// （锁定原分组/原端点，channel.RetryCredential）——冷却中的 key 被剔除，
 			// 轮询指针自然推进到下一条。
-			refreshed, err := assembler.Assemble(in.Ctx, provider)
+			refreshed, err := assembler.Assemble(in.Ctx, provider, &modelWithProvider)
 			if err != nil {
 				// 刷新失败 = 无法再取候选，属基础设施异常：只淘汰不累计（与首次
 				// Assemble / Select 失败同语义——凭据级失败累计滞后不在此类）。
@@ -322,7 +322,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 					if !probedThisCandidate {
 						probedThisCandidate = true
 						if probeRecoverInGroup(in.Ctx, provider, selection.Endpoint, refreshed.CredentialsByGroup[selection.Group.ID]) {
-							if refreshed2, rerr := assembler.Assemble(in.Ctx, provider); rerr == nil {
+							if refreshed2, rerr := assembler.Assemble(in.Ctx, provider, &modelWithProvider); rerr == nil {
 								if sel2, serr := channel.DefaultSelector().RetryCredential(refreshed2, selection.Group.ID, selection.Endpoint, time.Now()); serr == nil {
 									selection = sel2
 									snapshot = refreshed2

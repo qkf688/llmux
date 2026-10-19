@@ -11,6 +11,7 @@ func Register(rg gin.IRoutes) {
 	rg.POST("/model-providers", CreateModelProvider)
 	rg.PUT("/model-providers/:id", UpdateModelProvider)
 	rg.PATCH("/model-providers/:id/status", UpdateModelProviderStatus)
+	rg.PATCH("/model-providers/:id/protocols", UpdateModelProviderProtocols)
 	rg.PATCH("/model-providers/batch/status", BatchUpdateModelProvidersStatus)
 	rg.PATCH("/model-providers/batch/capabilities", BatchUpdateModelProvidersCapabilities)
 	rg.DELETE("/model-providers/batch", BatchDeleteModelProviders)

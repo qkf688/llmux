@@ -39,7 +39,7 @@ func TestBalanceChat_MultiProtocolEndpoints_PassthroughAndTransformByEndpoint(t 
 		recordBody(&oaBodies, string(body))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"id":"chatcmpl-t","object":"chat.completion","created":0,"model":"pm1","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`))
+		_, _ = w.Write([]byte(fakeOpenAIChatResponse))
 	}))
 	defer openaiSrv.Close()
 	anthropicSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -48,7 +48,7 @@ func TestBalanceChat_MultiProtocolEndpoints_PassthroughAndTransformByEndpoint(t 
 		recordBody(&anBodies, string(body))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"id":"msg_01","type":"message","role":"assistant","model":"pm1","content":[{"type":"text","text":"hi"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}`))
+		_, _ = w.Write([]byte(fakeAnthropicMessagesResponse))
 	}))
 	defer anthropicSrv.Close()
 
@@ -150,7 +150,7 @@ func TestBalanceChat_KeyGroupWhitelist_CredentialPlainKeyAndURLOverride(t *testi
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"id":"chatcmpl-t","object":"chat.completion","created":0,"model":"pm1","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`))
+		_, _ = w.Write([]byte(fakeOpenAIChatResponse))
 	}))
 	defer srv.Close()
 
@@ -194,23 +194,7 @@ func TestBalanceChat_KeyGroupWhitelist_CredentialPlainKeyAndURLOverride(t *testi
 		t.Fatalf("create association: %v", err)
 	}
 
-	pool, err := buildCandidatePool(context.Background(), []models.ModelWithProvider{mwp})
-	if err != nil {
-		t.Fatalf("build candidate pool: %v", err)
-	}
-	result, err := BalanceChat(context.Background(), BalanceInput{
-		Start:  time.Now(),
-		Style:  string(consts.StyleOpenAI),
-		Before: Before{Model: "m1", Stream: false, raw: []byte(`{"model":"m1","messages":[{"role":"user","content":"hi"}]}`)},
-		ProvidersWithMeta: ProvidersWithMeta{
-			CandidatePool: pool,
-			Model:         &models.Model{Name: "m1"},
-		},
-		ReqMeta: models.ReqMeta{Header: http.Header{}},
-	})
-	if err != nil {
-		t.Fatalf("BalanceChat err = %v", err)
-	}
+	result := runBalanceOnce(t, mwp, string(consts.StyleOpenAI), `{"model":"m1","messages":[{"role":"user","content":"hi"}]}`)
 	if result.ProviderName != "multi" {
 		t.Fatalf("ProviderName = %q, want multi", result.ProviderName)
 	}
@@ -286,23 +270,7 @@ func TestBalanceChat_RenamedAssociation_WhitelistMatchesUpstreamModel(t *testing
 		t.Fatalf("create association: %v", err)
 	}
 
-	pool, err := buildCandidatePool(context.Background(), []models.ModelWithProvider{mwp})
-	if err != nil {
-		t.Fatalf("build candidate pool: %v", err)
-	}
-	result, err := BalanceChat(context.Background(), BalanceInput{
-		Start:  time.Now(),
-		Style:  string(consts.StyleOpenAI),
-		Before: Before{Model: "m1", Stream: false, raw: []byte(`{"model":"m1","messages":[{"role":"user","content":"hi"}]}`)},
-		ProvidersWithMeta: ProvidersWithMeta{
-			CandidatePool: pool,
-			Model:         &models.Model{Name: "m1"},
-		},
-		ReqMeta: models.ReqMeta{Header: http.Header{}},
-	})
-	if err != nil {
-		t.Fatalf("BalanceChat err = %v（重命名关联在白名单非空分组下必须可服务）", err)
-	}
+	result := runBalanceOnce(t, mwp, string(consts.StyleOpenAI), `{"model":"m1","messages":[{"role":"user","content":"hi"}]}`)
 	if result.ProviderName != "renamed-p" {
 		t.Fatalf("ProviderName = %q, want renamed-p", result.ProviderName)
 	}
@@ -339,7 +307,7 @@ func TestBalanceChat_SameGroupMultipleCredentials_RoundRobin(t *testing.T) {
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"id":"chatcmpl-t","object":"chat.completion","created":0,"model":"pm1","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`))
+		_, _ = w.Write([]byte(fakeOpenAIChatResponse))
 	}))
 	defer srv.Close()
 
@@ -412,7 +380,7 @@ func TestBalanceChat_ChatLogRecordsChannelSelection(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"id":"chatcmpl-t","object":"chat.completion","created":0,"model":"pm1","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`))
+		_, _ = w.Write([]byte(fakeOpenAIChatResponse))
 	}))
 	defer srv.Close()
 

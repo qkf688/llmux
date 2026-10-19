@@ -29,7 +29,7 @@ func ListUpstreamModels(ctx context.Context, repos *repository.Repositories, pro
 		return nil, fmt.Errorf("get provider %d: %w", providerID, err)
 	}
 
-	snapshot, err := channel.NewAssembler(repos).Assemble(ctx, *provider)
+	snapshot, err := channel.NewAssembler(repos).Assemble(ctx, *provider, nil)
 	if err != nil {
 		return nil, fmt.Errorf("assemble channel snapshot: %w", err)
 	}
@@ -37,7 +37,7 @@ func ListUpstreamModels(ctx context.Context, repos *repository.Repositories, pro
 	if len(groups) == 0 {
 		return nil, errors.New("no key groups to browse")
 	}
-	endpoint, ok := channel.SelectPrimaryEndpoint(provider.Type, snapshot.Endpoints)
+	endpoint, ok := channel.SelectPrimaryEndpoint(provider.Type, snapshot.Endpoints, nil)
 	if !ok {
 		return nil, errors.New("no enabled endpoint matching provider type")
 	}

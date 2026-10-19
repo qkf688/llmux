@@ -90,7 +90,7 @@ func ResolveAssociationLink(ctx context.Context, id string) (*testLink, error) {
 			errNoWhitelistedGroup, mp.ProviderModel)
 	}
 
-	return buildLink(snapshot, mp.ProviderModel, candidates, mp.WithHeader, mp.CustomerHeaders)
+	return buildLink(snapshot, mp.ProviderModel, candidates, mp, mp.WithHeader, mp.CustomerHeaders)
 }
 
 // resolveAssociationSnapshot 解析「关联 id → 关联行 → 供应商行 → 选路快照」这段公共前缀。
@@ -111,7 +111,7 @@ func resolveAssociationSnapshot(ctx context.Context, id string) (*models.ModelWi
 	if err != nil {
 		return nil, models.Provider{}, nil, err
 	}
-	snapshot, err := channel.NewAssembler(repos()).Assemble(ctx, *provider)
+	snapshot, err := channel.NewAssembler(repos()).Assemble(ctx, *provider, mp)
 	if err != nil {
 		return nil, models.Provider{}, nil, err
 	}
@@ -134,7 +134,7 @@ func ResolveProviderLink(ctx context.Context, id string, model string, groupID u
 	if err != nil {
 		return nil, err
 	}
-	snapshot, err := channel.NewAssembler(repos()).Assemble(ctx, *provider)
+	snapshot, err := channel.NewAssembler(repos()).Assemble(ctx, *provider, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +154,7 @@ func ResolveProviderLink(ctx context.Context, id string, model string, groupID u
 		return nil, fmt.Errorf("供应商 %q 未配置任何凭据分组", provider.Name)
 	}
 
-	return buildLink(snapshot, model, candidates, nil, nil)
+	return buildLink(snapshot, model, candidates, nil, nil, nil)
 }
 
 // buildLink 在候选组里挑出**第一条凭据可用**的链路，装配一次、只发一次上游请求。
@@ -164,10 +164,10 @@ func ResolveProviderLink(ctx context.Context, id string, model string, groupID u
 // 花费不可接受；② react 是 SSE 流式多轮，重跑会向客户端重复推事件；③ 测试失败无副
 // 作用（不像健康检查会禁用关联），报「首个候选组失败」后管理员可按组徽标复测定位。
 // 代价已知：组内只验首个可用凭据，排在后面的坏 key 测不出来（那是 credprobe 与 #24 的职责）。
-func buildLink(snapshot *channel.Snapshot, model string, candidates []models.KeyGroup, withHeader *bool, customHeaders map[string]string) (*testLink, error) {
-	endpoint, ok := channel.SelectPrimaryEndpoint(snapshot.Provider.Type, snapshot.Endpoints)
+func buildLink(snapshot *channel.Snapshot, model string, candidates []models.KeyGroup, mp *models.ModelWithProvider, withHeader *bool, customHeaders map[string]string) (*testLink, error) {
+	endpoint, ok := channel.SelectPrimaryEndpoint(snapshot.Provider.Type, snapshot.Endpoints, mp)
 	if !ok {
-		return nil, fmt.Errorf("供应商 %q 无启用的 %s 协议端点", snapshot.Provider.Name, consts.ProtocolOfType(snapshot.Provider.Type))
+		return nil, fmt.Errorf("供应商 %q 无可用协议端点", snapshot.Provider.Name)
 	}
 	providerType, ok := consts.TypeOfProtocol(consts.Protocol(endpoint.Protocol))
 	if !ok {

@@ -2,6 +2,7 @@ package associations
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/handler/httpx"
 	"github.com/qkf688/llmux/httpresp"
 	"github.com/qkf688/llmux/models"
 )
@@ -9,8 +10,7 @@ import (
 // BatchUpdateModelProvidersCapabilities 批量更新模型提供商关联能力字段。
 func BatchUpdateModelProvidersCapabilities(c *gin.Context) {
 	var req BatchUpdateModelProvidersCapabilitiesRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
+	if !httpx.BindJSON(c, &req) {
 		return
 	}
 

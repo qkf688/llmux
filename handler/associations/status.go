@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/qkf688/llmux/handler/httpx"
 	"github.com/qkf688/llmux/httpresp"
 	"gorm.io/gorm"
 )
@@ -30,8 +31,7 @@ func UpdateModelProviderStatus(c *gin.Context) {
 	}
 
 	var req ModelProviderStatusRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
+	if !httpx.BindJSON(c, &req) {
 		return
 	}
 
@@ -59,8 +59,7 @@ func UpdateModelProviderStatus(c *gin.Context) {
 // BatchUpdateModelProvidersStatus 批量更新模型提供商关联状态。
 func BatchUpdateModelProvidersStatus(c *gin.Context) {
 	var req BatchUpdateModelProvidersStatusRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
+	if !httpx.BindJSON(c, &req) {
 		return
 	}
 

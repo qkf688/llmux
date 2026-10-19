@@ -28,9 +28,13 @@ func NewAssembler(repos *repository.Repositories) *Assembler {
 //   - credentials：CredentialRepo.ListByPools（按本供应商分组引用的号池 ID 集合收敛，
 //     SQL 侧过滤并 id ASC 排序），再按分组归并——组 ID → 其 PoolID 池内凭据
 //
+// mp 是该供应商下的关联；**有关联对应的调用点必须传**（chat、单模型健康检查、连通测试）：
+// 关联上的协议覆盖由 ResolveProtocolScope 解析，传 nil 等于按供应商口径选路、测/走的
+// 是另一条路。号池按凭据测试与供应商级模型同步没有关联可对应，传 nil。
+//
 // 候选顺序稳定性是轮询取模正确的前提（分组档内轮询 / 组内凭据轮询），
 // 三路数据统一在此按 ID ASC 收敛，不依赖 SQLite 的隐性行序。
-func (a *Assembler) Assemble(ctx context.Context, provider models.Provider) (*Snapshot, error) {
+func (a *Assembler) Assemble(ctx context.Context, provider models.Provider, mp *models.ModelWithProvider) (*Snapshot, error) {
 	endpoints, err := a.repos.Endpoint.ListByProvider(ctx, provider.ID)
 	if err != nil {
 		return nil, fmt.Errorf("channel: list endpoints: %w", err)
@@ -63,6 +67,7 @@ func (a *Assembler) Assemble(ctx context.Context, provider models.Provider) (*Sn
 		Endpoints:          endpoints,
 		Groups:             groups,
 		CredentialsByGroup: byGroup,
+		Association:        mp,
 	}, nil
 }
 

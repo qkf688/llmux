@@ -51,6 +51,29 @@ func TestWireFormatOfProtocol(t *testing.T) {
 	}
 }
 
+// TestAllProtocols_CoversMetaTable 是「新增协议忘了登记顺序」的机械门。
+// 两张表任一方向缺项都红：只剩表项 → 保存能过、运行时 Allowed 恒空（请求恒失败）；
+// 只剩顺序项 → 端点协议无法派生 provider 类型。两者都只在运行期暴露，必须在这里拦。
+func TestAllProtocols_CoversMetaTable(t *testing.T) {
+	listed := make(map[Protocol]bool, len(protocolOrder))
+	for _, p := range AllProtocols() {
+		if listed[p] {
+			t.Fatalf("AllProtocols 重复登记 %q", p)
+		}
+		listed[p] = true
+	}
+	for p := range protocolMetaTable {
+		if !listed[p] {
+			t.Fatalf("协议 %q 在 protocolMetaTable 中但不在 AllProtocols 里（新增协议漏登记顺序）", p)
+		}
+	}
+	for p := range listed {
+		if _, ok := protocolMetaTable[p]; !ok {
+			t.Fatalf("协议 %q 在 AllProtocols 中但不在 protocolMetaTable 里", p)
+		}
+	}
+}
+
 // TestProtocolOfType 锁定 provider type → 默认出站协议映射（与前端
 // webui/src/routes/providers/utils/schedule.ts 的 protocolOfType 同构）。
 func TestProtocolOfType(t *testing.T) {

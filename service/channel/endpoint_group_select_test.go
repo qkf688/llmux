@@ -265,7 +265,7 @@ func TestSelectPrimaryEndpoint_PrefersMatchingEnabledMinID(t *testing.T) {
 		{Model: gorm.Model{ID: 4}, Protocol: string(consts.ProtocolOpenAI), Enabled: true},
 	}
 
-	got, ok := SelectPrimaryEndpoint("openai", eps)
+	got, ok := SelectPrimaryEndpoint("openai", eps, nil)
 	if !ok {
 		t.Fatal("want enabled openai endpoint")
 	}
@@ -273,18 +273,18 @@ func TestSelectPrimaryEndpoint_PrefersMatchingEnabledMinID(t *testing.T) {
 		t.Fatalf("ID = %d, want 3（跳过停用端点，取 ID 最小可用者）", got.ID)
 	}
 
-	if got, ok := SelectPrimaryEndpoint("anthropic", eps); !ok || got.ID != 1 {
+	if got, ok := SelectPrimaryEndpoint("anthropic", eps, nil); !ok || got.ID != 1 {
 		t.Fatalf("anthropic 主协议 = %+v (ok=%v), want ID 1", got, ok)
 	}
 	// responses 协议无端点：调用方（同步 SkipReason / 浏览报错）据此自行措辞。
-	if _, ok := SelectPrimaryEndpoint("openai-res", eps); ok {
+	if _, ok := SelectPrimaryEndpoint("openai-res", eps, nil); ok {
 		t.Fatal("无 responses 端点时必须返回 false")
 	}
 	// 未知 type 走 ProtocolOfType 的 openai 兜底（与 SelectEndpoint 同一张表，不另立规则）。
-	if got, ok := SelectPrimaryEndpoint("mystery-type", eps); !ok || got.ID != 3 {
+	if got, ok := SelectPrimaryEndpoint("mystery-type", eps, nil); !ok || got.ID != 3 {
 		t.Fatalf("未知 type = %+v (ok=%v), want 兜底 openai ID 3", got, ok)
 	}
-	if _, ok := SelectPrimaryEndpoint("openai", eps[:2]); ok {
+	if _, ok := SelectPrimaryEndpoint("openai", eps[:2], nil); ok {
 		t.Fatal("同协议端点全停用时必须返回 false")
 	}
 }

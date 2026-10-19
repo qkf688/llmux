@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/common"
+	"github.com/qkf688/llmux/handler/httpx"
 	"github.com/qkf688/llmux/httpresp"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/repository"
@@ -40,8 +41,7 @@ func GetModelProviders(c *gin.Context) {
 // CreateModelProvider 创建模型提供商关联。
 func CreateModelProvider(c *gin.Context) {
 	var req ModelWithProviderRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
+	if !httpx.BindJSON(c, &req) {
 		return
 	}
 
@@ -75,6 +75,12 @@ func CreateModelProvider(c *gin.Context) {
 			httpresp.InternalErrorMessage(c, "Failed to get provider", err)
 			return
 		}
+	}
+
+	protocols, primaryProtocol, err := validateProtocolOverride(ctx, repos(), req.ProviderID, req.Protocols, req.PrimaryProtocol)
+	if err != nil {
+		writeProtocolOverrideError(c, err)
+		return
 	}
 
 	// 写入闸与 apikeys 同一份净化器（common 下沉，两域口径单源，4a）：
@@ -113,6 +119,9 @@ func CreateModelProvider(c *gin.Context) {
 		SupportsThinking: req.SupportsThinking,
 		// 三态：nil=继承 model，空切片=显式不约束，非空=override
 		ThinkingLevels: req.ThinkingLevels,
+		// 协议覆盖三态：nil=继承供应商那层；非 nil=覆盖（可含供应商未配置的协议）
+		Protocols:       protocols,
+		PrimaryProtocol: primaryProtocol,
 	}
 
 	defaultStatus := true
@@ -145,8 +154,7 @@ func UpdateModelProvider(c *gin.Context) {
 	}
 
 	var req ModelWithProviderRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
+	if !httpx.BindJSON(c, &req) {
 		return
 	}
 	slog.Debug("UpdateModelProvider", "id", id, "model_id", req.ModelID, "provider_id", req.ProviderID) // 不打印 req：CustomerHeaders 可能含敏感 header 值
@@ -170,7 +178,8 @@ func UpdateModelProvider(c *gin.Context) {
 		return
 	}
 
-	if _, err := repos().ModelWithProvider.Get(ctx, uint(id)); err != nil {
+	existing, err := repos().ModelWithProvider.Get(ctx, uint(id))
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			httpresp.NotFound(c, "Model-provider association not found")
 			return
@@ -202,6 +211,17 @@ func UpdateModelProvider(c *gin.Context) {
 		}
 	}
 
+	// 覆盖校验用「本次请求生效的供应商」：没传 provider_id 时沿用存量关联那家。
+	effectiveProviderID := req.ProviderID
+	if effectiveProviderID == 0 {
+		effectiveProviderID = existing.ProviderID
+	}
+	protocols, primaryProtocol, err := validateProtocolOverride(ctx, repos(), effectiveProviderID, req.Protocols, req.PrimaryProtocol)
+	if err != nil {
+		writeProtocolOverrideError(c, err)
+		return
+	}
+
 	// 五项三态字段（supports_thinking / thinking_levels / tool_call / structured_output / image）
 	// 需要 nil 显式写 NULL（struct Updates 会跳过 nil 指针），其余字段保持 struct 部分更新
 	// 语义（跳过零值，缺省不改）。两步在同一事务内执行（RunInTx），避免非原子：失败整体回滚。
@@ -228,7 +248,13 @@ func UpdateModelProvider(c *gin.Context) {
 		// supports_thinking + thinking_levels 都走 UpdateFields 显式写 NULL。
 		// thinking_levels 需手动 JSON 序列化：GORM serializer:json 只对 struct Updates 生效，
 		// map-based UpdateFields 不走 serializer，直接传 *[]string 会报 unsupported type。
-		thinkingLevelsVal, err := models.SerializeThinkingLevelsPtrForUpdate(req.ThinkingLevels)
+		thinkingLevelsVal, err := models.SerializeStringSlicePtrForUpdate(req.ThinkingLevels)
+		if err != nil {
+			return err
+		}
+		// protocols 与 thinking_levels 同族：*[]string 三态，map 更新不走 serializer，
+		// 需手动转 JSON；nil 写 NULL（= 继承供应商那层）。
+		protocolsVal, err := models.SerializeStringSlicePtrForUpdate(protocols)
 		if err != nil {
 			return err
 		}
@@ -239,6 +265,9 @@ func UpdateModelProvider(c *gin.Context) {
 			"tool_call":         req.ToolCall,
 			"structured_output": req.StructuredOutput,
 			"image":             req.Image,
+			// 协议覆盖同族：缺省 nil = 清回继承。
+			"protocols":        protocolsVal,
+			"primary_protocol": primaryProtocol,
 		})
 		return err
 	}); err != nil {
@@ -281,8 +310,7 @@ func DeleteModelProvider(c *gin.Context) {
 // BatchDeleteModelProviders 批量删除模型提供商关联。
 func BatchDeleteModelProviders(c *gin.Context) {
 	var req BatchDeleteModelProvidersRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httpresp.BadRequest(c, "Invalid request body: "+err.Error())
+	if !httpx.BindJSON(c, &req) {
 		return
 	}
 

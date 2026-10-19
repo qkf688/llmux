@@ -147,20 +147,27 @@ func healthCheckStatusFor(checkErr error) string {
 // 轮询指针（一轮巡检就把真实流量的 key 分配挪一格）；③ 分组白名单不参与过滤
 // （GroupCandidates 的口径），否则未同步/白名单未含该模型的组会被误判成不可用。
 func (h *HealthChecker) doCheck(ctx context.Context, provider *models.Provider, mp *models.ModelWithProvider) error {
-	snapshot, err := channel.NewAssembler(repos()).Assemble(ctx, *provider)
+	snapshot, err := channel.NewAssembler(repos()).Assemble(ctx, *provider, mp)
 	if err != nil {
 		return &errLocalCheck{err}
 	}
-	endpoint, ok := channel.SelectPrimaryEndpoint(provider.Type, snapshot.Endpoints)
+	endpoint, ok := channel.SelectPrimaryEndpoint(provider.Type, snapshot.Endpoints, mp)
 	if !ok {
-		return &errLocalCheck{fmt.Errorf("no enabled %s endpoint for provider %q", consts.ProtocolOfType(provider.Type), provider.Name)}
+		return &errLocalCheck{fmt.Errorf("no usable protocol endpoint for provider %q", provider.Name)}
+	}
+	// 探针体与响应形状按**选中端点协议**派生，不按 provider.Type：关联可覆盖主格式
+	// （openai 供应商 + 主格式 anthropic），两者会分叉——用错形状会把健康的上游判成
+	// 「内容形状非法」，进而自动停用关联。
+	endpointType, ok := consts.TypeOfProtocol(consts.Protocol(endpoint.Protocol))
+	if !ok {
+		return &errLocalCheck{fmt.Errorf("endpoint protocol %q is unknown (endpoint %d)", endpoint.Protocol, endpoint.ID)}
 	}
 	groups := channel.GroupCandidates(snapshot)
 	if len(groups) == 0 {
 		return &errLocalCheck{fmt.Errorf("provider %q has no key groups", provider.Name)}
 	}
 
-	testBody, format := chooseTestProbe(provider.Type)
+	testBody, format := chooseTestProbe(endpointType)
 	now := time.Now()
 
 	// 逐组失败原因都留下：health_check_logs.error 是排查入口，只报「失败」等于丢掉线索。

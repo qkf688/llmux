@@ -19,6 +19,9 @@ type Snapshot struct {
 	Groups []models.KeyGroup
 	// CredentialsByGroup 以分组 ID 为键的凭据候选（装配时已归并内联与号池两侧）。
 	CredentialsByGroup map[uint][]models.Credential
+	// Association 本次选路对应的关联；nil = 供应商级口径（诊断/同步/号池点测没有关联可对应）。
+	// 关联上两项协议覆盖由 ResolveProtocolScope 解析，见 protocol_scope.go。
+	Association *models.ModelWithProvider
 }
 
 // SelectionResult 一次选路的完整命中：端点 → 分组 → 凭据 + 组装后的动态 config。

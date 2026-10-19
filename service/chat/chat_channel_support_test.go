@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -86,6 +87,37 @@ func seedPoolCredentials(t *testing.T, cipher *credentialcrypto.Cipher, poolID u
 // 内联凭据删除后每个选路用例都要现建池/组/凭据/关联四层，逐个用例手写会在多个测试文件
 // 里长出逐字重复。mutate 用于给凭据补状态机字段（nil 表示全 active）。
 // 返回 (分组, 池ID, 关联)——关联回填了 ID，调用方构造 CandidatePool 要用。
+// 两个假上游的最小合法响应。需要同时挂 openai/anthropic 端点的用例共用，
+// 避免逐字重抄响应体（重复块会被提交门的重复率检查判为新增）。
+const (
+	fakeOpenAIChatResponse        = `{"id":"chatcmpl-t","object":"chat.completion","created":0,"model":"pm1","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`
+	fakeAnthropicMessagesResponse = `{"id":"msg_01","type":"message","role":"assistant","model":"pm1","content":[{"type":"text","text":"hi"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}`
+)
+
+// runBalanceOnce 跑一次完整的 BalanceChat 调用（构造候选池 → 调用 → 失败即止）。
+// 既有集成用例各自内联同一段装配，新增用例复用本 helper，避免第三份逐字重复。
+func runBalanceOnce(t *testing.T, mwp models.ModelWithProvider, style, raw string) *BalanceResult {
+	t.Helper()
+	pool, err := buildCandidatePool(context.Background(), []models.ModelWithProvider{mwp})
+	if err != nil {
+		t.Fatalf("build candidate pool: %v", err)
+	}
+	result, err := BalanceChat(context.Background(), BalanceInput{
+		Start:  time.Now(),
+		Style:  style,
+		Before: Before{Model: "m1", Stream: false, raw: []byte(raw)},
+		ProvidersWithMeta: ProvidersWithMeta{
+			CandidatePool: pool,
+			Model:         &models.Model{Name: "m1"},
+		},
+		ReqMeta: models.ReqMeta{Header: http.Header{}},
+	})
+	if err != nil {
+		t.Fatalf("BalanceChat err = %v", err)
+	}
+	return result
+}
+
 func seedGroupedChannel(
 	t *testing.T,
 	cipher *credentialcrypto.Cipher,

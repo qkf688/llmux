@@ -132,7 +132,7 @@ func TestSyncKeyGroup_WritesWhitelistAndHitsOnce(t *testing.T) {
 		Config: `{"api_key":"stale","base_url":"https://should-not-use.example"}`,
 	}, server.URL, []string{"sk-g1"})
 
-	snapshot, err := svc.assembler.Assemble(ctx, provider)
+	snapshot, err := svc.assembler.Assemble(ctx, provider, nil)
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestSyncKeyGroup_NoCredentialSkipsWithoutHit(t *testing.T) {
 		t.Fatalf("create group: %v", err)
 	}
 
-	snapshot, err := svc.assembler.Assemble(ctx, provider)
+	snapshot, err := svc.assembler.Assemble(ctx, provider, nil)
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)
 	}

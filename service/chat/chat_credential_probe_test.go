@@ -63,7 +63,7 @@ func TestProbeRecoverInGroup_RestoresAndSelectable(t *testing.T) {
 		t.Fatalf("create credential: %v", err)
 	}
 
-	snapshot, err := channel.NewAssembler(repos()).Assemble(context.Background(), provider)
+	snapshot, err := channel.NewAssembler(repos()).Assemble(context.Background(), provider, nil)
 	if err != nil {
 		t.Fatalf("assemble: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestProbeRecoverInGroup_RestoresAndSelectable(t *testing.T) {
 		t.Fatalf("probe hits = %d, want 1", hits.Load())
 	}
 
-	refreshed, err := channel.NewAssembler(repos()).Assemble(context.Background(), provider)
+	refreshed, err := channel.NewAssembler(repos()).Assemble(context.Background(), provider, nil)
 	if err != nil {
 		t.Fatalf("re-assemble: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestProbeRecoverInGroup_LocksExhaustedGroup(t *testing.T) {
 		t.Fatalf("create c2: %v", err)
 	}
 
-	snapshot, err := channel.NewAssembler(repos()).Assemble(context.Background(), provider)
+	snapshot, err := channel.NewAssembler(repos()).Assemble(context.Background(), provider, nil)
 	if err != nil {
 		t.Fatalf("assemble: %v", err)
 	}

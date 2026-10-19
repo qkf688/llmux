@@ -35,7 +35,7 @@ func (s *Service) syncKeyGroup(
 ) groupSyncOutcome {
 	out := groupSyncOutcome{GroupID: group.ID, GroupName: group.Name}
 
-	endpoint, ok := channel.SelectPrimaryEndpoint(provider.Type, snapshot.Endpoints)
+	endpoint, ok := channel.SelectPrimaryEndpoint(provider.Type, snapshot.Endpoints, nil)
 	if !ok {
 		out.Skipped = true
 		out.SkipReason = "no enabled endpoint matching provider type"

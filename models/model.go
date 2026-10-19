@@ -108,6 +108,19 @@ type ModelWithProvider struct {
 	// 本字段曾被单独加 `thinking_levels,omitempty` 成为异类，导致继承态整键消失，
 	// 前端读不到键便把"继承"误判为 override，并在保存时回写成"显式不约束"，静默破坏钳制规则。
 	ThinkingLevels *[]string `json:"ThinkingLevels" gorm:"serializer:json"`
+	// Protocols / PrimaryProtocol 是**协议覆盖**（三态），与 Provider.Protocols 的集合语义不同：
+	//   Protocols nil = 继承供应商那层（= 供应商已启用的协议端点集）；
+	//   非 nil = 该关联允许走的协议集合（取值见 consts.Protocol*），**可包含供应商未配置的协议**
+	//   （运行时合成空 URL 端点走 Provider base_url，与协议检测探测未配置协议同一做法）。
+	//   空切片没有业务含义（= 一条协议都不许走），写入侧归一为 nil（= 继承）。
+	//   PrimaryProtocol nil = 继承供应商主格式（consts.ProtocolOfType(Provider.Type)）；
+	//   非 nil = 需要协议转换时的落点，必须落在生效的协议集合内。
+	// 为什么必须在关联层：供应商级只能表达「这家网关整体支持哪几条」，表达不了
+	// 「同一网关下 A 模型只支持 Anthropic、B 模型只支持 Responses」，而协议检测正是按模型做的。
+	// json tag 显式 PascalCase 且**禁止 omitempty**：nil 是「继承」的有效语义，必须序列化成 null
+	// （范式同 ThinkingLevels，见其注释）。
+	Protocols       *[]string `json:"Protocols" gorm:"serializer:json"`
+	PrimaryProtocol *string   `json:"PrimaryProtocol"`
 }
 
 // SupportsThinkingResolved 解析该关联最终是否支持 thinking：
@@ -155,10 +168,10 @@ func SerializeThinkingLevelsForUpdate(levels []string) (any, error) {
 	return string(data), nil
 }
 
-// SerializeThinkingLevelsPtrForUpdate 将 *[]string 序列化为 GORM map-based UpdateFields 可接受的值。
-// 用于 ModelWithProvider.ThinkingLevels（*[]string，三态）。
-// nil → nil（写 NULL=继承）；非 nil → JSON 数组字符串（空切片="[]"=显式不约束）。
-func SerializeThinkingLevelsPtrForUpdate(levels *[]string) (any, error) {
+// SerializeStringSlicePtrForUpdate 将 *[]string 序列化为 GORM map-based UpdateFields 可接受的值。
+// 用于 ModelWithProvider 的 `*[]string` 三态字段（ThinkingLevels / Protocols）。
+// nil → nil（写 NULL=继承）；非 nil → JSON 数组字符串（空切片="[]"）。
+func SerializeStringSlicePtrForUpdate(levels *[]string) (any, error) {
 	if levels == nil {
 		return nil, nil
 	}

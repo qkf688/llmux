@@ -177,11 +177,11 @@ func resolveCredentialTestLink(ctx context.Context, poolID uint) (*credentialTes
 		return &credentialTestLink{group: group}, err
 	}
 
-	snapshot, err := channel.NewAssembler(repos()).Assemble(ctx, *provider)
+	snapshot, err := channel.NewAssembler(repos()).Assemble(ctx, *provider, nil)
 	if err != nil {
 		return &credentialTestLink{group: group, provider: *provider}, err
 	}
-	endpoint, ok := channel.SelectPrimaryEndpoint(provider.Type, snapshot.Endpoints)
+	endpoint, ok := channel.SelectPrimaryEndpoint(provider.Type, snapshot.Endpoints, nil)
 	if !ok {
 		return &credentialTestLink{group: group, provider: *provider},
 			fmt.Errorf("供应商 %q 无启用的 %s 协议端点", provider.Name, consts.ProtocolOfType(provider.Type))

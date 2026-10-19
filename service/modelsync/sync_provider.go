@@ -27,7 +27,7 @@ func (s *Service) SyncProviderModels(ctx context.Context, providerID uint) (*mod
 		return nil, fmt.Errorf("list group models before sync: %w", err)
 	}
 
-	snapshot, err := s.assembler.Assemble(ctx, provider)
+	snapshot, err := s.assembler.Assemble(ctx, provider, nil)
 	if err != nil {
 		slog.Error("failed to assemble channel snapshot", "provider_id", providerID, "error", err)
 		return s.createAndSaveErrorLog(ctx, provider, err.Error()), nil

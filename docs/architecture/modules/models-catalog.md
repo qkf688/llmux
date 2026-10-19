@@ -55,7 +55,7 @@ models.Model / ModelTemplateItem
 - `SupportsThinking=false` 时此字段被忽略（thinking 整体剥离，白名单无意义）。
 - 消费方：`service/chat` 经 `ModelWithProvider.ThinkingLevelsResolved(model)` 解析最终白名单（关联 override 优先，否则继承 model），传给 `transform.ThinkingClampConfig` 在 chat 主路径钳制。
 - 钳制规则：请求中的 `reasoning_effort` 不在白名单时，按就近原则钳制到白名单内最接近的档位；`auto` 不在白名单时回退到 `SettingKeyReasoningEffortDefaultValue`；`none` 不在白名单时剥离 thinking 字段。详见 `protocol-transform.md` 钳制章节。
-- GORM map-based UpdateFields 不走 `serializer:json`，需手动序列化。`models.SerializeThinkingLevelsForUpdate([]string)` 用于 Model（非三态），`models.SerializeThinkingLevelsPtrForUpdate(*[]string)` 用于 ModelWithProvider（三态）。详见 `associations.md`。
+- GORM map-based UpdateFields 不走 `serializer:json`，需手动序列化。`models.SerializeThinkingLevelsForUpdate([]string)` 用于 Model（非三态），`models.SerializeStringSlicePtrForUpdate(*[]string)` 用于 ModelWithProvider 的三态 `*[]string`（`ThinkingLevels` / `Protocols` 共用）。详见 `associations.md`。
 - `models.IsSixLevelEffort(effort)` 校验 effort 是否为 6 档有序档位之一（不含 none/auto），用于 `buildThinkingClampConfig` 兜底校验 autoFallback 设置值。
 
 ### `Model.ToolCall / StructuredOutput / Image`（能力真值）

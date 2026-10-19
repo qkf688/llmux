@@ -66,7 +66,7 @@ func TestAssemble_CredentialMerge(t *testing.T) {
 	}
 
 	repos := reposFromDB(db)
-	snap, err := NewAssembler(repos).Assemble(ctx, models.Provider{Model: gorm.Model{ID: 1}, Type: "openai"})
+	snap, err := NewAssembler(repos).Assemble(ctx, models.Provider{Model: gorm.Model{ID: 1}, Type: "openai"}, nil)
 	if err != nil {
 		t.Fatalf("Assemble error: %v", err)
 	}

@@ -38,15 +38,15 @@ function renderMutations() {
 }
 
 describe("applyProtocolRecommendation", () => {
-  it("整项覆盖推荐协议，且只调窄端点（不触碰其它字段）", async () => {
+  it("整项覆盖「集合 + 主格式」，且只调窄端点（不触碰其它字段）", async () => {
     const { result } = renderMutations();
 
     await act(async () => {
-      await result.current.applyProtocolRecommendation(42, "anthropic");
+      await result.current.applyProtocolRecommendation(42, ["openai", "anthropic"], "anthropic");
     });
 
     expect(apiMocks.updateModelProviderProtocols).toHaveBeenCalledWith(42, {
-      protocols: ["anthropic"],
+      protocols: ["openai", "anthropic"],
       primary_protocol: "anthropic",
     });
     expect(apiMocks.updateModelProvider).not.toHaveBeenCalled();

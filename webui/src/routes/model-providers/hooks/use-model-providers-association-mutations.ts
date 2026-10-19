@@ -9,6 +9,7 @@ import {
   type ModelWithProvider,
 } from "@/lib/api";
 import type { Updater } from "@/stores/core/updater";
+import { protocolLabel } from "@/lib/protocols";
 import type { FormValues } from "../form-schema";
 import type { ProviderModelSelection } from "../types";
 
@@ -149,14 +150,18 @@ export function useModelProvidersAssociationMutations({
     }
   };
 
-  // 协议检测的一键落地：推荐协议**整项覆盖**该关联的协议设置（集合 + 主格式）。
+  // 协议检测的一键落地：把推荐**整项覆盖**该关联的协议设置（允许集合 + 主格式）。
   // 覆盖而非合并：检测是按这个模型实测的结论，留着「检测说不通」的协议等于让请求继续
   // 打到坏路上；要保留别的协议，用户可以在关联弹窗里手动勾。
+  // 集合里勾多条是为了让客户端用哪种协议进来就走哪条，省掉没必要的格式转换；主格式兜住
+  // 「客户端发来集合外的协议」时该转成哪种格式。两者必须同时写，否则集合外协议没有转换目标。
   // 走窄端点（只写协议两列）：全量 PUT 会把能力/thinking/请求头透传一起清掉。
-  const applyProtocolRecommendation = async (id: number, protocol: string) => {
+  const applyProtocolRecommendation = async (id: number, protocols: string[], primary: string) => {
     try {
-      await updateModelProviderProtocols(id, { protocols: [protocol], primary_protocol: protocol });
-      toast.success(`已把该模型设为只走 ${protocol}（替换了原有协议设置）`);
+      await updateModelProviderProtocols(id, { protocols, primary_protocol: primary });
+      toast.success(
+        `已勾选 ${protocols.length} 条协议、主格式 ${protocolLabel(primary)}（替换了原有协议设置）`,
+      );
       if (selectedModelId) {
         void fetchModelProviders(selectedModelId);
       }

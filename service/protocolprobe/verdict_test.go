@@ -66,8 +66,8 @@ func TestRecommend_Branches(t *testing.T) {
 			{Protocol: consts.ProtocolAnthropic, NonStream: LegPassed, Stream: LegNonCompliant},
 		}
 		rec := Recommend(consts.ProtocolOpenAI, inputs)
-		if rec.Protocol != "" {
-			t.Fatalf("protocol = %q, want 空（无可用协议时不得点名）", rec.Protocol)
+		if len(rec.Protocols) != 0 || rec.Primary != "" {
+			t.Fatalf("protocols=%v primary=%q, want 空（无可用协议时不得给出可勾选集合）", rec.Protocols, rec.Primary)
 		}
 		if rec.Confidence != ConfidenceLow {
 			t.Fatalf("confidence = %q, want low", rec.Confidence)
@@ -88,17 +88,15 @@ func TestRecommend_Branches(t *testing.T) {
 			{Protocol: consts.ProtocolOpenAI, NonStream: LegPassed, Stream: LegFailed},
 		}
 		rec := Recommend(consts.ProtocolOpenAI, inputs)
-		if rec.Protocol != string(consts.ProtocolAnthropic) {
-			t.Fatalf("protocol = %q, want anthropic", rec.Protocol)
-		}
+		assertProtocolSet(t, rec, []consts.Protocol{consts.ProtocolAnthropic}, consts.ProtocolAnthropic)
 		if rec.Confidence != ConfidenceHigh {
 			t.Fatalf("confidence = %q, want high（唯一可用无需再比谁原生）", rec.Confidence)
 		}
 		if !containsSubstring(rec.Actions, "改为 Anthropic") {
 			t.Fatalf("actions 未给出改主类型的建议: %v", rec.Actions)
 		}
-		if !containsSubstring(rec.Actions, "建议把该模型的协议设置为只走 Anthropic") {
-			t.Fatalf("actions 未给出按模型勾选端点的动作: %v", rec.Actions)
+		if !containsSubstring(rec.Actions, "勾选 Anthropic，主格式 Anthropic") {
+			t.Fatalf("actions 未给出按模型勾选协议的动作: %v", rec.Actions)
 		}
 	})
 
@@ -117,17 +115,17 @@ func TestRecommend_Branches(t *testing.T) {
 			},
 		}
 		rec := Recommend(consts.ProtocolOpenAI, inputs)
-		if rec.Protocol != string(consts.ProtocolAnthropic) {
-			t.Fatalf("protocol = %q, want anthropic", rec.Protocol)
-		}
+		// openai 的错误信封是 Anthropic 形状 = 转译路径，按「不勾转译协议」的规矩被排除；
+		// 只剩 anthropic 一条进集合。这条断言就是「勾选集合排除转译」的锁。
+		assertProtocolSet(t, rec, []consts.Protocol{consts.ProtocolAnthropic}, consts.ProtocolAnthropic)
 		if rec.Confidence != ConfidenceHigh {
 			t.Fatalf("confidence = %q, want high（唯一同族且字段全命中）", rec.Confidence)
 		}
 		if !containsSubstring(rec.Actions, "转译路径") {
-			t.Fatalf("actions 未提示转译路径不建议开端点: %v", rec.Actions)
+			t.Fatalf("actions 未提示转译路径不建议勾选: %v", rec.Actions)
 		}
-		if !containsSubstring(rec.Actions, "建议把该模型的协议设置为只走 Anthropic") {
-			t.Fatalf("actions 未给出按模型勾选端点的动作: %v", rec.Actions)
+		if !containsSubstring(rec.Actions, "勾选 Anthropic，主格式 Anthropic") {
+			t.Fatalf("actions 未给出按模型勾选协议的动作: %v", rec.Actions)
 		}
 	})
 
@@ -164,20 +162,22 @@ func TestRecommend_Branches(t *testing.T) {
 			},
 		}
 		rec := Recommend(consts.ProtocolOpenAI, inputs)
-		if rec.Protocol != string(consts.ProtocolResponses) {
-			t.Fatalf("protocol = %q, want responses（字段命中更多）", rec.Protocol)
-		}
+		// 两条同族都在集合里（多条允许可少做格式转换），主格式按字段命中数取 responses。
+		assertProtocolSet(t, rec,
+			[]consts.Protocol{consts.ProtocolOpenAI, consts.ProtocolResponses},
+			consts.ProtocolResponses)
 		if rec.Confidence != ConfidenceMedium {
 			t.Fatalf("confidence = %q, want medium", rec.Confidence)
 		}
-		if !containsSubstring(rec.Actions, "建议把该模型的协议设置为只走 OpenAI Responses") {
+		if !containsSubstring(rec.Actions, "勾选 OpenAI Chat、OpenAI Responses，主格式 OpenAI Responses") {
 			t.Fatalf("actions 未按排序结果给出勾选动作: %v", rec.Actions)
 		}
 	})
 
-	t.Run("no_same_family_refuses_to_pick", func(t *testing.T) {
+	t.Run("all_usable_translated_yields_no_set", func(t *testing.T) {
 		t.Parallel()
-		// 共识口径：证据不足时写「无法区分」，不点名协议。
+		// 两条都可用、但错误信封都指向对方的家族 → 都是转译路径。按「不勾转译协议」的规矩
+		// 集合为空：勾哪条都等于把请求交给上游网关转，宁可不给，也不给一个自相矛盾的按钮。
 		inputs := []Input{
 			{
 				Protocol: consts.ProtocolOpenAI, NonStream: LegPassed, Stream: LegPassed,
@@ -189,8 +189,8 @@ func TestRecommend_Branches(t *testing.T) {
 			},
 		}
 		rec := Recommend(consts.ProtocolOpenAI, inputs)
-		if rec.Protocol != "" {
-			t.Fatalf("protocol = %q, want 空（无法区分时不许点名）", rec.Protocol)
+		if len(rec.Protocols) != 0 || rec.Primary != "" {
+			t.Fatalf("protocols=%v primary=%q, want 空（全部像转译路径时无可放心勾选的集合）", rec.Protocols, rec.Primary)
 		}
 		if rec.Confidence != ConfidenceLow {
 			t.Fatalf("confidence = %q, want low", rec.Confidence)
@@ -201,23 +201,71 @@ func TestRecommend_Branches(t *testing.T) {
 		if !containsSubstring(rec.Actions, "保持当前主类型") {
 			t.Fatalf("actions 未给弱建议: %v", rec.Actions)
 		}
-		// 分不出谁更原生时，仍要给出「这个模型可勾哪些端点」的候选（附实测提示），
-		// 而不是一句「无法区分」就把人卡住。
-		if !containsSubstring(rec.Actions, "可以走这些协议") {
-			t.Fatalf("actions 未列出可用协议: %v", rec.Actions)
+		if !containsSubstring(rec.Actions, "不建议勾选这条协议") {
+			t.Fatalf("actions 未说明每条为何不建议勾选: %v", rec.Actions)
 		}
 	})
 
-	t.Run("unknown_family_not_treated_as_same", func(t *testing.T) {
+	t.Run("unknown_family_not_treated_as_same_but_still_checkable", func(t *testing.T) {
 		t.Parallel()
 		// 指纹没采到（FamilyUnknown）不能算「同族」——否则会把「没测到」读成「测过且一致」。
+		// 但它也不是转译证据：两条都该进集合，主格式保持当前主类型。这正是用户截图里的那种结论。
 		inputs := []Input{
 			{Protocol: consts.ProtocolOpenAI, NonStream: LegPassed, Stream: LegPassed, Family: FamilyUnknown},
 			{Protocol: consts.ProtocolAnthropic, NonStream: LegPassed, Stream: LegPassed, Family: FamilyUnknown},
 		}
 		rec := Recommend(consts.ProtocolOpenAI, inputs)
-		if rec.Protocol != "" {
-			t.Fatalf("protocol = %q, want 空（两条都未采到指纹 → 无法区分）", rec.Protocol)
+		assertProtocolSet(t, rec,
+			[]consts.Protocol{consts.ProtocolOpenAI, consts.ProtocolAnthropic},
+			consts.ProtocolOpenAI)
+		if rec.Confidence != ConfidenceLow {
+			t.Fatalf("confidence = %q, want low（分不出谁更原生）", rec.Confidence)
+		}
+		if !containsSubstring([]string{rec.Summary}, "无法区分") {
+			t.Fatalf("summary = %q, 需明写无法区分", rec.Summary)
+		}
+	})
+
+	t.Run("complete_fields_outrank_current_main_for_primary", func(t *testing.T) {
+		t.Parallel()
+		// 用户实测场景：三条都可用、指纹都未采到 → 集合是三条；OpenAI Chat 缺 2 项、
+		// Responses 一项不缺、Anthropic 缺 1 项。主格式必须跟着字段最完整的那条走——
+		// 若仍无条件保留当前主类型，报告会一边说「Chat 缺 2 项」一边推荐它。
+		inputs := []Input{
+			{
+				Protocol: consts.ProtocolOpenAI, NonStream: LegPassed, Stream: LegPassed, Family: FamilyUnknown,
+				Fields: fields(
+					[]string{"object", "finish_reason", "usage.prompt_tokens", "usage.completion_tokens",
+						"usage.prompt_tokens_details", "usage.completion_tokens_details"},
+					[]string{"system_fingerprint", "service_tier"},
+				),
+			},
+			{
+				Protocol: consts.ProtocolResponses, NonStream: LegPassed, Stream: LegPassed, Family: FamilyUnknown,
+				Fields: fields(
+					[]string{"object", "status", "output[].type", "usage.input_tokens", "usage.output_tokens",
+						"usage.input_tokens_details", "usage.output_tokens_details", "error"},
+					nil,
+				),
+			},
+			{
+				Protocol: consts.ProtocolAnthropic, NonStream: LegPassed, Stream: LegPassed, Family: FamilyUnknown,
+				Fields: fields(
+					[]string{"type", "content[].type", "stop_reason", "usage.input_tokens", "usage.output_tokens",
+						"usage.cache_creation_input_tokens", "usage.cache_read_input_tokens"},
+					[]string{"stop_sequence"},
+				),
+			},
+		}
+		rec := Recommend(consts.ProtocolOpenAI, inputs)
+		assertProtocolSet(t, rec,
+			[]consts.Protocol{consts.ProtocolOpenAI, consts.ProtocolResponses, consts.ProtocolAnthropic},
+			consts.ProtocolResponses)
+		if !containsSubstring(rec.Actions, "主格式建议取 OpenAI Responses（原生字段最完整）") {
+			t.Fatalf("actions 未说明主格式为何改取 Responses: %v", rec.Actions)
+		}
+		if !containsSubstring(rec.Actions, "OpenAI Chat 也可用") {
+			t.Fatalf("actions 把「当前主类型可用但字段不全」误述成不可用: %v", rec.Actions)
 		}
 	})
 }
@@ -239,8 +287,8 @@ func TestRecommend_TieBreakByLatencyOnlyWhenEvidenceEqual(t *testing.T) {
 		},
 	}
 	rec := Recommend(consts.ProtocolAnthropic, inputs)
-	if rec.Protocol != string(consts.ProtocolAnthropic) {
-		t.Fatalf("protocol = %q, want anthropic（字段同分时耗时短者胜）", rec.Protocol)
+	if rec.Primary != string(consts.ProtocolAnthropic) {
+		t.Fatalf("primary = %q, want anthropic（字段同分时耗时短者胜）", rec.Primary)
 	}
 }
 
@@ -260,8 +308,8 @@ func TestRecommend_MainTypePreferredOverLatency(t *testing.T) {
 		},
 	}
 	rec := Recommend(consts.ProtocolOpenAI, inputs)
-	if rec.Protocol != string(consts.ProtocolOpenAI) {
-		t.Fatalf("protocol = %q, want openai（主类型优先）", rec.Protocol)
+	if rec.Primary != string(consts.ProtocolOpenAI) {
+		t.Fatalf("primary = %q, want openai（主类型优先）", rec.Primary)
 	}
 }
 
@@ -279,6 +327,34 @@ func TestRecommend_AlwaysCarriesFixedNotes(t *testing.T) {
 			t.Fatalf("notes 缺少 %q: %v", must, rec.Notes)
 		}
 	}
+}
+
+// assertProtocolSet 断「勾选集合逐字相等（含顺序）+ 主格式落在集合内」。
+// 集合顺序固定按 consts.AllProtocols，所以可以逐字比；主格式不在集合内会被保存侧拒绝，
+// 所以这条不变量必须在单测里锁死。
+func assertProtocolSet(t *testing.T, rec Recommendation, wantSet []consts.Protocol, wantPrimary consts.Protocol) {
+	t.Helper()
+	want := make([]string, 0, len(wantSet))
+	for _, p := range wantSet {
+		want = append(want, string(p))
+	}
+	if len(rec.Protocols) != len(want) {
+		t.Fatalf("protocols = %v, want %v", rec.Protocols, want)
+	}
+	for i := range want {
+		if rec.Protocols[i] != want[i] {
+			t.Fatalf("protocols = %v, want %v", rec.Protocols, want)
+		}
+	}
+	if rec.Primary != string(wantPrimary) {
+		t.Fatalf("primary = %q, want %q", rec.Primary, wantPrimary)
+	}
+	for _, p := range rec.Protocols {
+		if p == rec.Primary {
+			return
+		}
+	}
+	t.Fatalf("primary %q 不在集合 %v 内（保存侧会拒绝）", rec.Primary, rec.Protocols)
 }
 
 func containsSubstring(items []string, sub string) bool {

@@ -56,7 +56,8 @@ type protocolProbeEntry struct {
 	Fingerprint        protocolFingerprintResult `json:"fingerprint"`
 	Fields             protocolprobe.FieldReport `json:"fields"`
 	IDPrefix           string                    `json:"id_prefix"`
-	// Recommended 该协议在总评里被点名（前端据此高亮那一行）。
+	// Recommended 该协议是建议的主格式（前端据此高亮那一行）。一键写入勾选的是
+	// 一整个集合（见 Recommendation.Protocols），主格式只有一条，所以高亮仍按单条来。
 	Recommended bool `json:"recommended"`
 }
 
@@ -103,7 +104,7 @@ func TestProtocolsHandler(c *gin.Context) {
 		}
 	}
 	for i := range entries {
-		entries[i].Recommended = rec.Protocol != "" && entries[i].Protocol == rec.Protocol
+		entries[i].Recommended = rec.Primary != "" && entries[i].Protocol == rec.Primary
 	}
 
 	httpresp.Success(c, protocolProbeResponse{

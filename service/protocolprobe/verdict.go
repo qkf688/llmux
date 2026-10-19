@@ -67,10 +67,16 @@ func VerdictOf(in Input) Verdict {
 	}
 }
 
-// Recommendation 一次检测的总评。Protocol 为空 = 不点名任何协议（证据不足时的
-// 「无法区分」，共识口径：宁可不给，也不给一个自信的错答案）。
+// Recommendation 一次检测的总评。Protocols 为空 = 一条可勾选的协议都没有。
+//
+// 一键写入的是「允许集合 + 主格式」，不是「只走一条」：多勾几条能让客户端用哪种协议
+// 进来就走哪条，省掉没必要的格式转换；主格式只在「客户端发来的协议不在集合里」时
+// 决定转成哪种格式。两项必须同时给——只给集合而不给主格式，集合外的协议就没有转换目标。
 type Recommendation struct {
-	Protocol   string     `json:"protocol"`
+	// Protocols 建议勾选的协议集合（可用且未被判为转译），顺序与 consts.AllProtocols 一致。
+	Protocols []string `json:"protocols"`
+	// Primary 建议的主格式，必须落在 Protocols 内（保存侧按同一判据校验）。
+	Primary    string     `json:"primary"`
 	Confidence Confidence `json:"confidence"`
 	Summary    string     `json:"summary"`
 	Reason     string     `json:"reason"`
@@ -131,17 +137,18 @@ func Recommend(main consts.Protocol, inputs []Input) Recommendation {
 		rec.Summary = "没有一条协议同时通过非流式与流式"
 		rec.Reason = "本模型当前不能通过任何一条已配置协议提供完整服务；先修凭据或端点 URL 再复测。"
 		if len(partial) > 0 {
-			rec.Reason = "只有协议处于「部分支持」状态（单模式可用、双模式不通），不建议把该模型限制到这条协议。"
+			rec.Reason = "只有协议处于「部分支持」状态（单模式可用、双模式不通），不建议勾选这些协议。"
 		}
 		rec.Actions = append(rec.Actions, "本轮没有可用的协议（两种模式都没通过）")
 		return rec
 	case len(usable) == 1:
 		only := usable[0]
-		rec.Protocol = string(only.Protocol)
+		rec.Protocols = []string{string(only.Protocol)}
+		rec.Primary = string(only.Protocol)
 		rec.Confidence = ConfidenceHigh
 		rec.Summary = fmt.Sprintf("只有 %s 这条协议可用", displayName(only.Protocol))
 		rec.Reason = "其余协议至少有一种模式不通；唯一可用的协议就是最优解，无需再比谁更原生。"
-		rec.Actions = append(rec.Actions, mainTypeAction(only.Protocol, main), endpointAction(only.Protocol))
+		rec.Actions = append(rec.Actions, mainTypeAction(only.Protocol, main), endpointAction(rec.Protocols, rec.Primary))
 		return rec
 	}
 
@@ -155,7 +162,8 @@ func Recommend(main consts.Protocol, inputs []Input) Recommendation {
 	switch {
 	case len(native) == 1:
 		best := rank(native, main)[0]
-		rec.Protocol = string(best.Protocol)
+		rec.Protocols = allowSet(usable)
+		rec.Primary = string(best.Protocol)
 		rec.Confidence = ConfidenceMedium
 		if len(best.Fields.Miss) == 0 {
 			rec.Confidence = ConfidenceHigh
@@ -164,26 +172,47 @@ func Recommend(main consts.Protocol, inputs []Input) Recommendation {
 		rec.Reason = fmt.Sprintf("只有它的错误信封是自身协议形状（%s 同族），其余可用协议回的是别的家族——"+
 			"说明其余路径被网关转译，协议特有字段最容易在那里丢；它的原生字段命中 %d/%d。",
 			FamilyOfProtocol(best.Protocol), len(best.Fields.Hit), len(best.Fields.Hit)+len(best.Fields.Miss))
-		rec.Actions = append(rec.Actions, mainTypeAction(best.Protocol, main), endpointAction(best.Protocol))
+		rec.Actions = append(rec.Actions, mainTypeAction(best.Protocol, main), endpointAction(rec.Protocols, rec.Primary))
 		rec.Actions = append(rec.Actions, translatedActions(usable, best.Protocol)...)
 		return rec
 	case len(native) > 1:
 		best := rank(native, main)[0]
-		rec.Protocol = string(best.Protocol)
+		rec.Protocols = allowSet(usable)
+		rec.Primary = string(best.Protocol)
 		rec.Confidence = ConfidenceMedium
 		rec.Summary = fmt.Sprintf("建议主协议 %s（区分度有限）", displayName(best.Protocol))
 		rec.Reason = fmt.Sprintf("有多条协议的错误信封都与自身协议同族，说明网关在每条路都做了原生封装，"+
 			"分不出后端家族；按原生字段命中数（%d/%d）排序取第一，仅作弱推荐。",
 			len(best.Fields.Hit), len(best.Fields.Hit)+len(best.Fields.Miss))
-		rec.Actions = append(rec.Actions, mainTypeAction(best.Protocol, main), endpointAction(best.Protocol))
+		rec.Actions = append(rec.Actions, mainTypeAction(best.Protocol, main), endpointAction(rec.Protocols, rec.Primary))
 		return rec
 	default:
 		rec.Summary = "无法区分：各可用协议的响应都没有指向自身协议"
+		rec.Protocols = allowSet(usable)
+		rec.Primary = pickPrimary(main, rec.Protocols, usable)
+		// 逐条说明为什么没进集合（转译路径 / 缺原生字段）——排除掉的不给理由，用户无从判断。
+		rec.Actions = append(rec.Actions, translatedActions(usable, "")...)
+		if len(rec.Protocols) == 0 {
+			// 可用但全是转译路径：勾哪条都等于让上游网关转，宁可不给集合。
+			rec.Reason = "所有可用协议的错误信封都指向别的家族（像被网关统一改写），没有一条能当作原生路径；" +
+				"这里不给可勾选集合——勾哪条都等于把请求交给上游网关转。"
+			rec.Actions = append(rec.Actions, fmt.Sprintf("保持当前主类型 %s 不变，除非你另有把握", displayName(main)))
+			return rec
+		}
 		rec.Reason = "所有可用协议的错误信封都没有采到自身家族的形状（可能都被网关统一改写，" +
-			"也可能指纹请求未采到），无法判断谁更原生；这里不给推荐协议。"
-		rec.Actions = append(rec.Actions,
-			fmt.Sprintf("保持当前主类型 %s 不变，除非你另有把握", displayName(main)),
-			endpointListAction(usable))
+			"也可能指纹请求未采到），无法判断谁更原生；这里不点名唯一主协议，但仍给出可勾选的集合。"
+		switch {
+		case rec.Primary == string(main):
+			rec.Actions = append(rec.Actions, fmt.Sprintf("保持当前主类型 %s 不变，除非你另有把握", displayName(main)))
+		case containsProtocol(rec.Protocols, main):
+			// 当前主类型本身可用，只是原生字段没别人完整——说清是「换更完整的」而不是「当前不可用」。
+			rec.Actions = append(rec.Actions, fmt.Sprintf("主格式建议取 %s（原生字段最完整）；当前主类型 %s 也可用",
+				displayName(consts.Protocol(rec.Primary)), displayName(main)))
+		default:
+			rec.Actions = append(rec.Actions, fmt.Sprintf("当前主类型 %s 本次不可用，主格式建议取 %s",
+				displayName(main), displayName(consts.Protocol(rec.Primary))))
+		}
+		rec.Actions = append(rec.Actions, endpointAction(rec.Protocols, rec.Primary))
 		return rec
 	}
 }
@@ -218,22 +247,79 @@ func mainTypeAction(p, main consts.Protocol) string {
 	return fmt.Sprintf("建议把主类型从 %s 改为 %s", displayName(main), displayName(p))
 }
 
-// endpointAction 给出「这个模型该走哪条协议」的落地动作。可一键写入该关联的协议设置
-// （next-do #1 的能力），只影响这一个模型；与 mainTypeAction 刻意分开，是因为
-// 「供应商主类型该设成谁」与「这个模型该走哪条协议」是两个粒度，前者改的是全部模型的兜底路径。
-func endpointAction(p consts.Protocol) string {
-	return fmt.Sprintf("建议把该模型的协议设置为只走 %s（可一键写入，只影响这个模型）", displayName(p))
+// endpointAction 给出「这个模型该勾哪些协议、主格式取谁」的落地动作。可一键写入该关联的
+// 协议设置（next-do #1 的能力），只影响这一个模型；与 mainTypeAction 刻意分开，是因为
+// 「供应商主类型该设成谁」与「这个模型该走哪些协议」是两个粒度，前者改的是全部模型的兜底路径。
+func endpointAction(set []string, primary string) string {
+	return fmt.Sprintf("建议把该模型的协议设置为勾选 %s，主格式 %s（可一键写入，只影响这个模型）",
+		displayNames(set), displayName(consts.Protocol(primary)))
 }
 
-// endpointListAction 用于「无法区分谁更原生」的分支：可用协议都列出来，但不替用户拍板。
-// 附实测提示，是因为「可用」不等于「字段没被转译」，勾选前值得按该协议真跑一次。
-func endpointListAction(usable []Input) string {
-	names := make([]string, 0, len(usable))
-	for _, in := range usable {
-		names = append(names, displayName(in.Protocol))
+// displayNames 把协议集合转成句子里的称呼，顺序沿用入参（已是 consts.AllProtocols 序）。
+func displayNames(set []string) string {
+	names := make([]string, 0, len(set))
+	for _, p := range set {
+		names = append(names, displayName(consts.Protocol(p)))
 	}
-	return fmt.Sprintf("该模型可以走这些协议：%s（本次无法判断哪个最原生，配置前建议先按该协议实测一次真实请求）",
-		strings.Join(names, "、"))
+	return strings.Join(names, "、")
+}
+
+// allowSet 一键写入的勾选集合：双模式全过、且**没有被判为转译**的协议。
+//
+// 为什么排除转译路径：错误信封是别的家族形状，说明请求其实是上游网关在转；勾上等于让
+// 客户端把这条路交给上游转，协议特有字段更容易丢，与报告里「不建议勾选这条」的建议互相矛盾。
+// 指纹没采到（FamilyUnknown）不算转译证据，照常勾——「没测到」不等于「测过且不一致」。
+// 顺序按 consts.AllProtocols 固定，保证同一组输入每次得到的集合逐字一致（便于断言与回读）。
+func allowSet(usable []Input) []string {
+	out := make([]string, 0, len(usable))
+	for _, p := range consts.AllProtocols() {
+		for _, in := range usable {
+			if in.Protocol != p {
+				continue
+			}
+			// Family 空串（调用方未填）与 FamilyUnknown 一样当作「没有转译证据」，照勾。
+			if in.Family != "" && in.Family != FamilyUnknown && in.Family != FamilyOfProtocol(in.Protocol) {
+				continue // 转译路径，不勾
+			}
+			out = append(out, string(in.Protocol))
+			break
+		}
+	}
+	return out
+}
+
+// pickPrimary 在「无法区分谁更原生」时挑主格式：在可用集合内按同一份证据口径排序
+// （自己该有的原生字段回来了几个 → 当前主类型 → 耗时 → 协议名），集合外的不参与。
+//
+// 为什么不再「无条件保持当前主类型」：那样会出现「OpenAI Chat 缺 2 项、Responses 一项不缺，
+// 却仍推荐 OpenAI Chat」的自相矛盾——同一张报告里两段话打架。字段完整度只是弱证据
+// （各协议的原生字段集不同，缺一项也可能天生就不发），所以它排第一，但当前主类型仍是
+// 打平时的偏好——与 rank 在别处的口径一致。
+func pickPrimary(main consts.Protocol, set []string, usable []Input) string {
+	if len(set) == 0 {
+		return ""
+	}
+	candidates := make([]Input, 0, len(set))
+	for _, in := range usable {
+		if containsProtocol(set, in.Protocol) {
+			candidates = append(candidates, in)
+		}
+	}
+	if len(candidates) == 0 {
+		// 理论上不会发生（set 由 usable 算出）；兜底取集合首条，保证主格式落在集合内。
+		return set[0]
+	}
+	return string(rank(candidates, main)[0].Protocol)
+}
+
+// containsProtocol 判断协议是否在集合里（集合是字符串切片，与 JSON 回包同形状）。
+func containsProtocol(set []string, p consts.Protocol) bool {
+	for _, item := range set {
+		if item == string(p) {
+			return true
+		}
+	}
+	return false
 }
 
 // translatedActions 对「可用但不像直通」的协议给不开启建议——开了等于把转换交给上游。
@@ -246,7 +332,7 @@ func translatedActions(usable []Input, winner consts.Protocol) []string {
 		family := FamilyOfProtocol(in.Protocol)
 		if in.Family != FamilyUnknown && in.Family != family {
 			out = append(out, fmt.Sprintf(
-				"%s 可用但错误信封是 %s 家族的形状，像转译路径；不建议把该模型限制到这条协议（要走这条路时由 LLMux 自己转更可控）",
+				"%s 可用但错误信封是 %s 家族的形状，像转译路径；不建议勾选这条协议（要走这条路时由 LLMux 自己转更可控）",
 				displayName(in.Protocol), in.Family))
 			continue
 		}
@@ -270,7 +356,7 @@ func partialActions(partial []Input) []string {
 		if in.Stream == LegNonCompliant {
 			reason = "流式回了 SSE 但不合规（缺终止事件或无内容增量）"
 		}
-		out = append(out, fmt.Sprintf("%s 只支持 %s（%s），属于部分支持，不建议把该模型限制到这条协议",
+		out = append(out, fmt.Sprintf("%s 只支持 %s（%s），属于部分支持，不建议勾选这条协议",
 			displayName(in.Protocol), mode, reason))
 	}
 	return out
@@ -279,7 +365,7 @@ func partialActions(partial []Input) []string {
 func unusableActions(unusable []Input) []string {
 	var out []string
 	for _, in := range unusable {
-		out = append(out, fmt.Sprintf("%s 本次两种模式都不通，不要把这个模型限制到这条协议", displayName(in.Protocol)))
+		out = append(out, fmt.Sprintf("%s 本次两种模式都不通，不要勾选这条协议", displayName(in.Protocol)))
 	}
 	return out
 }

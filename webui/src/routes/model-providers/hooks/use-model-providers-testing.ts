@@ -81,11 +81,21 @@ function useProtocolTest() {
         return null;
       }
       const message = `协议检测失败: ${toErrorMessage(err)}`;
+      // 失败兜底给空集合 + 空主格式：没有可勾选的东西，弹窗据此不渲染一键按钮。
+      const failedRecommendation = {
+        protocols: [],
+        primary: "",
+        confidence: "low" as const,
+        summary: message,
+        reason: "",
+        actions: [],
+        notes: [],
+      };
       if (isCurrent()) {
-        setResults((prev) => ({ ...prev, [id]: { loading: false, result: { passed: false, protocols: [], recommendation: { protocol: "", confidence: "low", summary: message, reason: "", actions: [], notes: [] } } } }));
+        setResults((prev) => ({ ...prev, [id]: { loading: false, result: { passed: false, protocols: [], recommendation: failedRecommendation } } }));
       }
       console.error(err);
-      return { passed: false, protocols: [], recommendation: { protocol: "", confidence: "low", summary: message, reason: "", actions: [], notes: [] } };
+      return { passed: false, protocols: [], recommendation: failedRecommendation };
     } finally {
       if (isCurrent()) {
         controllersRef.current.delete(id);

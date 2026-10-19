@@ -62,9 +62,9 @@ type TestDialogProps = {
   reactTestResult: ReactTestResultState;
   onClose: () => void;
   onExecute: () => void;
-  // 协议检测的一键落地：用推荐协议整项覆盖该关联的协议设置（集合+主格式）。
+  // 协议检测的一键落地：把「允许集合 + 主格式」整项覆盖写入该关联的协议设置。
   // 由页面层持有写操作与列表刷新，弹窗只负责触发（不在这里直连 API）。
-  onApplyProtocol?: (id: number, protocol: string) => Promise<void> | void;
+  onApplyProtocol?: (id: number, protocols: string[], primary: string) => Promise<void> | void;
 };
 
 const TEST_OPTIONS: { value: TestType; label: string; description: string }[] = [
@@ -234,7 +234,7 @@ function ProtocolResultSection({
 }: {
   entry: ProtocolTestEntry | undefined;
   associationId: number | null;
-  onApply?: (id: number, protocol: string) => Promise<void> | void;
+  onApply?: (id: number, protocols: string[], primary: string) => Promise<void> | void;
 }) {
   // 写操作在本组件内只持有「进行中」这一瞬时态；成败由页面层 toast 反馈。
   const [applying, setApplying] = useState(false);
@@ -318,9 +318,11 @@ function ProtocolResultSection({
           {recommendation.actions.map((action) => (
             <p key={action}>· {action}</p>
           ))}
-          {/* 一键落地的条件：检测点名了协议（「无法区分」时刻意不点名，见后端 Recommend），
-              且页面层提供了写入口。覆盖语义写在按钮旁边——它会替换该模型已有的协议设置。 */}
-          {recommendation.protocol && associationId !== null && onApply && (
+          {/* 一键落地的条件：后端给了可勾选集合（「无法区分」时仍给全部可用协议，只是不点名
+              唯一主协议；可用协议全是转译路径时集合为空，此时不给按钮）。
+              写的是「允许集合 + 主格式」而不是「只走一条」：多勾几条能让客户端用哪种协议进来
+              就走哪条，省掉没必要的格式转换；主格式只在客户端发来集合外协议时决定转成哪种格式。 */}
+          {recommendation.protocols.length > 0 && associationId !== null && onApply && (
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <Button
                 size="sm"
@@ -330,11 +332,15 @@ function ProtocolResultSection({
                   // 先包一层 Promise 再调回调：回调若**同步抛错**，finally 仍会复位 loading。
                   // 失败提示由页面层（写操作 owner）负责，这里不重复 toast。
                   void Promise.resolve()
-                    .then(() => onApply(associationId, recommendation.protocol))
+                    .then(() =>
+                      onApply(associationId, recommendation.protocols, recommendation.primary),
+                    )
                     .finally(() => setApplying(false));
                 }}
               >
-                {applying ? "写入中..." : `一键设为只走 ${protocolLabel(recommendation.protocol)}`}
+                {applying
+                  ? "写入中..."
+                  : `一键勾选 ${recommendation.protocols.length} 条可用协议（主格式 ${protocolLabel(recommendation.primary)}）`}
               </Button>
               <span className="text-muted-foreground">会替换该模型当前的协议设置</span>
             </div>

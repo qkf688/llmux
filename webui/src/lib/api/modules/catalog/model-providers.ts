@@ -303,8 +303,13 @@ export interface ProtocolProbeEntry {
 }
 
 export interface ProtocolProbeRecommendation {
-  /** 空串 = 不点名任何协议（证据不足时的「无法区分」，后端刻意如此）。 */
-  protocol: string;
+  /**
+   * 建议勾选的协议集合（「允许集合」，不是「只走一条」）。空数组 = 没有可放心勾选的协议
+   * （一条都不可用，或可用协议全是转译路径——后端刻意不给）。
+   */
+  protocols: string[];
+  /** 建议的主格式，必落在 protocols 内；集合外的协议请求按它转。空串 = 没有可写配置。 */
+  primary: string;
   confidence: "high" | "medium" | "low";
   summary: string;
   reason: string;

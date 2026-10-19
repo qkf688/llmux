@@ -216,9 +216,13 @@ func TestTestProtocolsHandler_MatrixVerdictAndRecommendation(t *testing.T) {
 	if protocols[0].Get("id_prefix").String() != "chatcmpl" {
 		t.Fatalf("openai id_prefix = %q, want chatcmpl", protocols[0].Get("id_prefix").String())
 	}
-	// 总评：三条都同族 → medium（分不出后端家族），按字段命中数点名 anthropic。
-	if got := gjson.Get(w.Body.String(), "data.recommendation.protocol").String(); got != "anthropic" {
-		t.Fatalf("recommendation.protocol = %q, want anthropic", got)
+	// 总评：三条都同族 → medium（分不出后端家族），按字段命中数点名 anthropic 为主格式；
+	// 集合是一键写入的「允许集合」，三条都可用就该都在里面。
+	if got := gjson.Get(w.Body.String(), "data.recommendation.primary").String(); got != "anthropic" {
+		t.Fatalf("recommendation.primary = %q, want anthropic", got)
+	}
+	if set := gjson.Get(w.Body.String(), "data.recommendation.protocols").Array(); len(set) != 3 {
+		t.Fatalf("recommendation.protocols = %v, want 三条可用协议", set)
 	}
 	if got := gjson.Get(w.Body.String(), "data.recommendation.confidence").String(); got != "medium" {
 		t.Fatalf("recommendation.confidence = %q, want medium", got)
@@ -281,8 +285,13 @@ func TestTestProtocolsHandler_StreamNonCompliantIsPartial(t *testing.T) {
 	if !gjson.Get(w.Body.String(), "data.passed").Bool() {
 		t.Fatalf("另有两条协议可用，data.passed 应为 true，body=%s", w.Body.String())
 	}
-	if got := gjson.Get(w.Body.String(), "data.recommendation.protocol").String(); got == "openai" {
-		t.Fatalf("部分支持的协议不应被总评点名：%s", gjson.Get(w.Body.String(), "data.recommendation").Raw)
+	if got := gjson.Get(w.Body.String(), "data.recommendation.primary").String(); got == "openai" {
+		t.Fatalf("部分支持的协议不应被总评点成主格式：%s", gjson.Get(w.Body.String(), "data.recommendation").Raw)
+	}
+	for _, p := range gjson.Get(w.Body.String(), "data.recommendation.protocols").Array() {
+		if p.String() == "openai" {
+			t.Fatalf("部分支持的协议不应进一键勾选集合：%s", gjson.Get(w.Body.String(), "data.recommendation").Raw)
+		}
 	}
 	actions := gjson.Get(w.Body.String(), "data.recommendation.actions").Array()
 	found := false

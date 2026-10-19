@@ -283,12 +283,26 @@ describe("模型测试：复制整份结果", () => {
     const rows = screen.getAllByRole("row");
     // 表头 1 行 + 三条协议各 2 行（横向比较行 + 整行证据行）
     expect(rows).toHaveLength(7);
-    expect(screen.getAllByText("明细")).toHaveLength(3);
+    // summary 的文本是「▸ 明细」（箭头在后代 span 里），按正则匹配
+    expect(screen.getAllByText(/明细/)).toHaveLength(3);
     // 明细默认收起但内容已在 DOM：URL 与来源是判断「测的是哪条路」的唯一依据
     expect(screen.getByText(/https:\/\/up\.example\/v1\/messages/)).toBeInTheDocument();
     expect(screen.getAllByText(/缺失字段：service_tier/).length).toBeGreaterThan(0);
     // 指纹请求的状态码也要在 DOM 里（只说「未采到」不给状态码，用户判不出是正常拒绝还是网关故障）
     expect(screen.getAllByText(/指纹请求：HTTP 404/).length).toBeGreaterThan(0);
+  });
+
+  it("协议检测：证据标签是可读短句，免责说明默认收起但仍在 DOM", () => {
+    renderDialog({
+      testType: "protocol",
+      protocolTestResults: { [TEST_ID]: { loading: false, result: protocolFixture() } },
+    });
+
+    // 「原生字段」而不是裸「字段」：后者对没看过设计的人不成词。
+    expect(screen.getAllByText("原生字段 1/2").length).toBeGreaterThan(0);
+    // 三句免责默认折叠，但必须仍在 DOM（复制文本也含它们，口径不能分叉）。
+    expect(screen.getByText(/说明（3 条）/)).toBeInTheDocument();
+    expect(screen.getByText(/耗时是单次样本，只作展示，不参与排名/)).toBeInTheDocument();
   });
 });
 
@@ -379,6 +393,10 @@ const protocolFixture = (): ProtocolProbeResult => ({
     summary: "建议主协议：Anthropic",
     reason: "只有它的错误信封是自身协议形状。",
     actions: ["建议把主类型从 OpenAI 改为 Anthropic"],
-    notes: ["耗时是单次样本，只作展示，不参与排名"],
+    notes: [
+      "字段「有」才算证据，「没有」只算弱证据——很多字段是否出现取决于模型与请求",
+      "耗时是单次样本，只作展示，不参与排名",
+      "结论按本模型测出，协议端点开关在供应商级，改动会影响该供应商下所有模型",
+    ],
   },
 });

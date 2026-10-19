@@ -223,7 +223,7 @@ function CapabilityResultSection({
 // 协议名 / 判定名 / 证据行仍取自 test-result-report 的单一来源——屏幕与剪贴板同一份拼装。
 function ProtocolResultSection({ entry }: { entry: ProtocolTestEntry | undefined }) {
   if (entry?.loading) {
-    return <LoadingState text="检测中...（两段并发，最坏约 1 分钟）" />;
+    return <LoadingState text="检测中...（两段并发，最坏约 1.5 分钟）" />;
   }
   if (entry?.cancelled) {
     return (
@@ -302,11 +302,20 @@ function ProtocolResultSection({ entry }: { entry: ProtocolTestEntry | undefined
           {recommendation.actions.map((action) => (
             <p key={action}>· {action}</p>
           ))}
-          {recommendation.notes.map((note) => (
-            <p key={note} className="text-muted-foreground">
-              · {note}
-            </p>
-          ))}
+          {/* 三句免责是固定不变的同一段话，默认收起：它们在每次检测里都一样长，
+              摊开会把「这次该怎么做」压到看不见；需要时点开仍在。 */}
+          {recommendation.notes.length > 0 && (
+            <details>
+              <summary className="w-fit cursor-pointer list-none text-muted-foreground [&::-webkit-details-marker]:hidden">
+                ▸ 说明（{recommendation.notes.length} 条）
+              </summary>
+              <div className="mt-1 space-y-0.5 text-muted-foreground">
+                {recommendation.notes.map((note) => (
+                  <p key={note}>· {note}</p>
+                ))}
+              </div>
+            </details>
+          )}
         </div>
       )}
     </div>
@@ -340,10 +349,11 @@ function ProtocolDetail({ protocol }: { protocol: ProtocolProbeEntry }) {
   };
   // 收起时与证据标签同排（只占一个标签宽），展开时才独占一行，避免长句把标签行撑开。
   return (
-    <details className="mt-1 [&[open]]:w-full">
-      {/* 与证据短标签同款外观：它本质是「多一条可选信息」，不该看起来像另一种控件。 */}
+    <details className="mt-1 [&[open]]:w-full [&[open]>summary>span]:rotate-90">
+      {/* 与证据短标签同款外观：它本质是「多一条可选信息」，不该看起来像另一种控件。
+          ▸ 是唯一的可点提示（收起时看不出可展开，用户不会去点）。 */}
       <summary className="w-fit cursor-pointer list-none rounded bg-muted px-1 py-0.5 text-[11px] [&::-webkit-details-marker]:hidden">
-        明细
+        <span className="inline-block transition-transform">▸</span> 明细
       </summary>
       <div className="mt-1 space-y-0.5 font-mono text-[11px]">
         <p className="break-all">

@@ -45,7 +45,9 @@ const (
 
 	// DiagnosticProtocolProbeTimeout testapi 协议支持检测的单条探针超时。一次检测要并发
 	// 打 3 条协议 × 3 类探针（非流式 / 流式 / 无效模型指纹），沿用连通测试的 60s 会让
-	// 串行段最坏拖到数分钟；每条只求「这条路通不通」而非生成质量，故刻意压到 30s。
+	// 串行段最坏拖到数分钟；每条只求「这条路通不通」而非生成质量。
+	// 取 45s 的理由：实测同一网关的并发探针非流式段可到 ~22s（约为 30s 预算的 73%），
+	// 维持 30s 会让稍慢的上游被误判成「协议不可用」；45s 留两倍余量，整段最坏约 1.5 分钟。
 	// 超时只判该协议本次不可用，不改任何配置、无副作用。
-	DiagnosticProtocolProbeTimeout = 30 * time.Second
+	DiagnosticProtocolProbeTimeout = 45 * time.Second
 )

@@ -196,7 +196,7 @@ export function protocolEvidenceChips(entry: ProtocolProbeEntry): string[] {
   }
   const total = entry.fields.hit.length + entry.fields.miss.length;
   if (total > 0) {
-    chips.push(`字段 ${entry.fields.hit.length}/${total}`);
+    chips.push(`原生字段 ${entry.fields.hit.length}/${total}`);
   }
   if (entry.fingerprint.native_headers.length > 0) {
     chips.push(`原生头 ${entry.fingerprint.native_headers.length}`);

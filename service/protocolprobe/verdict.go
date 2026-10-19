@@ -3,6 +3,7 @@ package protocolprobe
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/qkf688/llmux/consts"
 )
@@ -132,6 +133,7 @@ func Recommend(main consts.Protocol, inputs []Input) Recommendation {
 		if len(partial) > 0 {
 			rec.Reason = "只有协议处于「部分支持」状态（单模式可用、双模式不通），不建议开启端点。"
 		}
+		rec.Actions = append(rec.Actions, "本轮没有可勾选的协议端点（两种模式都没通过）")
 		return rec
 	case len(usable) == 1:
 		only := usable[0]
@@ -139,7 +141,7 @@ func Recommend(main consts.Protocol, inputs []Input) Recommendation {
 		rec.Confidence = ConfidenceHigh
 		rec.Summary = fmt.Sprintf("只有 %s 这条协议可用", displayName(only.Protocol))
 		rec.Reason = "其余协议至少有一种模式不通；唯一可用的协议就是最优解，无需再比谁更原生。"
-		rec.Actions = append(rec.Actions, mainTypeAction(only.Protocol, main))
+		rec.Actions = append(rec.Actions, mainTypeAction(only.Protocol, main), endpointAction(only.Protocol))
 		return rec
 	}
 
@@ -162,7 +164,7 @@ func Recommend(main consts.Protocol, inputs []Input) Recommendation {
 		rec.Reason = fmt.Sprintf("只有它的错误信封是自身协议形状（%s 同族），其余可用协议回的是别的家族——"+
 			"说明其余路径被网关转译，协议特有字段最容易在那里丢；它的原生字段命中 %d/%d。",
 			FamilyOfProtocol(best.Protocol), len(best.Fields.Hit), len(best.Fields.Hit)+len(best.Fields.Miss))
-		rec.Actions = append(rec.Actions, mainTypeAction(best.Protocol, main))
+		rec.Actions = append(rec.Actions, mainTypeAction(best.Protocol, main), endpointAction(best.Protocol))
 		rec.Actions = append(rec.Actions, translatedActions(usable, best.Protocol)...)
 		return rec
 	case len(native) > 1:
@@ -173,14 +175,15 @@ func Recommend(main consts.Protocol, inputs []Input) Recommendation {
 		rec.Reason = fmt.Sprintf("有多条协议的错误信封都与自身协议同族，说明网关在每条路都做了原生封装，"+
 			"分不出后端家族；按原生字段命中数（%d/%d）排序取第一，仅作弱推荐。",
 			len(best.Fields.Hit), len(best.Fields.Hit)+len(best.Fields.Miss))
-		rec.Actions = append(rec.Actions, mainTypeAction(best.Protocol, main))
+		rec.Actions = append(rec.Actions, mainTypeAction(best.Protocol, main), endpointAction(best.Protocol))
 		return rec
 	default:
 		rec.Summary = "无法区分：各可用协议的响应都没有指向自身协议"
 		rec.Reason = "所有可用协议的错误信封都没有采到自身家族的形状（可能都被网关统一改写，" +
 			"也可能指纹请求未采到），无法判断谁更原生；这里不给推荐协议。"
 		rec.Actions = append(rec.Actions,
-			fmt.Sprintf("保持当前主类型 %s 不变，除非你另有把握", displayName(main)))
+			fmt.Sprintf("保持当前主类型 %s 不变，除非你另有把握", displayName(main)),
+			endpointListAction(usable))
 		return rec
 	}
 }
@@ -213,6 +216,24 @@ func mainTypeAction(p, main consts.Protocol) string {
 		return fmt.Sprintf("主类型保持 %s 即可", displayName(p))
 	}
 	return fmt.Sprintf("建议把主类型从 %s 改为 %s", displayName(main), displayName(p))
+}
+
+// endpointAction 给出「给这个模型勾哪条协议端点」的落地动作。主类型是供应商级配置，
+// 端点勾选才是按模型生效的那一层（next-do #1 的能力）；不写成同一句话，是因为
+// 「主类型该设成谁」与「这个模型该勾哪条端点」是两件事，前者改的是全部模型的兜底路径。
+func endpointAction(p consts.Protocol) string {
+	return fmt.Sprintf("建议该模型勾选 %s 协议端点", displayName(p))
+}
+
+// endpointListAction 用于「无法区分谁更原生」的分支：可用协议都列出来，但不替用户拍板。
+// 附实测提示，是因为「可用」不等于「字段没被转译」，勾选前值得按该协议真跑一次。
+func endpointListAction(usable []Input) string {
+	names := make([]string, 0, len(usable))
+	for _, in := range usable {
+		names = append(names, displayName(in.Protocol))
+	}
+	return fmt.Sprintf("该模型可勾选这些协议端点：%s（本次无法判断哪个最原生，勾选前建议先按该协议实测一次真实请求）",
+		strings.Join(names, "、"))
 }
 
 // translatedActions 对「可用但不像直通」的协议给不开启建议——开了等于把转换交给上游。

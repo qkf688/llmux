@@ -230,10 +230,13 @@ describe("模型测试：复制整份结果", () => {
     const report = await copyOut();
     expect(report).toContain("测试结论：通过");
     expect(report).toContain("【Anthropic ★】");
-    expect(report).toContain("非流式 ✓ 812 ms");
-    expect(report).toContain("流式 ✓ 640 ms");
+    // 探针耗时统一用秒（一位小数）：毫秒读数在 1~20 秒量级没有分辨率价值
+    expect(report).toContain("非流式 ✓ 0.8 s");
+    expect(report).toContain("流式 ✓ 0.6 s");
     expect(report).toContain("【总评：建议主协议：Anthropic（置信度 高）】");
     expect(report).toContain("建议把主类型从 OpenAI 改为 Anthropic");
+    // 总评必须给出「该模型勾哪条端点」的落地动作（按模型覆盖端点的前置话术）
+    expect(report).toContain("建议该模型勾选 Anthropic 协议端点");
   });
 
   it("协议检测：未执行时复制按钮置灰", () => {
@@ -392,7 +395,7 @@ const protocolFixture = (): ProtocolProbeResult => ({
     confidence: "high",
     summary: "建议主协议：Anthropic",
     reason: "只有它的错误信封是自身协议形状。",
-    actions: ["建议把主类型从 OpenAI 改为 Anthropic"],
+    actions: ["建议把主类型从 OpenAI 改为 Anthropic", "建议该模型勾选 Anthropic 协议端点"],
     notes: [
       "字段「有」才算证据，「没有」只算弱证据——很多字段是否出现取决于模型与请求",
       "耗时是单次样本，只作展示，不参与排名",

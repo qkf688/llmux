@@ -28,6 +28,7 @@ import {
   buildCapabilityReport,
   buildProtocolReport,
   buildReactReport,
+  formatDurationSeconds,
   protocolConfidenceLabel,
   protocolEvidenceChips,
   protocolName,
@@ -326,7 +327,9 @@ function ProtocolResultSection({ entry }: { entry: ProtocolTestEntry | undefined
 function protocolLegCell(leg: ProtocolProbeEntry["non_stream"]) {
   const mark = leg.status === "passed" ? "✓" : leg.status === "noncompliant" ? "⚠" : "✗";
   const timing =
-    leg.status === "passed" ? `${leg.duration_ms} ms` : leg.summary || leg.detail || leg.error_type || "未通过";
+    leg.status === "passed"
+      ? formatDurationSeconds(leg.duration_ms)
+      : leg.summary || leg.detail || leg.error_type || "未通过";
   return (
     <span className="font-mono">
       {mark} {timing}

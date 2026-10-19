@@ -148,16 +148,25 @@ export function protocolName(entry: ProtocolProbeEntry): string {
 
 /** 单条协议的一行摘要：判定 + 非流式/流式耗时（失败时带原因短语）。展示与复制共用，
  *  否则屏幕上写「流式不合规」、剪贴板里只剩「failed」这类漂移没有任何检查会红。 */
+/** 探针耗时统一显示为秒（保留一位小数）。协议探针动辄 1~20 秒，毫秒读数在这个量级没有
+ *  分辨率价值，反而让三列数字更难横向比较；`0.9 s` / `21.9 s` 一眼就能比。 */
+export function formatDurationSeconds(durationMs: number): string {
+  return `${(durationMs / 1000).toFixed(1)} s`;
+}
+
+/** 单条协议的一行摘要：判定 + 非流式/流式耗时（失败时带原因短语）。展示与复制共用，
+ *  否则屏幕上写「流式不合规」、剪贴板里只剩「failed」这类漂移没有任何检查会红。 */
 export function protocolSummaryLine(entry: ProtocolProbeEntry): string {
   const leg = (label: string, result: ProtocolProbeEntry["non_stream"]) => {
     const mark = result.status === "passed" ? "✓" : result.status === "noncompliant" ? "⚠" : "✗";
     const timing =
       result.status === "passed"
-        ? `${result.duration_ms} ms`
+        ? formatDurationSeconds(result.duration_ms)
         : result.summary || result.detail || result.error_type || "未通过";
     return `${label} ${mark} ${timing}`;
   };
-  const verdict = PROTOCOL_VERDICT_LABEL[entry.verdict] ?? entry.verdict;  return [verdict, leg("非流式", entry.non_stream), leg("流式", entry.stream)].join(" · ");
+  const verdict = PROTOCOL_VERDICT_LABEL[entry.verdict] ?? entry.verdict;
+  return [verdict, leg("非流式", entry.non_stream), leg("流式", entry.stream)].join(" · ");
 }
 
 /** 证据摘要：指纹同族 / 原生响应头 / 原生字段命中。展示与复制共用。 */

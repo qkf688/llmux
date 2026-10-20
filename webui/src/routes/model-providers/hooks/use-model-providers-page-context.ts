@@ -3,6 +3,7 @@
 import type { Model } from "@/lib/api";
 import type { useModelProvidersPageLocalState } from "./use-model-providers-page-local-state";
 import type { useModelProvidersPageStoreState } from "./use-model-providers-page-store";
+import type { useModelProvidersAssociationsData } from "./use-model-providers-associations-data";
 import type { useModelProvidersAssociationStatus } from "./use-model-providers-association-status";
 import type { useModelProvidersAssociationFilters } from "./use-model-providers-association-filters";
 import type { useModelProvidersModelListVisibility } from "./use-model-providers-model-list-visibility";
@@ -59,6 +60,10 @@ export interface ModelProvidersPageContext {
   testing: ReturnType<typeof useModelProvidersTesting>;
   batch: ReturnType<typeof useModelProvidersBatch>;
 
+  // 关联列表（TanStack Query 缓存）：协议检测的「继承态」提示要读它才知道当前关联
+  // 是继承供应商还是已被显式覆盖。
+  associationsData: ReturnType<typeof useModelProvidersAssociationsData>;
+
   // 页面级薄包装
   pageActions: PageActionsCtx;
   associationDialog: ReturnType<typeof useModelProvidersAssociationDialog>;
@@ -106,4 +111,5 @@ export type DialogPropsContext = Pick<
   | "modelListSelection"
   | "preview"
   | "pageActions"
+  | "associationsData"
 >;

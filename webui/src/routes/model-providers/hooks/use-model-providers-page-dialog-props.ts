@@ -1,4 +1,5 @@
 import type { DialogPropsContext } from "./use-model-providers-page-context";
+import { isProtocolsInherited } from "../utils/protocol-inheritance";
 
 /**
  * Dialog props 装配：把上下文对象组装成 6 组对话框 props。
@@ -73,6 +74,9 @@ export function useModelProvidersPageDialogProps(ctx: DialogPropsContext) {
     onClose: testing.dialogClose,
     onExecute: testing.executeTestNow,
     onApplyProtocol: mutations.applyProtocolRecommendation,
+    // 当前关联的协议集合是否仍继承供应商（Protocols=null）。一键写入会把继承改成显式覆盖，
+    // 之后供应商层改协议这条关联不再跟随——弹窗要据此提示。
+    protocolsInherited: isProtocolsInherited(ctx.associationsData.modelProviders, store.selectedTestId),
   };
 
   const modelListDialogProps = {

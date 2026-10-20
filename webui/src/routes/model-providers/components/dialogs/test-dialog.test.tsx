@@ -48,8 +48,9 @@ function renderDialog(props: {
   protocolTestResults?: ProtocolTestResults;
   reactTestResult?: ReactTestResultState;
   onApplyProtocol?: (id: number, protocols: string[], primary: string) => Promise<void> | void;
+  protocolsInherited?: boolean;
 }) {
-  const { testType, testResults = {}, protocolTestResults = {}, reactTestResult = REACT_IDLE, onApplyProtocol } = props;
+  const { testType, testResults = {}, protocolTestResults = {}, reactTestResult = REACT_IDLE, onApplyProtocol, protocolsInherited } = props;
   return render(
     <TooltipProvider>
       <TestDialog
@@ -69,6 +70,7 @@ function renderDialog(props: {
         onClose={vi.fn()}
         onExecute={vi.fn()}
         onApplyProtocol={onApplyProtocol}
+        protocolsInherited={protocolsInherited}
       />
     </TooltipProvider>
   );
@@ -296,6 +298,33 @@ describe("模型测试：复制整份结果", () => {
     });
 
     expect(screen.queryByRole("button", { name: /一键勾选/ })).toBeNull();
+  });
+
+  // 继承态被覆盖是单向的：写入后供应商层再改协议，这条关联不再跟随。按钮旁必须点明。
+  it("协议检测：关联处于继承态时，提示写入后会固定为该模型自己的设置", () => {
+    renderDialog({
+      testType: "protocol",
+      protocolTestResults: { [TEST_ID]: { loading: false, result: protocolFixture() } },
+      onApplyProtocol: vi.fn(),
+      protocolsInherited: true,
+    });
+
+    expect(
+      screen.getByText("当前为继承供应商，写入后将固定为该模型自己的设置"),
+    ).toBeInTheDocument();
+  });
+
+  it("协议检测：关联已是显式覆盖时，不给继承态提示", () => {
+    renderDialog({
+      testType: "protocol",
+      protocolTestResults: { [TEST_ID]: { loading: false, result: protocolFixture() } },
+      onApplyProtocol: vi.fn(),
+      protocolsInherited: false,
+    });
+
+    expect(
+      screen.queryByText("当前为继承供应商，写入后将固定为该模型自己的设置"),
+    ).toBeNull();
   });
 
   it("协议检测：未执行时复制按钮置灰", () => {

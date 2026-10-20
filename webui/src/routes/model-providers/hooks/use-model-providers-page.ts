@@ -245,6 +245,7 @@ export function useModelProvidersPage() {
     modelChange: { handleModelChange },
     testing,
     batch,
+    associationsData,
     pageActions: { openDeleteDialog, toggleProviderCollapse, refreshStatus, handleDeleteDialogChange, confirmPreviewAction, addTemplateItem, deleteTemplateItem },
     associationDialog,
     modelListSelection,

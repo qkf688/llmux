@@ -65,6 +65,9 @@ type TestDialogProps = {
   // 协议检测的一键落地：把「允许集合 + 主格式」整项覆盖写入该关联的协议设置。
   // 由页面层持有写操作与列表刷新，弹窗只负责触发（不在这里直连 API）。
   onApplyProtocol?: (id: number, protocols: string[], primary: string) => Promise<void> | void;
+  // 当前关联的协议集合是否处于继承态（null=继承供应商）。写入会把继承改成显式覆盖，
+  // 之后供应商层再改协议，这条关联不再跟着变——这个状态变化必须在按钮旁说清。
+  protocolsInherited?: boolean;
 };
 
 const TEST_OPTIONS: { value: TestType; label: string; description: string }[] = [
@@ -231,10 +234,12 @@ function ProtocolResultSection({
   entry,
   associationId,
   onApply,
+  protocolsInherited,
 }: {
   entry: ProtocolTestEntry | undefined;
   associationId: number | null;
   onApply?: (id: number, protocols: string[], primary: string) => Promise<void> | void;
+  protocolsInherited?: boolean;
 }) {
   // 写操作在本组件内只持有「进行中」这一瞬时态；成败由页面层 toast 反馈。
   const [applying, setApplying] = useState(false);
@@ -343,6 +348,13 @@ function ProtocolResultSection({
                   : `一键勾选 ${recommendation.protocols.length} 条可用协议（主格式 ${protocolLabel(recommendation.primary)}）`}
               </Button>
               <span className="text-muted-foreground">会替换该模型当前的协议设置</span>
+              {/* 继承态被覆盖成显式设置是**单向**的：写入后供应商层再改协议，这条关联不再
+                  跟着变。当下两条协议可能完全一致，用户看不出差别，所以必须在按钮旁点明。 */}
+              {protocolsInherited && (
+                <span className="text-muted-foreground">
+                  当前为继承供应商，写入后将固定为该模型自己的设置
+                </span>
+              )}
             </div>
           )}
           {/* 三句免责是固定不变的同一段话，默认收起：它们在每次检测里都一样长，
@@ -470,6 +482,7 @@ export function TestDialog({
   onClose,
   onExecute,
   onApplyProtocol,
+  protocolsInherited,
 }: TestDialogProps) {
   // 结果格按「关联:模式」定位：切换模式就是换一个格子，不会读到上一模式的结论。
   const entryOf = (map: CapabilityTestResults) =>
@@ -625,6 +638,7 @@ export function TestDialog({
                 entry={protocolEntry}
                 associationId={selectedTestId}
                 onApply={onApplyProtocol}
+                protocolsInherited={protocolsInherited}
               />
             )}
 

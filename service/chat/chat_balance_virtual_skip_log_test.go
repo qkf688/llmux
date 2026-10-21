@@ -54,8 +54,10 @@ func TestBalanceChatVirtual_NoProvidersForRealModel_WritesSkipLog(t *testing.T) 
 	if len(logs) != 1 {
 		t.Fatalf("logs length = %d, want 1", len(logs))
 	}
-	if logs[0].Status != "error" {
-		t.Fatalf("log status = %q, want %q", logs[0].Status, "error")
+	// 未发出上游请求即失败 → unsent（不是 error）：供应商没做错任何事，
+	// 不得进入「最近 10 次请求成败」把这家画成失败。
+	if logs[0].Status != models.ChatLogStatusUnsent {
+		t.Fatalf("log status = %q, want %q", logs[0].Status, models.ChatLogStatusUnsent)
 	}
 	if logs[0].ProviderModel != realModel.Name {
 		t.Fatalf("ProviderModel = %q, want %q", logs[0].ProviderModel, realModel.Name)

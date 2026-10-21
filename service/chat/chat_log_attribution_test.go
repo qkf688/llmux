@@ -264,8 +264,9 @@ func TestProvidersWithMetaBymodelsName_NoEnabledProvider_WritesAttributedLog(t *
 	if err := models.DB.Where("name = ?", amin.Name).First(&got).Error; err != nil {
 		t.Fatalf("reload no-provider log: %v", err)
 	}
-	if got.Status != "error" {
-		t.Fatalf("Status = %q, want %q", got.Status, "error")
+	// 未发出上游请求即失败 → unsent（不是 error），与「上游失败」区分开。
+	if got.Status != models.ChatLogStatusUnsent {
+		t.Fatalf("Status = %q, want %q", got.Status, models.ChatLogStatusUnsent)
 	}
 	if got.RealModelName != amin.Name {
 		t.Fatalf("RealModelName = %q, want %q", got.RealModelName, amin.Name)

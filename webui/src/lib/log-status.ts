@@ -5,11 +5,12 @@
  * `ChatLog.Status string`），取不出联合类型；字面量联合在本文件单点声明，
  * 后端新增状态时靠「三张 Record 都缺该键」让 tsc 报红。
  */
-export type ChatLogStatus = "processing" | "success" | "error" | "canceled" | "interrupted";
+export type ChatLogStatus = "processing" | "success" | "error" | "canceled" | "interrupted" | "unsent";
 
 /**
  * 请求日志状态的文案与配色单源（值域与后端 `models.ChatLogStatus*` 常量同源，
- * 2026-10-10 起五态：`processing` / `success` / `error` / `canceled` / `interrupted`）。
+ * 2026-10-10 起五态：`processing` / `success` / `error` / `canceled` / `interrupted`；
+ * 2026-10-21 增第六态 `unsent`（未发出：请求压根没发往上游，见下）。
  *
  * 为什么收在一处：状态从两态扩到五态，散落的 `status === "success" ? 绿 : 红` 判定
  * 漏掉新状态不会报错，只会把「用户点了停止」「进程被 kill」静默画成红色失败——
@@ -25,6 +26,7 @@ const LOG_STATUS_LABELS: Record<ChatLogStatus, string> = {
   error: "失败",
   canceled: "已取消",
   interrupted: "已中断",
+  unsent: "未发出",
 };
 
 /**
@@ -41,6 +43,7 @@ export const LOG_STATUS_TEXT_CLASS: Record<ChatLogStatus, string> = {
   error: "text-destructive",
   canceled: "text-muted-foreground",
   interrupted: "text-warning",
+  unsent: "text-notice",
 };
 
 /**
@@ -54,6 +57,7 @@ export const LOG_STATUS_BADGE_CLASS: Record<ChatLogStatus, string> = {
   error: "bg-destructive-tint text-destructive-tint-foreground",
   canceled: "bg-muted text-muted-foreground",
   interrupted: "bg-warning-tint text-warning-foreground",
+  unsent: "bg-notice-tint text-notice-foreground",
 };
 
 /** 状态清单（筛选下拉按此顺序铺开）：从文案表派生，新增状态不会漏进下拉 */
@@ -69,6 +73,7 @@ const LOG_STATUS_HINTS: Record<ChatLogStatus, string> = {
   error: "失败：上游故障、协议错误或体积超限等",
   canceled: "已取消：调用方主动撤走（客户端断开或点了停止），与上游无关",
   interrupted: "已中断：进程先走了（被强杀或崩溃），请求没有收尾",
+  unsent: "未发出：没有可用密钥/端点/分组，请求未发往上游；不是该提供商的问题",
 };
 
 export function getLogStatusHint(status: string): string | undefined {

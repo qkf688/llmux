@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -157,6 +158,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 		snapshot, err := channel.NewAssembler(repos()).Assemble(in.Ctx, provider, &modelWithProvider)
 		if err != nil {
 			slog.Error("failed to assemble channel snapshot", retryLogAttrs(in.LogAttrs, "provider", provider.Name, "error", err)...)
+			recordUnsentCandidate(in, provider, modelWithProvider, channel.SelectionResult{}, err)
 			delete(in.Pool.WeightItems, *id)
 			continue
 		}
@@ -185,6 +187,9 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 				// **正常产出**（前一轮刚把 key 打冷却），配上 ErrEndpointUnavailable/
 				// ErrNoGroupMatches 等配置态，均非系统异常；按候选淘汰继续即可。
 				slog.Warn("no channel selection", retryLogAttrs(in.LogAttrs, "provider", provider.Name, "error", err)...)
+				// selection 带回落点：凭据层失败时端点与分组已定（Select 刻意回传，
+				// 见 channel.Select 注释），归因因此能到「哪家的哪个分组」。
+				recordUnsentCandidate(in, provider, modelWithProvider, selection, err)
 				delete(in.Pool.WeightItems, *id)
 				continue
 			}
@@ -194,6 +199,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 		providerType, ok := consts.TypeOfProtocol(consts.Protocol(selection.Endpoint.Protocol))
 		if !ok {
 			slog.Error("unknown endpoint protocol", retryLogAttrs(in.LogAttrs, "provider", provider.Name, "protocol", selection.Endpoint.Protocol)...)
+			recordUnsentCandidate(in, provider, modelWithProvider, selection, fmt.Errorf("unknown endpoint protocol %q", selection.Endpoint.Protocol))
 			delete(in.Pool.WeightItems, *id)
 			continue
 		}
@@ -228,6 +234,7 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 			if err != nil {
 				// 单个供应商实例化失败（配置损坏等）只淘汰该候选，池中其余候选仍应尝试。
 				slog.Error("failed to create provider", retryLogAttrs(in.LogAttrs, "provider", provider.Name, "error", err)...)
+				recordUnsentCandidate(in, provider, modelWithProvider, selection, err)
 				delete(in.Pool.WeightItems, *id)
 				orgFailure = nil
 				break
@@ -365,6 +372,51 @@ func runProviderRetryLoop(in retryLoopInput) retryLoopOutcome {
 	}
 
 	return retryLoopOutcome{Status: retryLoopExhausted}
+}
+
+// recordUnsentCandidate 落一条「该候选在发出任何一次上游请求之前就被淘汰」的留痕行。
+//
+// 为什么必须由本函数写：chat_logs 的尝试行只在 executeSingleProviderAttempt 内建
+// （即**已选出凭据、准备发请求**之后）。走到本函数的四个外层淘汰点从未进入尝试层，
+// 于是这次淘汰在管理端是零痕迹——「这次请求为什么没走这家」只能去服务器控制台翻。
+// 状态由建行单源定为 unsent（不是 error），供应商没做错任何事，不进「最近 10 次成败」。
+//
+// 刻意不覆盖内层凭据耗尽分支（credentials exhausted in group）：那条路径此前必已
+// 产出尝试行，再补一行会把同一次上游尝试计成两行，双计请求数与模型调用数。
+//
+// sel 为零值时（端点层/分组层就已失败，Assemble 失败更是无任何选择结果）只留供应商
+// 与模型名——归因到「已知的最深一层」，不臆造下层信息。
+func recordUnsentCandidate(in retryLoopInput, provider models.Provider, mwp models.ModelWithProvider, sel channel.SelectionResult, cause error) {
+	f := preProviderFailureLog{
+		RequestedModel: in.Before.Model,
+		RealModelName:  in.RealModelName,
+		ProviderModel:  mwp.ProviderModel,
+		ProviderName:   provider.Name,
+		// 候选淘汰真实消耗了请求时间，零点与尝试行同源（in.Start 是请求级时刻）。
+		// **这是淘汰时刻的中途累计值，不是该请求的最终耗时**：同一请求的多条淘汰
+		// 行各不相同且都小于最终耗时（请求还会继续试下一个候选）。面板按此列排序
+		// 不可当「请求耗时」读，只当「白等到被淘汰时过了多久」。
+		// 「含探活的一次上游往返」只在惰性探活**失败**的分支成立——探活成功时走的是
+		// 成功路径，不会到淘汰点。
+		ProxyTime: time.Since(in.Start),
+		Error:     cause.Error(),
+		// 不计仪表盘统计：本行是**候选级**事件，一次请求可淘汰 N 个候选、落 N 行，
+		// 各计一次会把「总请求数」与「真实模型调用排行」按候选数放大。
+		NoStats: true,
+	}
+	if sel.Group.ID != 0 {
+		f.KeyGroupName = sel.Group.Name
+	}
+	if sel.Endpoint.ID != 0 {
+		f.EndpointProtocol = sel.Endpoint.Protocol
+		// URL 独立解析，不取 sel.UpstreamURL：选路失败时 Select 不带它回来
+		// （凭据层失败只回传 Endpoint/Group），靠它填会恒为空——那正是本次要答的
+		// 「败在哪一家的哪个 URL」。解析只需端点与 provider config，不需要明文 key。
+		if url, err := channel.ResolveUpstreamURL(provider, sel.Endpoint); err == nil {
+			f.EndpointURL = url
+		}
+	}
+	savePreProviderFailureLog(in.Ctx, in.ReqMeta, in.Style, f)
 }
 
 // retryLogAttrs 复制基础属性后再追加，避免直接 append 复用底层数组时

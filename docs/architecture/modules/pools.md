@@ -71,7 +71,7 @@ service/credview/        # 凭据对外视图单源（号池列表项与按凭�
 - **三态字段**（`Credential.CooldownUntil/LastUsedAt/LastProbeAt`、`KeyGroup.PoolID`）为指针，nil 序列化 JSON `null`（禁 omitempty）；清除必须走 `UpdateFields`（map 显式写 NULL），struct Update 跳过零值。`Credential.PoolID` 是普通 `uint`（凭据必属号池），`Credential.GroupID` 已于 2026-10-07 随内联凭据概念一并删除
 - **`LastProbeAt`**：#6-3 惰性探活频控字段（成败都更新）；凭据视图 `credview.View` 已暴露；恢复 active 不经 `CredentialRecoveryFields` 清该字段
 - **`StatusCounts` 用 map 而非固定字段**：S4 新增状态（如 temp_unsched）不改响应结构，前端按状态配置遍历
-- **两套"失败"语义并存勿混**：`FailCount`=鉴权**连败**瞬态计数（成功/恢复清零，驱动判停状态机，UI 已不展示）；`TotalErrors`=凭据级失败**终身**累计（UI「统计」列的「失败」）。UI 展示后者，行为处置读前者
+- **两套"失败"语义并存勿混**：`FailCount`=鉴权**连败**瞬态计数（成功/恢复清零，驱动判停状态机；2026-10-21 起号池详情凭据状态格会显示它，与 `CooldownReason`/`LastProbeAt` 一起回答「为什么不可用、坏了多久」）；`TotalErrors`=凭据级失败**终身**累计（UI「统计」列的「失败」）。行为处置读前者，两者都展示但含义不同
 - **未做**：号池列表分页（数量级小）；`GET /api/pools/:id` 详情端点（列表项携带足够）；批量导入逐行独立落库（无共享事务：500 条 ≈ 2s，低频粘贴可接受；单事务改造需扩仓储接口，未做）；`(pool_id, key_hash)` 无唯一约束，并发导入同 key 双插竞态与单条创建同语义（#11 起接受，不做复合唯一索引）
 - 契约测试：`handler/pools/crud_test.go`、`credential_import_test.go`、`credential_probe_test.go`、`credential_test_link_test.go`、`routes_test.go` 断言打在响应体 JSON（gjson `Exists()` 区分键存在与 null）；凭据自身的 CRUD/启停契约测试在 `handler/credentials/`；仓储测试在 `repository/channel_crud_test.go`
 - 路由注册顺序：本域 `/:id/credentials/batch/import` 固定段与 `/:id/credentials/:credId/test` 参数子树共存互不遮蔽（`TestRegisterRouteOrder_ImportNotShadowedByCredIDTest`）；凭据域的 `/credentials/status`、`/credentials/batch` 固定段先于 `/credentials/:id` 契约见 [credentials.md](credentials.md)

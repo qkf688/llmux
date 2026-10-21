@@ -29,11 +29,17 @@
   --warning-foreground: oklch(0.42 0.09 75);
   --info: oklch(0.58 0.09 230);
   --info-foreground: oklch(0.40 0.08 230);
+  /* notice：需注意但非故障（请求日志的「未发出」用它）。刻意选紫，因为绿=成功、
+     橙=警告、蓝=在途、红=失败、灰=取消都已被占用，而这第五种情形既不属失败也不属
+     取消——请求压根没发出去，供应商没做错任何事，给它任何一档已有色都会误导归因。 */
+  --notice: oklch(0.55 0.10 300);
+  --notice-foreground: oklch(0.40 0.09 300);
   --destructive-tint-foreground: oklch(0.40 0.10 35);
   /* tinted 提示块的浅底：从语义主色混入背景派生，避免再写死一套 -50 档色值 */
   --success-tint: color-mix(in oklch, var(--success) 12%, var(--background));
   --warning-tint: color-mix(in oklch, var(--warning) 14%, var(--background));
   --info-tint: color-mix(in oklch, var(--info) 12%, var(--background));
+  --notice-tint: color-mix(in oklch, var(--notice) 12%, var(--background));
   --destructive-tint: color-mix(in oklch, var(--destructive) 12%, var(--background));
   /* 表格表头/行 hover 底色：必须混在 card 上得到「不透明」色。
      sticky 表头与钉右操作列若用半透明（bg-muted/55 之类），滚动时底层单元格文字会透出来。
@@ -106,10 +112,14 @@ html.dark,
   --warning-foreground: oklch(0.82 0.10 75);
   --info: oklch(0.68 0.10 230);
   --info-foreground: oklch(0.78 0.09 230);
+  /* notice：口径见亮色主题同名字段（未发出用它） */
+  --notice: oklch(0.72 0.11 300);
+  --notice-foreground: oklch(0.84 0.09 300);
   --destructive-tint-foreground: oklch(0.75 0.11 35);
   --success-tint: color-mix(in oklch, var(--success) 12%, var(--background));
   --warning-tint: color-mix(in oklch, var(--warning) 14%, var(--background));
   --info-tint: color-mix(in oklch, var(--info) 12%, var(--background));
+  --notice-tint: color-mix(in oklch, var(--notice) 12%, var(--background));
   --destructive-tint: color-mix(in oklch, var(--destructive) 12%, var(--background));
   --border: oklch(0.32 0.01 90);
   --input: oklch(0.32 0.01 90);
@@ -173,6 +183,9 @@ html.dark,
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
   --color-info-tint: var(--info-tint);
+  --color-notice: var(--notice);
+  --color-notice-foreground: var(--notice-foreground);
+  --color-notice-tint: var(--notice-tint);
   --color-destructive-tint: var(--destructive-tint);
   --color-border: var(--border);
   --color-input: var(--input);

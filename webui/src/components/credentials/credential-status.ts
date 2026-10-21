@@ -68,13 +68,58 @@ export function credentialToggleAction(
   return usable ? { label: "停用", next: "disabled" } : { label: "启用", next: "active" };
 }
 
+/**
+ * 凭据「为什么不可用」的中文说明（后端 CooldownReason 机器码 → 人话）。
+ *
+ * 为什么不直接显示机器码：后端存的是给程序判断用的码（`auth_fail` / `http_429` /
+ * `network` / `http_<状态码>`，见 service/chat 的 cooldownReasonForStatus），管理端
+ * 读到的应该是判断依据本身；直接印 `http_503` 只会逼管理员再查一次文档。
+ *
+ * 为什么收在本文件：这里已是「凭据状态展示契约」的唯一来源（号池详情 + 供应商编辑
+ * 弹窗共用），失败原因同属这套词汇；另开文件会让同一件事有两个落点，早晚漂移。
+ *
+ * 空串返回空串（= 无原因可显示，调用方据此不渲染），不编造「未知原因」占位。
+ * 后端**刻意不保存**上游原始报错全文（只留归类），故此处不可能也不该显示原文。
+ */
+export function describeCredentialFailureReason(reason: string | null | undefined): string {
+  const code = (reason ?? "").trim();
+  if (!code) return "";
+
+  switch (code) {
+    case "auth_fail":
+      return "连续鉴权失败（密钥无效或无权限）";
+    case "network":
+      return "网络错误或超时";
+    case "http_429":
+      return "上游限流（请求过于频繁）";
+  }
+  // 后端 cooldownReasonForStatus 产出 http_<状态码>（5xx 直接带码便于排查）。
+  if (code.startsWith("http_")) {
+    const status = code.slice("http_".length);
+    return status ? `上游返回 ${status}` : code;
+  }
+  // 未登记的新机器码原样露出：宁可难看，也不要藏成「未知」而丢掉排查线索。
+  return code;
+}
+
 export function formatCredentialLastUsed(iso: string | null | undefined): string {
   // 统计格专用相对时间：null = 从未成功用过（坏 key 停格可读），紧凑无空格。
   // 与旧 formatCredentialTime 的区别只在 null/非法语义与空格——旧函数无消费方后删除，
   // 避免两套时间口径并存漂移。
-  if (!iso) return "从未使用";
+  return formatRelativeTime(iso, "从未使用");
+}
+
+/**
+ * 相对时间格式化内核：两个时间口径（上次成功使用 / 上次探测）共用同一份时间算式，
+ * 只有「没有值」的措辞不同。
+ *
+ * 为什么抽内核：两个口径的 null/非法值文案不同（「从未使用」vs「从未探测」），
+ * 各自写一份算式迟早漂移（某天改了「天前」的取整方式，另一处没跟着改）。
+ */
+export function formatRelativeTime(iso: string | null | undefined, neverLabel: string): string {
+  if (!iso) return neverLabel;
   const t = Date.parse(iso);
-  if (Number.isNaN(t)) return "从未使用";
+  if (Number.isNaN(t)) return neverLabel;
   const diffSec = Math.round((Date.now() - t) / 1000);
   if (diffSec < 60) return "刚刚";
   if (diffSec < 3600) return `${Math.floor(diffSec / 60)}分钟前`;

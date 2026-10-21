@@ -29,14 +29,9 @@ func BuildConfig(provider models.Provider, endpoint models.Endpoint, plainKey st
 		}
 	}
 
-	upstreamURL := strings.TrimSpace(endpoint.URL)
-	if upstreamURL == "" {
-		if s, ok := base["base_url"].(string); ok {
-			upstreamURL = strings.TrimSpace(s)
-		}
-	}
-	if upstreamURL == "" {
-		return "", "", errors.New("channel: no upstream URL (endpoint URL empty and provider base_url empty)")
+	upstreamURL, err := resolveUpstreamURLFromBase(base, endpoint)
+	if err != nil {
+		return "", "", err
 	}
 
 	base["base_url"] = upstreamURL
@@ -46,6 +41,39 @@ func BuildConfig(provider models.Provider, endpoint models.Endpoint, plainKey st
 		return "", "", fmt.Errorf("channel: marshal dynamic config: %w", err)
 	}
 	return string(out), upstreamURL, nil
+}
+
+// resolveUpstreamURLFromBase 从已解析的 provider config map 与端点解析上游 URL
+// （继承链单源：端点 URL 非空用端点 URL，否则用 provider config 的 base_url）。
+func resolveUpstreamURLFromBase(base map[string]any, endpoint models.Endpoint) (string, error) {
+	upstreamURL := strings.TrimSpace(endpoint.URL)
+	if upstreamURL == "" {
+		if s, ok := base["base_url"].(string); ok {
+			upstreamURL = strings.TrimSpace(s)
+		}
+	}
+	if upstreamURL == "" {
+		return "", errors.New("channel: no upstream URL (endpoint URL empty and provider base_url empty)")
+	}
+	return upstreamURL, nil
+}
+
+// ResolveUpstreamURL 按继承链解析上游 URL（端点 URL 优先，否则 provider 的 base_url）。
+//
+// 为什么要从 BuildConfig 里独立出来：选路**失败**时 Select 不带 UpstreamURL 回来
+// （凭据层失败只回传 Endpoint/Group，端点层/分组层失败连端点都没有），但失败留痕
+// 仍要能说出「打的是哪家的哪个 URL」——那正是候选淘汰留痕要的归因信息。
+//
+// URL 解析不依赖明文 key（只看 endpoint.URL 与 provider config 的 base_url），
+// 故可在「还没选出凭据」时独立调用。两者皆空则报错，与 BuildConfig 的失败口径一致。
+func ResolveUpstreamURL(provider models.Provider, endpoint models.Endpoint) (string, error) {
+	base := make(map[string]any)
+	if strings.TrimSpace(provider.Config) != "" {
+		if err := json.Unmarshal([]byte(provider.Config), &base); err != nil {
+			return "", fmt.Errorf("channel: parse provider config: %w", err)
+		}
+	}
+	return resolveUpstreamURLFromBase(base, endpoint)
 }
 
 // DecryptCredentialKey 解密凭据明文 key。cipher 未初始化（main 装配缺失）→ 明确

@@ -56,6 +56,7 @@ repository/credential.go # CredentialRepo：ListPaged/Get/Create/UpdateFields/Up
 - **写路径无归属限界**：凭据 ID 即资源标识，`PATCH`/`DELETE` 不再校验「属不属于某个池/组」；归属校验只出现在**列表过滤**与**分组级聚合端点**（`providerapi` 的内联明文查看）里
 - **状态是凭据属性、不属于表单提交内容**：供应商表单保存只写 key 与归属（`syncGroups` 不碰 `status`/`fail_count`），所以「换 key」不会自动清判停状态——恢复要么点「启用」（本域接口），要么等组内惰性探活成功
 - **启停按钮的显示判据是前端单源**（Stage 40）：`components/credentials/credential-status.ts` 的 `credentialToggleAction` 按「现在能不能用」决定显示哪个词——用不了（人工停用 / 判停 / 冷却中）显示「启用」，能用显示「停用」；号池页电脑行与手机行都调它，禁止在页面里各写一份 `status === "disabled"` 判断。按「是不是人工关的」判会把一条还能自愈的凭据钉成人工终态（后台不再自动拉回）
+- **「凭据为什么不可用」的文案与时间口径也在前端单源**（2026-10-22）：同一文件的 `describeCredentialFailureReason`（后端机器码 `auth_fail`/`network`/`http_429`/`http_<码>` → 中文，**空值返回空串**由调用方据此不渲染、未登记码原样露出不藏成「未知」）与 `formatRelativeTime`（相对时间内核，**「没有值」的措辞由调用方给**——「上次成功使用」传「从未使用」、「上次探测」传「从未探测」，时间算式只有一份）。消费方目前是号池详情弹窗的凭据状态格（`components/number-pools/pool-detail-dialog.tsx`），**只在凭据确实出过问题时渲染**（有冷却原因或连败次数）——健康凭据不挂这些信息，避免噪音。后端 `CooldownReason` 是**机器码**（供程序判断），管理端读到的应是判断依据本身，故由前端翻译；后端刻意不保存上游原始报错全文（只留归类），故前端不可能也不该显示原文
 - **探活 / 按凭据测试仍留在池域**：两者都依赖池级配置（`Pool.TestModel` 是测试模型来源）或走诊断口径（只报不改），不属于凭据属性面
 - **测试**：`handler/credentials/{crud,batch}_test.go`（契约断言打在响应体 JSON）、`service/credview/view_test.go`
 - **迁移记录**：原 `/api/pools/:id/credentials` 系列（列表/创建/详情/更新/删除/raw/批量启停/批量删除）已删除（开发阶段不留兼容层），前端 `lib/api/modules/catalog/credentials.ts` 与号池页、供应商弹窗共用

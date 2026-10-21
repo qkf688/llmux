@@ -43,8 +43,9 @@ func executeSingleProviderAttempt(input singleProviderAttemptInput, retryLog cha
 		ProxyTime: time.Since(input.Start),
 
 		// 调度明细（S3-3）：建行时从 Selection 填充一次即贯穿——失败出口全部走
-		// struct Updates（零值跳过），不会用空串覆盖这些字段。Select 失败的候选
-		// 淘汰路径不建行（无日志），故走到这里的行必有命中信息。
+		// struct Updates（零值跳过），不会用空串覆盖这些字段。走到这里的行必然已选出
+		// 凭据，故命中信息一定齐全；淘汰路径不经过本函数，它另经 recordUnsentCandidate
+		// 落 unsent 行（那些行没有凭据可言，故不许复用本尝试行口径）。
 		EndpointProtocol: input.Selection.Endpoint.Protocol,
 		EndpointURL:      input.Selection.UpstreamURL,
 		KeyGroupName:     input.Selection.Group.Name,

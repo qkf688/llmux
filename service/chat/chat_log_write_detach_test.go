@@ -50,8 +50,9 @@ func TestSavePreProviderFailureLog_DeadCtxStillCreates(t *testing.T) {
 	if err := models.DB.Where("name = ?", "m-pre-fail").First(&row).Error; err != nil {
 		t.Fatalf("cancelled ctx 下失败行未落库（审计缺口）: %v", err)
 	}
-	if row.Status != "error" || row.Error != "model not found" {
-		t.Fatalf("失败行内容 = %q/%q, want error/model not found", row.Status, row.Error)
+	// 未发出上游请求即失败 → unsent（不是 error）。
+	if row.Status != models.ChatLogStatusUnsent || row.Error != "model not found" {
+		t.Fatalf("失败行内容 = %q/%q, want unsent/model not found", row.Status, row.Error)
 	}
 	if row.RequestID != "gw:detach-test" {
 		t.Fatalf("失败行 request_id = %q, want gw:detach-test（ReqMeta 快照随建行定格）", row.RequestID)

@@ -9,8 +9,18 @@ import {
   type ChatLogStatus,
 } from "./log-status";
 
-/** 后端 models.ChatLogStatus* 的五个取值（2026-10-10 状态机分片 #1~#3 落地后的全集）。 */
-const BACKEND_STATUSES: ChatLogStatus[] = ["processing", "success", "error", "canceled", "interrupted"];
+/**
+ * 后端 models.ChatLogStatus* 的全集（2026-10-10 五态 + 2026-10-21 增 unsent）。
+ * 这份清单是「后端加了状态、前端没跟上」的机械锚点。
+ */
+const BACKEND_STATUSES: ChatLogStatus[] = [
+  "processing",
+  "success",
+  "error",
+  "canceled",
+  "interrupted",
+  "unsent",
+];
 
 describe("log-status", () => {
   it("清单与后端五态逐字对齐——后端新增状态而本表没跟上时这里变红", () => {

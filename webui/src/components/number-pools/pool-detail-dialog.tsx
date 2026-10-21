@@ -53,6 +53,8 @@ import {
   CREDENTIAL_STATUS_LABEL,
   CREDENTIAL_STATUS_ORDER,
   credentialToggleAction,
+  describeCredentialFailureReason,
+  formatRelativeTime,
 } from "@/components/credentials/credential-status";
 import { CredentialStats } from "./credential-stats-cell";
 
@@ -241,6 +243,29 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
     <CredentialStatusBadge status={status} cooldownUntil={cooldownUntil} />
   );
 
+  // 不可用的「为什么」与「坏了多久」：后台早就存着这三项，此前界面一处都没显示，
+  // 于是凭据停在「临时停调度」时管理员看不出原因（鉴权失败？限流？网络？）也看不出
+  // 是刚坏的还是坏了很久。**只在凭据确实出过问题时渲染**（有冷却原因或连败次数）：
+  // 健康凭据不塞噪音——「上次探测」是判停/冷却凭据的辅助信息（探活是否奏效、最近什么时候
+  // 试过），挂在健康凭据上只会变成噪音；故判据是「有冷却原因或连败次数」，不是「三项任一有值」。
+  // 用 renderXxx 返回 JSX（本文件既有惯例）而非内嵌组件：内嵌组件每次父组件渲染都会
+  // 重建类型，React 会把整棵子树卸载重挂，滚动位置/动画状态都会丢。
+  const renderFailureDetail = (
+    cooldownReason: string,
+    failCount: number,
+    lastProbeAt: string | null,
+  ) => {
+    const reason = describeCredentialFailureReason(cooldownReason);
+    if (!reason && failCount <= 0) return null;
+    return (
+      <div className="mt-1 space-y-0.5 text-[10px] leading-tight text-muted-foreground">
+        {reason && <div title={cooldownReason}>{reason}</div>}
+        {failCount > 0 && <div>连败 {failCount} 次</div>}
+        {lastProbeAt && <div>上次探测 {formatRelativeTime(lastProbeAt, "从未探测")}</div>}
+      </div>
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="xl" className="p-4">
@@ -360,7 +385,10 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
                             reveal={keyReveal}
                           />
                         </TableCell>
-                        <TableCell>{renderStatusBadges(cred.Status, cred.CooldownUntil)}</TableCell>
+                        <TableCell>
+                          {renderStatusBadges(cred.Status, cred.CooldownUntil)}
+                          {renderFailureDetail(cred.CooldownReason, cred.FailCount, cred.LastProbeAt)}
+                        </TableCell>
                         <TableCell
                           className="max-w-[140px] truncate text-xs text-muted-foreground"
                           title={cred.Note}
@@ -431,6 +459,7 @@ export function PoolDetailDialog({ open, onOpenChange, pool }: PoolDetailDialogP
                         />
                         {renderStatusBadges(cred.Status, cred.CooldownUntil)}
                       </div>
+                      {renderFailureDetail(cred.CooldownReason, cred.FailCount, cred.LastProbeAt)}
                       <p className="text-[10px] text-muted-foreground">{cred.Note || "-"}</p>
                       <CredentialStats
                         totalRequests={cred.TotalRequests}

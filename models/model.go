@@ -385,7 +385,7 @@ type ChatLog struct {
 	RealModelName string `gorm:"index"`
 	ProviderModel string `gorm:"index"`
 	ProviderName  string `gorm:"index"`
-	Status        string `gorm:"index"` // 状态机取值见 ChatLogStatus* 常量（processing 建行 / success 成功出口显式写 / error 与 canceled 失败出口 / interrupted 关机丢弃与启动兜底，写法见 service/chat 的 failureLogStatus）
+	Status        string `gorm:"index"` // 状态机取值见 ChatLogStatus* 常量（processing 建行 / success 成功出口显式写 / error 与 canceled 失败出口 / interrupted 关机丢弃与启动兜底 / unsent 未发出上游请求即失败，写法见 service/chat 的 failureLogStatus 与 savePreProviderFailureLog）
 	// Stream 入站 stream 标记快照：true = 流式 / false = 非流式。
 	// 建行时由 service/chat/chat_attempt 从 Before.Stream 拷贝（落点同 ApiKeyID 等快照字段）。
 	// 用 bool 而非 *bool：不引入「未设置」三态语义。
@@ -477,6 +477,17 @@ const (
 	// 等不下去，也可能只是本机被强杀。混进 error 会让面板给出「这家供应商在失败」的
 	// 错误归因；独立成态也让「只统计 success 与 error」的读点能把它精确剔出统计窗口。
 	ChatLogStatusInterrupted = "interrupted"
+	// ChatLogStatusUnsent：未发出——请求在把任何一次上游调用发出去**之前**就失败了
+	// （模型不存在 / 该模型无启用供应商 / 虚拟选模失败 / 虚拟跳过某真实模型 /
+	// 选路阶段候选被淘汰：无可用端点、无匹配分组、组内凭据全不可用）。
+	// **刻意与 error 分开，理由同 interrupted**：这类行没有任何一次上游请求被发出，
+	// 供应商没做错任何事——混进 error 会让「最近 10 次请求成败」这类只认
+	// success/error 的读点给出「这家供应商在失败」的假结论（候选淘汰常由配置态
+	// 或本机冷却产生，与被选中的提供商无关）。独立成态也让这些读点自动把它排除
+	// 在统计窗口外（白名单写法，状态机再加新态无需回来补排除）。
+	// **与 processing 相反**：processing 是「已发出、尚未收尾」，unsent 是「根本没发出」。
+	// 产生路径单源 service/chat 的 savePreProviderFailureLog（终态直写，不经 processing）。
+	ChatLogStatusUnsent = "unsent"
 )
 
 // ChatLog.UsageSource 的取值。

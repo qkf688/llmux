@@ -87,6 +87,7 @@ models/
 
 - **扩展点分布（现状）**：新外部格式通常同时涉及 `RegisterAdapter`、流式 `RegisterRealtimeRoute`（若涉及 SSE）、chat 侧 `Beforer`/`Processer`/`StreamErrorWriter`、`register_v1` 路由与 `consts.Style*`；Realtime 矩阵当前未覆盖全部协议组合，部分路径走 pivot/遗留逻辑
 - **Responses `function_call_output.output` 多模态**：`ResponsesItem.Output` 为 `interface{}`——纯文本 tool result 输出 `string`（老上游兼容），含图片块输出 `input_text`/`input_image` 数组（OpenAI Responses 协议规范）。编解码 helper 在 `service/responses/tool_content_codec.go`，入站解析复用 `parsePartsToUnifiedContent`（纯文本→string、含图片→块数组，与 Anthropic 路径行为一致）
+- **Responses 入站的并行 `function_call` 合并进同一条 assistant 消息**（`service/responses/transform_request.go` 的 `convertInputToMessages`）：Responses 协议里同一轮的并行工具调用是 `input` 数组中**连续**的多个 `function_call` item，其 `function_call_output` 紧随其后；入站必须把这批调用落进**同一条** unified assistant 消息的 `ToolCalls` 数组。**理由**：OpenAI Chat 协议要求「一批 tool_calls 的结果紧跟在该 assistant 之后」——若每个 `function_call` 各成一条 assistant 消息，结果前面会隔着别的 assistant 消息，上游判工具配对断裂（上游错误码 11148 `tool calls and tool results do not match`）并顶死整条会话（重试无效）。**合并边界＝连续性**：只有紧邻上一个 `function_call` item 的调用才并入同一条 assistant，出现任何别的 item（`function_call_output` / `message` / `output_text`）即封口，因为那意味着新一轮调用。与反向转换（`transform_to_responses.go` 的「一条 assistant 的多个 tool_calls → 多个 `function_call` item」）严格对称，路由往返一致。契约由 `service/responses/transform_request_tool_pairing_test.go` 锁住（并行合并 / 单调用不变 / 两轮不合并 / 出站配对对称性）
 - 专题细节可参考历史图示（本地 `local/架构文档/格式转换架构图.md`，未入库）
 
 ### 思考档位归一化与钳制（Stage B 扩档）

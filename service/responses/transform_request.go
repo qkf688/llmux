@@ -139,9 +139,15 @@ func convertInputToMessages(input ResponsesInput) ([]models.UnifiedMessage, stri
 	}
 	shouldExtractSystem := nonSystemCount > 0
 
+	// pendingCallGroup 标记「上一条产出的是 function_call 组头」——用于判定下一个
+	// function_call 是否与它同轮（连续）从而并入同一条 assistant 消息。
+	// 任何非 function_call 的 item 都会把它置回 false（见循环内各分支）。
+	pendingCallGroup := false
+
 	for _, item := range input.Items {
 		switch item.Type {
 		case "message", "input_text", "":
+			pendingCallGroup = false
 			if item.Role != "" {
 				if (item.Role == "system" || item.Role == "developer") && shouldExtractSystem {
 					systemContent := ""
@@ -189,6 +195,7 @@ func convertInputToMessages(input ResponsesInput) ([]models.UnifiedMessage, stri
 			}
 
 		case "output_text":
+			pendingCallGroup = false
 			if item.Text != nil {
 				messages = append(messages, models.UnifiedMessage{
 					Role:    "assistant",
@@ -210,13 +217,32 @@ func convertInputToMessages(input ResponsesInput) ([]models.UnifiedMessage, stri
 				} else if item.ID != "" {
 					toolCall.ID = item.ID
 				}
+				// 同一轮的并行调用在 Responses 里是 input 数组中**连续**的多个
+				// function_call item，必须落进同一条 assistant 消息的 ToolCalls 数组：
+				// OpenAI Chat 协议要求「一批 tool_calls 的结果紧跟在该 assistant 之后」，
+				// 拆成多条 assistant 消息会让结果前面隔着别的 assistant 消息，上游判
+				// 工具配对断裂（11148 tool calls and tool results do not match）并顶死
+				// 整条会话。反向转换（transform_to_responses.go）本就是「一条 assistant 的
+				// 多个 tool_calls → 多个 function_call item」，此处合并与之对称。
+				//
+				// 合并边界＝连续性：只有紧邻上一个 function_call item 的调用才并入同一条
+				// assistant；一旦出现别的 item（function_call_output / message 等）就封口，
+				// 因为那意味着新一轮调用。
+				if n := len(messages); n > 0 && messages[n-1].Role == "assistant" &&
+					len(messages[n-1].ToolCalls) > 0 && messages[n-1].Content == nil &&
+					pendingCallGroup {
+					messages[n-1].ToolCalls = append(messages[n-1].ToolCalls, toolCall)
+					continue
+				}
 				messages = append(messages, models.UnifiedMessage{
 					Role:      "assistant",
 					ToolCalls: []models.UnifiedToolCall{toolCall},
 				})
+				pendingCallGroup = true
 			}
 
 		case "function_call_output":
+			pendingCallGroup = false
 			if item.Output != nil {
 				msg := models.UnifiedMessage{
 					Role: "tool",

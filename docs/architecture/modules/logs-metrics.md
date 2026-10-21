@@ -68,6 +68,7 @@ models/retention.go
   - **共用同一个四态 `status` 与同一段编排**：两者的 Go 类型是同一个 `requestFieldDiagnostics`，四态判定收在 `computeRequestFieldDiagnostics(log, detect, errUnsupported)`——两份拷贝会漂移，让同一弹窗内两块的「查不了」语义不一致。差异只有两个注入参数：检测函数与「不支持」哨兵。
   - **`style_unsupported` 在两块里语义相反**：未认领检测的该态是**能力缺口**（当前无生产可达路径）；类型不匹配检测的该态是**不适用**——openai-res 已注册认领检测但刻意不注册类型检测，因为它类型写错会直接 400、不存在静默丢弃。这是该态**唯一的生产可达路径**。前端两块的文案因此必须分开写（`mismatchedViewByStatus` 说「不适用」而非「尚未实现」）。
   - **语义边界**：结果是「值类型不符而被容器忽略的键」，不等于上游拒绝了该参数；只看顶层，且只覆盖有三态容器的字段（`json.RawMessage` / `RawArray` 字段无从判断，是已知缺口）。
+- **日志详情弹窗的正文展示有体积闸（前端侧，`webui/src/routes/logs/components/dialogs/detail/`）**：请求体/响应体六字段不再各自渲染一份 `<pre>`，统一走 `BodyTextBlock`（`body-text-block.tsx`），体积策略集中在 `body-text-policy.ts`（阈值 `MAX_PREVIEW_CHARS` = 64KB、头尾切分 `buildHeadTailPreview`）。规则：**超过 64KB 的正文默认只渲染头尾各 32KB**（头尾都留——工具调用、工具结果这类关键片段常在正文两端，只留开头会把最该看的部分切掉），点「查看全文」才整段渲染，且**全文视图一律不换行**（`whitespace-pre` + 横向滚动）。理由（实测，同一 Chromium、768px 容器、1.98MB 单行 JSON 原文）：换行渲染（`white-space: pre-wrap`）**仅 layout 就吃掉 15s 主线程**（把 198 万字符切成 1.8 万个行盒逐行排版），弹窗直接无响应；同一段文本不换行只要 196ms、截断到 64KB 再换行只要 20ms——**贵的是「换行」不是「字符多」**（去掉字符内断行 `break-words` 同样 15s，故断行不是主因）。展开态随日志 id 重挂载（`RequestResponseSection` 上的 `key={detailLog.id}`），避免上一条日志的展开态带到下一条。
 - `ChatLogRepo.List` 在 `!IncludeRaw` 时用 **Omit 排除 raw 大字段**，不用 Select 白名单：白名单的失效模式是静默的（新增字段忘记加进来 → 该字段恒为零值，调用方无从察觉，`usage_source` 就这样漏过一轮）
 - `logs/enrich.go` 允许多表只读富化直连（repository 白名单例外之一）
 - 统计表的日期列格式（`2006-01-02`）与「时间维度 = total/daily/hourly 三表」属存储细节，只在 `repository/stats.go` 内出现；调用方一律传 `time.Time`

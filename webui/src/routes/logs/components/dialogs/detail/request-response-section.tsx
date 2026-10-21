@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import type { ChatLog } from "@/lib/api";
 import { Download } from "lucide-react";
 import { useState } from "react";
-import { formatByteLength } from "../../../utils/formatters";
 import { DEFAULT_CHAT_LOG_EXPORT_SECTIONS, type ChatLogExportSectionKey, type ChatLogExportSections } from "../../../utils/export-log";
+import { BodyTextBlock } from "./body-text-block";
 import { ExportLogDialog } from "./export-log-dialog";
 
 type RequestResponseSectionProps = {
@@ -73,69 +73,39 @@ export function RequestResponseSection({
 
       <div className="space-y-3">
         {log.request_headers && (
-          <div className="rounded-md border bg-muted/20 p-2 space-y-1 sm:p-3">
-            <p className="text-[11px] text-muted-foreground uppercase tracking-wide">
-              请求头 ({formatByteLength(log.request_headers)})
-            </p>
-            <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
-              {log.request_headers}
-            </pre>
-          </div>
+          <BodyTextBlock label="请求头" text={log.request_headers} />
         )}
 
         {log.raw_request_body && (
-          <div className="rounded-md border bg-info-tint p-2 space-y-1 sm:p-3">
-            <p className="text-[11px] text-info-foreground uppercase tracking-wide">
-              {log.request_body ? "原始请求体 - 转换前" : "请求体"} ({formatByteLength(log.raw_request_body)})
-            </p>
-            <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-info-foreground">
-              {log.raw_request_body}
-            </pre>
-          </div>
+          <BodyTextBlock
+            label={log.request_body ? "原始请求体 - 转换前" : "请求体"}
+            text={log.raw_request_body}
+            tone="info"
+          />
         )}
 
         {log.request_body && (
-          <div className="rounded-md border bg-success-tint p-2 space-y-1 sm:p-3">
-            <p className="text-[11px] text-success-foreground uppercase tracking-wide">
-              {log.raw_request_body ? "请求体 - 转换后" : "请求体"} ({formatByteLength(log.request_body)})
-            </p>
-            <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-success-foreground">
-              {log.request_body}
-            </pre>
-          </div>
+          <BodyTextBlock
+            label={log.raw_request_body ? "请求体 - 转换后" : "请求体"}
+            text={log.request_body}
+            tone="success"
+          />
         )}
 
         {log.response_headers && (
-          <div className="rounded-md border bg-muted/20 p-2 space-y-1 sm:p-3">
-            <p className="text-[11px] text-muted-foreground uppercase tracking-wide">
-              响应头 ({formatByteLength(log.response_headers)})
-            </p>
-            <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
-              {log.response_headers}
-            </pre>
-          </div>
+          <BodyTextBlock label="响应头" text={log.response_headers} />
         )}
 
         {log.raw_response_body && (
-          <div className="rounded-md border bg-info-tint p-2 space-y-1 sm:p-3">
-            <p className="text-[11px] text-info-foreground uppercase tracking-wide">
-              {log.response_body ? "原始响应体 - 转换前" : "响应体"} ({formatByteLength(log.raw_response_body)})
-            </p>
-            <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-info-foreground">
-              {log.raw_response_body}
-            </pre>
-          </div>
+          <BodyTextBlock
+            label={log.response_body ? "原始响应体 - 转换前" : "响应体"}
+            text={log.raw_response_body}
+            tone="info"
+          />
         )}
 
         {log.response_body && (
-          <div className="rounded-md border bg-success-tint p-2 space-y-1 sm:p-3">
-            <p className="text-[11px] text-success-foreground uppercase tracking-wide">
-              响应体 - 转换后 ({formatByteLength(log.response_body)})
-            </p>
-            <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-success-foreground">
-              {log.response_body}
-            </pre>
-          </div>
+          <BodyTextBlock label="响应体 - 转换后" text={log.response_body} tone="success" />
         )}
       </div>
 

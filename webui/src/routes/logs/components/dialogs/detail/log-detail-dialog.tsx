@@ -170,6 +170,9 @@ export function LogDetailDialog({ open, log, onOpenChange, onExportLog }: LogDet
             )}
 
             <RequestResponseSection
+              // key 随日志 id 变：切换日志时整块重挂载，正文块的「查看全文」展开态
+              // 不会从上一条日志带到下一条（同一位置同类型组件默认复用实例、保留 state）
+              key={detailLog.id}
               log={detailLog}
               loading={detailLoading}
               onExportLog={onExportLog}

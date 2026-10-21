@@ -324,6 +324,7 @@ func handleAnthropicToResponsesMessageDelta(state *realtimeStreamState, chunk ma
 		if err := writeRealtimeOrderedData(state, reasoningItemDone); err != nil {
 			return err
 		}
+		state.responsesOutput.markClosed(state.reasoningOutputIndex)
 
 		state.responsesOutput.set(state.reasoningOutputIndex, map[string]interface{}{
 			"id":   state.reasoningItemID,
@@ -343,6 +344,13 @@ func handleAnthropicToResponsesMessageDelta(state *realtimeStreamState, chunk ma
 	// messageOutputIndex=0 会与 blockIndex=0 的 function_call 撞车，
 	// 且事件流本身冗余。reasoning 路径在上面已独立发完，与这里互不影响。
 	if err := emitMessageStreamFinalization(state); err != nil {
+		return err
+	}
+
+	// 工具调用项收尾：每个 function_call 项都要有 arguments.done + output_item.done，
+	// 否则严格 Responses 客户端判「工具调用开了没关」→ 本轮运行失败
+	// （deepseek-harness 实测报 unfinished tool call）。
+	if err := emitResponsesOutputItemFinalization(state); err != nil {
 		return err
 	}
 
@@ -498,5 +506,9 @@ func emitMessageStreamFinalization(state *realtimeStreamState) error {
 		"output_index":    msgIndex,
 		"item":            messageItem,
 	}
-	return writeRealtimeOrderedData(state, outputItemDone)
+	if err := writeRealtimeOrderedData(state, outputItemDone); err != nil {
+		return err
+	}
+	state.responsesOutput.markClosed(msgIndex)
+	return nil
 }

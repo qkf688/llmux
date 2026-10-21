@@ -22,6 +22,22 @@ data: [DONE]
 
 `
 
+	// OpenAI Chat 流：reasoning_content + 一个 tool_call，末帧同时带 role 与
+	// finish_reason（生产流 chat_logs#32826 的真实形状：末包重复带 role）。
+	fixtureOpenAIReasoningToolCallStream = `data: {"id":"chatcmpl-rsn","object":"chat.completion.chunk","created":1234567890,"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant","content":null},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-rsn","object":"chat.completion.chunk","created":1234567890,"model":"test-model","choices":[{"index":0,"delta":{"reasoning_content":"先查一下代码"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-rsn","object":"chat.completion.chunk","created":1234567890,"model":"test-model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_rsn","type":"function","function":{"name":"run_code","arguments":""}}]},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-rsn","object":"chat.completion.chunk","created":1234567890,"model":"test-model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"code\":\"print(1)\"}"}}]},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-rsn","object":"chat.completion.chunk","created":1234567890,"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}
+
+data: [DONE]
+
+`
+
 	// Anthropic 流：文本块 + tool_use 块，stop_reason=tool_use。
 	fixtureAnthropicToolUseStream = `event: message_start
 data: {"type":"message_start","message":{"id":"msg_inv","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"usage":{"input_tokens":10,"output_tokens":0}}}
@@ -399,5 +415,70 @@ func TestInvariant_ResponsesOut_SequenceNumberMonotonic(t *testing.T) {
 			t.Errorf("事件 #%d (%s) sequence_number=%d 早于前一个 %d，不单调", i, ev.typ(), int(seq), lastSeq)
 		}
 		lastSeq = int(seq)
+	}
+}
+
+// TestInvariant_ResponsesOut_EveryAddedItemClosed 覆盖「每个 output item 都必须被关掉」
+// 这条 Responses 协议不变量（2026-10-22 生产实测 chat_logs#32826 踩中：
+// function_call 项只开了没收，严格客户端报 unfinished tool call）。
+//
+// 判据分两面：
+//   - 每个 output_item.added 都必须有同 output_index 的 output_item.done；
+//   - 每个 output_index 至多一个 output_item.done（重复关同样是协议违规）。
+//
+// 两条协议线都要满足：分叉过一次（OpenAI 线漏发工具调用与 reasoning 收尾）。
+func TestInvariant_ResponsesOut_EveryAddedItemClosed(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		from consts.WireFormat
+		in   string
+	}{
+		{name: "from_openai", from: consts.FormatOpenAIChat, in: fixtureOpenAIToolCallStream},
+		{name: "from_openai_reasoning", from: consts.FormatOpenAIChat, in: fixtureOpenAIReasoningToolCallStream},
+		{name: "from_anthropic", from: consts.FormatAnthropic, in: fixtureAnthropicToolUseStream},
+	}
+
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			events := runRealtimeTransform(t, c.in, c.from, consts.FormatOpenAIResponses)
+
+			addedIDs := map[int]string{}
+			doneCount := map[int]int{}
+			for _, ev := range events {
+				switch ev.typ() {
+				case "response.output_item.added":
+					item, _ := ev.data["item"].(map[string]interface{})
+					if item == nil {
+						t.Fatalf("output_item.added 缺少 item 字段: %v", ev.data)
+					}
+					idx := ev.outputIndex(t)
+					itemID, _ := item["id"].(string)
+					if prev, dup := addedIDs[idx]; dup {
+						t.Errorf("output_index %d 被开了两次（%q 与 %q）", idx, prev, itemID)
+					}
+					addedIDs[idx] = itemID
+				case "response.output_item.done":
+					doneCount[ev.outputIndex(t)]++
+				}
+			}
+
+			if len(addedIDs) == 0 {
+				t.Fatalf("流里没有任何 output_item.added: %v", eventTypes(events))
+			}
+			for idx := range addedIDs {
+				switch doneCount[idx] {
+				case 0:
+					t.Errorf("output_index=%d 的项开了却没收尾（缺 response.output_item.done）：客户端会判「未完成」", idx)
+				case 1:
+				default:
+					t.Errorf("output_index=%d 的项被收了 %d 次尾（一个项只能关一次）", idx, doneCount[idx])
+				}
+			}
+		})
 	}
 }

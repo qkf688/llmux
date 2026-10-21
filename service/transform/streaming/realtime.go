@@ -57,6 +57,12 @@ type realtimeStreamState struct {
 	messageOutputIndex    int
 	hasMessageOutputIndex bool
 
+	// messageStreamStarted 标记本流的 message 项是否已经开过（openai 线用）。
+	// 部分 OpenAI 兼容上游会在末包重复带 role，重复开会发出第二套
+	// response.created / output_item.added(message)，客户端看到的是同一
+	// response id 与同一 item id 各出现两次——严格 Responses 客户端判协议异常。
+	messageStreamStarted bool
+
 	reasoningItemID      string
 	hasReasoningItem     bool
 	reasoningOutputIndex int

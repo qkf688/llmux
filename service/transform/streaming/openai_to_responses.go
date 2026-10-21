@@ -110,6 +110,16 @@ func ensureMessageOutputIndex(state *realtimeStreamState) int {
 }
 
 func startOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]interface{}, role string) error {
+	// 一条流只开一次 message 项。部分 OpenAI 兼容上游会在**末包**（带 finish_reason
+	// 的那一帧）再带一次 role；若不拦，这里会把 response.created / response.in_progress /
+	// output_item.added(message) / content_part.added 全套再发一遍——客户端看到的是
+	// 「同一个 response id 建了两次、同一个 item id 开了两次」，严格 Responses 客户端
+	// 会判协议异常（且 item id 在流中途改写同样违规）。
+	if state.messageStreamStarted {
+		return nil
+	}
+	state.messageStreamStarted = true
+
 	state.responseID = maputil.String(chunk, "id")
 	state.itemID = "msg_" + state.responseID
 	msgIndex := ensureMessageOutputIndex(state)
@@ -405,6 +415,14 @@ func finishOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]
 		"item":            messageItem,
 	}
 	if err := writeRealtimeOrderedData(state, outputItemDone); err != nil {
+		return err
+	}
+	state.responsesOutput.markClosed(msgIndex)
+
+	// 其余开了还没关的项收尾：function_call 要 arguments.done + output_item.done，
+	// reasoning 要 output_item.done。否则严格 Responses 客户端判「项开了没关」→
+	// 本轮运行失败（deepseek-harness 实测报 unfinished tool call）。
+	if err := emitResponsesOutputItemFinalization(state); err != nil {
 		return err
 	}
 

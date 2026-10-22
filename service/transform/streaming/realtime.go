@@ -47,6 +47,21 @@ type realtimeStreamState struct {
 	// OpenAI 的 tool_call index 从 0 起，与 message 项的 output_index 会撞车，必须另行分配。
 	openAIToolCallIndexToResponsesOutputIndex map[int]int
 
+	// openAIStreamMeta 缓存上游 OpenAI Chat chunk 里的 id / model / created。
+	// 流末兜底收尾（上游没给 finish_reason）拿不到具体 chunk，
+	// response.completed 的这三项只能取缓存值，否则会是空串 / 0。
+	openAIStreamMeta responseStreamMeta
+
+	// openAIOutputClosed 标记 output item 的收尾事件是否已发出。
+	// Responses 协议里终态不可撤回：重复的 output_item.done 与 response.completed
+	// 同属协议违规，故收尾一旦发出就不得再发第二套。
+	openAIOutputClosed bool
+
+	// openAIFinalized 标记 response.completed 是否已写出。
+	// [DONE]、流末 EOF 兜底、上游读错误兜底三个出口都调同一个收尾函数，
+	// 由它保证只交付一次。
+	openAIFinalized bool
+
 	unknownRouteCount int
 
 	responseID string
@@ -62,6 +77,12 @@ type realtimeStreamState struct {
 	// response.created / output_item.added(message)，客户端看到的是同一
 	// response id 与同一 item id 各出现两次——严格 Responses 客户端判协议异常。
 	messageStreamStarted bool
+
+	// responseStreamStarted 标记本流的 response.created / response.in_progress
+	// 是否已发出（openai 线用）。与 messageStreamStarted 分开是因为两者
+	// 的开启条件不同：流首事件与 role 无关（上游可能先给 reasoning / tool_calls），
+	// message 项则要等 role 或 content。
+	responseStreamStarted bool
 
 	reasoningItemID      string
 	hasReasoningItem     bool

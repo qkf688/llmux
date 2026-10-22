@@ -14,10 +14,11 @@ func init() {
 
 func handleRealtimeOpenAIToResponses(state *realtimeStreamState, data string) error {
 	// OpenAI 的 [DONE] 不需要转换，但它是「上游已结束」的信号：
-	// 此时把延后的 response.completed（携带尾包 usage）flush 出去。
+	// 此时把延后的 response.completed（携带尾包 usage）flush 出去；
+	// 上游没给 finish_reason 时，还在这里做流末兜底收尾（补齐终态）。
 	// 正常路径下 usage 尾包到达时已交付，这里退化为幂等兜底。
 	if data == "[DONE]" {
-		return flushPendingOpenAIToResponsesCompleted(state)
+		return finalizeOpenAIToResponsesStream(state)
 	}
 
 	var chunk map[string]interface{}
@@ -25,6 +26,10 @@ func handleRealtimeOpenAIToResponses(state *realtimeStreamState, data string) er
 		logRealtimeChunkParseError(state, data, err)
 		return nil
 	}
+
+	// 缓存上游的 id/model/created：流末兜底收尾拿不到具体 chunk（上游可能整条流
+	// 都不给 finish_reason），response.completed 的这三项只能取缓存值。
+	captureOpenAIStreamMeta(state, chunk)
 
 	// usage 可能出现在任意 chunk（含 finish 之后的 choices:[] 尾包）。
 	// 先无条件抓取，供延后的 response.completed 使用（待办 #18）。
@@ -54,32 +59,58 @@ func handleRealtimeOpenAIToResponses(state *realtimeStreamState, data string) er
 		return nil
 	}
 
-	delta, ok := choice["delta"].(map[string]interface{})
-	if !ok {
-		return nil
+	// response.created / response.in_progress 是流首两个事件，与 role / content 无关：
+	// 上游可能先给 reasoning_content 或 tool_calls（此时还没有 role），
+	// 若把 created 挂在 role 上，这些项的 output_item.added 会先于 created 出现——
+	// 违反 Responses 协议「response.created 是流首事件」。
+	if err := ensureOpenAIResponsesStarted(state, chunk); err != nil {
+		return err
 	}
 
-	if role := maputil.String(delta, "role"); role != "" {
-		if err := startOpenAIToResponsesStream(state, chunk, role); err != nil {
+	// finish_reason 的判定必须放在 delta 断言之前：finish 只依赖 choice，
+	// 与 delta 无关。上游末包常写成 {"choices":[{"index":0,"finish_reason":"stop"}]}
+	//（不带 delta 键），若先断言 delta 再看 finish，这帧会被整条丢掉，
+	// 走不到收尾分支 → 整条流永不发 response.completed，客户端拿到悬空流。
+	if finishReason := maputil.String(choice, "finish_reason"); finishReason != "" {
+		return finishOpenAIToResponsesStream(state, chunk, finishReason)
+	}
+
+	// delta 缺失或为 null 的帧不带任何增量内容，按空增量处理后继续。
+	delta, _ := choice["delta"].(map[string]interface{})
+
+	role := maputil.String(delta, "role")
+	content := maputil.String(delta, "content")
+
+	// message 项在「首帧带 role 或带 content」时开启：
+	//   - 只看 role：整条流不带 role 的上游（部分兼容网关）永远开不出 message 项，
+	//     客户端拿到「有正文、无 message 项」的裸 delta 流；
+	//   - 只看 content：纯 tool_call 流会凭空多出一个空 message 项。
+	// role 只决定 message 项的 role 字段，不决定它何时开。
+	if role != "" || content != "" {
+		if err := ensureOpenAIMessageItem(state, role); err != nil {
 			return err
 		}
 	}
 
 	if reasoningContent := maputil.String(delta, "reasoning_content"); reasoningContent != "" {
+		armOpenAIToResponsesFinalize(state)
 		if err := emitOpenAIToResponsesReasoningDelta(state, reasoningContent); err != nil {
 			return err
 		}
 	}
 
-	if content := maputil.String(delta, "content"); content != "" {
+	if content != "" {
+		armOpenAIToResponsesFinalize(state)
 		state.accumulatedText += content
 		textDelta := map[string]interface{}{
 			"type":            "response.output_text.delta",
 			"sequence_number": nextRealtimeSequence(state),
-			"output_index":    0,
-			"item_id":         state.itemID,
-			"content_index":   0,
-			"delta":           content,
+			// 必须取 message 项自己的 index，不能写死 0：reasoning / function_call
+			// 先于正文到达时会占走 0，message 项拿 1——写死 0 会把正文挂到别人的项上。
+			"output_index":  ensureMessageOutputIndex(state),
+			"item_id":       state.itemID,
+			"content_index": 0,
+			"delta":         content,
 		}
 		if err := writeRealtimeOrderedData(state, textDelta); err != nil {
 			return err
@@ -87,13 +118,12 @@ func handleRealtimeOpenAIToResponses(state *realtimeStreamState, data string) er
 	}
 
 	if toolCalls, ok := delta["tool_calls"].([]interface{}); ok {
+		if len(toolCalls) > 0 {
+			armOpenAIToResponsesFinalize(state)
+		}
 		if err := emitOpenAIToResponsesToolCalls(state, toolCalls); err != nil {
 			return err
 		}
-	}
-
-	if finishReason := maputil.String(choice, "finish_reason"); finishReason != "" {
-		return finishOpenAIToResponsesStream(state, chunk, finishReason)
 	}
 
 	return nil
@@ -109,20 +139,37 @@ func ensureMessageOutputIndex(state *realtimeStreamState) int {
 	return state.messageOutputIndex
 }
 
-func startOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]interface{}, role string) error {
-	// 一条流只开一次 message 项。部分 OpenAI 兼容上游会在**末包**（带 finish_reason
-	// 的那一帧）再带一次 role；若不拦，这里会把 response.created / response.in_progress /
-	// output_item.added(message) / content_part.added 全套再发一遍——客户端看到的是
-	// 「同一个 response id 建了两次、同一个 item id 开了两次」，严格 Responses 客户端
-	// 会判协议异常（且 item id 在流中途改写同样违规）。
-	if state.messageStreamStarted {
+// armOpenAIToResponsesFinalize 挂上流末收尾出口。
+//
+// **为什么要在「首次产出内容」就挂，而不是等 finish_reason**：
+// state.finalize 是流末（EOF / 上游读错误）唯一的收尾出口，realtime.go 的兜底
+// 逻辑是 `if state.finalize != nil`。旧实现只在 finish 分支里赋值 finalize，
+// 于是「上游全程不给 finish_reason」时 finalize 恒为 nil，流末兜底整段跳过——
+// 注释声称的「上游不发 [DONE] 也要收尾」实际只覆盖了「已经 finish 过」的流。
+//
+// 挂上之后，finish 分支仍会覆盖它（同一个函数），两条路径共用一份收尾实现。
+func armOpenAIToResponsesFinalize(state *realtimeStreamState) {
+	if state.finalize == nil {
+		state.finalize = finalizeOpenAIToResponsesStream
+	}
+}
+
+// ensureOpenAIResponsesStarted 发出流首两个事件（response.created / response.in_progress）。
+//
+// 幂等：一条流只发一次。部分 OpenAI 兼容上游会在**末包**（带 finish_reason 的那一帧）
+// 再带一次 role；若不拦，客户端会看到「同一个 response id 建了两次」，
+// 严格 Responses 客户端判协议异常。
+//
+// 与 role 无关：上游可能先给 reasoning_content / tool_calls 再给 role，
+// 届时 created 必须已经发出（它是流首事件），不能等 role。
+func ensureOpenAIResponsesStarted(state *realtimeStreamState, chunk map[string]interface{}) error {
+	if state.responseStreamStarted {
 		return nil
 	}
-	state.messageStreamStarted = true
+	state.responseStreamStarted = true
 
 	state.responseID = maputil.String(chunk, "id")
 	state.itemID = "msg_" + state.responseID
-	msgIndex := ensureMessageOutputIndex(state)
 
 	responseCreated := map[string]interface{}{
 		"type":            "response.created",
@@ -152,9 +199,25 @@ func startOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]i
 			"output":     []interface{}{},
 		},
 	}
-	if err := writeRealtimeOrderedData(state, responseInProgress); err != nil {
-		return err
+	return writeRealtimeOrderedData(state, responseInProgress)
+}
+
+// ensureOpenAIMessageItem 开启 message 项（output_item.added + content_part.added）。
+//
+// 幂等：一条流只开一次。开启条件是「首帧带 role 或带 content」——
+// 只看 role 会漏掉整条流不带 role 的上游（永远开不出 message 项），
+// 只看 content 会给纯 tool_call 流凭空造一个空 message 项。
+// role 只决定 message 项的 role 字段，缺省用 "assistant"。
+func ensureOpenAIMessageItem(state *realtimeStreamState, role string) error {
+	if state.messageStreamStarted {
+		return nil
 	}
+	state.messageStreamStarted = true
+
+	if role == "" {
+		role = "assistant"
+	}
+	msgIndex := ensureMessageOutputIndex(state)
 
 	itemAdded := map[string]interface{}{
 		"type":            "response.output_item.added",
@@ -306,6 +369,64 @@ func getOrAllocResponsesOutputIndexForToolCall(state *realtimeStreamState, toolC
 }
 
 func finishOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]interface{}, finishReason string) error {
+	// 幂等门：终态不可撤回。上游重复带 finish_reason 时（兼容上游常见），
+	// 第二帧不得再发一套 output_item.done / response.completed。
+	if state.openAIFinalized {
+		return nil
+	}
+
+	if err := emitOpenAIToResponsesOutputFinalization(state); err != nil {
+		return err
+	}
+
+	status := "completed"
+	if finishReason == "length" {
+		status = "incomplete"
+	}
+
+	responseCompleted := map[string]interface{}{
+		"type": "response.completed",
+		"response": map[string]interface{}{
+			"object":     "response",
+			"id":         state.responseID,
+			"model":      maputil.String(chunk, "model"),
+			"created_at": int(maputil.Float64(chunk, "created")),
+			"status":     status,
+			// 必须是真实产出：下游靠扫这个数组里有没有 function_call 判定 finish_reason。
+			"output": state.responsesOutput.snapshot(),
+		},
+	}
+
+	// 不能在此直接写出：OpenAI 把 usage 放在 finish_reason 之后的独立尾包里，
+	// 现在发就永远带不上真实 token 数（待办 #18）。缓存起来，等 [DONE] 或流末
+	// 由 flushPendingOpenAIToResponsesCompleted 合并 usage 后统一发出。
+	state.pendingCompleted = responseCompleted
+	state.finalize = finalizeOpenAIToResponsesStream
+	return nil
+}
+
+// emitOpenAIToResponsesOutputFinalization 发出 message / reasoning / function_call
+// 三类 output item 的收尾事件。
+//
+// 从 finishOpenAIToResponsesStream 抽出来的原因：收尾能力必须与「上游是否给
+// finish_reason」解耦。上游不给 finish_reason（兼容上游 / 流被截断）时，
+// 兜底路径仍要调用它，否则开了的 output item 永远不关，客户端判「未完成」。
+//
+// 幂等：openAIOutputClosed 门保证只发一次（终态不可撤回）。
+func emitOpenAIToResponsesOutputFinalization(state *realtimeStreamState) error {
+	if state.openAIOutputClosed {
+		return nil
+	}
+	state.openAIOutputClosed = true
+
+	// message 项的收尾只对「开过」的项发：从未 output_item.added 过的项
+	// （上游首帧即 finish_reason、或整条流不带 role 且无内容）若发 done，
+	// 客户端会看到凭空冒出的 output_index——「关了但没开过」同样是协议违规。
+	// 与 Anthropic 线的 `if !state.hasMessageOutputIndex` 守卫同款判据。
+	if !state.messageStreamStarted {
+		return emitResponsesOutputItemFinalization(state)
+	}
+
 	msgIndex := ensureMessageOutputIndex(state)
 
 	// 如果有 reasoning 内容，发送 reasoning 完成事件
@@ -422,34 +543,7 @@ func finishOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]
 	// 其余开了还没关的项收尾：function_call 要 arguments.done + output_item.done，
 	// reasoning 要 output_item.done。否则严格 Responses 客户端判「项开了没关」→
 	// 本轮运行失败（deepseek-harness 实测报 unfinished tool call）。
-	if err := emitResponsesOutputItemFinalization(state); err != nil {
-		return err
-	}
-
-	status := "completed"
-	if finishReason == "length" {
-		status = "incomplete"
-	}
-
-	responseCompleted := map[string]interface{}{
-		"type": "response.completed",
-		"response": map[string]interface{}{
-			"object":     "response",
-			"id":         state.responseID,
-			"model":      maputil.String(chunk, "model"),
-			"created_at": int(maputil.Float64(chunk, "created")),
-			"status":     status,
-			// 必须是真实产出：下游靠扫这个数组里有没有 function_call 判定 finish_reason。
-			"output": state.responsesOutput.snapshot(),
-		},
-	}
-
-	// 不能在此直接写出：OpenAI 把 usage 放在 finish_reason 之后的独立尾包里，
-	// 现在发就永远带不上真实 token 数（待办 #18）。缓存起来，等 [DONE] 或流末
-	// 由 flushPendingOpenAIToResponsesCompleted 合并 usage 后统一发出。
-	state.pendingCompleted = responseCompleted
-	state.finalize = flushPendingOpenAIToResponsesCompleted
-	return nil
+	return emitResponsesOutputItemFinalization(state)
 }
 
 // captureOpenAIUsage 记录 chunk 里的 OpenAI 格式 usage。
@@ -470,9 +564,6 @@ func captureOpenAIUsage(state *realtimeStreamState, chunk map[string]interface{}
 // flushPendingOpenAIToResponsesCompleted 把延后的 response.completed 合并 usage 后写出。
 // 幂等：写出后清空全部延后状态。三个入口（usage 尾包到达 / [DONE] / 流末 finalize）
 // 只有第一个真正写出，其余因 pendingCompleted == nil 直接返回。
-//
-// 注：唯一的理论例外是上游在 [DONE] 之后仍发含 finish_reason 的帧（协议违规，会重新
-// set pending 并在流末再发一次）；重试是整流重发而非流内续传，项目内无此路径，故不防御。
 func flushPendingOpenAIToResponsesCompleted(state *realtimeStreamState) error {
 	completed := state.pendingCompleted
 	if completed == nil {
@@ -494,7 +585,52 @@ func flushPendingOpenAIToResponsesCompleted(state *realtimeStreamState) error {
 		}
 	}
 
+	state.openAIFinalized = true
 	return writeRealtimeOrderedData(state, completed)
+}
+
+// finalizeOpenAIToResponsesStream 是本流的收尾出口：保证开了的 output item 全部
+// 关掉、且终态事件一定发出。
+//
+// **为什么收尾不能只挂在 finish_reason 上**：上游给不给 finish_reason 不是
+// 转换层能控制的——兼容上游常把末包写成 {"choices":[{"index":0,"finish_reason":"stop"}]}
+// （不带 delta 键），也有上游整条流都不给 finish_reason。旧实现把收尾完全
+// 挂在 finish 分支里，这两种形态下客户端只会收到「有正文、无终态」的悬空流，
+// 严格 Responses 客户端报 "stream completed with an unfinished tool call"。
+//
+// 三层语义：
+//  1. 正常路径（上游给了 finish_reason）：收尾事件已在 finishOpenAIToResponsesStream
+//     里发出，这里只交付延后的 response.completed（含 usage）。
+//  2. 兜底路径（上游没给 finish_reason）：这里补发全部收尾事件 + response.completed，
+//     status 取 completed（上游没表达截断，就不能替它断言 incomplete）。
+//  3. 幂等：已交付过终态则什么都不做（上游重复 finish / [DONE] 与 EOF 双出口）。
+func finalizeOpenAIToResponsesStream(state *realtimeStreamState) error {
+	if state.openAIFinalized {
+		return nil
+	}
+
+	// 兜底路径：上游没给 finish_reason，收尾事件还没发过，这里补发。
+	if !state.openAIOutputClosed {
+		if err := emitOpenAIToResponsesOutputFinalization(state); err != nil {
+			return err
+		}
+		if state.pendingCompleted == nil {
+			state.pendingCompleted = map[string]interface{}{
+				"type": "response.completed",
+				"response": map[string]interface{}{
+					"object":     "response",
+					"id":         state.responseID,
+					"model":      state.openAIStreamMeta.model,
+					"created_at": state.openAIStreamMeta.created,
+					// 上游没表达截断就不能断言 incomplete：status 只能是 completed。
+					"status": "completed",
+					"output": state.responsesOutput.snapshot(),
+				},
+			}
+		}
+	}
+
+	return flushPendingOpenAIToResponsesCompleted(state)
 }
 
 // buildResponsesUsage 把上游原始 usage map 映射为 Responses 线的 usage 对象。

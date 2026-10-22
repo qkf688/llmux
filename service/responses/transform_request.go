@@ -22,7 +22,7 @@ func TransformRequest(rawBody []byte, options RequestTransformOptions) (*models.
 
 	unified := &models.UnifiedRequest{
 		Model:  req.Model,
-		System: req.Instructions,
+		System: instructionsText(req.Instructions),
 	}
 	if req.Input.Text != nil {
 		wasArray := false
@@ -62,12 +62,25 @@ func TransformRequest(rawBody []byte, options RequestTransformOptions) (*models.
 		unified.ToolChoice = &models.UnifiedToolChoice{}
 		if req.ToolChoice.StringValue != nil {
 			unified.ToolChoice.StringValue = req.ToolChoice.StringValue
-		} else if req.ToolChoice.ObjectValue != nil && req.ToolChoice.ObjectValue.Function != nil {
-			unified.ToolChoice.ObjectValue = &models.UnifiedToolChoiceObject{
-				Type: req.ToolChoice.ObjectValue.Type,
-				Function: &models.UnifiedToolChoiceFunction{
-					Name: req.ToolChoice.ObjectValue.Function.Name,
-				},
+		} else if obj := req.ToolChoice.ObjectValue; obj != nil {
+			// 具名 tool_choice 的两种形态归一到统一模型的嵌套语义：
+			// 官方扁平原 {"type":"function","name":"f"} 与 Chat 嵌套形
+			// {"type":"function","function":{"name":"f"}}。
+			// 两种都没拿到名字时整个 ToolChoice 置 nil——空壳会让出站 emit 出
+			// `"tool_choice":{}` 这种上游会拒的形状（与 anthropic 入站同款判据）。
+			name := obj.Name
+			if obj.Function != nil && obj.Function.Name != "" {
+				name = obj.Function.Name
+			}
+			if name != "" {
+				unified.ToolChoice.ObjectValue = &models.UnifiedToolChoiceObject{
+					Type: obj.Type,
+					Function: &models.UnifiedToolChoiceFunction{
+						Name: name,
+					},
+				}
+			} else {
+				unified.ToolChoice = nil
 			}
 		}
 	}
@@ -75,7 +88,7 @@ func TransformRequest(rawBody []byte, options RequestTransformOptions) (*models.
 	if req.Text != nil && req.Text.Format != nil && req.Text.Format.Type != "" {
 		unified.ResponseFormat = &models.UnifiedResponseFormat{
 			Type:       req.Text.Format.Type,
-			JSONSchema: req.Text.Format.JSONSchema,
+			JSONSchema: normalizeResponsesJSONSchema(req.Text.Format),
 		}
 	}
 
@@ -204,12 +217,20 @@ func convertInputToMessages(input ResponsesInput) ([]models.UnifiedMessage, stri
 			}
 
 		case "function_call":
-			if item.Name != nil && item.Arguments != nil {
+			// arguments 在 Responses 协议里可省（无参工具的常见写法），
+			// 缺省时兜底为空参数对象 "{}" 而不是丢弃整条 item——
+			// 丢一条 function_call 就破坏「调用↔结果」配对，结果消息前面
+			// 没有对应调用，上游直接判 400 且报错离真因隔了两层。
+			if item.Name != nil {
+				arguments := "{}"
+				if item.Arguments != nil {
+					arguments = *item.Arguments
+				}
 				toolCall := models.UnifiedToolCall{
 					Type: "function",
 					Function: models.UnifiedToolCallFunction{
 						Name:      *item.Name,
-						Arguments: *item.Arguments,
+						Arguments: arguments,
 					},
 				}
 				if item.CallID != nil {
@@ -243,11 +264,16 @@ func convertInputToMessages(input ResponsesInput) ([]models.UnifiedMessage, stri
 
 		case "function_call_output":
 			pendingCallGroup = false
-			if item.Output != nil {
+			// output 在 Responses 协议里可省，缺省时兜底为空串而不是丢弃整条
+			// item——丢一条结果同样破坏「调用↔结果」配对。
+			{
 				msg := models.UnifiedMessage{
 					Role: "tool",
 				}
 				switch v := item.Output.(type) {
+				case nil:
+					// 缺省 output：空串表示「调用成功但无内容」，不是未知
+					msg.Content = ""
 				case string:
 					msg.Content = v
 				case []interface{}:
@@ -287,6 +313,81 @@ func convertToolsToUnified(tools []ResponsesTool) []models.UnifiedTool {
 		}
 	}
 	return unified
+}
+
+// instructionsText 取 instructions 的文本内容。
+//
+// 官方形状是纯字符串；数组形态（非官方写法）汇总其中各段的文本。
+// 数组里有多段时用换行连接——各段通常是独立句子，粘连会改变语义。
+func instructionsText(instr ResponsesInstructions) string {
+	if instr.Parts == nil {
+		return instr.Text
+	}
+	parts := extractTextFromParts(instr.Parts)
+	if parts == "" {
+		return ""
+	}
+	// extractTextFromParts 把多段直接拼接（那是 content 数组的语义）；
+	// instructions 的多段是独立句子，这里按行分段再连接。
+	lines := make([]string, 0, len(instr.Parts))
+	for _, raw := range instr.Parts {
+		partMap, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		partType, _ := partMap["type"].(string)
+		if partType != "input_text" && partType != "output_text" && partType != "text" {
+			continue
+		}
+		if text, ok := partMap["text"].(string); ok && text != "" {
+			lines = append(lines, text)
+		}
+	}
+	if len(lines) == 0 {
+		return parts
+	}
+	return strings.Join(lines, "\n")
+}
+
+// normalizeResponsesJSONSchema 把 text.format 的两种 json_schema 形态归一到统一模型
+// 承载的内嵌对象形状 {"name","schema","strict"}。
+//
+// 内嵌对象是 Chat Completions 的自然形状（Chat 出站直接把它塞进
+// response_format.json_schema），也是统一模型 UnifiedResponseFormat.JSONSchema 的
+// 既有承载方式——归一到它，Chat / Anthropic 两条出站路径都不用改。
+//
+// 官方扁平原的 name / schema / strict 与 type 平级；嵌套形的同名三键在
+// json_schema 子对象里。两形给的信息等价，故取「官方扁平优先、嵌套兜底」。
+func normalizeResponsesJSONSchema(format *ResponsesTextFormat) json.RawMessage {
+	if format == nil {
+		return nil
+	}
+
+	// 嵌套形优先判定：它整体在 json_schema 子键里，与扁平形的顶层键不冲突。
+	if len(format.JSONSchema) > 0 {
+		return format.JSONSchema
+	}
+
+	if format.Name == "" && format.Schema == nil && format.Strict == nil {
+		return nil
+	}
+
+	normalized := map[string]interface{}{}
+	if format.Name != "" {
+		normalized["name"] = format.Name
+	}
+	if format.Schema != nil {
+		normalized["schema"] = format.Schema
+	}
+	if format.Strict != nil {
+		normalized["strict"] = *format.Strict
+	}
+
+	raw, err := json.Marshal(normalized)
+	if err != nil {
+		return nil
+	}
+	return raw
 }
 
 func extractTextFromParts(parts []interface{}) string {

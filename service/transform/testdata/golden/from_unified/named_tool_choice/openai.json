@@ -1,0 +1,36 @@
+{
+  "messages": [
+    {
+      "content": "hello",
+      "role": "user"
+    }
+  ],
+  "model": "coverage-model",
+  "stream": false,
+  "tool_choice": {
+    "function": {
+      "name": "get_weather"
+    },
+    "type": "function"
+  },
+  "tools": [
+    {
+      "function": {
+        "description": "",
+        "name": "get_weather",
+        "parameters": {
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "city"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "function"
+    }
+  ]
+}

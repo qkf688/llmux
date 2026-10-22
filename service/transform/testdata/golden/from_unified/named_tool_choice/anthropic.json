@@ -1,0 +1,32 @@
+{
+  "max_tokens": 8192,
+  "messages": [
+    {
+      "content": "hello",
+      "role": "user"
+    }
+  ],
+  "model": "coverage-model",
+  "stream": false,
+  "tool_choice": {
+    "name": "get_weather",
+    "type": "tool"
+  },
+  "tools": [
+    {
+      "description": "",
+      "input_schema": {
+        "properties": {
+          "city": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "city"
+        ],
+        "type": "object"
+      },
+      "name": "get_weather"
+    }
+  ]
+}

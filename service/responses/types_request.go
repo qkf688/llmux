@@ -7,8 +7,13 @@ import (
 
 // ResponsesRequest 表示 OpenAI Responses API 的请求格式。
 type ResponsesRequest struct {
-	Model           string                 `json:"model"`
-	Instructions    string                 `json:"instructions,omitempty"`
+	Model string `json:"model"`
+	// Instructions 官方是**纯字符串**（openai-go 的 param.Opt[string]、openai-python 的
+	// Optional[str] 都是 string），但部分客户端会写成内容段数组。这里用自定义
+	// UnmarshalJSON 宽容收两种形态：数组汇总其中的文本，字符串原样。
+	// 原先声明成 string 时数组形态在 json.Unmarshal 阶段就失败，整条请求 400——
+	// 连 model / input 都读不到，客户端只会看到「模型是空的」这类离真因很远的报错。
+	Instructions    ResponsesInstructions  `json:"instructions,omitempty"`
 	Input           ResponsesInput         `json:"input"`
 	Text            *ResponsesText         `json:"text,omitempty"`
 	Tools           []ResponsesTool        `json:"tools,omitempty"`
@@ -23,6 +28,43 @@ type ResponsesRequest struct {
 	ServiceTier      *string `json:"service_tier,omitempty"`
 	SafetyIdentifier *string `json:"safety_identifier,omitempty"`
 	PromptCacheKey   *string `json:"prompt_cache_key,omitempty"`
+}
+
+// ResponsesInstructions 是 instructions 字段的多态容器：字符串或内容段数组。
+//
+// 只保留文本内容——instructions 的语义是「插入模型上下文的系统消息」，多模态段
+// （input_image 之类）无法表达成字符串，退化成其文本部分即可，不为它把整条请求判死。
+type ResponsesInstructions struct {
+	Text  string
+	Parts []interface{}
+}
+
+// UnmarshalJSON 实现自定义 JSON 反序列化，宽容收字符串与数组两种形态。
+func (i *ResponsesInstructions) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		i.Text = str
+		i.Parts = nil
+		return nil
+	}
+
+	var parts []interface{}
+	if err := json.Unmarshal(data, &parts); err == nil {
+		i.Parts = parts
+		i.Text = ""
+		return nil
+	}
+
+	// 其他形状（数字 / 对象 / 布尔）：当作未设置，不让整条请求 400。
+	return nil
+}
+
+// MarshalJSON 实现自定义 JSON 序列化：官方形状是字符串，数组形态原样保留。
+func (i ResponsesInstructions) MarshalJSON() ([]byte, error) {
+	if i.Parts != nil {
+		return json.Marshal(i.Parts)
+	}
+	return json.Marshal(i.Text)
 }
 
 // ResponsesText 文本输出配置（用于结构化输出等）。
@@ -146,9 +188,26 @@ type ResponsesTextOptions struct {
 }
 
 // ResponsesTextFormat 文本格式。
+//
+// **json_schema 有两种形态，都要认**：
+//   - 官方扁平原 {"type":"json_schema","name":"n","schema":{...},"strict":true}
+//     （openai-go SDK v2 的 responses.ResponseFormatTextJSONSchemaConfigParam 与
+//     openai-python 的 ResponseFormatTextConfigParam 都是这个形状：name / schema /
+//     strict 与 type 平级，无嵌套 json_schema 键）；
+//   - Chat Completions 嵌套形 {"type":"json_schema","json_schema":{...}}。
+//
+// 入站两者归一到 unified 的内嵌对象形状（{"name","schema","strict"}，即 Chat 协议的
+// 自然形状），出站按官方扁平原 emit。
 type ResponsesTextFormat struct {
-	Type       string          `json:"type"`                  // "text", "json_object", or "json_schema"
-	JSONSchema json.RawMessage `json:"json_schema,omitempty"` // only for "json_schema"
+	Type string `json:"type"` // "text", "json_object", or "json_schema"
+
+	// 官方扁平原的三个字段（与 type 平级）。
+	Name   string                 `json:"name,omitempty"`
+	Schema map[string]interface{} `json:"schema,omitempty"`
+	Strict *bool                  `json:"strict,omitempty"`
+
+	// 嵌套形（Chat Completions 风格）的 json_schema 子键。
+	JSONSchema json.RawMessage `json:"json_schema,omitempty"`
 }
 
 // ResponsesTool 工具定义。
@@ -174,8 +233,17 @@ type ResponsesToolChoice struct {
 }
 
 // ResponsesToolChoiceObject 对象格式的工具选择。
+//
+// **两种形态都要认**：
+//   - 官方扁平原 {"type":"function","name":"get_weather"}（OpenAI Responses 文档的形状）；
+//   - Chat Completions 嵌套形 {"type":"function","function":{"name":"get_weather"}}。
+//
+// 只认嵌套形会让官方扁平原入站后 name 落空——「必须调用某工具」静默退化为
+// 「不限制」，且日志里看不到任何丢弃痕迹。出站统一按官方扁平原 emit（见
+// transform_to_responses.go），故入站两形、出站一形，回灌路径自洽。
 type ResponsesToolChoiceObject struct {
 	Type     string                       `json:"type"` // "function"
+	Name     string                       `json:"name,omitempty"`
 	Function *ResponsesToolChoiceFunction `json:"function,omitempty"`
 }
 

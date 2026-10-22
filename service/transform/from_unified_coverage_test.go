@@ -95,6 +95,41 @@ func fullUnifiedRequest(t *testing.T) *models.UnifiedRequest {
 	}
 }
 
+// namedToolChoiceUnifiedRequest 构造一个「具名 tool_choice」的统一请求，
+// 用于把 tool_choice 的**对象形态**在各协议出站时 emit 成什么冻结成 golden。
+//
+// 为什么单独一个 fixture 而不是改 fullUnifiedRequest：full 的 tool_choice 是字符串
+// "auto"，覆盖不到对象形态——出站形状（Responses 扁平的 {"type","name"} vs Chat 嵌套的
+// {"type","function":{"name"}} vs Anthropic 的 {"type":"tool","name"}）三线各不相同，
+// 没有 golden 兜底时出站形状被改坏不会有人发现。
+func namedToolChoiceUnifiedRequest(t *testing.T) *models.UnifiedRequest {
+	t.Helper()
+
+	return &models.UnifiedRequest{
+		Model:    "coverage-model",
+		Messages: []models.UnifiedMessage{{Role: "user", Content: "hello"}},
+		ToolChoice: &models.UnifiedToolChoice{
+			ObjectValue: &models.UnifiedToolChoiceObject{
+				Type: "function",
+				Function: &models.UnifiedToolChoiceFunction{
+					Name: "get_weather",
+				},
+			},
+		},
+		Tools: []models.UnifiedTool{{
+			Type: "function",
+			Function: models.UnifiedFunc{
+				Name: "get_weather",
+				Parameters: map[string]any{
+					"type":       "object",
+					"properties": map[string]any{"city": map[string]any{"type": "string"}},
+					"required":   []string{"city"},
+				},
+			},
+		}},
+	}
+}
+
 // TestFullUnifiedRequest_CoversAllSerializableFields 防止 fixture 随统一模型演进而腐化。
 // 给 UnifiedRequest 新增可序列化字段却忘了填进 fullUnifiedRequest 时，此测试失败——
 // 否则新字段会静默游离在 golden 覆盖之外，等于覆盖矩阵有洞而没人知道。
@@ -174,6 +209,7 @@ func TestFromUnifiedCoverage_Golden(t *testing.T) {
 	}{
 		{name: "full", build: fullUnifiedRequest},
 		{name: "reasoning_effort_only", build: reasoningEffortOnlyUnifiedRequest},
+		{name: "named_tool_choice", build: namedToolChoiceUnifiedRequest},
 	}
 
 	formats := []consts.WireFormat{consts.FormatOpenAIChat, consts.FormatOpenAIResponses, consts.FormatAnthropic}

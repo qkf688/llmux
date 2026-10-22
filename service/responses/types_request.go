@@ -13,7 +13,12 @@ type ResponsesRequest struct {
 	// UnmarshalJSON 宽容收两种形态：数组汇总其中的文本，字符串原样。
 	// 原先声明成 string 时数组形态在 json.Unmarshal 阶段就失败，整条请求 400——
 	// 连 model / input 都读不到，客户端只会看到「模型是空的」这类离真因很远的报错。
-	Instructions    ResponsesInstructions  `json:"instructions,omitempty"`
+	//
+	// 用指针是为了让 omitempty 真正生效：omitempty 对 struct 不生效（非指针 struct 恒非零），
+	// 值形态会让每条出站请求都带上 `"instructions":""`——官方 SDK 未设置时不发该键，
+	// 恒出现的空键会给日志/抓包对比制造噪声、也与「按官方形状 emit」的契约不符。
+	// 指针还顺带区分「未设置」（nil）与「显式空串」（&{Text:""}）两种状态。
+	Instructions    *ResponsesInstructions `json:"instructions,omitempty"`
 	Input           ResponsesInput         `json:"input"`
 	Text            *ResponsesText         `json:"text,omitempty"`
 	Tools           []ResponsesTool        `json:"tools,omitempty"`
@@ -202,9 +207,14 @@ type ResponsesTextFormat struct {
 	Type string `json:"type"` // "text", "json_object", or "json_schema"
 
 	// 官方扁平原的三个字段（与 type 平级）。
-	Name   string                 `json:"name,omitempty"`
-	Schema map[string]interface{} `json:"schema,omitempty"`
-	Strict *bool                  `json:"strict,omitempty"`
+	//
+	// Schema 用 json.RawMessage 而非 map[string]interface{}：JSON Schema 规范允许根
+	// schema 是布尔（true=任意值、false=不允许任何值）或数组，声明成 map 会让这类
+	// 合法请求在 json.Unmarshal 阶段整条 400——而「为支持扁平形而新增字段」不该把
+	// 原本能过的请求变窄。raw 形态也让出站拆平时能原样透传，不必按类型分支。
+	Name   string          `json:"name,omitempty"`
+	Schema json.RawMessage `json:"schema,omitempty"`
+	Strict *bool           `json:"strict,omitempty"`
 
 	// 嵌套形（Chat Completions 风格）的 json_schema 子键。
 	JSONSchema json.RawMessage `json:"json_schema,omitempty"`

@@ -60,6 +60,7 @@ service/modelsync/config.go  # ProviderModelCatalog 类型 + GetProviderModelCat
 - **工厂层 OCP**：实现接口 + `init` 中 `Register` 与 `RegisterMetadata`，不改 `New` 分发 switch
 - **外围未完全 OCP（现状）**：仍可能出现 type 特判（如 auth 解析、structured 测试、`AllMetadata` preferred 顺序、chat 出站预处理仅部分 style）；新 type 需 grep 外围分支
 - OpenAI 兼容供应商优先嵌入 `openaiBase` 并设置 `endpointPath`；模板/TestBody 等同构常量可能重复出现在 `meta_bodies.go`
+- **诊断测试体的形状须与该协议的真实出站形状同源**（2026-10-22）：`meta_bodies.go` 的 `StructuredBody` 等是**手写**的 JSON 字符串，而真实出站由转换层装配（如 Responses 的 `service/responses` 的 `buildResponsesTextFormat`）。两处手写同一语义的形状一旦漂移，检测结论与真实流量行为会相反——曾出现检测用 Chat 的嵌套形 `{"type":"json_schema","json_schema":{...}}`，而真 OpenAI Responses 端点只认扁平形 `{"type":"json_schema","name":...,"schema":...,"strict":...}`，结果是「端点明明支持结构化输出，检测却判不支持」。契约由 `providers/meta_structured_body_test.go` 锁住（Responses 检测体必须是扁平三键且不得带嵌套 `json_schema` 子键）；新增协议或改形状时**同步改检测体**，别只改一边
 - 黑名单影响虚拟模型候选池过滤（消费方在 virtualmodel/chat，不在本模块写选路）
 - **`Models()` 判定上游是否成功必须走 `common.IsPassingStatus`**（Stage 5，2026-09-17）：本模块两处 `Models()`（`openaiBase` / `Anthropic`）曾各自写严格 `== 200`，与诊断侧 2xx 口径分叉——回 201 的兼容网关拉不到模型列表只是显性症状，同口径在健康检查处会**自动停用关联**。providers 层禁止 import service 子包（依赖方向），故判定落在 `common`，机械执法见 `gate_upstream_status_test.go`、约定见 `framework-conventions.md §6`
 - **`Models()` 成功路径读体上限（Stage 27，2026-09-27）**：两处 `Models()` 解码前经 `common.ReadModelsListBody`（上限 `common.ModelsListReadLimitBytes` 10 MiB，量级依据：每模型 ~100-200B、聚合商数百模型 ≈ 100 KiB，10 MiB 为数百倍余量；刻意区别于诊断探针的 1 MiB——清单体量天然大一个数量级）——此前无上限整读，上游异常/被篡改时可被灌进任意体量；达上限视为截断按解码失败处置（错误文本含 `read cap` 与状态码）

@@ -319,7 +319,14 @@ func convertToolsToUnified(tools []ResponsesTool) []models.UnifiedTool {
 //
 // 官方形状是纯字符串；数组形态（非官方写法）汇总其中各段的文本。
 // 数组里有多段时用换行连接——各段通常是独立句子，粘连会改变语义。
-func instructionsText(instr ResponsesInstructions) string {
+//
+// 入参是**指针**：未设置（nil）与「设为空串」在**序列化层**是两件事——指针 + omitempty
+// 才能让「未设置」的请求根本不带这个键；取值层面两者都归到空串（统一模型的 System
+// 不区分「没给」与「给了空串」）。
+func instructionsText(instr *ResponsesInstructions) string {
+	if instr == nil {
+		return ""
+	}
 	if instr.Parts == nil {
 		return instr.Text
 	}
@@ -357,37 +364,41 @@ func instructionsText(instr ResponsesInstructions) string {
 // 既有承载方式——归一到它，Chat / Anthropic 两条出站路径都不用改。
 //
 // 官方扁平原的 name / schema / strict 与 type 平级；嵌套形的同名三键在
-// json_schema 子对象里。两形给的信息等价，故取「官方扁平优先、嵌套兜底」。
+// json_schema 子对象里。两形给的信息等价，故**官方扁平优先**：客户端同时给出
+// 两形时（迁移期客户端、或误把 Chat 形状抄进 Responses 请求）以官方形状为准，
+// 嵌套形只在扁平三键全缺时兜底。
 func normalizeResponsesJSONSchema(format *ResponsesTextFormat) json.RawMessage {
 	if format == nil {
 		return nil
 	}
 
-	// 嵌套形优先判定：它整体在 json_schema 子键里，与扁平形的顶层键不冲突。
+	// 官方扁平优先：任一扁平键存在即按扁平形组装。注意 Schema 是 RawMessage，
+	// 判 nil 而不是判长度——`schema:false` 是合法值（长度非 0），不能漏判。
+	if format.Name != "" || format.Schema != nil || format.Strict != nil {
+		normalized := map[string]interface{}{}
+		if format.Name != "" {
+			normalized["name"] = format.Name
+		}
+		if format.Schema != nil {
+			// 原样透传：布尔 / 数组 / 对象三种合法形态都不该在网关侧被判非法。
+			normalized["schema"] = json.RawMessage(format.Schema)
+		}
+		if format.Strict != nil {
+			normalized["strict"] = *format.Strict
+		}
+		raw, err := json.Marshal(normalized)
+		if err != nil {
+			return nil
+		}
+		return raw
+	}
+
+	// 嵌套形兜底：扁平三键全缺时才有意义。
 	if len(format.JSONSchema) > 0 {
 		return format.JSONSchema
 	}
 
-	if format.Name == "" && format.Schema == nil && format.Strict == nil {
-		return nil
-	}
-
-	normalized := map[string]interface{}{}
-	if format.Name != "" {
-		normalized["name"] = format.Name
-	}
-	if format.Schema != nil {
-		normalized["schema"] = format.Schema
-	}
-	if format.Strict != nil {
-		normalized["strict"] = *format.Strict
-	}
-
-	raw, err := json.Marshal(normalized)
-	if err != nil {
-		return nil
-	}
-	return raw
+	return nil
 }
 
 func extractTextFromParts(parts []interface{}) string {

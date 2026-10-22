@@ -139,17 +139,20 @@ const (
 		}
 	}`
 
+	// Responses 的 text.format 官方是**扁平**形：name / schema / strict 与 type 平级，
+	// 无嵌套 json_schema 子键（openai-go v2 的 ResponseFormatTextJSONSchemaConfigParam 与
+	// openai-python 的 ResponseFormatTextConfigParam 都是这个形状）。曾写成嵌套形（Chat 的
+	// response_format 形状），而被检测的真端点会拒 → 能力被误判成「不支持结构化输出」。
+	// 该形状须与 service/responses 的 buildResponsesTextFormat 出站结果保持同源。
 	structuredBodyOpenAIRes = `{
 		"model": "gpt-5-nano",
 		"input": "请严格按 JSON Schema 输出一个 JSON 对象，不要输出任何额外文本。",
 		"text": {
 			"format": {
 				"type": "json_schema",
-				"json_schema": {
-					"name": "structured_output_test",
-					"strict": true,
-					"schema": ` + structuredOutputSchema + `
-				}
+				"name": "structured_output_test",
+				"strict": true,
+				"schema": ` + structuredOutputSchema + `
 			}
 		}
 	}`

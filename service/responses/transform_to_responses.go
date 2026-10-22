@@ -16,8 +16,18 @@ func TransformFromUnified(unified *models.UnifiedRequest) ([]byte, error) {
 	unified = unified.SanitizedForProvider()
 
 	req := ResponsesRequest{
-		Model:        unified.Model,
-		Instructions: ResponsesInstructions{Text: unified.System},
+		Model: unified.Model,
+	}
+
+	// instructions 只在有内容时 emit：官方 SDK 未设置时根本不发这个键，
+	// 而 `omitempty` 对「非指针 struct」不生效（恒非零），值形态会让每条出站请求
+	// 都带一个 `"instructions":""`——恒出现的空键既给抓包对比制造噪声，也与
+	// 「按官方形状 emit」的契约不符。
+	//
+	// 判据是「统一模型的 System 是否为空」：统一层不区分「客户端没给 instructions」
+	// 与「客户端给了空串」（两者取值都是空串），故空即视为未设置、不发该键。
+	if unified.System != "" {
+		req.Instructions = &ResponsesInstructions{Text: unified.System}
 	}
 
 	if unified.Stream {
@@ -279,33 +289,48 @@ func unifiedPartsToResponsesContent(role string, parts []models.UnifiedMessageCo
 // ResponseFormatTextConfigParam 都是这个形状）。
 //
 // 统一模型承载的是内嵌对象 {"name","schema","strict"}（Chat 协议的自然形状），
-// 故出站前把内嵌对象拆平。拆不出三个键时（schema 本身不是对象）按原样塞进
-// json_schema 子键——那不是官方形状，但比整个 format 丢掉更接近客户端意图。
+// 故出站前把内嵌对象拆平。
+//
+// **schema 按 raw 原样带走，不做类型断言**：JSON Schema 的根可以是对象、布尔或数组，
+// 断言成 map 会在非对象时静默丢字段（曾出现「name 留着、schema 消失」的半截 format，
+// 上游要么 400 要么退化成不受约束的自由输出——后者更难发现）。拆**不出任何
+// name/schema/strict 键**时整段回退到嵌套形，保证内嵌对象无论什么形状都不丢信息。
 func buildResponsesTextFormat(format *models.UnifiedResponseFormat) *ResponsesTextFormat {
 	out := &ResponsesTextFormat{Type: format.Type}
 	if len(format.JSONSchema) == 0 {
 		return out
 	}
 
-	var embedded map[string]interface{}
+	var embedded map[string]json.RawMessage
 	if err := json.Unmarshal(format.JSONSchema, &embedded); err != nil {
+		// 内嵌值本身不是对象：整段当嵌套形原样带走。
 		out.JSONSchema = format.JSONSchema
 		return out
 	}
 
-	if name, ok := embedded["name"].(string); ok {
-		out.Name = name
+	var name string
+	if raw, ok := embedded["name"]; ok {
+		_ = json.Unmarshal(raw, &name)
 	}
-	if schema, ok := embedded["schema"]; ok {
-		out.Schema, _ = schema.(map[string]interface{})
+	var strict bool
+	strictPresent := false
+	if raw, ok := embedded["strict"]; ok {
+		strictPresent = json.Unmarshal(raw, &strict) == nil
 	}
-	if strict, ok := embedded["strict"].(bool); ok {
-		out.Strict = &strict
+	schemaRaw, schemaPresent := embedded["schema"]
+
+	if name == "" && !schemaPresent && !strictPresent {
+		// 一个键都没拿到：不是 {name,schema,strict} 形状，原样保留。
+		out.JSONSchema = format.JSONSchema
+		return out
 	}
 
-	// 三个键一个都没拆出来：内嵌对象不是 {name,schema,strict} 形状，原样保留。
-	if out.Name == "" && out.Schema == nil && out.Strict == nil {
-		out.JSONSchema = format.JSONSchema
+	out.Name = name
+	if schemaPresent {
+		out.Schema = schemaRaw
+	}
+	if strictPresent {
+		out.Strict = &strict
 	}
 	return out
 }

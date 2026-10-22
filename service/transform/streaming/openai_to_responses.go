@@ -67,15 +67,16 @@ func handleRealtimeOpenAIToResponses(state *realtimeStreamState, data string) er
 		return err
 	}
 
-	// finish_reason 的判定必须放在 delta 断言之前：finish 只依赖 choice，
-	// 与 delta 无关。上游末包常写成 {"choices":[{"index":0,"finish_reason":"stop"}]}
-	//（不带 delta 键），若先断言 delta 再看 finish，这帧会被整条丢掉，
-	// 走不到收尾分支 → 整条流永不发 response.completed，客户端拿到悬空流。
-	if finishReason := maputil.String(choice, "finish_reason"); finishReason != "" {
-		return finishOpenAIToResponsesStream(state, chunk, finishReason)
-	}
+	// finish_reason 只依赖 choice、不依赖 delta，但**不能在这里提前 return**：
+	// 上游常把最后一截正文/工具参数与结束标记合在同一个 chunk
+	//（`{"delta":{"content":"末段"},"finish_reason":"stop"}`，本仓 testapi 与
+	// credprobe 的测试服务端都是此形状）。提前 return 会把该帧的 delta 整段吃掉，
+	// 表现为正文少最后一截、工具参数变空串、finish_reason=tool_calls 被降级成
+	// 普通结束。故先处理 delta（缺失时按空增量），再走收尾。
+	finishReason := maputil.String(choice, "finish_reason")
 
 	// delta 缺失或为 null 的帧不带任何增量内容，按空增量处理后继续。
+	// 这也是「末包不带 delta 键」能走到收尾的前提：不因 delta 断言失败而丢帧。
 	delta, _ := choice["delta"].(map[string]interface{})
 
 	role := maputil.String(delta, "role")
@@ -124,6 +125,11 @@ func handleRealtimeOpenAIToResponses(state *realtimeStreamState, data string) er
 		if err := emitOpenAIToResponsesToolCalls(state, toolCalls); err != nil {
 			return err
 		}
+	}
+
+	// 增量处理完再收尾：该帧的 delta（若有）已经写出，finish 只决定终态。
+	if finishReason != "" {
+		return finishOpenAIToResponsesStream(state, chunk, finishReason)
 	}
 
 	return nil
@@ -419,6 +425,14 @@ func emitOpenAIToResponsesOutputFinalization(state *realtimeStreamState) error {
 	}
 	state.openAIOutputClosed = true
 
+	// reasoning 的收尾必须独立于 message 项是否存在：上游只给 reasoning_content、
+	// 不给 role/content 时（推理模型先思考再调工具/结束的常见形态），message 项
+	// 从未开出，若把它写进 message 分支内部就会被下面的早退挡掉——表现为
+	// reasoning 项开了不关、且 response.completed.output 里没有 reasoning。
+	if err := emitOpenAIReasoningFinalization(state); err != nil {
+		return err
+	}
+
 	// message 项的收尾只对「开过」的项发：从未 output_item.added 过的项
 	// （上游首帧即 finish_reason、或整条流不带 role 且无内容）若发 done，
 	// 客户端会看到凭空冒出的 output_index——「关了但没开过」同样是协议违规。
@@ -428,48 +442,6 @@ func emitOpenAIToResponsesOutputFinalization(state *realtimeStreamState) error {
 	}
 
 	msgIndex := ensureMessageOutputIndex(state)
-
-	// 如果有 reasoning 内容，发送 reasoning 完成事件
-	if state.hasReasoningItem && state.accumulatedReasoning != "" {
-		reasoningTextDone := map[string]interface{}{
-			"type":            "response.reasoning_summary_text.done",
-			"sequence_number": nextRealtimeSequence(state),
-			"output_index":    state.reasoningOutputIndex,
-			"item_id":         state.reasoningItemID,
-			"summary_index":   0,
-			"text":            state.accumulatedReasoning,
-		}
-		if err := writeRealtimeOrderedData(state, reasoningTextDone); err != nil {
-			return err
-		}
-
-		reasoningPartDone := map[string]interface{}{
-			"type":            "response.reasoning_summary_part.done",
-			"sequence_number": nextRealtimeSequence(state),
-			"output_index":    state.reasoningOutputIndex,
-			"item_id":         state.reasoningItemID,
-			"summary_index":   0,
-			"part": map[string]interface{}{
-				"type": "summary_text",
-				"text": state.accumulatedReasoning,
-			},
-		}
-		if err := writeRealtimeOrderedData(state, reasoningPartDone); err != nil {
-			return err
-		}
-
-		state.responsesOutput.set(state.reasoningOutputIndex, map[string]interface{}{
-			"id":   state.reasoningItemID,
-			"type": "reasoning",
-			"summary": []map[string]interface{}{
-				{
-					"type": "summary_text",
-					"text": state.accumulatedReasoning,
-				},
-			},
-			"status": "completed",
-		})
-	}
 
 	outputTextDone := map[string]interface{}{
 		"type":            "response.output_text.done",
@@ -587,6 +559,63 @@ func flushPendingOpenAIToResponsesCompleted(state *realtimeStreamState) error {
 
 	state.openAIFinalized = true
 	return writeRealtimeOrderedData(state, completed)
+}
+
+// emitOpenAIReasoningFinalization 发出 reasoning 项的收尾事件并把它写入 output store。
+//
+// **为什么必须独立成函数**：reasoning 项的生命周期与 message 项无关——上游可能
+// 只给 reasoning_content、不给 role/content（推理模型先思考再调工具/结束）。
+// 曾把它写在 message 分支内部，被「message 没开就早退」挡掉，导致 reasoning
+// 开了不关、且 response.completed.output 里完全没有 reasoning 项。
+//
+// 写入 store 才让 emitResponsesOutputItemFinalization 的 pendingItems() 扫得到它
+// ——那一层的判据是「进了 store 就算开了」。
+func emitOpenAIReasoningFinalization(state *realtimeStreamState) error {
+	if !state.hasReasoningItem || state.accumulatedReasoning == "" {
+		return nil
+	}
+
+	reasoningTextDone := map[string]interface{}{
+		"type":            "response.reasoning_summary_text.done",
+		"sequence_number": nextRealtimeSequence(state),
+		"output_index":    state.reasoningOutputIndex,
+		"item_id":         state.reasoningItemID,
+		"summary_index":   0,
+		"text":            state.accumulatedReasoning,
+	}
+	if err := writeRealtimeOrderedData(state, reasoningTextDone); err != nil {
+		return err
+	}
+
+	reasoningPartDone := map[string]interface{}{
+		"type":            "response.reasoning_summary_part.done",
+		"sequence_number": nextRealtimeSequence(state),
+		"output_index":    state.reasoningOutputIndex,
+		"item_id":         state.reasoningItemID,
+		"summary_index":   0,
+		"part": map[string]interface{}{
+			"type": "summary_text",
+			"text": state.accumulatedReasoning,
+		},
+	}
+	if err := writeRealtimeOrderedData(state, reasoningPartDone); err != nil {
+		return err
+	}
+
+	// 写入 store：response.completed 的 output 快照从这里取，
+	// emitResponsesOutputItemFinalization 的 pendingItems() 也据此判定「这个项开过」。
+	state.responsesOutput.set(state.reasoningOutputIndex, map[string]interface{}{
+		"id":   state.reasoningItemID,
+		"type": "reasoning",
+		"summary": []map[string]interface{}{
+			{
+				"type": "summary_text",
+				"text": state.accumulatedReasoning,
+			},
+		},
+		"status": "completed",
+	})
+	return nil
 }
 
 // finalizeOpenAIToResponsesStream 是本流的收尾出口：保证开了的 output item 全部

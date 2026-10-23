@@ -82,13 +82,14 @@ type BatchImportData struct {
 	Rows     []BatchImportRow `json:"rows"`
 }
 
-// AutoPoolImportRequest 「自动池 + 凭据」一步式落库的请求体。
-// Name 由前端按「供应商名·分组名」拼好（命名口径单一来源在前端），后端只负责重名时
-// 加序号后缀兜底，保证「同名不报错、池名唯一」。
+// AutoPoolImportRequest 「专属池 + 凭据」一步式落库的请求体。
+// 只收两个原语（供应商名、分组名）+ 待导入的 Key：池名与备注由服务端按统一口径生成
+// （autoPoolIdentity），前端不参与命名——同一规则两处实现必然漂移。
+// 池名重名时服务端加序号后缀兜底，保证「同名不报错、池名唯一」。
 type AutoPoolImportRequest struct {
-	Name string   `json:"name"`
-	Note string   `json:"note"`
-	Keys []string `json:"keys"`
+	ProviderName string   `json:"provider_name"`
+	GroupName    string   `json:"group_name"`
+	Keys         []string `json:"keys"`
 }
 
 // AutoPoolImportData 自动池创建 + 凭据导入结果：池标识 + 批量导入逐行回显。

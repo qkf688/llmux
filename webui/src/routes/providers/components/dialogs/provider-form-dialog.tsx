@@ -30,7 +30,6 @@ import { Switch } from "@/components/ui/switch";
 import type { Provider, ProviderTemplate } from "@/lib/api";
 import type { ProviderFormValues } from "../../form-schema";
 import { getActiveProviderExtras } from "../../form-fields";
-import { autoPoolMeta } from "../../utils/config";
 import { EndpointsSection, GroupsSection, SupportTypesField } from "./provider-schedule-fields";
 
 interface ProviderFormDialogProps {
@@ -104,8 +103,12 @@ export function ProviderFormDialog({
         return data;
       }
       const groupName = form.getValues(`groups.${groupIndex}.name`) ?? "";
-      const meta = autoPoolMeta(form.getValues("name") ?? "", groupName, groupIndex);
-      const data = await autoImport.mutateAsync({ ...meta, keys });
+      // 只传供应商名与分组名两个原语：池名与备注由服务端按统一口径生成，前端不参与命名。
+      const data = await autoImport.mutateAsync({
+        provider_name: form.getValues("name") ?? "",
+        group_name: groupName,
+        keys,
+      });
       form.setValue(`groups.${groupIndex}.poolId`, String(data.pool_id), { shouldDirty: true });
       form.setValue(`groups.${groupIndex}.mode`, "direct", { shouldDirty: true });
       toast.success(`已创建专属号池「${data.pool_name}」并导入 ${data.imported} 条凭据`);

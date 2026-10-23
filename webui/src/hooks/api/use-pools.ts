@@ -155,7 +155,7 @@ export function useBatchImportCredentials() {
 export function useAutoImportPoolCredentials() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { name: string; note?: string; keys: string[] }) =>
+    mutationFn: (body: { provider_name: string; group_name: string; keys: string[] }) =>
       autoImportPoolCredentials(body),
     onSuccess: (data) => {
       // 新池立刻并进列表缓存：否则号池列表要等 refetch 回来才认得它是专属池，

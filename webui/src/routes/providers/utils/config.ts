@@ -70,26 +70,6 @@ export function buildProviderPayload(values: ProviderFormValues, provider: Provi
   };
 }
 
-/**
- * 自动号池的命名与备注（单一来源）：「供应商名·分组名」。
- *
- * 为什么在前端拼：池在供应商保存之前就建好（用户点「添加 Key」即落库），
- * 那时分组还没有 id 可指，只能用「供应商名 + 分组名」这类人可读的组合标识。
- * 后端只负责重名时加序号后缀兜底，不参与命名口径。
- */
-export function autoPoolMeta(
-  providerName: string,
-  groupName: string,
-  groupIndex: number,
-): { name: string; note: string } {
-  const provider = providerName.trim() || "未命名供应商";
-  const group = groupName.trim() || `分组${groupIndex + 1}`;
-  return {
-    name: `${provider}·${group}`,
-    note: `供应商「${provider}」的分组「${group}」自动创建`,
-  };
-}
-
 function parseConfigToAdapterParts(
   config: string,
 ): Pick<ParsedProviderConfig, "base_url" | "beta" | "version" | "auth_type" | "openai_auth_type" | "custom_models"> {

@@ -121,15 +121,20 @@ export interface AutoPoolImportData extends BatchImportData {
 /**
  * POST /pools/auto/import —— 「供应商分组 → 添加 Key」的一步式落库：
  * 建一个专属号池（AutoCreated=true）并把粘贴的 Key 导进去。
- * name 由调用方按「供应商名·分组名」拼好；后端重名时自动加序号后缀，不会报「池名已存在」。
+ * 只传供应商名与分组名两个原语，池名与备注由服务端按统一口径生成；重名时服务端自动加
+ * 序号后缀，不会报「池名已存在」。
  */
 export async function autoImportPoolCredentials(body: {
-  name: string;
-  note?: string;
+  provider_name: string;
+  group_name: string;
   keys: string[];
 }): Promise<AutoPoolImportData> {
   return apiRequest<AutoPoolImportData>("/pools/auto/import", {
     method: "POST",
-    body: JSON.stringify({ name: body.name, note: body.note ?? "", keys: body.keys }),
+    body: JSON.stringify({
+      provider_name: body.provider_name,
+      group_name: body.group_name,
+      keys: body.keys,
+    }),
   });
 }

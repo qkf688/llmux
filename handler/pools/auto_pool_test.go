@@ -27,9 +27,14 @@ func autoImportViaHandler(t *testing.T, body string) (string, int) {
 	return w.Body.String(), w.Code
 }
 
-// autoImportBody 构造自动池导入请求体（key 内含控制字符时正确转义）。
-func autoImportBody(name string, keys ...string) string {
-	b, err := json.Marshal(map[string]any{"name": name, "keys": keys})
+// autoImportBody 构造专属池导入请求体（key 内含控制字符时正确转义）。
+// 只传两个原语：池名与备注由服务端按「供应商名·分组名」生成。
+func autoImportBody(providerName, groupName string, keys ...string) string {
+	b, err := json.Marshal(map[string]any{
+		"provider_name": providerName,
+		"group_name":    groupName,
+		"keys":          keys,
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -42,7 +47,7 @@ func TestAutoPoolImport_CreatesPoolAndCredentials(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupCipherForCredTest(t)
 
-	body, code := autoImportViaHandler(t, autoImportBody("供应商A·默认组", "sk-auto-1-ABCD1234", "sk-auto-2-ABCD1234"))
+	body, code := autoImportViaHandler(t, autoImportBody("供应商A", "默认组", "sk-auto-1-ABCD1234", "sk-auto-2-ABCD1234"))
 	if code != 200 {
 		t.Fatalf("HTTP %d body=%s", code, body)
 	}
@@ -106,16 +111,16 @@ func TestAutoPoolImport_DuplicateNameGetsSuffix(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupCipherForCredTest(t)
 
-	first, _ := autoImportViaHandler(t, autoImportBody("重名池", "sk-dup-1-ABCD1234"))
-	if gjson.Get(first, "data.pool_name").String() != "重名池" {
+	first, _ := autoImportViaHandler(t, autoImportBody("重名供应商", "重名组", "sk-dup-1-ABCD1234"))
+	if gjson.Get(first, "data.pool_name").String() != "重名供应商·重名组" {
 		t.Fatalf("首个池名应为原名 body=%s", first)
 	}
-	second, secondCode := autoImportViaHandler(t, autoImportBody("重名池", "sk-dup-2-ABCD1234"))
+	second, secondCode := autoImportViaHandler(t, autoImportBody("重名供应商", "重名组", "sk-dup-2-ABCD1234"))
 	if secondCode != 200 || gjson.Get(second, "code").Int() != 200 {
 		t.Fatalf("重名应正常建池（不是 500）code=%d body=%s", secondCode, second)
 	}
-	if got := gjson.Get(second, "data.pool_name").String(); got != "重名池 (2)" {
-		t.Fatalf("重名池名=%q want %q body=%s", got, "重名池 (2)", second)
+	if got := gjson.Get(second, "data.pool_name").String(); got != "重名供应商·重名组 (2)" {
+		t.Fatalf("重名池名=%q want %q body=%s", got, "重名供应商·重名组 (2)", second)
 	}
 	if gjson.Get(second, "data.pool_id").Uint() == gjson.Get(first, "data.pool_id").Uint() {
 		t.Fatal("重名时应建新池，不复用旧池")
@@ -128,15 +133,17 @@ func TestAutoPoolImport_NameVariantsExhausted(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupCipherForCredTest(t)
 
+	// 池名由服务端按「供应商名·分组名」生成，这里用同一口径占满全部候选名。
+	const baseName = "占位供应商·占位组"
 	for i := 1; i <= autoPoolNameMaxAttempts; i++ {
-		name := "占位池"
+		name := baseName
 		if i > 1 {
-			name = fmt.Sprintf("占位池 (%d)", i)
+			name = fmt.Sprintf("%s (%d)", baseName, i)
 		}
 		createPoolViaHandler(t, fmt.Sprintf(`{"name":%q}`, name))
 	}
 
-	body, code := autoImportViaHandler(t, autoImportBody("占位池", "sk-exhaust-ABCD1234"))
+	body, code := autoImportViaHandler(t, autoImportBody("占位供应商", "占位组", "sk-exhaust-ABCD1234"))
 	if code != 200 || gjson.Get(body, "code").Int() != 400 {
 		t.Fatalf("变体用尽应 400 code=%d body=%s", code, body)
 	}
@@ -146,18 +153,20 @@ func TestAutoPoolImport_NameVariantsExhausted(t *testing.T) {
 	}
 }
 
-// TestAutoPoolImport_Validation 覆盖入参校验：空名/空 keys/超上限 400 且零落库，
+// TestAutoPoolImport_Validation 覆盖入参校验：空 keys/缺 keys/keys 非数组 400 且零落库，
 // cipher 未配置 500。
+//
+// 供应商名/分组名**不再**是必填项：池名由服务端按「供应商名·分组名」生成，空名走可读
+// 兜底（用户还没填完就点了「添加 Key」是正常流程，不该被拦）——见
+// TestAutoPoolImport_ServerOwnedNaming。
 func TestAutoPoolImport_Validation(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupCipherForCredTest(t)
 
 	cases := map[string]string{
-		"空名":      `{"name":"","keys":["sk-v-1-ABCD1234"]}`,
-		"缺名":      `{"keys":["sk-v-2-ABCD1234"]}`,
-		"空keys":   `{"name":"v池","keys":[]}`,
-		"缺keys":   `{"name":"v池"}`,
-		"keys非数组": `{"name":"v池","keys":"sk-v-3-ABCD1234"}`,
+		"空keys":   `{"provider_name":"v","group_name":"g","keys":[]}`,
+		"缺keys":   `{"provider_name":"v","group_name":"g"}`,
+		"keys非数组": `{"provider_name":"v","group_name":"g","keys":"sk-v-3-ABCD1234"}`,
 	}
 	for name, payload := range cases {
 		body, _ := autoImportViaHandler(t, payload)
@@ -171,13 +180,13 @@ func TestAutoPoolImport_Validation(t *testing.T) {
 	for i := range tooMany {
 		tooMany[i] = "sk-oversize-" + strconv.Itoa(i) + "-ABCD1234"
 	}
-	body, _ := autoImportViaHandler(t, autoImportBody("超限池", tooMany...))
+	body, _ := autoImportViaHandler(t, autoImportBody("超限供应商", "超限组", tooMany...))
 	if gjson.Get(body, "code").Int() != 400 {
 		t.Fatalf("超限应400 body=%s", body)
 	}
 	pools, _ := repository.Default().Pool.List(t.Context(), repository.PoolFilter{})
 	for _, p := range pools {
-		if p.Name == "超限池" {
+		if p.Name == "超限供应商·超限组" {
 			t.Fatal("超限请求不应建池")
 		}
 	}
@@ -186,9 +195,41 @@ func TestAutoPoolImport_Validation(t *testing.T) {
 	prev := credentialcrypto.Default()
 	credentialcrypto.SetDefault(nil)
 	t.Cleanup(func() { credentialcrypto.SetDefault(prev) })
-	body2, _ := autoImportViaHandler(t, autoImportBody("无cipher池", "sk-nocipher-ABCD1234"))
+	body2, _ := autoImportViaHandler(t, autoImportBody("无cipher供应商", "无cipher组", "sk-nocipher-ABCD1234"))
 	if gjson.Get(body2, "code").Int() != 500 {
 		t.Fatalf("无 cipher 应500 body=%s", body2)
+	}
+}
+
+// TestAutoPoolImport_ServerOwnedNaming 锁「命名与备注口径在服务端」这条契约：
+// 池名恒为「供应商名·分组名」、备注恒由服务端生成，前端无从指定；
+// 供应商名/分组名为空时走可读兜底（不报错、不留空名）。
+func TestAutoPoolImport_ServerOwnedNaming(t *testing.T) {
+	testsupport.InitTestDB(t)
+	setupCipherForCredTest(t)
+
+	// 前端传 name/note 不生效：那两个键不在请求体契约里，被忽略，池名照服务端口径生成。
+	raw := `{"provider_name":"供应商B","group_name":"分组B","name":"前端指定名","note":"前端指定备注","keys":["sk-naming-ABCD1234"]}`
+	body, code := autoImportViaHandler(t, raw)
+	if code != 200 {
+		t.Fatalf("HTTP %d body=%s", code, body)
+	}
+	if got := gjson.Get(body, "data.pool_name").String(); got != "供应商B·分组B" {
+		t.Fatalf("池名应由服务端生成，got=%q body=%s", got, body)
+	}
+	poolID := gjson.Get(body, "data.pool_id").Uint()
+	pool, err := repository.Default().Pool.Get(t.Context(), uint(poolID))
+	if err != nil {
+		t.Fatalf("get pool: %v", err)
+	}
+	if want := "供应商「供应商B」的分组「分组B」自动创建"; pool.Note != want {
+		t.Fatalf("备注应由服务端生成，got=%q want=%q", pool.Note, want)
+	}
+
+	// 空名兜底：用户还没填完供应商名/分组名就点了「添加 Key」，不该被拦，也不该留空名。
+	empty, _ := autoImportViaHandler(t, autoImportBody("", "", "sk-fallback-ABCD1234"))
+	if got := gjson.Get(empty, "data.pool_name").String(); got != "未命名供应商·未命名分组" {
+		t.Fatalf("空名兜底池名=%q body=%s", got, empty)
 	}
 }
 
@@ -204,7 +245,7 @@ func TestAutoPoolImport_RouteNotShadowingBatchImport(t *testing.T) {
 
 	// 静态段走自动池导入（池不存在于请求体语义，靠 name+keys 建池）
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("POST", "/pools/auto/import", strings.NewReader(autoImportBody("路由池", "sk-route-1-ABCD1234")))
+	req := httptest.NewRequest("POST", "/pools/auto/import", strings.NewReader(autoImportBody("路由供应商", "路由组", "sk-route-1-ABCD1234")))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 	if w.Code != 200 || gjson.Get(w.Body.String(), "data.pool_id").Uint() == 0 {
@@ -236,13 +277,13 @@ func TestAutoPoolImport_BatchFailureRemovesEmptyPool(t *testing.T) {
 	repository.Default().Credential = failingHashesRepo{prev}
 	t.Cleanup(func() { repository.Default().Credential = prev })
 
-	body, code := autoImportViaHandler(t, autoImportBody("整批失败池", "sk-batchfail-ABCD1234"))
+	body, code := autoImportViaHandler(t, autoImportBody("整批失败供应商", "整批失败组", "sk-batchfail-ABCD1234"))
 	if code != 500 {
 		t.Fatalf("整批失败应500 body=%s", body)
 	}
 	pools, _ := repository.Default().Pool.List(t.Context(), repository.PoolFilter{})
 	for _, p := range pools {
-		if p.Name == "整批失败池" {
+		if p.Name == "整批失败供应商·整批失败组" {
 			t.Fatalf("整批失败后不应留下空池（pool %d）", p.ID)
 		}
 	}

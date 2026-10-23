@@ -109,6 +109,11 @@ describe("供应商弹窗「添加 Key」导入编排", () => {
     expect(apiMock.batchImport).not.toHaveBeenCalled();
     // 粘贴文本按行拆成 keys 数组交给后端（后端不做文本解析）
     expect(apiMock.autoImport.mock.calls[0][0].keys).toEqual(["sk-1", "sk-2"]);
+    // 只传供应商名与分组名两个原语：池名与备注由服务端按统一口径生成，前端不参与命名
+    expect(apiMock.autoImport.mock.calls[0][0].provider_name).toBe("供应商A");
+    expect(apiMock.autoImport.mock.calls[0][0].group_name).toBe("组一");
+    expect(apiMock.autoImport.mock.calls[0][0]).not.toHaveProperty("name");
+    expect(apiMock.autoImport.mock.calls[0][0]).not.toHaveProperty("note");
     await waitFor(() => {
       expect(formRef.current?.getValues("groups.0.poolId")).toBe("7");
       expect(formRef.current?.getValues("groups.0.mode")).toBe("direct");

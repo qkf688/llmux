@@ -14,14 +14,32 @@ import (
 	"github.com/qkf688/llmux/repository"
 )
 
-// defaultAutoPoolNote 自动池默认备注（调用方未指定时用）。
-const defaultAutoPoolNote = "供应商分组自动创建"
-
 // autoPoolNameMaxAttempts 自动池重名兜底的最大尝试次数（同名加 " (n)" 后缀）。
 const autoPoolNameMaxAttempts = 20
 
 // errAutoPoolNameTaken 池名变体用尽（同名太多）：业务条件，报 400 而不是内部故障。
 var errAutoPoolNameTaken = errors.New("pools: auto pool name variants exhausted")
+
+// autoPoolIdentity 由供应商名与分组名生成专属池的「名 + 备注」。
+//
+// 为什么口径在服务端：命名规则只有一处实现，前端不再拼名字——同一规则两处实现必然漂移
+// （前端拼「供应商名·分组名」、后端拼「供应商名_分组名」这类漂移，用户会看到两个口径）。
+//
+// 为什么空名不报错而是兜底：用户可能还没填完供应商名/分组名就点了「添加 Key」，
+// 这时拦住他等于把正常流程挡下来；池名是用户在号池页唯一能认出自己那批凭据的地方，
+// 空串在列表里无法区分，留可读占位比留空好。真正的归属关系由 key_groups.pool_id 承载，
+// 池名只是给人看的标识。
+func autoPoolIdentity(providerName, groupName string) (name, note string) {
+	provider := strings.TrimSpace(providerName)
+	if provider == "" {
+		provider = "未命名供应商"
+	}
+	group := strings.TrimSpace(groupName)
+	if group == "" {
+		group = "未命名分组"
+	}
+	return provider + "·" + group, fmt.Sprintf("供应商「%s」的分组「%s」自动创建", provider, group)
+}
 
 // createAutoPoolWithUniqueName 建一个专属号池并保证池名唯一：
 // 重名是常态而非异常（删过供应商再建同名、同名供应商的不同分组），直接报错会把用户的
@@ -61,7 +79,8 @@ func createAutoPoolWithUniqueName(ctx context.Context, base, note string) (*mode
 // 池已建好后的追加导入走既有端点 POST /pools/:id/credentials/batch/import。
 //
 // POST /api/pools/auto/import
-// 请求体 {"name": "供应商名·分组名", "note": "可选", "keys": ["sk-1", ...]}
+// 请求体 {"provider_name": "供应商名", "group_name": "分组名", "keys": ["sk-1", ...]}
+// 池名与备注由服务端按「供应商名·分组名」生成（autoPoolIdentity），前端不参与命名。
 // 响应 {"pool_id": 12, "pool_name": "...", "auto_created": true, "key_count": 2,
 // "total": n, "imported": n, "skipped": n,
 //
@@ -69,11 +88,6 @@ func createAutoPoolWithUniqueName(ctx context.Context, base, note string) (*mode
 func CreateAutoPoolWithCredentials(c *gin.Context) {
 	var req AutoPoolImportRequest
 	if !httpx.BindJSON(c, &req) {
-		return
-	}
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
-		httpresp.BadRequest(c, "Pool name is required")
 		return
 	}
 	if !validateImportKeys(c, req.Keys) {
@@ -86,10 +100,7 @@ func CreateAutoPoolWithCredentials(c *gin.Context) {
 		return
 	}
 
-	note := strings.TrimSpace(req.Note)
-	if note == "" {
-		note = defaultAutoPoolNote
-	}
+	name, note := autoPoolIdentity(req.ProviderName, req.GroupName)
 	pool, err := createAutoPoolWithUniqueName(ctx, name, note)
 	if err != nil {
 		// 变体名用尽是业务条件（同名太多），不是内部故障。

@@ -287,8 +287,11 @@ function GroupCard({
   // radio 的 id 必须在同页多张分组卡片间唯一：useId 保证（index 会随分组增删漂移）
   const idBase = useId();
 
-  // link 模式可选的池（专属池不进选项，理由见 linkablePoolOptions）
-  const linkablePools = linkablePoolOptions(pools, poolOption);
+  // link 模式可选的池：只列手建池，专属池一律不进（理由见 utils/group-mode.ts）
+  const linkablePools = linkablePoolOptions(pools);
+  // 当前绑定是否落在可关联列表里：不在（绑的是专属池 / 池已被删）时 Select 走占位——
+  // Radix 找不到匹配项时会把裸 pool_id 直接显示出来，用户看到的是一串数字。
+  const linkedPoolVisible = linkablePools.some((pool) => String(pool.id) === poolId);
 
   /**
    * 切模式：直接添加 = Key 只进该分组的专属池；关联号池 = Key 不归本表单管。
@@ -451,17 +454,25 @@ function GroupCard({
               <FormLabel>关联号池</FormLabel>
               <div className="flex items-center gap-2">
                 <FormControl>
-                  <Select value={field.value || undefined} onValueChange={field.onChange}>
+                  <Select
+                    value={linkedPoolVisible ? field.value || undefined : undefined}
+                    onValueChange={field.onChange}
+                  >
                     <SelectTrigger className="min-w-0 flex-1">
                       <SelectValue placeholder="选择号池（凭据在号池页管理）" />
                     </SelectTrigger>
                     <SelectContent>
-                      {linkablePools.map((pool) => (
-                        <SelectItem key={pool.id} value={String(pool.id)}>
-                          {pool.name}（{pool.keyCount} keys）
-                          {pool.autoCreated ? " · 专属池" : ""}
+                      {linkablePools.length === 0 ? (
+                        <SelectItem value="no-linkable-pool" disabled>
+                          没有可关联的手建号池
                         </SelectItem>
-                      ))}
+                      ) : (
+                        linkablePools.map((pool) => (
+                          <SelectItem key={pool.id} value={String(pool.id)}>
+                            {pool.name}（{pool.keyCount} keys）
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </FormControl>
@@ -484,6 +495,17 @@ function GroupCard({
                   <TooltipContent>查看号池详情（凭据列表 / 状态分布）</TooltipContent>
                 </Tooltip>
               </div>
+              {poolId && !linkedPoolVisible && (
+                <p className="text-xs text-muted-foreground">
+                  当前绑定的专属号池不会出现在关联列表里（专属号池只收自己分组的 Key，
+                  被多个分组共享会串凭据）。绑定保持不变，切回「直接添加」可继续使用它。
+                </p>
+              )}
+              {linkablePools.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  当前没有可关联的手建号池。到号池页新建一个手建号池后即可在此关联。
+                </p>
+              )}
               <FormMessage />
             </FormItem>
           )}

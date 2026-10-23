@@ -21,18 +21,14 @@ export function resolveGroupMode(
 }
 
 /**
- * link 模式下拉可选的号池：手建池 + 当前绑定的专属池。
+ * link 模式下拉可选的号池：**只有手建池**。
  *
- * 专属池不进选项：它是「专属某分组」的池，拿它当共享池关联会让两个分组共用一批凭据；
- * 而分组模式不落库（保存只提交 pool_id），下次打开这个供应商时该分组会被推回
- * 「直接添加」，「添加 Key」就把凭据写进了别人的池。
- * 当前绑定的池若本身是专属池（历史绑定 / 用户显式切过模式）仍要留在选项里，
- * 否则下拉显示空白，用户看不出自己绑的是哪个池。
+ * 专属池一律不进选项（当前绑定的那个也不例外）：专属池是「专属某分组」的池，
+ * 把它当共享池关联会让两个分组共用一批凭据。旧版会把「当前绑定的专属池」留在选项里，
+ * 好处是下拉不空、用户看得出自己绑了谁；代价是在没有手建池的库里，下拉里只剩它自己，
+ * 看着像「专属池可以关联」——实际是死路，用户会以为专属池被共享了。
+ * 现在改成：专属池不进选项，界面用占位 + 说明表达「当前未关联手建号池」。
  */
-export function linkablePoolOptions(
-  pools: PoolOption[],
-  current?: PoolOption,
-): PoolOption[] {
-  const manual = pools.filter((pool) => !pool.autoCreated);
-  return current?.autoCreated ? [...manual, current] : manual;
+export function linkablePoolOptions(pools: PoolOption[]): PoolOption[] {
+  return pools.filter((pool) => !pool.autoCreated);
 }

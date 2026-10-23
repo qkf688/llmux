@@ -301,6 +301,28 @@ describe("凭据分组区 - 取 Key 模式（直接添加 / 关联号池）", ()
     expect(screen.getByTestId("probe-pool-ids").textContent).toBe('["9",""]');
     expect(screen.getByTestId("probe-modes").textContent).toBe('["direct",""]');
   });
+
+  it("link 模式下绑的是专属池：下拉显示占位、不列专属池（专属池不是可关联项）", () => {
+    setPools([{ ID: 9, Name: "供应商A·默认组", KeyCount: 2, AutoCreated: true }]);
+    render(
+      <GroupsHarness
+        groups={[
+          { name: "组一", weight: 1, poolId: "9" },
+          { name: "组二", weight: 2, poolId: "" },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByRole("radio", { name: "关联号池" })[0]);
+
+    // 专属池不出现在关联下拉里：走占位文案，页面上也不再出现该池名
+    expect(screen.getAllByText("选择号池（凭据在号池页管理）").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/供应商A·默认组/)).toBeNull();
+    // 并说清专属池为什么不在列表里（否则用户以为被漏了）
+    expect(screen.getAllByText(/专属号池不会出现在关联列表里/).length).toBeGreaterThan(0);
+    // 绑定不被清掉：切回「直接添加」还能接着用自己的专属池
+    expect(screen.getByTestId("probe-pool-ids").textContent).toBe('["9",""]');
+  });
 });
 
 describe("link 模式可选号池（专属池不进关联选项）", () => {
@@ -311,8 +333,11 @@ describe("link 模式可选号池（专属池不进关联选项）", () => {
     expect(linkablePoolOptions([manual, auto])).toEqual([manual]);
   });
 
-  it("当前绑定的池本身是专属池时仍留在选项里（否则下拉空白、用户看不出绑了谁）", () => {
-    expect(linkablePoolOptions([manual, auto], auto)).toEqual([manual, auto]);
+  it("当前绑定的专属池也不进选项：专属池一律不作为可关联项", () => {
+    // 旧版会把当前绑定的专属池留在选项里，代价是没有手建池时下拉里只剩它自己，
+    // 看着像「专属池可以关联」——实际是死路，用户会以为专属池被共享了。
+    expect(linkablePoolOptions([manual, auto])).not.toContain(auto);
+    expect(linkablePoolOptions([auto])).toEqual([]);
   });
 });
 

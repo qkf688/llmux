@@ -7,7 +7,7 @@ import { PoolsAutoSection } from "./pools-auto-section";
 type PoolsListSectionProps = {
   /** 手建号池（主列表） */
   pools: PoolListItem[];
-  /** 系统自动创建的号池（折叠在主列表下方） */
+  /** 专属号池（折叠在主列表下方） */
   autoPools: PoolListItem[];
   isLoading?: boolean;
   isError?: boolean;

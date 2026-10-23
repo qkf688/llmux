@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/qkf688/llmux/models"
 	"gorm.io/gorm"
@@ -56,10 +55,7 @@ func (r *apiKeyRepo) Create(ctx context.Context, key *models.ApiKey) error {
 	if err == nil {
 		return nil
 	}
-	// glebarez/sqlite 未开启 TranslateError，唯一冲突以驱动原文抛出；
-	// 同时保留 ErrDuplicatedKey 分支，未来驱动行为变化不需回头改这里。
-	if errors.Is(err, gorm.ErrDuplicatedKey) ||
-		strings.Contains(err.Error(), "UNIQUE constraint failed: api_keys.api_key_hash") {
+	if isUniqueViolationOn(err, "api_keys.api_key_hash") {
 		return fmt.Errorf("%w: %w", err, ErrApiKeyExists)
 	}
 	return err

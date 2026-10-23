@@ -24,7 +24,8 @@ import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { usePoolOptions, type PoolOption } from "../../hooks/use-pool-options";
+import { usePoolOptions } from "../../hooks/use-pool-options";
+import { linkablePoolOptions, resolveGroupMode } from "../../utils/group-mode";
 import {
   PROTOCOL_LABEL,
   SUPPORTED_TYPE_OPTIONS,
@@ -260,23 +261,8 @@ function defaultGroup(): ProviderFormGroup {
 }
 
 /**
- * 分组取 Key 的模式解析：用户显式点选优先；没点选时按「当前绑定的号池是不是自动池」推导
- * （专属池 → 直接添加；手建池 → 关联号池）。
- *
- * 返回 null = 未知（号池列表还没回来）。此时**不猜**：先渲染占位，等列表到了再定模式。
- * 猜错的后果是 radio 在用户眼前跳变（先「直接添加」再翻成「关联号池」），比多等 100ms 难受得多。
+ * 分组取 Key 的模式解析与 link 模式可选池：见 utils/group-mode.ts（纯逻辑，单测直接打它）。
  */
-function resolveGroupMode(
-  poolId: string,
-  pool: PoolOption | undefined,
-  poolsReady: boolean,
-): ProviderGroupMode | null {
-  if (!poolId) return "direct";
-  if (!poolsReady) return null;
-  // 号池不在列表里（已删除）→ 退回关联模式，让用户重选一个存在的池
-  if (!pool) return "link";
-  return pool.autoCreated ? "direct" : "link";
-}
 
 /** 单个分组卡片：名称/价格权重 + 取 Key 模式（直接添加 / 关联号池）。 */
 function GroupCard({
@@ -291,7 +277,7 @@ function GroupCard({
   onAddKeys?: (groupIndex: number) => void;
 }) {
   const { control, setValue } = useFormContext<ProviderFormValues>();
-  const { options: pools, ready: poolsReady } = usePoolOptions();
+  const { options: pools, ready: poolsReady, error: poolsError } = usePoolOptions();
   const groups = useWatch({ control, name: "groups" }) ?? [];
   const poolId = groups[index]?.poolId ?? "";
   const selectedMode = groups[index]?.mode;
@@ -301,14 +287,21 @@ function GroupCard({
   // radio 的 id 必须在同页多张分组卡片间唯一：useId 保证（index 会随分组增删漂移）
   const idBase = useId();
 
+  // link 模式可选的池（专属池不进选项，理由见 linkablePoolOptions）
+  const linkablePools = linkablePoolOptions(pools, poolOption);
+
   /**
    * 切模式：直接添加 = Key 只进该分组的专属池；关联号池 = Key 不归本表单管。
-   * 切到「直接添加」时若当前绑的是手建池（或池已不存在）必须解绑——否则下一次「添加 Key」
+   * 切到「直接添加」时若当前绑的**确知是手建池**必须解绑——否则下一次「添加 Key」
    * 会把 Key 灌进用户的共享池，那不是专属池，等于悄悄改了用户原有池的内容。
+   *
+   * 只在「确知是手建池」时解绑：池还没进列表（刚建好、等列表刷新）不等于手建池，
+   * 那种情况下解绑会把刚建的专属池丢掉，用户白粘一次 Key。池确已被删则交给后端
+   * 校验（pool_id 不存在 → 400）报错，比静默解绑更可解释。
    */
   const handleModeChange = (next: string) => {
     setValue(`groups.${index}.mode`, next as ProviderGroupMode, { shouldDirty: true });
-    if (next === "direct" && poolId && poolOption?.autoCreated !== true) {
+    if (next === "direct" && poolId && poolOption && !poolOption.autoCreated) {
       setValue(`groups.${index}.poolId`, "", { shouldDirty: true });
     }
   };
@@ -362,7 +355,9 @@ function GroupCard({
       <div className="space-y-1.5">
         <FormLabel>凭据来源</FormLabel>
         {mode === null ? (
-          <p className="text-xs text-muted-foreground">加载号池信息…</p>
+          <p className="text-xs text-muted-foreground">
+            {poolsError ? "号池列表加载失败，请刷新后重试" : "加载号池信息…"}
+          </p>
         ) : (
           <RadioGroup value={mode} onValueChange={handleModeChange} className="flex flex-wrap gap-4">
             <div className="flex items-center gap-2">
@@ -461,9 +456,10 @@ function GroupCard({
                       <SelectValue placeholder="选择号池（凭据在号池页管理）" />
                     </SelectTrigger>
                     <SelectContent>
-                      {pools.map((pool) => (
+                      {linkablePools.map((pool) => (
                         <SelectItem key={pool.id} value={String(pool.id)}>
                           {pool.name}（{pool.keyCount} keys）
+                          {pool.autoCreated ? " · 专属池" : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>

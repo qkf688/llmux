@@ -3,6 +3,8 @@ package repository
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"sync"
 
 	"github.com/qkf688/llmux/models"
@@ -65,6 +67,22 @@ func (r *Repositories) RunInTx(ctx context.Context, fn func(txRepos *Repositorie
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		return fn(New(tx))
 	})
+}
+
+// isUniqueViolationOn 判断 err 是否是指定唯一索引上的冲突（例："pools.name"）。
+//
+// glebarez/sqlite 未开启 TranslateError，唯一冲突以驱动原文抛出；
+// 同时保留 ErrDuplicatedKey 分支，未来驱动行为变化不需回头改这里。
+// 语义与 api_keys 同口径：uniqueIndex 才是单一真相，调用方据此换名重试或报冲突，
+// 不做「先查后写」的预检（预检与写入之间有竞态窗口）。
+func isUniqueViolationOn(err error, index string) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return true
+	}
+	return strings.Contains(err.Error(), "UNIQUE constraint failed: "+index)
 }
 
 var (

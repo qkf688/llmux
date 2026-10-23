@@ -11,11 +11,14 @@ type PoolsAutoSectionProps = {
 };
 
 /**
- * 系统自动创建的号池折叠区。
+ * 专属号池折叠区。
  *
  * 这些池是供应商分组点「添加 Key」时自动建出来的专属池（pools.auto_created=true），
  * 数量多、平时不需要逐个看；但没人引用的孤儿池要能在这里找到并手动删掉，
  * 所以默认折叠、点标题展开，而不是从列表里藏起来。
+ *
+ * 术语与供应商弹窗一致叫「专属号池」（创建时用户看到的就是这个词）；
+ * 对照的一侧叫「手建号池」。
  */
 export function PoolsAutoSection({
   pools,
@@ -39,7 +42,7 @@ export function PoolsAutoSection({
         ) : (
           <ChevronRight className="size-4 shrink-0" />
         )}
-        系统自动创建的号池
+        专属号池
         <span className="text-xs font-normal text-muted-foreground">{pools.length} 个</span>
         <span className="text-xs font-normal text-muted-foreground">
           （供应商分组「添加 Key」时自动建出，专属该分组）

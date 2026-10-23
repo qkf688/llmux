@@ -158,6 +158,27 @@ export function useAutoImportPoolCredentials() {
     mutationFn: (body: { name: string; note?: string; keys: string[] }) =>
       autoImportPoolCredentials(body),
     onSuccess: (data) => {
+      // 新池立刻并进列表缓存：否则号池列表要等 refetch 回来才认得它是专属池，
+      // 这段窗口里「添加 Key」刚建好的池会被当成「不在列表里」→ 分组卡片显示成
+      // 「尚未添加凭据」、切模式时还会被误解绑。缓存里的这一行只是临时占位，
+      // 随后的 invalidatePoolList refetch 会用服务端真数据覆盖它。
+      qc.setQueriesData<PoolListItem[]>({ queryKey: poolKeys.lists() }, (old) => {
+        if (!old) return old;
+        const now = new Date().toISOString();
+        const created: PoolListItem = {
+          ID: data.pool_id,
+          Name: data.pool_name,
+          Note: "",
+          TestModel: "",
+          AutoCreated: data.auto_created,
+          CreatedAt: now,
+          UpdatedAt: now,
+          KeyCount: data.key_count,
+          StatusCounts: {},
+          ReferencedBy: 0,
+        };
+        return [...old.filter((p) => p.ID !== created.ID), created];
+      });
       invalidatePoolList(qc);
       void qc.invalidateQueries({ queryKey: [...poolKeys.all, "credentials", data.pool_id] });
     },

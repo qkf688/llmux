@@ -96,5 +96,10 @@ type AutoPoolImportRequest struct {
 type AutoPoolImportData struct {
 	PoolID   uint   `json:"pool_id"`
 	PoolName string `json:"pool_name"`
+	// AutoCreated 恒为 true（该端点只建专属池）：前端据此把新池并进号池列表缓存，
+	// 不必等列表 refetch 回来才认得它是专属池（否则模式推导与展示都靠猜）。
+	AutoCreated bool `json:"auto_created"`
+	// KeyCount 本次导入落库的凭据条数（= BatchImportData.Imported）：前端列表缓存用。
+	KeyCount int `json:"key_count"`
 	BatchImportData
 }

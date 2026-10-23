@@ -2,10 +2,18 @@ package repository
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/qkf688/llmux/models"
 	"gorm.io/gorm"
 )
+
+// ErrPoolNameTaken 表示建池时撞了 pools.name 唯一索引（同名号池已存在）。
+// 与 ErrApiKeyExists 同口径：查重语义走「DB 撞库翻译」而非应用层预查
+// （预检查询与写入之间存在竞态窗口，uniqueIndex 才是单一真相），
+// 调用方据此换名重试或映射 HTTP 冲突，而不是把它当成内部故障报 500。
+var ErrPoolNameTaken = errors.New("repository: pool name already taken")
 
 // PoolRepo 封装号池（pools）实体的数据访问。
 type PoolRepo interface {
@@ -79,7 +87,15 @@ func (r *poolRepo) ExistsByName(ctx context.Context, name string) (bool, error) 
 }
 
 func (r *poolRepo) Create(ctx context.Context, pool *models.Pool) error {
-	return r.db.WithContext(ctx).Create(pool).Error
+	err := r.db.WithContext(ctx).Create(pool).Error
+	if err == nil {
+		return nil
+	}
+	// 同名不静默：撞唯一索引翻译成 ErrPoolNameTaken，由调用方决定换名重试还是报冲突。
+	if isUniqueViolationOn(err, "pools.name") {
+		return fmt.Errorf("%w: %w", err, ErrPoolNameTaken)
+	}
+	return err
 }
 
 func (r *poolRepo) Update(ctx context.Context, id uint, pool *models.Pool) error {

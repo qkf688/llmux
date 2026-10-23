@@ -2,6 +2,7 @@ package pools
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http/httptest"
 	"strconv"
 	"strings"
@@ -58,6 +59,13 @@ func TestAutoPoolImport_CreatesPoolAndCredentials(t *testing.T) {
 	if gjson.Get(body, "data.total").Int() != 2 || gjson.Get(body, "data.imported").Int() != 2 {
 		t.Fatalf("导入计数不符 body=%s", body)
 	}
+	// 前端靠这两个字段把新池并进号池列表缓存（不等 refetch 才认得它是专属池）
+	if !gjson.Get(body, "data.auto_created").Bool() {
+		t.Fatalf("auto_created 应为 true body=%s", body)
+	}
+	if gjson.Get(body, "data.key_count").Int() != 2 {
+		t.Fatalf("key_count 应为 2 body=%s", body)
+	}
 
 	// 库内：池带自动标记，凭据密文落库且可解密回明文
 	pool, err := repository.Default().Pool.Get(t.Context(), uint(poolID))
@@ -91,6 +99,9 @@ func TestAutoPoolImport_CreatesPoolAndCredentials(t *testing.T) {
 
 // TestAutoPoolImport_DuplicateNameGetsSuffix 覆盖重名兜底：同名再建不报错，
 // 自动加 " (2)" 后缀（复用已存在的池 = 往别人的池里塞凭据，绝不能做）。
+//
+// 走的是「撞 pools.name 唯一索引 → 换后缀重试」这条路径（uniqueIndex 才是单一真相，
+// 不做先查后写的预检——预检与写入之间有窗口，并发同名会双双通过预检再撞索引报 500）。
 func TestAutoPoolImport_DuplicateNameGetsSuffix(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupCipherForCredTest(t)
@@ -99,12 +110,39 @@ func TestAutoPoolImport_DuplicateNameGetsSuffix(t *testing.T) {
 	if gjson.Get(first, "data.pool_name").String() != "重名池" {
 		t.Fatalf("首个池名应为原名 body=%s", first)
 	}
-	second, _ := autoImportViaHandler(t, autoImportBody("重名池", "sk-dup-2-ABCD1234"))
+	second, secondCode := autoImportViaHandler(t, autoImportBody("重名池", "sk-dup-2-ABCD1234"))
+	if secondCode != 200 || gjson.Get(second, "code").Int() != 200 {
+		t.Fatalf("重名应正常建池（不是 500）code=%d body=%s", secondCode, second)
+	}
 	if got := gjson.Get(second, "data.pool_name").String(); got != "重名池 (2)" {
 		t.Fatalf("重名池名=%q want %q body=%s", got, "重名池 (2)", second)
 	}
 	if gjson.Get(second, "data.pool_id").Uint() == gjson.Get(first, "data.pool_id").Uint() {
 		t.Fatal("重名时应建新池，不复用旧池")
+	}
+}
+
+// TestAutoPoolImport_NameVariantsExhausted 覆盖「同名太多」的边界：
+// 候选名（base、base (2) … base (20)）全被占满时，报 400 业务条件而不是 500 内部故障。
+func TestAutoPoolImport_NameVariantsExhausted(t *testing.T) {
+	testsupport.InitTestDB(t)
+	setupCipherForCredTest(t)
+
+	for i := 1; i <= autoPoolNameMaxAttempts; i++ {
+		name := "占位池"
+		if i > 1 {
+			name = fmt.Sprintf("占位池 (%d)", i)
+		}
+		createPoolViaHandler(t, fmt.Sprintf(`{"name":%q}`, name))
+	}
+
+	body, code := autoImportViaHandler(t, autoImportBody("占位池", "sk-exhaust-ABCD1234"))
+	if code != 200 || gjson.Get(body, "code").Int() != 400 {
+		t.Fatalf("变体用尽应 400 code=%d body=%s", code, body)
+	}
+	pools, _ := repository.Default().Pool.List(t.Context(), repository.PoolFilter{})
+	if len(pools) != autoPoolNameMaxAttempts {
+		t.Fatalf("变体用尽不应新建池，实际池数=%d", len(pools))
 	}
 }
 
@@ -186,6 +224,10 @@ func TestAutoPoolImport_RouteNotShadowingBatchImport(t *testing.T) {
 // TestAutoPoolImport_BatchFailureRemovesEmptyPool 覆盖「整批失败不留空池」：
 // 查重查询异常（importCredentialRows 的唯一 error 出口，此时一行都没写）→ 500，
 // 且刚建的池被删掉——留着它等于给用户塞一个没凭据的专属池，重试还会再撞同名。
+//
+// 顺带锁一条隐含契约：整批失败时库内凭据数必须为 0。补偿删池走的是
+// Pool.Delete（硬删池行、不级联删凭据），「一行都没写」是它不留孤儿凭据的唯一前提；
+// 这条断言把该前提钉住——将来谁在写入循环之后新增 error 出口，用例会立刻红。
 func TestAutoPoolImport_BatchFailureRemovesEmptyPool(t *testing.T) {
 	testsupport.InitTestDB(t)
 	setupCipherForCredTest(t)
@@ -203,6 +245,13 @@ func TestAutoPoolImport_BatchFailureRemovesEmptyPool(t *testing.T) {
 		if p.Name == "整批失败池" {
 			t.Fatalf("整批失败后不应留下空池（pool %d）", p.ID)
 		}
+	}
+	creds, err := repository.Default().Credential.List(t.Context(), repository.CredentialFilter{})
+	if err != nil {
+		t.Fatalf("list creds: %v", err)
+	}
+	if len(creds) != 0 {
+		t.Fatalf("整批失败应一行都没写（删池不留孤儿凭据），实际凭据数=%d", len(creds))
 	}
 }
 

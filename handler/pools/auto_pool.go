@@ -1,6 +1,9 @@
 package pools
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -8,10 +11,43 @@ import (
 	"github.com/qkf688/llmux/handler/httpx"
 	"github.com/qkf688/llmux/httpresp"
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/repository"
 )
 
-// defaultAutoPoolNote 自动池默认备注（前端未指定时用）。
+// defaultAutoPoolNote 自动池默认备注（调用方未指定时用）。
 const defaultAutoPoolNote = "供应商分组自动创建"
+
+// autoPoolNameMaxAttempts 自动池重名兜底的最大尝试次数（同名加 " (n)" 后缀）。
+const autoPoolNameMaxAttempts = 20
+
+// errAutoPoolNameTaken 池名变体用尽（同名太多）：业务条件，报 400 而不是内部故障。
+var errAutoPoolNameTaken = errors.New("pools: auto pool name variants exhausted")
+
+// createAutoPoolWithUniqueName 建一个专属号池并保证池名唯一：
+// 重名是常态而非异常（删过供应商再建同名、同名供应商的不同分组），直接报错会把用户的
+// 正常操作挡下来；加序号后缀既能建池，又不会把用户建到别的池上去
+// （复用已存在的池 = 往别人的池里塞凭据，绝不能做）。
+//
+// 为什么不先查名再建池（与 api_keys 建 key 同口径）：查名与建池之间有窗口——两个并发
+// 请求（双击「添加 Key」、两个标签页同时建同名供应商）会同时查到「名字可用」，后者撞
+// pools.name 唯一索引 → 报 500，报错方向全错。uniqueIndex 才是单一真相：直接建池，
+// 撞了就换下一个后缀重试。顺带收敛「软删行仍占名」——预检看不见软删行，但唯一索引看得见。
+func createAutoPoolWithUniqueName(ctx context.Context, base, note string) (*models.Pool, error) {
+	candidate := base
+	for attempt := 1; attempt <= autoPoolNameMaxAttempts; attempt++ {
+		pool := &models.Pool{Name: candidate, Note: note, AutoCreated: true}
+		err := repos().Pool.Create(ctx, pool)
+		if err == nil {
+			return pool, nil
+		}
+		if !errors.Is(err, repository.ErrPoolNameTaken) {
+			return nil, fmt.Errorf("create auto pool: %w", err)
+		}
+		candidate = fmt.Sprintf("%s (%d)", base, attempt+1)
+	}
+	return nil, fmt.Errorf("%w: pool name %q has no free variant within %d attempts",
+		errAutoPoolNameTaken, base, autoPoolNameMaxAttempts)
+}
 
 // CreateAutoPoolWithCredentials 「供应商分组 → 添加 Key」的一步式落库：
 // 建一个专属号池（auto_created=true）并立刻把粘贴的 Key 导进去，返回池标识与逐行回显。
@@ -26,7 +62,8 @@ const defaultAutoPoolNote = "供应商分组自动创建"
 //
 // POST /api/pools/auto/import
 // 请求体 {"name": "供应商名·分组名", "note": "可选", "keys": ["sk-1", ...]}
-// 响应 {"pool_id": 12, "pool_name": "...", "total": n, "imported": n, "skipped": n,
+// 响应 {"pool_id": 12, "pool_name": "...", "auto_created": true, "key_count": 2,
+// "total": n, "imported": n, "skipped": n,
 //
 //	"failed": n, "rows": [...]}
 func CreateAutoPoolWithCredentials(c *gin.Context) {
@@ -49,17 +86,17 @@ func CreateAutoPoolWithCredentials(c *gin.Context) {
 		return
 	}
 
-	poolName, err := uniquePoolName(ctx, name)
-	if err != nil {
-		httpresp.InternalServerError(c, err)
-		return
-	}
 	note := strings.TrimSpace(req.Note)
 	if note == "" {
 		note = defaultAutoPoolNote
 	}
-	pool := &models.Pool{Name: poolName, Note: note, AutoCreated: true}
-	if err := repos().Pool.Create(ctx, pool); err != nil {
+	pool, err := createAutoPoolWithUniqueName(ctx, name, note)
+	if err != nil {
+		// 变体名用尽是业务条件（同名太多），不是内部故障。
+		if errors.Is(err, errAutoPoolNameTaken) {
+			httpresp.BadRequest(c, "Pool name is taken and no free variant available")
+			return
+		}
 		httpresp.InternalErrorMessage(c, "Failed to create pool", err)
 		return
 	}
@@ -72,10 +109,17 @@ func CreateAutoPoolWithCredentials(c *gin.Context) {
 	data, err := importCredentialRows(ctx, repos().Credential, pool.ID, req.Keys, cipher)
 	if err != nil {
 		if _, delErr := repos().Pool.Delete(ctx, pool.ID); delErr != nil {
-			slog.Warn("auto pool cleanup after batch import failure", "pool_id", pool.ID, "err", delErr)
+			slog.Warn("auto pool cleanup after batch import failure",
+				"pool_id", pool.ID, "pool_name", pool.Name, "err", delErr)
 		}
 		httpresp.InternalErrorMessage(c, "Failed to import credentials", err)
 		return
 	}
-	httpresp.Success(c, AutoPoolImportData{PoolID: pool.ID, PoolName: pool.Name, BatchImportData: data})
+	httpresp.Success(c, AutoPoolImportData{
+		PoolID:          pool.ID,
+		PoolName:        pool.Name,
+		AutoCreated:     true,
+		KeyCount:        data.Imported,
+		BatchImportData: data,
+	})
 }

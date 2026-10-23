@@ -39,8 +39,12 @@ export function PoolsMobileList({ pools, onOpenDetail, onEdit, onRequestDelete }
                 </span>
               ))}
             </div>
-            {pool.ReferencedBy > 0 && (
+            {/* 引用标记与桌面表格同口径：没人引用的池（孤儿专属池）在移动端也要看得出来，
+                否则用户无从判断哪个池该手动删（本仓不做常驻清理，手动删是唯一出口）。 */}
+            {pool.ReferencedBy > 0 ? (
               <p className="text-[10px] text-muted-foreground">被 {pool.ReferencedBy} 个分组引用</p>
+            ) : (
+              <p className="text-[10px] text-muted-foreground">未引用</p>
             )}
             <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
               <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => onOpenDetail(pool)}>

@@ -5,18 +5,24 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 // GroupsSection/GroupCard 未渲染，但 use-pool-options 在模块顶层被 import；
 // mock usePools 避免拉起 QueryClient 依赖。poolState 让用例能摆不同的号池列表
-// （手建池 / 自动池），并模拟「列表已就绪」。
+// （手建池 / 专属池），并模拟「列表已就绪」与「列表请求失败」两种状态。
 const { poolState } = vi.hoisted(() => ({
   poolState: {
     data: [] as Array<{ ID: number; Name: string; KeyCount: number; AutoCreated: boolean }>,
     isFetched: true,
+    isError: false,
   },
 }));
 vi.mock("@/hooks/api", () => ({
   usePools: () => poolState,
 }));
 
-import { SupportTypesField, EndpointsSection, GroupsSection } from "./provider-schedule-fields";
+import {
+  SupportTypesField,
+  EndpointsSection,
+  GroupsSection,
+} from "./provider-schedule-fields";
+import { linkablePoolOptions, resolveGroupMode } from "../../utils/group-mode";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   defaultProviderFormValues,
@@ -163,6 +169,8 @@ function GroupsHarness({
 /** 复位号池列表（用例间互不污染） */
 function setPools(pools: Array<{ ID: number; Name: string; KeyCount: number; AutoCreated: boolean }>) {
   poolState.data = pools;
+  poolState.isFetched = true;
+  poolState.isError = false;
 }
 
 describe("凭据分组区 - 取 Key 模式（直接添加 / 关联号池）", () => {
@@ -253,5 +261,72 @@ describe("凭据分组区 - 取 Key 模式（直接添加 / 关联号池）", ()
       "true",
     );
     expect(screen.getByTestId("probe-pool-ids").textContent).toBe('["9",""]');
+  });
+
+  it("号池列表请求失败：不猜模式（不渲染 radio），并提示刷新重试", () => {
+    setPools([{ ID: 9, Name: "供应商A·默认组", KeyCount: 2, AutoCreated: true }]);
+    poolState.isError = true;
+    render(
+      <GroupsHarness
+        groups={[
+          { name: "组一", weight: 1, poolId: "9" },
+          { name: "组二", weight: 2, poolId: "" },
+        ]}
+      />,
+    );
+
+    // 列表没拿到 ≠ 池被删：这时翻成「关联号池」是用错误模式解释真实数据。
+    // 组一绑着池（模式取决于列表）→ 不渲染 radio、只给占位提示；
+    // 组二没绑池（模式恒为「直接添加」，与列表无关）→ radio 照常渲染。
+    expect(screen.getAllByRole("radio")).toHaveLength(2);
+    expect(screen.getAllByText("号池列表加载失败，请刷新后重试")).toHaveLength(1);
+    // 绑定值不受影响（提交仍按真实 pool_id 走）
+    expect(screen.getByTestId("probe-pool-ids").textContent).toBe('["9",""]');
+  });
+
+  it("池还没进列表（刚建好等刷新）：切到「直接添加」不解绑（解绑=丢掉刚建的专属池）", () => {
+    // 列表里没有该池：模拟「刚建好、列表还没刷回来」的窗口
+    setPools([]);
+    render(
+      <GroupsHarness
+        groups={[
+          { name: "组一", weight: 1, poolId: "9" },
+          { name: "组二", weight: 2, poolId: "" },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByRole("radio", { name: "直接添加" })[0]);
+
+    expect(screen.getByTestId("probe-pool-ids").textContent).toBe('["9",""]');
+    expect(screen.getByTestId("probe-modes").textContent).toBe('["direct",""]');
+  });
+});
+
+describe("link 模式可选号池（专属池不进关联选项）", () => {
+  const manual = { id: 7, name: "手建池", keyCount: 3, autoCreated: false };
+  const auto = { id: 9, name: "供应商A·默认组", keyCount: 2, autoCreated: true };
+
+  it("只列手建池：专属池不作为共享池被关联（否则两组共用一批凭据）", () => {
+    expect(linkablePoolOptions([manual, auto])).toEqual([manual]);
+  });
+
+  it("当前绑定的池本身是专属池时仍留在选项里（否则下拉空白、用户看不出绑了谁）", () => {
+    expect(linkablePoolOptions([manual, auto], auto)).toEqual([manual, auto]);
+  });
+});
+
+describe("分组取 Key 模式推导（纯逻辑）", () => {
+  it("列表没就绪/失败时返回未知（null），不猜模式", () => {
+    expect(resolveGroupMode("9", undefined, false)).toBeNull();
+  });
+
+  it("绑的是专属池 → 直接添加；绑的是手建池 → 关联号池", () => {
+    expect(resolveGroupMode("9", { id: 9, name: "p", keyCount: 1, autoCreated: true }, true)).toBe(
+      "direct",
+    );
+    expect(resolveGroupMode("7", { id: 7, name: "p", keyCount: 1, autoCreated: false }, true)).toBe(
+      "link",
+    );
   });
 });

@@ -19,8 +19,8 @@ export function useNumberPoolsPage() {
   const updatePool = useUpdatePool();
   const deletePool = useDeletePool();
 
-  // 手建号池走主列表；系统自动创建的号池（供应商分组「添加 Key」建出来的专属池）
-  // 折叠到下方单独一块——两类池来路不同，混排会让主列表被自动池淹没。
+  // 手建号池走主列表；专属号池（供应商分组「添加 Key」建出来的专属池）
+  // 折叠到下方单独一块——两类池来路不同，混排会让主列表被专属池淹没。
   const manualPools = pools.filter((pool) => !pool.AutoCreated);
   const autoPools = pools.filter((pool) => pool.AutoCreated);
 

@@ -108,10 +108,14 @@ export async function batchImportCredentials(
   });
 }
 
-/** POST /pools/auto/import 响应：自动池标识 + 批量导入逐行回显（与既有批量导入同源）。 */
+/** POST /pools/auto/import 响应：专属池标识 + 批量导入逐行回显（与既有批量导入同源）。 */
 export interface AutoPoolImportData extends BatchImportData {
   pool_id: number;
   pool_name: string;
+  /** 新池恒为自动池（该端点只建专属池）：前端据此把它并进号池列表缓存。 */
+  auto_created: boolean;
+  /** 本次导入落库的凭据条数（= imported）：前端列表缓存用。 */
+  key_count: number;
 }
 
 /**

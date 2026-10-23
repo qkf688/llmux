@@ -322,6 +322,26 @@ describe("凭据分组区 - 取 Key 模式（直接添加 / 关联号池）", ()
     expect(screen.getAllByText(/专属号池不会出现在关联列表里/).length).toBeGreaterThan(0);
     // 绑定不被清掉：切回「直接添加」还能接着用自己的专属池
     expect(screen.getByTestId("probe-pool-ids").textContent).toBe('["9",""]');
+    // 「查看详情」禁用：当前没关联可关联的号池（专属池不在关联列表里），
+    // 点了会打开自己专属池的详情，看着像「查看的是我关联的那个池」，实际不是。
+    const detailButton = screen.getAllByRole("button", { name: /查看详情/ })[0] as HTMLButtonElement;
+    expect(detailButton.disabled).toBe(true);
+  });
+
+  it("link 模式下关联了手建池：「查看详情」可点（看的是真正关联的那个池）", () => {
+    setPools([{ ID: 7, Name: "手建池", KeyCount: 3, AutoCreated: false }]);
+    render(
+      <GroupsHarness
+        groups={[
+          { name: "组一", weight: 1, poolId: "7" },
+          { name: "组二", weight: 2, poolId: "" },
+        ]}
+      />,
+    );
+
+    // 组一绑手建池 → 推导即「关联号池」，详情按钮可点
+    const detailButton = screen.getAllByRole("button", { name: /查看详情/ })[0] as HTMLButtonElement;
+    expect(detailButton.disabled).toBe(false);
   });
 });
 

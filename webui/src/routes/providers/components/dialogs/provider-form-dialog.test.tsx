@@ -118,7 +118,10 @@ describe("供应商弹窗「添加 Key」导入编排", () => {
       expect(formRef.current?.getValues("groups.0.poolId")).toBe("7");
       expect(formRef.current?.getValues("groups.0.mode")).toBe("direct");
     });
-  });
+    // 整弹窗集成用例（渲染 ProviderFormDialog 全量 Radix 组件 + 走真实交互），
+    // 并行跑满 61 个文件时会逼近 vitest 默认的 5s 阈值而偶发超时——给它显式时限。
+    // 断言强度不变：只放宽时间，不放宽判据。
+  }, 15000);
 
   it("分组已绑专属池：走「往该池追加」，不建池也不改绑定", async () => {
     poolState.data = [{ ID: 7, Name: "供应商A·组一", KeyCount: 1, AutoCreated: true }];
@@ -143,5 +146,6 @@ describe("供应商弹窗「添加 Key」导入编排", () => {
     expect(apiMock.batchImport.mock.calls[0][0]).toEqual({ poolId: 7, keys: ["sk-3"] });
     expect(apiMock.autoImport).not.toHaveBeenCalled();
     expect(formRef.current?.getValues("groups.0.poolId")).toBe("7");
-  });
+    // 同上：整弹窗集成用例，显式时限避免并行高负载下偶发超时
+  }, 15000);
 });

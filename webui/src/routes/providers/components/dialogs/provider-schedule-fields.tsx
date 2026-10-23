@@ -484,15 +484,22 @@ function GroupCard({
                         variant="outline"
                         size="sm"
                         className="h-9 shrink-0 px-2.5 text-xs"
-                        disabled={!field.value}
-                        onClick={() => onViewPoolDetail?.(field.value)}
+                        // 只有关联了一个**可关联**的号池才有详情可看：当前绑的是专属池
+                        // （不在关联列表里）或压根没绑时禁用——否则用户点开的是自己专属池的
+                        // 详情，看着像「查看的是我关联的那个池」，实际不是。
+                        disabled={!linkedPoolVisible}
+                        onClick={() => linkedPoolVisible && onViewPoolDetail?.(field.value)}
                       >
                         <Eye className="size-3.5" />
                         查看详情
                       </Button>
                     </span>
                   </TooltipTrigger>
-                  <TooltipContent>查看号池详情（凭据列表 / 状态分布）</TooltipContent>
+                  <TooltipContent>
+                    {linkedPoolVisible
+                      ? "查看号池详情（凭据列表 / 状态分布）"
+                      : "未关联号池，暂无可查看的详情"}
+                  </TooltipContent>
                 </Tooltip>
               </div>
               {poolId && !linkedPoolVisible && (

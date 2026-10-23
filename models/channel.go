@@ -18,6 +18,11 @@ type Pool struct {
 	// 的供应商主类型决定，只有模型改自池。空 = 未配置，点测直接判 validation 失败（不回退
 	// 硬编码默认模型，否则未授权模型的 404 会被误判成 key 坏，Q4 语义不变）。
 	TestModel string `gorm:"type:varchar(255)"`
+	// AutoCreated 标记该池是「供应商分组→添加 Key」流程自动建的专属池。
+	// 归属不记 group id：池在分组保存之前就建好，那时分组还没落库，指不到具体分组；
+	// 归属靠 key_groups.pool_id 反查（号池页 PoolListItem.RefGroups 已有供应商名+分组名）。
+	// 号池页据此把自动池折叠成单独一块，与用户手建的多 Key 号池主列表分开。
+	AutoCreated bool `gorm:"not null;default:false"`
 }
 
 // CredentialStatus 凭据状态枚举。冷却不占状态（用 CooldownUntil 表达），

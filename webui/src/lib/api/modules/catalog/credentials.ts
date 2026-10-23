@@ -1,10 +1,10 @@
 /**
- * 凭据 API（`/api/credentials…`）：凭据是第一等资源，归属（号池 / 分组内联）只是它的
- * 字段与列表过滤条件——号池页与供应商编辑弹窗共用本模块。
+ * 凭据 API（`/api/credentials…`）：凭据是第一等资源，归属号池只是它的字段与列表过滤条件——
+ * 号池页与供应商编辑弹窗共用本模块。
  *
  * 为什么从 pools 模块拆出来：原先凭据的读/写挂在 `/api/pools/:id/credentials…`，
- * 与号池强绑定，导致分组内联凭据（`group_id` 归属）拿不到按凭据 ID 的属性与动作
- * （判停后无法人工恢复）。提为独立资源后，启停/备注/明文/以后的凭据级设置只有这一份实现。
+ * 与号池强绑定，分组拿不到按凭据 ID 的属性与动作（判停后无法人工恢复）。
+ * 提为独立资源后，启停/备注/明文/以后的凭据级设置只有这一份实现。
  */
 import { apiRequest } from "../../core/client";
 
@@ -12,12 +12,11 @@ import { apiRequest } from "../../core/client";
 export type CredentialStatus = "active" | "disabled" | "error" | "temp_unsched";
 
 /** 凭据视图（与后端 service/credview.View 同源，PascalCase）：号池列表与供应商分组
- *  内联 key 项共用同一形状。三态字段（PoolID/GroupID/CooldownUntil/…）后端恒出键，
+ *  详情共用同一形状。三态字段（PoolID/CooldownUntil/…）后端恒出键，
  *  `null` = 无该归属 / 无冷却，前端据此判断，禁写 `?`。 */
 export interface CredentialView {
   ID: number;
   PoolID: number | null;
-  GroupID: number | null;
   Status: CredentialStatus | string;
   Note: string;
   KeyMasked: string;
@@ -41,9 +40,8 @@ export interface CredentialListData {
 }
 
 export interface CredentialListParams {
-  /** 归属过滤（二选一或都不带 = 全量） */
+  /** 归属过滤（号池 id；不带走全量） */
   pool_id?: number;
-  group_id?: number;
   page?: number;
   page_size?: number;
   status?: string;
@@ -53,7 +51,6 @@ export interface CredentialListParams {
 export function listCredentials(params: CredentialListParams = {}): Promise<CredentialListData> {
   const sp = new URLSearchParams();
   if (params.pool_id != null) sp.append("pool_id", String(params.pool_id));
-  if (params.group_id != null) sp.append("group_id", String(params.group_id));
   if (params.page != null) sp.append("page", String(params.page));
   if (params.page_size != null) sp.append("page_size", String(params.page_size));
   if (params.status && params.status !== "all") sp.append("status", params.status);
@@ -66,7 +63,7 @@ export function getCredential(credId: number): Promise<CredentialView> {
   return apiRequest<CredentialView>(`/credentials/${credId}`);
 }
 
-/** 新建凭据：`pool_id` 必填（分组内联凭据的唯一写入口是供应商表单同步）。 */
+/** 新建凭据：`pool_id` 必填（凭据只归属号池）。 */
 export function createCredential(body: {
   pool_id: number;
   key: string;

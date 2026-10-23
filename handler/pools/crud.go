@@ -3,6 +3,7 @@ package pools
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -12,6 +13,9 @@ import (
 	"github.com/qkf688/llmux/repository"
 	"gorm.io/gorm"
 )
+
+// autoPoolNameMaxAttempts 自动池重名兜底的最大尝试次数（同名加 " (n)" 后缀）。
+const autoPoolNameMaxAttempts = 20
 
 // GetPools 获取号池列表（名称搜索），每项附健康概览统计
 // （key 数 / 状态分布 / 被分组引用数 + 引用明细）。
@@ -94,6 +98,27 @@ func poolRefGroups(ctx context.Context, poolIDs []uint) (map[uint][]PoolRefGroup
 		})
 	}
 	return refsByPool, nil
+}
+
+// uniquePoolName 生成一个未被占用的池名：重名时追加 " (2)"、" (3)"……
+// 自动池名由前端按「供应商名·分组名」拼出，重名是常态而非异常（删过供应商再建同名、
+// 同名供应商的不同分组），直接报错会把用户的正常操作挡下来；加序号后缀既能建池，
+// 又不会把用户建到别的池上去（复用已存在的池 = 往别人的池里塞凭据，绝不能做）。
+// 放在建池这一侧：号池名的可用性判断只有这一处口径（CreatePool 走预检报同名，
+// 自动池走本函数加后缀）。
+func uniquePoolName(ctx context.Context, base string) (string, error) {
+	candidate := base
+	for attempt := 1; attempt <= autoPoolNameMaxAttempts; attempt++ {
+		exists, err := repos().Pool.ExistsByName(ctx, candidate)
+		if err != nil {
+			return "", fmt.Errorf("check pool name availability: %w", err)
+		}
+		if !exists {
+			return candidate, nil
+		}
+		candidate = fmt.Sprintf("%s (%d)", base, attempt+1)
+	}
+	return "", fmt.Errorf("pool name %q is taken and no free variant within %d attempts", base, autoPoolNameMaxAttempts)
 }
 
 // CreatePool 创建号池（name 必填且唯一）。

@@ -43,7 +43,7 @@ repository/credential.go # CredentialRepo：ListPaged/Get/Create/UpdateFields/Up
 
 | 契约 | 职责 | 定义位置 | 实现方 |
 |------|------|----------|--------|
-| `GET /api/credentials` | 列表：`pool_id` 归属过滤（不带 = 全量）+ `status`（`all`/空 = 不过滤）+ `q`（备注子串）+ 分页；非法状态或非法归属 ID → 400。**`group_id` 过滤已随内联凭据概念删除**（凭据必属号池，分组只是引用方） | `handler/credentials/crud.go` `ListCredentials` | 同文件 |
+| `GET /api/credentials` | 列表：`pool_id` 归属过滤（不带 = 全量）+ `status`（`all`/空 = 不过滤）+ `q`（备注子串）+ 分页；非法状态或非法归属 ID → 400。**`group_id` 过滤已随内联凭据概念删除**（凭据必属号池，分组只是引用方）；前端 `CredentialListParams` / `CredentialView` 里同名的陈旧字段（`group_id` / `GroupID`）一并删除，别再加回来 | `handler/credentials/crud.go` `ListCredentials` | 同文件 |
 | `POST /api/credentials` | 创建：`pool_id` **必填**（凭据只归属号池，别无写入口）；池不存在 404、空 key 400、池内 `KeyHash` 重复 400（跨池同 key 允许） | `handler/credentials/crud.go` `CreateCredential` | 同文件 |
 | `PATCH /api/credentials/:id` | 更新：`note` 可清空、`status` 可切；**切回 `active` 即人工恢复 = 立刻可用**，连同清 `fail_count`/`cooldown_reason`/`cooldown_until`（单一来源 `models.CredentialRecoveryFields`；2026-10-08 起含解除冷却——只清失败计数会留下「状态是启用、选路仍跳过」的假象）；无字段 400、非法状态 400、凭据不存在 404 | `handler/credentials/crud.go` `UpdateCredential` | 同文件 |
 | `PATCH /api/credentials/status` | 批量启停（`{ids, status}`）：**不分归属**，一次调用可同时启停任意池的凭据；空 ids 400、非法状态 400 | `handler/credentials/batch.go` | `CredentialRepo.UpdateFieldsByIDs` |

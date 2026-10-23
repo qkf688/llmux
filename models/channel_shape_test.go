@@ -25,6 +25,7 @@ var (
 		{key: "Name", wantSetType: gjson.String},
 		{key: "Note", wantSetType: gjson.String},
 		{key: "TestModel", wantSetType: gjson.String},
+		{key: "AutoCreated", wantSetType: gjson.True},
 	}
 	credentialResponseKeys = []channelResponseKeyContract{
 		{key: "Key", wantSetType: gjson.String},
@@ -100,7 +101,7 @@ func TestChannelEntities_KeysPresent_WhenSet(t *testing.T) {
 	now := time.Now()
 	creds := uint(3)
 
-	pool := Pool{Name: "主池", Note: "生产密钥池", TestModel: "gpt-4o-mini"}
+	pool := Pool{Name: "主池", Note: "生产密钥池", TestModel: "gpt-4o-mini", AutoCreated: true}
 	credential := Credential{
 		Key:            "hex-ciphertext",
 		KeyHash:        "sha256-hex",

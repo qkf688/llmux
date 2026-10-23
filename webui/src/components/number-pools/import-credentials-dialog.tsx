@@ -32,6 +32,10 @@ type ImportCredentialsDialogProps = {
   /** 父组件拆分 keys 后调 API，返回逐行回显 */
   onImport: (text: string) => Promise<BatchImportData | null>;
   isImporting?: boolean;
+  /** 弹窗标题（供应商分组场景叫「添加 Key」，号池页叫「添加凭据」） */
+  title?: string;
+  /** 副标题说明 */
+  description?: string;
 };
 
 export function ImportCredentialsDialog({
@@ -39,6 +43,8 @@ export function ImportCredentialsDialog({
   onOpenChange,
   onImport,
   isImporting = false,
+  title = "添加凭据",
+  description = "粘贴 Key，每行一个（逗号分隔亦可）；只填 1 个也合法。自动去重并加密落库。",
 }: ImportCredentialsDialogProps) {
   const [text, setText] = useState("");
   const [result, setResult] = useState<BatchImportData | null>(null);
@@ -67,10 +73,8 @@ export function ImportCredentialsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="sm">
         <DialogHeader>
-          <DialogTitle>添加凭据</DialogTitle>
-          <DialogDescription>
-            粘贴 Key，每行一个（逗号分隔亦可）；只填 1 个也合法。自动去重并加密落库。
-          </DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
         <DialogBody className="-mx-1 min-w-0 space-y-3 px-1">

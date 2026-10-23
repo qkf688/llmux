@@ -11,6 +11,7 @@ import {
   batchUpdateCredentialStatus,
   batchDeleteCredentials,
   batchImportCredentials,
+  autoImportPoolCredentials,
   type CredentialListParams,
   type PoolListItem,
   type CredentialListData,
@@ -147,6 +148,19 @@ export function useBatchImportCredentials() {
     mutationFn: ({ poolId, keys }: { poolId: number; keys: string[] }) =>
       batchImportCredentials(poolId, { keys }),
     onSuccess: (_data, vars) => invalidatePoolCredentials(qc, vars.poolId),
+  });
+}
+
+/** 「供应商分组 → 添加 Key」：建专属号池 + 导凭据一步完成（池 id 随响应返回）。 */
+export function useAutoImportPoolCredentials() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; note?: string; keys: string[] }) =>
+      autoImportPoolCredentials(body),
+    onSuccess: (data) => {
+      invalidatePoolList(qc);
+      void qc.invalidateQueries({ queryKey: [...poolKeys.all, "credentials", data.pool_id] });
+    },
   });
 }
 

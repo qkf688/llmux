@@ -4,9 +4,16 @@ import { useForm, FormProvider, useFormContext, useWatch } from "react-hook-form
 import { zodResolver } from "@hookform/resolvers/zod";
 
 // GroupsSection/GroupCard 未渲染，但 use-pool-options 在模块顶层被 import；
-// mock usePools 避免拉起 QueryClient 依赖
+// mock usePools 避免拉起 QueryClient 依赖。poolState 让用例能摆不同的号池列表
+// （手建池 / 自动池），并模拟「列表已就绪」。
+const { poolState } = vi.hoisted(() => ({
+  poolState: {
+    data: [] as Array<{ ID: number; Name: string; KeyCount: number; AutoCreated: boolean }>,
+    isFetched: true,
+  },
+}));
 vi.mock("@/hooks/api", () => ({
-  usePools: () => ({ data: [] }),
+  usePools: () => poolState,
 }));
 
 import { SupportTypesField, EndpointsSection, GroupsSection } from "./provider-schedule-fields";
@@ -121,14 +128,20 @@ describe("支持类型勾选 → 协议端点同步（添加供应商弹窗）",
   });
 });
 
-/** 分组区 Harness：探针额外 watch groups[].poolId，供断言回填后的表单真实值 */
-function GroupsHarness({ onCreatePool }: { onCreatePool?: (index: number) => void }) {
+/** 分组区 Harness：探针额外 watch groups[].poolId / mode，供断言回填后的表单真实值 */
+function GroupsHarness({
+  onAddKeys,
+  groups,
+}: {
+  onAddKeys?: (index: number) => void;
+  groups?: ProviderFormValues["groups"];
+}) {
   const form = useForm<ProviderFormValues>({
     resolver: zodResolver(providerFormSchema),
     defaultValues: {
       ...defaultProviderFormValues,
       type: "openai",
-      groups: [
+      groups: groups ?? [
         { name: "组一", weight: 1, poolId: "" },
         { name: "组二", weight: 2, poolId: "" },
       ],
@@ -139,38 +152,106 @@ function GroupsHarness({ onCreatePool }: { onCreatePool?: (index: number) => voi
   return (
     <TooltipProvider>
       <FormProvider {...form}>
-        <GroupsSection onCreatePool={onCreatePool} />
+        <GroupsSection onAddKeys={onAddKeys} />
         <span data-testid="probe-pool-ids">{JSON.stringify(pools.map((g) => g?.poolId ?? ""))}</span>
+        <span data-testid="probe-modes">{JSON.stringify(pools.map((g) => g?.mode ?? ""))}</span>
       </FormProvider>
     </TooltipProvider>
   );
 }
 
-describe("凭据分组区 - 就地新建号池", () => {
-  it("点「新建号池」带上该组的下标回调（回填要按组定位，不能默认落到第一组）", () => {
-    const onCreatePool = vi.fn();
-    render(<GroupsHarness onCreatePool={onCreatePool} />);
+/** 复位号池列表（用例间互不污染） */
+function setPools(pools: Array<{ ID: number; Name: string; KeyCount: number; AutoCreated: boolean }>) {
+  poolState.data = pools;
+}
 
-    const buttons = screen.getAllByRole("button", { name: /新建号池/ });
+describe("凭据分组区 - 取 Key 模式（直接添加 / 关联号池）", () => {
+  it("默认「直接添加」：选中该模式、显示「添加 Key」按钮、不出现号池下拉", () => {
+    setPools([]);
+    render(<GroupsHarness />);
+
+    const direct = screen.getAllByRole("radio", { name: "直接添加" });
+    expect(direct).toHaveLength(2);
+    expect(direct[0].getAttribute("aria-checked")).toBe("true");
+    expect(screen.getAllByRole("radio", { name: "关联号池" })[0].getAttribute("aria-checked")).toBe(
+      "false",
+    );
+    expect(screen.getAllByRole("button", { name: /添加 Key/ })).toHaveLength(2);
+    // 直接添加模式下不出现号池下拉（凭据由系统自动建池承载）
+    expect(screen.queryAllByText("选择号池（凭据在号池页管理）")).toHaveLength(0);
+  });
+
+  it("点「添加 Key」带上该组的下标回调（回填要按组定位，不能默认落到第一组）", () => {
+    setPools([]);
+    const onAddKeys = vi.fn();
+    render(<GroupsHarness onAddKeys={onAddKeys} />);
+
+    const buttons = screen.getAllByRole("button", { name: /添加 Key/ });
     expect(buttons).toHaveLength(2);
 
     fireEvent.click(buttons[1]);
 
-    expect(onCreatePool).toHaveBeenCalledTimes(1);
-    expect(onCreatePool).toHaveBeenCalledWith(1);
+    expect(onAddKeys).toHaveBeenCalledTimes(1);
+    expect(onAddKeys).toHaveBeenCalledWith(1);
   });
 
-  it("未传 onCreatePool 时按钮仍渲染但点击不抛错（回调是可选注入）", () => {
+  it("未传 onAddKeys 时按钮仍渲染但点击不抛错（回调是可选注入）", () => {
+    setPools([]);
     render(<GroupsHarness />);
-    fireEvent.click(screen.getAllByRole("button", { name: /新建号池/ })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: /添加 Key/ })[0]);
     expect(screen.getByTestId("probe-pool-ids").textContent).toBe('["",""]');
   });
 
-  it("分组无内联 key 入口：只有号池下拉与两个池操作按钮", () => {
+  it("切到「关联号池」：出现号池下拉、隐藏「添加 Key」按钮（Key 不归本表单管）", () => {
+    setPools([{ ID: 7, Name: "手建池", KeyCount: 3, AutoCreated: false }]);
     render(<GroupsHarness />);
-    expect(screen.queryByText("凭据来源")).toBeNull();
-    expect(screen.queryByText("内联 Key")).toBeNull();
-    // 每个分组一个「关联号池」标签（本用例两分组 = 两个）
-    expect(screen.getAllByText("关联号池", { exact: true })).toHaveLength(2);
+
+    fireEvent.click(screen.getAllByRole("radio", { name: "关联号池" })[0]);
+
+    expect(screen.getAllByRole("radio", { name: "关联号池" })[0].getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    // 只有被切换的第一组进入关联模式（第二组仍是直接添加）
+    expect(screen.getAllByText("选择号池（凭据在号池页管理）")).toHaveLength(1);
+    expect(screen.queryAllByRole("button", { name: /添加 Key/ })).toHaveLength(1);
+  });
+
+  it("绑的是手建池时默认落在「关联号池」；切到「直接添加」会解绑（专属池只收自己的 Key）", () => {
+    setPools([{ ID: 7, Name: "手建池", KeyCount: 3, AutoCreated: false }]);
+    render(
+      <GroupsHarness
+        groups={[
+          { name: "组一", weight: 1, poolId: "7" },
+          { name: "组二", weight: 2, poolId: "" },
+        ]}
+      />,
+    );
+
+    // 手建池 → 关联号池模式
+    expect(screen.getAllByRole("radio", { name: "关联号池" })[0].getAttribute("aria-checked")).toBe(
+      "true",
+    );
+
+    fireEvent.click(screen.getAllByRole("radio", { name: "直接添加" })[0]);
+
+    expect(screen.getByTestId("probe-pool-ids").textContent).toBe('["",""]');
+    expect(screen.getByTestId("probe-modes").textContent).toBe('["direct",""]');
+  });
+
+  it("绑的是自动池（专属池）时默认落在「直接添加」，且保留绑定不解绑", () => {
+    setPools([{ ID: 9, Name: "供应商A·默认组", KeyCount: 2, AutoCreated: true }]);
+    render(
+      <GroupsHarness
+        groups={[
+          { name: "组一", weight: 1, poolId: "9" },
+          { name: "组二", weight: 2, poolId: "" },
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByRole("radio", { name: "直接添加" })[0].getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    expect(screen.getByTestId("probe-pool-ids").textContent).toBe('["9",""]');
   });
 });

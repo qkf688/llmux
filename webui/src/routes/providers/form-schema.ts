@@ -22,16 +22,39 @@ export const providerFormEndpointSchema = z.object({
 
 export type ProviderFormEndpoint = z.infer<typeof providerFormEndpointSchema>;
 
-/** 凭据分组：名称 × 价格权重 × 关联号池（凭据只存在于号池） */
-export const providerFormGroupSchema = z.object({
-  name: z.string().min(1, { message: "分组名称不能为空" }),
-  /** 价格导向权重：便宜的分组权重高 → 加权随机命中概率大 */
-  weight: z.number().int().min(0).max(100),
-  /** 回填的既有分组 ID：保存时按 id 就地更新该组（模型白名单是同步专属数据，
-   *  就地更新才不会被保存冲掉）。新建组缺省 */
-  groupId: z.number().optional(),
-  poolId: z.string().min(1, { message: "请选择关联号池" }),
-});
+/** 分组取 Key 的两种模式：
+ *  direct = 直接添加——粘贴 Key 即落库，系统为该分组自动建一个专属号池（auto_created）；
+ *  link   = 关联号池——凭据在该号池里维护，本表单只做绑定（Key 不归本表单管）。 */
+export const PROVIDER_GROUP_MODES = ["direct", "link"] as const;
+export type ProviderGroupMode = (typeof PROVIDER_GROUP_MODES)[number];
+
+/** 凭据分组：名称 × 价格权重 × 取 Key 模式 × 绑定号池（凭据只存在于号池） */
+export const providerFormGroupSchema = z
+  .object({
+    name: z.string().min(1, { message: "分组名称不能为空" }),
+    /** 价格导向权重：便宜的分组权重高 → 加权随机命中概率大 */
+    weight: z.number().int().min(0).max(100),
+    /** 回填的既有分组 ID：保存时按 id 就地更新该组（模型白名单是同步专属数据，
+     *  就地更新才不会被保存冲掉）。新建组缺省 */
+    groupId: z.number().optional(),
+    /** 模式：缺省时按「当前号池是不是自动池」推导（见 GroupCard 的模式解析）。
+     *  一旦用户显式点选就以显式值为准，不再随号池列表变化漂移。 */
+    mode: z.enum(PROVIDER_GROUP_MODES).optional(),
+    /** 绑定的号池 id（字符串形态，提交时转 number）。
+     *  direct 模式 = 该分组的专属池；link 模式 = 手工关联的号池。 */
+    poolId: z.string(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.poolId) return;
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["poolId"],
+      message:
+        val.mode === "link"
+          ? "请选择关联号池"
+          : "请先点「添加 Key」粘贴至少一个 Key（系统会自动建专属号池）",
+    });
+  });
 
 export type ProviderFormGroup = z.infer<typeof providerFormGroupSchema>;
 

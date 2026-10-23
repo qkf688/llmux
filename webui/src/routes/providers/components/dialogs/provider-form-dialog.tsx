@@ -3,9 +3,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { UseFormReturn } from "react-hook-form";
 import { PoolDetailDialog } from "@/components/number-pools/pool-detail-dialog";
-import { PoolFormDialog } from "@/components/number-pools/pool-form-dialog";
-import { usePools, useCreatePool } from "@/hooks/api";
+import { ImportCredentialsDialog } from "@/components/number-pools/import-credentials-dialog";
+import { usePools, useBatchImportCredentials, useAutoImportPoolCredentials } from "@/hooks/api";
 import { toErrorMessage } from "@/lib/errors";
+import type { BatchImportData } from "@/lib/api";
 import {
   Dialog,
   DialogBody,
@@ -29,6 +30,7 @@ import { Switch } from "@/components/ui/switch";
 import type { Provider, ProviderTemplate } from "@/lib/api";
 import type { ProviderFormValues } from "../../form-schema";
 import { getActiveProviderExtras } from "../../form-fields";
+import { autoPoolMeta } from "../../utils/config";
 import { EndpointsSection, GroupsSection, SupportTypesField } from "./provider-schedule-fields";
 
 interface ProviderFormDialogProps {
@@ -64,10 +66,11 @@ export function ProviderFormDialog({
     open: false,
     poolId: null,
   });
-  // 就地新建号池：记住是给哪个分组建的，建完把新池 id 回填进该组 poolId
-  const [creatingPoolForIndex, setCreatingPoolForIndex] = useState<number | null>(null);
+  // 「添加 Key」子弹窗：记住是给哪个分组建的，导入后把池 id 回填进该组
+  const [keysTarget, setKeysTarget] = useState<number | null>(null);
   const { data: pools = [] } = usePools();
-  const createPool = useCreatePool();
+  const batchImport = useBatchImportCredentials();
+  const autoImport = useAutoImportPoolCredentials();
   const poolDetailTarget = poolDetail.poolId
     ? (pools.find((p) => String(p.ID) === poolDetail.poolId) ?? null)
     : null;
@@ -75,25 +78,41 @@ export function ProviderFormDialog({
   useEffect(() => {
     if (!open) {
       setPoolDetail({ open: false, poolId: null });
-      setCreatingPoolForIndex(null);
+      setKeysTarget(null);
     }
   }, [open]);
 
   /**
-   * 就地新建号池的保存处理：写入成功后把新池回填进发起该操作的分组。
-   * 新池建出来是空的（凭据去号池页导入），这里只负责「建池 + 选中」。
+   * 「添加 Key」的导入处理：弹窗把粘贴文本交过来，这里拆行 + 调接口 + 回填。
+   *
+   * 两个分支：分组已绑专属号池 → 往那个池追加；还没绑 → 调「建池 + 导入」一步式端点，
+   * 拿到新池 id 回填进该组。供应商保存时照旧只提交 pool_id，后端结构化同步零改动。
    */
-  const handlePoolCreated = async (values: { name: string; note?: string; test_model?: string }) => {
-    const targetIndex = creatingPoolForIndex;
+  const handleImportKeys = async (text: string): Promise<BatchImportData | null> => {
+    if (keysTarget == null) return null;
+    const groupIndex = keysTarget;
+    const keys = text
+      .split(/[\n,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (keys.length === 0) return null;
+    const poolId = form.getValues(`groups.${groupIndex}.poolId`) ?? "";
     try {
-      const created = await createPool.mutateAsync(values);
-      if (targetIndex != null) {
-        form.setValue(`groups.${targetIndex}.poolId`, String(created.ID), { shouldDirty: true });
+      if (poolId) {
+        const data = await batchImport.mutateAsync({ poolId: Number(poolId), keys });
+        toast.success(`已导入 ${data.imported} 条凭据`);
+        return data;
       }
-      toast.success("号池已创建并关联到该分组（凭据请在号池页导入）");
-      setCreatingPoolForIndex(null);
+      const groupName = form.getValues(`groups.${groupIndex}.name`) ?? "";
+      const meta = autoPoolMeta(form.getValues("name") ?? "", groupName, groupIndex);
+      const data = await autoImport.mutateAsync({ ...meta, keys });
+      form.setValue(`groups.${groupIndex}.poolId`, String(data.pool_id), { shouldDirty: true });
+      form.setValue(`groups.${groupIndex}.mode`, "direct", { shouldDirty: true });
+      toast.success(`已创建专属号池「${data.pool_name}」并导入 ${data.imported} 条凭据`);
+      return data;
     } catch (err) {
-      toast.error(`创建号池失败: ${toErrorMessage(err)}`);
+      toast.error(`导入凭据失败: ${toErrorMessage(err)}`);
+      return null;
     }
   };
 
@@ -271,7 +290,7 @@ export function ProviderFormDialog({
                 <EndpointsSection />
                 <GroupsSection
                   onViewPoolDetail={(poolId) => setPoolDetail({ open: true, poolId })}
-                  onCreatePool={(groupIndex) => setCreatingPoolForIndex(groupIndex)}
+                  onAddKeys={(groupIndex) => setKeysTarget(groupIndex)}
                 />
               </div>
             </DialogBody>
@@ -292,15 +311,16 @@ export function ProviderFormDialog({
         onOpenChange={(next) => setPoolDetail((prev) => ({ ...prev, open: next }))}
         pool={poolDetailTarget}
       />
-      {/* 就地新建号池子弹窗：pool 恒 null（新建态）；建池失败的弹窗不关，留给用户改名字重试 */}
-      <PoolFormDialog
-        open={creatingPoolForIndex != null}
+      {/* 「添加 Key」子弹窗：粘贴即落库；分组还没有专属号池时后端会一并建池并回填池 id */}
+      <ImportCredentialsDialog
+        open={keysTarget != null}
         onOpenChange={(next) => {
-          if (!next) setCreatingPoolForIndex(null);
+          if (!next) setKeysTarget(null);
         }}
-        pool={null}
-        onSaved={handlePoolCreated}
-        isSaving={createPool.isPending}
+        onImport={handleImportKeys}
+        isImporting={batchImport.isPending || autoImport.isPending}
+        title="添加 Key"
+        description="粘贴 Key，每行一个（逗号分隔亦可）；只填 1 个也合法。首次添加会自动为该分组建一个专属号池。"
       />
     </Dialog>
   );

@@ -38,6 +38,31 @@ type credentialCipher interface {
 	Encrypt(plain string) (string, error)
 }
 
+// validateImportKeys 校验一次导入请求的 keys 规模：空 → 400，超上限 → 400。
+// 两个入口共用（既有批量导入 + 自动池建池并导入），上限口径与错误文案只此一处。
+func validateImportKeys(c *gin.Context, keys []string) bool {
+	if len(keys) == 0 {
+		httpresp.BadRequest(c, "No keys provided")
+		return false
+	}
+	if len(keys) > maxCredentialImportBatch {
+		httpresp.BadRequest(c, fmt.Sprintf("Batch exceeds limit of %d keys", maxCredentialImportBatch))
+		return false
+	}
+	return true
+}
+
+// importCipher 取凭据加密器；未配置 → 500 并写回响应（响应已写出，调用方直接 return）。
+// 两个入口共用，避免各自写一遍「取 cipher + 未配置兜底」。
+func importCipher(c *gin.Context) (credentialCipher, bool) {
+	cipher := credentialcrypto.Default()
+	if cipher == nil {
+		httpresp.InternalErrorMessage(c, "encryption not configured", nil)
+		return nil, false
+	}
+	return cipher, true
+}
+
 // BatchImportCredentials 批量粘贴导入凭据：去重（批内首现 + 池内现有）+ 加密落库 +
 // 失败行回显。行级事务语义：单行加密/落库异常收集为 failed 行，不阻断其余行落库。
 //
@@ -56,21 +81,15 @@ func BatchImportCredentials(c *gin.Context) {
 	if !httpx.BindJSON(c, &req) {
 		return
 	}
-	if len(req.Keys) == 0 {
-		httpresp.BadRequest(c, "No keys provided")
-		return
-	}
-	if len(req.Keys) > maxCredentialImportBatch {
-		httpresp.BadRequest(c, fmt.Sprintf("Batch exceeds limit of %d keys", maxCredentialImportBatch))
+	if !validateImportKeys(c, req.Keys) {
 		return
 	}
 	ctx := c.Request.Context()
 	if _, ok := requirePool(c, ctx, poolID); !ok {
 		return
 	}
-	cipher := credentialcrypto.Default()
-	if cipher == nil {
-		httpresp.InternalErrorMessage(c, "encryption not configured", nil)
+	cipher, ok := importCipher(c)
+	if !ok {
 		return
 	}
 	data, err := importCredentialRows(ctx, repos().Credential, poolID, req.Keys, cipher)

@@ -13,6 +13,9 @@ func Register(rg gin.IRoutes) {
 	rg.POST("/pools", CreatePool)
 	rg.PUT("/pools/:id", UpdatePool)
 	rg.DELETE("/pools/:id", DeletePool)
+	// 自动池 + 凭据一步落库（供应商分组「添加 Key」）：静态段与下方 :id 通配段同层共存，
+	// gin 按静态优先匹配，两者互不捕获（见 handler/pools/auto_pool_test.go 的路由断言）。
+	rg.POST("/pools/auto/import", CreateAutoPoolWithCredentials)
 	// batch 固定段优先于 :credId，避免 "batch" 被当成 credId 捕获
 	rg.POST("/pools/:id/credentials/batch/import", BatchImportCredentials)
 	rg.POST("/pools/:id/credentials/:credId/test", TestCredential)

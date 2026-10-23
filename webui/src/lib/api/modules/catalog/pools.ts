@@ -8,6 +8,9 @@ export interface Pool {
   /** 池级「测试模型」（#24-B 迁移）：按凭据测试打真实最小 completion 用的模型名；
    *  空 = 未配置，点测直接判 validation 失败。键恒在（后端直返实体无 omitempty）。 */
   TestModel: string;
+  /** 该池是否由「供应商分组 → 添加 Key」流程自动创建（专属池）。
+   *  号池页据此把自动池折叠成单独一块，与用户手建的多 Key 号池主列表分开。 */
+  AutoCreated: boolean;
   CreatedAt: string;
   UpdatedAt: string;
   DeletedAt?: string | null;
@@ -102,5 +105,27 @@ export async function batchImportCredentials(
   return apiRequest<BatchImportData>(`/pools/${poolId}/credentials/batch/import`, {
     method: "POST",
     body: JSON.stringify(body),
+  });
+}
+
+/** POST /pools/auto/import 响应：自动池标识 + 批量导入逐行回显（与既有批量导入同源）。 */
+export interface AutoPoolImportData extends BatchImportData {
+  pool_id: number;
+  pool_name: string;
+}
+
+/**
+ * POST /pools/auto/import —— 「供应商分组 → 添加 Key」的一步式落库：
+ * 建一个专属号池（AutoCreated=true）并把粘贴的 Key 导进去。
+ * name 由调用方按「供应商名·分组名」拼好；后端重名时自动加序号后缀，不会报「池名已存在」。
+ */
+export async function autoImportPoolCredentials(body: {
+  name: string;
+  note?: string;
+  keys: string[];
+}): Promise<AutoPoolImportData> {
+  return apiRequest<AutoPoolImportData>("/pools/auto/import", {
+    method: "POST",
+    body: JSON.stringify({ name: body.name, note: body.note ?? "", keys: body.keys }),
   });
 }

@@ -1,11 +1,14 @@
 import Loading from "@/components/loading";
 import { TableCard } from "@/components/table-card";
 import type { PoolListItem } from "@/lib/api";
-import { PoolsTableDesktop } from "./pools-desktop-table";
-import { PoolsMobileList } from "./pools-mobile-list";
+import { PoolsTableBlock } from "./pools-table-block";
+import { PoolsAutoSection } from "./pools-auto-section";
 
 type PoolsListSectionProps = {
+  /** 手建号池（主列表） */
   pools: PoolListItem[];
+  /** 系统自动创建的号池（折叠在主列表下方） */
+  autoPools: PoolListItem[];
   isLoading?: boolean;
   isError?: boolean;
   onOpenDetail: (pool: PoolListItem) => void;
@@ -16,6 +19,7 @@ type PoolsListSectionProps = {
 
 export function PoolsListSection({
   pools,
+  autoPools,
   isLoading = false,
   isError = false,
   onOpenDetail,
@@ -32,14 +36,30 @@ export function PoolsListSection({
         <div className="flex h-full items-center justify-center px-6 text-center text-sm text-destructive">
           加载号池失败，请刷新重试
         </div>
-      ) : pools.length === 0 ? (
+      ) : pools.length === 0 && autoPools.length === 0 ? (
         <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
           暂无号池数据
         </div>
       ) : (
         <div className="flex h-full flex-col">
-          <PoolsTableDesktop pools={pools} onOpenDetail={onOpenDetail} onEdit={onEdit} onRequestDelete={onRequestDelete} />
-          <PoolsMobileList pools={pools} onOpenDetail={onOpenDetail} onEdit={onEdit} onRequestDelete={onRequestDelete} />
+          {pools.length === 0 ? (
+            <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground">
+              暂无手建号池
+            </div>
+          ) : (
+            <PoolsTableBlock
+              pools={pools}
+              onOpenDetail={onOpenDetail}
+              onEdit={onEdit}
+              onRequestDelete={onRequestDelete}
+            />
+          )}
+          <PoolsAutoSection
+            pools={autoPools}
+            onOpenDetail={onOpenDetail}
+            onEdit={onEdit}
+            onRequestDelete={onRequestDelete}
+          />
         </div>
       )}
     </TableCard>

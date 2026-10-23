@@ -81,3 +81,20 @@ type BatchImportData struct {
 	Failed   int              `json:"failed"`
 	Rows     []BatchImportRow `json:"rows"`
 }
+
+// AutoPoolImportRequest 「自动池 + 凭据」一步式落库的请求体。
+// Name 由前端按「供应商名·分组名」拼好（命名口径单一来源在前端），后端只负责重名时
+// 加序号后缀兜底，保证「同名不报错、池名唯一」。
+type AutoPoolImportRequest struct {
+	Name string   `json:"name"`
+	Note string   `json:"note"`
+	Keys []string `json:"keys"`
+}
+
+// AutoPoolImportData 自动池创建 + 凭据导入结果：池标识 + 批量导入逐行回显。
+// 内嵌 BatchImportData（汇总计数与逐行回显的契约与既有批量导入完全同源）。
+type AutoPoolImportData struct {
+	PoolID   uint   `json:"pool_id"`
+	PoolName string `json:"pool_name"`
+	BatchImportData
+}

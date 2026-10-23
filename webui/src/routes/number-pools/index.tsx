@@ -10,9 +10,14 @@ export default function NumberPoolsPage() {
 
   return (
     <div className="h-full min-h-0 flex flex-col gap-4">
-      <PoolsHeader poolCount={page.pools.length} onCreate={page.openCreateForm} />
+      <PoolsHeader
+        poolCount={page.manualPools.length}
+        autoPoolCount={page.autoPools.length}
+        onCreate={page.openCreateForm}
+      />
       <PoolsListSection
-        pools={page.pools}
+        pools={page.manualPools}
+        autoPools={page.autoPools}
         isLoading={page.isLoading}
         isError={page.isError}
         onOpenDetail={page.openDetail}

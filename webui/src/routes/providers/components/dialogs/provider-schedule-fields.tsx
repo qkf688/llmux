@@ -6,8 +6,8 @@
  * 正式实现（S6）时这些字段改为独立 DTO 提交，本组件结构保留。
  */
 import type { ProviderTemplate } from "@/lib/api";
-import { Eye, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Eye, KeyRound, Trash2 } from "lucide-react";
+import { useId, useState } from "react";
 import { useFieldArray, useFormContext, useWatch } from "react-hook-form";
 import { applyProviderTemplateDefaults } from "../../utils/template-defaults";
 import { Badge } from "@/components/ui/badge";
@@ -21,10 +21,17 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { usePoolOptions } from "../../hooks/use-pool-options";
-import { PROTOCOL_LABEL, SUPPORTED_TYPE_OPTIONS, type ProviderFormGroup, type ProviderFormValues } from "../../form-schema";
+import { usePoolOptions, type PoolOption } from "../../hooks/use-pool-options";
+import {
+  PROTOCOL_LABEL,
+  SUPPORTED_TYPE_OPTIONS,
+  type ProviderFormGroup,
+  type ProviderFormValues,
+  type ProviderGroupMode,
+} from "../../form-schema";
 
 /**
  * 主类型 / 支持类型（S0 原型）：主类型为 Select 下拉（紧凑，决定 providers.New 分发 / 模板默认值 / 模型同步），
@@ -252,20 +259,59 @@ function defaultGroup(): ProviderFormGroup {
   return { name: "", weight: 1, poolId: "" };
 }
 
-/** 单个分组卡片：名称/价格权重/关联号池；凭据只存在于号池，可查看池详情或就地新建号池 */
+/**
+ * 分组取 Key 的模式解析：用户显式点选优先；没点选时按「当前绑定的号池是不是自动池」推导
+ * （专属池 → 直接添加；手建池 → 关联号池）。
+ *
+ * 返回 null = 未知（号池列表还没回来）。此时**不猜**：先渲染占位，等列表到了再定模式。
+ * 猜错的后果是 radio 在用户眼前跳变（先「直接添加」再翻成「关联号池」），比多等 100ms 难受得多。
+ */
+function resolveGroupMode(
+  poolId: string,
+  pool: PoolOption | undefined,
+  poolsReady: boolean,
+): ProviderGroupMode | null {
+  if (!poolId) return "direct";
+  if (!poolsReady) return null;
+  // 号池不在列表里（已删除）→ 退回关联模式，让用户重选一个存在的池
+  if (!pool) return "link";
+  return pool.autoCreated ? "direct" : "link";
+}
+
+/** 单个分组卡片：名称/价格权重 + 取 Key 模式（直接添加 / 关联号池）。 */
 function GroupCard({
   index,
   onViewPoolDetail,
-  onCreatePool,
+  onAddKeys,
 }: {
   index: number;
   /** 打开号池详情弹窗（由 ProviderFormDialog 持 state 并渲染共享 PoolDetailDialog） */
   onViewPoolDetail?: (poolId: string) => void;
-  /** 就地新建号池（由 ProviderFormDialog 持 state 并渲染共享 PoolFormDialog，建完自动回填本组） */
-  onCreatePool?: (groupIndex: number) => void;
+  /** 打开「添加 Key」弹窗（由 ProviderFormDialog 持 state 并渲染共享 ImportCredentialsDialog） */
+  onAddKeys?: (groupIndex: number) => void;
 }) {
-  const { control } = useFormContext<ProviderFormValues>();
-  const pools = usePoolOptions();
+  const { control, setValue } = useFormContext<ProviderFormValues>();
+  const { options: pools, ready: poolsReady } = usePoolOptions();
+  const groups = useWatch({ control, name: "groups" }) ?? [];
+  const poolId = groups[index]?.poolId ?? "";
+  const selectedMode = groups[index]?.mode;
+  const poolOption = pools.find((pool) => String(pool.id) === poolId);
+  // 用户显式点选过的模式以表单值为准（不随号池列表刷新而漂移）
+  const mode = selectedMode ?? resolveGroupMode(poolId, poolOption, poolsReady);
+  // radio 的 id 必须在同页多张分组卡片间唯一：useId 保证（index 会随分组增删漂移）
+  const idBase = useId();
+
+  /**
+   * 切模式：直接添加 = Key 只进该分组的专属池；关联号池 = Key 不归本表单管。
+   * 切到「直接添加」时若当前绑的是手建池（或池已不存在）必须解绑——否则下一次「添加 Key」
+   * 会把 Key 灌进用户的共享池，那不是专属池，等于悄悄改了用户原有池的内容。
+   */
+  const handleModeChange = (next: string) => {
+    setValue(`groups.${index}.mode`, next as ProviderGroupMode, { shouldDirty: true });
+    if (next === "direct" && poolId && poolOption?.autoCreated !== true) {
+      setValue(`groups.${index}.poolId`, "", { shouldDirty: true });
+    }
+  };
 
   return (
     <div className="space-y-3 rounded-lg border p-3">
@@ -313,65 +359,140 @@ function GroupCard({
         />
       </div>
 
-      <FormField
-        control={control}
-        name={`groups.${index}.poolId`}
-        render={({ field }) => (
-          <FormItem className="space-y-1">
-            <FormLabel>关联号池</FormLabel>
+      <div className="space-y-1.5">
+        <FormLabel>凭据来源</FormLabel>
+        {mode === null ? (
+          <p className="text-xs text-muted-foreground">加载号池信息…</p>
+        ) : (
+          <RadioGroup value={mode} onValueChange={handleModeChange} className="flex flex-wrap gap-4">
             <div className="flex items-center gap-2">
-              <FormControl>
-                <Select value={field.value || undefined} onValueChange={field.onChange}>
-                  <SelectTrigger className="min-w-0 flex-1">
-                    <SelectValue placeholder="选择号池（凭据在号池页管理）" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pools.map((pool) => (
-                      <SelectItem key={pool.id} value={String(pool.id)}>
-                        {pool.name}（{pool.keyCount} keys）
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FormControl>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-9 shrink-0 px-2.5 text-xs"
-                      disabled={!field.value}
-                      onClick={() => onViewPoolDetail?.(field.value)}
-                    >
-                      <Eye className="size-3.5" />
-                      查看详情
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>查看号池详情（凭据列表 / 状态分布）</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-9 shrink-0 px-2.5 text-xs"
-                    onClick={() => onCreatePool?.(index)}
-                  >
-                    <Plus className="size-3.5" />
-                    新建号池
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>就地建空号池并自动关联到本分组（凭据稍后在号池页导入）</TooltipContent>
-              </Tooltip>
+              <RadioGroupItem value="direct" id={`${idBase}-direct`} />
+              <label htmlFor={`${idBase}-direct`} className="cursor-pointer text-sm">
+                直接添加
+              </label>
             </div>
-            <FormMessage />
-          </FormItem>
+            <div className="flex items-center gap-2">
+              <RadioGroupItem value="link" id={`${idBase}-link`} />
+              <label htmlFor={`${idBase}-link`} className="cursor-pointer text-sm">
+                关联号池
+              </label>
+            </div>
+          </RadioGroup>
         )}
-      />
+        <p className="text-xs text-muted-foreground">
+          直接添加：粘贴 Key 即落库，系统为该分组自动建专属号池；关联号池：凭据在该号池里维护
+        </p>
+      </div>
+
+      {mode === "direct" && (
+        <FormField
+          control={control}
+          name={`groups.${index}.poolId`}
+          render={() => (
+            <FormItem className="space-y-1">
+              <FormLabel>专属号池</FormLabel>
+              <div className="flex items-center gap-2">
+                <FormControl>
+                  <div className="min-w-0 flex-1 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                    {poolOption ? (
+                      <span className="flex items-center gap-2">
+                        <KeyRound className="size-3.5 shrink-0 text-muted-foreground" />
+                        <span className="truncate">{poolOption.name}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {poolOption.keyCount} keys
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        尚未添加凭据 —— 点「添加 Key」自动创建专属号池
+                      </span>
+                    )}
+                  </div>
+                </FormControl>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 shrink-0 px-2.5 text-xs"
+                  onClick={() => onAddKeys?.(index)}
+                >
+                  <KeyRound className="size-3.5" />
+                  添加 Key
+                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 shrink-0 px-2.5 text-xs"
+                        disabled={!poolId}
+                        onClick={() => onViewPoolDetail?.(poolId)}
+                      >
+                        <Eye className="size-3.5" />
+                        查看详情
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>查看号池详情（凭据列表 / 状态分布）</TooltipContent>
+                </Tooltip>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                专属号池的测试模型留空，需在号池页配置（点测凭据要用）
+              </p>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
+
+      {mode === "link" && (
+        <FormField
+          control={control}
+          name={`groups.${index}.poolId`}
+          render={({ field }) => (
+            <FormItem className="space-y-1">
+              <FormLabel>关联号池</FormLabel>
+              <div className="flex items-center gap-2">
+                <FormControl>
+                  <Select value={field.value || undefined} onValueChange={field.onChange}>
+                    <SelectTrigger className="min-w-0 flex-1">
+                      <SelectValue placeholder="选择号池（凭据在号池页管理）" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pools.map((pool) => (
+                        <SelectItem key={pool.id} value={String(pool.id)}>
+                          {pool.name}（{pool.keyCount} keys）
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormControl>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 shrink-0 px-2.5 text-xs"
+                        disabled={!field.value}
+                        onClick={() => onViewPoolDetail?.(field.value)}
+                      >
+                        <Eye className="size-3.5" />
+                        查看详情
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>查看号池详情（凭据列表 / 状态分布）</TooltipContent>
+                </Tooltip>
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
     </div>
   );
 }
@@ -379,12 +500,12 @@ function GroupCard({
 /** 凭据分组区：分组列表 + 添加分组 */
 export function GroupsSection({
   onViewPoolDetail,
-  onCreatePool,
+  onAddKeys,
 }: {
   /** 透传给各分组卡片：关联号池时打开该池的详情弹窗 */
   onViewPoolDetail?: (poolId: string) => void;
-  /** 透传给各分组卡片：就地新建号池，参数为分组下标 */
-  onCreatePool?: (groupIndex: number) => void;
+  /** 透传给各分组卡片：打开该组的「添加 Key」弹窗，参数为分组下标 */
+  onAddKeys?: (groupIndex: number) => void;
 }) {
   const { control } = useFormContext<ProviderFormValues>();
   const { fields, append, remove } = useFieldArray({ control, name: "groups" });
@@ -402,7 +523,7 @@ export function GroupsSection({
           <GroupCard
             index={index}
             onViewPoolDetail={onViewPoolDetail}
-            onCreatePool={onCreatePool}
+            onAddKeys={onAddKeys}
           />
           <Tooltip>
             <TooltipTrigger asChild>

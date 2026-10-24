@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/qkf688/llmux/consts"
+	"github.com/qkf688/llmux/service/transform/shared"
 	"github.com/tidwall/gjson"
 )
 
@@ -32,7 +33,9 @@ const (
 )
 
 // FamilyOfProtocol 给协议期望的家族。Responses 与 Chat Completions 共用 OpenAI 家族
-// （同一家的两套 API），故两者同族——这也是「Responses 路径回 OpenAI 错误信封」**不算**证据的原因。
+// （同一家的两套 API）——但**同族不等于直通**：OpenAI 信封是兼容网关的默认形状，
+// 任何转译路径都顺手回它。故它能作否决（回的是 Anthropic/Google 信封 → 必是转译），
+// 不能作正面证明；正面证明见 fieldSpec.strong 与 IDPrefixConflict。
 func FamilyOfProtocol(protocol consts.Protocol) Family {
 	switch protocol {
 	case consts.ProtocolAnthropic:
@@ -163,9 +166,19 @@ func NativeHeaders(header http.Header, family Family) []string {
 // 为什么按协议各列一份、而不是跨协议比字段多少：三条协议的关键字段集本就不同
 // （cache_* 只有 Anthropic 有），跨协议比数量没有意义。本包比的是
 // 「**它自己该有的，回来了几个**」，命中项逐条报给用户看。
+//
+// strong 标记「翻译层造不出来」的字段——这是唯一能正面证明直通的证据：
+//   - Anthropic 的 content[].signature 是上游对推理块的不透明签名，转译层拿不到源数据，
+//     想造只能伪造一个哈希，且它对客户端无意义；
+//   - OpenAI 的 system_fingerprint 由后端模型侧生成，转译层无从得知；
+//   - Responses 的 encrypted_content 同理（只有请求 include 时才回，故常缺席）。
+//
+// 其余的（object / type / stop_reason / usage.*）都是各协议的**骨架**：任何翻译层都必须
+// 亲手写出来，命中与否与是否原生无关，只能当完整度看，不能当直通证据。
 type fieldSpec struct {
-	label string
-	path  string
+	label  string
+	path   string
+	strong bool
 }
 
 var fieldSpecs = map[consts.WireFormat][]fieldSpec{
@@ -176,7 +189,7 @@ var fieldSpecs = map[consts.WireFormat][]fieldSpec{
 		{label: "usage.completion_tokens", path: "usage.completion_tokens"},
 		{label: "usage.prompt_tokens_details", path: "usage.prompt_tokens_details"},
 		{label: "usage.completion_tokens_details", path: "usage.completion_tokens_details"},
-		{label: "system_fingerprint", path: "system_fingerprint"},
+		{label: "system_fingerprint", path: "system_fingerprint", strong: true},
 		{label: "service_tier", path: "service_tier"},
 	},
 	consts.FormatOpenAIResponses: {
@@ -187,7 +200,7 @@ var fieldSpecs = map[consts.WireFormat][]fieldSpec{
 		{label: "usage.output_tokens", path: "usage.output_tokens"},
 		{label: "usage.input_tokens_details", path: "usage.input_tokens_details"},
 		{label: "usage.output_tokens_details", path: "usage.output_tokens_details"},
-		{label: "error", path: "error"},
+		{label: "encrypted_content", path: "output.0.encrypted_content", strong: true},
 	},
 	consts.FormatAnthropic: {
 		{label: "type", path: "type"},
@@ -198,14 +211,20 @@ var fieldSpecs = map[consts.WireFormat][]fieldSpec{
 		{label: "usage.output_tokens", path: "usage.output_tokens"},
 		{label: "usage.cache_creation_input_tokens", path: "usage.cache_creation_input_tokens"},
 		{label: "usage.cache_read_input_tokens", path: "usage.cache_read_input_tokens"},
+		{label: "content[].signature", path: "content.0.signature", strong: true},
 	},
 }
 
 // FieldReport 一次响应按本协议「该有的原生特征」的命中情况。Miss 同样要报给用户：
 // 「缺了什么」才是他判断该不该换上游的依据。
+//
+// StrongHit 是 Hit 的子集：命中项里属于「翻译层造不出来」的那些。判定只看 StrongHit，
+// Hit/Miss 只用于展示完整度——把骨架字段和签名串等权计分，正是本包此前把转译路径
+// 推成主协议的成因。
 type FieldReport struct {
-	Hit  []string `json:"hit"`
-	Miss []string `json:"miss"`
+	Hit       []string `json:"hit"`
+	Miss      []string `json:"miss"`
+	StrongHit []string `json:"strong_hit"`
 }
 
 // Total 该协议的原生特征总数（0 = 未注册的 wire format，调用方据此判「不可检」）。
@@ -216,13 +235,16 @@ func Total(format consts.WireFormat) int {
 // InspectFields 按协议核对原生特征。用 Exists() 判「键在不在」而非「值非空」——
 // cache_read_input_tokens 为 0 是合法响应，但它出现本身就说明这一层没被转译抹掉。
 func InspectFields(format consts.WireFormat, body []byte) FieldReport {
-	report := FieldReport{Hit: []string{}, Miss: []string{}}
+	report := FieldReport{Hit: []string{}, Miss: []string{}, StrongHit: []string{}}
 	if !gjson.ValidBytes(body) {
 		return report
 	}
 	for _, spec := range fieldSpecs[format] {
 		if gjson.GetBytes(body, spec.path).Exists() {
 			report.Hit = append(report.Hit, spec.label)
+			if spec.strong {
+				report.StrongHit = append(report.StrongHit, spec.label)
+			}
 			continue
 		}
 		report.Miss = append(report.Miss, spec.label)
@@ -231,7 +253,7 @@ func InspectFields(format consts.WireFormat, body []byte) FieldReport {
 }
 
 // IDPrefix 取响应 id 的家族前缀（msg / chatcmpl / resp 之类）。原生实现各有自己的 id
-// 形状，转译层往往照着目标协议造同样的前缀，故它只是**佐证**，不参与判定。
+// 形状，转译层往往照着目标协议造同样的前缀，故它**只作佐证与否决**，不单独作正面证据。
 func IDPrefix(body []byte) string {
 	if !gjson.ValidBytes(body) {
 		return ""
@@ -244,4 +266,40 @@ func IDPrefix(body []byte) string {
 		return id[:i]
 	}
 	return id
+}
+
+// protocolIDPrefix 各协议原生响应的 id 前缀（身份词，不含分隔符）。
+//
+// **单一来源取自 transform/shared**：出站重铸与「前缀矛盾」判定必须用同一张表。
+// 两处各写一份时，改了重铸口径却忘了判定侧，就会出现「LLMux 自己产出的 id 被自己的
+// 检测判成转译证据」这类自伤（2026-10-24 修的第一版正是这个状态）。
+var protocolIDPrefix = map[consts.Protocol]string{
+	consts.ProtocolOpenAI:    shared.ResponseIDPrefixToken(consts.FormatOpenAIChat),
+	consts.ProtocolResponses: shared.ResponseIDPrefixToken(consts.FormatOpenAIResponses),
+	consts.ProtocolAnthropic: shared.ResponseIDPrefixToken(consts.FormatAnthropic),
+}
+
+// IDPrefixConflict 判「响应 id 前缀是否指向**另一条**已知协议」。
+//
+// 这是比字段命中更硬的证据：`{"object":"chat.completion"}` 配 `msg_...` 这种组合
+// 只可能是翻译层拼出来的——它按目标协议写了骨架，却漏了源协议的 id 形状。
+// 反过来，前缀不认识（"" / 自定义）一律不算冲突：第三方实现的前缀并不统一，
+// 拿未知当转译会误杀。
+//
+// **适用范围仅限上游返回的原始响应**：本仓 transform 出站已按目标协议重铸 id
+// （见 shared.ResponseIDFor），故 LLMux 自产响应不会命中本判据。若将来把这个函数
+// 复用到自产响应上，必须先剥掉重铸痕迹，否则会误判自己的输出。
+func IDPrefixConflict(protocol consts.Protocol, prefix string) (consts.Protocol, bool) {
+	if prefix == "" {
+		return "", false
+	}
+	for _, p := range consts.AllProtocols() {
+		if p == protocol {
+			continue
+		}
+		if want := protocolIDPrefix[p]; want != "" && strings.HasPrefix(prefix, want) {
+			return p, true
+		}
+	}
+	return "", false
 }

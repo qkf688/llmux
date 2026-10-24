@@ -127,7 +127,7 @@ func buildProtocolEntries(states []protocolprobe.RawResult) ([]protocolProbeEntr
 	for _, state := range states {
 		target := state.Target
 
-		fields := protocolprobe.FieldReport{Hit: []string{}, Miss: []string{}}
+		fields := protocolprobe.FieldReport{Hit: []string{}, Miss: []string{}, StrongHit: []string{}}
 		idPrefix := ""
 		if state.NonStream.Passed {
 			fields = protocolprobe.InspectFields(target.Format, state.NonStream.Body)
@@ -167,6 +167,7 @@ func buildProtocolEntries(states []protocolprobe.RawResult) ([]protocolProbeEntr
 			Family:             family,
 			NativeHeaders:      heads,
 			Fields:             fields,
+			IDPrefix:           idPrefix,
 			NonStreamMS:        nonStreamLeg.DurationMS,
 			EndpointConfigured: target.EndpointConfigured,
 		}

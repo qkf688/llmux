@@ -300,6 +300,24 @@ describe("模型测试：复制整份结果", () => {
     expect(screen.queryByRole("button", { name: /一键勾选/ })).toBeNull();
   });
 
+  // 回包形状回归：协议全挂时后端可能回 protocols: null（nil 切片序列化成 null）。
+  // 前端必须兜住，否则 .length 直接把整页带崩——这在「上游全挂」时真实发生过。
+  it("协议检测：recommendation.protocols 为 null 时不崩", () => {
+    const result = protocolFixture();
+    const broken = {
+      ...result,
+      recommendation: { ...result.recommendation!, protocols: null },
+    } as unknown as ProtocolProbeResult;
+    renderDialog({
+      testType: "protocol",
+      protocolTestResults: { [TEST_ID]: { loading: false, result: broken } },
+      onApplyProtocol: vi.fn(),
+    });
+
+    expect(screen.queryByRole("button", { name: /一键勾选/ })).toBeNull();
+    expect(screen.getAllByText(/置信度/).length).toBeGreaterThan(0);
+  });
+
   // 继承态被覆盖是单向的：写入后供应商层再改协议，这条关联不再跟随。按钮旁必须点明。
   it("协议检测：关联处于继承态时，提示写入后会固定为该模型自己的设置", () => {
     renderDialog({
@@ -424,7 +442,7 @@ const protocolEntryFixture = (over: Partial<ProtocolProbeEntry>): ProtocolProbeE
     same_family: true,
     native_headers: [],
   },
-  fields: { hit: ["object"], miss: ["service_tier"] },
+  fields: { hit: ["object"], miss: ["service_tier"], strong_hit: [] },
   id_prefix: "chatcmpl",
   recommended: false,
   ...over,
@@ -474,7 +492,7 @@ const protocolFixture = (): ProtocolProbeResult => ({
         same_family: true,
         native_headers: ["anthropic-ratelimit-requests-limit"],
       },
-      fields: { hit: ["type", "stop_reason"], miss: [] },
+      fields: { hit: ["type", "stop_reason", "content[].signature"], miss: [], strong_hit: ["content[].signature"] },
       id_prefix: "msg",
     }),
   ],

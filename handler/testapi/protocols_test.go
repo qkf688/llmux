@@ -206,18 +206,26 @@ func TestTestProtocolsHandler_MatrixVerdictAndRecommendation(t *testing.T) {
 	if heads := protocols[2].Get("fingerprint.native_headers").Array(); len(heads) == 0 {
 		t.Fatalf("anthropic 未采到任何原生响应头: %s", protocols[2].Get("fingerprint").Raw)
 	}
-	// 字段命中：anthropic 原生形状 8/8，openai/responses 的假上游只给了精简 usage。
-	if miss := protocols[2].Get("fields.miss").Array(); len(miss) != 0 {
-		t.Fatalf("anthropic fields.miss = %v, want 空", miss)
-	}
+	// 字段命中：anthropic 原生形状 8/9（缺 content[].signature——假上游回的是纯文本块，
+	// 没有推理块签名），openai/responses 的假上游只给了精简 usage。
 	if hit := protocols[2].Get("fields.hit").Array(); len(hit) != 8 {
 		t.Fatalf("anthropic fields.hit = %d, want 8", len(hit))
+	}
+	if miss := protocols[2].Get("fields.miss").Array(); len(miss) != 1 || miss[0].String() != "content[].signature" {
+		t.Fatalf("anthropic fields.miss = %v, want [content[].signature]（骨架字段别当强证据）", miss)
+	}
+	// 三条假响应都没有不可伪造的原生特征（无 system_fingerprint / encrypted_content /
+	// signature）→ strong_hit 必须为空，否则总评会凭骨架字段给出高置信度。
+	for i := range protocols {
+		if strong := protocols[i].Get("fields.strong_hit").Array(); len(strong) != 0 {
+			t.Fatalf("%s fields.strong_hit = %v, want 空", protocols[i].Get("protocol").String(), strong)
+		}
 	}
 	if protocols[0].Get("id_prefix").String() != "chatcmpl" {
 		t.Fatalf("openai id_prefix = %q, want chatcmpl", protocols[0].Get("id_prefix").String())
 	}
-	// 总评：三条都同族 → medium（分不出后端家族），按字段命中数点名 anthropic 为主格式；
-	// 集合是一键写入的「允许集合」，三条都可用就该都在里面。
+	// 总评：三条都同族（假上游按各自方言回错误），但 Anthropic 的信封必须专门实现、
+	// 且带一份原生响应头，弱证据强于另两条 → 点名 anthropic，置信度 medium（无强证据）。
 	if got := gjson.Get(w.Body.String(), "data.recommendation.primary").String(); got != "anthropic" {
 		t.Fatalf("recommendation.primary = %q, want anthropic", got)
 	}

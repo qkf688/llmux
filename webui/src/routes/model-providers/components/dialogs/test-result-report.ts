@@ -169,6 +169,13 @@ export function protocolSummaryLine(entry: ProtocolProbeEntry): string {
   return [verdict, leg("非流式", entry.non_stream), leg("流式", entry.stream)].join(" · ");
 }
 
+/** 强证据清单。字段由后端保证是数组，但「协议全挂」这类回包里历史上出现过 null
+ *  （旧版本 Recommendation.Protocols 是 nil 切片，序列化成了 null）——这里兜一层，
+ *  免得一个空数组把整页带崩。 */
+function strongHitsOf(entry: ProtocolProbeEntry): string[] {
+  return entry.fields.strong_hit ?? [];
+}
+
 /** 证据摘要：指纹同族 / 原生响应头 / 原生字段命中。展示与复制共用。 */
 export function protocolEvidenceLine(entry: ProtocolProbeEntry): string {
   const parts: string[] = [];
@@ -187,6 +194,11 @@ export function protocolEvidenceLine(entry: ProtocolProbeEntry): string {
   if (total > 0) {
     const miss = entry.fields.miss.length > 0 ? `（缺 ${entry.fields.miss.join(", ")}）` : "";
     parts.push(`原生字段 ${entry.fields.hit.length}/${total} 命中${miss}`);
+    // 强证据单列：它是「像不像直通」的唯一正面依据，混在命中总数里读不出来。
+    const strong = strongHitsOf(entry);
+    if (strong.length > 0) {
+      parts.push(`不可伪造的原生特征 ${strong.join(", ")}`);
+    }
   }
   return parts.join(" · ");
 }
@@ -206,6 +218,11 @@ export function protocolEvidenceChips(entry: ProtocolProbeEntry): string[] {
   const total = entry.fields.hit.length + entry.fields.miss.length;
   if (total > 0) {
     chips.push(`原生字段 ${entry.fields.hit.length}/${total}`);
+  }
+  // 强证据单独成 chip（放在字段命中之前读作「它为什么更原生」），数量就是它的强度。
+  const strong = strongHitsOf(entry);
+  if (strong.length > 0) {
+    chips.splice(1, 0, `强证据 ${strong.length}`);
   }
   if (entry.fingerprint.native_headers.length > 0) {
     chips.push(`原生头 ${entry.fingerprint.native_headers.length}`);

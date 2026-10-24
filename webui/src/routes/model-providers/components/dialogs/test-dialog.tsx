@@ -260,6 +260,9 @@ function ProtocolResultSection({
   }
   const protocols = result.protocols ?? [];
   const recommendation = result.recommendation;
+  // 后端保证 protocols 是数组，但检测整体失败时旧版本会回 null——这里兜一层，
+  // 免得一个空数组把整页带崩。
+  const recommended = recommendation?.protocols ?? [];
   return (
     <div className="space-y-3">
       {protocols.length === 0 && (
@@ -327,7 +330,7 @@ function ProtocolResultSection({
               唯一主协议；可用协议全是转译路径时集合为空，此时不给按钮）。
               写的是「允许集合 + 主格式」而不是「只走一条」：多勾几条能让客户端用哪种协议进来
               就走哪条，省掉没必要的格式转换；主格式只在客户端发来集合外协议时决定转成哪种格式。 */}
-          {recommendation.protocols.length > 0 && associationId !== null && onApply && (
+          {recommended.length > 0 && associationId !== null && onApply && (
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <Button
                 size="sm"
@@ -337,15 +340,13 @@ function ProtocolResultSection({
                   // 先包一层 Promise 再调回调：回调若**同步抛错**，finally 仍会复位 loading。
                   // 失败提示由页面层（写操作 owner）负责，这里不重复 toast。
                   void Promise.resolve()
-                    .then(() =>
-                      onApply(associationId, recommendation.protocols, recommendation.primary),
-                    )
+                    .then(() => onApply(associationId, recommended, recommendation.primary))
                     .finally(() => setApplying(false));
                 }}
               >
                 {applying
                   ? "写入中..."
-                  : `一键勾选 ${recommendation.protocols.length} 条可用协议（主格式 ${protocolLabel(recommendation.primary)}）`}
+                  : `一键勾选 ${recommended.length} 条可用协议（主格式 ${protocolLabel(recommendation.primary)}）`}
               </Button>
               <span className="text-muted-foreground">会替换该模型当前的协议设置</span>
               {/* 继承态被覆盖成显式设置是**单向**的：写入后供应商层再改协议，这条关联不再

@@ -296,8 +296,10 @@ export interface ProtocolProbeEntry {
   non_stream: ProtocolLegResult;
   stream: ProtocolLegResult;
   fingerprint: ProtocolFingerprint;
-  /** 该协议「应有」的原生特征命中情况（跨协议不比数量，只看各自完整度）。 */
-  fields: { hit: string[]; miss: string[] };
+  /** 该协议「应有」的原生特征命中情况（跨协议不比数量，只看各自完整度）。
+   *  strong_hit 是 hit 的子集：命中项里「翻译层造不出来」的那些（签名串 / 指纹 / 加密推理内容），
+   *  只有它参与总评排名——骨架字段（object/type/usage.*）翻译层必须亲手写，命中与否不说明直通。 */
+  fields: { hit: string[]; miss: string[]; strong_hit: string[] };
   id_prefix: string;
   recommended: boolean;
 }

@@ -1,6 +1,7 @@
 package protocolprobe
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -8,6 +9,11 @@ import (
 )
 
 func fields(hit, miss []string) FieldReport { return FieldReport{Hit: hit, Miss: miss} }
+
+// strongFields 造一份带「不可伪造的原生特征」命中的字段报告（强证据即证据本体）。
+func strongFields(strong []string) FieldReport {
+	return FieldReport{Hit: strong, Miss: nil, StrongHit: strong}
+}
 
 func TestVerdictOf(t *testing.T) {
 	t.Parallel()
@@ -106,7 +112,7 @@ func TestRecommend_Branches(t *testing.T) {
 			{
 				Protocol: consts.ProtocolAnthropic, NonStream: LegPassed, Stream: LegPassed,
 				Family: FamilyAnthropic,
-				Fields: fields([]string{"a", "b", "c"}, nil),
+				Fields: strongFields([]string{"content[].signature"}),
 			},
 			{
 				Protocol: consts.ProtocolOpenAI, NonStream: LegPassed, Stream: LegPassed,
@@ -119,7 +125,7 @@ func TestRecommend_Branches(t *testing.T) {
 		// 只剩 anthropic 一条进集合。这条断言就是「勾选集合排除转译」的锁。
 		assertProtocolSet(t, rec, []consts.Protocol{consts.ProtocolAnthropic}, consts.ProtocolAnthropic)
 		if rec.Confidence != ConfidenceHigh {
-			t.Fatalf("confidence = %q, want high（唯一同族且字段全命中）", rec.Confidence)
+			t.Fatalf("confidence = %q, want high（其余路径已证明是转译）", rec.Confidence)
 		}
 		if !containsSubstring(rec.Actions, "转译路径") {
 			t.Fatalf("actions 未提示转译路径不建议勾选: %v", rec.Actions)
@@ -129,7 +135,7 @@ func TestRecommend_Branches(t *testing.T) {
 		}
 	})
 
-	t.Run("lone_same_family_with_missing_fields_is_medium", func(t *testing.T) {
+	t.Run("lone_same_family_without_strong_evidence_is_medium", func(t *testing.T) {
 		t.Parallel()
 		inputs := []Input{
 			{
@@ -145,24 +151,27 @@ func TestRecommend_Branches(t *testing.T) {
 		}
 		rec := Recommend(consts.ProtocolOpenAI, inputs)
 		if rec.Confidence != ConfidenceMedium {
-			t.Fatalf("confidence = %q, want medium（字段没全命中不许给 high）", rec.Confidence)
+			t.Fatalf("confidence = %q, want medium（只有弱证据，不许给 high）", rec.Confidence)
+		}
+		if rec.Primary != string(consts.ProtocolAnthropic) {
+			t.Fatalf("primary = %q, want anthropic（同为弱证据时信封方言更难的胜出）", rec.Primary)
 		}
 	})
 
-	t.Run("multiple_same_family_rank_by_fields", func(t *testing.T) {
+	t.Run("multiple_strong_candidates_rank_by_strong_count", func(t *testing.T) {
 		t.Parallel()
 		inputs := []Input{
 			{
 				Protocol: consts.ProtocolOpenAI, NonStream: LegPassed, Stream: LegPassed,
-				Family: FamilyOpenAI, Fields: fields([]string{"a"}, []string{"b", "c"}),
+				Family: FamilyOpenAI, Fields: strongFields([]string{"system_fingerprint"}),
 			},
 			{
 				Protocol: consts.ProtocolResponses, NonStream: LegPassed, Stream: LegPassed,
-				Family: FamilyOpenAI, Fields: fields([]string{"a", "b"}, []string{"c"}),
+				Family: FamilyOpenAI, Fields: strongFields([]string{"encrypted_content", "response.output.encrypted"}),
 			},
 		}
 		rec := Recommend(consts.ProtocolOpenAI, inputs)
-		// 两条同族都在集合里（多条允许可少做格式转换），主格式按字段命中数取 responses。
+		// 两条都有强证据（网关在每条路都做了原生封装），按强证据数量取第一，仅作弱推荐。
 		assertProtocolSet(t, rec,
 			[]consts.Protocol{consts.ProtocolOpenAI, consts.ProtocolResponses},
 			consts.ProtocolResponses)
@@ -171,6 +180,56 @@ func TestRecommend_Branches(t *testing.T) {
 		}
 		if !containsSubstring(rec.Actions, "勾选 OpenAI Chat、OpenAI Responses，主格式 OpenAI Responses") {
 			t.Fatalf("actions 未按排序结果给出勾选动作: %v", rec.Actions)
+		}
+	})
+
+	t.Run("no_strong_evidence_is_indistinguishable_not_field_count", func(t *testing.T) {
+		t.Parallel()
+		// 回归：此前按「命中字段总数」跨协议排序，Chat 的骨架比 Responses 少一项就凭空落后，
+		// 于是推荐了一条转译路径。三家字段集本就不同，数量差不是证据。
+		inputs := []Input{
+			{
+				Protocol: consts.ProtocolOpenAI, NonStream: LegPassed, Stream: LegPassed,
+				Family: FamilyOpenAI, Fields: fields([]string{"a", "b"}, []string{"c"}),
+			},
+			{
+				Protocol: consts.ProtocolResponses, NonStream: LegPassed, Stream: LegPassed,
+				Family: FamilyOpenAI, Fields: fields([]string{"a", "b", "c"}, nil),
+			},
+		}
+		rec := Recommend(consts.ProtocolOpenAI, inputs)
+		// 证据打平（同为 openai 信封、都无强证据、都无原生头）→ 不点名谁更原生。
+		if rec.Confidence != ConfidenceLow {
+			t.Fatalf("confidence = %q, want low（字段数量差不算证据）", rec.Confidence)
+		}
+		if !containsSubstring([]string{rec.Summary}, "无法区分") {
+			t.Fatalf("summary = %q, 需明写无法区分", rec.Summary)
+		}
+		if rec.Primary != string(consts.ProtocolOpenAI) {
+			t.Fatalf("primary = %q, want openai（打平时保持当前主类型）", rec.Primary)
+		}
+	})
+
+	t.Run("id_prefix_conflict_excludes_translated_path", func(t *testing.T) {
+		t.Parallel()
+		// 回归：Chat 路径回 object=chat.completion 但 id 是 msg_ 前缀（Anthropic 形状）——
+		// 这是翻译层拼出来的直接证据，哪怕字段完整、双模式全过也不能勾。
+		inputs := []Input{
+			{
+				Protocol: consts.ProtocolOpenAI, NonStream: LegPassed, Stream: LegPassed,
+				Family: FamilyUnknown, IDPrefix: "msg",
+				Fields: fields([]string{"object", "finish_reason"}, []string{"service_tier"}),
+			},
+			{
+				Protocol: consts.ProtocolAnthropic, NonStream: LegPassed, Stream: LegPassed,
+				Family: FamilyUnknown, IDPrefix: "msg",
+				Fields: fields([]string{"type", "content[].type"}, nil),
+			},
+		}
+		rec := Recommend(consts.ProtocolOpenAI, inputs)
+		assertProtocolSet(t, rec, []consts.Protocol{consts.ProtocolAnthropic}, consts.ProtocolAnthropic)
+		if !containsSubstring(rec.Actions, "响应 id 是 msg 前缀") {
+			t.Fatalf("actions 未说明 Chat 路径为何被排除: %v", rec.Actions)
 		}
 	})
 
@@ -209,7 +268,7 @@ func TestRecommend_Branches(t *testing.T) {
 	t.Run("unknown_family_not_treated_as_same_but_still_checkable", func(t *testing.T) {
 		t.Parallel()
 		// 指纹没采到（FamilyUnknown）不能算「同族」——否则会把「没测到」读成「测过且一致」。
-		// 但它也不是转译证据：两条都该进集合，主格式保持当前主类型。这正是用户截图里的那种结论。
+		// 但它也不是转译证据：两条都该进集合，主格式保持当前主类型。
 		inputs := []Input{
 			{Protocol: consts.ProtocolOpenAI, NonStream: LegPassed, Stream: LegPassed, Family: FamilyUnknown},
 			{Protocol: consts.ProtocolAnthropic, NonStream: LegPassed, Stream: LegPassed, Family: FamilyUnknown},
@@ -226,63 +285,68 @@ func TestRecommend_Branches(t *testing.T) {
 		}
 	})
 
-	t.Run("complete_fields_outrank_current_main_for_primary", func(t *testing.T) {
+	t.Run("unforgeable_native_feature_beats_translating_gateway", func(t *testing.T) {
 		t.Parallel()
-		// 用户实测场景：三条都可用、指纹都未采到 → 集合是三条；OpenAI Chat 缺 2 项、
-		// Responses 一项不缺、Anthropic 缺 1 项。主格式必须跟着字段最完整的那条走——
-		// 若仍无条件保留当前主类型，报告会一边说「Chat 缺 2 项」一边推荐它。
-		inputs := []Input{
-			{
-				Protocol: consts.ProtocolOpenAI, NonStream: LegPassed, Stream: LegPassed, Family: FamilyUnknown,
-				Fields: fields(
-					[]string{"object", "finish_reason", "usage.prompt_tokens", "usage.completion_tokens",
-						"usage.prompt_tokens_details", "usage.completion_tokens_details"},
-					[]string{"system_fingerprint", "service_tier"},
-				),
-			},
-			{
-				Protocol: consts.ProtocolResponses, NonStream: LegPassed, Stream: LegPassed, Family: FamilyUnknown,
-				Fields: fields(
-					[]string{"object", "status", "output[].type", "usage.input_tokens", "usage.output_tokens",
-						"usage.input_tokens_details", "usage.output_tokens_details", "error"},
-					nil,
-				),
-			},
-			{
-				Protocol: consts.ProtocolAnthropic, NonStream: LegPassed, Stream: LegPassed, Family: FamilyUnknown,
-				Fields: fields(
-					[]string{"type", "content[].type", "stop_reason", "usage.input_tokens", "usage.output_tokens",
-						"usage.cache_creation_input_tokens", "usage.cache_read_input_tokens"},
-					[]string{"stop_sequence"},
-				),
+		// 用户实测场景（glm-5.3-flash）：三条协议都可用。Chat 与 Responses 的错误信封被
+		// 上游网关包成通用 OpenAI 信封（Responses 因此「同族」），Anthropic 的指纹没采到；
+		// 只有 Anthropic 回了 content[].signature——翻译层造不出来的签名串。
+		// 旧逻辑按「唯一同族」把 Responses 点成主协议，是错的：OpenAI 信封近乎恒真。
+		chat := Input{
+			Protocol: consts.ProtocolOpenAI, NonStream: LegPassed, Stream: LegPassed,
+			Family: FamilyUnknown, IDPrefix: "msg",
+			Fields: fields(
+				[]string{"object", "finish_reason", "usage.prompt_tokens", "usage.completion_tokens", "usage.prompt_tokens_details"},
+				[]string{"usage.completion_tokens_details", "system_fingerprint", "service_tier"},
+			),
+		}
+		responses := Input{
+			Protocol: consts.ProtocolResponses, NonStream: LegPassed, Stream: LegPassed,
+			Family: FamilyOpenAI, IDPrefix: "resp",
+			Fields: fields(
+				[]string{"object", "status", "output[].type", "usage.input_tokens", "usage.output_tokens", "usage.output_tokens_details"},
+				[]string{"usage.input_tokens_details", "encrypted_content"},
+			),
+		}
+		anthropic := Input{
+			Protocol: consts.ProtocolAnthropic, NonStream: LegPassed, Stream: LegPassed,
+			Family: FamilyUnknown, IDPrefix: "msg",
+			Fields: FieldReport{
+				Hit:       []string{"type", "content[].type", "stop_reason", "usage.input_tokens", "usage.output_tokens", "usage.cache_read_input_tokens", "content[].signature"},
+				Miss:      []string{"stop_sequence", "usage.cache_creation_input_tokens"},
+				StrongHit: []string{"content[].signature"},
 			},
 		}
-		rec := Recommend(consts.ProtocolOpenAI, inputs)
+		rec := Recommend(consts.ProtocolOpenAI, []Input{chat, responses, anthropic})
+		// Chat 被 id 前缀矛盾判为转译（回了 chat.completion 骨架却用 msg_ 的 id），不进集合；
+		// Responses 只有「回 OpenAI 信封」这条弱证据，Anthropic 有签名串这条强证据 → 后者主格式。
 		assertProtocolSet(t, rec,
-			[]consts.Protocol{consts.ProtocolOpenAI, consts.ProtocolResponses, consts.ProtocolAnthropic},
-			consts.ProtocolResponses)
-		if !containsSubstring(rec.Actions, "主格式建议取 OpenAI Responses（原生字段最完整）") {
-			t.Fatalf("actions 未说明主格式为何改取 Responses: %v", rec.Actions)
+			[]consts.Protocol{consts.ProtocolResponses, consts.ProtocolAnthropic},
+			consts.ProtocolAnthropic)
+		if rec.Confidence != ConfidenceHigh {
+			t.Fatalf("confidence = %q, want high（唯一强证据）", rec.Confidence)
 		}
-		if !containsSubstring(rec.Actions, "OpenAI Chat 也可用") {
-			t.Fatalf("actions 把「当前主类型可用但字段不全」误述成不可用: %v", rec.Actions)
+		if !containsSubstring([]string{rec.Reason}, "翻译层造不出来") {
+			t.Fatalf("reason 未说明强证据为何可信: %q", rec.Reason)
+		}
+		if !containsSubstring(rec.Actions, "响应 id 是 msg 前缀") {
+			t.Fatalf("actions 未说明 Chat 路径为何被排除: %v", rec.Actions)
 		}
 	})
 }
 
-// 耗时只在证据完全打平时用于打破平局，不得单独决定名次：本例字段命中相同、
-// 两条都同族，耗时短的 anthropic 胜出。
+// 耗时只在证据完全打平时用于打破平局，不得单独决定名次：本例两条都无强证据、
+// 都无原生头、指纹都没采到，耗时短的 anthropic 胜出。
 func TestRecommend_TieBreakByLatencyOnlyWhenEvidenceEqual(t *testing.T) {
 	t.Parallel()
 	inputs := []Input{
 		{
 			Protocol: consts.ProtocolOpenAI, NonStream: LegPassed, Stream: LegPassed,
-			Family: FamilyOpenAI, NonStreamMS: 900,
+			Family: FamilyUnknown, NonStreamMS: 900,
 			Fields: fields([]string{"a", "b"}, nil),
 		},
 		{
 			Protocol: consts.ProtocolAnthropic, NonStream: LegPassed, Stream: LegPassed,
-			Family: FamilyAnthropic, NonStreamMS: 100,
+			Family: FamilyUnknown, NonStreamMS: 100,
 			Fields: fields([]string{"a", "b"}, nil),
 		},
 	}
@@ -292,18 +356,18 @@ func TestRecommend_TieBreakByLatencyOnlyWhenEvidenceEqual(t *testing.T) {
 	}
 }
 
-// 主类型在字段同分时优先于耗时：避免一次偶发快就把「当前配置」判成次优。
+// 主类型在证据打平时优先于耗时：避免一次偶发快就把「当前配置」判成次优。
 func TestRecommend_MainTypePreferredOverLatency(t *testing.T) {
 	t.Parallel()
 	inputs := []Input{
 		{
 			Protocol: consts.ProtocolOpenAI, NonStream: LegPassed, Stream: LegPassed,
-			Family: FamilyOpenAI, NonStreamMS: 100,
+			Family: FamilyUnknown, NonStreamMS: 100,
 			Fields: fields([]string{"a", "b"}, nil),
 		},
 		{
 			Protocol: consts.ProtocolAnthropic, NonStream: LegPassed, Stream: LegPassed,
-			Family: FamilyAnthropic, NonStreamMS: 900,
+			Family: FamilyUnknown, NonStreamMS: 900,
 			Fields: fields([]string{"a", "b"}, nil),
 		},
 	}
@@ -364,4 +428,22 @@ func containsSubstring(items []string, sub string) bool {
 		}
 	}
 	return false
+}
+
+// 回包形状回归：Protocols 必须是空数组而不是 null。协议全挂时走的正是这条分支，
+// 而前端拿到 null 再取 .length 会把整页带崩——曾经真实发生过（上游全挂时白屏）。
+func TestRecommend_ProtocolsIsEmptyArrayNotNull(t *testing.T) {
+	t.Parallel()
+	inputs := []Input{
+		{Protocol: consts.ProtocolOpenAI, NonStream: LegFailed, Stream: LegFailed},
+	}
+	for _, rec := range []Recommendation{Recommend(consts.ProtocolOpenAI, inputs)} {
+		raw, err := json.Marshal(rec)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if !strings.Contains(string(raw), `"protocols":[]`) {
+			t.Fatalf("protocols 序列化成 %s, want 空数组（null 会让前端 .length 崩）", raw)
+		}
+	}
 }

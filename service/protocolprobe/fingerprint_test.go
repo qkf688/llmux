@@ -84,8 +84,9 @@ func TestClassifyError_Families(t *testing.T) {
 	}
 }
 
-// 家族映射回归：responses 必须与 openai 同族（否则 Responses 路径回 OpenAI 错误信封
-// 会被误判成「不同族 → 被转译」，整条结论反过来）。
+// 家族映射回归：responses 与 openai 同族（响应都按 OpenAI 方言），否则 Responses 路径
+// 回 OpenAI 错误信封会被判成「不同族 → 靠转译」而误排除。注意同族只是**弱证据**：
+// 正面证明直通靠 fieldSpec.strong 与 IDPrefixConflict，见 verdict.go。
 func TestFamilyOfProtocol_ResponsesSharesOpenAIFamily(t *testing.T) {
 	t.Parallel()
 	if got := FamilyOfProtocol(consts.ProtocolResponses); got != FamilyOpenAI {
@@ -157,18 +158,20 @@ func TestNativeHeaders(t *testing.T) {
 func TestInspectFields(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		name     string
-		format   consts.WireFormat
-		body     string
-		wantMiss []string
+		name          string
+		format        consts.WireFormat
+		body          string
+		wantMiss      []string
+		wantStrongHit []string
 	}{
 		{
 			name:   "anthropic_full",
 			format: consts.FormatAnthropic,
-			body: `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"hi"}],
+			body: `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"thinking","thinking":"x","signature":"sig"}],
 				"stop_reason":"end_turn","stop_sequence":null,
 				"usage":{"input_tokens":5,"output_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}`,
-			wantMiss: nil,
+			wantMiss:      nil,
+			wantStrongHit: []string{"content[].signature"},
 		},
 		{
 			// 转译层最典型的形状：Anthropic 特有的 cache_* 与 stop_sequence 被抹掉。
@@ -176,7 +179,17 @@ func TestInspectFields(t *testing.T) {
 			format: consts.FormatAnthropic,
 			body: `{"id":"msg_1","type":"message","content":[{"type":"text","text":"hi"}],
 				"stop_reason":"end_turn","usage":{"input_tokens":5,"output_tokens":2}}`,
-			wantMiss: []string{"stop_sequence", "usage.cache_creation_input_tokens", "usage.cache_read_input_tokens"},
+			wantMiss: []string{"stop_sequence", "usage.cache_creation_input_tokens", "usage.cache_read_input_tokens", "content[].signature"},
+		},
+		{
+			// 强证据：签名串是不透明 blob，翻译层造不出来 → 进 StrongHit。
+			name:   "anthropic_signature_is_strong",
+			format: consts.FormatAnthropic,
+			body: `{"id":"msg_1","type":"message","content":[{"type":"thinking","thinking":"x","signature":"abc"}],
+				"stop_reason":"end_turn","stop_sequence":null,
+				"usage":{"input_tokens":5,"output_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}`,
+			wantMiss:      nil,
+			wantStrongHit: []string{"content[].signature"},
 		},
 		{
 			name:   "openai_chat_full",
@@ -184,7 +197,8 @@ func TestInspectFields(t *testing.T) {
 			body: `{"id":"chatcmpl-1","object":"chat.completion","system_fingerprint":"fp_1","service_tier":"default",
 				"choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}],
 				"usage":{"prompt_tokens":5,"completion_tokens":2,"prompt_tokens_details":{"cached_tokens":0},"completion_tokens_details":{"reasoning_tokens":0}}}`,
-			wantMiss: nil,
+			wantMiss:      nil,
+			wantStrongHit: []string{"system_fingerprint"},
 		},
 		{
 			name:   "openai_chat_minimal",
@@ -200,7 +214,9 @@ func TestInspectFields(t *testing.T) {
 			body: `{"id":"resp_1","object":"response","status":"completed","error":null,
 				"output":[{"id":"msg_1","type":"message"}],
 				"usage":{"input_tokens":5,"output_tokens":2,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}}}`,
-			wantMiss: nil,
+			// encrypted_content 只在请求带 include 时才回，常规请求缺席是常态——仍要报出来，
+			// 因为「缺席」本身是弱信号，用户需要知道它没被检到。
+			wantMiss: []string{"encrypted_content"},
 		},
 		{
 			// 非法 JSON 下不报「缺字段」——那会把「压根不是 JSON」说成「字段不全」。
@@ -220,6 +236,14 @@ func TestInspectFields(t *testing.T) {
 			for i := range report.Miss {
 				if report.Miss[i] != tc.wantMiss[i] {
 					t.Fatalf("miss = %v, want %v (hit=%v)", report.Miss, tc.wantMiss, report.Hit)
+				}
+			}
+			if len(report.StrongHit) != len(tc.wantStrongHit) {
+				t.Fatalf("strong_hit = %v, want %v", report.StrongHit, tc.wantStrongHit)
+			}
+			for i := range report.StrongHit {
+				if report.StrongHit[i] != tc.wantStrongHit[i] {
+					t.Fatalf("strong_hit = %v, want %v", report.StrongHit, tc.wantStrongHit)
 				}
 			}
 			// 非 JSON 输入下 hit/miss 都为空：意思是「没检到字段信息」，不是「字段全缺」，
@@ -275,6 +299,37 @@ func TestIDPrefix(t *testing.T) {
 			t.Parallel()
 			if got := IDPrefix([]byte(tc.body)); got != tc.want {
 				t.Fatalf("IDPrefix = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// id 前缀矛盾是「翻译层拼出来的」最硬的证据：按目标协议写了骨架、却漏了源协议的 id 形状。
+// 前缀不认识时必须放行——第三方实现的前缀并不统一，拿未知当转译会误杀。
+func TestIDPrefixConflict(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name     string
+		protocol consts.Protocol
+		prefix   string
+		wantTo   consts.Protocol
+		want     bool
+	}{
+		{name: "chat_with_msg_prefix", protocol: consts.ProtocolOpenAI, prefix: "msg", wantTo: consts.ProtocolAnthropic, want: true},
+		{name: "responses_with_chatcmpl_prefix", protocol: consts.ProtocolResponses, prefix: "chatcmpl", wantTo: consts.ProtocolOpenAI, want: true},
+		{name: "anthropic_with_resp_prefix", protocol: consts.ProtocolAnthropic, prefix: "resp", wantTo: consts.ProtocolResponses, want: true},
+		{name: "chat_native_prefix", protocol: consts.ProtocolOpenAI, prefix: "chatcmpl"},
+		{name: "anthropic_native_prefix", protocol: consts.ProtocolAnthropic, prefix: "msg"},
+		{name: "unknown_prefix_passes", protocol: consts.ProtocolOpenAI, prefix: "custom-abc"},
+		{name: "empty_prefix_passes", protocol: consts.ProtocolOpenAI, prefix: ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			gotTo, got := IDPrefixConflict(tc.protocol, tc.prefix)
+			if got != tc.want || gotTo != tc.wantTo {
+				t.Fatalf("IDPrefixConflict(%q,%q) = (%q,%v), want (%q,%v)",
+					tc.protocol, tc.prefix, gotTo, got, tc.wantTo, tc.want)
 			}
 		})
 	}

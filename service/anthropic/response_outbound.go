@@ -3,7 +3,9 @@ package anthropic
 import (
 	"encoding/json"
 	"errors"
+	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/transform/shared"
 	"strings"
 )
 
@@ -21,7 +23,9 @@ func FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
 	}
 
 	resp := map[string]interface{}{
-		"id":      unified.ID,
+		// id 按目标协议重铸：上游若是 OpenAI 方言，unified.ID 是 `chatcmpl-...`，
+		// 原样透出会得到 `{"type":"message","id":"chatcmpl-..."}` 这种自相矛盾形状。
+		"id":      shared.ResponseIDFor(consts.FormatAnthropic, unified.ID),
 		"type":    "message",
 		"role":    "assistant",
 		"model":   unified.Model,

@@ -35,7 +35,7 @@
     }
   ],
   "created": 0,
-  "id": "msg_123",
+  "id": "chatcmpl-123",
   "model": "test-model",
   "object": "chat.completion",
   "usage": {

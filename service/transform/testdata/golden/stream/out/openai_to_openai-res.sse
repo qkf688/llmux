@@ -1,14 +1,14 @@
 event: response.created
-data: {"response":{"created_at":1234567890,"id":"chatcmpl-123","model":"test-model","object":"response","output":[],"status":"in_progress"},"sequence_number":0,"type":"response.created"}
+data: {"response":{"created_at":1234567890,"id":"resp_123","model":"test-model","object":"response","output":[],"status":"in_progress"},"sequence_number":0,"type":"response.created"}
 
 event: response.in_progress
-data: {"response":{"created_at":1234567890,"id":"chatcmpl-123","model":"test-model","object":"response","output":[],"status":"in_progress"},"sequence_number":1,"type":"response.in_progress"}
+data: {"response":{"created_at":1234567890,"id":"resp_123","model":"test-model","object":"response","output":[],"status":"in_progress"},"sequence_number":1,"type":"response.in_progress"}
 
 event: response.output_item.added
-data: {"item":{"content":[],"id":"msg_chatcmpl-123","role":"assistant","status":"in_progress","type":"message"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
+data: {"item":{"content":[],"id":"msg_123","role":"assistant","status":"in_progress","type":"message"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
 
 event: response.content_part.added
-data: {"content_index":0,"item_id":"msg_chatcmpl-123","output_index":0,"part":{"text":"","type":"output_text"},"sequence_number":3,"type":"response.content_part.added"}
+data: {"content_index":0,"item_id":"msg_123","output_index":0,"part":{"text":"","type":"output_text"},"sequence_number":3,"type":"response.content_part.added"}
 
 event: response.output_item.added
 data: {"item":{"arguments":"","call_id":"call_abc","id":"call_abc","name":"get_weather","type":"function_call"},"output_index":1,"sequence_number":4,"type":"response.output_item.added"}
@@ -20,13 +20,13 @@ event: response.function_call_arguments.delta
 data: {"delta":":\"Beijing\"}","output_index":1,"sequence_number":6,"type":"response.function_call_arguments.delta"}
 
 event: response.output_text.done
-data: {"content_index":0,"item_id":"msg_chatcmpl-123","output_index":0,"sequence_number":7,"text":"","type":"response.output_text.done"}
+data: {"content_index":0,"item_id":"msg_123","output_index":0,"sequence_number":7,"text":"","type":"response.output_text.done"}
 
 event: response.content_part.done
-data: {"content_index":0,"item_id":"msg_chatcmpl-123","output_index":0,"part":{"text":"","type":"output_text"},"sequence_number":8,"type":"response.content_part.done"}
+data: {"content_index":0,"item_id":"msg_123","output_index":0,"part":{"text":"","type":"output_text"},"sequence_number":8,"type":"response.content_part.done"}
 
 event: response.output_item.done
-data: {"item":{"content":[{"text":"","type":"output_text"}],"id":"msg_chatcmpl-123","role":"assistant","status":"completed","type":"message"},"output_index":0,"sequence_number":9,"type":"response.output_item.done"}
+data: {"item":{"content":[{"text":"","type":"output_text"}],"id":"msg_123","role":"assistant","status":"completed","type":"message"},"output_index":0,"sequence_number":9,"type":"response.output_item.done"}
 
 event: response.function_call_arguments.done
 data: {"arguments":"{\"location\":\"Beijing\"}","item_id":"call_abc","output_index":1,"sequence_number":10,"type":"response.function_call_arguments.done"}
@@ -35,5 +35,5 @@ event: response.output_item.done
 data: {"item":{"arguments":"{\"location\":\"Beijing\"}","call_id":"call_abc","id":"call_abc","name":"get_weather","status":"completed","type":"function_call"},"output_index":1,"sequence_number":11,"type":"response.output_item.done"}
 
 event: response.completed
-data: {"response":{"created_at":1234567890,"id":"chatcmpl-123","model":"test-model","object":"response","output":[{"content":[{"text":"","type":"output_text"}],"id":"msg_chatcmpl-123","role":"assistant","status":"completed","type":"message"},{"arguments":"{\"location\":\"Beijing\"}","call_id":"call_abc","id":"call_abc","name":"get_weather","type":"function_call"}],"status":"completed","usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}},"sequence_number":12,"type":"response.completed"}
+data: {"response":{"created_at":1234567890,"id":"resp_123","model":"test-model","object":"response","output":[{"content":[{"text":"","type":"output_text"}],"id":"msg_123","role":"assistant","status":"completed","type":"message"},{"arguments":"{\"location\":\"Beijing\"}","call_id":"call_abc","id":"call_abc","name":"get_weather","type":"function_call"}],"status":"completed","usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}},"sequence_number":12,"type":"response.completed"}
 

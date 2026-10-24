@@ -1,6 +1,6 @@
 {
   "created_at": 0,
-  "id": "msg_123",
+  "id": "resp_123",
   "model": "test-model",
   "object": "response",
   "output": [
@@ -26,7 +26,7 @@
           "type": "image_url"
         }
       ],
-      "id": "msg_msg_123",
+      "id": "msg_123",
       "role": "assistant",
       "status": "completed",
       "type": "message"

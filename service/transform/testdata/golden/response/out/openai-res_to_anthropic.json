@@ -17,7 +17,7 @@
       "type": "tool_use"
     }
   ],
-  "id": "resp_123",
+  "id": "msg_123",
   "model": "test-model",
   "role": "assistant",
   "stop_reason": "tool_use",

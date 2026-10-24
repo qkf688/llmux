@@ -21,7 +21,7 @@
       "type": "tool_use"
     }
   ],
-  "id": "chatcmpl_123",
+  "id": "msg_123",
   "model": "test-model",
   "role": "assistant",
   "stop_reason": "tool_use",

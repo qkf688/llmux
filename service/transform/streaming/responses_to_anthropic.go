@@ -6,6 +6,7 @@ import (
 	"github.com/qkf688/llmux/common"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/service/responses"
+	"github.com/qkf688/llmux/service/transform/shared"
 )
 
 // anthropicItemMeta 记录 Responses output item 的元数据，供并行顺序化时
@@ -90,10 +91,13 @@ func handleResponsesToAnthropicCreatedEvent(state *realtimeStreamState, ev *resp
 		outputTokens = int(ev.Response.Usage.OutputTokens)
 	}
 
+	// id 按目标协议（Anthropic）重铸：上游 Responses 的 `resp_...` 原样塞进
+	// `message_start.message.id` 会得到「Anthropic 消息带 Responses 前缀」的矛盾形状。
+	messageID := shared.ResponseIDFor(consts.FormatAnthropic, responseID)
 	messageStart := map[string]interface{}{
 		"type": "message_start",
 		"message": map[string]interface{}{
-			"id":      responseID,
+			"id":      messageID,
 			"type":    "message",
 			"role":    "assistant",
 			"content": []interface{}{},

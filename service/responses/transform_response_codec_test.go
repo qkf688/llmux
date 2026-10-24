@@ -178,9 +178,11 @@ func TestFormatResponse_MultiChoiceMessageItemIDsAreUnique(t *testing.T) {
 	if len(messageIDs) != 2 {
 		t.Fatalf("expected 2 message items, got %d (%v)", len(messageIDs), messageIDs)
 	}
-	// 首个保持裸 msg_<id>：单 choice 是绝对主流形态，给它加后缀等于改动几乎所有响应的 id。
-	if messageIDs[0] != "msg_resp_multi" {
-		t.Fatalf("first message id should stay bare msg_<id>, got %q", messageIDs[0])
+	// 首个保持裸 msg_<裸 id>：单 choice 是绝对主流形态，给它加后缀等于改动几乎所有响应的 id。
+	// 裸 id 是响应级 id 剥掉协议前缀（resp_）后的部分——item 级前缀固定 msg_，
+	// 两者不可混用（响应级 `resp_` 前缀的 item id 会让客户端回灌 input 时找不到 item）。
+	if messageIDs[0] != "msg_multi" {
+		t.Fatalf("first message id should stay bare msg_<bare id>, got %q", messageIDs[0])
 	}
 	// 全员去重而非两两比较：choice 数增加时这条断言自动仍然有效。
 	seen := make(map[string]bool, len(messageIDs))

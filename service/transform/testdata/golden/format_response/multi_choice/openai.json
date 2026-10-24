@@ -18,7 +18,7 @@
     }
   ],
   "created": 1700000001,
-  "id": "resp-multi",
+  "id": "chatcmpl-multi",
   "model": "coverage-model",
   "object": "chat.completion",
   "usage": {

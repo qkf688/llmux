@@ -1,6 +1,6 @@
 {
   "created_at": 1700000001,
-  "id": "resp-multi",
+  "id": "resp_multi",
   "model": "coverage-model",
   "object": "response",
   "output": [
@@ -11,7 +11,7 @@
           "type": "output_text"
         }
       ],
-      "id": "msg_resp-multi",
+      "id": "msg_multi",
       "role": "assistant",
       "status": "completed",
       "type": "message"
@@ -23,7 +23,7 @@
           "type": "output_text"
         }
       ],
-      "id": "msg_resp-multi_1",
+      "id": "msg_multi_1",
       "role": "assistant",
       "status": "completed",
       "type": "message"

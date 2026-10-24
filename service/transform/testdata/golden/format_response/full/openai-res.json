@@ -1,6 +1,6 @@
 {
   "created_at": 1700000000,
-  "id": "resp-coverage",
+  "id": "resp_coverage",
   "model": "coverage-model",
   "object": "response",
   "output": [
@@ -18,7 +18,7 @@
           "type": "output_text"
         }
       ],
-      "id": "msg_resp-coverage",
+      "id": "msg_coverage",
       "role": "assistant",
       "status": "completed",
       "type": "message"

@@ -22,7 +22,7 @@
       "type": "tool_use"
     }
   ],
-  "id": "resp-coverage",
+  "id": "msg_coverage",
   "model": "coverage-model",
   "role": "assistant",
   "stop_reason": "tool_use",

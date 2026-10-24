@@ -1,6 +1,6 @@
 {
   "created_at": 1234567890,
-  "id": "chatcmpl_123",
+  "id": "resp_123",
   "model": "test-model",
   "object": "response",
   "output": [
@@ -23,7 +23,7 @@
           "type": "image_url"
         }
       ],
-      "id": "msg_chatcmpl_123",
+      "id": "msg_123",
       "role": "assistant",
       "status": "completed",
       "type": "message"

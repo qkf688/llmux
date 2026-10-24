@@ -5,7 +5,7 @@
       "type": "text"
     }
   ],
-  "id": "resp-multi",
+  "id": "msg_multi",
   "model": "coverage-model",
   "role": "assistant",
   "stop_reason": "end_turn",

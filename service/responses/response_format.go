@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/transform/shared"
 )
 
 // FormatResponse 将统一格式转换为 Responses API 响应。
@@ -24,9 +26,12 @@ func FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
 		})
 	}
 
+	// id 按目标协议重铸：上游若是 Anthropic 方言，unified.ID 是 `msg_...`，
+	// 原样透出会得到 `{"object":"response","id":"msg_..."}` 这种自相矛盾形状。
+	responseID := shared.ResponseIDFor(consts.FormatOpenAIResponses, unified.ID)
 	resp := ResponsesResponse{
 		Object:    "response",
-		ID:        unified.ID,
+		ID:        responseID,
 		Model:     unified.Model,
 		CreatedAt: unified.Created,
 	}
@@ -104,10 +109,10 @@ func FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
 				status := "completed"
 				// item id 在 output 数组内必须唯一：OpenAI Responses 的 msg_ 是 message 级
 				// 标识，客户端把 output 回灌成下一轮 input 时同 id 会被判 "Duplicate item
-				// found with id msg_..." 而 400。unified.ID 是整个响应的 id，多 choice 时
-				// 对每个 choice 都取它就会撞车，故第二个及之后的 choice 追加序号后缀。
+				// found with id msg_..." 而 400。响应级 id（resp_）多 choice 时对每个 choice
+				// 都取它就会撞车，故第二个及之后的 choice 追加序号后缀。
 				// 首个不加后缀：单 choice 是绝对主流形态，保持既有 id 稳定。
-				msgID := fmt.Sprintf("msg_%s", unified.ID)
+				msgID := shared.ResponseItemIDFor(responseID)
 				if choiceIdx > 0 {
 					msgID = fmt.Sprintf("%s_%d", msgID, choiceIdx)
 				}

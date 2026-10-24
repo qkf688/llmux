@@ -6,6 +6,7 @@ import (
 	"github.com/qkf688/llmux/common/maputil"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/transform/shared"
 )
 
 func init() {
@@ -174,8 +175,11 @@ func ensureOpenAIResponsesStarted(state *realtimeStreamState, chunk map[string]i
 	}
 	state.responseStreamStarted = true
 
-	state.responseID = maputil.String(chunk, "id")
-	state.itemID = "msg_" + state.responseID
+	// id 按目标协议（Responses）重铸：上游 OpenAI Chat 的 `chatcmpl-...` 不能直接当
+	// Responses 的响应级 id 用（客户端会按 `resp_` 前缀认响应）。
+	// message 项 id 前缀固定 `msg_`（Responses 的 item 级标识），与响应级不是同一个东西。
+	state.responseID = shared.ResponseIDFor(consts.FormatOpenAIResponses, maputil.String(chunk, "id"))
+	state.itemID = shared.ResponseItemIDFor(state.responseID)
 
 	responseCreated := map[string]interface{}{
 		"type":            "response.created",

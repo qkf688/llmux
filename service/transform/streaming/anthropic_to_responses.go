@@ -49,9 +49,11 @@ func handleRealtimeAnthropicToResponses(state *realtimeStreamState, data string)
 }
 
 func handleAnthropicToResponsesMessageStart(state *realtimeStreamState, chunk map[string]interface{}) error {
-	// 获取 message ID 并生成 item ID
-	state.responseID = shared.GetNestedString(chunk, "message.id")
-	state.itemID = fmt.Sprintf("msg_%s", state.responseID)
+	// 获取 message ID 并按目标协议（Responses）重铸：上游是 Anthropic 方言，它的
+	// `msg_...` 是 message 级 id，而 Responses 的响应级 id 必须自述 `resp_`。
+	// item 级 id 则由 state.itemID 单独按 `msg_` 生成（见下），两者不可混用。
+	state.responseID = shared.ResponseIDFor(consts.FormatOpenAIResponses, shared.GetNestedString(chunk, "message.id"))
+	state.itemID = shared.ResponseItemIDFor(state.responseID)
 	createdAt := int(shared.GetNestedFloat(chunk, "message.created_at"))
 
 	// input 侧 token 只在 message_start 出现（旧版上游的 message_delta 不重复带），

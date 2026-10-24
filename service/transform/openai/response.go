@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 
+	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/transform/shared"
 )
 
 // ParseResponse parses an OpenAI Chat Completion response body into the
@@ -91,7 +93,9 @@ func FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
 	}
 
 	resp := openAIChatCompletionResponseOut{
-		ID:                unified.ID,
+		// id 按目标协议重铸：上游若是 Anthropic 方言，unified.ID 是 `msg_...`，
+		// 原样透出就会得到 `{"object":"chat.completion","id":"msg_..."}` 这种自相矛盾形状。
+		ID:                shared.ResponseIDFor(consts.FormatOpenAIChat, unified.ID),
 		Object:            unified.Object,
 		Created:           unified.Created,
 		Model:             unified.Model,

@@ -5,6 +5,7 @@ import (
 
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/service/responses"
+	"github.com/qkf688/llmux/service/transform/shared"
 )
 
 func init() {
@@ -263,6 +264,12 @@ func responsesUsageHasTokens(u *responses.ResponsesUsage) bool {
 	return u.InputTokens > 0 || u.OutputTokens > 0 || u.TotalTokens > 0
 }
 
+// ensureOpenAIStreamMetaFromResponsesEvent 缓存 OpenAI Chat 出站需要的 id / model / created。
+//
+// id 走 shared.ResponseIDFor 重铸而不是直接拼 "chatcmpl-"：上游 Responses 的 id 是
+// `resp_...`，而它自己的上游可能是 Anthropic（`msg_...`）。无脑拼接会产出
+// `chatcmpl-msg_...` 这种任何协议都不合法的双前缀串——三跳转换（Anthropic 上游 →
+// LLMux 中间 canonical Responses → OpenAI 客户端）正是这条路径。
 func ensureOpenAIStreamMetaFromResponsesEvent(state *realtimeStreamState, ev *responses.ResponsesStreamEvent) {
 	if state.openAIModel == "" {
 		state.openAIModel = "responses-api"
@@ -273,7 +280,7 @@ func ensureOpenAIStreamMetaFromResponsesEvent(state *realtimeStreamState, ev *re
 
 	if ev != nil && ev.Response != nil {
 		if ev.Response.ID != "" {
-			state.openAIID = "chatcmpl-" + ev.Response.ID
+			state.openAIID = shared.ResponseIDFor(consts.FormatOpenAIChat, ev.Response.ID)
 		}
 		if ev.Response.Model != "" {
 			state.openAIModel = ev.Response.Model
@@ -285,12 +292,12 @@ func ensureOpenAIStreamMetaFromResponsesEvent(state *realtimeStreamState, ev *re
 
 	if state.openAIID == "" {
 		if ev != nil && ev.ResponseID != "" {
-			state.openAIID = "chatcmpl-" + ev.ResponseID
+			state.openAIID = shared.ResponseIDFor(consts.FormatOpenAIChat, ev.ResponseID)
 		}
 	}
 
 	if state.openAIID == "" {
-		state.openAIID = "chatcmpl-unknown"
+		state.openAIID = shared.ResponseIDFor(consts.FormatOpenAIChat, "unknown")
 	}
 }
 

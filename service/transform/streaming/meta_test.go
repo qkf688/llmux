@@ -87,8 +87,10 @@ data: {"type":"response.completed","response":{"id":"resp_123","object":"respons
 		}
 	}
 
-	if ids[0] != "chatcmpl-resp_123" {
-		t.Fatalf("输出 id 应为 chatcmpl-resp_123，实际: %q", ids[0])
+	// 上游 `resp_123` 按目标协议重铸为 `chatcmpl-123`：不叠加双前缀（旧实现会产出
+	// `chatcmpl-resp_123`，任何协议都不合法）。
+	if ids[0] != "chatcmpl-123" {
+		t.Fatalf("输出 id 应为 chatcmpl-123（重铸而非叠加），实际: %q", ids[0])
 	}
 	if models[0] != "gpt-4" {
 		t.Fatalf("输出 model 应为 gpt-4，实际: %q", models[0])
@@ -142,8 +144,8 @@ data: {"type":"response.completed","response":{"id":"resp_123","object":"respons
 			continue
 		}
 		if id, _ := ev["id"].(string); id != "" {
-			if id != "chatcmpl-resp_123" {
-				t.Fatalf("输出 id 应为 chatcmpl-resp_123，实际: %q", id)
+			if id != "chatcmpl-123" {
+				t.Fatalf("输出 id 应为 chatcmpl-123（重铸而非叠加），实际: %q", id)
 			}
 			return
 		}
@@ -232,8 +234,10 @@ data: {"type":"message_stop"}
 		}
 	}
 
-	if ids[0] != "chatcmpl-msg_123" {
-		t.Fatalf("输出 id 应为 chatcmpl-msg_123，实际: %q", ids[0])
+	// 上游 Anthropic 的 `msg_123` 重铸为 `chatcmpl-123`（三跳转换曾产出
+	// `chatcmpl-msg_123` 双前缀串）。
+	if ids[0] != "chatcmpl-123" {
+		t.Fatalf("输出 id 应为 chatcmpl-123（重铸而非叠加），实际: %q", ids[0])
 	}
 	if models[0] != "claude-3-5-sonnet" {
 		t.Fatalf("输出 model 应为 claude-3-5-sonnet，实际: %q", models[0])

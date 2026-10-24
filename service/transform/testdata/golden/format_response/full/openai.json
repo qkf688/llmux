@@ -20,7 +20,7 @@
     }
   ],
   "created": 1700000000,
-  "id": "resp-coverage",
+  "id": "chatcmpl-coverage",
   "model": "coverage-model",
   "object": "chat.completion",
   "service_tier": "default",

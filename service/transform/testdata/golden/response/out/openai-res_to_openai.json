@@ -20,7 +20,7 @@
     }
   ],
   "created": 111,
-  "id": "resp_123",
+  "id": "chatcmpl-123",
   "model": "test-model",
   "object": "chat.completion",
   "usage": {

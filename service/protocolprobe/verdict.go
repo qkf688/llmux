@@ -115,48 +115,30 @@ func fixedNotes() []string {
 // 分档的唯一判据是**翻译层能不能伪造**：
 //   - strong：不可推导的原生特征（Anthropic 的 content[].signature、Responses 的
 //     encrypted_content）。翻译层拿不到源数据，造不出来，命中即近似证明直通；
-//   - heads：原生响应头。网关普遍剥头，留着的多半是原样透传，但也可以伪造，故次之；
-//   - dialect：错误信封方言。**排最后**——OpenAI 信封是兼容网关的默认形状
-//     （见 ClassifyError），任何转译路径都顺手回它。把它当主要证据，正是「三条路
-//     都可用时推荐了一条转译路径」的成因。
+//   - heads：原生响应头。网关普遍剥头，留着的多半是原样透传，但也可以伪造，故次之。
+//
+// **错误信封方言不在排名里**，它只作否决（见 Input.translated）：信封「与自身同族」
+// 不能当正面证据——OpenAI 信封是兼容网关的默认形状（见 ClassifyError），任何转译
+// 路径都顺手回它，同族近乎恒真；更要命的是拿它跟「没测到」（FamilyUnknown）比大小，
+// 等于把「测到同族」与「没测到」的差当成证据，实测会让转译路径凭空赢过真正的原生路
+// （这正是本次要修的症状）。异族才是否决证据，那时它已经由 translated() 兜住。
 type evidence struct {
-	strong  int
-	heads   int
-	dialect int
+	strong int
+	heads  int
 }
 
 func (e evidence) beats(o evidence) bool {
 	if e.strong != o.strong {
 		return e.strong > o.strong
 	}
-	if e.heads != o.heads {
-		return e.heads > o.heads
-	}
-	return e.dialect > o.dialect
+	return e.heads > o.heads
 }
 
 func evidenceOf(in Input) evidence {
 	return evidence{
-		strong:  len(in.Fields.StrongHit),
-		heads:   len(in.NativeHeaders),
-		dialect: sameFamilyWeight(in),
+		strong: len(in.Fields.StrongHit),
+		heads:  len(in.NativeHeaders),
 	}
-}
-
-// sameFamilyWeight 同族证据的强度取决于「这个信封有多难被伪造」。
-//
-// Anthropic 信封要求顶层 type=error + 闭集内的 error.type（见 ClassifyError），必须
-// 专门实现；OpenAI 信封则是兼容网关的默认形状，任何转译都顺手回它，近乎恒真。
-// 两者等权就会让「OpenAI Responses 路径回 OpenAI 错误」凭空赢过「Anthropic 路径
-// 回了一份完整的签名块」——这正是要修的错。
-func sameFamilyWeight(in Input) int {
-	if in.Family == "" || in.Family == FamilyUnknown || in.Family != FamilyOfProtocol(in.Protocol) {
-		return 0
-	}
-	if in.Family == FamilyAnthropic {
-		return 2
-	}
-	return 1
 }
 
 // translated 这条路径是否已被**明确证据**判为转译（而非原生）。
@@ -174,7 +156,8 @@ func (in Input) translated() bool {
 // Recommend 给总评。判据（按序，先命中先返回）：
 //
 //  1. 无协议双模式全过 → low：「没有一条协议同时通过非流式与流式」；
-//  2. 只有一条可用     → high：唯一可用，无需分辨谁更原生；
+//  2. 只有一条可用     → high：唯一可用且无转译特征，无需分辨谁更原生；
+//     （唯一可用**但带转译特征** → low：不给勾选集合，理由见该分支注释）
 //  3. 排除被证据判为转译的路径后只剩一条 → high：其余路径已**被证明**是转译；
 //  4. 有且只有一条路径握有不可伪造的原生特征 → high；
 //  5. 有多条握有强证据、或唯一赢家只靠弱证据 → medium，按 evidence 字典序点名；
@@ -210,6 +193,20 @@ func Recommend(main consts.Protocol, inputs []Input) Recommendation {
 		return rec
 	case len(usable) == 1:
 		only := usable[0]
+		// 唯一可用**不等于**唯一原生：这条路径可能已被硬证据判为转译（错误信封指向别的
+		// 家族，或响应 id 前缀是别的协议的形状）。此时把它当 high 置信度推荐并写进
+		// 勾选集合，与其余分支「转译路径不给出可勾选集合」的口径相反——同一份证据换个
+		// 分支就得出相反结论。故先过 translated()，命中则不给集合、不给 high。
+		if only.translated() {
+			rec.Summary = fmt.Sprintf("%s 可用但带转译特征", displayName(only.Protocol))
+			rec.Reason = "这条协议双模式都通过，但证据显示它是上游网关转出来的（错误信封指向别的家族，" +
+				"或成功响应的 id 前缀是别的协议的形状）。勾它等于把协议转换交给上游转，协议特有字段更容易丢；" +
+				"这里不给可勾选集合。"
+			rec.Confidence = ConfidenceLow
+			rec.Actions = append(rec.Actions, translatedActions(usable, "")...)
+			rec.Actions = append(rec.Actions, fmt.Sprintf("保持当前主类型 %s 不变，除非你另有把握", displayName(main)))
+			return rec
+		}
 		rec.Protocols = []string{string(only.Protocol)}
 		rec.Primary = string(only.Protocol)
 		rec.Confidence = ConfidenceHigh

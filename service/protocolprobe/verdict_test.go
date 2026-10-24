@@ -135,8 +135,12 @@ func TestRecommend_Branches(t *testing.T) {
 		}
 	})
 
-	t.Run("lone_same_family_without_strong_evidence_is_medium", func(t *testing.T) {
+	t.Run("same_family_alone_is_not_evidence", func(t *testing.T) {
 		t.Parallel()
+		// 回归：错误信封「与自身同族」不能当正面证据。OpenAI 信封是兼容网关的默认形状，
+		// 转译路径也顺手回它；拿它跟「没测到」（FamilyUnknown）比大小，等于把
+		// 「测到同族」与「没测到」的差当成证据——实测会让转译路径凭空赢过原生路。
+		// 现在两条都无强证据、无原生头 → 证据打平，不点名唯一主协议。
 		inputs := []Input{
 			{
 				Protocol: consts.ProtocolAnthropic, NonStream: LegPassed, Stream: LegPassed,
@@ -150,11 +154,37 @@ func TestRecommend_Branches(t *testing.T) {
 			},
 		}
 		rec := Recommend(consts.ProtocolOpenAI, inputs)
+		if rec.Confidence != ConfidenceLow {
+			t.Fatalf("confidence = %q, want low（信封同族不算证据，不许凭它点名）", rec.Confidence)
+		}
+		if !containsSubstring([]string{rec.Summary}, "无法区分") {
+			t.Fatalf("summary = %q, 需明写无法区分", rec.Summary)
+		}
+		// 打平时保持当前主类型；字段总数差不是证据（跨协议字段集本就不同）。
+		if rec.Primary != string(consts.ProtocolOpenAI) {
+			t.Fatalf("primary = %q, want openai（打平时保持当前主类型）", rec.Primary)
+		}
+	})
+
+	t.Run("native_headers_break_tie_without_strong_evidence", func(t *testing.T) {
+		t.Parallel()
+		// 强证据缺席时，原生响应头是唯一还能分出名次的弱证据档。
+		inputs := []Input{
+			{
+				Protocol: consts.ProtocolAnthropic, NonStream: LegPassed, Stream: LegPassed,
+				Family: FamilyUnknown, NativeHeaders: []string{"anthropic-ratelimit-requests-limit", "request-id"},
+			},
+			{
+				Protocol: consts.ProtocolOpenAI, NonStream: LegPassed, Stream: LegPassed,
+				Family: FamilyOpenAI, NativeHeaders: nil,
+			},
+		}
+		rec := Recommend(consts.ProtocolOpenAI, inputs)
 		if rec.Confidence != ConfidenceMedium {
-			t.Fatalf("confidence = %q, want medium（只有弱证据，不许给 high）", rec.Confidence)
+			t.Fatalf("confidence = %q, want medium（弱证据分出名次）", rec.Confidence)
 		}
 		if rec.Primary != string(consts.ProtocolAnthropic) {
-			t.Fatalf("primary = %q, want anthropic（同为弱证据时信封方言更难的胜出）", rec.Primary)
+			t.Fatalf("primary = %q, want anthropic（原生头多者胜）", rec.Primary)
 		}
 	})
 
@@ -282,6 +312,76 @@ func TestRecommend_Branches(t *testing.T) {
 		}
 		if !containsSubstring([]string{rec.Summary}, "无法区分") {
 			t.Fatalf("summary = %q, 需明写无法区分", rec.Summary)
+		}
+	})
+
+	t.Run("single_usable_but_translated_is_not_high", func(t *testing.T) {
+		t.Parallel()
+		// 回归：唯一可用 ≠ 唯一原生。这条路径若已被硬证据判为转译（信封异族 / id 前缀
+		// 矛盾），把它当 high 推荐并写进勾选集合，与其余分支「转译路径不给集合」的口径
+		// 相反——同一份证据换个分支就得出相反结论。
+		cases := []struct {
+			name string
+			in   Input
+		}{
+			{
+				name: "envelope_foreign_family",
+				in: Input{
+					Protocol: consts.ProtocolOpenAI, NonStream: LegPassed, Stream: LegPassed,
+					Family: FamilyAnthropic,
+				},
+			},
+			{
+				name: "id_prefix_conflict",
+				in: Input{
+					Protocol: consts.ProtocolOpenAI, NonStream: LegPassed, Stream: LegPassed,
+					Family: FamilyUnknown, IDPrefix: "msg",
+				},
+			},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				rec := Recommend(consts.ProtocolOpenAI, []Input{tc.in})
+				if len(rec.Protocols) != 0 || rec.Primary != "" {
+					t.Fatalf("protocols=%v primary=%q, want 空（转译路径不给出可勾选集合）", rec.Protocols, rec.Primary)
+				}
+				if rec.Confidence != ConfidenceLow {
+					t.Fatalf("confidence = %q, want low（带转译特征不许给 high）", rec.Confidence)
+				}
+				if !containsSubstring([]string{rec.Summary}, "转译特征") {
+					t.Fatalf("summary = %q, 需说明是转译特征", rec.Summary)
+				}
+				if !containsSubstring(rec.Actions, "不建议勾选这条协议") {
+					t.Fatalf("actions 未说明为何不建议勾选: %v", rec.Actions)
+				}
+			})
+		}
+	})
+
+	t.Run("lone_strong_evidence_with_multiple_candidates_is_high", func(t *testing.T) {
+		t.Parallel()
+		// 补「有且只有一条握有不可伪造原生特征 → high」这条分支的直达断言。
+		// 上一条 unforgeable_* 用例里 Chat 被 id 前缀否决，实际走的是「候选只剩一条」
+		// 那支，没有真正验证 strongCount==1 的路径。
+		inputs := []Input{
+			{
+				Protocol: consts.ProtocolOpenAI, NonStream: LegPassed, Stream: LegPassed,
+				Family: FamilyOpenAI, IDPrefix: "chatcmpl",
+				Fields: fields([]string{"object", "finish_reason"}, nil),
+			},
+			{
+				Protocol: consts.ProtocolAnthropic, NonStream: LegPassed, Stream: LegPassed,
+				Family: FamilyAnthropic, IDPrefix: "msg",
+				Fields: strongFields([]string{"content[].signature"}),
+			},
+		}
+		rec := Recommend(consts.ProtocolOpenAI, inputs)
+		assertProtocolSet(t, rec,
+			[]consts.Protocol{consts.ProtocolOpenAI, consts.ProtocolAnthropic},
+			consts.ProtocolAnthropic)
+		if rec.Confidence != ConfidenceHigh {
+			t.Fatalf("confidence = %q, want high（唯一握有强证据）", rec.Confidence)
 		}
 	})
 

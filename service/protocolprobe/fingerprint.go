@@ -167,18 +167,23 @@ func NativeHeaders(header http.Header, family Family) []string {
 // （cache_* 只有 Anthropic 有），跨协议比数量没有意义。本包比的是
 // 「**它自己该有的，回来了几个**」，命中项逐条报给用户看。
 //
-// strong 标记「翻译层造不出来」的字段——这是唯一能正面证明直通的证据：
-//   - Anthropic 的 content[].signature 是上游对推理块的不透明签名，转译层拿不到源数据，
-//     想造只能伪造一个哈希，且它对客户端无意义；
-//   - OpenAI 的 system_fingerprint 由后端模型侧生成，转译层无从得知；
-//   - Responses 的 encrypted_content 同理（只有请求 include 时才回，故常缺席）。
-//
-// 其余的（object / type / stop_reason / usage.*）都是各协议的**骨架**：任何翻译层都必须
+// 这里列的**只有骨架字段**（object / type / stop_reason / usage.*）：任何翻译层都必须
 // 亲手写出来，命中与否与是否原生无关，只能当完整度看，不能当直通证据。
+// 能证明直通的字段另列在 strongSpecs，两者判据不同、不能混在一张表里。
 type fieldSpec struct {
-	label  string
-	path   string
-	strong bool
+	label string
+	path  string
+}
+
+// strongSpec 是「翻译层通常产不出来」的字段——唯一能正面证明直通的证据。
+//
+// 与 fieldSpecs 的分野不是重要程度，而是**缺席能否算证据**：
+// 这类字段是否出现取决于模型与请求参数（要不要 thinking、要不要 include、上游版本），
+// 所以只能「有才算证据，没有不算」——绝不能进 Miss 列表，否则每一份正常的原生响应
+// 都会显示「缺 N 项原生字段」，把用户引去排查一个不存在的上游丢字段问题。
+type strongSpec struct {
+	label string
+	path  string
 }
 
 var fieldSpecs = map[consts.WireFormat][]fieldSpec{
@@ -189,7 +194,6 @@ var fieldSpecs = map[consts.WireFormat][]fieldSpec{
 		{label: "usage.completion_tokens", path: "usage.completion_tokens"},
 		{label: "usage.prompt_tokens_details", path: "usage.prompt_tokens_details"},
 		{label: "usage.completion_tokens_details", path: "usage.completion_tokens_details"},
-		{label: "system_fingerprint", path: "system_fingerprint", strong: true},
 		{label: "service_tier", path: "service_tier"},
 	},
 	consts.FormatOpenAIResponses: {
@@ -200,7 +204,6 @@ var fieldSpecs = map[consts.WireFormat][]fieldSpec{
 		{label: "usage.output_tokens", path: "usage.output_tokens"},
 		{label: "usage.input_tokens_details", path: "usage.input_tokens_details"},
 		{label: "usage.output_tokens_details", path: "usage.output_tokens_details"},
-		{label: "encrypted_content", path: "output.0.encrypted_content", strong: true},
 	},
 	consts.FormatAnthropic: {
 		{label: "type", path: "type"},
@@ -211,29 +214,55 @@ var fieldSpecs = map[consts.WireFormat][]fieldSpec{
 		{label: "usage.output_tokens", path: "usage.output_tokens"},
 		{label: "usage.cache_creation_input_tokens", path: "usage.cache_creation_input_tokens"},
 		{label: "usage.cache_read_input_tokens", path: "usage.cache_read_input_tokens"},
-		{label: "content[].signature", path: "content.0.signature", strong: true},
+	},
+}
+
+// strongSpecs 各协议的「翻译层通常产不出来」字段。缺席是常态，只有命中才有意义。
+//
+// 逐项说明为什么是它、以及为什么没把别的塞进来：
+//   - Chat `system_fingerprint`：后端配置指纹，翻译层要凭空编一个既无意义也易被识破。
+//     **注意它不是绝对的**——部分自建兼容服务（vLLM 一类）支持自定义该值，故它是
+//     「转译层通常不产出」而非「物理上不可能」；但作为弱于签名的证据仍有区分力。
+//   - Anthropic `content[].signature`：上游对 thinking 块的不透明签名，翻译层拿不到源
+//     数据。**只在响应含 thinking 块时出现**（模型默认思考与否决定），故只算机会性证据。
+//   - Responses `encrypted_content`：**已移除**。官方只在请求带
+//     `include:["reasoning.encrypted_content"]`（或 `store:false`）时返回，而协议探针的
+//     请求体不带这两个参数 → 结构上永不出现。留着等于给每条正常响应挂一条恒假的
+//     「缺 encrypted_content」，且它作为强证据的分支线上永不触发。
+var strongSpecs = map[consts.WireFormat][]strongSpec{
+	consts.FormatOpenAIChat: {
+		{label: "system_fingerprint", path: "system_fingerprint"},
+	},
+	consts.FormatOpenAIResponses: {},
+	consts.FormatAnthropic: {
+		{label: "content[].signature", path: "content.0.signature"},
 	},
 }
 
 // FieldReport 一次响应按本协议「该有的原生特征」的命中情况。Miss 同样要报给用户：
 // 「缺了什么」才是他判断该不该换上游的依据。
 //
-// StrongHit 是 Hit 的子集：命中项里属于「翻译层造不出来」的那些。判定只看 StrongHit，
-// Hit/Miss 只用于展示完整度——把骨架字段和签名串等权计分，正是本包此前把转译路径
-// 推成主协议的成因。
+// StrongHit 与 Hit/Miss **来源不同、互不重叠**：
+//   - Hit / Miss 来自 fieldSpecs（骨架字段，该有就有），用于展示完整度；
+//   - StrongHit 来自 strongSpecs（机会性字段，缺席是常态），**只记命中不记缺失**。
+//
+// 判定只看 StrongHit——把骨架字段当直通证据，正是本包此前把转译路径推成主协议的成因。
 type FieldReport struct {
 	Hit       []string `json:"hit"`
 	Miss      []string `json:"miss"`
 	StrongHit []string `json:"strong_hit"`
 }
 
-// Total 该协议的原生特征总数（0 = 未注册的 wire format，调用方据此判「不可检」）。
+// Total 该协议「该有」的骨架特征总数（0 = 未注册的 wire format，调用方据此判「不可检」）。
 func Total(format consts.WireFormat) int {
 	return len(fieldSpecs[format])
 }
 
 // InspectFields 按协议核对原生特征。用 Exists() 判「键在不在」而非「值非空」——
 // cache_read_input_tokens 为 0 是合法响应，但它出现本身就说明这一层没被转译抹掉。
+//
+// strongSpecs 单独一轮扫描：缺席**不进 Miss**（见 strongSpec 注释——那类字段出不出现
+// 取决于模型与请求参数，把常态缺席报成「缺字段」会让每份正常响应都挂一条假缺陷）。
 func InspectFields(format consts.WireFormat, body []byte) FieldReport {
 	report := FieldReport{Hit: []string{}, Miss: []string{}, StrongHit: []string{}}
 	if !gjson.ValidBytes(body) {
@@ -242,12 +271,14 @@ func InspectFields(format consts.WireFormat, body []byte) FieldReport {
 	for _, spec := range fieldSpecs[format] {
 		if gjson.GetBytes(body, spec.path).Exists() {
 			report.Hit = append(report.Hit, spec.label)
-			if spec.strong {
-				report.StrongHit = append(report.StrongHit, spec.label)
-			}
 			continue
 		}
 		report.Miss = append(report.Miss, spec.label)
+	}
+	for _, spec := range strongSpecs[format] {
+		if gjson.GetBytes(body, spec.path).Exists() {
+			report.StrongHit = append(report.StrongHit, spec.label)
+		}
 	}
 	return report
 }
@@ -286,6 +317,12 @@ var protocolIDPrefix = map[consts.Protocol]string{
 // 反过来，前缀不认识（"" / 自定义）一律不算冲突：第三方实现的前缀并不统一，
 // 拿未知当转译会误杀。
 //
+// **判定用身份词等值，不做前缀包含**：`prefix` 已是 IDPrefix 切段后的整段身份词，
+// 用 HasPrefix 会把「身份词恰好是另一个身份词的超串」误判成已知协议——
+// `msgpack-1` 会被当成 Anthropic 形状、`response-9c1d` 会被当成 Responses 形状。
+// 三个身份词（chatcmpl / resp / msg）两两互不为前缀，故等值判定不丢召回：
+// 真实的 `msg_…` / `resp_…` / `chatcmpl-…` 仍各自命中，而第三方自定义前缀全部放行。
+//
 // **适用范围仅限上游返回的原始响应**：本仓 transform 出站已按目标协议重铸 id
 // （见 shared.ResponseIDFor），故 LLMux 自产响应不会命中本判据。若将来把这个函数
 // 复用到自产响应上，必须先剥掉重铸痕迹，否则会误判自己的输出。
@@ -297,7 +334,7 @@ func IDPrefixConflict(protocol consts.Protocol, prefix string) (consts.Protocol,
 		if p == protocol {
 			continue
 		}
-		if want := protocolIDPrefix[p]; want != "" && strings.HasPrefix(prefix, want) {
+		if want := protocolIDPrefix[p]; want != "" && prefix == want {
 			return p, true
 		}
 	}

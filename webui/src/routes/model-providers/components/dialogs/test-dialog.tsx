@@ -426,6 +426,10 @@ function ProtocolDetail({ protocol }: { protocol: ProtocolProbeEntry }) {
         {!protocol.fingerprint.same_family && protocol.fingerprint.message && <p>{protocol.fingerprint.message}</p>}
         {protocol.fields.hit.length > 0 && <p>原生字段命中：{protocol.fields.hit.join(", ")}</p>}
         {protocol.fields.miss.length > 0 && <p>缺失字段：{protocol.fields.miss.join(", ")}</p>}
+        {/* 强证据单列：它是「像不像直通」的唯一正面依据，混在命中清单里读不出来。 */}
+        {protocol.fields.strong_hit.length > 0 && (
+          <p>不可伪造的原生特征：{protocol.fields.strong_hit.join(", ")}</p>
+        )}
         {protocol.fingerprint.native_headers.length > 0 && (
           <p>原生响应头：{protocol.fingerprint.native_headers.join(", ")}</p>
         )}

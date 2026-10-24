@@ -211,8 +211,10 @@ func TestTestProtocolsHandler_MatrixVerdictAndRecommendation(t *testing.T) {
 	if hit := protocols[2].Get("fields.hit").Array(); len(hit) != 8 {
 		t.Fatalf("anthropic fields.hit = %d, want 8", len(hit))
 	}
-	if miss := protocols[2].Get("fields.miss").Array(); len(miss) != 1 || miss[0].String() != "content[].signature" {
-		t.Fatalf("anthropic fields.miss = %v, want [content[].signature]（骨架字段别当强证据）", miss)
+	// signature 属机会性字段（假上游回纯文本块，本就没有 thinking 签名），
+	// 它只在命中时进 strong_hit，缺席不进 miss——否则每份正常响应都挂一条假缺陷。
+	if miss := protocols[2].Get("fields.miss").Array(); len(miss) != 0 {
+		t.Fatalf("anthropic fields.miss = %v, want 空（机会性字段不算缺）", miss)
 	}
 	// 三条假响应都没有不可伪造的原生特征（无 system_fingerprint / encrypted_content /
 	// signature）→ strong_hit 必须为空，否则总评会凭骨架字段给出高置信度。

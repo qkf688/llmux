@@ -179,7 +179,8 @@ func TestInspectFields(t *testing.T) {
 			format: consts.FormatAnthropic,
 			body: `{"id":"msg_1","type":"message","content":[{"type":"text","text":"hi"}],
 				"stop_reason":"end_turn","usage":{"input_tokens":5,"output_tokens":2}}`,
-			wantMiss: []string{"stop_sequence", "usage.cache_creation_input_tokens", "usage.cache_read_input_tokens", "content[].signature"},
+			// signature 属机会性字段（模型不返 thinking 时本就不出现），不进 Miss。
+			wantMiss: []string{"stop_sequence", "usage.cache_creation_input_tokens", "usage.cache_read_input_tokens"},
 		},
 		{
 			// 强证据：签名串是不透明 blob，翻译层造不出来 → 进 StrongHit。
@@ -206,7 +207,8 @@ func TestInspectFields(t *testing.T) {
 			body: `{"id":"chatcmpl-1","object":"chat.completion",
 				"choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}],
 				"usage":{"prompt_tokens":5,"completion_tokens":2}}`,
-			wantMiss: []string{"usage.prompt_tokens_details", "usage.completion_tokens_details", "system_fingerprint", "service_tier"},
+			// system_fingerprint 同上：机会性字段，缺席不算缺。
+			wantMiss: []string{"usage.prompt_tokens_details", "usage.completion_tokens_details", "service_tier"},
 		},
 		{
 			name:   "responses_full",
@@ -214,9 +216,8 @@ func TestInspectFields(t *testing.T) {
 			body: `{"id":"resp_1","object":"response","status":"completed","error":null,
 				"output":[{"id":"msg_1","type":"message"}],
 				"usage":{"input_tokens":5,"output_tokens":2,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}}}`,
-			// encrypted_content 只在请求带 include 时才回，常规请求缺席是常态——仍要报出来，
-			// 因为「缺席」本身是弱信号，用户需要知道它没被检到。
-			wantMiss: []string{"encrypted_content"},
+			// encrypted_content 已整条移除（探针体不带 include，结构上永不出现）。
+			wantMiss: nil,
 		},
 		{
 			// 非法 JSON 下不报「缺字段」——那会把「压根不是 JSON」说成「字段不全」。
@@ -322,6 +323,12 @@ func TestIDPrefixConflict(t *testing.T) {
 		{name: "anthropic_native_prefix", protocol: consts.ProtocolAnthropic, prefix: "msg"},
 		{name: "unknown_prefix_passes", protocol: consts.ProtocolOpenAI, prefix: "custom-abc"},
 		{name: "empty_prefix_passes", protocol: consts.ProtocolOpenAI, prefix: ""},
+		// 身份词恰好是已知身份词的超串：不是那个协议的实现，必须放行。
+		// （判据用等值而非前缀包含，这三条是回归锁。）
+		{name: "msgpack_is_not_anthropic", protocol: consts.ProtocolOpenAI, prefix: "msgpack"},
+		{name: "response_is_not_responses", protocol: consts.ProtocolOpenAI, prefix: "response"},
+		{name: "message_is_not_anthropic", protocol: consts.ProtocolOpenAI, prefix: "message"},
+		{name: "chatcmplx_is_not_openai", protocol: consts.ProtocolAnthropic, prefix: "chatcmplx"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

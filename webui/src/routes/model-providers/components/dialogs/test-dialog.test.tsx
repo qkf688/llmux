@@ -399,6 +399,10 @@ describe("模型测试：复制整份结果", () => {
     expect(screen.getAllByText(/缺失字段：service_tier/).length).toBeGreaterThan(0);
     // 指纹请求的状态码也要在 DOM 里（只说「未采到」不给状态码，用户判不出是正常拒绝还是网关故障）
     expect(screen.getAllByText(/指纹请求：HTTP 404/).length).toBeGreaterThan(0);
+    // 强证据必须单独可见：它是「像不像直通」的唯一正面依据，混进字段命中总数里读不出来。
+    // 夹具里 anthropic 行的 strong_hit 是 ["content[].signature"]。
+    expect(screen.getAllByText("强证据 1").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/不可伪造的原生特征：content\[\]\.signature/).length).toBeGreaterThan(0);
   });
 
   it("协议检测：证据标签是可读短句，免责说明默认收起但仍在 DOM", () => {

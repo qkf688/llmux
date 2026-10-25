@@ -85,7 +85,8 @@ export function LogsMobileList({
           <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px] ml-6">
             <div className="space-y-0.5">
               <p className="text-muted-foreground text-[10px] uppercase tracking-wide">耗时</p>
-              <p className="font-medium">{formatTime(log.chunk_time)}</p>
+              {/* 同桌面端：proxy_time 对失败/进行中行也有意义，chunk_time 失败行恒 0 */}
+              <p className="font-medium">{formatTime(log.proxy_time)}</p>
             </div>
             <div className="space-y-0.5">
               <p className="text-muted-foreground text-[10px] uppercase tracking-wide">提供商</p>

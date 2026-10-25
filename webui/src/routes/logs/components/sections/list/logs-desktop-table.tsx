@@ -108,7 +108,9 @@ export function LogsDesktopTable({
                   {getLogStatusLabel(log.status)}
                 </span>
               </TableCell>
-              <TableCell>{formatTime(log.chunk_time)}</TableCell>
+              {/* 列表列用 proxy_time（端到端总耗时）：chunk_time 在失败行恒 0（没收到任何上游字节）、
+                  批量下发的流式成功行也会塌到 0，显示成 0.00 ns 读起来像「没花时间」 */}
+              <TableCell>{formatTime(log.proxy_time)}</TableCell>
               <TableCell className="max-w-[120px] truncate text-xs" title={log.provider_model}>
                 {log.provider_model}
               </TableCell>

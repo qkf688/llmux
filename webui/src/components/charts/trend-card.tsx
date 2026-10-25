@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useMemo, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AnimatedNumber } from "@/components/ui/animated-number";
@@ -76,10 +77,15 @@ export function TrendCard({
 
   const chartData = useMemo(() => {
     if (period === "today") {
-      return (hourlyData ?? []).map((stat) => ({
-        label: `${String(stat.hour).padStart(2, "0")}:00`,
-        metric: metricType === "count" ? stat.reqs : stat.tokens,
-      }));
+      // 只画已到达的时刻：把未来小时补 0 画进去，会读成「上午过后流量归零」，
+      // 实际只是时间还没到（后端按全天 24 桶返回）
+      const nowHour = new Date().getHours();
+      return (hourlyData ?? [])
+        .filter((stat) => stat.hour <= nowHour)
+        .map((stat) => ({
+          label: `${String(stat.hour).padStart(2, "0")}:00`,
+          metric: metricType === "count" ? stat.reqs : stat.tokens,
+        }));
     }
 
     return filledDaily.map((stat) => ({
@@ -142,15 +148,20 @@ export function TrendCard({
             </div>
           </div>
 
-          <div
-            className="flex gap-2 text-sm cursor-pointer hover:opacity-80 transition-opacity select-none"
+          {/* 周期切换的点击目标做成真按钮：纯文本 + cursor:pointer 的隐形入口
+              首次使用者发现不了（无下划线/底色/图标，与旁侧静态指标无差异） */}
+          <button
+            type="button"
             onClick={handlePeriodClick}
+            title="点击切换时间段"
+            className="flex flex-col items-start rounded-md px-2 py-1 -my-1 -mr-2 hover:bg-muted transition-colors select-none"
           >
-            <div>
-              <div className="text-xs text-muted-foreground">时间段</div>
-              <div className="text-base font-semibold">{periodLabel(period)}</div>
-            </div>
-          </div>
+            <span className="text-xs text-muted-foreground">时间段</span>
+            <span className="flex items-center gap-1 text-base font-semibold">
+              {periodLabel(period)}
+              <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            </span>
+          </button>
         </div>
       </div>
 

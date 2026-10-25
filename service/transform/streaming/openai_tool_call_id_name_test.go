@@ -65,6 +65,19 @@ data: {"id":"chatcmpl-late","object":"chat.completion.chunk","created":123456789
 data: [DONE]
 
 `
+
+	// fixtureToolCallNameAfterFinish：结束标记早于工具名到达——部分兼容上游先把
+	// finish_reason 帧发出去，随后才补 tool_call 的 name。此时收尾已发出
+	// response.completed，后续帧不得再开新 output item。
+	fixtureToolCallNameAfterFinish = `data: {"id":"chatcmpl-after","object":"chat.completion.chunk","created":1234567890,"model":"test-model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_after","type":"function","function":{"arguments":"{}"}}]},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-after","object":"chat.completion.chunk","created":1234567890,"model":"test-model","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}
+
+data: {"id":"chatcmpl-after","object":"chat.completion.chunk","created":1234567890,"model":"test-model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"name":"get_weather","arguments":"{}"}}]},"finish_reason":null}]}
+
+data: [DONE]
+
+`
 )
 
 // functionCallAdded 返回第一个 function_call 类型的 output_item.added 事件。
@@ -226,6 +239,46 @@ func TestOpenAIToolCall_LateName_Buffered(t *testing.T) {
 			if ev.outputIndex(t) == idx && !seenAdded {
 				t.Errorf("参数 delta 先于 output_item.added 发出（output_index=%d），协议违规", idx)
 			}
+		}
+	}
+}
+
+// TestOpenAIToolCall_NameAfterFinish_NoItemAfterCompleted 覆盖「结束标记早于工具名到达」：
+// 流末兜底已丢弃该工具调用（并已发出终态）之后到达的帧不得再开新的 output item——
+// 否则产出「开了却没关」的 item，严格 Responses 客户端判本轮运行失败
+// （正是本次修复要消灭的故障类别）。
+func TestOpenAIToolCall_NameAfterFinish_NoItemAfterCompleted(t *testing.T) {
+	t.Parallel()
+
+	events := runRealtimeTransform(t, fixtureToolCallNameAfterFinish, consts.FormatOpenAIChat, consts.FormatOpenAIResponses)
+
+	completedSeen := false
+	addedAfterCompleted := 0
+	addedIdx := map[int]bool{}
+	doneIdx := map[int]bool{}
+	for _, ev := range events {
+		switch ev.typ() {
+		case "response.completed":
+			completedSeen = true
+		case "response.output_item.added":
+			if completedSeen {
+				addedAfterCompleted++
+			}
+			addedIdx[ev.outputIndex(t)] = true
+		case "response.output_item.done":
+			doneIdx[ev.outputIndex(t)] = true
+		}
+	}
+
+	if !completedSeen {
+		t.Fatalf("未产出 response.completed；事件序列: %v", eventTypes(events))
+	}
+	if addedAfterCompleted != 0 {
+		t.Errorf("终态之后仍开出 %d 个 output item，终态不可撤回，协议违规", addedAfterCompleted)
+	}
+	for idx := range addedIdx {
+		if !doneIdx[idx] {
+			t.Errorf("output_index=%d 的项开了却没关（缺 output_item.done），客户端判「未完成」", idx)
 		}
 	}
 }

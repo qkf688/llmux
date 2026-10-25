@@ -313,6 +313,18 @@ func emitOpenAIToResponsesReasoningDelta(state *realtimeStreamState, reasoningCo
 }
 
 func emitOpenAIToResponsesToolCalls(state *realtimeStreamState, toolCalls []interface{}) error {
+	// 终态之后不得再开新的 output item：Responses 协议里 response.completed 不可撤回，
+	// 此后开的项既进不了 response.completed 的 output 快照（已构建），也不会被
+	// emitResponsesOutputItemFinalization 收尾（收尾已跑过）——产出「开了却没关」的
+	// item，严格客户端判本轮运行失败。
+	//
+	// 触发形状：上游把 finish_reason 帧发在工具名之前（部分兼容上游会补发后续帧）。
+	// 流末兜底已按「有 id 无 name」丢弃该工具调用并发出终态，后续帧若再把它当
+	// 待开的工具调用处理，就会重开一个永不关闭的 item。
+	if state.openAIOutputClosed {
+		return nil
+	}
+
 	for _, tc := range toolCalls {
 		toolCall, ok := tc.(map[string]interface{})
 		if !ok {
@@ -384,7 +396,9 @@ func getOrAllocOpenAIToolCallBuffer(state *realtimeStreamState, toolCallIndex in
 	if buf, ok := state.openAIToolCallBuffers[toolCallIndex]; ok {
 		return buf
 	}
-	buf := &openAIToolCallBuffer{outputIndex: getOrAllocResponsesOutputIndexForToolCall(state, toolCallIndex)}
+	// output_index 直接分配：缓冲项本身就持有它，且缓冲 map 与 tool_call index
+	// 同键域同生命周期，另建一张 index→output_index 映射表是同义重复。
+	buf := &openAIToolCallBuffer{outputIndex: state.responsesOutput.alloc()}
 	state.openAIToolCallBuffers[toolCallIndex] = buf
 	return buf
 }
@@ -473,20 +487,6 @@ func flushOpenAIToResponsesToolCallBuffers(state *realtimeStreamState) error {
 		}
 	}
 	return nil
-}
-
-// getOrAllocResponsesOutputIndexForToolCall 把 OpenAI 的 tool_call index（从 0 起）
-// 映射到一个独立的 Responses output_index，避开 message / reasoning 项已占用的 index。
-func getOrAllocResponsesOutputIndexForToolCall(state *realtimeStreamState, toolCallIndex int) int {
-	if state.openAIToolCallIndexToResponsesOutputIndex == nil {
-		state.openAIToolCallIndexToResponsesOutputIndex = map[int]int{}
-	}
-	if idx, ok := state.openAIToolCallIndexToResponsesOutputIndex[toolCallIndex]; ok {
-		return idx
-	}
-	idx := state.responsesOutput.alloc()
-	state.openAIToolCallIndexToResponsesOutputIndex[toolCallIndex] = idx
-	return idx
 }
 
 func finishOpenAIToResponsesStream(state *realtimeStreamState, chunk map[string]interface{}, finishReason string) error {

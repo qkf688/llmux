@@ -64,15 +64,8 @@ func FillMissingToolCallIDs(body []byte) ([]byte, bool, error) {
 		}
 
 		toolMsgs := make([]map[string]any, 0, len(rawToolCalls))
-		for nextIndex := msgIndex + 1; nextIndex < len(rawMessages); nextIndex++ {
-			nextMsg, ok := rawMessages[nextIndex].(map[string]any)
-			if !ok {
-				break
-			}
-			nextRole, _ := nextMsg["role"].(string)
-			if nextRole != "tool" {
-				break
-			}
+		for _, nextIndex := range toolMessagesAfter(rawMessages, msgIndex) {
+			nextMsg, _ := rawMessages[nextIndex].(map[string]any)
 			toolMsgs = append(toolMsgs, nextMsg)
 		}
 
@@ -175,4 +168,26 @@ func collectUsedToolCallIDs(messages []any) map[string]struct{} {
 		}
 	}
 	return used
+}
+
+// toolMessagesAfter 返回 rawMessages 中紧跟 assistantIndex 之后、连续 role:tool
+// 消息的下标列表，边界取到首个非 tool 角色为止——OpenAI 形状里 tool 消息紧跟
+// 发出调用的 assistant。
+//
+// FillMissingToolCallIDs（按位置补 id）与 SanitizeToolCallFunctionNames（按存活
+// 集合判删配对 tool 消息）共用同一条边界：两处口径一旦漂移，补出来的 id 与删掉的
+// 消息就会指向不同的段，调用↔结果配对必断。
+func toolMessagesAfter(rawMessages []any, assistantIndex int) []int {
+	indexes := make([]int, 0, 4)
+	for next := assistantIndex + 1; next < len(rawMessages); next++ {
+		msg, ok := rawMessages[next].(map[string]any)
+		if !ok {
+			break
+		}
+		if role, _ := msg["role"].(string); role != "tool" {
+			break
+		}
+		indexes = append(indexes, next)
+	}
+	return indexes
 }

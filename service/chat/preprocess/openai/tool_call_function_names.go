@@ -152,18 +152,11 @@ func SanitizeToolCallFunctionNames(body []byte) ([]byte, bool, error) {
 	}
 
 	// 第四遍：圈定每条 role:tool 消息归属的「连续段」——即它前面那条删过
-	// tool_call 的 assistant 消息之后的连续 role:tool 序列。OpenAI 形状里
-	// tool 消息紧跟发出调用的 assistant，故段边界取到首个非 tool 角色为止。
+	// tool_call 的 assistant 消息之后的连续 role:tool 序列。段边界单源在
+	// toolMessagesAfter（与 FillMissingToolCallIDs 共用，两处口径不得漂移）。
 	toolRunOwner := map[int]int{}
 	for msgIndex := range dirtyAssistants {
-		for next := msgIndex + 1; next < len(rawMessages); next++ {
-			nextMsg, ok := rawMessages[next].(map[string]any)
-			if !ok {
-				break
-			}
-			if role, _ := nextMsg["role"].(string); role != "tool" {
-				break
-			}
+		for _, next := range toolMessagesAfter(rawMessages, msgIndex) {
 			toolRunOwner[next] = msgIndex
 		}
 	}

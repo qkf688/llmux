@@ -2,10 +2,13 @@ package streaming
 
 import (
 	"encoding/json"
+	"log/slog"
+	"sort"
 
 	"github.com/qkf688/llmux/common/maputil"
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/models/unified"
 	"github.com/qkf688/llmux/service/transform/shared"
 )
 
@@ -321,46 +324,154 @@ func emitOpenAIToResponsesToolCalls(state *realtimeStreamState, toolCalls []inte
 		}
 
 		toolCallIndex := int(maputil.Float64(toolCall, "index"))
-		outputIndex := getOrAllocResponsesOutputIndexForToolCall(state, toolCallIndex)
+		buf := getOrAllocOpenAIToolCallBuffer(state, toolCallIndex)
 
-		// 首包含 id/name 时，发送 output_item.added 事件
-		if id := maputil.String(toolCall, "id"); id != "" {
-			item := map[string]interface{}{
-				"type":      "function_call",
-				"id":        id,
-				"call_id":   id,
-				"name":      maputil.String(function, "name"),
-				"arguments": "",
-			}
-			state.responsesOutput.set(outputIndex, item)
+		// 收集本帧的 id/name：上游可能分帧给（甚至只给其一），取首个非空值，
+		// 后续帧不得覆盖。
+		if id := maputil.String(toolCall, "id"); id != "" && buf.id == "" {
+			buf.id = id
+		}
+		if name := maputil.String(function, "name"); name != "" && buf.name == "" {
+			buf.name = name
+		}
 
-			itemAdded := map[string]interface{}{
-				"type":            "response.output_item.added",
-				"sequence_number": nextRealtimeSequence(state),
-				"output_index":    outputIndex,
-				"item":            item,
-			}
-			if err := writeRealtimeOrderedData(state, itemAdded); err != nil {
-				return err
+		// 参数增量：added 之前先进缓冲（协议要求 delta 挂在已开的 item 上，
+		// 修复前参数 delta 先于 added 发出属协议违规），added 之后直接透传。
+		if args := maputil.String(function, "arguments"); args != "" {
+			if buf.opened {
+				state.responsesOutput.appendArguments(buf.outputIndex, args)
+
+				argsDelta := map[string]interface{}{
+					"type":            "response.function_call_arguments.delta",
+					"sequence_number": nextRealtimeSequence(state),
+					"output_index":    buf.outputIndex,
+					"delta":           args,
+				}
+				if err := writeRealtimeOrderedData(state, argsDelta); err != nil {
+					return err
+				}
+			} else {
+				buf.args += args
 			}
 		}
 
-		// 参数增量
-		if args := maputil.String(function, "arguments"); args != "" {
-			state.responsesOutput.appendArguments(outputIndex, args)
-
-			argsDelta := map[string]interface{}{
-				"type":            "response.function_call_arguments.delta",
-				"sequence_number": nextRealtimeSequence(state),
-				"output_index":    outputIndex,
-				"delta":           args,
-			}
-			if err := writeRealtimeOrderedData(state, argsDelta); err != nil {
+		// id+name 齐备才开 item：修复前 id 帧即发 added 且 name 写死一次，
+		// id 帧缺 name 产出空名 tool_use（下游客户端报 No such tool 并把脏块
+		// 写回历史，会话被出站校验 400 卡死）。
+		if !buf.opened && buf.id != "" && buf.name != "" {
+			if err := openOpenAIToResponsesToolCall(state, buf); err != nil {
 				return err
 			}
 		}
 	}
 
+	return nil
+}
+
+// openAIToolCallBuffer 缓冲一个「id/name 尚未齐备」的工具调用。
+type openAIToolCallBuffer struct {
+	outputIndex int
+	id          string
+	name        string
+	args        string // added 之前攒的参数增量
+	opened      bool   // output_item.added 是否已发
+}
+
+func getOrAllocOpenAIToolCallBuffer(state *realtimeStreamState, toolCallIndex int) *openAIToolCallBuffer {
+	if state.openAIToolCallBuffers == nil {
+		state.openAIToolCallBuffers = map[int]*openAIToolCallBuffer{}
+	}
+	if buf, ok := state.openAIToolCallBuffers[toolCallIndex]; ok {
+		return buf
+	}
+	buf := &openAIToolCallBuffer{outputIndex: getOrAllocResponsesOutputIndexForToolCall(state, toolCallIndex)}
+	state.openAIToolCallBuffers[toolCallIndex] = buf
+	return buf
+}
+
+// openOpenAIToResponsesToolCall 发出 function_call 的 output_item.added，
+// 并把缓冲里攒的参数增量作为首个 delta 补发（added 必须先于该 item 的任何 delta）。
+func openOpenAIToResponsesToolCall(state *realtimeStreamState, buf *openAIToolCallBuffer) error {
+	item := map[string]interface{}{
+		"type":      "function_call",
+		"id":        buf.id,
+		"call_id":   buf.id,
+		"name":      buf.name,
+		"arguments": "",
+	}
+	state.responsesOutput.set(buf.outputIndex, item)
+
+	itemAdded := map[string]interface{}{
+		"type":            "response.output_item.added",
+		"sequence_number": nextRealtimeSequence(state),
+		"output_index":    buf.outputIndex,
+		"item":            item,
+	}
+	if err := writeRealtimeOrderedData(state, itemAdded); err != nil {
+		return err
+	}
+
+	buf.opened = true
+
+	// added 之前攒的参数此刻补发为一个 delta。
+	if buf.args != "" {
+		state.responsesOutput.appendArguments(buf.outputIndex, buf.args)
+
+		argsDelta := map[string]interface{}{
+			"type":            "response.function_call_arguments.delta",
+			"sequence_number": nextRealtimeSequence(state),
+			"output_index":    buf.outputIndex,
+			"delta":           buf.args,
+		}
+		if err := writeRealtimeOrderedData(state, argsDelta); err != nil {
+			return err
+		}
+		buf.args = ""
+	}
+	return nil
+}
+
+// flushOpenAIToResponsesToolCallBuffers 处理流末仍未「id/name 齐备」的工具调用：
+//   - 有 name 无 id：补 call_ 前缀兜底 id 发出（修复前整帧静默丢弃，客户端连错误都看不到）；
+//   - 有 id 无 name：丢弃整条工具调用（上游没给工具名，发了就是空名 tool_use，
+//     下游客户端会把它写进脏历史，会话被出站校验 400 卡死）。
+//
+// 必须在 emitOpenAIToResponsesOutputFinalization 开头调用：补发的事件要先于收尾事件，
+// 且新开的项要能被 emitResponsesOutputItemFinalization 关掉。
+func flushOpenAIToResponsesToolCallBuffers(state *realtimeStreamState) error {
+	indices := make([]int, 0, len(state.openAIToolCallBuffers))
+	for idx := range state.openAIToolCallBuffers {
+		indices = append(indices, idx)
+	}
+	sort.Ints(indices)
+
+	for _, idx := range indices {
+		buf := state.openAIToolCallBuffers[idx]
+		if buf.opened {
+			continue
+		}
+		if buf.name == "" {
+			slog.Warn("dropping tool call without function name at stream end",
+				"tool_call_index", idx,
+				"tool_call_id", buf.id,
+				"upstream_format", state.upstreamFormat,
+				"client_format", state.clientFormat,
+			)
+			continue
+		}
+		if buf.id == "" {
+			buf.id = unified.GenerateUniqueToolCallID(nil)
+			slog.Warn("synthesized missing tool_call id at stream end",
+				"tool_call_index", idx,
+				"tool_call_name", buf.name,
+				"upstream_format", state.upstreamFormat,
+				"client_format", state.clientFormat,
+			)
+		}
+		if err := openOpenAIToResponsesToolCall(state, buf); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -428,6 +539,12 @@ func emitOpenAIToResponsesOutputFinalization(state *realtimeStreamState) error {
 		return nil
 	}
 	state.openAIOutputClosed = true
+
+	// 流末兜底：未齐备的工具调用必须先于收尾事件处理（补发或丢弃），
+	// 否则新开的项来不及被 emitResponsesOutputItemFinalization 关掉。
+	if err := flushOpenAIToResponsesToolCallBuffers(state); err != nil {
+		return err
+	}
 
 	// reasoning 的收尾必须独立于 message 项是否存在：上游只给 reasoning_content、
 	// 不给 role/content 时（推理模型先思考再调工具/结束的常见形态），message 项

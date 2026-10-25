@@ -47,6 +47,15 @@ type realtimeStreamState struct {
 	// OpenAI 的 tool_call index 从 0 起，与 message 项的 output_index 会撞车，必须另行分配。
 	openAIToolCallIndexToResponsesOutputIndex map[int]int
 
+	// openAIToolCallBuffers 按 OpenAI tool_call index 缓冲「id/name 未齐备」的工具调用。
+	//
+	// 上游常把 id 与 name 分帧发送（甚至只发其一）：修复前 id 帧即发 output_item.added
+	// 且 name 写死一次——id 帧缺 name 产出空名 tool_use（下游客户端报 No such tool
+	// 并把脏块写回历史，会话被出站校验 400 卡死）；无 id 帧则整帧丢弃，工具调用凭空消失。
+	// 改为 id+name 齐备才发 added，参数增量先进缓冲，流末兜底时有 name 无 id 补
+	// call_ 前缀 id 发出、有 id 无 name 丢弃。
+	openAIToolCallBuffers map[int]*openAIToolCallBuffer
+
 	// openAIStreamMeta 缓存上游 OpenAI Chat chunk 里的 id / model / created。
 	// 流末兜底收尾（上游没给 finish_reason）拿不到具体 chunk，
 	// response.completed 的这三项只能取缓存值，否则会是空串 / 0。

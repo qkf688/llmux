@@ -78,7 +78,7 @@ func (r *UnifiedRequest) NormalizeToolCallIDs() {
 				id = candidates[candidateIndex]
 				candidateIndex++
 			} else {
-				id = generateUniqueToolCallID(used)
+				id = GenerateUniqueToolCallID(used)
 			}
 
 			msg.ToolCalls[i].ID = id
@@ -94,7 +94,9 @@ func (r *UnifiedRequest) NormalizeToolCallIDs() {
 	}
 }
 
-func generateUniqueToolCallID(used map[string]struct{}) string {
+// GenerateUniqueToolCallID 生成一个 `call_` 前缀的唯一 tool_call id。
+// used 非 nil 时保证不与其中已有 id 冲突；streaming 层流末兜底补 id 时传 nil。
+func GenerateUniqueToolCallID(used map[string]struct{}) string {
 	for attempts := 0; attempts < 8; attempts++ {
 		buf := make([]byte, 12)
 		if _, err := rand.Read(buf); err != nil {

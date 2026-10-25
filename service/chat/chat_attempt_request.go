@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net/http"
 
 	"github.com/qkf688/llmux/consts"
 	preprocessanthropic "github.com/qkf688/llmux/service/chat/preprocess/anthropic"
@@ -224,11 +223,14 @@ func patchOutgoingRequestBody(upstreamFormat consts.WireFormat, body []byte) ([]
 // 校验/补齐的都是 OpenAI Chat 特有字段（tool_call 函数名、tool_call_id、message.content），
 // 判定依据必须是 wire format 而非「上游是哪一家」——OpenAI 兼容的新上游同样需要这层补齐。
 func patchOutgoingOpenAIChatRequest(body []byte) ([]byte, error) {
-	if err := preprocessopenai.ValidateToolCallFunctionNames(body); err != nil {
-		return nil, newClientRequestError(http.StatusBadRequest, err.Error())
+	// 先补 id：sanitize 配对 tool_call.id 与 tool_message.tool_call_id 依赖两者一致。
+	if patched, changed, err := preprocessopenai.FillMissingToolCallIDs(body); err == nil && changed {
+		body = patched
 	}
 
-	if patched, changed, err := preprocessopenai.FillMissingToolCallIDs(body); err == nil && changed {
+	// 再丢弃空名 tool_call 并连带删配对 tool 消息：这类脏数据是上游空名 tool_use
+	// 经客户端写回历史后的遗留，拒绝它会把脏会话永久卡死，丢弃则让会话自愈。
+	if patched, changed, err := preprocessopenai.SanitizeToolCallFunctionNames(body); err == nil && changed {
 		body = patched
 	}
 

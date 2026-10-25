@@ -174,10 +174,10 @@ func BeforerOpenAI(data []byte) (*Before, error) {
 
 	_, _, toolCall, structuredOutput, image := detectCapabilities(data, cfg)
 
-	if err := preprocessopenai.ValidateToolCallFunctionNames(data); err != nil {
-		return nil, err
-	}
 	if patched, changed, err := preprocessopenai.FillMissingToolCallIDs(data); err == nil && changed {
+		data = patched
+	}
+	if patched, changed, err := preprocessopenai.SanitizeToolCallFunctionNames(data); err == nil && changed {
 		data = patched
 	}
 	return &Before{

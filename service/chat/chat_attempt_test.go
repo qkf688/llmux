@@ -57,21 +57,26 @@ func TestApplyProviderSelectionResult_RemoveOnlyWeight(t *testing.T) {
 	}
 }
 
-func TestBuildRequestBodyForProvider_OpenAI_MissingToolCallFunctionName_ReturnsHTTP400(t *testing.T) {
+// TestBuildRequestBodyForProvider_OpenAI_MissingToolCallFunctionName_Sanitized
+// 覆盖出站 patch 的新行为：空名 tool_call 不再 400，而是被丢弃（连同配对的
+// tool 消息），会话自愈。修复前这里返回 HTTP 400，把已经脏掉的会话永久卡死。
+func TestBuildRequestBodyForProvider_OpenAI_MissingToolCallFunctionName_Sanitized(t *testing.T) {
 	ctx := context.Background()
 	raw := []byte(`{
 		"model":"m",
 		"messages":[
 			{
 				"role":"assistant",
+				"content":null,
 				"tool_calls":[
 					{"type":"function","function":{"arguments":"{}"}}
 				]
-			}
+			},
+			{"role":"tool","tool_call_id":"","content":"r1"}
 		]
 	}`)
 
-	_, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
+	body, skip, err := buildRequestBodyForProvider(ctx, ProviderRequestCaps{
 		Style:            string(consts.StyleOpenAI),
 		EndpointProtocol: consts.ProtocolOpenAI,
 		Raw:              raw,
@@ -81,16 +86,22 @@ func TestBuildRequestBodyForProvider_OpenAI_MissingToolCallFunctionName_ReturnsH
 	if skip {
 		t.Fatalf("skipProvider = true, want false")
 	}
-	if err == nil {
-		t.Fatalf("expected error, got nil")
+	if err != nil {
+		t.Fatalf("expected no error (sanitize drops dirty tool call), got %v", err)
 	}
 
-	var statusCoder interface{ StatusCode() int }
-	if !errors.As(err, &statusCoder) {
-		t.Fatalf("expected status-codable error, got %T: %v", err, err)
+	// 出站 body 里 assistant 消息的 tool_calls 应被清空移除，tool 消息被删。
+	var req map[string]any
+	if err := json.Unmarshal(body, &req); err != nil {
+		t.Fatalf("outgoing body is not valid JSON: %v", err)
 	}
-	if got := statusCoder.StatusCode(); got != http.StatusBadRequest {
-		t.Fatalf("StatusCode() = %d, want %d", got, http.StatusBadRequest)
+	msgs, _ := req["messages"].([]any)
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message (assistant only, tool message dropped), got %d", len(msgs))
+	}
+	first, _ := msgs[0].(map[string]any)
+	if _, hasToolCalls := first["tool_calls"]; hasToolCalls {
+		t.Errorf("tool_calls key should be removed from outgoing body, got %v", first)
 	}
 }
 

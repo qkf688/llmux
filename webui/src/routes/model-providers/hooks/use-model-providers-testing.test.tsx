@@ -283,13 +283,13 @@ describe("useModelProvidersTesting", () => {
     expect(testModelProviderVision).not.toHaveBeenCalled();
   });
 
-  it("打开弹窗回到非流式默认模式", () => {
+  it("打开弹窗回到流式默认模式", () => {
     const { result } = renderTesting("vision", "stream");
     act(() => {
       result.current.handleTest(9);
     });
 
-    expect(setTestMode).toHaveBeenCalledWith("non_stream");
+    expect(setTestMode).toHaveBeenCalledWith("stream");
   });
 });
 

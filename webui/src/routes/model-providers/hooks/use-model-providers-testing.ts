@@ -261,9 +261,8 @@ export function useModelProvidersTesting({
       currentControllerRef.current = null;
       setSelectedTestId(id);
       setTestType("connectivity");
-      // 打开弹窗回到默认模式：若沿用上一轮的「流式」，用户会以为点击立即出结果，
-      // 实际要多等十几秒到几十秒（流式要读完整条 SSE）。
-      setTestMode("non_stream");
+      // 打开弹窗回到默认模式（流式），不沿用上一轮选择。
+      setTestMode("stream");
       setTestDialogOpen(true);
       setReactTestResult({
         loading: false,

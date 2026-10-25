@@ -162,8 +162,8 @@ export const modelProvidersPageStore = createStore<ModelProvidersPageState>()((s
   testDialogOpen: false,
   selectedTestId: null,
   testType: "connectivity",
-  // 默认非流式：与改造前的行为一致，流式是显式选择（弹窗里另有一处开关）。
-  testMode: "non_stream",
+  // 默认流式，非流式是显式选择（弹窗里另有一处开关）。
+  testMode: "stream",
   isSubmitting: false,
 
   modelListDialogOpen: false,
@@ -298,7 +298,7 @@ export const modelProvidersPageStore = createStore<ModelProvidersPageState>()((s
       testDialogOpen: false,
       selectedTestId: null,
       testType: "connectivity",
-      testMode: "non_stream",
+      testMode: "stream",
       isSubmitting: false,
       modelListDialogOpen: false,
       modelSearchKeyword: "",

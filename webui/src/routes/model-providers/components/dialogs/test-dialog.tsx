@@ -101,12 +101,12 @@ const TEST_OPTIONS: { value: TestType; label: string; description: string }[] = 
 // 执行模式：与测试类型正交（同一能力的两种跑法）。流式的判定输入是 SSE 折叠出的响应体，
 // 通过标准与非流式完全一致，额外要求「真是 SSE 流 + 有内容增量 + 有终止事件」。
 const TEST_MODE_OPTIONS: { value: TestMode; label: string; description: string }[] = [
-  { value: "non_stream", label: "非流式", description: "一次性返回完整响应（默认，最快）" },
   {
     value: "stream",
     label: "流式",
-    description: "带 stream=true：响应必须是 SSE 流、有内容增量、且以终止事件收尾。耗时明显更长。",
+    description: "带 stream=true：响应必须是 SSE 流、有内容增量、且以终止事件收尾（默认）。耗时明显更长。",
   },
+  { value: "non_stream", label: "非流式", description: "一次性返回完整响应（最快）" },
 ];
 
 // 四类能力测试的段名与取值：屏幕上的段落与复制出去的文本从这张表取，两边不会各写一份而漂移。

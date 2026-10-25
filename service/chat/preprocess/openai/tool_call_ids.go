@@ -1,14 +1,10 @@
 package openai
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
-	"sync/atomic"
-)
 
-var fallbackToolCallIDCounter uint64
+	unified "github.com/qkf688/llmux/models/unified"
+)
 
 // FillMissingToolCallIDs best-effort normalizes OpenAI Chat `tool_calls[].id`.
 //
@@ -181,23 +177,9 @@ func collectUsedToolCallIDs(messages []any) map[string]struct{} {
 	return used
 }
 
+// generateUniqueToolCallID 委托 unified.GenerateUniqueToolCallID：
+// `call_` + 24 位 hex 的兜底 id 生成单源在 models/unified（unified 请求归一
+// 与本包 FillMissingToolCallIDs 共用一份），此薄包装保持包内调用点不变。
 func generateUniqueToolCallID(used map[string]struct{}) string {
-	for attempts := 0; attempts < 8; attempts++ {
-		buf := make([]byte, 12)
-		if _, err := rand.Read(buf); err != nil {
-			break
-		}
-		id := "call_" + hex.EncodeToString(buf)
-		if _, exists := used[id]; !exists {
-			return id
-		}
-	}
-
-	for {
-		n := atomic.AddUint64(&fallbackToolCallIDCounter, 1)
-		id := fmt.Sprintf("call_%d", n)
-		if _, exists := used[id]; !exists {
-			return id
-		}
-	}
+	return unified.GenerateUniqueToolCallID(used)
 }

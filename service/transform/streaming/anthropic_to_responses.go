@@ -3,6 +3,7 @@ package streaming
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/qkf688/llmux/common/maputil"
 	"github.com/qkf688/llmux/consts"
@@ -157,11 +158,28 @@ func handleAnthropicToResponsesContentBlockStart(state *realtimeStreamState, chu
 		// 工具调用块：必须映射成 function_call item 并透传 id/name，
 		// 落进下面的通用分支会被包成 type="message"，id 与 name 一起丢掉。
 		toolID := maputil.String(contentBlock, "id")
+		toolName := maputil.String(contentBlock, "name")
+
+		// 空名 tool_use 整条丢弃：与 openai→responses 线同口径（flushOpenAIToResponsesToolCallBuffers
+		// 的「有 id 无 name 丢弃」分支）。空名 function_call 转发给客户端会报
+		// No such tool 并写脏历史，下一轮被出站校验拦成 400，会话卡死。
+		// Anthropic 协议下 id/name 单帧齐备、无「name 迟到」形态，源头丢弃即可；
+		// 该 block 后续的 input_json_delta 由 arguments-append 的 nil-item 守卫拦掉。
+		if toolName == "" {
+			slog.Warn("dropping anthropic tool_use without name",
+				"block_index", blockIndex,
+				"tool_use_id", toolID,
+				"upstream_format", state.upstreamFormat,
+				"client_format", state.clientFormat,
+			)
+			return nil
+		}
+
 		item := map[string]interface{}{
 			"type":      "function_call",
 			"id":        toolID,
 			"call_id":   toolID,
-			"name":      maputil.String(contentBlock, "name"),
+			"name":      toolName,
 			"arguments": "",
 		}
 		state.responsesOutput.set(blockIndex, item)
@@ -263,6 +281,12 @@ func handleAnthropicToResponsesContentBlockDelta(state *realtimeStreamState, chu
 			return nil
 		}
 		blockIndex := int(maputil.Float64(chunk, "index"))
+		// 空 item 守卫：该 block 的 tool_use 因空名被丢弃（或未开 item 的异常形状），
+		// 参数增量不得透传——否则产出孤立于任何 function_call 的 arguments.delta，
+		// 严格客户端判协议违规。
+		if state.responsesOutput.get(blockIndex) == nil {
+			return nil
+		}
 		state.responsesOutput.appendArguments(blockIndex, partialJSON)
 
 		argsDelta := map[string]interface{}{

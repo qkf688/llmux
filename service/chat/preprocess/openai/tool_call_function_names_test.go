@@ -154,8 +154,10 @@ func TestSanitizeToolCallFunctionNames_DropsPairedToolMessages(t *testing.T) {
 	if _, hasToolCalls := first["tool_calls"]; hasToolCalls {
 		t.Errorf("assistant message should have tool_calls key removed, got %v", first)
 	}
-	if content, _ := first["content"].(string); content != "" {
-		t.Errorf("assistant content should be filled with empty string, got %q", content)
+	// 断言必须能区分「补了空串」与「键缺失/值为 null」——后者类型断言失败会取零值
+	// 通过，等于没锁住补空串这条契约（入站路径只有 sanitize 这一处补 content）。
+	if content, ok := first["content"].(string); !ok || content != "" {
+		t.Errorf("assistant content should be filled with empty string (key present, string type), got %#v", first["content"])
 	}
 
 	second, _ := msgs[1].(map[string]any)
@@ -226,8 +228,34 @@ func TestSanitizeToolCallFunctionNames_AllDirtyKeepsAssistantMessage(t *testing.
 	if _, hasToolCalls := first["tool_calls"]; hasToolCalls {
 		t.Errorf("tool_calls key should be removed, got %v", first)
 	}
-	if content, _ := first["content"].(string); content != "" {
-		t.Errorf("content should be filled with empty string, got %q", content)
+	// 与 DropsPairedToolMessages 同款判据：必须能区分「补了空串」与「键缺失/值为 null」。
+	if content, ok := first["content"].(string); !ok || content != "" {
+		t.Errorf("content should be filled with empty string (key present, string type), got %#v", first["content"])
+	}
+}
+
+// TestSanitizeToolCallFunctionNames_FillsMissingContentKey 覆盖「content 键缺失」分支：
+// 全部 tool_calls 被删且 assistant 消息没有 content 键时，必须补出 content:""
+// （键存在且为字符串）。入站路径（BeforerOpenAI）只有 sanitize 这一处补 content，
+// 该分支失守会产出「无内容无工具调用」的消息，被上游拒收且无测试报红。
+// 输入刻意不带 role:tool 消息（与 AllDirty 用例区分形状），单条消息即可触达该分支。
+func TestSanitizeToolCallFunctionNames_FillsMissingContentKey(t *testing.T) {
+	body := []byte(`{
+		"model":"m",
+		"messages":[
+			{"role":"assistant","tool_calls":[
+				{"id":"call_a","type":"function","function":{"arguments":"{}"}}
+			]}
+		]
+	}`)
+
+	msgs := sanitizeMessages(t, body, true)
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message (assistant only), got %d", len(msgs))
+	}
+	first, _ := msgs[0].(map[string]any)
+	if content, ok := first["content"].(string); !ok || content != "" {
+		t.Errorf("missing content key should be filled with empty string, got %#v", first["content"])
 	}
 }
 

@@ -12,15 +12,19 @@ import (
 // 经客户端写回对话历史后的遗留——拒绝它等于把已经脏掉的会话永久卡死（重试永远
 // 撞同一条脏消息），而丢弃只损失那一轮的工具上下文，会话可以自愈。
 //
-// 连带删 role:tool 消息的理由：tool 消息的 tool_call_id 指向被删的 tool_call，
-// 留着会让上游因「找不到对应 tool_call」而 400。
+// 连带删 role:tool 消息的作用域是「被删 tool_call 所在 assistant 消息之后的连续
+// role:tool 段」，不是全请求按 tool_call_id 扫——后者会把复用同一 id 的其它轮
+// 结果一并删掉，那轮 assistant 只剩没有结果的 tool_call，下一轮上游照样 400
+// （自愈反而制造新的脏数据）。段内判据认「tool 消息的 tool_call_id 是否落在该条
+// assistant 存活 tool_call 的 id 集合里」：落不进去的就是与已删调用配对的孤儿
+// （客户端写回时 id 会错位），留着会让上游因「找不到对应 tool_call」400。
 //
 // 调用方必须先跑 FillMissingToolCallIDs：配对依赖 tool_call.id 与
-// tool_message.tool_call_id 的一致性，补 id 之后两者才能对上。
+// tool_message.tool_call_id 的一致性，补 id 之后存活集合才有意义。
 //
-// Best-effort / non-breaking：请求无法解析时原样返回（与 FillMissingToolCallIDs
-// 同口径）；修补后 messages 为空时同样原样返回（全脏的请求交给上游判，
-// 不在网关层发明新语义）。
+// Best-effort / non-blocking：请求无法解析时原样返回（与 FillMissingToolCallIDs
+// 同口径）；全脏请求仍会改写（assistant 消息保留、tool_calls 移除、content 补
+// 空串），交上游判定，不在网关层发明新语义。
 func SanitizeToolCallFunctionNames(body []byte) ([]byte, bool, error) {
 	if len(body) == 0 {
 		return body, false, nil
@@ -37,13 +41,14 @@ func SanitizeToolCallFunctionNames(body []byte) ([]byte, bool, error) {
 	}
 
 	// 第一遍：找出所有要删的 tool_call（空名 / function 缺失或非对象），
-	// 记录其 id 供第二遍配对 tool 消息。
+	// 并记下「哪些 assistant 消息删过 tool_call」——只有这些消息之后的
+	// role:tool 段才需要连带清理。
 	type dropRef struct {
 		msgIndex int
 		tcIndex  int
 	}
 	var drops []dropRef
-	droppedIDs := map[string]bool{}
+	dirtyAssistants := map[int]bool{}
 
 	for msgIndex := range rawMessages {
 		msgMap, ok := rawMessages[msgIndex].(map[string]any)
@@ -84,9 +89,7 @@ func SanitizeToolCallFunctionNames(body []byte) ([]byte, bool, error) {
 			}
 
 			drops = append(drops, dropRef{msgIndex, tcIndex})
-			if id, _ := tcMap["id"].(string); id != "" {
-				droppedIDs[id] = true
-			}
+			dirtyAssistants[msgIndex] = true
 		}
 	}
 
@@ -127,17 +130,57 @@ func SanitizeToolCallFunctionNames(body []byte) ([]byte, bool, error) {
 		}
 	}
 
-	// 第三遍：删配对的 role:tool 消息。
+	// 第三遍：算每条脏 assistant 消息删除后仍存活的 tool_call id 集合。
+	// 从删除后的最终状态取——中途状态会把「同样待删的其它条目」算成存活。
+	survivingByAssistant := map[int]map[string]bool{}
+	for msgIndex := range dirtyAssistants {
+		surviving := map[string]bool{}
+		msgMap, _ := rawMessages[msgIndex].(map[string]any)
+		if msgMap != nil {
+			if rawToolCalls, ok := msgMap["tool_calls"].([]any); ok {
+				for _, raw := range rawToolCalls {
+					tcMap, ok := raw.(map[string]any)
+					if !ok {
+						continue
+					}
+					id, _ := tcMap["id"].(string)
+					surviving[id] = true
+				}
+			}
+		}
+		survivingByAssistant[msgIndex] = surviving
+	}
+
+	// 第四遍：圈定每条 role:tool 消息归属的「连续段」——即它前面那条删过
+	// tool_call 的 assistant 消息之后的连续 role:tool 序列。OpenAI 形状里
+	// tool 消息紧跟发出调用的 assistant，故段边界取到首个非 tool 角色为止。
+	toolRunOwner := map[int]int{}
+	for msgIndex := range dirtyAssistants {
+		for next := msgIndex + 1; next < len(rawMessages); next++ {
+			nextMsg, ok := rawMessages[next].(map[string]any)
+			if !ok {
+				break
+			}
+			if role, _ := nextMsg["role"].(string); role != "tool" {
+				break
+			}
+			toolRunOwner[next] = msgIndex
+		}
+	}
+
+	// 第五遍：段内按存活集合判删 tool 消息，重建 messages。
 	kept := make([]any, 0, len(rawMessages))
-	for _, raw := range rawMessages {
+	for msgIndex, raw := range rawMessages {
 		msgMap, ok := raw.(map[string]any)
 		if !ok {
 			kept = append(kept, raw)
 			continue
 		}
-		if role, _ := msgMap["role"].(string); role == "tool" {
-			if id, _ := msgMap["tool_call_id"].(string); droppedIDs[id] {
-				slog.Warn("dropping tool message for dropped tool call",
+		if owner, inRun := toolRunOwner[msgIndex]; inRun {
+			id, _ := msgMap["tool_call_id"].(string)
+			if !survivingByAssistant[owner][id] {
+				slog.Warn("dropping tool message without surviving tool call",
+					"message_index", msgIndex,
 					"tool_call_id", id,
 				)
 				continue

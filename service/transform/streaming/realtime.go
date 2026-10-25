@@ -60,7 +60,10 @@ type realtimeStreamState struct {
 	// response.completed 的这三项只能取缓存值，否则会是空串 / 0。
 	openAIStreamMeta responseStreamMeta
 
-	// openAIOutputClosed 标记 output item 的收尾事件是否已发出。
+	// openAIOutputClosed 标记 output item 的收尾流程是否已进入（在
+	// emitOpenAIToResponsesOutputFinalization 开头即置位，先于 flush 与 done 事件）。
+	// 置位后本流不再接受新的 output item 与增量事件（帧入口门据此丢帧）；
+	// 「response.completed 是否已交付」是另一个字段 openAIFinalized。
 	// Responses 协议里终态不可撤回：重复的 output_item.done 与 response.completed
 	// 同属协议违规，故收尾一旦发出就不得再发第二套。
 	openAIOutputClosed bool

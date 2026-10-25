@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"sort"
+	"strings"
 
 	"github.com/qkf688/llmux/common/maputil"
 	"github.com/qkf688/llmux/consts"
@@ -83,6 +84,28 @@ func handleRealtimeOpenAIToResponses(state *realtimeStreamState, data string) er
 	// 这也是「末包不带 delta 键」能走到收尾的前提：不因 delta 断言失败而丢帧。
 	delta, _ := choice["delta"].(map[string]interface{})
 
+	// 终态已收尾（openAIOutputClosed）后到达的增量帧一律忽略：response.completed
+	// 不可撤回，此后新开的 output item 进不了 output 快照（已在 finish 时定格）、
+	// 也拿不到配对 done——「开了没关」是协议违规，message / reasoning /
+	// function_call 三路同受约束，故门放在帧入口单点而不是各开项路径各抄一份
+	// （新增 output item 类型时无需记得补门）。
+	//
+	// 位置约束：必须在 captureOpenAIUsage 与 pendingCompleted 交付**之后**——
+	// usage 尾包（choices:[]）到达时正是靠上面几步交付终态，是正常路径不是违规；
+	// 也必须在 finish 帧自身之前不生效——finish 帧的 delta 在本函数后半段处理，
+	// 此时 openAIOutputClosed 尚为 false。门只对「带增量」的帧告警：usage 尾包
+	// 与空 delta 静默放过，避免把规范行为刷成告警。
+	if state.openAIOutputClosed {
+		if keys := realtimeDeltaPayloadKeys(delta); keys != "" {
+			slog.Warn("dropping delta chunk after output closed",
+				"delta_keys", keys,
+				"upstream_format", state.upstreamFormat,
+				"client_format", state.clientFormat,
+			)
+		}
+		return nil
+	}
+
 	role := maputil.String(delta, "role")
 	content := maputil.String(delta, "content")
 
@@ -137,6 +160,18 @@ func handleRealtimeOpenAIToResponses(state *realtimeStreamState, data string) er
 	}
 
 	return nil
+}
+
+// realtimeDeltaPayloadKeys 返回 delta 里携带增量的键名（固定顺序、逗号连接），
+// 供终态后丢帧告警辨认「丢的是什么」。空 delta / 只有 role 的帧返回空串（不告警）。
+func realtimeDeltaPayloadKeys(delta map[string]interface{}) string {
+	keys := make([]string, 0, 3)
+	for _, k := range []string{"content", "reasoning_content", "tool_calls"} {
+		if v, ok := delta[k]; ok && v != nil {
+			keys = append(keys, k)
+		}
+	}
+	return strings.Join(keys, ",")
 }
 
 // ensureMessageOutputIndex 惰性给 message 项分配 output_index。
@@ -313,18 +348,9 @@ func emitOpenAIToResponsesReasoningDelta(state *realtimeStreamState, reasoningCo
 }
 
 func emitOpenAIToResponsesToolCalls(state *realtimeStreamState, toolCalls []interface{}) error {
-	// 终态之后不得再开新的 output item：Responses 协议里 response.completed 不可撤回，
-	// 此后开的项既进不了 response.completed 的 output 快照（已构建），也不会被
-	// emitResponsesOutputItemFinalization 收尾（收尾已跑过）——产出「开了却没关」的
-	// item，严格客户端判本轮运行失败。
-	//
-	// 触发形状：上游把 finish_reason 帧发在工具名之前（部分兼容上游会补发后续帧）。
-	// 流末兜底已按「有 id 无 name」丢弃该工具调用并发出终态，后续帧若再把它当
-	// 待开的工具调用处理，就会重开一个永不关闭的 item。
-	if state.openAIOutputClosed {
-		return nil
-	}
-
+	// 终态后丢弃由 handleRealtimeOpenAIToResponses 入口的 openAIOutputClosed 门统一承担
+	//（message / reasoning / function_call 三路 output item 与正文增量同被挡住），
+	// 此处不再重复设门。
 	for _, tc := range toolCalls {
 		toolCall, ok := tc.(map[string]interface{})
 		if !ok {

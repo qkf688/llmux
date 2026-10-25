@@ -78,6 +78,40 @@ data: {"id":"chatcmpl-after","object":"chat.completion.chunk","created":12345678
 data: [DONE]
 
 `
+
+	// fixtureContentAfterFinish：message 项已开、正文已流出，finish 后又补一帧正文增量。
+	fixtureContentAfterFinish = `data: {"id":"chatcmpl-contentlate","object":"chat.completion.chunk","created":1234567890,"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant","content":"hi"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-contentlate","object":"chat.completion.chunk","created":1234567890,"model":"test-model","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}
+
+data: {"id":"chatcmpl-contentlate","object":"chat.completion.chunk","created":1234567890,"model":"test-model","choices":[{"index":0,"delta":{"content":"late"},"finish_reason":null}]}
+
+data: [DONE]
+
+`
+
+	// fixtureToolStreamThenContent：纯 tool_call 流（message 项从未开过），
+	// finish 后补一帧 content——终态后新开 message item（开了没关）的形状。
+	fixtureToolStreamThenContent = `data: {"id":"chatcmpl-toolcontent","object":"chat.completion.chunk","created":1234567890,"model":"test-model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_ok","type":"function","function":{"name":"get_weather","arguments":"{}"}}]},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-toolcontent","object":"chat.completion.chunk","created":1234567890,"model":"test-model","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}
+
+data: {"id":"chatcmpl-toolcontent","object":"chat.completion.chunk","created":1234567890,"model":"test-model","choices":[{"index":0,"delta":{"content":"late"},"finish_reason":null}]}
+
+data: [DONE]
+
+`
+
+	// fixtureReasoningAfterFinish：reasoning 项已开，finish 后又补一帧 reasoning 增量。
+	fixtureReasoningAfterFinish = `data: {"id":"chatcmpl-rsnlate","object":"chat.completion.chunk","created":1234567890,"model":"test-model","choices":[{"index":0,"delta":{"reasoning_content":"想"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-rsnlate","object":"chat.completion.chunk","created":1234567890,"model":"test-model","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}
+
+data: {"id":"chatcmpl-rsnlate","object":"chat.completion.chunk","created":1234567890,"model":"test-model","choices":[{"index":0,"delta":{"reasoning_content":"续"},"finish_reason":null}]}
+
+data: [DONE]
+
+`
 )
 
 // functionCallAdded 返回第一个 function_call 类型的 output_item.added 事件。
@@ -243,27 +277,24 @@ func TestOpenAIToolCall_LateName_Buffered(t *testing.T) {
 	}
 }
 
-// TestOpenAIToolCall_NameAfterFinish_NoItemAfterCompleted 覆盖「结束标记早于工具名到达」：
-// 流末兜底已丢弃该工具调用（并已发出终态）之后到达的帧不得再开新的 output item——
-// 否则产出「开了却没关」的 item，严格 Responses 客户端判本轮运行失败
-// （正是本次修复要消灭的故障类别）。
-func TestOpenAIToolCall_NameAfterFinish_NoItemAfterCompleted(t *testing.T) {
-	t.Parallel()
-
-	events := runRealtimeTransform(t, fixtureToolCallNameAfterFinish, consts.FormatOpenAIChat, consts.FormatOpenAIResponses)
+// assertNothingAfterCompleted 断言 response.completed 之后不再发出任何事件，
+// 且已开的每个 output item 都恰有关闭（开—增—关三段式，开了没关与重复关同为违规）。
+// 终态之后到达的任何帧（补发工具名 / 正文 / reasoning）都属同族协议违规，共用一份判据。
+func assertNothingAfterCompleted(t *testing.T, events []sseEvent) {
+	t.Helper()
 
 	completedSeen := false
-	addedAfterCompleted := 0
 	addedIdx := map[int]bool{}
 	doneIdx := map[int]bool{}
 	for _, ev := range events {
+		if completedSeen {
+			t.Errorf("response.completed 之后仍发出 %s，终态不可撤回，协议违规", ev.typ())
+			continue
+		}
 		switch ev.typ() {
 		case "response.completed":
 			completedSeen = true
 		case "response.output_item.added":
-			if completedSeen {
-				addedAfterCompleted++
-			}
 			addedIdx[ev.outputIndex(t)] = true
 		case "response.output_item.done":
 			doneIdx[ev.outputIndex(t)] = true
@@ -273,12 +304,47 @@ func TestOpenAIToolCall_NameAfterFinish_NoItemAfterCompleted(t *testing.T) {
 	if !completedSeen {
 		t.Fatalf("未产出 response.completed；事件序列: %v", eventTypes(events))
 	}
-	if addedAfterCompleted != 0 {
-		t.Errorf("终态之后仍开出 %d 个 output item，终态不可撤回，协议违规", addedAfterCompleted)
-	}
 	for idx := range addedIdx {
 		if !doneIdx[idx] {
 			t.Errorf("output_index=%d 的项开了却没关（缺 output_item.done），客户端判「未完成」", idx)
 		}
+	}
+}
+
+// TestOpenAIToolCall_NameAfterFinish_NoItemAfterCompleted 覆盖「结束标记早于工具名到达」：
+// 流末兜底已丢弃该工具调用（并已发出终态）之后到达的帧不得再开新的 output item——
+// 否则产出「开了却没关」的 item，严格 Responses 客户端判本轮运行失败
+// （正是本次修复要消灭的故障类别）。
+func TestOpenAIToolCall_NameAfterFinish_NoItemAfterCompleted(t *testing.T) {
+	t.Parallel()
+
+	events := runRealtimeTransform(t, fixtureToolCallNameAfterFinish, consts.FormatOpenAIChat, consts.FormatOpenAIResponses)
+	assertNothingAfterCompleted(t, events)
+}
+
+// TestOpenAIResponses_NothingAfterCompleted 覆盖「终态之后补发任意增量帧」的三个形状：
+// 正文增量、纯 tool_call 流后补正文（新开 message 项）、reasoning 增量。
+// response.completed 一经发出，其后不得再出现任何事件——message / reasoning /
+// tool_call 三路 output item 同受此约束，不能只封 tool_call 一路。
+func TestOpenAIResponses_NothingAfterCompleted(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		in   string
+	}{
+		{name: "content_delta", in: fixtureContentAfterFinish},
+		{name: "message_item_opened", in: fixtureToolStreamThenContent},
+		{name: "reasoning_delta", in: fixtureReasoningAfterFinish},
+	}
+
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			events := runRealtimeTransform(t, c.in, consts.FormatOpenAIChat, consts.FormatOpenAIResponses)
+			assertNothingAfterCompleted(t, events)
+		})
 	}
 }

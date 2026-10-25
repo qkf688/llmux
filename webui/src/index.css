@@ -60,6 +60,14 @@
   --chart-8: oklch(0.60 0.07 20);
   --chart-9: oklch(0.58 0.06 300);
   --chart-10: oklch(0.60 0.07 340);
+  /* 文字安全深档（-strong）：chart-N 用作 15% tint 底上的文字色时，亮色下原值
+     实测仅 2.5~4:1（WCAG 正文 ≥4.5:1），各 hue 另立加深档；只用于文本，
+     图表线条/色块仍引用 chart-N 本体。暗色是深底浅字，无需加深。 */
+  --chart-1-strong: oklch(0.45 0.09 160);
+  --chart-5-strong: oklch(0.45 0.07 260);
+  --chart-6-strong: oklch(0.45 0.07 200);
+  --chart-7-strong: oklch(0.44 0.09 60);
+  --chart-8-strong: oklch(0.44 0.09 20);
   --sidebar: oklch(0.995 0.002 90);
   --sidebar-foreground: oklch(0.25 0.01 95);
   --sidebar-primary: oklch(0.62 0.08 160);
@@ -135,6 +143,14 @@ html.dark,
   --chart-8: oklch(0.65 0.07 20);
   --chart-9: oklch(0.63 0.06 300);
   --chart-10: oklch(0.65 0.07 340);
+  /* -strong 口径见亮色主题同名字段：暗色深底浅字，直接沿用提亮档；
+     chart-5-strong / chart-8-strong 提到 0.73（比本体亮一档以上），
+     否则 15% tint 底上不足 4.5:1（本体实测暗色仅 2.7~3.7:1） */
+  --chart-1-strong: oklch(0.68 0.08 160);
+  --chart-5-strong: oklch(0.73 0.07 260);
+  --chart-6-strong: oklch(0.70 0.06 200);
+  --chart-7-strong: oklch(0.73 0.07 60);
+  --chart-8-strong: oklch(0.73 0.07 20);
   --sidebar: oklch(0.24 0.01 90);
   --sidebar-foreground: oklch(0.90 0.005 90);
   --sidebar-primary: oklch(0.68 0.08 160);
@@ -198,6 +214,11 @@ html.dark,
   --color-chart-6: var(--chart-6);
   --color-chart-7: var(--chart-7);
   --color-chart-8: var(--chart-8);
+  --color-chart-1-strong: var(--chart-1-strong);
+  --color-chart-5-strong: var(--chart-5-strong);
+  --color-chart-6-strong: var(--chart-6-strong);
+  --color-chart-7-strong: var(--chart-7-strong);
+  --color-chart-8-strong: var(--chart-8-strong);
   --color-chart-9: var(--chart-9);
   --color-chart-10: var(--chart-10);
   --color-sidebar: var(--sidebar);

@@ -16,10 +16,12 @@ describe("getErrorTypeConfig", () => {
     expect(config.borderColor).toBe(borderColor);
   });
 
-  // chart 色断言由 chartVar 模板驱动，锁定"引用正确的 chart 变量"而非逐字复制三件套字符串
+  // chart 色断言由 chartVar 模板驱动，锁定"引用正确的 chart 变量"而非逐字复制三件套字符串。
+  // 文字色用 -strong（chart 本体在 15% tint 底上不足 WCAG 4.5:1，见 index.css -strong 注释），
+  // 底色/边框是图形仍用本体
   it.each(["chart-8", "chart-5"] as const)("auth/validation 使用独立 chart 色 %s", (chartVar) => {
     const config = getErrorTypeConfig(chartVar === "chart-8" ? "auth" : "validation");
-    expect(config.color).toBe(`text-[color:var(--${chartVar})]`);
+    expect(config.color).toBe(`text-[color:var(--${chartVar}-strong)]`);
     expect(config.bgColor).toBe(`bg-[color:var(--${chartVar})]/15`);
     expect(config.borderColor).toBe(`border-[color:var(--${chartVar})]/20`);
   });

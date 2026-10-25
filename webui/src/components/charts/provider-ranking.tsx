@@ -3,17 +3,11 @@
 import { useMemo, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RankEmptyState } from "@/components/charts/rank-empty-state";
+import { rankToneClass } from "@/components/charts/rank-tone";
 import type { ProviderMetric } from "@/lib/api";
 import { formatCompactCount, formatPercent, formatTimeNs } from "@/lib/formatters";
 
 type RankSortMode = "count" | "tokens";
-
-function rankToneClass(rank: number) {
-  if (rank === 1) return "bg-[color:var(--chart-7)]/15 text-[color:var(--chart-7)]";
-  if (rank === 2) return "bg-[color:var(--chart-6)]/15 text-[color:var(--chart-6)]";
-  if (rank === 3) return "bg-[color:var(--chart-8)]/15 text-[color:var(--chart-8)]";
-  return "bg-muted/60 text-muted-foreground";
-}
 
 export function ProviderRankCard({
   data,
@@ -74,7 +68,7 @@ export function ProviderRankCard({
               <div className="flex items-center gap-1 text-right shrink-0">
                 {mode === "count" ? (
                   <div className="flex items-center gap-1 text-sm font-medium tabular-nums">
-                    <span className="text-[color:var(--chart-1)]">
+                    <span className="text-[color:var(--chart-1-strong)]">
                       {success.value}
                       <span className="text-xs text-muted-foreground">{success.unit}</span>
                     </span>

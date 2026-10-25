@@ -92,7 +92,7 @@ export function CapabilityBadges({
       )}
       {withHeader && (
         <span
-          className={`${badgeCls} bg-[color:var(--chart-7)]/15 text-[color:var(--chart-7)]`}
+          className={`${badgeCls} bg-[color:var(--chart-7)]/15 text-[color:var(--chart-7-strong)]`}
           title="透传自定义请求头"
         >
           透传

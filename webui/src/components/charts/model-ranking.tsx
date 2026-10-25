@@ -3,17 +3,11 @@
 import { useMemo, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RankEmptyState } from "@/components/charts/rank-empty-state";
+import { rankToneClass } from "@/components/charts/rank-tone";
 import type { ModelCount } from "@/lib/api";
 import { formatCompactCount } from "@/lib/formatters";
 
 type RankSortMode = "count" | "tokens";
-
-function rankToneClass(rank: number) {
-  if (rank === 1) return "bg-[color:var(--chart-7)]/15 text-[color:var(--chart-7)]";
-  if (rank === 2) return "bg-[color:var(--chart-6)]/15 text-[color:var(--chart-6)]";
-  if (rank === 3) return "bg-[color:var(--chart-8)]/15 text-[color:var(--chart-8)]";
-  return "bg-muted/60 text-muted-foreground";
-}
 
 /** 一次排行的主指标取值：次数模式下取 calls，token 模式下取 total_tokens。 */
 function metricValue(item: ModelCount, mode: RankSortMode) {
@@ -112,7 +106,7 @@ export function ModelRankingList({
                 </div>
 
                 <div
-                  className="text-right shrink-0 font-semibold text-base tabular-nums text-[color:var(--chart-1)]"
+                  className="text-right shrink-0 font-semibold text-base tabular-nums text-[color:var(--chart-1-strong)]"
                   title={mode === "tokens" ? tokenTitle(item) : undefined}
                 >
                   {main.value}

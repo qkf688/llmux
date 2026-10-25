@@ -33,7 +33,7 @@ export function getErrorTypeConfig(type?: string) {
     },
     auth: {
       icon: Lock,
-      color: "text-[color:var(--chart-8)]",
+      color: "text-[color:var(--chart-8-strong)]",
       bgColor: "bg-[color:var(--chart-8)]/15",
       borderColor: "border-[color:var(--chart-8)]/20",
       label: "认证错误",
@@ -54,7 +54,7 @@ export function getErrorTypeConfig(type?: string) {
     },
     validation: {
       icon: AlertTriangle,
-      color: "text-[color:var(--chart-5)]",
+      color: "text-[color:var(--chart-5-strong)]",
       bgColor: "bg-[color:var(--chart-5)]/15",
       borderColor: "border-[color:var(--chart-5)]/20",
       label: "验证错误",

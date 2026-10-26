@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { createProvider, updateProvider, type Provider } from "@/lib/api";
 import { providerKeys } from "@/hooks/api/use-providers";
+import { invalidateModelProviders } from "@/hooks/api/use-model-providers";
 import { defaultProviderFormValues, type ProviderFormValues } from "../form-schema";
 import { buildProviderPayload } from "../utils/config";
 
@@ -41,6 +42,10 @@ export function useProviderMutations({
         setEditingProvider(null);
         form.reset({ ...defaultProviderFormValues });
         void queryClient.invalidateQueries({ queryKey: providerKeys.lists() });
+        // 后端 PUT /providers/:id 之后会 TriggerAutoAssociate + TriggerAutoClean（按开关），
+        // 实际改写 model_with_providers；模型关联页读另一套缓存族，不一起失效就会在
+        // staleTime（60s）内继续显示陈旧关联行。
+        invalidateModelProviders(queryClient);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         toast.error(`更新提供商失败: ${message}`);
@@ -64,6 +69,8 @@ export function useProviderMutations({
       toast.success(`提供商 ${values.name} 创建成功`);
       form.reset({ ...defaultProviderFormValues });
       void queryClient.invalidateQueries({ queryKey: providerKeys.lists() });
+      // 同 Update：POST /providers 之后后端会 TriggerAutoAssociate，可能新增关联行
+      invalidateModelProviders(queryClient);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast.error(`创建提供商失败: ${message}`);

@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // 于是「模型关联」页在全局 staleTime=60s 内继续显示已失效或缺失的行。
 // 本文件锁这条跨缓存族契约。
 const apiMocks = vi.hoisted(() => ({
+  createProvider: vi.fn(),
   getProviderModelCatalog: vi.fn(),
   getProviderModels: vi.fn(),
   getProviders: vi.fn(),
@@ -23,6 +24,8 @@ import { modelProviderKeys } from "@/hooks/api/use-model-providers";
 import { providerKeys } from "@/hooks/api/use-providers";
 import { useProviderSyncActions } from "./use-provider-sync-actions";
 import { useAllModelsDialog } from "./use-all-models-dialog";
+import { useProviderMutations } from "./use-provider-mutations";
+import { defaultProviderFormValues, type ProviderFormValues } from "../form-schema";
 
 function createClient() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -140,6 +143,63 @@ describe("useAllModelsDialog", () => {
 
     await act(async () => {
       await result.current.handleAddCustomModels();
+    });
+
+    expect(apiMocks.updateProvider).toHaveBeenCalledTimes(1);
+    expect(queryClient.getQueryState(assocKey)?.isInvalidated).toBe(true);
+  });
+});
+
+describe("useProviderMutations", () => {
+  beforeEach(() => {
+    apiMocks.createProvider.mockReset().mockResolvedValue({});
+    apiMocks.updateProvider.mockReset().mockResolvedValue({});
+  });
+
+  const formStub = { reset: vi.fn() } as never;
+  const formValues = {
+    ...defaultProviderFormValues,
+    name: "zcode",
+    type: "anthropic",
+    protocols: ["anthropic"] as const,
+  } as unknown as ProviderFormValues;
+
+  function renderMutations(
+    queryClient: QueryClient,
+    editingProvider: { ID: number } | null,
+  ) {
+    return renderHook(
+      () =>
+        useProviderMutations({
+          form: formStub,
+          editingProvider: editingProvider as never,
+          setEditingProvider: vi.fn(),
+          setOpen: vi.fn(),
+        }),
+      { wrapper: makeWrapper(queryClient) },
+    );
+  }
+
+  it("创建提供商后失效模型关联页缓存（后端 TriggerAutoAssociate 会新增关联）", async () => {
+    const queryClient = createClient();
+    const { assocKey } = seedCaches(queryClient);
+
+    const { result } = renderMutations(queryClient, null);
+    await act(async () => {
+      await result.current.handleSubmitProvider(formValues);
+    });
+
+    expect(apiMocks.createProvider).toHaveBeenCalledTimes(1);
+    expect(queryClient.getQueryState(assocKey)?.isInvalidated).toBe(true);
+  });
+
+  it("编辑提供商后失效模型关联页缓存（TriggerAutoAssociate + TriggerAutoClean）", async () => {
+    const queryClient = createClient();
+    const { assocKey } = seedCaches(queryClient);
+
+    const { result } = renderMutations(queryClient, { ID: 30 });
+    await act(async () => {
+      await result.current.handleSubmitProvider(formValues);
     });
 
     expect(apiMocks.updateProvider).toHaveBeenCalledTimes(1);

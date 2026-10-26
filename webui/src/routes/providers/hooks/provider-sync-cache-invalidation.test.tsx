@@ -246,6 +246,50 @@ describe("useProviderSwitchActions", () => {
       expect(queryClient.getQueryState(assocKey)?.isInvalidated).toBe(true);
     });
   }
+
+  // 另一半契约：这三个开关**故意不**失效提供商列表（统一入口传 lists: false）。
+  // 豁免的前提是它们已用 setQueriesData 就地改好缓存里的那一行。前提没了，豁免就变成漏刷：
+  // 用户点开关 → 拨过去又被重取回来的旧值弹回原位，或者每次点击多打一次全表请求。
+  // 上面那组用例只验「关联页被失效」，不经过这条路，删掉就地打补丁它照样全绿
+  // （变异实测确认过），故这里补端到端：就地补丁生效 + 列表未被标记失效，两条一起断。
+  const patchCases: Array<{
+    name: string;
+    run: (h: ReturnType<typeof useProviderSwitchActions>) => Promise<void>;
+    field: "ModelEndpoint" | "ModelFilterEnabled" | "blacklisted";
+    want: boolean;
+  }> = [
+    // provider.ModelEndpoint 未设置视为启用(true) → 点一下变禁用(false)
+    { name: "模型端点", run: (h) => h.handleToggleModelEndpoint(provider), field: "ModelEndpoint", want: false },
+    { name: "模型过滤", run: (h) => h.handleToggleModelFilter(provider, true), field: "ModelFilterEnabled", want: true },
+    // 开启关联触发 = blacklisted 置 false
+    { name: "关联触发", run: (h) => h.handleToggleAssociationTrigger(provider, true), field: "blacklisted", want: false },
+  ];
+
+  for (const tc of patchCases) {
+    it(`切换「${tc.name}」后就地改好列表缓存、且不触发整表重取`, async () => {
+      const queryClient = createClient();
+      const { assocKey } = seedCaches(queryClient);
+      // 列表缓存必须真实存在：setQueriesData 只改已存在的 query，没有它就地补丁就是空转，
+      // 这条用例会以「值没变」变红——正是我们要抓的那种失效。
+      const listKey = providerKeys.list();
+      queryClient.setQueryData(listKey, [{ ID: 30, Name: "zcode", Type: "anthropic" }]);
+      expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(false);
+
+      const { result } = renderHook(() => useProviderSwitchActions(), {
+        wrapper: makeWrapper(queryClient),
+      });
+
+      await act(async () => {
+        await tc.run(result.current);
+      });
+
+      const cached = queryClient.getQueryData<Array<Record<string, unknown>>>(listKey);
+      expect(cached?.[0]?.[tc.field]).toBe(tc.want);
+      // lists: false 的实质：不整表重取（关联页仍要刷，见上一组用例）
+      expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(false);
+      expect(queryClient.getQueryState(assocKey)?.isInvalidated).toBe(true);
+    });
+  }
 });
 
 describe("useProviderMutations", () => {

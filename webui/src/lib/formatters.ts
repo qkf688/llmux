@@ -30,21 +30,21 @@ export function formatPercent(value?: number, digits = 1): string {
   return `${(value * 100).toFixed(digits)}%`;
 }
 
-export function formatTimeNs(nanoseconds?: number): string {
-  if (typeof nanoseconds !== "number" || Number.isNaN(nanoseconds)) {
+/** 首包等耗时字段的入参口径是**毫秒**：后端 avg_response_time / ResponseTimeMs
+ *  均为毫秒累计（见 repository/stats.go）。旧名 formatTimeNs 按纳秒处理，
+ *  供应商排行把 4370ms 显示成 4.37 μs，差 6 个数量级。 */
+export function formatTimeMs(milliseconds?: number): string {
+  if (typeof milliseconds !== "number" || Number.isNaN(milliseconds)) {
     return "-";
   }
 
-  if (nanoseconds < 1000) {
-    return `${nanoseconds.toFixed(2)} ns`;
+  if (milliseconds < 1) {
+    return `${(milliseconds * 1000).toFixed(2)} μs`;
   }
-  if (nanoseconds < 1_000_000) {
-    return `${(nanoseconds / 1000).toFixed(2)} μs`;
+  if (milliseconds < 1000) {
+    return `${milliseconds.toFixed(2)} ms`;
   }
-  if (nanoseconds < 1_000_000_000) {
-    return `${(nanoseconds / 1_000_000).toFixed(2)} ms`;
-  }
-  return `${(nanoseconds / 1_000_000_000).toFixed(2)} s`;
+  return `${(milliseconds / 1000).toFixed(2)} s`;
 }
 
 /** ISO/RFC3339 时间串 → 本地可读格式。全站管理端单源，locale 固定 zh-CN

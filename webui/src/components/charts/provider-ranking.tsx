@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RankEmptyState } from "@/components/charts/rank-empty-state";
 import { rankToneClass } from "@/components/charts/rank-tone";
 import type { ProviderMetric } from "@/lib/api";
-import { formatCompactCount, formatPercent, formatTimeNs } from "@/lib/formatters";
+import { formatCompactCount, formatPercent, formatTimeMs } from "@/lib/formatters";
 
 type RankSortMode = "count" | "tokens";
 
@@ -61,7 +61,7 @@ export function ProviderRankCard({
                   <span>{formatPercent(item.success_rate, 1)}</span>
                   <span className="text-muted-foreground/40">·</span>
                   <span>首包:</span>
-                  <span>{formatTimeNs(item.avg_response_time)}</span>
+                  <span>{formatTimeMs(item.avg_response_time)}</span>
                 </div>
               </div>
 

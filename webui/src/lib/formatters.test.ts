@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCompactCount, formatPercent, formatTimeNs } from "./formatters";
+import { formatCompactCount, formatPercent, formatTimeMs } from "./formatters";
 
 describe("formatCompactCount", () => {
   it("formats small numbers as integers", () => {
@@ -31,12 +31,11 @@ describe("formatPercent", () => {
   });
 });
 
-describe("formatTimeNs", () => {
-  it("formats nanoseconds into readable units", () => {
-    expect(formatTimeNs(999)).toBe("999.00 ns");
-    expect(formatTimeNs(1000)).toBe("1.00 μs");
-    expect(formatTimeNs(1_000_000)).toBe("1.00 ms");
-    expect(formatTimeNs(1_000_000_000)).toBe("1.00 s");
+describe("formatTimeMs", () => {
+  it("formats milliseconds into readable units", () => {
+    expect(formatTimeMs(0.5)).toBe("500.00 μs");
+    expect(formatTimeMs(1)).toBe("1.00 ms");
+    expect(formatTimeMs(4370)).toBe("4.37 s");
   });
 });
 

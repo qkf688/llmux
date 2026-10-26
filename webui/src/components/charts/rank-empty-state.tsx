@@ -12,6 +12,7 @@ export function RankEmptyState({ message = "暂无数据" }: { message?: string 
     <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
       <TrendingUp className="w-12 h-12 mb-3 opacity-30" />
       <p className="text-sm">{message}</p>
+      <p className="mt-1 text-xs text-muted-foreground/70">发起调用后这里会出现排行</p>
     </div>
   );
 }

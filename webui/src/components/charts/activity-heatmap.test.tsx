@@ -26,10 +26,12 @@ describe("ActivityHeatmapCard 图例色阶", () => {
 
     const styles = legendSwatchStyles();
     expect(styles).toHaveLength(5);
-    // 首格是「无请求」底色，其余为 25% / 50% / 75% / 100% 的档位色
+    // 首格是「无请求」底色，其余为 25% / 45% / 65% / 85% 的档位色。
+    // 基底是 --chart-1-strong（不是 --primary）：primary 对卡底只 3.45:1，
+    // 浅档位会压到 1.5~2.7:1 与空格融为一体，实测对照见提交说明
     expect(styles[0]).toContain("var(--muted)");
-    expect(styles.slice(1).map((style) => Number(style.match(/(\d+(?:\.\d+)?)%/)?.[1]))).toEqual([
-      25, 50, 75, 100,
-    ]);
+    const percentages = styles.slice(1).map((style) => Number(style.match(/(\d+(?:\.\d+)?)%/)?.[1]));
+    expect(percentages).toEqual([25, 45, 65, 85]);
+    expect(styles[1]).toContain("--chart-1-strong");
   });
 });

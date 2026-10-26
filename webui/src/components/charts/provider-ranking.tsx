@@ -56,12 +56,18 @@ export function ProviderRankCard({
 
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm truncate">{item.provider_name}</p>
+                {/* 副指标分两档：标签最弱、数值次强——与模型排行的副指标同一套排版，
+                    整行同色同重会让「成功率:」这类标签和数据一样抢眼 */}
                 <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                   <span>成功率:</span>
-                  <span>{formatPercent(item.success_rate, 1)}</span>
+                  <span className="text-foreground font-medium tabular-nums">
+                    {formatPercent(item.success_rate, 1)}
+                  </span>
                   <span className="text-muted-foreground/40">·</span>
                   <span>首包:</span>
-                  <span>{formatTimeMs(item.avg_response_time)}</span>
+                  <span className="text-foreground font-medium tabular-nums">
+                    {formatTimeMs(item.avg_response_time)}
+                  </span>
                 </div>
               </div>
 

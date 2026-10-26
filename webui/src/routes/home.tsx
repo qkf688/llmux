@@ -32,6 +32,14 @@ const AnimatedMetric = ({
   />
 );
 
+// KPI 卡图标底色：颜色只表达「指标语义」而非卡片位置——请求/Token 各一种，
+// 数据库与时间无关另给中性档。此前四张卡 8 个色，同语义（请求）三种色，
+// 颜色随卡片编号漂移，不携带信息还互相抢戏
+const REQUEST_TONE = "bg-primary/10 text-primary";
+const TOKEN_TONE = "bg-[color:var(--chart-2)]/10 text-[color:var(--chart-2)]";
+const DB_TONE = "bg-muted text-muted-foreground";
+const DB_USAGE_ALERT_TONE = "bg-warning-tint text-warning-foreground";
+
 type IconComponent = ComponentType<{ className?: string }>;
 
 function TopMetricCard({
@@ -101,6 +109,9 @@ export default function Home() {
     ? ((dbStats.page_count - dbStats.free_pages) / dbStats.page_count) * 100
     : 0;
 
+  // 满库是报警级信息：≥90% 时切警示色，别让它和普通指标长得一样
+  const dbUsageTone = dbUsagePercent >= 90 ? DB_USAGE_ALERT_TONE : DB_TONE;
+
   if (kpiLoading) return <Loading message="加载系统概览" />;
 
   const compactCountFormatter = (value: number) => {
@@ -118,39 +129,39 @@ export default function Home() {
 
       <StaggerList className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <TopMetricCard title="今日" headerIcon={Activity}>
-          <MetricItem icon={MessageSquare} label="请求" toneClassName="bg-primary/10 text-primary">
+          <MetricItem icon={MessageSquare} label="请求" toneClassName={REQUEST_TONE}>
             <AnimatedMetric value={todayMetrics.reqs} formatter={compactCountFormatter} />
           </MetricItem>
-          <MetricItem icon={Bot} label="Tokens" toneClassName="bg-[color:var(--chart-1)]/10 text-[color:var(--chart-1)]">
+          <MetricItem icon={Bot} label="Tokens" toneClassName={TOKEN_TONE}>
             <AnimatedMetric value={todayMetrics.tokens} formatter={compactCountFormatter} />
           </MetricItem>
         </TopMetricCard>
 
         <TopMetricCard title="本月" headerIcon={CalendarDays}>
-          <MetricItem icon={MessageSquare} label="请求" toneClassName="bg-[color:var(--chart-6)]/10 text-[color:var(--chart-6)]">
+          <MetricItem icon={MessageSquare} label="请求" toneClassName={REQUEST_TONE}>
             <AnimatedMetric value={totalMetrics.reqs} formatter={compactCountFormatter} />
           </MetricItem>
-          <MetricItem icon={Bot} label="Tokens" toneClassName="bg-[color:var(--chart-2)]/10 text-[color:var(--chart-2)]">
+          <MetricItem icon={Bot} label="Tokens" toneClassName={TOKEN_TONE}>
             <AnimatedMetric value={totalMetrics.tokens} formatter={compactCountFormatter} />
           </MetricItem>
         </TopMetricCard>
 
         <TopMetricCard title="全部" headerIcon={BarChart3}>
-          <MetricItem icon={MessageSquare} label="请求" toneClassName="bg-[color:var(--chart-9)]/10 text-[color:var(--chart-9)]">
+          <MetricItem icon={MessageSquare} label="请求" toneClassName={REQUEST_TONE}>
             <AnimatedMetric value={allMetrics.reqs} formatter={compactCountFormatter} />
           </MetricItem>
-          <MetricItem icon={Bot} label="Tokens" toneClassName="bg-[color:var(--chart-10)]/10 text-[color:var(--chart-10)]">
+          <MetricItem icon={Bot} label="Tokens" toneClassName={TOKEN_TONE}>
             <AnimatedMetric value={allMetrics.tokens} formatter={compactCountFormatter} />
           </MetricItem>
         </TopMetricCard>
 
         <TopMetricCard title="数据库" headerIcon={Database}>
-          <MetricItem icon={HardDrive} label="大小" toneClassName="bg-[color:var(--chart-3)]/10 text-[color:var(--chart-3)]">
+          <MetricItem icon={HardDrive} label="大小" toneClassName={DB_TONE}>
             <div className="text-xl sm:text-2xl font-semibold leading-none tabular-nums">
               {dbStats?.file_size_human ?? "-"}
             </div>
           </MetricItem>
-          <MetricItem icon={HardDrive} label="使用率" toneClassName="bg-[color:var(--chart-4)]/10 text-[color:var(--chart-4)]">
+          <MetricItem icon={HardDrive} label="使用率" toneClassName={dbUsageTone}>
             <AnimatedMetric
               value={dbUsagePercent}
               formatter={(v) => ({ value: v.toFixed(1), unit: "%" })}
@@ -173,7 +184,7 @@ export default function Home() {
 
       <Card className="py-4 gap-3 sm:py-6 sm:gap-6">
         <CardHeader className="px-3 sm:px-6">
-          <CardTitle className="text-sm font-medium sm:text-base">模型数据分析</CardTitle>
+          <CardTitle className="text-sm font-semibold sm:text-base">模型数据分析</CardTitle>
           <CardDescription className="hidden sm:block">按真实命中模型查看调用分布</CardDescription>
         </CardHeader>
         <CardContent className="px-3 sm:px-6">

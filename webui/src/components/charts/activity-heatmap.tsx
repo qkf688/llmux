@@ -29,11 +29,19 @@ function getActivityLevel(value: number): number {
   return LEVELS.find((l) => value >= l.min)?.level ?? 1;
 }
 
-// 格子与图例共用同一色阶：比例由 LEVELS 档数推导，加档位时无需两处同步
+// 格子与图例共用同一色阶：起止比例固定，档位间均分，加档位时无需两处同步。
+// 基底用 -strong 而非 --primary：primary 对卡底仅 3.45:1，浅档位会被压到
+// 1.5~2.7:1 与空格糊成一片（实测对照实验，见提交说明）。
+// 起点 25%、终点 85%：L1 起对卡底 >2:1、L3 起 >4:1；末档不顶到 100，
+// 避免最深格过饱和压过图表主色
+const LEVEL_START_PERCENT = 25;
+const LEVEL_END_PERCENT = 85;
+
 function getLevelColor(level: number): string {
   if (level <= 0) return "var(--muted)";
-  const stepPercent = 100 / LEVELS.length;
-  return `color-mix(in oklch, var(--primary) ${level * stepPercent}%, var(--muted))`;
+  const stepPercent = (LEVEL_END_PERCENT - LEVEL_START_PERCENT) / (LEVELS.length - 1);
+  const percent = LEVEL_START_PERCENT + (level - 1) * stepPercent;
+  return `color-mix(in oklch, var(--chart-1-strong) ${percent}%, var(--muted))`;
 }
 
 type TooltipState = {

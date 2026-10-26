@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qkf688/llmux/common/bgtask"
@@ -159,7 +160,17 @@ func CreateProvider(c *gin.Context) {
 		return
 	}
 
-	bgtask.Go(autoassoc.TriggerAutoAssociate)
+	// 写后快照：新提供商此刻的目录（分组白名单由模型同步写入，建库时为空；
+	// 此刻只有表单带的 custom_models 算数）。目录为空 = 这次创建没给关联表添任何
+	// 输入，不触发重算（重算是全库模型 × 全库提供商的一趟扫）。
+	after, err := autoassoc.SnapshotProviderWriteState(ctx, *provider)
+	if err != nil {
+		// 创建已落库，此处不能再回 500：前端会当成创建失败重试，重试必撞「名称已存在」。
+		// 关联补齐由后续模型同步或手动一键关联兜住，这里只留痕迹。
+		slog.Error("failed to snapshot created provider write state", "error", err)
+	} else {
+		autoassoc.TriggerProviderWrite(ctx, autoassoc.ProviderWriteState{}, after)
+	}
 
 	httpresp.Success(c, detail)
 }
@@ -177,7 +188,8 @@ func UpdateProvider(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	if _, err := repos().Provider.Get(ctx, id); err != nil {
+	existing, err := repos().Provider.Get(ctx, id)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			httpresp.NotFound(c, "Provider not found")
 			return
@@ -207,6 +219,15 @@ func UpdateProvider(c *gin.Context) {
 		return
 	}
 	req.Config = sanitized
+
+	// 写前快照必须在事务前取：分组白名单的增删写在事务里（syncProviderChildren 删掉
+	// 未提交的分组时，它同步下来的名单随之消失），取晚了读到的就是写后状态，判定会
+	// 假成「没变」而漏掉该清理的关联。
+	before, err := autoassoc.SnapshotProviderWriteState(ctx, *existing)
+	if err != nil {
+		httpresp.InternalErrorMessage(c, "Failed to read provider catalog", err)
+		return
+	}
 
 	err = repos().RunInTx(ctx, func(txRepos *repository.Repositories) error {
 		if childrenProvided {
@@ -287,8 +308,16 @@ func UpdateProvider(c *gin.Context) {
 		return
 	}
 
-	bgtask.Go(autoassoc.TriggerAutoAssociate)
-	bgtask.Go(autoassoc.TriggerAutoClean)
+	// 写后快照 + 判定：只有「可提供的模型增减 / 从拉黑恢复」才触发重算
+	// （口径见 handler/autoassoc.TriggerProviderWrite）。
+	after, err := autoassoc.SnapshotProviderWriteState(ctx, *updatedProvider)
+	if err != nil {
+		// 写已落库，同创建路径：不能回 500（前端会当成更新失败重试），只留痕迹，
+		// 关联补齐由后续模型同步或手动一键关联兜住。
+		slog.Error("failed to snapshot updated provider write state", "error", err)
+	} else {
+		autoassoc.TriggerProviderWrite(ctx, before, after)
+	}
 
 	httpresp.Success(c, detail)
 }

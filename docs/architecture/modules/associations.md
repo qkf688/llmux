@@ -22,15 +22,16 @@
 
 ```
 handler/associations/     # CRUD、status、capabilities、health 视图
-handler/autoassoc/        # HTTP 预览/执行 + Trigger* 薄封装
+handler/autoassoc/        # HTTP 预览/执行 + Trigger* 薄封装（trigger.go 含 provider 写触发入口）
 service/autoassoc/        # 统一 Associate / CleanInvalid 业务
   ├── service.go            # Service 聚合根 + 构造 + setting/Result/LogResult + 公共入口（Preview/Associate/Trigger*）
   ├── associate.go          # Associate 路径（associate / fetchAssociateData / forEachMissingAssociation / skipAutoAssociate）
   ├── clean.go              # CleanInvalid 路径（CleanInvalid / fetchCleanData / forEachInvalidAssociation）
+  ├── trigger.go            # provider 写触发判定（ProviderWriteState 快照 / DetectProviderWriteEffect）
   ├── shared.go             # 共享 helpers（key/index/blacklist/allows）
   ├── defaults.go           # Fallback 常量 + NewDefaultAssociation
   └── types.go              # Preview / associationCandidate / NameMatcher / BuildIndexFunc
-service/autoassoc_facade.go  # GetAutoAssocService / NewAutoAssocService
+service/autoassoc_facade.go  # GetAutoAssocService / NewAutoAssocService + ProviderWriteState 别名 / Detect 转出
 repository/model_with_provider.go
 models.ModelWithProvider
 ```
@@ -93,9 +94,18 @@ Create / Update 对 `req.CustomerHeaders` 走 `common.SanitizeOutboundHeaders`�
 - **自动关联单一入口（已收敛）**：
   - 业务：`service/autoassoc`（`Associate` / `CleanInvalid` / `Preview*` / `Trigger*IfEnabled`）
   - HTTP：`handler/autoassoc` 只做绑定与响应
-  - Provider CRUD：`TriggerAutoAssociate` / `TriggerAutoClean` → service
+  - Provider CRUD：`TriggerProviderWrite`（写前/写后快照 → `DetectProviderWriteEffect` 判定）→ 按需触发 Associate / Clean，`Trigger*IfEnabled` 自查全局开关
   - 同步后：`modelsync.ActionHooks` → `service.GetAutoAssocService().Associate/CleanInvalid`（开关在 `triggerAutoActions`）
   - 模板匹配：`service/model_template.go` 的 `TemplateIndex`（经 `autoassoc_facade` 注入 `BuildIndexFunc`）
+- **provider 写触发按改动内容收窄（2026-10-27）**：Create / Update 在写前（事务前）与写后各取一次
+  `ProviderWriteState` 快照（`SnapshotProviderWriteState`：目录 = 分组白名单并集 ∪ `custom_models`，与重算
+  自身读的**同一份** `modelsync.GetProviderModels`；外加拉黑位），`DetectProviderWriteEffect` 按差集判定：
+  目录增加 → Associate；目录减少（含表单删分组连带删其白名单、清空 `custom_models`）→ Clean；
+  取消拉黑 → Associate；**拉黑本身不触发**（既有关联行留在表里，路由侧另行过滤）；其余改动
+  （改名/地址/类型/端点/分组权重/各开关）不动关联表、不触发——重算是全库模型 × 全库提供商的一趟扫。
+  判定每一行钉在 `service/autoassoc/trigger_test.go`。写后快照失败只记日志不回 500（写已落库，
+  回 500 会让前端当成失败重试）；写前快照失败回 500（尚未写库，可安全重试）。`DeleteProvider`
+  不走此判定（保留原分支：自动清理开关开 → 后台 `TriggerAutoClean`，关 → 同步 `DeleteByProviderID`）。
 - 规则权威：
   - 尊重 `Model.AutoAssociate`（**二态 bool**：`false` 跳过；Create 缺省由 handler 兜底为 true，无「未设置」态——该字段曾声明 `*bool` 三态但从未可表达，已收回，见 `models.Model` 字段注释）
   - 跳过 `Provider.Blacklisted`

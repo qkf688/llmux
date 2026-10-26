@@ -127,8 +127,11 @@ export default function Layout() {
                   <li key={item.to}>
                     <Link to={item.to}>
                       {/* 侧栏收起时图标态需要 label 提示：Radix tooltip 替代原生 title，
-                          展开时无 Content 不弹（Radix Root 不产生 DOM 节点，结构不变） */}
-                      <Tooltip>
+                          展开时无 Content 不弹（Radix Root 不产生 DOM 节点，结构不变）。
+                          disableHoverableContent 必须加：Radix 默认把「指针离开 trigger 即关闭」
+                          委托给已挂载 Content 的 grace-area 逻辑，展开态 Content 未挂载导致
+                          Root 的 open 状态滞留，收起瞬间所有滞留 tooltip 集体显形 */}
+                      <Tooltip disableHoverableContent>
                         <TooltipTrigger asChild>
                           <div
                             className={`

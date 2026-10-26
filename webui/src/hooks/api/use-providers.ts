@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { invalidateModelProviders } from '@/hooks/api/use-model-providers';
 import {
   getProviders,
   getProviderModelCatalog,
@@ -113,6 +114,8 @@ export function useDeleteProvider() {
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: providerKeys.lists() });
+      // 删除提供商后，其名下的关联在模型关联页同样会残留（同一 staleTime 窗口问题）
+      invalidateModelProviders(qc);
     },
   });
 }
@@ -121,8 +124,13 @@ export function useClearProviderAssociations() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: clearProviderAssociations,
-    onSuccess: () => {
+    // 清除的是 model-providers 表的行，影响面横跨两个缓存族：
+    // 提供商页读 providerKeys，模型关联页读 modelProviderKeys（另一套 key）。
+    // 只失效前者会让关联页在 staleTime（60s）内继续显示已删除的行——
+    // 用户会以为"没清掉"并重复点击，第二次自然得到 deleted: 0。
+    onSettled: () => {
       void qc.invalidateQueries({ queryKey: providerKeys.lists() });
+      invalidateModelProviders(qc);
     },
   });
 }

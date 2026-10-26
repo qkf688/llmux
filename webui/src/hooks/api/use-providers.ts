@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { invalidateModelProviders } from '@/hooks/api/use-model-providers';
 import {
   getProviders,
@@ -37,6 +37,55 @@ export const healthCheckSettingsKeys = {
   all: ['healthCheckSettings'] as const,
 };
 
+/** 一次 provider 侧写操作要失效哪些缓存族。缺省 = 最常见的组合。 */
+export type ProviderWriteInvalidation = {
+  /** 提供商列表。个别入口已用 setQueriesData 本地打补丁，可关掉避免整表重取。 */
+  lists?: boolean;
+  /** 组织级模型目录（分组白名单并集 ∪ custom）：只有同步 / 改 custom 才需要。 */
+  catalog?: boolean;
+  /** 模型关联页缓存（modelProviderKeys，另一套 key）。端点确不触发 autoassoc 时才可关。 */
+  associations?: boolean;
+};
+
+/**
+ * 提供商侧写操作后的缓存失效**唯一入口**。
+ *
+ * 为什么这两个缓存族必须成对：后端对 provider 写路径几乎都会改写 `model_with_providers`
+ * （POST/PUT 走 `TriggerAutoAssociate` + `TriggerAutoClean`，DELETE 与「清除关联」直接删行），
+ * 而「模型关联」页读的是**独立的** `modelProviderKeys`。全局 `staleTime` 是 60s 且
+ * `refetchOnWindowFocus` 已关，漏掉后者的后果是：用户清完关联再进该页仍看见旧行，
+ * 以为没生效而重复点击，第二次自然得到 `deleted: 0`（本仓曾如此）。
+ *
+ * 为什么收成一处而不是各调用点自己写两行：这些入口分散在 6 个文件、各自只看得到自己
+ * 那一半缓存；成对写、成对改，漏一处就复现同一类 bug（2026-10 一轮修复连补 7 处即是此因）。
+ * 新增 provider 写入口时**一律**走这里，不要自己拼 invalidateQueries。
+ *
+ * 返回值：所有已完成失效动作的 Promise。需要「refetch 落定后再读缓存」的调用点
+ * （如「全部模型」弹窗写完目录立刻回读）必须 await，否则读到的是旧值；
+ * 纯事件通知型调用点可以不管（`void` 或不接）。
+ */
+export function invalidateAfterProviderWrite(
+  qc: QueryClient,
+  options: ProviderWriteInvalidation = {},
+): Promise<unknown> {
+  const { lists = true, catalog = false, associations = true } = options;
+  const tasks: Promise<unknown>[] = [];
+
+  if (lists) {
+    tasks.push(qc.invalidateQueries({ queryKey: providerKeys.lists() }));
+  }
+  if (catalog) {
+    tasks.push(qc.invalidateQueries({ queryKey: providerKeys.catalog() }));
+  }
+  if (associations) {
+    // invalidateModelProviders 本身是同步 fire-and-forget（既有签名），
+    // 关联页数据不参与任何「写完立刻回读」的链路，无须纳入 await 集合。
+    invalidateModelProviders(qc);
+  }
+
+  return Promise.all(tasks);
+}
+
 export function useProviders(filters?: { name?: string; type?: string }) {
   return useQuery({
     queryKey: providerKeys.list(filters),
@@ -73,8 +122,9 @@ export function useCreateProvider() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: createProvider,
+    // 后端 POST /providers 会 TriggerAutoAssociate，可能新增关联行
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: providerKeys.lists() });
+      invalidateAfterProviderWrite(qc);
     },
   });
 }
@@ -84,8 +134,9 @@ export function useUpdateProvider(id: number) {
   return useMutation({
     mutationFn: (data: Parameters<typeof updateProvider>[1]) =>
       updateProvider(id, data),
+    // 同 POST：PUT 会 TriggerAutoAssociate + TriggerAutoClean
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: providerKeys.lists() });
+      invalidateAfterProviderWrite(qc);
     },
   });
 }
@@ -113,9 +164,8 @@ export function useDeleteProvider() {
       }
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: providerKeys.lists() });
-      // 删除提供商后，其名下的关联在模型关联页同样会残留（同一 staleTime 窗口问题）
-      invalidateModelProviders(qc);
+      // 删除提供商后其名下关联随之消失，两个缓存族都要刷
+      invalidateAfterProviderWrite(qc);
     },
   });
 }
@@ -124,13 +174,10 @@ export function useClearProviderAssociations() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: clearProviderAssociations,
-    // 清除的是 model-providers 表的行，影响面横跨两个缓存族：
-    // 提供商页读 providerKeys，模型关联页读 modelProviderKeys（另一套 key）。
-    // 只失效前者会让关联页在 staleTime（60s）内继续显示已删除的行——
-    // 用户会以为"没清掉"并重复点击，第二次自然得到 deleted: 0。
+    // 清除的是 model-providers 表的行：提供商页读 providerKeys，模型关联页读
+    // modelProviderKeys（另一套 key），两族必须同时失效——见 invalidateAfterProviderWrite。
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: providerKeys.lists() });
-      invalidateModelProviders(qc);
+      invalidateAfterProviderWrite(qc);
     },
   });
 }
@@ -140,9 +187,9 @@ export function useSyncAllProviders() {
   return useMutation({
     mutationFn: syncAllProviderModels,
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: providerKeys.lists() });
-      // 同步改写分组白名单 → 组织级目录随之变化
-      void qc.invalidateQueries({ queryKey: providerKeys.catalog() });
+      // 同步改写分组白名单（→ 组织级目录变化），并在开关开启时经
+      // modelsync.ActionHooks 后台改写关联，故三个缓存族一起失效。
+      invalidateAfterProviderWrite(qc, { catalog: true });
     },
   });
 }

@@ -21,7 +21,7 @@ vi.mock("@/lib/api", () => apiMocks);
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
 import { modelProviderKeys } from "@/hooks/api/use-model-providers";
-import { providerKeys } from "@/hooks/api/use-providers";
+import { providerKeys, invalidateAfterProviderWrite } from "@/hooks/api/use-providers";
 import { useProviderSyncActions } from "./use-provider-sync-actions";
 import { useAllModelsDialog } from "./use-all-models-dialog";
 import { useProviderMutations } from "./use-provider-mutations";
@@ -81,6 +81,65 @@ describe("useProviderSyncActions", () => {
     // 原有的 catalog 失效行为不得被覆盖
     expect(queryClient.getQueryState(catalogKey)?.isInvalidated).toBe(true);
   });
+});
+
+// 统一入口自身的选项语义：这些是「哪一族该刷、哪一族该放过」的唯一定义处，
+// 各调用点只是传参。逐项锁死，防以后改缺省值把某族静默关掉。
+describe("invalidateAfterProviderWrite", () => {
+  function freshState(queryClient: QueryClient) {
+    const providerKey = providerKeys.list();
+    const catalogKey = providerKeys.catalog();
+    const assocKey = modelProviderKeys.list(9);
+    queryClient.setQueryData(providerKey, [{ ID: 30 }]);
+    queryClient.setQueryData(catalogKey, [{ ProviderID: 30, Upstream: [], Custom: [] }]);
+    queryClient.setQueryData(assocKey, [{ ID: 71 }]);
+    return {
+      invalidated: () => ({
+        lists: queryClient.getQueryState(providerKey)?.isInvalidated === true,
+        catalog: queryClient.getQueryState(catalogKey)?.isInvalidated === true,
+        associations: queryClient.getQueryState(assocKey)?.isInvalidated === true,
+      }),
+    };
+  }
+
+  const cases: Array<{
+    name: string;
+    options: Parameters<typeof invalidateAfterProviderWrite>[1];
+    want: { lists: boolean; catalog: boolean; associations: boolean };
+  }> = [
+    {
+      name: "缺省：列表 + 关联，目录不动",
+      options: undefined,
+      want: { lists: true, catalog: false, associations: true },
+    },
+    {
+      name: "catalog: true 追加目录",
+      options: { catalog: true },
+      want: { lists: true, catalog: true, associations: true },
+    },
+    {
+      name: "lists: false 只放过列表（本地已打补丁的场景）",
+      options: { lists: false },
+      want: { lists: false, catalog: false, associations: true },
+    },
+    {
+      name: "associations: false 放过关联（端点不触发 autoassoc 的场景）",
+      options: { associations: false },
+      want: { lists: true, catalog: false, associations: false },
+    },
+  ];
+
+  for (const tc of cases) {
+    it(tc.name, async () => {
+      const queryClient = createClient();
+      const state = freshState(queryClient);
+      expect(state.invalidated()).toEqual({ lists: false, catalog: false, associations: false });
+
+      await invalidateAfterProviderWrite(queryClient, tc.options);
+
+      expect(state.invalidated()).toEqual(tc.want);
+    });
+  }
 });
 
 describe("useAllModelsDialog", () => {

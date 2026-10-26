@@ -2,8 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { updateProvider, type Provider } from "@/lib/api";
-import { providerKeys } from "@/hooks/api/use-providers";
-import { invalidateModelProviders } from "@/hooks/api/use-model-providers";
+import { providerKeys, invalidateAfterProviderWrite } from "@/hooks/api/use-providers";
 
 export function useProviderSwitchActions() {
   const queryClient = useQueryClient();
@@ -24,8 +23,10 @@ export function useProviderSwitchActions() {
   // 其中「关联触发」（blacklisted）是唯一有确定因果的一条：associate 跳过黑名单供应商，
   // 取消拉黑会在自动关联开启时新建关联行；其余两个（model_endpoint /
   // model_filter_enabled）不参与 GetProviderModels，实际影响仅来自上述无条件触发。
+  //
+  // lists: false —— 三个开关都已用 patchProviderInCache 就地打好补丁，整表重取是多余请求。
   const invalidateAssociations = () => {
-    invalidateModelProviders(queryClient);
+    invalidateAfterProviderWrite(queryClient, { lists: false });
   };
 
   const handleToggleModelEndpoint = async (provider: Provider) => {

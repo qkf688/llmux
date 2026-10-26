@@ -12,7 +12,7 @@ import {
   type ModelSyncLogsResponse,
   type RecentAddedModelsResponse,
 } from '@/lib/api';
-import { providerKeys } from './use-providers';
+import { invalidateAfterProviderWrite } from './use-providers';
 
 const LOG_PAGE_SIZE = 20;
 
@@ -108,7 +108,8 @@ export function useToggleProviderModelEndpointMutation() {
     mutationFn: ({ providerId, enabled }: { providerId: number; enabled: boolean }) =>
       updateProvider(providerId, { model_endpoint: enabled }),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: providerKeys.lists() });
+      // 同 providers 页的行内开关：PUT /providers/:id 会无条件触发 autoassoc
+      void invalidateAfterProviderWrite(qc);
       void qc.invalidateQueries({ queryKey: modelSyncLogsKeys.stats() });
     },
   });

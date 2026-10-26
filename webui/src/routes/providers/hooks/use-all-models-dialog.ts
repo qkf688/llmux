@@ -10,8 +10,7 @@ import {
   type Provider,
   type ProviderModelCatalog,
 } from "@/lib/api";
-import { providerKeys, useProviderModelCatalog } from "@/hooks/api/use-providers";
-import { invalidateModelProviders } from "@/hooks/api/use-model-providers";
+import { providerKeys, useProviderModelCatalog, invalidateAfterProviderWrite } from "@/hooks/api/use-providers";
 import { EMPTY_MODEL_CATALOG } from "@/lib/empty-constants";
 import {
   buildConfigWithCustomModels,
@@ -183,12 +182,7 @@ export function useAllModelsDialog({
     if (updated) {
       patchProviderInLists(updated);
     }
-    await queryClient.invalidateQueries({ queryKey: providerKeys.lists() });
-    // 同步改写分组白名单 → 目录随之变化（fetchCatalogEntry 会重取最新值）
-    await queryClient.invalidateQueries({ queryKey: providerKeys.catalog() });
-    // 同步增删上游模型 → 后端在后台按开关改写关联（modelsync.ActionHooks），
-    // 关联页是另一套缓存族，不一起失效就会在 staleTime 内继续显示陈旧行。
-    invalidateModelProviders(queryClient);
+    await invalidateAfterProviderWrite(queryClient, { catalog: true });
     return updated;
   };
 
@@ -206,12 +200,10 @@ export function useAllModelsDialog({
     });
     const updatedProvider = { ...provider, Config: nextConfig };
     patchProviderInLists(updatedProvider);
-    // 目录缓存与 config 写不同源（聚合端点重算分组白名单），invalidate 让
-    // upstreamSet / 三页目录随 custom 变化刷新
-    await queryClient.invalidateQueries({ queryKey: providerKeys.catalog() });
-    // custom_models 的增删走的是 PUT /providers/:id，后端随后按开关跑自动关联/自动清理，
-    // 会改写 model_with_providers —— 与 sync 同一条缺口，关联页缓存一并失效。
-    invalidateModelProviders(queryClient);
+    // 目录缓存与 config 写不同源（聚合端点重算分组白名单）；custom_models 的增删走的是
+    // PUT /providers/:id，后端随后按开关跑自动关联/自动清理，会改写 model_with_providers。
+    // 故 lists + catalog + 关联页三族一起失效，且必须 await——调用方写完立刻回读目录。
+    await invalidateAfterProviderWrite(queryClient, { catalog: true });
     return nextConfig;
   };
 

@@ -25,6 +25,7 @@ import { providerKeys } from "@/hooks/api/use-providers";
 import { useProviderSyncActions } from "./use-provider-sync-actions";
 import { useAllModelsDialog } from "./use-all-models-dialog";
 import { useProviderMutations } from "./use-provider-mutations";
+import { useProviderSwitchActions } from "./use-provider-switch-actions";
 import { defaultProviderFormValues, type ProviderFormValues } from "../form-schema";
 
 function createClient() {
@@ -148,6 +149,44 @@ describe("useAllModelsDialog", () => {
     expect(apiMocks.updateProvider).toHaveBeenCalledTimes(1);
     expect(queryClient.getQueryState(assocKey)?.isInvalidated).toBe(true);
   });
+});
+
+describe("useProviderSwitchActions", () => {
+  beforeEach(() => {
+    apiMocks.updateProvider.mockReset().mockResolvedValue({});
+  });
+
+  // 三个开关走同一个 PUT /providers/:id，后端对该请求无条件跑
+  // TriggerAutoAssociate + TriggerAutoClean（handler/providerapi/crud.go UpdateProvider），
+  // 前端按字段判不出是否真改动了关联，故三条路径一律要失效关联页缓存。
+  const provider = { ID: 30, Name: "zcode", Type: "anthropic", Config: "{}" } as never;
+
+  const cases: Array<{
+    name: string;
+    run: (h: ReturnType<typeof useProviderSwitchActions>) => Promise<void>;
+  }> = [
+    { name: "模型端点", run: (h) => h.handleToggleModelEndpoint(provider) },
+    { name: "模型过滤", run: (h) => h.handleToggleModelFilter(provider, true) },
+    { name: "关联触发", run: (h) => h.handleToggleAssociationTrigger(provider, true) },
+  ];
+
+  for (const tc of cases) {
+    it(`切换「${tc.name}」后失效模型关联页缓存`, async () => {
+      const queryClient = createClient();
+      const { assocKey } = seedCaches(queryClient);
+
+      const { result } = renderHook(() => useProviderSwitchActions(), {
+        wrapper: makeWrapper(queryClient),
+      });
+
+      await act(async () => {
+        await tc.run(result.current);
+      });
+
+      expect(apiMocks.updateProvider).toHaveBeenCalledTimes(1);
+      expect(queryClient.getQueryState(assocKey)?.isInvalidated).toBe(true);
+    });
+  }
 });
 
 describe("useProviderMutations", () => {

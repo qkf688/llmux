@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { getProviderBlacklist, updateProviderBlacklist, type Provider } from "@/lib/api";
+import { providerKeys } from "@/hooks/api/use-providers";
 import type { Updater } from "@/stores/core/updater";
 import type { BlacklistFilter } from "../types";
 
@@ -37,6 +39,8 @@ export function useModelProvidersBlacklist({
   blacklistFilter,
   setBlacklistFilter,
 }: UseModelProvidersBlacklistInput) {
+  const queryClient = useQueryClient();
+
   const filteredProviders = useMemo(() => {
     let result = providers;
 
@@ -70,6 +74,11 @@ export function useModelProvidersBlacklist({
     setBlacklistSaving(true);
     try {
       await updateProviderBlacklist(blacklistedIds);
+      // 黑名单写的是 Provider.Blacklisted，提供商页的「关联触发」开关直接读该字段。
+      // 不失效 providerKeys 的话，回到提供商页仍显示旧开关状态（staleTime 60s）。
+      // 该端点（PUT /providers/blacklist）本身不触发 autoassoc，故关联行不变，
+      // modelProviderKeys 无需失效。
+      void queryClient.invalidateQueries({ queryKey: providerKeys.lists() });
       toast.success("黑名单已保存");
       setBlacklistDialogOpen(false);
     } catch (err) {

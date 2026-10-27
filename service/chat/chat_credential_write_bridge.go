@@ -21,7 +21,7 @@ func init() {
 func persistCredentialCooldown(ctx context.Context, credID uint, reason string) error {
 	window, ok := cooldownWindowForReason(ctx, reason)
 	if !ok {
-		// 窗口读失败：冷却写整体跳过（已留痕）——不拿编造窗口写冷却（Stage 33，Ruling 4）。
+		// 不写冷却：开关关闭（运营关停）或窗口读失败（已留痕）——不拿编造窗口写冷却（Stage 33，Ruling 4）。
 		return nil
 	}
 	_, err := repos().Credential.UpdateFields(ctx, credID, map[string]any{
@@ -32,6 +32,11 @@ func persistCredentialCooldown(ctx context.Context, credID uint, reason string) 
 }
 
 func persistCredentialAuthFailure(ctx context.Context, credID uint) error {
+	if !getCredHealthAuthFailStopEnabled(ctx) {
+		// 判停开关关闭：只计数，绝不判停——判停 = 自动停用凭据，是运营要能一键关停的动作。
+		_, err := repos().Credential.IncrementFailCountNoStop(ctx, credID)
+		return err
+	}
 	threshold, err := getCredHealthAuthFailThreshold(ctx)
 	if err != nil {
 		// 判停阈值读失败：只计数不判停（已留痕）——temp_unsched 是停用类动作，

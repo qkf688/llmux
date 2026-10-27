@@ -141,6 +141,19 @@ func TestDefaultSettingsResponse(t *testing.T) {
 	if response.CredHealthProbeIntervalSec != 60 {
 		t.Fatalf("expected CredHealthProbeIntervalSec default to be 60, got %d", response.CredHealthProbeIntervalSec)
 	}
+	// 凭据健康四个开关默认关（= 自动冷却/自动停用不生效）：需要时运营显式开启。
+	if response.CredHealthCooldown429Enabled {
+		t.Fatalf("expected CredHealthCooldown429Enabled default to be false")
+	}
+	if response.CredHealthCooldownServerEnabled {
+		t.Fatalf("expected CredHealthCooldownServerEnabled default to be false")
+	}
+	if response.CredHealthAuthFailStopEnabled {
+		t.Fatalf("expected CredHealthAuthFailStopEnabled default to be false")
+	}
+	if response.CredHealthProbeEnabled {
+		t.Fatalf("expected CredHealthProbeEnabled default to be false")
+	}
 	if response.ReasoningEffortDefaultValue != "low" {
 		t.Fatalf("expected ReasoningEffortDefaultValue default to be low, got %s", response.ReasoningEffortDefaultValue)
 	}

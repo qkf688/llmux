@@ -108,6 +108,7 @@ func TestBalanceChat_DeadlineCtx_GatewayTimeout504(t *testing.T) {
 // 结算照常（凭据冷却写入），慢供应商的调度信号不丢（Stage 33 AC-4 的结算半边）。
 func TestBalanceChat_DeadlineCtx_SettlesAsProviderFailure(t *testing.T) {
 	pool, model := setupTimeoutProbeProvider(t, 3*time.Second)
+	enableCredHealthSwitches(t) // 本用例断言超时按凭据级失败结算（写冷却）：开关须显式打开
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()

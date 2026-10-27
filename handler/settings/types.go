@@ -79,6 +79,11 @@ type Settings struct {
 	CredHealthCooldownServerSec int `json:"cred_health_cooldown_server_sec"` // 凭据服务端错误冷却窗口（秒，5xx/超时/网络）
 	CredHealthAuthFailThreshold int `json:"cred_health_auth_fail_threshold"` // 凭据连续鉴权失败（401/403）判停阈值（次）
 	CredHealthProbeIntervalSec  int `json:"cred_health_probe_interval_sec"`  // 凭据惰性探活最小间隔（秒）
+	// 凭据健康四个机制的开关（默认关 = 自动冷却/自动停用不默认生效）：关闭后该机制完全不生效
+	CredHealthCooldown429Enabled    bool `json:"cred_health_cooldown_429_enabled"`    // 429 限流冷却开关
+	CredHealthCooldownServerEnabled bool `json:"cred_health_cooldown_server_enabled"` // 服务端错误冷却开关
+	CredHealthAuthFailStopEnabled   bool `json:"cred_health_auth_fail_stop_enabled"`  // 鉴权失败判停开关
+	CredHealthProbeEnabled          bool `json:"cred_health_probe_enabled"`           // 惰性探活开关
 }
 
 // SettingsResponse 设置响应结构（类型别名，字段定义统一在 Settings 中）

@@ -171,10 +171,16 @@ func buildSettingSchemas() map[string]SettingSchema {
 		// 凭据健康（S4 状态机 #6-1/#6-2/#6-3）：429 与过载合并一个窗口字段，5xx/超时/网络共用一个
 		// 窗口（设计定案第 5 节）；鉴权失败(401/403)不走冷却，连续失败达阈值后判停 temp_unsched；
 		// 探活间隔控制 temp_unsched 惰性自愈频控（#6-3）。
+		// 每项配一个 bool 开关，**默认关**（2026-10-27 运营要求：凭据自动冷却/自动停用
+		// 不该默认生效）——开关关闭时该机制完全不生效，需要时在设置页手动开启。
 		{Key: SettingKeyCredHealthCooldown429Sec, Field: "CredHealthCooldown429Sec", Type: SettingTypeInt, Default: 60, Category: "cred_health", Min: intPtr(1)},
 		{Key: SettingKeyCredHealthCooldownServerSec, Field: "CredHealthCooldownServerSec", Type: SettingTypeInt, Default: 60, Category: "cred_health", Min: intPtr(1)},
 		{Key: SettingKeyCredHealthAuthFailThreshold, Field: "CredHealthAuthFailThreshold", Type: SettingTypeInt, Default: 3, Category: "cred_health", Min: intPtr(1)},
 		{Key: SettingKeyCredHealthProbeIntervalSec, Field: "CredHealthProbeIntervalSec", Type: SettingTypeInt, Default: 60, Category: "cred_health", Min: intPtr(1)},
+		{Key: SettingKeyCredHealthCooldown429Enabled, Field: "CredHealthCooldown429Enabled", Type: SettingTypeBool, Default: false, Category: "cred_health"},
+		{Key: SettingKeyCredHealthCooldownServerEnabled, Field: "CredHealthCooldownServerEnabled", Type: SettingTypeBool, Default: false, Category: "cred_health"},
+		{Key: SettingKeyCredHealthAuthFailStopEnabled, Field: "CredHealthAuthFailStopEnabled", Type: SettingTypeBool, Default: false, Category: "cred_health"},
+		{Key: SettingKeyCredHealthProbeEnabled, Field: "CredHealthProbeEnabled", Type: SettingTypeBool, Default: false, Category: "cred_health"},
 	}
 
 	result := make(map[string]SettingSchema, len(list))

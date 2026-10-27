@@ -1,10 +1,14 @@
 package chat
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/qkf688/llmux/models"
+	"github.com/qkf688/llmux/service/settings"
 )
 
 // 本文件是 Stage 33「凭据结算腿设置读取失败 → 显式降级」的回归组（Ruling 3）：
@@ -101,5 +105,125 @@ func TestPersistCredentialCooldown_ServerWindowReadFail_SkipsCooldown(t *testing
 	}
 	if got.CooldownUntil != nil {
 		t.Fatalf("CooldownUntil != nil (reason=%q), want 服务端窗读不到 → 冷却写跳过", got.CooldownReason)
+	}
+}
+
+// captureSlog 捕获 slog 输出（断言「读失败已留痕」用）。返回捕获文本与恢复函数。
+//
+// 为什么要捕获：开关读失败与「运营主动关停」在行为上同形（都按关处理），
+// 唯一可观测的差别就是留痕——不留痕则两者永远无法区分。
+func captureSlog(t *testing.T) (*bytes.Buffer, func()) {
+	t.Helper()
+	buf := &bytes.Buffer{}
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	restore := func() { slog.SetDefault(old) }
+	t.Cleanup(restore)
+	// 留痕限频是进程级的（60 秒窗口）：不重置的话上一轮用例的留痕会把本轮压掉，
+	// 断言留痕的用例会假红（-count>1 尤其明显）。
+	settings.ResetReadSkipLimiterForTest()
+	return buf, restore
+}
+
+// TestCredHealthSwitchReadFail_LogsAndTreatsAsOff 锁「开关读失败 → 可辨 + 留痕」
+// （Stage 33）：四个开关用 BoolE 读取，读失败时按「关」处理（保守方向），
+// 并经 settings.LogReadSkip 留痕——否则「设置读不到」与「运营主动关停」同形，
+// DB 抖动导致机制静默失效时事后无从判断。
+func TestCredHealthSwitchReadFail_LogsAndTreatsAsOff(t *testing.T) {
+	cases := []struct {
+		name    string
+		key     string
+		readErr error
+	}{
+		{"429 冷却开关", models.SettingKeyCredHealthCooldown429Enabled, nil},
+		{"服务端冷却开关", models.SettingKeyCredHealthCooldownServerEnabled, nil},
+		{"判停开关", models.SettingKeyCredHealthAuthFailStopEnabled, nil},
+		{"探活开关", models.SettingKeyCredHealthProbeEnabled, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			initChatRecordTestDB(t)
+			installChatTestSettings(t, credCooldownSettingsReader{
+				failKeys: map[string]bool{tc.key: true},
+			})
+			buf, _ := captureSlog(t)
+
+			if got := getCredHealthSwitch(context.Background(), tc.key); got {
+				t.Fatalf("getCredHealthSwitch(%s) = true, want false（读失败按关处理）", tc.key)
+			}
+			if !strings.Contains(buf.String(), tc.key) {
+				t.Fatalf("留痕缺设置键 %s，日志=%s", tc.key, buf.String())
+			}
+			if !strings.Contains(buf.String(), "settings read failed") {
+				t.Fatalf("留痕缺「settings read failed」消息，日志=%s", buf.String())
+			}
+		})
+	}
+}
+
+// TestPersistCredentialCooldown_SwitchReadFail_SkipsCooldown 冷却开关读失败腿：
+// 与「运营主动关停」同效——不写冷却；且因开关读失败发生在窗口读之前，
+// 窗口值读不到也不写（拿编造窗口写冷却才是 Stage 33 禁止的）。
+func TestPersistCredentialCooldown_SwitchReadFail_SkipsCooldown(t *testing.T) {
+	initChatRecordTestDB(t)
+	installChatTestSettings(t, credCooldownSettingsReader{
+		Cooldown429Sec:    60,
+		CooldownServerSec: 60,
+		failKeys: map[string]bool{
+			models.SettingKeyCredHealthCooldown429Enabled: true,
+		},
+	})
+	captureSlog(t)
+
+	cred := models.Credential{Key: "enc", KeyHash: "hash"}
+	if err := models.DB.Create(&cred).Error; err != nil {
+		t.Fatalf("create credential: %v", err)
+	}
+
+	if err := persistCredentialCooldown(context.Background(), cred.ID, cooldownReason429); err != nil {
+		t.Fatalf("persist cooldown: %v", err)
+	}
+
+	var got models.Credential
+	if err := models.DB.First(&got, cred.ID).Error; err != nil {
+		t.Fatalf("reload credential: %v", err)
+	}
+	if got.CooldownUntil != nil {
+		t.Fatal("CooldownUntil != nil, want 开关读失败 → 冷却写跳过")
+	}
+}
+
+// TestPersistCredentialAuthFailure_SwitchReadFail_CountsWithoutStop 判停开关读失败腿：
+// 读不到开关时按「关」处理——只计数、不判停（绝不拿编造阈值停用凭据）。
+func TestPersistCredentialAuthFailure_SwitchReadFail_CountsWithoutStop(t *testing.T) {
+	initChatRecordTestDB(t)
+	installChatTestSettings(t, credCooldownSettingsReader{
+		AuthFailThreshold: 1, // 危险覆写值：开关读不到时若退它/若判停，首败即停
+		failKeys: map[string]bool{
+			models.SettingKeyCredHealthAuthFailStopEnabled: true,
+		},
+	})
+	captureSlog(t)
+
+	cred := models.Credential{Key: "enc", KeyHash: "hash"}
+	if err := models.DB.Create(&cred).Error; err != nil {
+		t.Fatalf("create credential: %v", err)
+	}
+
+	for i := 1; i <= 3; i++ {
+		if err := persistCredentialAuthFailure(context.Background(), cred.ID); err != nil {
+			t.Fatalf("persist auth fail (step %d): %v", i, err)
+		}
+	}
+
+	var got models.Credential
+	if err := models.DB.First(&got, cred.ID).Error; err != nil {
+		t.Fatalf("reload credential: %v", err)
+	}
+	if got.FailCount != 3 {
+		t.Fatalf("FailCount = %d, want 3（计数不因开关读失败而丢）", got.FailCount)
+	}
+	if got.Status != models.CredentialStatusActive {
+		t.Fatalf("Status = %q, want active（开关读不到 → 按关处理，不得停用凭据）", got.Status)
 	}
 }

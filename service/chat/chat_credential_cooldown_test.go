@@ -74,12 +74,27 @@ func TestApplyCredentialCooldown(t *testing.T) {
 // failKeys 命中 = 读失败，**裸变体与 E 变体一起失败**（Stage 36 按生产三态建模：
 // 生产里两者读同一张表，不存在「只有 E 变体读不到」的世界；旧 mock 让裸变体照旧
 // 返回覆写值，会把「读失败时裸读退覆写值驱动写」这条真实风险从测试里抹掉）。
+//
+// disabledKeys 命中 = 该机制开关被运营关停（bool 读 false）。
+//
+// 开关的 stub 默认值与生产默认**相反**：生产默认关（机制不生效），本 stub 默认开——
+// 这些用例测的是机制本身（冷却写库 / 判停 / 探活），前提是开关处于打开态；
+// 要测关停就在 disabledKeys 里显式列出该键。
 type credCooldownSettingsReader struct {
 	Cooldown429Sec    int
 	CooldownServerSec int
 	AuthFailThreshold int
 	ProbeIntervalSec  int
+	disabledKeys      map[string]bool
 	failKeys          map[string]bool
+}
+
+// credHealthToggleKeys 是四个机制开关的键集合：stub 对它们默认返回 true（开关打开）。
+var credHealthToggleKeys = map[string]bool{
+	models.SettingKeyCredHealthCooldown429Enabled:    true,
+	models.SettingKeyCredHealthCooldownServerEnabled: true,
+	models.SettingKeyCredHealthAuthFailStopEnabled:   true,
+	models.SettingKeyCredHealthProbeEnabled:          true,
 }
 
 func (r credCooldownSettingsReader) readErr(key string) error {
@@ -92,6 +107,12 @@ func (r credCooldownSettingsReader) readErr(key string) error {
 func (r credCooldownSettingsReader) Bool(_ context.Context, key string, def bool) bool {
 	if r.readErr(key) != nil {
 		return def
+	}
+	if r.disabledKeys[key] {
+		return false
+	}
+	if credHealthToggleKeys[key] {
+		return true
 	}
 	return def
 }
@@ -179,11 +200,59 @@ func TestApplyCredentialCooldown_ConfigurableWindows(t *testing.T) {
 	}
 }
 
+// TestApplyCredentialCooldown_SwitchOffSkipsCooldown 锁「冷却开关关停」（2026-10-27）：
+// 运营关闭某类冷却后，该类失败不再写任何冷却字段——凭据保持 active、继续参与选路。
+// 开关按失败类型分窗生效（429 开关只管 429、server 开关管 5xx/网络）。
+func TestApplyCredentialCooldown_SwitchOffSkipsCooldown(t *testing.T) {
+	cases := []struct {
+		name        string
+		reason      string
+		disabledKey string
+	}{
+		{"429 开关关停", "http_429", models.SettingKeyCredHealthCooldown429Enabled},
+		{"服务端错误开关关停", "http_500", models.SettingKeyCredHealthCooldownServerEnabled},
+		{"网络失败走服务端开关", "network", models.SettingKeyCredHealthCooldownServerEnabled},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			initChatRecordTestDB(t)
+			installChatTestSettings(t, credCooldownSettingsReader{
+				Cooldown429Sec:    60,
+				CooldownServerSec: 60,
+				disabledKeys:      map[string]bool{tc.disabledKey: true},
+			})
+
+			_, poolID := seedPooledGroup(t, 1, "g1", 1, "")
+			cred := models.Credential{PoolID: poolID, Key: "enc", KeyHash: "hash"}
+			if err := models.DB.Create(&cred).Error; err != nil {
+				t.Fatalf("create credential: %v", err)
+			}
+
+			applyCredentialCooldown(context.Background(), cred, tc.reason)
+
+			var got models.Credential
+			if err := models.DB.First(&got, cred.ID).Error; err != nil {
+				t.Fatalf("reload credential: %v", err)
+			}
+			if got.CooldownUntil != nil {
+				t.Fatalf("CooldownUntil = %v, want nil（开关关闭后不写冷却）", got.CooldownUntil)
+			}
+			if got.CooldownReason != "" {
+				t.Fatalf("CooldownReason = %q, want 空（开关关闭后不留冷却痕迹）", got.CooldownReason)
+			}
+			if got.Status != models.CredentialStatusActive {
+				t.Fatalf("Status = %q, want active（冷却不占状态位）", got.Status)
+			}
+		})
+	}
+}
+
 // 上游 429 → executeSingleProviderAttempt 走 handleNonOKProviderResponse 凭据级分支：
 // 选中凭据的 CooldownUntil 落库非空 + reason 为 http_429。锁 AC-1 的「冷却写库」
 // 半边（组内换 key 的端到端在 retry loop 集成测试）。
 func TestExecuteSingleProviderAttempt_NonOK429_WritesCredentialCooldown(t *testing.T) {
 	initChatRecordTestDB(t)
+	enableCredHealthSwitches(t) // 本用例断言 429 冷却写库：开关须显式打开
 	cipher := setupChatChannelCipher(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -188,6 +188,58 @@ func TestProbeRecoverInGroup_LocksExhaustedGroup(t *testing.T) {
 	}
 }
 
+// TestProbeRecoverInGroup_SwitchOffSkipsProbe 锁「探活开关关停」（2026-10-27）：
+// 运营关闭惰性探活后，判停凭据不再被自动探活恢复——不打上游，函数直接返回 false，
+// 凭据保持 temp_unsched（只能人工改回启用）。
+func TestProbeRecoverInGroup_SwitchOffSkipsProbe(t *testing.T) {
+	initChatRecordTestDB(t)
+	cipher := setupChatChannelCipher(t)
+	installChatTestSettings(t, credCooldownSettingsReader{
+		ProbeIntervalSec: 60,
+		disabledKeys:     map[string]bool{models.SettingKeyCredHealthProbeEnabled: true},
+	})
+
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"m1","object":"model"}]}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	plain := "sk-probe-off"
+	cred := models.Credential{
+		Key:            mustEncrypt(t, cipher, plain),
+		KeyHash:        cipher.Hash(plain),
+		Status:         models.CredentialStatusTempUnsched,
+		CooldownReason: "auth_fail",
+		FailCount:      3,
+	}
+	if err := models.DB.Create(&cred).Error; err != nil {
+		t.Fatalf("create credential: %v", err)
+	}
+
+	ok := probeRecoverInGroup(context.Background(),
+		models.Provider{Name: "p", Type: "openai"},
+		models.Endpoint{Protocol: "openai", URL: srv.URL, Enabled: true},
+		[]models.Credential{cred},
+	)
+	if ok {
+		t.Fatal("probeRecoverInGroup = true, want false（探活开关关闭）")
+	}
+	if hits.Load() != 0 {
+		t.Fatalf("hits = %d, want 0（开关关闭时不得打上游）", hits.Load())
+	}
+
+	var got models.Credential
+	if err := models.DB.First(&got, cred.ID).Error; err != nil {
+		t.Fatalf("reload credential: %v", err)
+	}
+	if got.Status != models.CredentialStatusTempUnsched {
+		t.Fatalf("Status = %q, want temp_unsched（开关关闭后不自动恢复）", got.Status)
+	}
+}
+
 // TestProbeRecoverInGroup_RateLimited 锁 AC-2：间隔内二次探活不打上游。
 func TestProbeRecoverInGroup_RateLimited(t *testing.T) {
 	initChatRecordTestDB(t)

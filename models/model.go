@@ -756,6 +756,17 @@ const (
 	SettingKeyCredHealthCooldownServerSec = "cred_health_cooldown_server_sec" // 凭据服务端错误冷却窗口（秒，5xx/超时/网络）
 	SettingKeyCredHealthAuthFailThreshold = "cred_health_auth_fail_threshold" // 凭据连续鉴权失败（401/403）判停阈值（次）
 	SettingKeyCredHealthProbeIntervalSec  = "cred_health_probe_interval_sec"  // 凭据惰性探活最小间隔（秒）
+
+	// 凭据健康四个机制的开关（**默认关**：自动冷却/自动停用不默认生效，
+	// 凭据不会被系统擅自停用；需要时在设置页手动开启）。关闭后对应机制完全不生效：
+	// 冷却开关关 → 不写 CooldownUntil（凭据不因 429/5xx 被选路剔除）；
+	// 判停开关关 → 鉴权失败只计数不写 temp_unsched（凭据不会被自动停用）；
+	// 探活开关关 → 判停凭据不再自动探活恢复（只影响恢复手段，不影响判停本身）。
+	// 开关与窗口/阈值独立：窗口值在开关关闭期间保留，恢复开启即按原值生效。
+	SettingKeyCredHealthCooldown429Enabled    = "cred_health_cooldown_429_enabled"    // 凭据 429 限流冷却开关
+	SettingKeyCredHealthCooldownServerEnabled = "cred_health_cooldown_server_enabled" // 凭据服务端错误冷却开关
+	SettingKeyCredHealthAuthFailStopEnabled   = "cred_health_auth_fail_stop_enabled"  // 凭据鉴权失败判停开关
+	SettingKeyCredHealthProbeEnabled          = "cred_health_probe_enabled"           // 凭据惰性探活开关
 )
 
 // HealthCheckLog 状态取值（单源：后端统计、判停计数、前端展示共用一个口径，禁散落字面量）。

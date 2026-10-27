@@ -51,18 +51,26 @@ func cooldownReasonForStatus(statusCode int) string {
 // cooldownWindowForReason 按失败类型分配冷却窗口（#6-1 可配基数 + 分窗）：
 // 429/过载独立读「429 窗口」；其余凭据级失败（5xx/超时/网络）共用「服务端窗口」；
 // 鉴权失败（401/403）不走冷却，走判停路径（#6-2，见 chat_credential_auth_fail.go）。
+// 每个窗口配一个开关（默认关）：开关关闭 = 该类失败不再写冷却，凭据保持 active。
 // 分窗判定集中此一处（OCP）：复用既有窗口的新失败类型此判定即覆盖（多半连这都不用改）；
-// 但「新窗口」类型需同步设置项全链 6 处（键常量/schema/DTO/前端 interface/卡片 intFields/本函数）。
-// 窗口读失败返回 ok=false（已留痕）——调用方必须跳过冷却写，不得拿默认窗口兜底
-// （Stage 33 显式降级，Ruling 4）。
+// 但「新窗口」类型需同步设置项全链（键常量/schema/DTO/前端 interface/前端卡片 rows/
+// 后端 getter/本函数），且每项还要配一个 bool 开关（开关键同样走全链）。
+// ok=false = 不写冷却，两种成因：开关关闭（运营主动关停，不留痕——不是故障）
+// 与窗口读失败（已留痕，调用方不得拿默认窗口兜底，Stage 33 显式降级，Ruling 4）。
 func cooldownWindowForReason(ctx context.Context, reason string) (time.Duration, bool) {
 	if reason == cooldownReason429 {
+		if !getCredHealthCooldown429Enabled(ctx) {
+			return 0, false
+		}
 		sec, err := getCredHealthCooldown429Sec(ctx)
 		if err != nil {
 			settings.LogReadSkip("credential cooldown", models.SettingKeyCredHealthCooldown429Sec, err)
 			return 0, false
 		}
 		return time.Duration(sec) * time.Second, true
+	}
+	if !getCredHealthCooldownServerEnabled(ctx) {
+		return 0, false
 	}
 	sec, err := getCredHealthCooldownServerSec(ctx)
 	if err != nil {

@@ -286,6 +286,41 @@ func TestApplyCredentialAuthFailure_CooldownDoesNotResetCount(t *testing.T) {
 	}
 }
 
+// TestApplyCredentialAuthFailure_SwitchOffNeverStops 锁「判停开关关停」（2026-10-27）：
+// 运营关闭鉴权失败判停后，连续 401/403 只累加失败次数，**绝不**把凭据判停为
+// temp_unsched——凭据不会被系统自动停用，仍留在选路里。
+func TestApplyCredentialAuthFailure_SwitchOffNeverStops(t *testing.T) {
+	initChatRecordTestDB(t)
+	installChatTestSettings(t, credCooldownSettingsReader{
+		Cooldown429Sec:    60,
+		CooldownServerSec: 60,
+		AuthFailThreshold: 3, // 阈值仍在，但开关关停 → 阈值不生效
+		disabledKeys:      map[string]bool{models.SettingKeyCredHealthAuthFailStopEnabled: true},
+	})
+
+	cred := models.Credential{Key: "enc", KeyHash: "hash"}
+	if err := models.DB.Create(&cred).Error; err != nil {
+		t.Fatalf("create credential: %v", err)
+	}
+
+	for i := 1; i <= 5; i++ {
+		applyCredentialAuthFailure(context.Background(), cred)
+		var got models.Credential
+		if err := models.DB.First(&got, cred.ID).Error; err != nil {
+			t.Fatalf("reload credential (step %d): %v", i, err)
+		}
+		if got.Status != models.CredentialStatusActive {
+			t.Fatalf("step %d Status = %q, want active（开关关闭后永不判停）", i, got.Status)
+		}
+		if got.FailCount != i {
+			t.Fatalf("step %d FailCount = %d, want %d（失败计数照记）", i, got.FailCount, i)
+		}
+		if got.CooldownReason != "" {
+			t.Fatalf("step %d CooldownReason = %q, want 空（判停痕迹不应写入）", i, got.CooldownReason)
+		}
+	}
+}
+
 // TestApplyCredentialAuthFailure_SkipsNonActiveCredential 锁「判停不覆写人工终态」：
 // 管理员置 disabled/error 的窗口内 in-flight 请求 401 达阈值，不判停——
 // temp_unsched 可被探活自动恢复，覆写人工终态等于绕开「停用 key 不被拉回生产」。

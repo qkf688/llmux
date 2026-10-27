@@ -137,6 +137,33 @@ func drainBackgroundWork(t *testing.T) {
 	drainBgTasks(t)        // 读 settingsReader / models.DB
 }
 
+// enableCredHealthSwitches 把凭据健康四个开关置为 true（2026-10-27 起这四个开关
+// **默认关**——自动冷却/自动停用不默认生效，凭据不会被系统擅自停用）。
+//
+// 依赖这些机制生效的用例必须显式声明这个前提：否则「机制没开」与「机制坏了」
+// 在断言里同形，失败时定位不到真因（本仓已因此红过一轮：切换默认值的用例
+// 静默失去冷却写库，断言报「CooldownUntil = nil」而真因是开关关着）。
+//
+// 写 settings 表（不是 stub）：这些用例走默认读库（modelsReader），与生产读法同源。
+// 行已由 models.Init 的播种建好（值为默认的 false），故这里改值而不是插入。
+func enableCredHealthSwitches(t *testing.T) {
+	t.Helper()
+	for _, key := range []string{
+		models.SettingKeyCredHealthCooldown429Enabled,
+		models.SettingKeyCredHealthCooldownServerEnabled,
+		models.SettingKeyCredHealthAuthFailStopEnabled,
+		models.SettingKeyCredHealthProbeEnabled,
+	} {
+		res := models.DB.Model(&models.Setting{}).Where("key = ?", key).Update("value", "true")
+		if res.Error != nil {
+			t.Fatalf("enable cred health switch %s: %v", key, res.Error)
+		}
+		if res.RowsAffected == 0 {
+			t.Fatalf("enable cred health switch %s: 行不存在（settings 播种未建该键？）", key)
+		}
+	}
+}
+
 // installChatTestSettings 注入包级 settingsReader 并注册收尾（先排空、再复位）。
 // 取代手写的 `SetSettingsReader(x)` + `t.Cleanup(func() { SetSettingsReader(nil) })`
 // 两行式——后者漏了「先排空」，正是本次竞态的成因。

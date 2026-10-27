@@ -22,6 +22,11 @@ func probeRecoverInGroup(
 	endpoint models.Endpoint,
 	creds []models.Credential,
 ) bool {
+	if !getCredHealthProbeEnabled(ctx) {
+		// 探活开关关闭：判停凭据不自动探活恢复（temp_unsched 只能人工恢复）。
+		// 不打上游——开关关闭是运营主动关停，不是探活失败。
+		return false
+	}
 	interval := time.Duration(getCredHealthProbeIntervalSec(ctx)) * time.Second
 	out := credprobe.TryRecover(credprobe.Request{
 		Ctx:         ctx,

@@ -221,6 +221,56 @@ func TestUpdateSettingsFromRequest_CredHealthAuthFailThreshold_RejectsBelowMin(t
 	}
 }
 
+// TestUpdateSettingsFromRequest_CredHealthSwitchesRoundTrip 回归：
+// 凭据健康四个开关是 bool 设置项——两个方向都必须能落库并读回。
+//
+// 为什么两态都要断言：schema 默认就是 false，写 false 再断言 false 是恒真断言
+// （写路径完全不通也绿）——只锁「写 true 读回 true」才证明写入路径通，
+// 再写 false 读回 false 才证明关停可落库。
+func TestUpdateSettingsFromRequest_CredHealthSwitchesRoundTrip(t *testing.T) {
+	testsupport.InitTestDB(t)
+	ctx := context.Background()
+
+	keys := []struct {
+		key   string
+		field string
+	}{
+		{models.SettingKeyCredHealthCooldown429Enabled, "CredHealthCooldown429Enabled"},
+		{models.SettingKeyCredHealthCooldownServerEnabled, "CredHealthCooldownServerEnabled"},
+		{models.SettingKeyCredHealthAuthFailStopEnabled, "CredHealthAuthFailStopEnabled"},
+		{models.SettingKeyCredHealthProbeEnabled, "CredHealthProbeEnabled"},
+	}
+
+	apply := func(enabled bool) {
+		t.Helper()
+		req := &UpdateSettingsRequest{}
+		if err := models.ApplySettingDefaults(req); err != nil {
+			t.Fatalf("ApplySettingDefaults: %v", err)
+		}
+		req.CredHealthCooldown429Enabled = enabled
+		req.CredHealthCooldownServerEnabled = enabled
+		req.CredHealthAuthFailStopEnabled = enabled
+		req.CredHealthProbeEnabled = enabled
+		if err := updateSettingsFromRequest(ctx, req); err != nil {
+			t.Fatalf("updateSettingsFromRequest(enabled=%v): %v", enabled, err)
+		}
+	}
+
+	store := settingStore()
+	apply(true)
+	for _, tc := range keys {
+		if got := store.GetBool(ctx, tc.key); !got {
+			t.Errorf("%s = false, want true（写入路径必须生效）", tc.field)
+		}
+	}
+	apply(false)
+	for _, tc := range keys {
+		if got := store.GetBool(ctx, tc.key); got {
+			t.Errorf("%s = true, want false（关停必须可写入并读回）", tc.field)
+		}
+	}
+}
+
 // TestUpdateSettingsFromRequest_ResponseLogMaxKiB_RejectsOutOfRange 回归（Stage 23）：
 // 回复日志上限 schema Min=16/Max=16384，越界（0 或天文数字）应整请求校验失败
 // （directClientError → 400），且不留下任何部分写入。

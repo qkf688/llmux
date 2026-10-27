@@ -209,6 +209,48 @@ func getCredHealthProbeIntervalSec(ctx context.Context) int {
 	return settingsReader.Int(ctx, models.SettingKeyCredHealthProbeIntervalSec, 60, 1)
 }
 
+// getCredHealthSwitch 读凭据健康开关（默认关 = 机制不生效）。
+//
+// 用 E 变体而非裸 Bool：裸变体下「设置读失败」与「运营主动关停」完全同形，
+// DB 抖动时四个机制会静默失效且零痕迹（Stage 33：读失败会引发写动作的决策点
+// 必须可辨 + 留痕）。读失败按**关**处理——保守方向：宁可少一层保护，也不在
+// 读失败瞬间自动停用凭据；同时 LogReadSkip 留痕，事后能回答「这次没冷却/
+// 没判停，是开关关了还是设置读不到」。
+func getCredHealthSwitch(ctx context.Context, key string) bool {
+	enabled, err := settingsReader.BoolE(ctx, key, false)
+	if err != nil {
+		settings.LogReadSkip("cred health switch", key, err)
+		return false
+	}
+	return enabled
+}
+
+// getCredHealthCooldown429Enabled 读 429 冷却开关（默认关 = 机制不生效）。
+// 关闭后 429 失败不再写冷却：凭据保持 active、继续参与选路（冷却本是临时剔除手段，
+// 运营要求「不自动动我的凭据」时整体关停）。
+func getCredHealthCooldown429Enabled(ctx context.Context) bool {
+	return getCredHealthSwitch(ctx, models.SettingKeyCredHealthCooldown429Enabled)
+}
+
+// getCredHealthCooldownServerEnabled 读服务端错误冷却开关（默认关 = 机制不生效）。
+// 关闭后 5xx/超时/网络失败不再写冷却。
+func getCredHealthCooldownServerEnabled(ctx context.Context) bool {
+	return getCredHealthSwitch(ctx, models.SettingKeyCredHealthCooldownServerEnabled)
+}
+
+// getCredHealthAuthFailStopEnabled 读鉴权失败判停开关（默认关 = 机制不生效）。
+// 关闭后 401/403 连续失败只计数，不再把凭据判停为 temp_unsched——
+// 判停是「自动停用凭据」，是运营最需要能一键关停的动作。
+func getCredHealthAuthFailStopEnabled(ctx context.Context) bool {
+	return getCredHealthSwitch(ctx, models.SettingKeyCredHealthAuthFailStopEnabled)
+}
+
+// getCredHealthProbeEnabled 读惰性探活开关（默认关 = 机制不生效）。
+// 关闭后判停凭据不再自动探活恢复（temp_unsched 需人工恢复）。
+func getCredHealthProbeEnabled(ctx context.Context) bool {
+	return getCredHealthSwitch(ctx, models.SettingKeyCredHealthProbeEnabled)
+}
+
 // buildThinkingClampConfig 从 ctx 读取设置 + model/association 白名单，构建思考档位钳制配置。
 // 调用方在 supportsThinking=true 时调用（false 时 thinking 已被 stripThinkingFields 剥离，无需钳制）。
 // autoFallback 复用 SettingKeyReasoningEffortDefaultValue（P0-2：设置键保留真实消费者）。

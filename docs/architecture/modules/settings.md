@@ -70,6 +70,12 @@ models.Setting
   - `SettingKeyCredHealthCooldownServerSec`：int，Default=`60`，Min=1。凭据服务端错误冷却窗口（秒，5xx/超时/网络）。
   - `SettingKeyCredHealthAuthFailThreshold`：int，Default=`3`，Min=1。凭据连续鉴权失败（401/403）判停阈值：达 N 后 Status=`temp_unsched`（选路剔除，探活恢复为 #6-3），成功请求重置计数。
   - `SettingKeyCredHealthProbeIntervalSec`：int，Default=`60`，Min=1。凭据惰性探活最小间隔（秒）：`temp_unsched` 距 `LastProbeAt` 不足该间隔则跳过探活。
+- **凭据健康四机制的开关（2026-10-27，运营要求：凭据自动冷却/自动停用需可一键关停）**：四个开关**默认关**——自动冷却与自动停用不再默认生效，凭据不会被系统擅自停用；需要时在设置页手动开启。开关关闭时对应机制**完全不生效**；数值项（窗口/阈值/间隔）在开关关闭期间保留原值，重新打开即按原值生效。
+  - `SettingKeyCredHealthCooldown429Enabled`：bool，Default=`false`。429 限流冷却开关：关 → 429 失败不再写 `CooldownUntil`（凭据保持 active）。**副作用**：冷却写同时承担「把失败 key 从组内可用集合剔除」，故关掉后同一请求内可能再次命中刚失败的 key（`chat-gateway.md` 的「不重复打同一 key」在冷却关闭时不成立）。
+  - `SettingKeyCredHealthCooldownServerEnabled`：bool，Default=`false`。服务端错误冷却开关：关 → 5xx/超时/网络失败不再写 `CooldownUntil`（同上副作用）。
+  - `SettingKeyCredHealthAuthFailStopEnabled`：bool，Default=`false`。鉴权失败判停开关：关 → 401/403 只累加 `FailCount`（**计数照记**，便于排查），绝不写 `temp_unsched`（凭据不会被系统自动停用）。**副作用**：关停期累积的计数不清零，重新开启后按已记次数判定，可能立即判停（成功请求会清零）。
+  - `SettingKeyCredHealthProbeEnabled`：bool，Default=`false`。惰性探活开关：关 → `temp_unsched` 凭据不再自动探活恢复（只能人工改回 active；**存量已判停的凭据因此不会自愈**）。探活是判停的唯一自动恢复路径——只开判停不开探活时，被判停凭据永久滞留。
+  - 消费方：`service/chat` 的 `getCredHealthCooldown429Enabled / getCredHealthCooldownServerEnabled / getCredHealthAuthFailStopEnabled / getCredHealthProbeEnabled`（`chat_settings.go`，统一走 `getCredHealthSwitch`）→ 冷却分窗判定（`cooldownWindowForReason`，`chat_credential_cooldown.go`）、判停写桥（`persistCredentialAuthFailure`，`chat_credential_write_bridge.go`）、惰性探活编排（`probeRecoverInGroup`，`chat_credential_probe.go`）。**读失败口径**：用 `BoolE` 变体读取，读失败按**关**处理（保守方向：宁可少一层保护，也不在读失败瞬间自动停用凭据），并经 `settings.LogReadSkip` 留痕——「设置读不到」与「运营主动关停」因此可区分（前者有留痕）。
   - 消费方：`service/chat` 的 `getCredHealthCooldown429Sec / getCredHealthCooldownServerSec / getCredHealthAuthFailThreshold / getCredHealthProbeIntervalSec`（`chat_settings.go`）经 `settingsReader` 读取 → `cooldownWindowForReason`（`chat_credential_cooldown.go`）按 reason 分窗写 `CooldownUntil`；判停阈值由凭据结算写桥 `persistCredentialAuthFailure`（`chat_credential_write_bridge.go`，credwrite worker 腿）读取后写 `temp_unsched`（401/403 不走冷却）；探活间隔由 chat 读出后注入 `credprobe.Request.Interval`（#6-3，credprobe 本身不读 settings）；选路侧 `channel` 的 `credentialUsable` 判定冷却中与非 active 状态剔除（`channel-routing.md`）。**Stage 33 显式降级**：前三个读取（读失败会引发写动作）走 E 变体——窗口读失败跳过冷却写、判停阈值读失败只计数不判停（`IncrementFailCountNoStop`），均留痕（`settings.LogReadSkip`）。
 
 ---

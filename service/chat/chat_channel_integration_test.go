@@ -476,6 +476,7 @@ const chatSuccessBody = `{"id":"chatcmpl-t","object":"chat.completion","created"
 // key1 CooldownUntil 落库非空、落库 2 条 ChatLog 各带对应 credential_note。
 func TestBalanceChat_CredentialFailover_SwapKeyWithinGroup(t *testing.T) {
 	initChatRecordTestDB(t)
+	enableCredHealthSwitches(t) // 本用例断言 429 冷却写库：开关须显式打开
 	cipher := setupChatChannelCipher(t)
 	channel.ResetDefaultSelectorForTest()
 	t.Cleanup(channel.ResetDefaultSelectorForTest)
@@ -595,6 +596,7 @@ func TestBalanceChat_CredentialFailover_SwapKeyWithinGroup(t *testing.T) {
 // ConsecutiveFailures 递增、BalanceChat 返回失败、两 key 均落冷却。
 func TestBalanceChat_CredentialsExhausted_OrganizationFailure(t *testing.T) {
 	initChatRecordTestDB(t)
+	enableCredHealthSwitches(t) // 本用例断言凭据级冷却/判停处置：开关须显式打开
 	cipher := setupChatChannelCipher(t)
 	channel.ResetDefaultSelectorForTest()
 	t.Cleanup(channel.ResetDefaultSelectorForTest)
@@ -677,6 +679,7 @@ func TestBalanceChat_CredentialsExhausted_OrganizationFailure(t *testing.T) {
 // 顺带锁「冷却避免同请求重复轰击 429 上游」：改造前单 key 429 会每轮 retry 再打一次。
 func TestBalanceChat_SingleKeyGroup_429_OrganizationSemantics(t *testing.T) {
 	initChatRecordTestDB(t)
+	enableCredHealthSwitches(t) // 本用例断言 429 冷却写库：开关须显式打开
 	cipher := setupChatChannelCipher(t)
 	channel.ResetDefaultSelectorForTest()
 	t.Cleanup(channel.ResetDefaultSelectorForTest)
@@ -770,6 +773,7 @@ func TestBalanceChat_SingleKeyGroup_429_OrganizationSemantics(t *testing.T) {
 // key 冷却 reason=http_500。5xx 是服务端持续故障信号，不留池（与现状 5xx 分支一致）。
 func TestBalanceChat_ServerErrors_RemoveOrganizationSemantics(t *testing.T) {
 	initChatRecordTestDB(t)
+	enableCredHealthSwitches(t) // 本用例断言服务端错误冷却写库：开关须显式打开
 	cipher := setupChatChannelCipher(t)
 	channel.ResetDefaultSelectorForTest()
 	t.Cleanup(channel.ResetDefaultSelectorForTest)

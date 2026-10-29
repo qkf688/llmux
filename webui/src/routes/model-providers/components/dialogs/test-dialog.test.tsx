@@ -198,6 +198,31 @@ describe("模型测试：复制整份结果", () => {
     expect(copyTextWithToastMock).not.toHaveBeenCalled();
   });
 
+  // 流式诊断块曾把「终止事件」的值顶出卡片右边界：4 等分网格的格子 min-width 默认 auto
+  // （= min-content），而 response.completed 这类长 mono token 比同格数字宽得多，格子按
+  // min-content 撑开就把值挤到边框外。两条约束缺一不可：格子要能收缩（min-w-0）、
+  // 值要能换行（break-words）——只给其中一条仍会溢出。
+  it("流式诊断的格子可收缩、值可换行（长终止事件不撑出卡片）", () => {
+    renderDialog({
+      testType: "connectivity",
+      testResults: resultsOf(
+        entry({
+          result: capabilityResult({
+            mode: "stream",
+            stream: { frames: 44, first_frame_ms: 3282, duration_ms: 3283, terminated_by: "response.completed" },
+          }),
+        })
+      ),
+    });
+
+    const value = screen.getByText("response.completed");
+    // 值本身要允许在格内换行（否则长 token 顶出边框）。
+    expect(value.className).toContain("break-words");
+    // 格子要允许收缩到轨道宽度（grid item 的 min-width:auto 会让它按 min-content 撑开）。
+    const cell = value.parentElement;
+    expect(cell?.className).toContain("min-w-0");
+  });
+
   it("连通性测试没有正文段也仍可复制（结论本身就是全部）", async () => {
     renderDialog({ testType: "connectivity", testResults: resultsOf(entry({ result: capabilityResult() })) });
 

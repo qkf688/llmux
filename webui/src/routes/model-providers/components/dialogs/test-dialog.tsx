@@ -162,6 +162,10 @@ function ResultPlaceholder() {
 
 // 流式诊断块：帧数 / 首帧耗时 / 总耗时 / 终止事件。四项的取值与复制文本共用
 // streamStatsItems，改口径只改一处。
+//
+// 格子必须带 min-w-0：grid item 的 min-width 默认是 auto（= min-content），而「终止事件」的
+// 值（response.completed 这类长 token）比同格的数字宽得多，格子按 min-content 撑开就会把值
+// 顶出卡片右边界。值本身还要带 break-words：只让格子收缩而值不可断，长 token 照样溢出。
 function StreamStatsSection({ result }: { result: ModelProviderTestResult }) {
   const items = streamStatsItems(result);
   if (items.length === 0) {
@@ -170,9 +174,9 @@ function StreamStatsSection({ result }: { result: ModelProviderTestResult }) {
   return (
     <div className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-md border bg-background/40 p-2 text-xs sm:grid-cols-4">
       {items.map((item) => (
-        <div key={item.label} className="flex flex-col">
+        <div key={item.label} className="flex min-w-0 flex-col">
           <span className="text-muted-foreground">{item.label}</span>
-          <span className="font-mono">{item.value}</span>
+          <span className="font-mono break-words">{item.value}</span>
         </div>
       ))}
     </div>

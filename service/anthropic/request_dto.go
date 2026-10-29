@@ -53,9 +53,15 @@ type anthropicThinking struct {
 	BudgetTokens shared.OptionalNumber[int64] `json:"budget_tokens"`
 }
 
-// anthropicOutputConfig 是 output_config 字段的嵌套 DTO（Claude 4.6 adaptive thinking）。
+// anthropicOutputConfig 是 output_config 字段的嵌套 DTO（Claude 4.6 adaptive thinking
+// 的档位 + 结构化输出的输出格式）。
+//
+// 两个子字段语义独立、可并存：effort 控制推理档位，format 约束输出形状。
+// format 停在 RawMessage 由 buildAnthropicResponseFormat 二次解析（形状不可信，
+// 非对象/未知 type 一律视为未设置，与 thinking / tool_choice 的处理口径一致）。
 type anthropicOutputConfig struct {
 	Effort shared.Optional[string] `json:"effort"`
+	Format json.RawMessage         `json:"format"`
 }
 
 // anthropicToolChoice 是 tool_choice **对象形态**的嵌套 DTO；另一形态是裸字符串，

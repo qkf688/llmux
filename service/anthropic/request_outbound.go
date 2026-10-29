@@ -84,7 +84,41 @@ func TransformFromUnified(unified *models.UnifiedRequest) ([]byte, error) {
 		req["thinking"] = thinking
 	}
 
+	// Anthropic 的结构化输出走 output_config.format（推理档位仍由上面的 thinking 表达，
+	// 两者在该协议是不同容器，互不取代）。
+	if outputConfig := buildOutputConfig(unified.ResponseFormat); outputConfig != nil {
+		req["output_config"] = outputConfig
+	}
+
 	return json.Marshal(req)
+}
+
+// buildOutputConfig 把统一模型的响应格式还原成 Anthropic 的 output_config.format。
+//
+// 统一模型承载 Chat 的内嵌形状 {"name","schema","strict"}，Anthropic 只认
+// {"type":"json_schema","schema":...}——name / strict 在该协议无位置，故只取 schema。
+// 非 json_schema 的类型（json_object / text）在 Anthropic 没有对应语义：写成
+// json_schema 却缺 schema 会被上游 400，故整体不写该键（退化成自由文本，好过被拒）。
+func buildOutputConfig(format *models.UnifiedResponseFormat) map[string]interface{} {
+	if format == nil || format.Type != "json_schema" || len(format.JSONSchema) == 0 {
+		return nil
+	}
+
+	// 内嵌对象里取 schema；取不到（或整段不是对象）就把内嵌值本身当 schema 带走，
+	// 与 Responses 出站 buildResponsesTextFormat 的回退同款——宁可变形也不丢约束。
+	schema := format.JSONSchema
+	var embedded map[string]json.RawMessage
+	if err := json.Unmarshal(format.JSONSchema, &embedded); err == nil {
+		if raw, ok := embedded["schema"]; ok && len(raw) > 0 {
+			schema = raw
+		}
+	}
+	return map[string]interface{}{
+		"format": map[string]interface{}{
+			"type":   "json_schema",
+			"schema": schema,
+		},
+	}
 }
 
 func buildMessages(unified *models.UnifiedRequest, req map[string]interface{}) []interface{} {

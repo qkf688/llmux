@@ -82,12 +82,58 @@ func TransformToUnified(ctx context.Context, rawBody []byte) (*models.UnifiedReq
 			}
 			unified.ReasoningEffort = &effort
 		}
+		// output_config.format 是 Anthropic 的结构化输出（json_schema 约束）。
+		// 此前只认 effort，format 整段被静默丢弃——客户端要求 schema 约束而上游
+		// 收到的是无 response_format / text.format 的自由生成请求，回来的是散文
+		// （实测 Claude Code 的会话标题生成拿到了「标题：…\n\n我是…」而不是 {"title":…}）。
+		if responseFormat := buildAnthropicResponseFormat(outputConfig.Format); responseFormat != nil {
+			unified.ResponseFormat = responseFormat
+		}
 	}
 
 	// tool_choice (best-effort): keep unified semantics as OpenAI-style tool_choice.
 	unified.ToolChoice = parseToolChoice(req.ToolChoice)
 
 	return unified, nil
+}
+
+// anthropicStructuredOutputName 是 Anthropic format 缺 name 时补给统一模型的占位名。
+//
+// Anthropic 的 output_config.format 只有 type + schema，没有 schema 名；而统一模型
+// 承载的是 Chat 的内嵌形状 {name,schema,strict}，Chat 与 Responses 两条出站都要求
+// name 非空（真端点对空 name 直接 400）。取固定名而非按 schema 内容生成——name 只
+// 用于上游日志与引用，不参与校验。
+const anthropicStructuredOutputName = "structured_output"
+
+// buildAnthropicResponseFormat 把 Anthropic 的 output_config.format 转成统一模型的响应格式。
+//
+// 只认 {"type":"json_schema","schema":{...}}：Anthropic 没有 json_object / text 这类
+// 输出格式，形状不符（非对象、type 不认识、schema 缺失）一律视为未设置——与入站层
+// 「解析不出来 = 没传」的统一口径一致，不把客户端的非标准写法升级成 400。
+func buildAnthropicResponseFormat(raw json.RawMessage) *models.UnifiedResponseFormat {
+	if len(raw) == 0 || shared.IsJSONNull(raw) {
+		return nil
+	}
+	var format struct {
+		Type   shared.Optional[string] `json:"type"`
+		Schema json.RawMessage         `json:"schema"`
+	}
+	if !shared.DecodeJSONObject(raw, &format) {
+		return nil
+	}
+	if format.Type.Value != "json_schema" || len(format.Schema) == 0 || shared.IsJSONNull(format.Schema) {
+		return nil
+	}
+
+	// schema 原样带走（JSON Schema 的根可以是对象/布尔/数组，不做类型断言——断言成
+	// map 会在非对象时静默丢字段），外层补成 Chat 的内嵌形状。
+	embedded := make([]byte, 0, len(format.Schema)+len(anthropicStructuredOutputName)+16)
+	embedded = append(embedded, `{"name":"`...)
+	embedded = append(embedded, anthropicStructuredOutputName...)
+	embedded = append(embedded, `","schema":`...)
+	embedded = append(embedded, format.Schema...)
+	embedded = append(embedded, '}')
+	return &models.UnifiedResponseFormat{Type: "json_schema", JSONSchema: embedded}
 }
 
 // parseToolChoice 解析 Anthropic 的 tool_choice：裸字符串 ｜ 对象两种形态。

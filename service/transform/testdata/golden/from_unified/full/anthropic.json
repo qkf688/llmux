@@ -10,6 +10,14 @@
     "trace": "coverage"
   },
   "model": "coverage-model",
+  "output_config": {
+    "format": {
+      "schema": {
+        "type": "object"
+      },
+      "type": "json_schema"
+    }
+  },
   "stop_sequences": [
     "STOP"
   ],

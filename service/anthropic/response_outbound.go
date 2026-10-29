@@ -94,8 +94,15 @@ func FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
 	}
 
 	if unified.Usage != nil {
+		// Anthropic 的 input_tokens 只算**未命中缓存**的输入（cache_read 独立成键）。
+		// 统一模型的 PromptTokens 是「含缓存的输入总量」（OpenAI 口径），故必须减掉
+		// 命中部分——直写会让客户端把那一段按全价再算一遍，输入量与费用双双虚高。
+		inputTokens := unified.Usage.PromptTokens - unified.Usage.PromptTokensDetails.CachedTokens
+		if inputTokens < 0 {
+			inputTokens = 0
+		}
 		usage := map[string]interface{}{
-			"input_tokens":  unified.Usage.PromptTokens,
+			"input_tokens":  inputTokens,
 			"output_tokens": unified.Usage.CompletionTokens,
 		}
 		// 按 Anthropic Messages 官方 usage 形状逐键决定，不照搬统一模型：

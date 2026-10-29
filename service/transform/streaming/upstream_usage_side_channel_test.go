@@ -95,8 +95,9 @@ func TestSideChannel_AnthropicUpstreamUsageIsMergedNotOverwritten(t *testing.T) 
 		t.Fatal("side channel captured no upstream usage")
 	}
 	// input 侧只出现在 message_start：若被 message_delta 的快照覆盖就会变 0。
-	if u.PromptTokens != 500 {
-		t.Errorf("PromptTokens = %d, want 500 (message_start value must not be overwritten)", u.PromptTokens)
+	// 归一后的 PromptTokens 是「含缓存的输入总量」：500 + cache_read 256 = 756。
+	if u.PromptTokens != 756 {
+		t.Errorf("PromptTokens = %d, want 756 (message_start value must not be overwritten)", u.PromptTokens)
 	}
 	if u.CompletionTokens != 90 {
 		t.Errorf("CompletionTokens = %d, want 90", u.CompletionTokens)
@@ -104,9 +105,9 @@ func TestSideChannel_AnthropicUpstreamUsageIsMergedNotOverwritten(t *testing.T) 
 	if u.PromptTokensDetails.CachedTokens != 256 {
 		t.Errorf("CachedTokens = %d, want 256", u.PromptTokensDetails.CachedTokens)
 	}
-	// 落库口径与 process.go 一致：total 只算 input+output，不额外加 cache。
-	if u.TotalTokens != 590 {
-		t.Errorf("TotalTokens = %d, want 590", u.TotalTokens)
+	// 落库口径与 process.go 一致：total = 含缓存的 input + output。
+	if u.TotalTokens != 846 {
+		t.Errorf("TotalTokens = %d, want 846", u.TotalTokens)
 	}
 }
 
@@ -164,8 +165,9 @@ func TestSideChannel_AnthropicMessageStartOnlyStillCaptured(t *testing.T) {
 	if !ok {
 		t.Fatal("side channel captured nothing; message_start usage was lost")
 	}
-	if u.PromptTokens != 800 {
-		t.Errorf("PromptTokens = %d, want 800", u.PromptTokens)
+	// 归一后的 PromptTokens 是「含缓存的输入总量」：800 + cache_read 512 = 1312。
+	if u.PromptTokens != 1312 {
+		t.Errorf("PromptTokens = %d, want 1312", u.PromptTokens)
 	}
 	if u.PromptTokensDetails.CachedTokens != 512 {
 		t.Errorf("CachedTokens = %d, want 512", u.PromptTokensDetails.CachedTokens)

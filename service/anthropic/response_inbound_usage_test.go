@@ -19,11 +19,13 @@ func TestParseResponse_UsageNormalization(t *testing.T) {
 		wantReasoning int64
 	}{
 		{
-			name:         "anthropic 原生字段",
+			// Anthropic 的 input_tokens 不含缓存命中部分，统一模型口径是「含缓存的输入总量」，
+			// 故归一时加总：100 + cache_read 8 = 108。
+			name:         "anthropic 原生字段：input_tokens 加缓存才是输入总量",
 			body:         `{"id":"msg_1","model":"claude","content":[],"usage":{"input_tokens":100,"output_tokens":20,"cache_read_input_tokens":8}}`,
-			wantPrompt:   100,
+			wantPrompt:   108,
 			wantComplete: 20,
-			wantTotal:    120,
+			wantTotal:    128,
 			wantCached:   8,
 		},
 		{

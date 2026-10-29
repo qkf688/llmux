@@ -61,13 +61,43 @@ func TestUsageFromMap_ToleratesNonStandardShapes(t *testing.T) {
 			wantPrompt: 10, wantComplete: 20, wantTotal: 30, wantCached: 8,
 		},
 		{
+			// Anthropic 的 input_tokens 只算**未命中缓存**的输入，cache_read / cache_creation
+			// 独立相加；OpenAI 系（chat 的 prompt_tokens、Responses 的 input_tokens）则相反，
+			// 已是含缓存的总量。统一模型只承载一种口径——「含缓存的输入总量」——故此处必须
+			// 加总，否则同一字段在两条协议线上语义相反，出站转 Anthropic 时会再追加一次
+			// cache_read，客户端看到的输入量直接翻倍。
+			name: "anthropic 原生：input_tokens 不含缓存，归一时加总",
+			usage: map[string]interface{}{
+				"input_tokens":                float64(100),
+				"output_tokens":               float64(20),
+				"cache_read_input_tokens":     float64(80),
+				"cache_creation_input_tokens": float64(12),
+			},
+			wantPrompt: 192, wantComplete: 20, wantTotal: 212, wantCached: 80,
+		},
+		{
+			// 混合返回（实测 DeepSeek 一类网关在 OpenAI 协议下也回 cache_read_input_tokens）：
+			// 此时 prompt_tokens 已含缓存，再按 Anthropic 口径加总就是双算。
+			// 判据必须同时看「取值来源」与「缓存键」，只看键名会把这类响应算错一倍。
+			name: "OpenAI 协议带 anthropic 缓存键名：prompt_tokens 已含缓存，不加总",
+			usage: map[string]interface{}{
+				"prompt_tokens":           float64(52080),
+				"completion_tokens":       float64(31),
+				"total_tokens":            float64(52111),
+				"prompt_tokens_details":   map[string]interface{}{"cached_tokens": float64(43136)},
+				"cache_read_input_tokens": float64(43136),
+				"prompt_cache_hit_tokens": float64(43136),
+			},
+			wantPrompt: 52080, wantComplete: 31, wantTotal: 52111, wantCached: 43136,
+		},
+		{
 			name: "anthropic 原生：cache_read_input_tokens 即 cached_tokens",
 			usage: map[string]interface{}{
 				"input_tokens":            float64(300),
 				"output_tokens":           float64(60),
 				"cache_read_input_tokens": float64(256),
 			},
-			wantPrompt: 300, wantComplete: 60, wantTotal: 360, wantCached: 256,
+			wantPrompt: 556, wantComplete: 60, wantTotal: 616, wantCached: 256,
 		},
 		{
 			// kimi 一类供应商走 anthropic 协议时只回填 openai 兼容字段，
@@ -90,6 +120,7 @@ func TestUsageFromMap_ToleratesNonStandardShapes(t *testing.T) {
 		},
 		{
 			// 原生与兼容并存（kimi 一类混合返回）：兼容位常是垃圾值，原生必须胜出。
+			// 原生胜出后仍按 Anthropic 口径加总缓存（200 + 32）。
 			name: "原生与顶层兼容字段并存：原生优先",
 			usage: map[string]interface{}{
 				"input_tokens":            float64(200),
@@ -99,7 +130,7 @@ func TestUsageFromMap_ToleratesNonStandardShapes(t *testing.T) {
 				"completion_tokens":       float64(1),
 				"cached_tokens":           float64(1),
 			},
-			wantPrompt: 200, wantComplete: 40, wantTotal: 240, wantCached: 32,
+			wantPrompt: 232, wantComplete: 40, wantTotal: 272, wantCached: 32,
 		},
 		{
 			// 上游明确报了 0 的拆分：known=true 区分于「没报」——非推理模型真实报 0，

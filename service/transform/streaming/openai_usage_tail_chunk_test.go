@@ -108,6 +108,10 @@ func TestOpenAIUsageTailChunk_TokenDetailsArePassedThrough(t *testing.T) {
 // TestOpenAIUsageTailChunk_AnthropicOut 断言 openai → anthropic 的
 // message_delta 带上真实 usage（Anthropic 侧的权威 token 来源，
 // 也是 chat_logs 的 usage 提取来源）。
+//
+// input_tokens 必须扣掉缓存命中：上游 prompt_tokens=37914 是含缓存的总量
+// （cached=37000），而 Anthropic 的 input_tokens 只算未命中部分，故 914。
+// 直写 37914 会让客户端把同一段缓存按全价再算一遍。
 func TestOpenAIUsageTailChunk_AnthropicOut(t *testing.T) {
 	t.Parallel()
 
@@ -123,8 +127,9 @@ func TestOpenAIUsageTailChunk_AnthropicOut(t *testing.T) {
 				t.Fatalf("message_delta 缺少 usage 字段: %v", delta.data)
 			}
 
-			assertNumber(t, usage, "input_tokens", 37914)
+			assertNumber(t, usage, "input_tokens", 914)
 			assertNumber(t, usage, "output_tokens", 135)
+			assertNumber(t, usage, "cache_read_input_tokens", 37000)
 		})
 	}
 }

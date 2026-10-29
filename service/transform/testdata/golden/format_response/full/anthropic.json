@@ -29,7 +29,7 @@
   "type": "message",
   "usage": {
     "cache_read_input_tokens": 3,
-    "input_tokens": 11,
+    "input_tokens": 8,
     "output_tokens": 22
   }
 }

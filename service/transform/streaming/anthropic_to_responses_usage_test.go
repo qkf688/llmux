@@ -25,12 +25,14 @@ func TestMergeAnthropicUsage_CapturedThroughCandidateTable(t *testing.T) {
 		wantCaptured bool
 	}{
 		{
+			// Anthropic 的 input_tokens 不含缓存命中部分，归一后统一成「含缓存的输入总量」：
+			// 100 + cache_read 8 = 108（旧期望 100 会让「输入 100、缓存命中 8」自相矛盾）。
 			name:         "anthropic 原生键：两处合并后各侧都在",
 			startUsage:   map[string]interface{}{"input_tokens": float64(100), "cache_read_input_tokens": float64(8)},
 			deltaUsage:   map[string]interface{}{"output_tokens": float64(20)},
-			wantPrompt:   100,
+			wantPrompt:   108,
 			wantComplete: 20,
-			wantTotal:    120,
+			wantTotal:    128,
 			wantCached:   8,
 			wantCaptured: true,
 		},

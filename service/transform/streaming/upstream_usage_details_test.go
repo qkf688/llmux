@@ -70,16 +70,20 @@ data: {"type":"response.completed","sequence_number":4,"response":{"id":"resp_1"
 
 // TestAnthropicUsage_InputSideComesFromMessageStart 断言 input 侧 token 与 cache 明细
 // 从 message_start 取，不因 message_delta 只带 output_tokens 而归零。
+//
+// 归一后的 input_tokens 是「含缓存的输入总量」（Responses / OpenAI 口径，cached 只是
+// 其中的子集），故上游的 100 + cache_read 80 + cache_creation 12 = 192；旧的 100
+// 会让客户端看到「输入 100、其中缓存 80」这种自相矛盾的形状。
 func TestAnthropicUsage_InputSideComesFromMessageStart(t *testing.T) {
 	events := runRealtimeTransform(t, anthropicSSEWithCacheUsage, "anthropic", "openai-res")
 
 	completed := findEvent(t, events, "response.completed")
 	usage := nestedMap(t, completed.data, "response", "usage")
 
-	assertNumber(t, usage, "input_tokens", 100)
+	assertNumber(t, usage, "input_tokens", 192)
 	assertNumber(t, usage, "output_tokens", 42)
-	// total 沿用全仓统一口径 input+output（cache 明细不计入 total，见 models.ResolveTotalTokens）。
-	assertNumber(t, usage, "total_tokens", 142)
+	// total 沿用全仓统一口径 input+output（含缓存的 input，见 models.ResolveTotalTokens）。
+	assertNumber(t, usage, "total_tokens", 234)
 
 	inputDetails := nestedMap(t, completed.data, "response", "usage", "input_tokens_details")
 	assertNumber(t, inputDetails, "cached_tokens", 80)
@@ -168,6 +172,12 @@ func TestResponsesUsage_DetailsReachOpenAIClient(t *testing.T) {
 
 // TestResponsesUsage_CacheReachesAnthropicClient 断言 cached_tokens 映射为 Anthropic 的
 // cache_read_input_tokens；reasoning 在 Anthropic 协议无位置，按协议能力裁剪后丢弃。
+//
+// input_tokens 必须扣掉缓存命中部分：统一模型里的 InputTokens 是「含缓存的总量」
+// （OpenAI / Responses 口径），而 Anthropic 的 input_tokens 只算未命中缓存的输入，
+// 两者相加才是客户端眼里的总输入。这里上游报 input_tokens=100、其中 cached=80，
+// 故客户端应看到 input_tokens=20 + cache_read_input_tokens=80 = 100（原实现直写 100，
+// 客户端会把这次输入算成 180）。
 func TestResponsesUsage_CacheReachesAnthropicClient(t *testing.T) {
 	events := runRealtimeTransform(t, responsesSSEWithTokenDetails, "openai-res", "anthropic")
 
@@ -177,7 +187,7 @@ func TestResponsesUsage_CacheReachesAnthropicClient(t *testing.T) {
 		t.Fatalf("message_delta 缺少 usage: %v", delta.data)
 	}
 
-	assertNumber(t, usage, "input_tokens", 100)
+	assertNumber(t, usage, "input_tokens", 20)
 	assertNumber(t, usage, "output_tokens", 42)
 	assertNumber(t, usage, "cache_read_input_tokens", 80)
 }

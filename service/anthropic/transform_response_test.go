@@ -147,6 +147,12 @@ func TestFormatResponse_UsageCacheReadTokens(t *testing.T) {
 			if tt.wantKey && got.(float64) != tt.wantCached {
 				t.Fatalf("cache_read_input_tokens = %v, want %v", got, tt.wantCached)
 			}
+			// Anthropic 的 input_tokens 只算未命中缓存的输入：统一模型的 PromptTokens 是
+			// 含缓存的总量，出站必须减掉命中部分，否则客户端把缓存段按全价再算一遍。
+			if got := usage["input_tokens"].(float64); got != float64(100-tt.cached) {
+				t.Fatalf("input_tokens = %v，期望 %v（= PromptTokens 100 - cached %d）: %+v",
+					got, 100-tt.cached, tt.cached, usage)
+			}
 			if _, present := usage["total_tokens"]; present {
 				t.Fatalf("total_tokens 不属于 Anthropic usage 契约，不应写出: %+v", usage)
 			}

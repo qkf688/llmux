@@ -528,15 +528,26 @@ func handleResponsesToAnthropicCompletedEvent(state *realtimeStreamState, ev *re
 	if ev.Response != nil && ev.Response.Usage != nil {
 		// 上游 openai-res 原始 usage 旁路交给落库侧（本跳读上游时才持有 sideChannel）。
 		captureUpstreamUsageResponses(state, ev.Response.Usage)
-		usageMap := map[string]interface{}{
-			"input_tokens":  int(ev.Response.Usage.InputTokens),
-			"output_tokens": int(ev.Response.Usage.OutputTokens),
+		cachedTokens := 0
+		if d := ev.Response.Usage.InputTokenDetails; d != nil && d.CachedTokens > 0 {
+			cachedTokens = int(d.CachedTokens)
 		}
-		// Responses 的 cached_tokens 对应 Anthropic 的 cache_read_input_tokens。
+		// Responses 的 cached_tokens 对应 Anthropic 的 cache_read_input_tokens，
+		// 而 Anthropic 的 input_tokens 只算未命中缓存的那部分（该协议把两者当独立项相加）。
+		// 统一模型里的 InputTokens 是含缓存的量，故此处必须减掉，否则缓存段被算两次
+		// （实测 52080 含 43136 命中，客户端看到 95216）。
 		// reasoning_tokens 在 Anthropic 协议无对应位置（thinking 计入 output_tokens），
 		// 按协议能力裁剪后丢弃，不塞非标准扩展字段——落库侧另有上游真值来源。
-		if d := ev.Response.Usage.InputTokenDetails; d != nil && d.CachedTokens > 0 {
-			usageMap["cache_read_input_tokens"] = int(d.CachedTokens)
+		inputTokens := int(ev.Response.Usage.InputTokens) - cachedTokens
+		if inputTokens < 0 {
+			inputTokens = 0
+		}
+		usageMap := map[string]interface{}{
+			"input_tokens":  inputTokens,
+			"output_tokens": int(ev.Response.Usage.OutputTokens),
+		}
+		if cachedTokens > 0 {
+			usageMap["cache_read_input_tokens"] = cachedTokens
 		}
 		messageDelta["usage"] = usageMap
 	}

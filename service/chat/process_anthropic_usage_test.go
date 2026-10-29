@@ -29,11 +29,13 @@ func TestProcesserAnthropic_ParseUsageFallsBackToOpenAICompatFields(t *testing.T
 			wantCached:   16,
 		},
 		{
-			name:         "anthropic 原生字段：行为不变",
+			// 落库口径随归一一起修正：Anthropic 的 input_tokens 不含缓存命中部分，
+			// Usage.PromptTokens 统一为「含缓存的输入总量」，故 100 + 8 = 108。
+			name:         "anthropic 原生字段：input_tokens 加缓存才是输入总量",
 			body:         `{"usage":{"input_tokens":100,"output_tokens":20,"cache_read_input_tokens":8}}`,
-			wantPrompt:   100,
+			wantPrompt:   108,
 			wantComplete: 20,
-			wantTotal:    120,
+			wantTotal:    128,
 			wantCached:   8,
 		},
 		{

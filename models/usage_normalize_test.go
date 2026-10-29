@@ -91,6 +91,30 @@ func TestUsageFromMap_ToleratesNonStandardShapes(t *testing.T) {
 			wantPrompt: 52080, wantComplete: 31, wantTotal: 52111, wantCached: 43136,
 		},
 		{
+			// 整轮输入全命中缓存（或首轮只写缓存）时上游会报 input_tokens: 0——这是
+			// 合法形态而非「没给」。按 >0 判会把两段缓存整段丢掉，产出「输入 0、
+			// 缓存 5000」的自相矛盾快照，total 也只剩 completion。
+			name: "anthropic 原生：input_tokens 为 0 且只报缓存（全命中）",
+			usage: map[string]interface{}{
+				"input_tokens":            float64(0),
+				"output_tokens":           float64(10),
+				"cache_read_input_tokens": float64(5000),
+			},
+			wantPrompt: 5000, wantComplete: 10, wantTotal: 5010, wantCached: 5000,
+		},
+		{
+			// 第三类无法从结构上判定的形态：input_tokens 已含缓存却又带 anthropic
+			// 缓存键（部分互转网关两者都发）。这里显式固定「按加总处理」的当前行为，
+			// 让这条已知模糊区是一条被写下来的决定，而不是留给人猜。
+			name: "无法判定的第三类形态：input_tokens + anthropic 缓存键（按加总处理）",
+			usage: map[string]interface{}{
+				"input_tokens":            float64(1000),
+				"output_tokens":           float64(10),
+				"cache_read_input_tokens": float64(800),
+			},
+			wantPrompt: 1800, wantComplete: 10, wantTotal: 1810, wantCached: 800,
+		},
+		{
 			name: "anthropic 原生：cache_read_input_tokens 即 cached_tokens",
 			usage: map[string]interface{}{
 				"input_tokens":            float64(300),
@@ -273,5 +297,30 @@ func TestResolveTotalTokens(t *testing.T) {
 	}
 	if got := ResolveTotalTokens(10, 5, 0); got != 15 {
 		t.Errorf("ResolveTotalTokens(10,5,0) = %d, want 15 (fallback)", got)
+	}
+}
+
+// Anthropic 出站的 input_tokens 只算未命中缓存的输入。这条规则被流式与非流式两个
+// 出站口共用，所以锁在 models 层，两处漂移时这里先红。
+func TestUsage_AnthropicInputTokens(t *testing.T) {
+	tests := []struct {
+		name   string
+		prompt int64
+		cached int64
+		want   int64
+	}{
+		{name: "有缓存命中：减掉命中部分", prompt: 52080, cached: 43136, want: 8944},
+		{name: "无缓存：原样", prompt: 100, cached: 0, want: 100},
+		{name: "全命中：0", prompt: 5000, cached: 5000, want: 0},
+		{name: "上游自相矛盾 cached > prompt：钳零不发负数", prompt: 100, cached: 300, want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			u := Usage{PromptTokens: tt.prompt}
+			u.PromptTokensDetails.CachedTokens = tt.cached
+			if got := u.AnthropicInputTokens(); got != tt.want {
+				t.Fatalf("AnthropicInputTokens() = %d, want %d (prompt=%d cached=%d)", got, tt.want, tt.prompt, tt.cached)
+			}
+		})
 	}
 }

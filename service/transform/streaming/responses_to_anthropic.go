@@ -67,6 +67,28 @@ func handleRealtimeResponsesToAnthropic(state *realtimeStreamState, data string)
 	}
 }
 
+// anthropicUsageFromResponses 把 Responses 的 usage 装配成 Anthropic 线的 usage 对象。
+//
+// message_start 与 message_delta 两个写出点共用同一份：早先 message_start 直写
+// 「含缓存总量」、message_delta 写「未命中量 + cache_read」，同一条流里客户端先后
+// 读到两种口径（前一份的缓存段被按全价算一遍）。
+//
+// 「减 cached + 钳零」的规则不在这里实现：单源在 models.Usage.AnthropicInputTokens，
+// 这里只做「Responses 强类型 → models.Usage → 目标键」的转换与装配。reasoning_tokens
+// 在 Anthropic 协议无对应位置（thinking 计入 output_tokens），按协议能力裁剪后丢弃，
+// 不塞非标准扩展字段——落库侧另有上游真值来源。
+func anthropicUsageFromResponses(u *responses.ResponsesUsage) map[string]interface{} {
+	normalized := usageFromResponses(u)
+	usage := map[string]interface{}{
+		"input_tokens":  int(normalized.AnthropicInputTokens()),
+		"output_tokens": int(normalized.CompletionTokens),
+	}
+	if cached := int(normalized.PromptTokensDetails.CachedTokens); cached > 0 {
+		usage["cache_read_input_tokens"] = cached
+	}
+	return usage
+}
+
 func handleResponsesToAnthropicCreatedEvent(state *realtimeStreamState, ev *responses.ResponsesStreamEvent) error {
 	responseID := ""
 	if ev.Response != nil {
@@ -85,10 +107,13 @@ func handleResponsesToAnthropicCreatedEvent(state *realtimeStreamState, ev *resp
 	// usage：首个 chunk 自带 usage 时用真实值，否则兜底 1/1。
 	// 写死 0/0 会让依赖 message_start.usage.input_tokens 做早期计费的客户端拿到 0 误判。
 	// 真实 token 统计仍以 message_delta.usage 为准（completed 事件带最终值）。
-	inputTokens, outputTokens := 1, 1
+	//
+	// **必须与 message_delta 同一份装配**（anthropicUsageFromResponses）：这里若直写
+	// 「含缓存总量」而 message_delta 写「未命中量 + cache_read」，同一条流里客户端会
+	// 先后读到两种口径，前一份的缓存段被按全价算一遍。
+	usage := map[string]interface{}{"input_tokens": 1, "output_tokens": 1}
 	if ev.Response != nil && ev.Response.Usage != nil {
-		inputTokens = int(ev.Response.Usage.InputTokens)
-		outputTokens = int(ev.Response.Usage.OutputTokens)
+		usage = anthropicUsageFromResponses(ev.Response.Usage)
 	}
 
 	// id 按目标协议（Anthropic）重铸：上游 Responses 的 `resp_...` 原样塞进
@@ -102,10 +127,7 @@ func handleResponsesToAnthropicCreatedEvent(state *realtimeStreamState, ev *resp
 			"role":    "assistant",
 			"content": []interface{}{},
 			"model":   modelName,
-			"usage": map[string]interface{}{
-				"input_tokens":  inputTokens,
-				"output_tokens": outputTokens,
-			},
+			"usage":   usage,
 		},
 	}
 	return writeRealtimeEventJSONData(state, "message_start", messageStart)
@@ -539,28 +561,9 @@ func handleResponsesToAnthropicCompletedEvent(state *realtimeStreamState, ev *re
 	if ev.Response != nil && ev.Response.Usage != nil {
 		// 上游 openai-res 原始 usage 旁路交给落库侧（本跳读上游时才持有 sideChannel）。
 		captureUpstreamUsageResponses(state, ev.Response.Usage)
-		cachedTokens := 0
-		if d := ev.Response.Usage.InputTokenDetails; d != nil && d.CachedTokens > 0 {
-			cachedTokens = int(d.CachedTokens)
-		}
-		// Responses 的 cached_tokens 对应 Anthropic 的 cache_read_input_tokens，
-		// 而 Anthropic 的 input_tokens 只算未命中缓存的那部分（该协议把两者当独立项相加）。
-		// 统一模型里的 InputTokens 是含缓存的量，故此处必须减掉，否则缓存段被算两次
-		// （实测 52080 含 43136 命中，客户端看到 95216）。
-		// reasoning_tokens 在 Anthropic 协议无对应位置（thinking 计入 output_tokens），
-		// 按协议能力裁剪后丢弃，不塞非标准扩展字段——落库侧另有上游真值来源。
-		inputTokens := int(ev.Response.Usage.InputTokens) - cachedTokens
-		if inputTokens < 0 {
-			inputTokens = 0
-		}
-		usageMap := map[string]interface{}{
-			"input_tokens":  inputTokens,
-			"output_tokens": int(ev.Response.Usage.OutputTokens),
-		}
-		if cachedTokens > 0 {
-			usageMap["cache_read_input_tokens"] = cachedTokens
-		}
-		messageDelta["usage"] = usageMap
+		// 与 message_start 同一份装配：input_tokens 只算未命中缓存的输入（换算单源在
+		// models.Usage.AnthropicInputTokens），缓存命中另写 cache_read_input_tokens。
+		messageDelta["usage"] = anthropicUsageFromResponses(ev.Response.Usage)
 	}
 
 	if err := writeRealtimeEventJSONData(state, "message_delta", messageDelta); err != nil {

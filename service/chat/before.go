@@ -280,16 +280,25 @@ func BeforerAnthropic(data []byte) (*Before, error) {
 	}
 
 	cfg := capabilityDetector{
-		messageArrayPath:      "messages",
-		imageTypeValue:        "image",
-		structuredOutputCheck: nil, // Anthropic 的 structuredOutput 直接等于 toolCall
+		messageArrayPath: "messages",
+		imageTypeValue:   "image",
+		// Anthropic 的结构化输出有两条路：原生 output_config.format（json_schema 约束）
+		// 与工具模拟（tools + tool_choice 强制调用）。这里按「请求是否要求结构化输出」
+		// 判定，两种形态任一成立都算——此前只认 toolCall，于是「只发 format、不带
+		// tools」的请求（Claude Code 的会话标题生成即此类）被判无该能力，strict 能力
+		// 匹配就不剔除「未开启 structured_output」的关联，请求带着 format 打到不支持的
+		// 端点后静默退化成散文——正是修 output_config.format 想解决的那个症状换到了选路轴。
+		structuredOutputCheck: func(data []byte) bool {
+			return gjson.GetBytes(data, "output_config.format.type").String() == "json_schema"
+		},
 	}
-	_, stream, toolCall, _, image := detectCapabilities(data, cfg)
+	_, stream, toolCall, structuredOutput, image := detectCapabilities(data, cfg)
 	return &Before{
-		Model:            model,
-		Stream:           stream,
-		toolCall:         toolCall,
-		structuredOutput: toolCall,
+		Model:    model,
+		Stream:   stream,
+		toolCall: toolCall,
+		// 两种形态取并集：tool 模拟仍然有效，不能因为新增了 format 就把它丢掉。
+		structuredOutput: structuredOutput || toolCall,
 		image:            image,
 		raw:              data,
 		affinityKey:      affinityKeyFromRequest(data, cfg),

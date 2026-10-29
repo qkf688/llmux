@@ -3,10 +3,12 @@ package anthropic
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
+	"strings"
+
 	"github.com/qkf688/llmux/consts"
 	"github.com/qkf688/llmux/models"
 	"github.com/qkf688/llmux/service/transform/shared"
-	"strings"
 )
 
 // FormatResponse 将统一响应格式转换为 Anthropic 响应格式。
@@ -65,16 +67,11 @@ func FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
 			}
 
 			for _, toolCall := range choice.Message.ToolCalls {
-				var input map[string]interface{}
-				if toolCall.Function.Arguments != "" {
-					_ = json.Unmarshal([]byte(toolCall.Function.Arguments), &input)
-				}
-
 				content = append(content, map[string]interface{}{
 					"type":  "tool_use",
 					"id":    toolCall.ID,
 					"name":  toolCall.Function.Name,
-					"input": input,
+					"input": buildToolUseInput(toolCall),
 				})
 			}
 		}
@@ -94,15 +91,10 @@ func FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
 	}
 
 	if unified.Usage != nil {
-		// Anthropic 的 input_tokens 只算**未命中缓存**的输入（cache_read 独立成键）。
-		// 统一模型的 PromptTokens 是「含缓存的输入总量」（OpenAI 口径），故必须减掉
-		// 命中部分——直写会让客户端把那一段按全价再算一遍，输入量与费用双双虚高。
-		inputTokens := unified.Usage.PromptTokens - unified.Usage.PromptTokensDetails.CachedTokens
-		if inputTokens < 0 {
-			inputTokens = 0
-		}
+		// input_tokens 只算未命中缓存的输入：换算规则单源在 models.Usage.AnthropicInputTokens
+		// （流式出站同一份），此处不重复实现，避免两个出口各自漂移。
 		usage := map[string]interface{}{
-			"input_tokens":  inputTokens,
+			"input_tokens":  unified.Usage.AnthropicInputTokens(),
 			"output_tokens": unified.Usage.CompletionTokens,
 		}
 		// 按 Anthropic Messages 官方 usage 形状逐键决定，不照搬统一模型：
@@ -118,6 +110,34 @@ func FormatResponse(unified *models.UnifiedResponse) ([]byte, error) {
 	}
 
 	return json.Marshal(resp)
+}
+
+// buildToolUseInput 把 tool_call 的 arguments 解析成 Anthropic 的 tool_use.input。
+//
+// Anthropic 契约要求 input 是**对象**：空参数工具（OpenAI 兼容上游常给
+// `arguments: ""`）与非法 JSON 都必须落成空对象，否则会向客户端发出
+// `"input": null` 被判契约违规——与流式侧 openAnthropicBlockForItem 补的
+// `input: {}` 是同一条约束的两个出口，漏一个就只修了一半。
+//
+// 解析失败不阻断本次响应（参数损坏是上游行为，客户端拿空对象仍能继续对话），
+// 但打一条 debug 留痕，不静默吞。
+func buildToolUseInput(toolCall models.UnifiedToolCall) map[string]interface{} {
+	empty := map[string]interface{}{}
+	if toolCall.Function.Arguments == "" {
+		return empty
+	}
+
+	input := map[string]interface{}{}
+	if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &input); err != nil {
+		slog.Debug("tool_call arguments 不是 JSON 对象，按空 input 发出",
+			"tool_call_id", toolCall.ID, "error", err)
+		return empty
+	}
+	// arguments 字面量是 `null` 时 map 会被置成 nil（不是空 map），同样要落回空对象。
+	if input == nil {
+		return empty
+	}
+	return input
 }
 
 // formatErrorEnvelope 产出 Anthropic 官方错误形状：

@@ -134,14 +134,23 @@ var anthropicNativeCacheKeys = []string{"cache_read_input_tokens", "cache_creati
 // DeepSeek 一类网关在 OpenAI 协议下也回 cache_read_input_tokens）prompt_tokens
 // 已含缓存，再按 Anthropic 口径加总就是双算。故只有 base 取自 input_tokens
 // （Anthropic 原生位）且存在 Anthropic 自有缓存键时才加总。
+//
+// **Anthropic 分支用「键存在」而非「> 0」判 base**：`input_tokens: 0` 配非零
+// cache_read 是合法形态（整轮输入全命中缓存，或首轮只写缓存），按 > 0 判会把它
+// 当成「上游没给」，于是加总整段跳过——prompt 落 0、cached 却是 5000，产出
+// 「输入 0、缓存 5000」的自相矛盾快照（total 只剩 completion）。非 Anthropic
+// 形状仍保留 > 0 语义：那里的 input_tokens 是含缓存总量，报 0 等于没报。
 func promptTokensFrom(usage map[string]interface{}) int64 {
-	if v := maputil.Float64(usage, "input_tokens"); v > 0 {
-		if !hasAnthropicNativeCacheKeys(usage) {
-			// Responses 的 input_tokens 已是含缓存的量，只缺 cache 明细。
-			return int64(v)
+	if hasAnthropicNativeCacheKeys(usage) {
+		if _, hasBase := usage["input_tokens"]; hasBase {
+			return int64(maputil.Float64(usage, "input_tokens") +
+				maputil.Float64(usage, "cache_read_input_tokens") +
+				maputil.Float64(usage, "cache_creation_input_tokens"))
 		}
-		return int64(v + maputil.Float64(usage, "cache_read_input_tokens") +
-			maputil.Float64(usage, "cache_creation_input_tokens"))
+	}
+	if v := maputil.Float64(usage, "input_tokens"); v > 0 {
+		// Responses 的 input_tokens 已是含缓存的量，只缺 cache 明细。
+		return int64(v)
 	}
 	return int64(maputil.Float64(usage, "prompt_tokens"))
 }
@@ -153,6 +162,27 @@ func hasAnthropicNativeCacheKeys(usage map[string]interface{}) bool {
 		}
 	}
 	return false
+}
+
+// AnthropicInputTokens 返回 Anthropic 协议 `input_tokens` 的取值：未命中缓存的输入。
+//
+// 统一模型的 PromptTokens 是含缓存总量（OpenAI 口径），而 Anthropic 的 input_tokens
+// 只算未命中部分、cache_read 独立成键——跨协议出站必须减掉，否则缓存段被客户端按
+// 全价再算一遍（实测 52080 → 95216）。钳零是对上游自相矛盾（cached > prompt）的
+// 防御，不把负数发给客户端。
+//
+// 收成一个方法而不是在两个出站口各写一遍：流式与非流式的「减 cached」一旦漂移，
+// 同一上游会在流式/非流式下报出两个不同的输入量。
+//
+// 已知损失：`cache_creation_input_tokens` 被折进 PromptTokens 后没有回程槽位
+// （PromptTokensDetails 只存 cache_read），故本值实际是「未命中 read 的部分」，
+// 含写缓存那一段。anthropic 上游 → anthropic 客户端走 passthrough 不经过本方法，
+// 仅在「anthropic 形状 usage + 非 anthropic 端点」这类组合下会把写缓存当普通输入。
+func (u Usage) AnthropicInputTokens() int64 {
+	if v := u.PromptTokens - u.PromptTokensDetails.CachedTokens; v > 0 {
+		return v
+	}
+	return 0
 }
 
 // UsageFromMap 把任意上游协议的 usage map 归一为 Usage。

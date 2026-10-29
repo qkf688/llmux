@@ -132,10 +132,14 @@ func handleResponsesToAnthropicOutputItemAddedEvent(state *realtimeStreamState, 
 	// 若在此处急切开 text content_block，遇到推理模型 reasoning 先于 content 到达时，
 	// reasoning 的 output_item.added 会把这个尚未收到任何文本的空 text block 提前 stop，
 	// 导致后续正文 text_delta 全发到已关闭的 block 上（log-33 bug）。
-	// 因此 message 只预留 output_index → block_index 映射，text block 改由第一个
-	// output_text.delta 惰性开启（见 emitOrBufferAnthropicDelta 的 active 接管分支）。
+	// 因此 text block 改由第一个 output_text.delta 惰性开启（见 switchToAnthropicTextBlock）。
+	//
+	// 这里**不得**预占 block index：Anthropic 要求 content_block.index 从 0 起、按
+	// 「发出顺序」严格递增，而块是在真正开块那一刻才发的。预占会让「先 added 但后出
+	// delta」的 message 抢走 index 0，把先出 delta 的 reasoning 挤到 index 1——实测
+	// 客户端收到 thinking=1、text=0 的倒序流。index 一律由
+	// getOrAllocAnthropicBlockIndex 在开块处分配，与发出顺序天然一致。
 	if itemType == "message" {
-		getOrAllocAnthropicBlockIndex(state, ev.OutputIndex)
 		return nil
 	}
 
@@ -303,14 +307,21 @@ func openAnthropicBlockForItem(state *realtimeStreamState, blockIndex int, outpu
 	}
 	switch meta.itemType {
 	case "function_call":
+		// input 是 Anthropic tool_use 块的必填字段（对象），增量由 input_json_delta 补进来；
+		// 缺这个键会让按 SDK 类型取值的客户端拿到 undefined。
 		contentBlock = map[string]interface{}{
-			"type": "tool_use",
-			"id":   meta.itemID,
-			"name": meta.itemName,
+			"type":  "tool_use",
+			"id":    meta.itemID,
+			"name":  meta.itemName,
+			"input": map[string]interface{}{},
 		}
 	case "reasoning":
+		// thinking / signature 同属该块契约的字段，哪怕空串也要在场：上游是 OpenAI
+		// 兼容协议时没有签名概念，但客户端按块类型取值，缺键会读成 undefined。
 		contentBlock = map[string]interface{}{
-			"type": "thinking",
+			"type":      "thinking",
+			"thinking":  "",
+			"signature": "",
 		}
 	}
 

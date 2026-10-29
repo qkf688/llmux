@@ -20,7 +20,7 @@ event: content_block_stop
 data: {"index":1,"type":"content_block_stop"}
 
 event: content_block_start
-data: {"content_block":{"id":"call_abc","name":"get_weather","type":"tool_use"},"index":2,"type":"content_block_start"}
+data: {"content_block":{"id":"call_abc","input":{},"name":"get_weather","type":"tool_use"},"index":2,"type":"content_block_start"}
 
 event: content_block_delta
 data: {"delta":{"partial_json":"{\"location\"","type":"input_json_delta"},"index":2,"type":"content_block_delta"}

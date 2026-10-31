@@ -43,6 +43,19 @@ func TestUsageFromMap_ToleratesNonStandardShapes(t *testing.T) {
 			wantPrompt: 200, wantComplete: 80, wantTotal: 280, wantCached: 128, wantReasoning: 40, wantReasoningKnown: true,
 		},
 		{
+			// Anthropic Messages 原生 extended thinking：推理 token 记在
+			// output_tokens_details.thinking_tokens，键名不是 reasoning_tokens。
+			// 上游实测 message_delta.usage：
+			// {"input_tokens":936,"output_tokens":92,"output_tokens_details":{"thinking_tokens":83}}。
+			name: "anthropic 原生：output_tokens_details.thinking_tokens 即 reasoning_tokens",
+			usage: map[string]interface{}{
+				"input_tokens":          float64(936),
+				"output_tokens":         float64(92),
+				"output_tokens_details": map[string]interface{}{"thinking_tokens": float64(83)},
+			},
+			wantPrompt: 936, wantComplete: 92, wantTotal: 1028, wantReasoning: 83, wantReasoningKnown: true,
+		},
+		{
 			name: "reasoning_tokens 放在 usage 顶层（非标准供应商）",
 			usage: map[string]interface{}{
 				"prompt_tokens":     float64(10),

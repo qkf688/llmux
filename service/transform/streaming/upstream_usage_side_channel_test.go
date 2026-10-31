@@ -111,6 +111,53 @@ func TestSideChannel_AnthropicUpstreamUsageIsMergedNotOverwritten(t *testing.T) 
 	}
 }
 
+// Anthropic 原生 extended thinking：推理 token 记在 usage.output_tokens_details.thinking_tokens
+// （官方字段名，不是 reasoning_tokens）。message_delta 的合并快照必须带着这条明细交侧信道——
+// 否则归一恒 0、reasoning_tokens_known=false，日志面板给出「上游没报告推理用量」的假结论。
+// 出站 openai 客户端线同时带出 completion_tokens_details.reasoning_tokens，与落库同源。
+func TestSideChannel_AnthropicThinkingTokensMergedIntoSideChannel(t *testing.T) {
+	sse := "event: message_start\n" +
+		`data: {"type":"message_start","message":{"id":"m1","model":"claude",` +
+		`"usage":{"input_tokens":936}}}` + "\n\n" +
+		"event: message_delta\n" +
+		`data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},` +
+		`"usage":{"output_tokens":92,"output_tokens_details":{"thinking_tokens":83}}}` + "\n\n"
+
+	sc := models.NewTransformSideChannel(false)
+	out, err := TransformResponseRealtime(newSSEResponse(sse), "anthropic", "openai", sc)
+	if err != nil {
+		t.Fatalf("TransformResponseRealtime: %v", err)
+	}
+	defer out.Body.Close()
+	body, _ := io.ReadAll(out.Body)
+
+	u, ok := sc.UpstreamUsage()
+	if !ok {
+		t.Fatal("side channel captured no upstream usage")
+	}
+	if u.PromptTokens != 936 {
+		t.Errorf("PromptTokens = %d, want 936", u.PromptTokens)
+	}
+	if u.CompletionTokens != 92 {
+		t.Errorf("CompletionTokens = %d, want 92", u.CompletionTokens)
+	}
+	if u.TotalTokens != 1028 {
+		t.Errorf("TotalTokens = %d, want 1028", u.TotalTokens)
+	}
+	if u.CompletionTokensDetails.ReasoningTokens != 83 {
+		t.Errorf("ReasoningTokens = %d, want 83 (output_tokens_details.thinking_tokens must normalize to reasoning)", u.CompletionTokensDetails.ReasoningTokens)
+	}
+	if !u.CompletionTokensDetails.ReasoningTokensKnown {
+		t.Error("ReasoningTokensKnown = false, want true (upstream reported the breakdown)")
+	}
+
+	// 客户端与 DB 同源：anthropic → openai 双跳的出站 usage 尾包须带
+	// completion_tokens_details.reasoning_tokens:83，否则客户端看 83、DB 记 0 的分叉。
+	if !strings.Contains(string(body), `"completion_tokens_details":{"reasoning_tokens":83}`) {
+		t.Errorf("openai downstream usage tail missing completion_tokens_details.reasoning_tokens:\n%s", body)
+	}
+}
+
 // 直通/无旁路场景：sideChannel 为 nil 时捕获逻辑必须是 no-op，不能 panic。
 func TestSideChannel_NilIsNoOp(t *testing.T) {
 	sse := `data: {"id":"c1","object":"chat.completion.chunk","created":1,"model":"m","choices":[],"usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}}` + "\n\n"

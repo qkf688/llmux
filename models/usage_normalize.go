@@ -50,6 +50,9 @@ var (
 	reasoningTokenPaths = usageFieldCandidates{
 		{"completion_tokens_details", "reasoning_tokens"},
 		{"output_tokens_details", "reasoning_tokens"},
+		// Anthropic Messages 原生写法（extended thinking）：官方字段名是
+		// usage.output_tokens_details.thinking_tokens，不是 reasoning_tokens。
+		{"output_tokens_details", "thinking_tokens"},
 		// 部分 OpenAI 兼容供应商把 reasoning 记在 usage 顶层。
 		{"reasoning_tokens"},
 	}

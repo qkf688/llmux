@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
-import { useForm, FormProvider, useFormContext, useWatch } from "react-hook-form";
+import { act, render, screen, fireEvent } from "@testing-library/react";
+import { useForm, FormProvider, useFormContext, useWatch, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 // GroupsSection/GroupCard 未渲染，但 use-pool-options 在模块顶层被 import；
@@ -27,6 +27,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   defaultProviderFormValues,
   providerFormSchema,
+  SUPPORTED_TYPE_OPTIONS,
+  typeSelectorOptions,
   type ProviderFormValues,
 } from "../../form-schema";
 
@@ -373,5 +375,73 @@ describe("分组取 Key 模式推导（纯逻辑）", () => {
     expect(resolveGroupMode("7", { id: 7, name: "p", keyCount: 1, autoCreated: false }, true)).toBe(
       "link",
     );
+  });
+});
+
+/**
+ * 主类型下拉 Harness：暴露 form 实例，复刻编辑弹窗的两段式重置
+ * （先 reset 默认值 = type 空 → 详情回填写入真实 type）。
+ * 回填 bug 只在这条时序上出现：单段「初始就有值」测不出。
+ */
+function TypeFieldHarness({ onReady }: { onReady: (form: UseFormReturn<ProviderFormValues>) => void }) {
+  const form = useForm<ProviderFormValues>({
+    resolver: zodResolver(providerFormSchema),
+    defaultValues: { ...defaultProviderFormValues },
+  });
+  onReady(form);
+  return (
+    <TooltipProvider>
+      <FormProvider {...form}>
+        <SupportTypesField providerTemplates={[]} />
+      </FormProvider>
+    </TooltipProvider>
+  );
+}
+
+/** Radix 隐藏原生 select 在 jsdom 里查不到（Content 关闭态渲染到 DocumentFragment），
+ *  「选项恒列」的契约改成直接测 typeSelectorOptions 这个纯函数。 */
+
+function resetType(form: UseFormReturn<ProviderFormValues>, type: string, protocols: string[]) {
+  act(() => {
+    form.reset({ ...defaultProviderFormValues, type, protocols });
+  });
+}
+
+function expectedLabel(type: string): string {
+  return SUPPORTED_TYPE_OPTIONS.find((option) => option.type === type)?.label ?? "";
+}
+
+describe("主类型下拉（编辑回填）", () => {
+  it("选项恒列全部主类型，只按已勾选协议置 disabled", () => {
+    // 默认只勾 openai：另两项仍要在选项表里（只是不可选）。若按 protocols 过滤掉，
+    // 回填 anthropic / openai-res 时原生 select 找不到 option，会把空值回写进表单
+    expect(typeSelectorOptions(["openai"])).toEqual([
+      { type: "openai", protocol: "openai", label: "OpenAI（chat/completions）", disabled: false },
+      { type: "openai-res", protocol: "responses", label: "OpenAI Responses", disabled: true },
+      { type: "anthropic", protocol: "anthropic", label: "Anthropic", disabled: true },
+    ]);
+    expect(typeSelectorOptions(["openai", "responses", "anthropic"]).every((o) => !o.disabled)).toBe(
+      true,
+    );
+  });
+
+  it("先空后填 openai-res：下拉显示 OpenAI Responses，表单值不被清成空", () => {
+    let form!: UseFormReturn<ProviderFormValues>;
+    render(<TypeFieldHarness onReady={(f) => (form = f)} />);
+
+    resetType(form, "openai-res", ["openai", "responses", "anthropic"]);
+
+    expect(form.getValues().type).toBe("openai-res");
+    expect(screen.getByRole("combobox").textContent).toBe(expectedLabel("openai-res"));
+  });
+
+  it("先空后填 anthropic：同样回填成功", () => {
+    let form!: UseFormReturn<ProviderFormValues>;
+    render(<TypeFieldHarness onReady={(f) => (form = f)} />);
+
+    resetType(form, "anthropic", ["anthropic"]);
+
+    expect(form.getValues().type).toBe("anthropic");
+    expect(screen.getByRole("combobox").textContent).toBe(expectedLabel("anthropic"));
   });
 });

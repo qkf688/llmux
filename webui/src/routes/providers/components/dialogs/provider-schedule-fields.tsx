@@ -29,6 +29,7 @@ import { linkablePoolOptions, resolveGroupMode } from "../../utils/group-mode";
 import {
   PROTOCOL_LABEL,
   SUPPORTED_TYPE_OPTIONS,
+  typeSelectorOptions,
   type ProviderFormGroup,
   type ProviderFormValues,
   type ProviderGroupMode,
@@ -37,8 +38,9 @@ import {
 /**
  * 主类型 / 支持类型（S0 原型）：主类型为 Select 下拉（紧凑，决定 providers.New 分发 / 模板默认值 / 模型同步），
  * 支持类型为 □ checkbox 纵列表选出站协议（每协议一行，生成对应端点行）。主类型必须 ∈ 已勾选协议：
- * 下拉只列出已勾选项；取消勾选主类型时自动落到剩余第一个（schema superRefine 兜底）。
- * 首个勾选 = 初始主类型（下拉无候选，此时自动写入并套模板默认值；此后显式改选不覆盖已填字段）。
+ * 下拉恒列全部类型、未勾选协议置 disabled（不按勾选过滤掉选项，理由见 typeSelectorOptions）；
+ * 取消勾选主类型时自动落到剩余第一个（schema superRefine 兜底）。
+ * 首个勾选 = 初始主类型（此时 type 尚未设置，自动写入并套模板默认值；此后显式改选不覆盖已填字段）。
  */
 export function SupportTypesField({ providerTemplates }: { providerTemplates: ProviderTemplate[] }) {
   const form = useFormContext<ProviderFormValues>();
@@ -100,13 +102,19 @@ export function SupportTypesField({ providerTemplates }: { providerTemplates: Pr
             <div className="flex flex-wrap items-center gap-2">
               <FormLabel className="shrink-0">主类型</FormLabel>
               <FormControl>
-                <Select onValueChange={field.onChange} value={field.value || undefined}>
+                {/* 受控值恒为字符串（空串 = 未选），禁止传 undefined：Radix 会按非受控初始化内部
+                    state，之后受控回填时先写隐藏原生 <select> 再回派 change，把空值写回表单。
+                    选项恒列全部主类型、未勾选协议置 disabled（保留「主类型 ∈ 已勾选协议」约束）：
+                    Radix 隐藏 <select> 只认已渲染的 <option>，选项随 protocols 动态增删会让
+                    「值已到、选项未到」的那一帧赋值失败并同样回写空值——表现为编辑
+                    openai-res / anthropic 供应商时主类型显示为空、保存被校验拦下。 */}
+                <Select onValueChange={field.onChange} value={field.value ?? ""}>
                   <SelectTrigger className="h-8 min-w-0 flex-1">
                     <SelectValue placeholder="选择主类型" />
                   </SelectTrigger>
                   <SelectContent>
-                    {SUPPORTED_TYPE_OPTIONS.filter((o) => protocols.includes(o.protocol)).map((opt) => (
-                      <SelectItem key={opt.type} value={opt.type}>
+                    {typeSelectorOptions(protocols).map((opt) => (
+                      <SelectItem key={opt.type} value={opt.type} disabled={opt.disabled}>
                         {opt.label}
                       </SelectItem>
                     ))}

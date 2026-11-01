@@ -8,6 +8,23 @@ export const SUPPORTED_TYPE_OPTIONS = [
   { type: "anthropic", protocol: "anthropic", label: "Anthropic" },
 ] as const;
 
+/**
+ * 主类型下拉选项：**恒列全部类型**，未勾选协议的那几项只置 disabled。
+ *
+ * 不能用 `filter(protocols.includes)` 把未勾选项过滤掉：Radix Select 靠隐藏的原生
+ * `<select>` 承接受控值，而原生 select 只能赋值为已渲染 `<option>` 的 value。
+ * 编辑弹窗「先 reset 空值 → 详情回填 type」时，回填那一帧选项若还没出现，赋值失败后
+ * Radix 会把空值经 change 回写进表单——表现为主类型显示为空、保存被「提供商类型不能为空」
+ * 拦下（只有 type 非 openai 的供应商会中，因为 openai 选项初始就存在）。
+ * 「主类型 ∈ 已勾选协议」的约束由 disabled + schema superRefine 共同表达。
+ */
+export function typeSelectorOptions(protocols: readonly string[]) {
+  return SUPPORTED_TYPE_OPTIONS.map((option) => ({
+    ...option,
+    disabled: !protocols.includes(option.protocol),
+  }));
+}
+
 /** 协议 → 展示名（端点行 / 主类型展示）。单一来源在 lib/protocols：
  *  模型测试的协议矩阵读同一张表，避免两处各写一份随协议新增而漂移。 */
 export { PROTOCOL_LABEL, protocolLabel } from "@/lib/protocols";
